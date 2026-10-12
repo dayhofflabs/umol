@@ -136,10 +136,10 @@ impl NoncovalentBondConstraintsForm {
     }
 
     /// The bond's intramolecular value, or `Undetermined` when no `Intramolecular` constraint is present.
-    pub fn intramolecular(&self) -> BooleanForm {
+    pub fn intramolecular(&self) -> &BooleanForm {
         match self.get(NoncovalentBondConstraintKey::Intramolecular) {
-            Some(NoncovalentBondConstraintForm::Intramolecular(b)) => *b,
-            _ => BooleanForm::Undetermined,
+            Some(NoncovalentBondConstraintForm::Intramolecular(b)) => b,
+            _ => &BooleanForm::Undetermined,
         }
     }
 
@@ -361,7 +361,7 @@ impl Lattice for NoncovalentBondConstraintsForm {
     /// Pattern-driven: the intramolecular value is matched on its own lattice; an empty
     /// pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
-        self.intramolecular().matches(&target.intramolecular())
+        self.intramolecular().matches(target.intramolecular())
     }
 
     /// Sorted merge, short-circuit: only shared keys can conflict; non-shared keys are always
@@ -568,7 +568,7 @@ mod tests {
         #[case] cs: NoncovalentBondConstraintsForm,
         #[case] expected: BooleanForm,
     ) {
-        assert_eq!(cs.intramolecular(), expected);
+        assert_eq!(cs.intramolecular(), &expected);
     }
 
     #[rstest]

@@ -1049,7 +1049,7 @@ mod tests {
             );
             assert_eq!(
                 bond.to_rust().constraints.intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1116,7 +1116,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1149,7 +1149,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1183,7 +1183,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1201,7 +1201,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1294,7 +1294,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(false)
+                &GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1332,7 +1332,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1351,7 +1351,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1442,7 +1442,7 @@ mod tests {
                     .attributes()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1473,7 +1473,7 @@ mod tests {
                     .attributes()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(false)
+                &GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1523,7 +1523,7 @@ mod tests {
                     .attributes()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }

@@ -584,28 +584,28 @@ fn test_aromatic_skeleton_coverage() {
     assert_eq!(
         atoms
             .iter()
-            .map(|atom| atom.constraints.aromatic_valence().cloned())
+            .map(|atom| atom.constraints.aromatic_valence().clone())
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
-            None,
-            Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(0))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(2))),
-            Some(AromaticValenceForm::NotAromatic),
+            AromaticValenceForm::Undetermined,
+            AromaticValenceForm::Aromatic(NumForm::Undetermined),
+            AromaticValenceForm::Aromatic(NumForm::Lit(0)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(2)),
+            AromaticValenceForm::NotAromatic,
         ])
     );
     assert_eq!(
         atoms
             .iter()
-            .map(|atom| atom.constraints.tetrahedral_stereo().cloned())
+            .map(|atom| atom.constraints.tetrahedral_stereo().clone())
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
-            None,
-            Some(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)),
-            Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))),
-            Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))),
-            Some(TetrahedralStereoForm::NotStereo),
+            TetrahedralStereoForm::Undetermined,
+            TetrahedralStereoForm::Stereo(StereoCoset::Undetermined),
+            TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)),
+            TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+            TetrahedralStereoForm::NotStereo,
         ])
     );
     assert_eq!(
@@ -615,7 +615,7 @@ fn test_aromatic_skeleton_coverage() {
                 molecule
                     .bonds()
                     .iter()
-                    .map(|bond| bond.attributes().constraints.aromatic())
+                    .map(|bond| *bond.attributes().constraints.aromatic())
                     .collect::<Vec<_>>()
             })
             .collect::<BTreeSet<_>>(),
@@ -688,7 +688,7 @@ proptest! {
                     attributes.implicit_hydrogens.clone(),
                     matches!(
                         attributes.constraints.aromatic_valence(),
-                        Some(AromaticValenceForm::Aromatic(_))
+                        AromaticValenceForm::Aromatic(_)
                     ),
                 )
             })
@@ -720,7 +720,7 @@ proptest! {
             raised
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes().constraints.aromatic())
+                .map(|bond| *bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             skeleton
                 .bond_aromaticity

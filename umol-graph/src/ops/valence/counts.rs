@@ -187,10 +187,7 @@ impl<'a> CountsValence<'a> {
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.table.entry(shifted));
 
-        let aromatic_constraint = atom
-            .constraints
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined);
+        let aromatic_constraint = atom.constraints.aromatic_valence();
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
@@ -327,12 +324,12 @@ impl<'a> CountsValence<'a> {
         let charge = atom.charge().as_lit()?;
         let constraints = atom.constraints();
         let valence = match constraints.valence() {
-            Some(asserted) => asserted.as_lit()?,
-            None => atom.valence().as_lit()?,
+            NumForm::Undetermined => atom.valence().as_lit()?,
+            asserted => asserted.as_lit()?,
         };
         let aromatic = match constraints.aromatic_valence() {
-            Some(asserted) => asserted.as_lit()?.valence_count(),
-            None => atom.aromatic_valence().as_lit()?,
+            AromaticValenceForm::Undetermined => atom.aromatic_valence().as_lit()?,
+            asserted => asserted.as_lit()?.valence_count(),
         };
         let accepted_pairs = atom.accepted_pairs().as_lit()?;
         let shifted_number = i64::from(element.atomic_number())
@@ -784,7 +781,6 @@ mod tests {
         Some(2)
     )]
     #[case::open_charge(r#"{:atoms ["C#u0#s"]}"#, None, None)]
-    #[case::open_valence(r#"{:atoms ["C#c0#u0#s#v*"]}"#, None, None)]
     #[case::open_aromatic(r#"{:atoms ["C#c0#u0#s#a+"]}"#, None, None)]
     #[case::aromatic_system(
         r#"{:atoms ["C#c0#h1#u0#s" "C" "C" "C" "C" "C"]

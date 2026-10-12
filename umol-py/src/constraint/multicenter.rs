@@ -368,7 +368,7 @@ impl MulticenterBondConstraintsForm {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.electron_count())
+        NumForm::from_rust(py, self.0.electron_count())
     }
 
     #[setter]
@@ -739,7 +739,7 @@ impl MulticenterBondConstraintsView {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
-        self.read(py, |cs| NumForm::from_rust(py, &cs.electron_count()))
+        self.read(py, |cs| NumForm::from_rust(py, cs.electron_count()))
     }
 
     #[setter]

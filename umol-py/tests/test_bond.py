@@ -262,8 +262,8 @@ def test_bondconstraints_aromatic():
     empty = BondConstraintsForm([])
     # aromatic is non-optional: unset reads back as Undetermined
     assert empty.aromatic == BooleanForm.Undetermined()
-    assert empty.cis_trans_stereo is None
-    assert empty.ring_count is None
+    assert empty.cis_trans_stereo == CisTransStereoForm.Undetermined()
+    assert empty.ring_count == NumForm.Undetermined()
     constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert constraints.aromatic == BooleanForm.Lit(True)
 
@@ -288,8 +288,23 @@ def test_bondconstraints_ring_size_count():
         [BondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))]
     )
     assert constraints.ring_size_count[6] == NumForm.Lit(1)
-    assert constraints.ring_size_count[5] is None
-    assert constraints.ring_count is None
+    assert constraints.ring_size_count[5] == NumForm.Undetermined()
+    assert constraints.ring_count == NumForm.Undetermined()
+
+
+def test_bondconstraints_ring_memberships():
+    constraints = BondConstraintsForm(
+        [
+            BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))),
+        ]
+    )
+    assert constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
+    assert BondConstraintsForm([]).ring_memberships() == []
 
 
 def test_bond_constraints_form_set():
@@ -374,7 +389,7 @@ def test_bondconstraints_ring_size_count_subscript():
     cs.ring_size_count[6] = 3
     assert cs.ring_size_count[6].as_lit() == 3
     del cs.ring_size_count[6]
-    assert cs.ring_size_count[6] is None
+    assert cs.ring_size_count[6] == NumForm.Undetermined()
 
 
 def test_bondringsizecounts_len_iter_contains():
@@ -449,7 +464,7 @@ def test_bondconstraintsview_ring_size_count():
     bond.constraints.ring_size_count[6] = 3
     assert bond.constraints.ring_size_count[6].as_lit() == 3
     del bond.constraints.ring_size_count[6]
-    assert bond.constraints.ring_size_count[6] is None
+    assert bond.constraints.ring_size_count[6] == NumForm.Undetermined()
 
 
 def test_bondconstraintsview_reads():
@@ -632,7 +647,18 @@ def test_bondview_constraints_ring_size_count():
     mol.bonds[0].constraints.ring_size_count[6] = 3
     assert mol.bonds[0].constraints.ring_size_count[6].as_lit() == 3
     del mol.bonds[0].constraints.ring_size_count[6]
-    assert mol.bonds[0].constraints.ring_size_count[6] is None
+    assert mol.bonds[0].constraints.ring_size_count[6] == NumForm.Undetermined()
+
+
+def test_bondview_constraints_ring_memberships():
+    mol = ethene()
+    assert mol.bonds[0].constraints.ring_memberships() == []
+    mol.bonds[0].constraints.ring_count = 2
+    mol.bonds[0].constraints.ring_size_count[6] = 1
+    assert mol.bonds[0].constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
 
 
 def test_bondview_set_constraints():

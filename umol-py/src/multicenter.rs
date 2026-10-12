@@ -752,7 +752,7 @@ mod tests {
             );
             assert_eq!(
                 bond.to_rust().constraints.electron_count(),
-                GraphIrNumForm::Lit(6)
+                &GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -865,7 +865,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 dst.bind(py).borrow().to_rust().constraints.electron_count(),
-                GraphIrNumForm::Lit(6)
+                &GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1445,7 +1445,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .electron_count(),
-                GraphIrNumForm::Lit(6)
+                &GraphIrNumForm::Lit(6)
             );
         });
     }
@@ -1481,7 +1481,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .electron_count(),
-                GraphIrNumForm::Lit(6)
+                &GraphIrNumForm::Lit(6)
             );
         });
     }

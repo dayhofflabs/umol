@@ -260,8 +260,7 @@ impl AromaticityPerceiver {
         if molecule.atoms().iter().any(|atom| {
             matches!(
                 atom.attributes().constraints.aromatic_valence(),
-                Some(AromaticValenceForm::Aromatic(valence))
-                    if valence.as_lit().is_none()
+                AromaticValenceForm::Aromatic(valence) if valence.as_lit().is_none()
             )
         }) || molecule.aromatic_systems().iter().any(|system| {
             matches!(
@@ -275,13 +274,9 @@ impl AromaticityPerceiver {
         let systems = match self.find_systems(molecule, config, |atom| {
             let view = molecule.atom(atom);
             match view.attributes().constraints.aromatic_valence() {
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
-                    u8::try_from(*valence).ok()
-                }
-                Some(AromaticValenceForm::Aromatic(_)) | Some(AromaticValenceForm::NotAromatic) => {
-                    None
-                }
-                Some(AromaticValenceForm::Undetermined) | None => match view.aromatic_valence() {
+                AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
+                AromaticValenceForm::Aromatic(_) | AromaticValenceForm::NotAromatic => None,
+                AromaticValenceForm::Undetermined => match view.aromatic_valence() {
                     NumForm::Lit(valence) => u8::try_from(valence).ok(),
                     _ => None,
                 },
@@ -306,7 +301,7 @@ impl AromaticityPerceiver {
         for atom in molecule.atoms().iter() {
             if matches!(
                 atom.attributes().constraints.aromatic_valence(),
-                Some(AromaticValenceForm::Aromatic(_))
+                AromaticValenceForm::Aromatic(_)
             ) && !accepted_atoms.contains(&atom.id())
             {
                 inconsistencies
@@ -391,10 +386,7 @@ impl AromaticityPerceiver {
             let has_matching_candidate =
                 system_members.iter().any(|candidate| candidate == &members);
             for atom in molecule.atoms().iter() {
-                let Some(constraint) = atom.attributes().constraints.aromatic_valence() else {
-                    continue;
-                };
-                let mismatch = match constraint {
+                let mismatch = match atom.attributes().constraints.aromatic_valence() {
                     AromaticValenceForm::Aromatic(NumForm::Lit(expected)) => {
                         has_matching_candidate
                             && contributions
@@ -698,13 +690,7 @@ mod tests {
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
             .find_systems(molecule, AromaticityConfig::default(), |v| {
-                match molecule
-                    .atom(v)
-                    .attributes()
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceForm::Undetermined)
-                {
+                match molecule.atom(v).attributes().constraints.aromatic_valence() {
                     AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 }
@@ -1053,7 +1039,6 @@ mod tests {
                 .attributes()
                 .constraints
                 .aromatic_valence()
-                .unwrap_or(&AromaticValenceForm::Undetermined)
             {
                 AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                 _ => None,

@@ -2858,7 +2858,7 @@ mod tests {
         );
         assert_eq!(
             molecule.atom(AtomId(1)).constraints().tetrahedral_stereo(),
-            Some(&TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))
+            &TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
         );
         assert_eq!(
             StereoPerception::new(&model.stereo)

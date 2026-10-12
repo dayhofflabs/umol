@@ -82,7 +82,7 @@ impl StereoPerception {
             .filter(|bond| {
                 matches!(
                     bond.constraints().cis_trans_stereo(),
-                    Some(CisTransStereoForm::Stereo(_))
+                    CisTransStereoForm::Stereo(_)
                 )
             })
             .map(|bond| bond.id())
@@ -119,8 +119,7 @@ impl StereoPerception {
                 .atom(atom)
                 .attributes()
                 .constraints
-                .tetrahedral_stereo()
-                .unwrap_or(&TetrahedralStereoForm::Undetermined);
+                .tetrahedral_stereo();
 
             let constraint_candidate = match assertion {
                 TetrahedralStereoForm::Stereo(coset) => {
@@ -198,8 +197,7 @@ impl StereoPerception {
                 .bond(bond)
                 .attributes()
                 .constraints
-                .cis_trans_stereo()
-                .unwrap_or(&CisTransStereoForm::Undetermined);
+                .cis_trans_stereo();
 
             let constraint_candidate = match assertion {
                 CisTransStereoForm::Stereo(_) if skipped.contains(&bond) => None,

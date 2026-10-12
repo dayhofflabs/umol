@@ -346,7 +346,7 @@ impl NoncovalentBondConstraintsForm {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn intramolecular(&self) -> BooleanForm {
-        BooleanForm::from_rust(&self.0.intramolecular())
+        BooleanForm::from_rust(self.0.intramolecular())
     }
 
     #[setter]
@@ -799,7 +799,7 @@ impl NoncovalentBondConstraintsView {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn intramolecular(&self, py: Python<'_>) -> PyResult<BooleanForm> {
-        self.read(py, |cs| Ok(BooleanForm::from_rust(&cs.intramolecular())))
+        self.read(py, |cs| Ok(BooleanForm::from_rust(cs.intramolecular())))
     }
 
     #[setter]

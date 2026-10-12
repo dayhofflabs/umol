@@ -1142,7 +1142,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),
@@ -1155,13 +1155,13 @@ mod tests {
             },
             stereo: StereoResolveConfig::default(),
         },
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_ingest_smiles_with_aromatic_valence(
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Vec<Option<AromaticValenceForm>>,
+        #[case] expected: Vec<AromaticValenceForm>,
     ) {
         let molecule = ingest_smiles_with("c1ccccc1", &io_config, &model, &resolve_config).unwrap();
 
@@ -1169,7 +1169,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
             expected
         );
@@ -1645,15 +1645,15 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
-            vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
+            vec![AromaticValenceForm::Aromatic(NumForm::Undetermined); 5]
         );
         assert_eq!(
             molecule
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes().constraints.aromatic())
+                .map(|bond| *bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );
@@ -1674,7 +1674,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        None
+        TetrahedralStereoForm::Undetermined
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),
@@ -1693,13 +1693,13 @@ mod tests {
                 ..StereoResolveConfig::default()
             },
         },
-        None
+        TetrahedralStereoForm::Undetermined
     )]
     fn test_ingest_smiles_with_stereo(
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Option<TetrahedralStereoForm>,
+        #[case] expected: TetrahedralStereoForm,
     ) {
         let molecule =
             ingest_smiles_with("C[C@H](N)O", &io_config, &model, &resolve_config).unwrap();
@@ -1710,7 +1710,7 @@ mod tests {
                 .attributes()
                 .constraints
                 .tetrahedral_stereo()
-                .cloned(),
+                .clone(),
             expected
         );
         assert!(molecule.stereo_atoms().is_at(AtomId(1)));
@@ -2127,16 +2127,16 @@ mod tests {
                 .lhs()
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
-            vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
+            vec![AromaticValenceForm::Aromatic(NumForm::Undetermined); 5]
         );
         assert_eq!(
             reaction
                 .lhs()
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes().constraints.aromatic())
+                .map(|bond| *bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );

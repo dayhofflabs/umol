@@ -10,9 +10,8 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::{
-    aromatic_covalence, AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintsForm,
-    AtomForm, AtomId, ElementForm, Lattice, Molecule, MulticenterValenceForm, NumForm,
-    UnpairedElectronsForm,
+    aromatic_covalence, AsLit, AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId,
+    ElementForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -81,33 +80,22 @@ impl ValenceInvariants {
         else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom.constraints.valence().unwrap_or(&NumForm::Undetermined) {
+        let valence = match atom.constraints.valence() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let donated = match atom
-            .constraints
-            .donated_pairs()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let donated = match atom.constraints.donated_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let accepted = match atom
-            .constraints
-            .accepted_pairs()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let accepted = match atom.constraints.accepted_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let aromatic_constraint = atom
-            .constraints
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined);
+        let aromatic_constraint = atom.constraints.aromatic_valence();
         let aromatic_valence = match aromatic_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -116,10 +104,7 @@ impl ValenceInvariants {
             None if aromatic_constraint.is_undetermined() => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let multicenter_constraint = atom
-            .constraints
-            .multicenter_valence()
-            .unwrap_or(&MulticenterValenceForm::Undetermined);
+        let multicenter_constraint = atom.constraints.multicenter_valence();
         let multicenter_valence = match multicenter_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -177,11 +162,7 @@ impl ValenceInvariants {
         let Some(unpaired_electrons) = atom.unpaired_electrons().count.as_lit() else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom
-            .constraints()
-            .valence()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let valence = match atom.constraints().valence() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.valence() {
                 NumForm::Lit(t) if t >= 0 => t,
@@ -189,11 +170,7 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let donated = match atom
-            .constraints()
-            .donated_pairs()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let donated = match atom.constraints().donated_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.donated_pairs() {
                 NumForm::Lit(t) if t >= 0 => t,
@@ -201,11 +178,7 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let accepted = match atom
-            .constraints()
-            .accepted_pairs()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let accepted = match atom.constraints().accepted_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.accepted_pairs() {
                 NumForm::Lit(t) if t >= 0 => t,
@@ -213,10 +186,7 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let aromatic_constraint = atom
-            .constraints()
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined);
+        let aromatic_constraint = atom.constraints().aromatic_valence();
         let aromatic_valence = match aromatic_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -228,10 +198,7 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let multicenter_constraint = atom
-            .constraints()
-            .multicenter_valence()
-            .unwrap_or(&MulticenterValenceForm::Undetermined);
+        let multicenter_constraint = atom.constraints().multicenter_valence();
         let multicenter_valence = match multicenter_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -290,11 +257,7 @@ impl ValenceInvariants {
             return Vec::new();
         };
 
-        let valence = match atom
-            .constraints()
-            .valence()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let valence = match atom.constraints().valence() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.valence() {
                 NumForm::Lit(t) if t >= 0 => t,
@@ -302,11 +265,7 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let donated = match atom
-            .constraints()
-            .donated_pairs()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let donated = match atom.constraints().donated_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.donated_pairs() {
                 NumForm::Lit(t) if t >= 0 => t,
@@ -314,11 +273,7 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let accepted = match atom
-            .constraints()
-            .accepted_pairs()
-            .unwrap_or(&NumForm::Undetermined)
-        {
+        let accepted = match atom.constraints().accepted_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.accepted_pairs() {
                 NumForm::Lit(t) if t >= 0 => t,
@@ -326,10 +281,7 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let aromatic_constraint = atom
-            .constraints()
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined);
+        let aromatic_constraint = atom.constraints().aromatic_valence();
         let aromatic_valence = match aromatic_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -341,10 +293,7 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let multicenter_constraint = atom
-            .constraints()
-            .multicenter_valence()
-            .unwrap_or(&MulticenterValenceForm::Undetermined);
+        let multicenter_constraint = atom.constraints().multicenter_valence();
         let multicenter_valence = match multicenter_constraint
             .as_lit()
             .map(|valence| valence.valence_count())
@@ -525,8 +474,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId, ElementForm, IsotopeMassForm,
-        Molecule, MoleculeEntries, NumForm, UnpairedElectronsForm,
+        AromaticValenceForm, AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId,
+        ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, UnpairedElectronsForm,
     };
 
     use super::*;

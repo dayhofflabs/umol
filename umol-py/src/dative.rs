@@ -641,7 +641,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                dst.bind(py).borrow().to_rust().constraints.aromatic(),
+                *dst.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -998,7 +998,10 @@ mod tests {
         Python::attach(|py| {
             let empty = DativeBondConstraintsForm::new(py, vec![]);
             assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanForm::Undetermined);
-            assert!(empty.ring_count(py).unwrap().is_none());
+            assert_eq!(
+                empty.ring_count(py).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
             let aromatic = into_py_variant(
                 py,
                 DativeBondConstraintForm::from_rust(
@@ -1032,16 +1035,22 @@ mod tests {
                 Py::new(py, DativeBondConstraintsForm::new(py, vec![membership])).unwrap();
             let proxy = DativeBondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(1)
             );
-            assert!(proxy.__getitem__(py, 5).unwrap().is_none());
-            assert!(constraints
-                .bind(py)
-                .borrow()
-                .ring_count(py)
-                .unwrap()
-                .is_none());
+            assert_eq!(
+                proxy.__getitem__(py, 5).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
+            assert_eq!(
+                constraints
+                    .bind(py)
+                    .borrow()
+                    .ring_count(py)
+                    .unwrap()
+                    .to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
         });
     }
 
@@ -1120,7 +1129,7 @@ mod tests {
             assert_eq!(c.__len__(), 2);
             assert_eq!(c.aromatic().to_rust(), GraphIrBooleanForm::Lit(true));
             assert_eq!(
-                c.ring_count(py).unwrap().unwrap().to_rust(py),
+                c.ring_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(2)
             );
         });
@@ -1213,7 +1222,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().to_rust().constraints.aromatic(),
+                *bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1244,7 +1253,7 @@ mod tests {
             view.update(py, DativeBondConstraintsUpdate::View(other))
                 .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().to_rust().constraints.aromatic(),
+                *bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1273,7 +1282,7 @@ mod tests {
             let mut constraints = DativeBondConstraintsForm::new(py, vec![]);
             constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_rust(py),
+                constraints.ring_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(2)
             );
         });
@@ -1436,11 +1445,14 @@ mod tests {
             let proxy = DativeBondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(3)
             );
             proxy.__delitem__(py, 6).unwrap();
-            assert!(proxy.__getitem__(py, 6).unwrap().is_none());
+            assert_eq!(
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
         });
     }
 
@@ -1467,7 +1479,6 @@ mod tests {
                     .ring_size_count(py)
                     .unwrap()
                     .__getitem__(py, 5)
-                    .unwrap()
                     .unwrap()
                     .to_rust(py),
                 GraphIrNumForm::Lit(1)
@@ -1558,7 +1569,6 @@ mod tests {
                     .ring_size_count(py)
                     .unwrap()
                     .__getitem__(py, 6)
-                    .unwrap()
                     .unwrap()
                     .to_rust(py),
                 GraphIrNumForm::Lit(1)

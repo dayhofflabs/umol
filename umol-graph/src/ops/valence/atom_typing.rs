@@ -97,12 +97,7 @@ impl<'a> AtomTypingValence<'a> {
             .filter(|row| {
                 // A field-ground atom is under resolution only for its open
                 // aromatic contribution: only aromatic rows complete it.
-                if ground_contribution_open
-                    && !row
-                        .constraints
-                        .aromatic_valence()
-                        .is_some_and(|a| a.is_aromatic())
-                {
+                if ground_contribution_open && !row.constraints.aromatic_valence().is_aromatic() {
                     return false;
                 }
                 atom.attributes().is_compatible(row)
@@ -230,29 +225,23 @@ impl<'a> AtomTypingValence<'a> {
         let charge = i8::try_from(atom.charge().as_lit()?).ok()?;
         let constraints = atom.constraints();
         let valence = NumForm::Lit(match constraints.valence() {
-            Some(asserted) => asserted.as_lit()?,
-            None => atom.valence().as_lit()?,
+            NumForm::Undetermined => atom.valence().as_lit()?,
+            asserted => asserted.as_lit()?,
         });
         let aromatic = match constraints.aromatic_valence() {
-            Some(asserted) => AromaticValenceForm::from(asserted.as_lit()?),
-            None if atom.is_in_aromatic_system() => {
+            AromaticValenceForm::Undetermined if atom.is_in_aromatic_system() => {
                 AromaticValenceForm::aromatic(atom.aromatic_valence().as_lit()?)
             }
-            None => AromaticValenceForm::NotAromatic,
+            AromaticValenceForm::Undetermined => AromaticValenceForm::NotAromatic,
+            asserted => AromaticValenceForm::from(asserted.as_lit()?),
         };
         let mut hydrogens = None;
         for row in self.registry.lookup(element, Some(charge)) {
             if !atom
                 .unpaired_electrons()
                 .is_compatible(&row.unpaired_electrons)
-                || row
-                    .constraints
-                    .valence()
-                    .is_some_and(|v| !v.is_compatible(&valence))
-                || row
-                    .constraints
-                    .aromatic_valence()
-                    .is_some_and(|a| !a.is_compatible(&aromatic))
+                || !row.constraints.valence().is_compatible(&valence)
+                || !row.constraints.aromatic_valence().is_compatible(&aromatic)
             {
                 continue;
             }
@@ -492,7 +481,6 @@ mod tests {
     #[case::open_charge(vec!["C#c0#h4"], r#"{:atoms ["C#h4#u0#s"]}"#, None, None)]
     #[case::open_aromatic(vec!["C#c0#h1#a1"], r#"{:atoms ["C#c0#h1#u0#s#a*"]}"#, None, None)]
     #[case::stored_valence(vec!["C#c0#h4#v0", "C#c0#h3#v1"], r#"{:atoms ["C#c0#h4#u0#s#v1"]}"#, Some(3), Some(3))]
-    #[case::open_valence(vec!["C#c0#h4#v0"], r#"{:atoms ["C#c0#h4#u0#s#v*"]}"#, None, None)]
     #[case::aromatic_system(
         vec!["C#c0#h1#v2#a1", "C#c0#h0#v2#a2"],
         r#"{:atoms ["C#c0#h1#u0#s" "C" "C" "C" "C" "C"]

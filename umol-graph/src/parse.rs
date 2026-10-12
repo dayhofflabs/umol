@@ -184,7 +184,7 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     #[case::reset(
         CtfileIoConfig::basic(),
@@ -197,13 +197,13 @@ mod tests {
             },
             stereo: StereoResolveConfig::default(),
         },
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_parse_mol_bytes_with_aromatic_valence(
         #[case] io_config: CtfileIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Vec<Option<AromaticValenceForm>>,
+        #[case] expected: Vec<AromaticValenceForm>,
     ) {
         let molecule = parse_mol_bytes_with(
             BENZENE_AROMATIC_MOL.as_bytes(),
@@ -217,7 +217,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
             expected
         );

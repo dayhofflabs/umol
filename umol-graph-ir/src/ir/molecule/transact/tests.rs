@@ -909,18 +909,18 @@ fn test_transaction_apply_modify_atom_constraint_absent_error(one_atom: Molecule
 }
 
 #[rstest]
-#[case::introduce(None, Some(AtomConstraintForm::valence(4)), Some(NumForm::Lit(4)))]
+#[case::introduce(None, Some(AtomConstraintForm::valence(4)), NumForm::Lit(4))]
 #[case::replace(
     Some(AtomConstraintForm::valence(3)),
     Some(AtomConstraintForm::valence(4)),
-    Some(NumForm::Lit(4))
+    NumForm::Lit(4)
 )]
-#[case::remove(Some(AtomConstraintForm::valence(3)), None, None)]
+#[case::remove(Some(AtomConstraintForm::valence(3)), None, NumForm::Undetermined)]
 fn test_transaction_apply_set_atom_constraint(
     one_atom: MoleculeEditor,
     #[case] old: Option<AtomConstraintForm>,
     #[case] new: Option<AtomConstraintForm>,
-    #[case] expected: Option<NumForm>,
+    #[case] expected: NumForm,
 ) {
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
@@ -948,7 +948,7 @@ fn test_transaction_apply_set_atom_constraint(
                     .attributes_mut()
                     .constraints
                     .valence(),
-                expected.as_ref()
+                &expected
             );
 
             Ok(())

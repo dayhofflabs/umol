@@ -149,8 +149,26 @@ def test_dativebondconstraints_ring_size_count():
         ]
     )
     assert constraints.ring_size_count[6] == NumForm.Lit(1)
-    assert constraints.ring_size_count[5] is None
-    assert constraints.ring_count is None
+    assert constraints.ring_size_count[5] == NumForm.Undetermined()
+    assert constraints.ring_count == NumForm.Undetermined()
+
+
+def test_dativebondconstraints_ring_memberships():
+    constraints = DativeBondConstraintsForm(
+        [
+            DativeBondConstraintForm.RingMembership(
+                RingMembershipForm(RingScope.All(), NumForm.Lit(2))
+            ),
+            DativeBondConstraintForm.RingMembership(
+                RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
+            ),
+        ]
+    )
+    assert constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
+    assert DativeBondConstraintsForm([]).ring_memberships() == []
 
 
 def test_dativebondconstraints_mapping_ops():
@@ -242,7 +260,18 @@ def test_dativebondview_constraints_ring_size_count():
     mol.dative_bonds[0].constraints.ring_size_count[6] = 3
     assert mol.dative_bonds[0].constraints.ring_size_count[6].as_lit() == 3
     del mol.dative_bonds[0].constraints.ring_size_count[6]
-    assert mol.dative_bonds[0].constraints.ring_size_count[6] is None
+    assert mol.dative_bonds[0].constraints.ring_size_count[6] == NumForm.Undetermined()
+
+
+def test_dativebondview_constraints_ring_memberships():
+    mol = ammonia_borane()
+    assert mol.dative_bonds[0].constraints.ring_memberships() == []
+    mol.dative_bonds[0].constraints.ring_count = 2
+    mol.dative_bonds[0].constraints.ring_size_count[6] = 1
+    assert mol.dative_bonds[0].constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
 
 
 def test_dativebondview_set_constraints():

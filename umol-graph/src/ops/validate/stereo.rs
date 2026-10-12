@@ -113,21 +113,21 @@ impl StereoConformanceValidator {
                 | StereoInconsistency::CisTransStereoMismatch { .. } => true,
                 StereoInconsistency::StereoAtomFailure { stereo_atom } => {
                     let atom = molecule.stereo_atom(stereo_atom).site_id();
-                    molecule
+                    !molecule
                         .atom(atom)
                         .attributes()
                         .constraints
                         .tetrahedral_stereo()
-                        .is_some_and(|constraint| !constraint.is_undetermined())
+                        .is_undetermined()
                 }
                 StereoInconsistency::StereoBondFailure { stereo_bond } => {
                     let bond = molecule.stereo_bond(stereo_bond).site_id();
-                    molecule
+                    !molecule
                         .bond(bond)
                         .attributes()
                         .constraints
                         .cis_trans_stereo()
-                        .is_some_and(|constraint| !constraint.is_undetermined())
+                        .is_undetermined()
                 }
             };
             if asserted {
@@ -182,7 +182,7 @@ impl StereoConformanceValidator {
             return Solution::Underdetermined(());
         }
         let sym = molecule.stereo_atom_symmetry(symmetry, id);
-        self.validate_symmetry(&sym, &stereogenicity, &topicities, &ligand_symmetries)
+        self.validate_symmetry(&sym, stereogenicity, &topicities, &ligand_symmetries)
     }
 
     fn validate_stereo_bond(
@@ -207,7 +207,7 @@ impl StereoConformanceValidator {
             return Solution::Underdetermined(());
         }
         let sym = molecule.stereo_bond_symmetry(symmetry, id);
-        self.validate_symmetry(&sym, &stereogenicity, &topicities, &ligand_symmetries)
+        self.validate_symmetry(&sym, stereogenicity, &topicities, &ligand_symmetries)
     }
 
     /// Compare derived symmetry against constraints.

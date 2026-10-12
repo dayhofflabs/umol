@@ -2730,7 +2730,7 @@ mod tests {
             view.set(py, stereogenicity).unwrap();
             assert_eq!(
                 value.borrow(py).to_rust().constraints.stereogenicity(),
-                GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
+                &GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2890,7 +2890,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 value.borrow(py).to_rust().constraints.stereogenicity(),
-                GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
+                &GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2964,7 +2964,7 @@ mod tests {
             view.set(py, stereogenicity).unwrap();
             assert_eq!(
                 value.borrow(py).to_rust().constraints.stereogenicity(),
-                GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
+                &GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -2996,7 +2996,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 value.borrow(py).to_rust().constraints.stereogenicity(),
-                GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
+                &GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }
@@ -3060,7 +3060,7 @@ mod tests {
             view.set(py, stereogenicity).unwrap();
             assert_eq!(
                 value.borrow(py).to_rust().constraints.stereogenicity(),
-                GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
+                &GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
     }

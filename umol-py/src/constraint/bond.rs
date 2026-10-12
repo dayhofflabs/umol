@@ -356,7 +356,7 @@ impl BondConstraintsForm {
     /// (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn aromatic(&self) -> BooleanForm {
-        BooleanForm::from_rust(&self.0.aromatic())
+        BooleanForm::from_rust(self.0.aromatic())
     }
 
     #[setter]
@@ -365,13 +365,10 @@ impl BondConstraintsForm {
             .set(GraphIrBondConstraintForm::aromatic(value.to_rust(py)));
     }
 
-    /// The cis/trans-stereo state, or `None`.
+    /// The cis/trans-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<Option<CisTransStereoForm>> {
-        self.0
-            .cis_trans_stereo()
-            .map(|c| CisTransStereoForm::from_rust(py, c))
-            .transpose()
+    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<CisTransStereoForm> {
+        CisTransStereoForm::from_rust(py, self.0.cis_trans_stereo())
     }
 
     #[setter]
@@ -386,13 +383,18 @@ impl BondConstraintsForm {
         Ok(())
     }
 
-    /// The all-rings membership count, or `None`.
-    #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+    /// The ring-membership constraints.
+    pub(crate) fn ring_memberships(&self, py: Python<'_>) -> PyResult<Vec<RingMembershipForm>> {
         self.0
-            .ring_count()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+            .ring_memberships()
+            .map(|m| RingMembershipForm::from_rust(py, m))
+            .collect()
+    }
+
+    /// The all-rings membership count (undetermined if absent).
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.ring_count())
     }
 
     #[setter]
@@ -765,7 +767,7 @@ impl BondConstraintsView {
     /// (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn aromatic(&self, py: Python<'_>) -> PyResult<BooleanForm> {
-        self.read(py, |cs| Ok(BooleanForm::from_rust(&cs.aromatic())))
+        self.read(py, |cs| Ok(BooleanForm::from_rust(cs.aromatic())))
     }
 
     #[setter]
@@ -773,13 +775,11 @@ impl BondConstraintsView {
         self.set_form(py, GraphIrBondConstraintForm::aromatic(value.to_rust(py)))
     }
 
-    /// The cis/trans-stereo state, or `None`.
+    /// The cis/trans-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<Option<CisTransStereoForm>> {
+    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<CisTransStereoForm> {
         self.read(py, |cs| {
-            cs.cis_trans_stereo()
-                .map(|c| CisTransStereoForm::from_rust(py, c))
-                .transpose()
+            CisTransStereoForm::from_rust(py, cs.cis_trans_stereo())
         })
     }
 
@@ -795,14 +795,19 @@ impl BondConstraintsView {
         )
     }
 
-    /// The all-rings membership count, or `None`.
-    #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+    /// The ring-membership constraints.
+    pub(crate) fn ring_memberships(&self, py: Python<'_>) -> PyResult<Vec<RingMembershipForm>> {
         self.read(py, |cs| {
-            cs.ring_count()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
+            cs.ring_memberships()
+                .map(|m| RingMembershipForm::from_rust(py, m))
+                .collect()
         })
+    }
+
+    /// The all-rings membership count (undetermined if absent).
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_count()))
     }
 
     #[setter]
@@ -910,13 +915,9 @@ impl BondRingSizeCounts {
 
 #[pymethods]
 impl BondRingSizeCounts {
-    /// The membership count for rings of `size`, or `None`.
-    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.ring_size_count(size)
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    /// The membership count for rings of `size` (undetermined if absent).
+    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_size_count(size)))
     }
 
     /// The number of distinct ring sizes with a membership constraint.
@@ -925,7 +926,11 @@ impl BondRingSizeCounts {
     }
 
     pub(crate) fn __contains__(&self, py: Python<'_>, size: u8) -> PyResult<bool> {
-        self.read(py, |cs| Ok(cs.ring_size_count(size).is_some()))
+        self.read(py, |cs| {
+            Ok(cs.contains(GraphIrBondConstraintKey::RingMembership(
+                GraphIrRingScope::Size(size),
+            )))
+        })
     }
 
     /// Iterate the present ring sizes (as ints).

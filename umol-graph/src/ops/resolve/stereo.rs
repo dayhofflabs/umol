@@ -113,20 +113,18 @@ impl StereoResolver {
         molecule: &Molecule,
     ) -> Result<Solution<Edits, StereoContradiction>, StereoError> {
         let partial_atom_constraint = molecule.atoms().iter().any(|atom| {
-            atom.constraints()
-                .tetrahedral_stereo()
-                .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
+            let constraint = atom.constraints().tetrahedral_stereo();
+            !constraint.is_undetermined() && !constraint.is_ground()
         });
         let skipped = self.perception.skipped_stereo_bonds(molecule);
-        let partial_bond_constraint = molecule.bonds().iter().any(|bond| {
-            !skipped.contains(&bond.id())
-                && bond
-                    .constraints()
-                    .cis_trans_stereo()
-                    .is_some_and(|constraint| {
-                        !constraint.is_undetermined() && !constraint.is_ground()
-                    })
-        });
+        let partial_bond_constraint = molecule
+            .bonds()
+            .iter()
+            .filter(|bond| !skipped.contains(&bond.id()))
+            .any(|bond| {
+                let constraint = bond.constraints().cis_trans_stereo();
+                !constraint.is_undetermined() && !constraint.is_ground()
+            });
         if partial_atom_constraint || partial_bond_constraint {
             return Ok(Solution::Underdetermined(Edits::new()));
         }
@@ -511,10 +509,10 @@ impl StereoResolver {
             let projected = TetrahedralStereoForm::Stereo(coset);
             let attributes = molecule.atom(atom).attributes();
             let assertion = match attributes.constraints.tetrahedral_stereo() {
-                Some(existing) => existing
+                TetrahedralStereoForm::Undetermined => projected,
+                existing => existing
                     .meet(&projected)
                     .ok_or(StereoProjectError::AtomAssertion { atom })?,
-                None => projected,
             };
             let mut update = AtomUpdate::default();
             update
@@ -538,10 +536,10 @@ impl StereoResolver {
             let projected = CisTransStereoForm::Stereo(coset);
             let attributes = molecule.bond(bond).attributes();
             let assertion = match attributes.constraints.cis_trans_stereo() {
-                Some(existing) => existing
+                CisTransStereoForm::Undetermined => projected,
+                existing => existing
                     .meet(&projected)
                     .ok_or(StereoProjectError::BondAssertion { bond })?,
-                None => projected,
             };
             let mut update = BondUpdate::default();
             update

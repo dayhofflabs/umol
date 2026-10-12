@@ -711,7 +711,7 @@ mod tests {
             BondForm::set_constraints(dst.clone_ref(py), py, BondConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
-                dst.bind(py).borrow().to_rust().constraints.aromatic(),
+                *dst.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -883,8 +883,14 @@ mod tests {
         Python::attach(|py| {
             let empty = BondConstraintsForm::new(py, vec![]);
             assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanForm::Undetermined);
-            assert!(empty.cis_trans_stereo(py).unwrap().is_none());
-            assert!(empty.ring_count(py).unwrap().is_none());
+            assert_eq!(
+                empty.cis_trans_stereo(py).unwrap().to_rust(py),
+                GraphIrCisTransStereoForm::Undetermined
+            );
+            assert_eq!(
+                empty.ring_count(py).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
             let aromatic = into_py_variant(
                 py,
                 BondConstraintForm::from_rust(
@@ -917,16 +923,22 @@ mod tests {
             let constraints = Py::new(py, BondConstraintsForm::new(py, vec![membership])).unwrap();
             let proxy = BondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(1)
             );
-            assert!(proxy.__getitem__(py, 5).unwrap().is_none());
-            assert!(constraints
-                .bind(py)
-                .borrow()
-                .ring_count(py)
-                .unwrap()
-                .is_none());
+            assert_eq!(
+                proxy.__getitem__(py, 5).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
+            assert_eq!(
+                constraints
+                    .bind(py)
+                    .borrow()
+                    .ring_count(py)
+                    .unwrap()
+                    .to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
         });
     }
 
@@ -1005,7 +1017,7 @@ mod tests {
             assert_eq!(c.__len__(), 2);
             assert_eq!(c.aromatic().to_rust(), GraphIrBooleanForm::Lit(true));
             assert_eq!(
-                c.ring_count(py).unwrap().unwrap().to_rust(py),
+                c.ring_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(2)
             );
         });
@@ -1094,7 +1106,7 @@ mod tests {
             BondForm::set_constraints(bond.clone_ref(py), py, BondConstraintsLike::View(own_view))
                 .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().to_rust().constraints.aromatic(),
+                *bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1125,7 +1137,7 @@ mod tests {
             .unwrap();
             view.update(py, BondConstraintsUpdate::View(other)).unwrap();
             assert_eq!(
-                bond.bind(py).borrow().to_rust().constraints.aromatic(),
+                *bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1155,7 +1167,7 @@ mod tests {
             constraints
                 .set_cis_trans_stereo(py, CisTransStereoLike::Config(CisTransConfiguration::E))
                 .unwrap();
-            match constraints.cis_trans_stereo(py).unwrap().unwrap() {
+            match constraints.cis_trans_stereo(py).unwrap() {
                 CisTransStereoForm::Stereo(coset) => {
                     assert_eq!(
                         coset.bind(py).borrow().to_rust(py),
@@ -1167,7 +1179,7 @@ mod tests {
             constraints
                 .set_cis_trans_stereo(py, CisTransStereoLike::Flag(false))
                 .unwrap();
-            match constraints.cis_trans_stereo(py).unwrap().unwrap() {
+            match constraints.cis_trans_stereo(py).unwrap() {
                 CisTransStereoForm::NotStereo() => {}
                 _ => panic!("expected NotStereo"),
             }
@@ -1190,7 +1202,7 @@ mod tests {
             let mut constraints = BondConstraintsForm::new(py, vec![]);
             constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_rust(py),
+                constraints.ring_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(2)
             );
         });
@@ -1341,11 +1353,14 @@ mod tests {
             let proxy = BondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(3)
             );
             proxy.__delitem__(py, 6).unwrap();
-            assert!(proxy.__getitem__(py, 6).unwrap().is_none());
+            assert_eq!(
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
         });
     }
 
@@ -1368,7 +1383,6 @@ mod tests {
                     .ring_size_count(py)
                     .unwrap()
                     .__getitem__(py, 5)
-                    .unwrap()
                     .unwrap()
                     .to_rust(py),
                 GraphIrNumForm::Lit(1)
@@ -1540,7 +1554,6 @@ mod tests {
                     .ring_size_count(py)
                     .unwrap()
                     .__getitem__(py, 6)
-                    .unwrap()
                     .unwrap()
                     .to_rust(py),
                 GraphIrNumForm::Lit(1)

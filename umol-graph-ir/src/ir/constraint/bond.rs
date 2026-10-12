@@ -158,38 +158,38 @@ impl BondConstraintsForm {
     }
 
     /// The bond's aromatic value, or `Undetermined` when no `Aromatic` constraint is present.
-    pub fn aromatic(&self) -> BooleanForm {
+    pub fn aromatic(&self) -> &BooleanForm {
         match self.get(BondConstraintKey::Aromatic) {
-            Some(BondConstraintForm::Aromatic(b)) => *b,
-            _ => BooleanForm::Undetermined,
+            Some(BondConstraintForm::Aromatic(b)) => b,
+            _ => &BooleanForm::Undetermined,
         }
     }
 
-    pub fn cis_trans_stereo(&self) -> Option<&CisTransStereoForm> {
+    pub fn cis_trans_stereo(&self) -> &CisTransStereoForm {
         match self.get(BondConstraintKey::CisTransStereo) {
-            Some(BondConstraintForm::CisTransStereo(c)) => Some(c),
-            _ => None,
+            Some(BondConstraintForm::CisTransStereo(c)) => c,
+            _ => &CisTransStereoForm::Undetermined,
         }
     }
 
-    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &NumForm)> {
+    pub fn ring_memberships(&self) -> impl Iterator<Item = &RingMembershipForm> {
         self.iter().filter_map(|c| match c {
-            BondConstraintForm::RingMembership(m) => Some((m.scope, &m.count)),
+            BondConstraintForm::RingMembership(m) => Some(m),
             _ => None,
         })
     }
 
-    fn ring_membership(&self, scope: RingScope) -> Option<&NumForm> {
+    fn ring_membership(&self, scope: RingScope) -> &NumForm {
         self.ring_memberships()
-            .find(|(s, _)| *s == scope)
-            .map(|(_, v)| v)
+            .find(|m| m.scope == scope)
+            .map_or(&NumForm::Undetermined, |m| &m.count)
     }
 
-    pub fn ring_count(&self) -> Option<&NumForm> {
+    pub fn ring_count(&self) -> &NumForm {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> Option<&NumForm> {
+    pub fn ring_size_count(&self, s: u8) -> &NumForm {
         self.ring_membership(RingScope::Size(s))
     }
 
@@ -394,17 +394,11 @@ impl Lattice for BondConstraintsForm {
     /// pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
         self.iter().all(|c| match c {
-            BondConstraintForm::Aromatic(b) => b.matches(&target.aromatic()),
-            BondConstraintForm::CisTransStereo(cts) => cts.matches(
-                target
-                    .cis_trans_stereo()
-                    .unwrap_or(&CisTransStereoForm::Undetermined),
-            ),
-            BondConstraintForm::RingMembership(rm) => rm.count.matches(
-                target
-                    .ring_membership(rm.scope)
-                    .unwrap_or(&NumForm::Undetermined),
-            ),
+            BondConstraintForm::Aromatic(b) => b.matches(target.aromatic()),
+            BondConstraintForm::CisTransStereo(cts) => cts.matches(target.cis_trans_stereo()),
+            BondConstraintForm::RingMembership(rm) => {
+                rm.count.matches(target.ring_membership(rm.scope))
+            }
         })
     }
 
@@ -578,6 +572,96 @@ mod tests {
         let cs = BondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rstest]
+    #[case::stored(
+        BondConstraintsForm::from(BondConstraintForm::aromatic(BooleanForm::Lit(true))),
+        BooleanForm::Lit(true)
+    )]
+    #[case::absent(
+        BondConstraintsForm::from(BondConstraintForm::ring_membership(RingScope::All, 1)),
+        BooleanForm::Undetermined
+    )]
+    fn test_bond_constraints_form_aromatic(
+        #[case] cs: BondConstraintsForm,
+        #[case] expected: BooleanForm,
+    ) {
+        assert_eq!(cs.aromatic(), &expected);
+    }
+
+    #[rstest]
+    #[case::stored(
+        BondConstraintsForm::from(BondConstraintForm::cis_trans_stereo(
+            CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+        )),
+        CisTransStereoForm::Stereo(StereoCoset::Lit(1))
+    )]
+    #[case::absent(
+        BondConstraintsForm::from(BondConstraintForm::aromatic(BooleanForm::Lit(true))),
+        CisTransStereoForm::Undetermined
+    )]
+    fn test_bond_constraints_form_cis_trans_stereo(
+        #[case] cs: BondConstraintsForm,
+        #[case] expected: CisTransStereoForm,
+    ) {
+        assert_eq!(cs.cis_trans_stereo(), &expected);
+    }
+
+    #[rstest]
+    #[case::memberships(
+        BondConstraintsForm::from(vec![
+            BondConstraintForm::aromatic(BooleanForm::Lit(true)),
+            BondConstraintForm::ring_membership(RingScope::All, 2),
+            BondConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ]),
+        vec![
+            RingMembershipForm::new(RingScope::All, 2),
+            RingMembershipForm::new(RingScope::Size(6), 1),
+        ]
+    )]
+    #[case::none(
+        BondConstraintsForm::from(BondConstraintForm::aromatic(BooleanForm::Lit(true))),
+        vec![]
+    )]
+    fn test_bond_constraints_form_ring_memberships(
+        #[case] cs: BondConstraintsForm,
+        #[case] expected: Vec<RingMembershipForm>,
+    ) {
+        assert_eq!(
+            cs.ring_memberships().collect::<Vec<_>>(),
+            expected.iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
+    #[case::stored(
+        BondConstraintsForm::from(vec![
+            BondConstraintForm::ring_membership(RingScope::All, 2),
+            BondConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ]),
+        NumForm::Lit(2)
+    )]
+    #[case::absent(
+        BondConstraintsForm::from(BondConstraintForm::ring_membership(RingScope::Size(6), 1)),
+        NumForm::Undetermined
+    )]
+    fn test_bond_constraints_form_ring_count(
+        #[case] cs: BondConstraintsForm,
+        #[case] expected: NumForm,
+    ) {
+        assert_eq!(cs.ring_count(), &expected);
+    }
+
+    #[rstest]
+    #[case::stored(6, NumForm::Lit(1))]
+    #[case::absent(5, NumForm::Undetermined)]
+    fn test_bond_constraints_form_ring_size_count(#[case] size: u8, #[case] expected: NumForm) {
+        let cs = BondConstraintsForm::from(vec![
+            BondConstraintForm::ring_membership(RingScope::All, 2),
+            BondConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ]);
+        assert_eq!(cs.ring_size_count(size), &expected);
     }
 
     #[rstest]

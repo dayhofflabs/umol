@@ -990,11 +990,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::with_constraint(Some(AtomConstraintForm::valence(4)), Some(NumForm::Lit(4)))]
-    #[case::absent(None, None)]
+    #[case::with_constraint(Some(AtomConstraintForm::valence(4)), NumForm::Lit(4))]
+    #[case::absent(None, NumForm::Undetermined)]
     fn test_atom_view_valence_constraint(
         #[case] constraint: Option<AtomConstraintForm>,
-        #[case] expected: Option<NumForm>,
+        #[case] expected: NumForm,
     ) {
         let mut atom = AtomForm::from_element(Element::C);
         if let Some(c) = constraint {
@@ -1004,10 +1004,7 @@ mod tests {
             atoms: vec![atom],
             ..Default::default()
         });
-        assert_eq!(
-            molecule.atom(AtomId(0)).constraints().valence(),
-            expected.as_ref()
-        );
+        assert_eq!(molecule.atom(AtomId(0)).constraints().valence(), &expected);
     }
 
     #[rstest]
@@ -1035,7 +1032,7 @@ mod tests {
         });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().donated_pairs(),
-            Some(&NumForm::Lit(1)),
+            &NumForm::Lit(1),
         );
     }
 
@@ -1064,7 +1061,7 @@ mod tests {
         });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().accepted_pairs(),
-            Some(&NumForm::Lit(2)),
+            &NumForm::Lit(2),
         );
     }
 
@@ -1292,7 +1289,7 @@ mod tests {
         });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().aromatic_valence(),
-            Some(&AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            &AromaticValenceForm::Aromatic(NumForm::Lit(1)),
         );
     }
 
@@ -1345,7 +1342,7 @@ mod tests {
         });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().multicenter_valence(),
-            Some(&MulticenterValenceForm::Multicenter(NumForm::Lit(2))),
+            &MulticenterValenceForm::Multicenter(NumForm::Lit(2)),
         );
     }
 

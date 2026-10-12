@@ -363,11 +363,16 @@ have a derived value, so the readings agree on them. Every reading that derives
 a ring key requires ring context.
 
 Each constraint form type gains `undetermined(key)`, its vacuous form at a key,
-which a reading returns for a key without a source. The containers' typed
-getters return the stored value, owned, and the vacuous value for an absent key,
-as `aromatic()`, `electron_count()`, `intramolecular()`, and `stereogenicity()`
-already do. `get`, `contains`, and `iter` remain the storage accessors, and the
-views' inherited getters follow the containers'.
+which a reading returns for a key without a source. The constraint container of
+each of the eight entity kinds has a named getter for every key, and its
+constraints view has the same getter. Each returns `&T`, for `Copy` and
+non-`Copy` values alike: the stored value, or a static vacuous value for an
+absent key, so a vacuous entry and an absent key read alike. The getter of a key
+with a parameter (a ring scope, a ligand permutation, or a ligand pair) takes the
+parameter and returns the inner value; an iterator over the key's entries yields
+references to the stored outer forms, so the entries can be listed without
+knowing their parameters. Getters and iterators keep doc 122's rule that read
+paths borrow and clone nothing. `get`, `contains`, and `iter` are unchanged.
 
 `asserted_complete` reads only the entity's own storage and the absence cell. An
 incident bond's assertion of aromaticity moves into the evidenced readings,
@@ -376,18 +381,22 @@ that asserts non-aromaticity next to a bond that asserts aromaticity reads ⊥,
 not non-aromatic. The constraints views' `is_compatible` compares against
 `evidenced`.
 
-Valence admission, under atom typing and under counts, reads
-`evidenced_complete`, and so do aromaticity perception, for each atom's
-contribution, and stereo perception. Admission builds the ring set when a
+Valence admission and implicit hydrogen inference, under atom typing and under
+counts, read `evidenced_complete`, and so do aromaticity perception, for each
+atom's contribution, and stereo perception. Admission builds the ring set when a
 registry row states a ring key. An atom whose evidence meets to ⊥ admits no
 candidate, so atom typing and counts report their existing NoMatch. derive
 reports an atom whose aromatic evidence meets to ⊥ as an AromaticValenceMismatch
 when the conflict is with its system, and as an AromaticValenceBondMismatch when
-the conflict is with an incident bond. Three outcomes change. Counts reads an
+the conflict is with an incident bond. Four outcomes change. Counts reads an
 atom that asserts non-aromaticity inside a stored system as ⊥, not aromatic.
 Perception reads an atom that asserts m electrons inside a stored system that
 gives it n ≠ m as ⊥, not m. An atom without aromatic evidence outside every
 system is excluded from perception instead of contributing zero electrons.
+Implicit hydrogen inference, which export uses to omit stored H counts, infers
+no count for an atom whose stored valence or aromatic valence conflicts with its
+derived value, where the stored value took precedence, or whose only aromatic
+evidence is an incident bond's `#a`, where the atom read as non-aromatic.
 Stereo perception's outcomes are unchanged.
 
 Substructure matching, and reaction matching through it, asks the constraints
@@ -1081,24 +1090,52 @@ a property over generated constraint forms of the eight types:
 `x.as_undetermined()`, and meets x to its normal form, or to ⊥ where x does not
 normalize.
 
-#### S3a2 — Owned typed getters on constraint containers
+#### S3a2 — Entity constraint getters return references **Done**
 
-**Modules:** graph-IR constraint/atom, bond, and dative, and view/constraints;
-their callers in graph-IR, graph, io, and umol-py. **Breaking, red→green within
-the subitem.** [dep: none]
+**Modules:** graph-IR constraint/atom, bond, dative, aromatic, multicenter,
+noncovalent, and stereo, and view/constraints; their callers in graph-IR, graph,
+io, and umol-py. **Breaking, red→green within the subitem.** [dep: none]
 
-The typed getters that return `Option<&T>` return `T`, the stored value or the
-vacuous value for an absent key: the atom getters (`valence`,
-`aromatic_valence`, `multicenter_valence`, `tetrahedral_stereo`, `degree`,
-`total_degree`, `total_valence`, `ring_degree`, `ring_valence`,
-`total_hydrogens`, `donated_pairs`, `accepted_pairs`, `ring_count`, and
-`ring_size_count`), `cis_trans_stereo` on bonds, and `ring_count` and
-`ring_size_count` on bonds and dative bonds. The views' inherited getters
-follow. Callers match the value instead of an option, and matches that cover
-both `None` and the vacuous value collapse.
+Every named getter on the eight constraint containers returns `&T`, the stored
+value or a static vacuous value for an absent key:
 
-**Tests:** per getter, a stored value and an absent key, which reads the vacuous
-value; existing results.
+- the getters that return `Option<&T>`: on atoms `valence`, `aromatic_valence`,
+  `multicenter_valence`, `tetrahedral_stereo`, `degree`, `total_degree`,
+  `total_valence`, `ring_degree`, `ring_valence`, `total_hydrogens`,
+  `donated_pairs`, `accepted_pairs`, `ring_count`, and `ring_size_count`;
+  `cis_trans_stereo` on bonds; and `ring_count` and `ring_size_count` on bonds
+  and dative bonds;
+- the getters that return owned values: `aromatic` on bonds and dative bonds,
+  `electron_count` on aromatic systems and multicenter bonds, `intramolecular` on
+  noncovalent bonds, and `topicity` and `stereogenicity` on stereo atoms and
+  stereo bonds;
+- `ligand_symmetry` and `fluxionality` on stereo atoms and stereo bonds, which
+  return the whole form and instead return its `BooleanForm` value, as `topicity`
+  and the ring getters return the value at their parameter.
+
+`ring_memberships` on atoms, bonds, and dative bonds becomes public and yields
+`&RingMembershipForm`, as the stereo iterators yield references to their forms.
+The views' inherited getters follow and return `&'a T`; atom views gain
+`ring_size_count`, the atom, bond, and dative bond views gain `ring_memberships`,
+and the stereo atom and stereo bond views gain `ligand_symmetry`. Callers match
+the value instead of an option: matches that cover both `None` and the vacuous
+value collapse, `unwrap_or` with the vacuous value goes, and a caller that needs
+an owned value clones it where it does. A stored vacuous value reads as an absent
+key, so `infer_implicit_hydrogens` derives the valence of an atom that stores
+`#v*` instead of inferring no count. The umol-py getters follow: those that return
+`None` for an absent key return `Undetermined`, `ligand_symmetry` and
+`fluxionality` return the value, as `topicity` already does, and the atom, bond,
+and dative bond constraints gain `ring_memberships`, a list of ring membership
+forms, as `ligand_symmetries`, `fluxionalities`, and `topicities` list theirs.
+
+**Tests:** per getter, on containers and views, a stored value and an absent key,
+which reads the vacuous value, including `ligand_symmetry` and `fluxionality` at a
+permutation with and without an entry; `ring_memberships` on containers, views,
+and the umol-py constraints yields each stored ring membership; existing results,
+except the two `open_valence` inference cases, which expected no count for `#v*`
+and are removed, since `filtered_nonliteral_h` under atom typing and
+`unresolved_h_lp` under counts cover an atom without `#v`, and the umol-py tests
+that read an absent key as `None`, which read `Undetermined`.
 
 **Verification:** the resolve and substructure bench groups, against a baseline
 taken before the change.
@@ -1141,7 +1178,7 @@ every reading returns the same value on a molecule and on its normal form.
 **Verification:** the resolve and substructure bench groups, against a baseline
 taken before the change.
 
-#### S3c — Valence admission reads evidenced_complete
+#### S3c — Valence admission and implicit hydrogen inference read evidenced_complete
 
 **Modules:** graph valence/atom_typing and valence/counts. **Green.** [dep: S3b]
 
@@ -1153,10 +1190,23 @@ Counts applies the same ground-atom test and reads aromatic evidence and the
 candidate aromatic valences from `evidenced_complete`. An atom whose evidence
 meets to ⊥ admits no candidate and reports NoMatch.
 
-**Tests:** existing admission results; NoMatch under both sources for an atom
-that asserts non-aromaticity next to a bond that asserts aromaticity, and under
-counts for an atom that asserts non-aromaticity inside a stored system; a
-registry row with a ring key admits by the atom's ring membership.
+`infer_implicit_hydrogens`, under both sources, reads the atom's valence and
+aromatic valence from `evidenced_complete`, replacing the rule that a stored
+assertion takes precedence over the derived value. An assertion that conflicts
+with its derived value meets to ⊥ and infers no count; an incident bond's `#a`
+reads as `#a+` and infers no count, as the atom's own `#a+` does. Both doc
+comments follow.
+
+**Tests:** existing admission and export results; NoMatch under both sources for
+an atom that asserts non-aromaticity next to a bond that asserts aromaticity,
+and under counts for an atom that asserts non-aromaticity inside a stored
+system; a registry row with a ring key admits by the atom's ring membership.
+For `infer_implicit_hydrogens` under both sources: the stored-valence and
+stored-aromatic cases, whose assertions conflict with their derived values,
+infer no count; an atom outside the stored systems next to a bond that asserts
+aromaticity infers no count; under counts, the cases that assert a nonzero `#v`
+on an atom without bonds, and the table case, gain bonds that realize it and
+keep their results.
 
 **Verification:** the resolve bench groups resolve_ingest_smiles and
 smiles_roundtrip/resolve, against a baseline taken before the change.

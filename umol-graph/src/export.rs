@@ -562,7 +562,7 @@ fn elide_implicit_hydrogens(
         || lowered.class.is_some()
         || matches!(
             atom.constraints().tetrahedral_stereo(),
-            Some(TetrahedralStereoForm::Stereo(_))
+            TetrahedralStereoForm::Stereo(_)
         )
         || !matches!(
             lowered.element,

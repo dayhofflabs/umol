@@ -132,10 +132,10 @@ impl MulticenterBondConstraintsForm {
     }
 
     /// The bond's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
-    pub fn electron_count(&self) -> NumForm {
+    pub fn electron_count(&self) -> &NumForm {
         match self.get(MulticenterBondConstraintKey::ElectronCount) {
-            Some(MulticenterBondConstraintForm::ElectronCount(v)) => v.clone(),
-            _ => NumForm::Undetermined,
+            Some(MulticenterBondConstraintForm::ElectronCount(v)) => v,
+            _ => &NumForm::Undetermined,
         }
     }
 
@@ -357,7 +357,7 @@ impl Lattice for MulticenterBondConstraintsForm {
     /// Pattern-driven: the electron-count value is matched on its own lattice; an empty
     /// pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
-        self.electron_count().matches(&target.electron_count())
+        self.electron_count().matches(target.electron_count())
     }
 
     /// Sorted merge, short-circuit: only shared keys can conflict; non-shared keys are always
@@ -552,6 +552,19 @@ mod tests {
         let cs = MulticenterBondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rstest]
+    #[case::stored(
+        MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(2)),
+        NumForm::Lit(2)
+    )]
+    #[case::absent(MulticenterBondConstraintsForm::new(), NumForm::Undetermined)]
+    fn test_multicenter_bond_constraints_form_electron_count(
+        #[case] cs: MulticenterBondConstraintsForm,
+        #[case] expected: NumForm,
+    ) {
+        assert_eq!(cs.electron_count(), &expected);
     }
 
     #[rstest]

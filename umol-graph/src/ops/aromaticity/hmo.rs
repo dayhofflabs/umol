@@ -377,7 +377,6 @@ mod tests {
                 .attributes()
                 .constraints
                 .aromatic_valence()
-                .unwrap_or(&AromaticValenceForm::Undetermined)
             {
                 AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                 _ => None,
@@ -528,13 +527,7 @@ mod tests {
                 &molecule,
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,
-                &|v| match molecule
-                    .atom(v)
-                    .attributes()
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceForm::Undetermined)
-                {
+                &|v| match molecule.atom(v).attributes().constraints.aromatic_valence() {
                     AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 },
@@ -579,7 +572,6 @@ mod tests {
                 .attributes()
                 .constraints
                 .aromatic_valence()
-                .unwrap_or(&AromaticValenceForm::Undetermined)
             {
                 AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
                 _ => None,

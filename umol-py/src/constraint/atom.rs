@@ -773,13 +773,10 @@ impl AtomConstraintsForm {
         self.0.contains(key.bind(py).borrow().to_rust(py))
     }
 
-    /// The valence value, or `None`.
+    /// The valence value (undetermined if absent).
     #[getter]
-    pub(crate) fn valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .valence()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn valence(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.valence())
     }
 
     #[setter]
@@ -788,13 +785,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::valence(value.to_rust(py)));
     }
 
-    /// The donated-pairs value, or `None`.
+    /// The donated-pairs value (undetermined if absent).
     #[getter]
-    pub(crate) fn donated_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .donated_pairs()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn donated_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.donated_pairs())
     }
 
     #[setter]
@@ -803,13 +797,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::donated_pairs(value.to_rust(py)));
     }
 
-    /// The accepted-pairs value, or `None`.
+    /// The accepted-pairs value (undetermined if absent).
     #[getter]
-    pub(crate) fn accepted_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .accepted_pairs()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn accepted_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.accepted_pairs())
     }
 
     #[setter]
@@ -818,13 +809,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::accepted_pairs(value.to_rust(py)));
     }
 
-    /// The aromatic-valence state, or `None`.
+    /// The aromatic-valence state (undetermined if absent).
     #[getter]
-    pub(crate) fn aromatic_valence(&self, py: Python<'_>) -> PyResult<Option<AromaticValenceForm>> {
-        self.0
-            .aromatic_valence()
-            .map(|c| AromaticValenceForm::from_rust(py, c))
-            .transpose()
+    pub(crate) fn aromatic_valence(&self, py: Python<'_>) -> PyResult<AromaticValenceForm> {
+        AromaticValenceForm::from_rust(py, self.0.aromatic_valence())
     }
 
     #[setter]
@@ -839,16 +827,10 @@ impl AtomConstraintsForm {
         Ok(())
     }
 
-    /// The multicenter-valence state, or `None`.
+    /// The multicenter-valence state (undetermined if absent).
     #[getter]
-    pub(crate) fn multicenter_valence(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Option<MulticenterValenceForm>> {
-        self.0
-            .multicenter_valence()
-            .map(|c| MulticenterValenceForm::from_rust(py, c))
-            .transpose()
+    pub(crate) fn multicenter_valence(&self, py: Python<'_>) -> PyResult<MulticenterValenceForm> {
+        MulticenterValenceForm::from_rust(py, self.0.multicenter_valence())
     }
 
     #[setter]
@@ -863,16 +845,10 @@ impl AtomConstraintsForm {
         Ok(())
     }
 
-    /// The tetrahedral-stereo state, or `None`.
+    /// The tetrahedral-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn tetrahedral_stereo(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Option<TetrahedralStereoForm>> {
-        self.0
-            .tetrahedral_stereo()
-            .map(|c| TetrahedralStereoForm::from_rust(py, c))
-            .transpose()
+    pub(crate) fn tetrahedral_stereo(&self, py: Python<'_>) -> PyResult<TetrahedralStereoForm> {
+        TetrahedralStereoForm::from_rust(py, self.0.tetrahedral_stereo())
     }
 
     #[setter]
@@ -887,13 +863,10 @@ impl AtomConstraintsForm {
         Ok(())
     }
 
-    /// The degree value, or `None`.
+    /// The degree value (undetermined if absent).
     #[getter]
-    pub(crate) fn degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .degree()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn degree(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.degree())
     }
 
     #[setter]
@@ -902,13 +875,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::degree(value.to_rust(py)));
     }
 
-    /// The total-degree value, or `None`.
+    /// The total-degree value (undetermined if absent).
     #[getter]
-    pub(crate) fn total_degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .total_degree()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn total_degree(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.total_degree())
     }
 
     #[setter]
@@ -917,13 +887,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::total_degree(value.to_rust(py)));
     }
 
-    /// The total-valence value, or `None`.
+    /// The total-valence value (undetermined if absent).
     #[getter]
-    pub(crate) fn total_valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .total_valence()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn total_valence(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.total_valence())
     }
 
     #[setter]
@@ -932,13 +899,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::total_valence(value.to_rust(py)));
     }
 
-    /// The ring-degree value, or `None`.
+    /// The ring-degree value (undetermined if absent).
     #[getter]
-    pub(crate) fn ring_degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .ring_degree()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn ring_degree(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.ring_degree())
     }
 
     #[setter]
@@ -947,13 +911,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::ring_degree(value.to_rust(py)));
     }
 
-    /// The ring-valence value, or `None`.
+    /// The ring-valence value (undetermined if absent).
     #[getter]
-    pub(crate) fn ring_valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .ring_valence()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn ring_valence(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.ring_valence())
     }
 
     #[setter]
@@ -962,13 +923,10 @@ impl AtomConstraintsForm {
             .set(GraphIrAtomConstraintForm::ring_valence(value.to_rust(py)));
     }
 
-    /// The total-hydrogens value, or `None`.
+    /// The total-hydrogens value (undetermined if absent).
     #[getter]
-    pub(crate) fn total_hydrogens(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.0
-            .total_hydrogens()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+    pub(crate) fn total_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.total_hydrogens())
     }
 
     #[setter]
@@ -978,13 +936,18 @@ impl AtomConstraintsForm {
         ));
     }
 
-    /// The all-rings membership count, or `None`.
-    #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+    /// The ring-membership constraints.
+    pub(crate) fn ring_memberships(&self, py: Python<'_>) -> PyResult<Vec<RingMembershipForm>> {
         self.0
-            .ring_count()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+            .ring_memberships()
+            .map(|m| RingMembershipForm::from_rust(py, m))
+            .collect()
+    }
+
+    /// The all-rings membership count (undetermined if absent).
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.ring_count())
     }
 
     #[setter]
@@ -1384,12 +1347,10 @@ impl AtomConstraintsView {
         self.read(py, |cs| Ok(cs.contains(key)))
     }
 
-    /// The valence value, or `None`.
+    /// The valence value (undetermined if absent).
     #[getter]
-    pub(crate) fn valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.valence().map(|v| NumForm::from_rust(py, v)).transpose()
-        })
+    pub(crate) fn valence(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.valence()))
     }
 
     #[setter]
@@ -1397,14 +1358,10 @@ impl AtomConstraintsView {
         self.set_form(py, GraphIrAtomConstraintForm::valence(value.to_rust(py)))
     }
 
-    /// The donated-pairs value, or `None`.
+    /// The donated-pairs value (undetermined if absent).
     #[getter]
-    pub(crate) fn donated_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.donated_pairs()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn donated_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.donated_pairs()))
     }
 
     #[setter]
@@ -1415,14 +1372,10 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The accepted-pairs value, or `None`.
+    /// The accepted-pairs value (undetermined if absent).
     #[getter]
-    pub(crate) fn accepted_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.accepted_pairs()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn accepted_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.accepted_pairs()))
     }
 
     #[setter]
@@ -1433,13 +1386,11 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The aromatic-valence state, or `None`.
+    /// The aromatic-valence state (undetermined if absent).
     #[getter]
-    pub(crate) fn aromatic_valence(&self, py: Python<'_>) -> PyResult<Option<AromaticValenceForm>> {
+    pub(crate) fn aromatic_valence(&self, py: Python<'_>) -> PyResult<AromaticValenceForm> {
         self.read(py, |cs| {
-            cs.aromatic_valence()
-                .map(|c| AromaticValenceForm::from_rust(py, c))
-                .transpose()
+            AromaticValenceForm::from_rust(py, cs.aromatic_valence())
         })
     }
 
@@ -1455,16 +1406,11 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The multicenter-valence state, or `None`.
+    /// The multicenter-valence state (undetermined if absent).
     #[getter]
-    pub(crate) fn multicenter_valence(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Option<MulticenterValenceForm>> {
+    pub(crate) fn multicenter_valence(&self, py: Python<'_>) -> PyResult<MulticenterValenceForm> {
         self.read(py, |cs| {
-            cs.multicenter_valence()
-                .map(|c| MulticenterValenceForm::from_rust(py, c))
-                .transpose()
+            MulticenterValenceForm::from_rust(py, cs.multicenter_valence())
         })
     }
 
@@ -1480,16 +1426,11 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The tetrahedral-stereo state, or `None`.
+    /// The tetrahedral-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn tetrahedral_stereo(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Option<TetrahedralStereoForm>> {
+    pub(crate) fn tetrahedral_stereo(&self, py: Python<'_>) -> PyResult<TetrahedralStereoForm> {
         self.read(py, |cs| {
-            cs.tetrahedral_stereo()
-                .map(|c| TetrahedralStereoForm::from_rust(py, c))
-                .transpose()
+            TetrahedralStereoForm::from_rust(py, cs.tetrahedral_stereo())
         })
     }
 
@@ -1505,12 +1446,10 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The degree value, or `None`.
+    /// The degree value (undetermined if absent).
     #[getter]
-    pub(crate) fn degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.degree().map(|v| NumForm::from_rust(py, v)).transpose()
-        })
+    pub(crate) fn degree(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.degree()))
     }
 
     #[setter]
@@ -1518,14 +1457,10 @@ impl AtomConstraintsView {
         self.set_form(py, GraphIrAtomConstraintForm::degree(value.to_rust(py)))
     }
 
-    /// The total-degree value, or `None`.
+    /// The total-degree value (undetermined if absent).
     #[getter]
-    pub(crate) fn total_degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.total_degree()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn total_degree(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.total_degree()))
     }
 
     #[setter]
@@ -1536,14 +1471,10 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The total-valence value, or `None`.
+    /// The total-valence value (undetermined if absent).
     #[getter]
-    pub(crate) fn total_valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.total_valence()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn total_valence(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.total_valence()))
     }
 
     #[setter]
@@ -1554,14 +1485,10 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The ring-degree value, or `None`.
+    /// The ring-degree value (undetermined if absent).
     #[getter]
-    pub(crate) fn ring_degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.ring_degree()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn ring_degree(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_degree()))
     }
 
     #[setter]
@@ -1572,14 +1499,10 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The ring-valence value, or `None`.
+    /// The ring-valence value (undetermined if absent).
     #[getter]
-    pub(crate) fn ring_valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.ring_valence()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn ring_valence(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_valence()))
     }
 
     #[setter]
@@ -1590,14 +1513,10 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The total-hydrogens value, or `None`.
+    /// The total-hydrogens value (undetermined if absent).
     #[getter]
-    pub(crate) fn total_hydrogens(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.total_hydrogens()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    pub(crate) fn total_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.total_hydrogens()))
     }
 
     #[setter]
@@ -1608,14 +1527,19 @@ impl AtomConstraintsView {
         )
     }
 
-    /// The all-rings membership count, or `None`.
-    #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+    /// The ring-membership constraints.
+    pub(crate) fn ring_memberships(&self, py: Python<'_>) -> PyResult<Vec<RingMembershipForm>> {
         self.read(py, |cs| {
-            cs.ring_count()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
+            cs.ring_memberships()
+                .map(|m| RingMembershipForm::from_rust(py, m))
+                .collect()
         })
+    }
+
+    /// The all-rings membership count (undetermined if absent).
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_count()))
     }
 
     #[setter]
@@ -1723,13 +1647,9 @@ impl AtomRingSizeCounts {
 
 #[pymethods]
 impl AtomRingSizeCounts {
-    /// The membership count for rings of `size`, or `None`.
-    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.ring_size_count(size)
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    /// The membership count for rings of `size` (undetermined if absent).
+    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_size_count(size)))
     }
 
     /// The number of distinct ring sizes with a membership constraint.
@@ -1738,7 +1658,11 @@ impl AtomRingSizeCounts {
     }
 
     pub(crate) fn __contains__(&self, py: Python<'_>, size: u8) -> PyResult<bool> {
-        self.read(py, |cs| Ok(cs.ring_size_count(size).is_some()))
+        self.read(py, |cs| {
+            Ok(cs.contains(GraphIrAtomConstraintKey::RingMembership(
+                GraphIrRingScope::Size(size),
+            )))
+        })
     }
 
     /// Iterate the present ring sizes (as ints).

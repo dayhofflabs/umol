@@ -854,13 +854,12 @@ macro_rules! stereo_constraints {
                     .collect()
             }
 
-            /// The ligand-symmetry constraint at `permutation` (undetermined if absent).
+            /// The ligand-symmetry `invariant` value at `permutation` (undetermined if absent).
             pub(crate) fn ligand_symmetry(
                 &self,
-                py: Python<'_>,
                 permutation: OrientedLigandPermutation,
-            ) -> PyResult<LigandSymmetryForm> {
-                LigandSymmetryForm::from_rust(py, &self.0.ligand_symmetry(permutation.to_rust()))
+            ) -> BooleanForm {
+                BooleanForm::from_rust(self.0.ligand_symmetry(permutation.to_rust()))
             }
 
             /// The fluxionality constraints.
@@ -871,13 +870,9 @@ macro_rules! stereo_constraints {
                     .collect()
             }
 
-            /// The fluxionality constraint at `permutation` (undetermined if absent).
-            pub(crate) fn fluxionality(
-                &self,
-                py: Python<'_>,
-                permutation: LigandPermutation,
-            ) -> PyResult<FluxionalityForm> {
-                FluxionalityForm::from_rust(py, &self.0.fluxionality(permutation.to_rust()))
+            /// The fluxionality `active` value at `permutation` (undetermined if absent).
+            pub(crate) fn fluxionality(&self, permutation: LigandPermutation) -> BooleanForm {
+                BooleanForm::from_rust(self.0.fluxionality(permutation.to_rust()))
             }
 
             /// The topicity constraints.
@@ -890,12 +885,12 @@ macro_rules! stereo_constraints {
 
             /// The topicity relation at ligand `pair` (undetermined if absent).
             pub(crate) fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
-                TopicityRelationForm::from_rust(&self.0.topicity(pair.to_rust()))
+                TopicityRelationForm::from_rust(self.0.topicity(pair.to_rust()))
             }
 
             /// The stereogenicity constraint (undetermined if absent).
             pub(crate) fn stereogenicity(&self) -> StereogenicityForm {
-                StereogenicityForm::from_rust(&self.0.stereogenicity())
+                StereogenicityForm::from_rust(self.0.stereogenicity())
             }
         }
 
@@ -1234,14 +1229,16 @@ macro_rules! stereo_constraints {
                 })
             }
 
-            /// The ligand-symmetry constraint at `permutation` (undetermined if absent).
+            /// The ligand-symmetry `invariant` value at `permutation` (undetermined if absent).
             pub(crate) fn ligand_symmetry(
                 &self,
                 py: Python<'_>,
                 permutation: OrientedLigandPermutation,
-            ) -> PyResult<LigandSymmetryForm> {
+            ) -> PyResult<BooleanForm> {
                 self.read(py, |cs| {
-                    LigandSymmetryForm::from_rust(py, &cs.ligand_symmetry(permutation.to_rust()))
+                    Ok(BooleanForm::from_rust(
+                        cs.ligand_symmetry(permutation.to_rust()),
+                    ))
                 })
             }
 
@@ -1254,14 +1251,16 @@ macro_rules! stereo_constraints {
                 })
             }
 
-            /// The fluxionality constraint at `permutation` (undetermined if absent).
+            /// The fluxionality `active` value at `permutation` (undetermined if absent).
             pub(crate) fn fluxionality(
                 &self,
                 py: Python<'_>,
                 permutation: LigandPermutation,
-            ) -> PyResult<FluxionalityForm> {
+            ) -> PyResult<BooleanForm> {
                 self.read(py, |cs| {
-                    FluxionalityForm::from_rust(py, &cs.fluxionality(permutation.to_rust()))
+                    Ok(BooleanForm::from_rust(
+                        cs.fluxionality(permutation.to_rust()),
+                    ))
                 })
             }
 
@@ -1281,16 +1280,14 @@ macro_rules! stereo_constraints {
                 pair: StereoLigandPair,
             ) -> PyResult<TopicityRelationForm> {
                 self.read(py, |cs| {
-                    Ok(TopicityRelationForm::from_rust(
-                        &cs.topicity(pair.to_rust()),
-                    ))
+                    Ok(TopicityRelationForm::from_rust(cs.topicity(pair.to_rust())))
                 })
             }
 
             /// The stereogenicity constraint (undetermined if absent).
             pub(crate) fn stereogenicity(&self, py: Python<'_>) -> PyResult<StereogenicityForm> {
                 self.read(py, |cs| {
-                    Ok(StereogenicityForm::from_rust(&cs.stereogenicity()))
+                    Ok(StereogenicityForm::from_rust(cs.stereogenicity()))
                 })
             }
         }

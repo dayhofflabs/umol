@@ -46,7 +46,7 @@ use crate::strategies::{select_scenario, SelectScenario};
 
 fn contribution(form: &AtomForm) -> Option<u8> {
     match form.constraints.aromatic_valence() {
-        Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => u8::try_from(*valence).ok(),
+        AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
         _ => None,
     }
 }
@@ -151,7 +151,7 @@ fn exhaustive_select(
                     disjuncts.iter().all(|form| {
                         matches!(
                             form.constraints.aromatic_valence(),
-                            Some(AromaticValenceForm::Aromatic(_))
+                            AromaticValenceForm::Aromatic(_)
                         )
                     })
                 })
@@ -349,7 +349,7 @@ fn exhaustive_select(
             if disjuncts.iter().all(|form| {
                 matches!(
                     form.constraints.aromatic_valence(),
-                    Some(AromaticValenceForm::Aromatic(_))
+                    AromaticValenceForm::Aromatic(_)
                 )
             }) {
                 return Solution::Contradictory(

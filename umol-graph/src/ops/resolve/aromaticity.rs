@@ -417,10 +417,10 @@ impl AromaticityResolver {
                 let attributes = molecule.atom(atom).attributes();
                 let aromatic = AromaticValenceForm::aromatic(NumForm::Lit(electrons));
                 let assertion = match attributes.constraints.aromatic_valence() {
-                    Some(existing) => existing
+                    AromaticValenceForm::Undetermined => aromatic,
+                    existing => existing
                         .meet(&aromatic)
                         .ok_or(AromaticityProjectError::AtomAssertion { atom })?,
-                    None => aromatic,
                 };
                 let mut update = AtomUpdate::default();
                 update
@@ -592,7 +592,7 @@ impl AromaticityResolver {
             || molecule.atoms().iter().any(|atom| {
                 matches!(
                     atom.attributes().constraints.aromatic_valence(),
-                    Some(AromaticValenceForm::Aromatic(_))
+                    AromaticValenceForm::Aromatic(_)
                 )
             })
             || molecule.bonds().iter().any(|bond| {
@@ -621,7 +621,7 @@ impl AromaticityResolver {
             !carrier_atoms.contains(&atom.id())
                 && matches!(
                     atom.attributes().constraints.aromatic_valence(),
-                    Some(AromaticValenceForm::Aromatic(valence)) if valence.as_lit().is_none()
+                    AromaticValenceForm::Aromatic(valence) if valence.as_lit().is_none()
                 )
         });
         if stored_gate {
@@ -634,9 +634,7 @@ impl AromaticityResolver {
 
         let contribution = |form: &AtomForm| -> Option<u8> {
             match form.constraints.aromatic_valence() {
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
-                    u8::try_from(*valence).ok()
-                }
+                AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
                 _ => None,
             }
         };
@@ -749,7 +747,7 @@ impl AromaticityResolver {
                         disjuncts.iter().all(|form| {
                             matches!(
                                 form.constraints.aromatic_valence(),
-                                Some(AromaticValenceForm::Aromatic(_))
+                                AromaticValenceForm::Aromatic(_)
                             )
                         })
                     })
@@ -1068,7 +1066,7 @@ impl AromaticityResolver {
                 if disjuncts.iter().all(|form| {
                     matches!(
                         form.constraints.aromatic_valence(),
-                        Some(AromaticValenceForm::Aromatic(_))
+                        AromaticValenceForm::Aromatic(_)
                     )
                 }) {
                     return Ok(Solution::Contradictory(
@@ -1101,9 +1099,9 @@ impl AromaticityResolver {
 fn stored_contribution(molecule: &Molecule, atom: AtomId) -> Option<u8> {
     let view = molecule.atom(atom);
     match view.attributes().constraints.aromatic_valence() {
-        Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => u8::try_from(*valence).ok(),
-        Some(AromaticValenceForm::Aromatic(_) | AromaticValenceForm::NotAromatic) => None,
-        Some(AromaticValenceForm::Undetermined) | None => match view.aromatic_valence() {
+        AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
+        AromaticValenceForm::Aromatic(_) | AromaticValenceForm::NotAromatic => None,
+        AromaticValenceForm::Undetermined => match view.aromatic_valence() {
             NumForm::Lit(valence) => u8::try_from(valence).ok(),
             _ => None,
         },
@@ -1596,9 +1594,9 @@ mod tests {
         NumForm::Lit(0),
         vec![NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(1)],
         vec![
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(0))),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(0)),
         ]
     )]
     #[case::heterogeneous_localized(
@@ -1612,7 +1610,7 @@ mod tests {
             NumForm::Lit(1), NumForm::Lit(0), NumForm::Lit(0),
             NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(0),
         ],
-        vec![Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))); 6]
+        vec![AromaticValenceForm::Aromatic(NumForm::Lit(1)); 6]
     )]
     #[case::accepted_system_with_rejected_projections(
         AromaticityResolveConfig {
@@ -1627,13 +1625,13 @@ mod tests {
         NumForm::Lit(0),
         vec![NumForm::Lit(0); 7],
         vec![
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
         ]
     )]
     #[case::reset_source_constraints(
@@ -1644,7 +1642,7 @@ mod tests {
         benzene(),
         NumForm::Lit(0),
         vec![NumForm::Lit(0); 6],
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_aromaticity_resolver_resolve(
         aromaticity_model: AromaticityModel,
@@ -1652,7 +1650,7 @@ mod tests {
         #[case] mut molecule: Molecule,
         #[case] expected_system_charge: NumForm,
         #[case] expected_atom_charges: Vec<NumForm>,
-        #[case] expected_aromatic_valences: Vec<Option<AromaticValenceForm>>,
+        #[case] expected_aromatic_valences: Vec<AromaticValenceForm>,
     ) {
         let consumed =
             AromaticityResolver::with_config(&aromaticity_model, config).resolve(molecule.clone());
@@ -1681,7 +1679,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
             expected_aromatic_valences
         );

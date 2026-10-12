@@ -62,6 +62,7 @@ from umol import (
     StereoModel,
     StereoResolveConfig,
     TetrahedralConfiguration,
+    TetrahedralStereoForm,
     TransactionError,
     UnderdeterminedError,
     ValenceCandidateSource,
@@ -766,7 +767,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         NumForm.Lit(1),
     ]
     assert [atom.constraints.tetrahedral_stereo for atom in molecule.atoms] == [
-        None
+        TetrahedralStereoForm.Undetermined()
     ] * 4
     assert list(molecule.stereo_atoms) == []
 
@@ -800,8 +801,8 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(1), NumForm.Lit(0), NumForm.Lit(0)],
-                [None] * 3,
-                [None] * 3,
+                [AromaticValenceForm.Undetermined()] * 3,
+                [TetrahedralStereoForm.Undetermined()] * 3,
                 [((0, 1, 2), NumForm.Lit(0))],
                 [],
             ),
@@ -816,8 +817,8 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(0)] * 6,
-                [None] * 6,
-                [None] * 6,
+                [AromaticValenceForm.Undetermined()] * 6,
+                [TetrahedralStereoForm.Undetermined()] * 6,
                 [((0, 1, 2, 3, 4, 5), NumForm.Lit(0))],
                 [],
             ),
@@ -830,8 +831,8 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(0)] * 4,
-                [None] * 4,
-                [None] * 4,
+                [AromaticValenceForm.Undetermined()] * 4,
+                [TetrahedralStereoForm.Undetermined()] * 4,
                 [],
                 [(1, StereoKind.Tetrahedral, StereoCoset.Lit(0))],
             ),

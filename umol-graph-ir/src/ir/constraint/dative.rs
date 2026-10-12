@@ -156,31 +156,31 @@ impl DativeBondConstraintsForm {
     }
 
     /// The dative bond's aromatic value, or `Undetermined` when no `Aromatic` constraint is present.
-    pub fn aromatic(&self) -> BooleanForm {
+    pub fn aromatic(&self) -> &BooleanForm {
         match self.get(DativeBondConstraintKey::Aromatic) {
-            Some(DativeBondConstraintForm::Aromatic(b)) => *b,
-            _ => BooleanForm::Undetermined,
+            Some(DativeBondConstraintForm::Aromatic(b)) => b,
+            _ => &BooleanForm::Undetermined,
         }
     }
 
-    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &NumForm)> {
+    pub fn ring_memberships(&self) -> impl Iterator<Item = &RingMembershipForm> {
         self.iter().filter_map(|c| match c {
-            DativeBondConstraintForm::RingMembership(m) => Some((m.scope, &m.count)),
+            DativeBondConstraintForm::RingMembership(m) => Some(m),
             _ => None,
         })
     }
 
-    fn ring_membership(&self, scope: RingScope) -> Option<&NumForm> {
+    fn ring_membership(&self, scope: RingScope) -> &NumForm {
         self.ring_memberships()
-            .find(|(s, _)| *s == scope)
-            .map(|(_, v)| v)
+            .find(|m| m.scope == scope)
+            .map_or(&NumForm::Undetermined, |m| &m.count)
     }
 
-    pub fn ring_count(&self) -> Option<&NumForm> {
+    pub fn ring_count(&self) -> &NumForm {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> Option<&NumForm> {
+    pub fn ring_size_count(&self, s: u8) -> &NumForm {
         self.ring_membership(RingScope::Size(s))
     }
 
@@ -397,12 +397,10 @@ impl Lattice for DativeBondConstraintsForm {
     /// Each value is matched on its own lattice; an empty pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
         self.iter().all(|c| match c {
-            DativeBondConstraintForm::Aromatic(b) => b.matches(&target.aromatic()),
-            DativeBondConstraintForm::RingMembership(rm) => rm.count.matches(
-                target
-                    .ring_membership(rm.scope)
-                    .unwrap_or(&NumForm::Undetermined),
-            ),
+            DativeBondConstraintForm::Aromatic(b) => b.matches(target.aromatic()),
+            DativeBondConstraintForm::RingMembership(rm) => {
+                rm.count.matches(target.ring_membership(rm.scope))
+            }
         })
     }
 
@@ -601,6 +599,89 @@ mod tests {
         let cs = DativeBondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rstest]
+    #[case::stored(
+        DativeBondConstraintsForm::from(DativeBondConstraintForm::aromatic(BooleanForm::Lit(
+            true
+        ))),
+        BooleanForm::Lit(true)
+    )]
+    #[case::absent(
+        DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(
+            RingScope::All,
+            1,
+        )),
+        BooleanForm::Undetermined
+    )]
+    fn test_dative_bond_constraints_form_aromatic(
+        #[case] cs: DativeBondConstraintsForm,
+        #[case] expected: BooleanForm,
+    ) {
+        assert_eq!(cs.aromatic(), &expected);
+    }
+
+    #[rstest]
+    #[case::memberships(
+        DativeBondConstraintsForm::from(vec![
+            DativeBondConstraintForm::aromatic(BooleanForm::Lit(true)),
+            DativeBondConstraintForm::ring_membership(RingScope::All, 2),
+            DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ]),
+        vec![
+            RingMembershipForm::new(RingScope::All, 2),
+            RingMembershipForm::new(RingScope::Size(6), 1),
+        ]
+    )]
+    #[case::none(
+        DativeBondConstraintsForm::from(DativeBondConstraintForm::aromatic(BooleanForm::Lit(true))),
+        vec![]
+    )]
+    fn test_dative_bond_constraints_form_ring_memberships(
+        #[case] cs: DativeBondConstraintsForm,
+        #[case] expected: Vec<RingMembershipForm>,
+    ) {
+        assert_eq!(
+            cs.ring_memberships().collect::<Vec<_>>(),
+            expected.iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
+    #[case::stored(
+        DativeBondConstraintsForm::from(vec![
+            DativeBondConstraintForm::ring_membership(RingScope::All, 2),
+            DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ]),
+        NumForm::Lit(2)
+    )]
+    #[case::absent(
+        DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(
+            RingScope::Size(6),
+            1,
+        )),
+        NumForm::Undetermined
+    )]
+    fn test_dative_bond_constraints_form_ring_count(
+        #[case] cs: DativeBondConstraintsForm,
+        #[case] expected: NumForm,
+    ) {
+        assert_eq!(cs.ring_count(), &expected);
+    }
+
+    #[rstest]
+    #[case::stored(6, NumForm::Lit(1))]
+    #[case::absent(5, NumForm::Undetermined)]
+    fn test_dative_bond_constraints_form_ring_size_count(
+        #[case] size: u8,
+        #[case] expected: NumForm,
+    ) {
+        let cs = DativeBondConstraintsForm::from(vec![
+            DativeBondConstraintForm::ring_membership(RingScope::All, 2),
+            DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ]);
+        assert_eq!(cs.ring_size_count(size), &expected);
     }
 
     #[rstest]

@@ -20,10 +20,11 @@ use super::super::constraint::{
     DativeBondConstraintKey, DativeBondConstraintsForm, FluxionalityForm, LigandPermutation,
     LigandSymmetryForm, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
     MulticenterBondConstraintsForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
-    NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, StereoAtomConstraintForm,
-    StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintKey, StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm,
-    TopicityForm, TopicityRelationForm,
+    NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, OrientedLigandPermutation,
+    RingMembershipForm, StereoAtomConstraintForm, StereoAtomConstraintKey,
+    StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintKey,
+    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+    TopicityRelationForm,
 };
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -179,56 +180,64 @@ impl<'a> AtomConstraintsView<'a> {
     // The stored container's read API, inherited with its meanings intact:
     // every accessor below reads the asserted side.
 
-    pub fn valence(&self) -> Option<&'a NumForm> {
+    pub fn valence(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).valence()
     }
 
-    pub fn aromatic_valence(&self) -> Option<&'a AromaticValenceForm> {
+    pub fn aromatic_valence(&self) -> &'a AromaticValenceForm {
         atom_asserted_constraints(self.molecule, self.atom).aromatic_valence()
     }
 
-    pub fn multicenter_valence(&self) -> Option<&'a MulticenterValenceForm> {
+    pub fn multicenter_valence(&self) -> &'a MulticenterValenceForm {
         atom_asserted_constraints(self.molecule, self.atom).multicenter_valence()
     }
 
-    pub fn tetrahedral_stereo(&self) -> Option<&'a TetrahedralStereoForm> {
+    pub fn tetrahedral_stereo(&self) -> &'a TetrahedralStereoForm {
         atom_asserted_constraints(self.molecule, self.atom).tetrahedral_stereo()
     }
 
-    pub fn degree(&self) -> Option<&'a NumForm> {
+    pub fn degree(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).degree()
     }
 
-    pub fn total_degree(&self) -> Option<&'a NumForm> {
+    pub fn total_degree(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).total_degree()
     }
 
-    pub fn total_valence(&self) -> Option<&'a NumForm> {
+    pub fn total_valence(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).total_valence()
     }
 
-    pub fn ring_degree(&self) -> Option<&'a NumForm> {
+    pub fn ring_degree(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).ring_degree()
     }
 
-    pub fn ring_valence(&self) -> Option<&'a NumForm> {
+    pub fn ring_valence(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).ring_valence()
     }
 
-    pub fn total_hydrogens(&self) -> Option<&'a NumForm> {
+    pub fn total_hydrogens(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).total_hydrogens()
     }
 
-    pub fn donated_pairs(&self) -> Option<&'a NumForm> {
+    pub fn donated_pairs(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).donated_pairs()
     }
 
-    pub fn accepted_pairs(&self) -> Option<&'a NumForm> {
+    pub fn accepted_pairs(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).accepted_pairs()
     }
 
-    pub fn ring_count(&self) -> Option<&'a NumForm> {
+    pub fn ring_memberships(&self) -> impl Iterator<Item = &'a RingMembershipForm> {
+        atom_asserted_constraints(self.molecule, self.atom).ring_memberships()
+    }
+
+    pub fn ring_count(&self) -> &'a NumForm {
         atom_asserted_constraints(self.molecule, self.atom).ring_count()
+    }
+
+    pub fn ring_size_count(&self, s: u8) -> &'a NumForm {
+        atom_asserted_constraints(self.molecule, self.atom).ring_size_count(s)
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &'a AtomConstraintForm> {
@@ -365,19 +374,23 @@ impl<'a> BondConstraintsView<'a> {
     // The stored container's read API, inherited with its meanings intact:
     // every accessor below reads the asserted side.
 
-    pub fn aromatic(&self) -> BooleanForm {
+    pub fn aromatic(&self) -> &'a BooleanForm {
         bond_asserted_constraints(self.molecule, self.bond).aromatic()
     }
 
-    pub fn cis_trans_stereo(&self) -> Option<&'a CisTransStereoForm> {
+    pub fn cis_trans_stereo(&self) -> &'a CisTransStereoForm {
         bond_asserted_constraints(self.molecule, self.bond).cis_trans_stereo()
     }
 
-    pub fn ring_count(&self) -> Option<&'a NumForm> {
+    pub fn ring_memberships(&self) -> impl Iterator<Item = &'a RingMembershipForm> {
+        bond_asserted_constraints(self.molecule, self.bond).ring_memberships()
+    }
+
+    pub fn ring_count(&self) -> &'a NumForm {
         bond_asserted_constraints(self.molecule, self.bond).ring_count()
     }
 
-    pub fn ring_size_count(&self, s: u8) -> Option<&'a NumForm> {
+    pub fn ring_size_count(&self, s: u8) -> &'a NumForm {
         bond_asserted_constraints(self.molecule, self.bond).ring_size_count(s)
     }
 
@@ -569,15 +582,19 @@ impl<'a> DativeBondConstraintsView<'a> {
         dative_bond_asserted_complete_constraint(self.molecule, self.id, key)
     }
 
-    pub fn aromatic(&self) -> BooleanForm {
+    pub fn aromatic(&self) -> &'a BooleanForm {
         dative_bond_asserted_constraints(self.molecule, self.id).aromatic()
     }
 
-    pub fn ring_count(&self) -> Option<&'a NumForm> {
+    pub fn ring_memberships(&self) -> impl Iterator<Item = &'a RingMembershipForm> {
+        dative_bond_asserted_constraints(self.molecule, self.id).ring_memberships()
+    }
+
+    pub fn ring_count(&self) -> &'a NumForm {
         dative_bond_asserted_constraints(self.molecule, self.id).ring_count()
     }
 
-    pub fn ring_size_count(&self, s: u8) -> Option<&'a NumForm> {
+    pub fn ring_size_count(&self, s: u8) -> &'a NumForm {
         dative_bond_asserted_constraints(self.molecule, self.id).ring_size_count(s)
     }
 }
@@ -592,7 +609,7 @@ impl<'a> AromaticSystemConstraintsView<'a> {
         self.asserted(key).cloned()
     }
 
-    pub fn electron_count(&self) -> NumForm {
+    pub fn electron_count(&self) -> &'a NumForm {
         aromatic_system_asserted_constraints(self.molecule, self.id).electron_count()
     }
 }
@@ -607,7 +624,7 @@ impl<'a> MulticenterBondConstraintsView<'a> {
         self.asserted(key).cloned()
     }
 
-    pub fn electron_count(&self) -> NumForm {
+    pub fn electron_count(&self) -> &'a NumForm {
         multicenter_bond_asserted_constraints(self.molecule, self.id).electron_count()
     }
 }
@@ -622,7 +639,7 @@ impl<'a> NoncovalentBondConstraintsView<'a> {
         self.asserted(key).cloned()
     }
 
-    pub fn intramolecular(&self) -> BooleanForm {
+    pub fn intramolecular(&self) -> &'a BooleanForm {
         noncovalent_bond_asserted_constraints(self.molecule, self.id).intramolecular()
     }
 }
@@ -641,11 +658,15 @@ impl<'a> StereoAtomConstraintsView<'a> {
         stereo_atom_asserted_constraints(self.molecule, self.id).ligand_symmetries()
     }
 
+    pub fn ligand_symmetry(&self, permutation: OrientedLigandPermutation) -> &'a BooleanForm {
+        stereo_atom_asserted_constraints(self.molecule, self.id).ligand_symmetry(permutation)
+    }
+
     pub fn fluxionalities(&self) -> impl Iterator<Item = &'a FluxionalityForm> {
         stereo_atom_asserted_constraints(self.molecule, self.id).fluxionalities()
     }
 
-    pub fn fluxionality(&self, permutation: LigandPermutation) -> FluxionalityForm {
+    pub fn fluxionality(&self, permutation: LigandPermutation) -> &'a BooleanForm {
         stereo_atom_asserted_constraints(self.molecule, self.id).fluxionality(permutation)
     }
 
@@ -653,11 +674,11 @@ impl<'a> StereoAtomConstraintsView<'a> {
         stereo_atom_asserted_constraints(self.molecule, self.id).topicities()
     }
 
-    pub fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
+    pub fn topicity(&self, pair: StereoLigandPair) -> &'a TopicityRelationForm {
         stereo_atom_asserted_constraints(self.molecule, self.id).topicity(pair)
     }
 
-    pub fn stereogenicity(&self) -> StereogenicityForm {
+    pub fn stereogenicity(&self) -> &'a StereogenicityForm {
         stereo_atom_asserted_constraints(self.molecule, self.id).stereogenicity()
     }
 }
@@ -676,11 +697,15 @@ impl<'a> StereoBondConstraintsView<'a> {
         stereo_bond_asserted_constraints(self.molecule, self.id).ligand_symmetries()
     }
 
+    pub fn ligand_symmetry(&self, permutation: OrientedLigandPermutation) -> &'a BooleanForm {
+        stereo_bond_asserted_constraints(self.molecule, self.id).ligand_symmetry(permutation)
+    }
+
     pub fn fluxionalities(&self) -> impl Iterator<Item = &'a FluxionalityForm> {
         stereo_bond_asserted_constraints(self.molecule, self.id).fluxionalities()
     }
 
-    pub fn fluxionality(&self, permutation: LigandPermutation) -> FluxionalityForm {
+    pub fn fluxionality(&self, permutation: LigandPermutation) -> &'a BooleanForm {
         stereo_bond_asserted_constraints(self.molecule, self.id).fluxionality(permutation)
     }
 
@@ -688,11 +713,11 @@ impl<'a> StereoBondConstraintsView<'a> {
         stereo_bond_asserted_constraints(self.molecule, self.id).topicities()
     }
 
-    pub fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
+    pub fn topicity(&self, pair: StereoLigandPair) -> &'a TopicityRelationForm {
         stereo_bond_asserted_constraints(self.molecule, self.id).topicity(pair)
     }
 
-    pub fn stereogenicity(&self) -> StereogenicityForm {
+    pub fn stereogenicity(&self) -> &'a StereogenicityForm {
         stereo_bond_asserted_constraints(self.molecule, self.id).stereogenicity()
     }
 }
@@ -702,6 +727,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_perm::{Orientation, Permutation};
 
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
@@ -711,16 +737,19 @@ mod tests {
         AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemConstraintsForm,
         AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
         BondConstraintForm, BondConstraintKey, BondConstraintsForm, DativeBondConstraintForm,
-        DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+        DativeBondConstraintKey, DativeBondConstraintsForm, FluxionalityForm, LigandPermutation,
+        LigandSymmetryForm, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
         MulticenterBondConstraintsForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
-        NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, RingScope,
-        StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
-        StereoBondConstraintKey, StereogenicityForm,
+        NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, OrientedLigandPermutation,
+        RingMembershipForm, RingScope, StereoAtomConstraintForm, StereoAtomConstraintKey,
+        StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintKey,
+        StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+        TopicityRelationForm,
     };
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-        StereoAtomId, StereoBondId,
+        StereoAtomId, StereoBondId, StereoLigandPosition,
     };
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{Molecule, MoleculeEntries};
@@ -730,7 +759,7 @@ mod tests {
     use crate::ir::ring::{RingConfig, RingModel};
     use crate::ir::stereo::{
         CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
-        StereoKind, Stereogenicity, TetrahedralStereoForm,
+        StereoKind, Stereogenicity, TetrahedralStereoForm, Topicity,
     };
     use crate::mol_dsl;
 
@@ -1408,12 +1437,10 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_atom_constraints_view_container_methods() {
-        // The container read API is inherited with its meanings intact: every
-        // getter reads the asserted side.
-        let mut atom = AtomForm::from_element(Element::C);
-        for constraint in [
+    #[case::stored(
+        vec![
             AtomConstraintForm::valence(4),
             AtomConstraintForm::donated_pairs(1),
             AtomConstraintForm::accepted_pairs(2),
@@ -1427,39 +1454,77 @@ mod tests {
             AtomConstraintForm::ring_valence(2),
             AtomConstraintForm::total_hydrogens(1),
             AtomConstraintForm::ring_membership(RingScope::All, 1),
-        ] {
-            atom.constraints.set(constraint);
-        }
+            AtomConstraintForm::ring_membership(RingScope::Size(6), 1),
+        ],
+        [
+            NumForm::Lit(4), NumForm::Lit(1), NumForm::Lit(2), NumForm::Lit(3), NumForm::Lit(4),
+            NumForm::Lit(4), NumForm::Lit(2), NumForm::Lit(2), NumForm::Lit(1), NumForm::Lit(1),
+            NumForm::Lit(1),
+        ],
+        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+        MulticenterValenceForm::NotMulticenter,
+        TetrahedralStereoForm::NotStereo,
+        vec![
+            RingMembershipForm::new(RingScope::All, 1),
+            RingMembershipForm::new(RingScope::Size(6), 1),
+        ],
+    )]
+    #[case::absent(
+        vec![],
+        [
+            NumForm::Undetermined, NumForm::Undetermined, NumForm::Undetermined,
+            NumForm::Undetermined, NumForm::Undetermined, NumForm::Undetermined,
+            NumForm::Undetermined, NumForm::Undetermined, NumForm::Undetermined,
+            NumForm::Undetermined, NumForm::Undetermined,
+        ],
+        AromaticValenceForm::Undetermined,
+        MulticenterValenceForm::Undetermined,
+        TetrahedralStereoForm::Undetermined,
+        vec![],
+    )]
+    fn test_atom_constraints_view_container_methods(
+        #[case] constraints: Vec<AtomConstraintForm>,
+        #[case] counts: [NumForm; 11],
+        #[case] aromatic_valence: AromaticValenceForm,
+        #[case] multicenter_valence: MulticenterValenceForm,
+        #[case] tetrahedral_stereo: TetrahedralStereoForm,
+        #[case] ring_memberships: Vec<RingMembershipForm>,
+    ) {
+        // The container read API is inherited with its meanings intact: every
+        // getter reads the asserted side.
+        let mut atom = AtomForm::from_element(Element::C);
+        atom.constraints = AtomConstraintsForm::from(constraints.clone());
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom],
             ..Default::default()
         });
         let view = molecule.atom(AtomId(0)).constraints();
-        assert_eq!(view.valence(), Some(&NumForm::Lit(4)));
-        assert_eq!(view.donated_pairs(), Some(&NumForm::Lit(1)));
-        assert_eq!(view.accepted_pairs(), Some(&NumForm::Lit(2)));
         assert_eq!(
-            view.aromatic_valence(),
-            Some(&AromaticValenceForm::Aromatic(NumForm::Lit(1)))
+            [
+                view.valence(),
+                view.donated_pairs(),
+                view.accepted_pairs(),
+                view.degree(),
+                view.total_degree(),
+                view.total_valence(),
+                view.ring_degree(),
+                view.ring_valence(),
+                view.total_hydrogens(),
+                view.ring_count(),
+                view.ring_size_count(6),
+            ],
+            counts.each_ref()
         );
+        assert_eq!(view.aromatic_valence(), &aromatic_valence);
+        assert_eq!(view.multicenter_valence(), &multicenter_valence);
+        assert_eq!(view.tetrahedral_stereo(), &tetrahedral_stereo);
         assert_eq!(
-            view.multicenter_valence(),
-            Some(&MulticenterValenceForm::NotMulticenter)
+            view.ring_memberships().collect::<Vec<_>>(),
+            ring_memberships.iter().collect::<Vec<_>>()
         );
-        assert_eq!(
-            view.tetrahedral_stereo(),
-            Some(&TetrahedralStereoForm::NotStereo)
-        );
-        assert_eq!(view.degree(), Some(&NumForm::Lit(3)));
-        assert_eq!(view.total_degree(), Some(&NumForm::Lit(4)));
-        assert_eq!(view.total_valence(), Some(&NumForm::Lit(4)));
-        assert_eq!(view.ring_degree(), Some(&NumForm::Lit(2)));
-        assert_eq!(view.ring_valence(), Some(&NumForm::Lit(2)));
-        assert_eq!(view.total_hydrogens(), Some(&NumForm::Lit(1)));
-        assert_eq!(view.ring_count(), Some(&NumForm::Lit(1)));
-        assert_eq!(view.len(), 13);
-        assert!(!view.is_empty());
-        assert_eq!(view.iter().count(), 13);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
     }
 
     #[rstest]
@@ -1724,16 +1789,38 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_bond_constraints_view_container_methods() {
-        let mut bond = BondForm::from_order(1);
-        for constraint in [
+    #[case::stored(
+        vec![
             BondConstraintForm::aromatic(BooleanForm::Lit(true)),
             BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo),
             BondConstraintForm::ring_membership(RingScope::All, 1),
-        ] {
-            bond.constraints.set(constraint);
-        }
+        ],
+        BooleanForm::Lit(true),
+        CisTransStereoForm::NotStereo,
+        NumForm::Lit(1),
+        NumForm::Undetermined,
+        vec![RingMembershipForm::new(RingScope::All, 1)],
+    )]
+    #[case::absent(
+        vec![],
+        BooleanForm::Undetermined,
+        CisTransStereoForm::Undetermined,
+        NumForm::Undetermined,
+        NumForm::Undetermined,
+        vec![],
+    )]
+    fn test_bond_constraints_view_container_methods(
+        #[case] constraints: Vec<BondConstraintForm>,
+        #[case] aromatic: BooleanForm,
+        #[case] cis_trans_stereo: CisTransStereoForm,
+        #[case] ring_count: NumForm,
+        #[case] ring_size_count: NumForm,
+        #[case] ring_memberships: Vec<RingMembershipForm>,
+    ) {
+        let mut bond = BondForm::from_order(1);
+        bond.constraints = BondConstraintsForm::from(constraints.clone());
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -1743,16 +1830,17 @@ mod tests {
             ..Default::default()
         });
         let view = molecule.bond(BondId(0)).constraints();
-        assert_eq!(view.aromatic(), BooleanForm::Lit(true));
+        assert_eq!(view.aromatic(), &aromatic);
+        assert_eq!(view.cis_trans_stereo(), &cis_trans_stereo);
         assert_eq!(
-            view.cis_trans_stereo(),
-            Some(&CisTransStereoForm::NotStereo)
+            view.ring_memberships().collect::<Vec<_>>(),
+            ring_memberships.iter().collect::<Vec<_>>()
         );
-        assert_eq!(view.ring_count(), Some(&NumForm::Lit(1)));
-        assert_eq!(view.ring_size_count(6), None);
-        assert_eq!(view.len(), 3);
-        assert!(!view.is_empty());
-        assert_eq!(view.iter().count(), 3);
+        assert_eq!(view.ring_count(), &ring_count);
+        assert_eq!(view.ring_size_count(6), &ring_size_count);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
     }
 
     #[rustfmt::skip]
@@ -1882,6 +1970,55 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored(
+        vec![
+            DativeBondConstraintForm::aromatic(BooleanForm::Lit(false)),
+            DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
+        ],
+        BooleanForm::Lit(false),
+        NumForm::Undetermined,
+        NumForm::Lit(1),
+        vec![RingMembershipForm::new(RingScope::Size(5), 1)],
+    )]
+    #[case::absent(
+        vec![],
+        BooleanForm::Undetermined,
+        NumForm::Undetermined,
+        NumForm::Undetermined,
+        vec![],
+    )]
+    fn test_dative_bond_constraints_view_container_methods(
+        #[case] constraints: Vec<DativeBondConstraintForm>,
+        #[case] aromatic: BooleanForm,
+        #[case] ring_count: NumForm,
+        #[case] ring_size_count: NumForm,
+        #[case] ring_memberships: Vec<RingMembershipForm>,
+    ) {
+        let mut bond = DativeBondForm::from_order(1);
+        bond.constraints = DativeBondConstraintsForm::from(constraints.clone());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+            ],
+            dative: vec![(vec![AtomId(0)], AtomId(1), bond)],
+            ..Default::default()
+        });
+        let view = molecule.dative_bond(DativeBondId(0)).constraints();
+        assert_eq!(view.aromatic(), &aromatic);
+        assert_eq!(
+            view.ring_memberships().collect::<Vec<_>>(),
+            ring_memberships.iter().collect::<Vec<_>>()
+        );
+        assert_eq!(view.ring_count(), &ring_count);
+        assert_eq!(view.ring_size_count(5), &ring_size_count);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
+    }
+
     #[rstest]
     #[case::count_match(
         AromaticSystemConstraintsForm::from_iter([
@@ -1985,6 +2122,33 @@ mod tests {
     }
 
     #[rstest]
+    #[case::stored(
+        vec![AromaticSystemConstraintForm::electron_count(6)],
+        NumForm::Lit(6)
+    )]
+    #[case::absent(vec![], NumForm::Undetermined)]
+    fn test_aromatic_system_constraints_view_container_methods(
+        #[case] constraints: Vec<AromaticSystemConstraintForm>,
+        #[case] electron_count: NumForm,
+    ) {
+        let mut form = AromaticSystemForm::from_electrons(vec![2, 2, 2]);
+        form.constraints = AromaticSystemConstraintsForm::from(constraints.clone());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], form)],
+            ..Default::default()
+        });
+        let view = molecule.aromatic_system(AromaticSystemId(0)).constraints();
+        assert_eq!(view.electron_count(), &electron_count);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(
+            view.iter().collect::<Vec<_>>(),
+            constraints.iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
     fn test_multicenter_bond_constraints_view_derived() {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::B); 3],
@@ -2049,6 +2213,35 @@ mod tests {
             Some(MulticenterBondConstraintForm::electron_count(
                 NumForm::Undetermined,
             ))
+        );
+    }
+
+    #[rstest]
+    #[case::stored(
+        vec![MulticenterBondConstraintForm::electron_count(2)],
+        NumForm::Lit(2)
+    )]
+    #[case::absent(vec![], NumForm::Undetermined)]
+    fn test_multicenter_bond_constraints_view_container_methods(
+        #[case] constraints: Vec<MulticenterBondConstraintForm>,
+        #[case] electron_count: NumForm,
+    ) {
+        let mut form = MulticenterBondForm::from_electrons(vec![1, 0, 1]);
+        form.constraints = MulticenterBondConstraintsForm::from(constraints.clone());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::B); 3],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], form)],
+            ..Default::default()
+        });
+        let view = molecule
+            .multicenter_bond(MulticenterBondId(0))
+            .constraints();
+        assert_eq!(view.electron_count(), &electron_count);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(
+            view.iter().collect::<Vec<_>>(),
+            constraints.iter().collect::<Vec<_>>()
         );
     }
 
@@ -2153,6 +2346,38 @@ mod tests {
     }
 
     #[rstest]
+    #[case::stored(
+        vec![NoncovalentBondConstraintForm::intramolecular(true)],
+        BooleanForm::Lit(true)
+    )]
+    #[case::absent(vec![], BooleanForm::Undetermined)]
+    fn test_noncovalent_bond_constraints_view_container_methods(
+        #[case] constraints: Vec<NoncovalentBondConstraintForm>,
+        #[case] intramolecular: BooleanForm,
+    ) {
+        let mut form = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        form.constraints = NoncovalentBondConstraintsForm::from(constraints.clone());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::O),
+            ],
+            noncovalent: vec![([AtomId(0), AtomId(1)], form)],
+            ..Default::default()
+        });
+        let view = molecule
+            .noncovalent_bond(NoncovalentBondId(0))
+            .constraints();
+        assert_eq!(view.intramolecular(), &intramolecular);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(
+            view.iter().collect::<Vec<_>>(),
+            constraints.iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
     #[case::present(
         Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
             Stereogenicity::Stereogenic,
@@ -2241,6 +2466,76 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored(
+        vec![
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
+            StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }),
+            StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        ],
+        BooleanForm::Lit(true),
+        BooleanForm::Lit(false),
+        TopicityRelationForm::Lit(Topicity::Homotopic),
+        StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+    )]
+    #[case::absent(
+        vec![],
+        BooleanForm::Undetermined,
+        BooleanForm::Undetermined,
+        TopicityRelationForm::Undetermined,
+        StereogenicityForm::Undetermined,
+    )]
+    fn test_stereo_atom_constraints_view_container_methods(
+        #[case] constraints: Vec<StereoAtomConstraintForm>,
+        #[case] ligand_symmetry: BooleanForm,
+        #[case] fluxionality: BooleanForm,
+        #[case] topicity: TopicityRelationForm,
+        #[case] stereogenicity: StereogenicityForm,
+    ) {
+        let mut form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
+        form.constraints = StereoAtomConstraintsForm::from(constraints.clone());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                form,
+            )],
+            ..Default::default()
+        });
+        let view = molecule.stereo_atom(StereoAtomId(0)).constraints();
+        let permutation = LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]));
+        assert_eq!(
+            view.ligand_symmetry(OrientedLigandPermutation {
+                permutation,
+                orientation: Orientation::Proper,
+            }),
+            &ligand_symmetry
+        );
+        assert_eq!(view.fluxionality(permutation), &fluxionality);
+        assert_eq!(
+            view.topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
+            &topicity
+        );
+        assert_eq!(view.stereogenicity(), &stereogenicity);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
+    }
+
     #[rstest]
     #[case::present(
         Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
@@ -2316,5 +2611,74 @@ mod tests {
             None
         );
         assert!(view.is_empty());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored(
+        vec![
+            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
+            StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }),
+            StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        ],
+        BooleanForm::Lit(true),
+        BooleanForm::Lit(false),
+        TopicityRelationForm::Lit(Topicity::Homotopic),
+        StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+    )]
+    #[case::absent(
+        vec![],
+        BooleanForm::Undetermined,
+        BooleanForm::Undetermined,
+        TopicityRelationForm::Undetermined,
+        StereogenicityForm::Undetermined,
+    )]
+    fn test_stereo_bond_constraints_view_container_methods(
+        #[case] constraints: Vec<StereoBondConstraintForm>,
+        #[case] ligand_symmetry: BooleanForm,
+        #[case] fluxionality: BooleanForm,
+        #[case] topicity: TopicityRelationForm,
+        #[case] stereogenicity: StereogenicityForm,
+    ) {
+        let mut form = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1));
+        form.constraints = StereoBondConstraintsForm::from(constraints.clone());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                ],
+                form,
+            )],
+            ..Default::default()
+        });
+        let view = molecule.stereo_bond(StereoBondId(0)).constraints();
+        let permutation = LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]));
+        assert_eq!(
+            view.ligand_symmetry(OrientedLigandPermutation {
+                permutation,
+                orientation: Orientation::Proper,
+            }),
+            &ligand_symmetry
+        );
+        assert_eq!(view.fluxionality(permutation), &fluxionality);
+        assert_eq!(
+            view.topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
+            &topicity
+        );
+        assert_eq!(view.stereogenicity(), &stereogenicity);
+        assert_eq!(view.len(), constraints.len());
+        assert_eq!(view.is_empty(), constraints.is_empty());
+        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
     }
 }

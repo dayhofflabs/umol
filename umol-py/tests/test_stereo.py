@@ -3,11 +3,17 @@ import pytest
 from umol import (
     AtomForm,
     BondForm,
+    BooleanForm,
     CisTransConfiguration,
     CisTransStereo,
     CisTransStereoForm,
     Element,
+    FluxionalityForm,
+    LigandPermutation,
+    LigandSymmetryForm,
     Molecule,
+    Orientation,
+    OrientedLigandPermutation,
     ParseError,
     Permutation,
     StereoAtomForm,
@@ -24,12 +30,16 @@ from umol import (
     StereoKind,
     StereoLigand,
     StereoLigandKind,
+    StereoLigandPair,
     StereoTerm,
     Stereogenicity,
     StereogenicityForm,
     TetrahedralConfiguration,
     TetrahedralStereo,
     TetrahedralStereoForm,
+    Topicity,
+    TopicityForm,
+    TopicityRelationForm,
 )
 
 
@@ -397,6 +407,44 @@ def test_stereoatom_form_constraints_kwarg():
     )
 
 
+def test_stereoatomconstraints_ligand_symmetry():
+    permutation = OrientedLigandPermutation(
+        LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Proper
+    )
+    constraints = StereoAtomConstraintsForm(
+        [StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(permutation, True))]
+    )
+    assert constraints.ligand_symmetry(permutation) == BooleanForm.Lit(True)
+    improper = OrientedLigandPermutation(
+        LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Improper
+    )
+    assert constraints.ligand_symmetry(improper) == BooleanForm.Undetermined()
+
+
+def test_stereoatomconstraints_fluxionality():
+    permutation = LigandPermutation(Permutation([1, 0, 2, 3]))
+    constraints = StereoAtomConstraintsForm(
+        [StereoAtomConstraintForm.Fluxionality(FluxionalityForm(permutation, False))]
+    )
+    assert constraints.fluxionality(permutation) == BooleanForm.Lit(False)
+    other = LigandPermutation(Permutation([0, 1, 3, 2]))
+    assert constraints.fluxionality(other) == BooleanForm.Undetermined()
+
+
+def test_stereoatomconstraints_topicity():
+    constraints = StereoAtomConstraintsForm(
+        [
+            StereoAtomConstraintForm.Topicity(
+                TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Lit(Topicity.Homotopic))
+            )
+        ]
+    )
+    assert constraints.topicity(StereoLigandPair(0, 1)) == TopicityRelationForm.Lit(
+        Topicity.Homotopic
+    )
+    assert constraints.topicity(StereoLigandPair(0, 2)) == TopicityRelationForm.Undetermined()
+
+
 def test_stereoatom_form_asdict():
     atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     d = atom.asdict()
@@ -446,6 +494,22 @@ def test_stereoatomview_constraints_write_through():
     assert mol.stereo_atoms[0].constraints.stereogenicity() == StereogenicityForm.Lit(
         Stereogenicity.Stereogenic
     )
+
+
+def test_stereoatomview_constraints_ligand_symmetry_and_fluxionality():
+    mol = stereo_atom_molecule()
+    permutation = LigandPermutation(Permutation([1, 0, 2, 3]))
+    oriented = OrientedLigandPermutation(permutation, Orientation.Proper)
+    assert mol.stereo_atoms[0].constraints.ligand_symmetry(oriented) == BooleanForm.Undetermined()
+    assert mol.stereo_atoms[0].constraints.fluxionality(permutation) == BooleanForm.Undetermined()
+    mol.stereo_atoms[0].constraints.set(
+        StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(oriented, True))
+    )
+    mol.stereo_atoms[0].constraints.set(
+        StereoAtomConstraintForm.Fluxionality(FluxionalityForm(permutation, False))
+    )
+    assert mol.stereo_atoms[0].constraints.ligand_symmetry(oriented) == BooleanForm.Lit(True)
+    assert mol.stereo_atoms[0].constraints.fluxionality(permutation) == BooleanForm.Lit(False)
 
 
 def test_stereoatomviews_at():

@@ -1328,7 +1328,6 @@ mod tests {
                     .to_rust()
                     .constraints
                     .valence()
-                    .unwrap()
                     .clone(),
                 GraphIrNumForm::Lit(4)
             );
@@ -1364,7 +1363,6 @@ mod tests {
                     .to_rust()
                     .constraints
                     .valence()
-                    .unwrap()
                     .clone(),
                 GraphIrNumForm::Lit(4)
             );
@@ -1539,15 +1537,21 @@ mod tests {
             .unwrap();
             let constraints = AtomConstraintsForm::new(py, vec![valence, degree]);
             assert_eq!(
-                constraints.valence(py).unwrap().unwrap().to_rust(py),
+                constraints.valence(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(4)
             );
             assert_eq!(
-                constraints.degree(py).unwrap().unwrap().to_rust(py),
+                constraints.degree(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(3)
             );
-            assert!(constraints.total_valence(py).unwrap().is_none());
-            assert!(constraints.aromatic_valence(py).unwrap().is_none());
+            assert_eq!(
+                constraints.total_valence(py).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
+            assert_eq!(
+                constraints.aromatic_valence(py).unwrap().to_rust(py),
+                GraphIrAromaticValenceForm::Undetermined
+            );
         });
     }
 
@@ -1566,16 +1570,22 @@ mod tests {
             let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![membership])).unwrap();
             let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(1)
             );
-            assert!(proxy.__getitem__(py, 5).unwrap().is_none());
-            assert!(constraints
-                .bind(py)
-                .borrow()
-                .ring_count(py)
-                .unwrap()
-                .is_none());
+            assert_eq!(
+                proxy.__getitem__(py, 5).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
+            assert_eq!(
+                constraints
+                    .bind(py)
+                    .borrow()
+                    .ring_count(py)
+                    .unwrap()
+                    .to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
         });
     }
 
@@ -1591,7 +1601,7 @@ mod tests {
             constraints.set(py, valence);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
-                constraints.valence(py).unwrap().unwrap().to_rust(py),
+                constraints.valence(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(4)
             );
         });
@@ -1639,14 +1649,8 @@ mod tests {
             .unwrap();
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 2);
-            assert_eq!(
-                c.valence(py).unwrap().unwrap().to_rust(py),
-                GraphIrNumForm::Lit(4)
-            );
-            assert_eq!(
-                c.degree(py).unwrap().unwrap().to_rust(py),
-                GraphIrNumForm::Lit(3)
-            );
+            assert_eq!(c.valence(py).unwrap().to_rust(py), GraphIrNumForm::Lit(4));
+            assert_eq!(c.degree(py).unwrap().to_rust(py), GraphIrNumForm::Lit(3));
         });
     }
 
@@ -1883,7 +1887,7 @@ mod tests {
             let mut constraints = AtomConstraintsForm::new(py, vec![]);
             constraints.set_valence(py, NumLike::Lit(4));
             assert_eq!(
-                constraints.valence(py).unwrap().unwrap().to_rust(py),
+                constraints.valence(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(4)
             );
         });
@@ -1895,7 +1899,7 @@ mod tests {
             let mut constraints = AtomConstraintsForm::new(py, vec![]);
             constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_rust(py),
+                constraints.ring_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(2)
             );
         });
@@ -1908,7 +1912,7 @@ mod tests {
             constraints
                 .set_aromatic_valence(py, AromaticValenceLike::Value(NumLike::Lit(1)))
                 .unwrap();
-            match constraints.aromatic_valence(py).unwrap().unwrap() {
+            match constraints.aromatic_valence(py).unwrap() {
                 AromaticValenceForm::Aromatic(v) => {
                     assert_eq!(v.to_rust(py), GraphIrNumForm::Lit(1))
                 }
@@ -1917,7 +1921,7 @@ mod tests {
             constraints
                 .set_aromatic_valence(py, AromaticValenceLike::Flag(false))
                 .unwrap();
-            match constraints.aromatic_valence(py).unwrap().unwrap() {
+            match constraints.aromatic_valence(py).unwrap() {
                 AromaticValenceForm::NotAromatic() => {}
                 _ => panic!("expected NotAromatic"),
             }
@@ -1944,7 +1948,7 @@ mod tests {
                     TetrahedralStereoLike::Config(TetrahedralConfiguration::Cw),
                 )
                 .unwrap();
-            match constraints.tetrahedral_stereo(py).unwrap().unwrap() {
+            match constraints.tetrahedral_stereo(py).unwrap() {
                 TetrahedralStereoForm::Stereo(coset) => {
                     assert_eq!(
                         coset.bind(py).borrow().to_rust(py),
@@ -1983,7 +1987,7 @@ mod tests {
                     id: GraphIrAtomId(0),
                 },
             };
-            match fresh.aromatic_valence(py).unwrap().unwrap() {
+            match fresh.aromatic_valence(py).unwrap() {
                 AromaticValenceForm::Aromatic(v) => {
                     assert_eq!(v.to_rust(py), GraphIrNumForm::Lit(1))
                 }
@@ -1999,11 +2003,14 @@ mod tests {
             let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(3)
             );
             proxy.__delitem__(py, 6).unwrap();
-            assert!(proxy.__getitem__(py, 6).unwrap().is_none());
+            assert_eq!(
+                proxy.__getitem__(py, 6).unwrap().to_rust(py),
+                GraphIrNumForm::Undetermined
+            );
         });
     }
 
@@ -2041,7 +2048,6 @@ mod tests {
                     .ring_size_count(py)
                     .unwrap()
                     .__getitem__(py, 5)
-                    .unwrap()
                     .unwrap()
                     .to_rust(py),
                 GraphIrNumForm::Lit(1)
@@ -2096,7 +2102,6 @@ mod tests {
                     .borrow()
                     .valence(py)
                     .unwrap()
-                    .unwrap()
                     .to_rust(py),
                 GraphIrNumForm::Lit(4)
             );
@@ -2134,7 +2139,6 @@ mod tests {
                     .to_rust()
                     .constraints
                     .valence()
-                    .unwrap()
                     .clone(),
                 GraphIrNumForm::Lit(4)
             );

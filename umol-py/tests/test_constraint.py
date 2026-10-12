@@ -134,8 +134,8 @@ def test_atomconstraints_valence():
     )
     assert constraints.valence == NumForm.Lit(4)
     assert constraints.degree == NumForm.Lit(3)
-    assert constraints.total_valence is None
-    assert constraints.aromatic_valence is None
+    assert constraints.total_valence == NumForm.Undetermined()
+    assert constraints.aromatic_valence == AromaticValenceForm.Undetermined()
 
 
 def test_atomconstraints_asdict():
@@ -160,8 +160,23 @@ def test_atomconstraints_ring_size_count():
         [AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))]
     )
     assert constraints.ring_size_count[6] == NumForm.Lit(1)
-    assert constraints.ring_size_count[5] is None
-    assert constraints.ring_count is None
+    assert constraints.ring_size_count[5] == NumForm.Undetermined()
+    assert constraints.ring_count == NumForm.Undetermined()
+
+
+def test_atomconstraints_ring_memberships():
+    constraints = AtomConstraintsForm(
+        [
+            AtomConstraintForm.Valence(NumForm.Lit(4)),
+            AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
+            AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))),
+        ]
+    )
+    assert constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
+    assert AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]).ring_memberships() == []
 
 
 def test_atom_constraints_form_set():
@@ -341,7 +356,7 @@ def test_atomconstraints_ring_size_count_subscript():
     cs.ring_size_count[6] = 3
     assert cs.ring_size_count[6].as_lit() == 3
     del cs.ring_size_count[6]
-    assert cs.ring_size_count[6] is None
+    assert cs.ring_size_count[6] == NumForm.Undetermined()
 
 
 def test_atomconstraintsview_property_on_molecule():
@@ -356,7 +371,18 @@ def test_atomconstraintsview_ring_size_count_on_molecule():
     mol.atoms[0].constraints.ring_size_count[6] = 3
     assert mol.atoms[0].constraints.ring_size_count[6].as_lit() == 3
     del mol.atoms[0].constraints.ring_size_count[6]
-    assert mol.atoms[0].constraints.ring_size_count[6] is None
+    assert mol.atoms[0].constraints.ring_size_count[6] == NumForm.Undetermined()
+
+
+def test_atomconstraintsview_ring_memberships_on_molecule():
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
+    assert mol.atoms[0].constraints.ring_memberships() == []
+    mol.atoms[0].constraints.ring_count = 2
+    mol.atoms[0].constraints.ring_size_count[6] = 1
+    assert mol.atoms[0].constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
 
 
 def test_aromatic_valence_form_aromatic_int():
