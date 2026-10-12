@@ -1,5 +1,7 @@
 //! Ring views over a molecule.
 
+use std::borrow::Cow;
+
 use super::super::constraint::RingScope;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::Molecule;
@@ -7,16 +9,41 @@ use super::super::num::NumForm;
 use super::super::ring::{RingId, RingSet, RingSetKind};
 use super::read_num;
 
-/// Molecule ring views: owned ring set plus borrow of molecule.
+/// Molecule ring views over owned or borrowed ring data.
+///
+/// The molecule is borrowed. The ring set must describe its covalent topology
+/// and atom/bond ids for meaningful contextual readings. Mismatched context
+/// does not panic but has no specified semantic result.
+///
+/// # Semantic properties
+///
+/// Owned and borrowed views over the same ring data and compatible molecule
+/// give identical readings. Reconstructing a view after attribute-only mutation
+/// preserves ring topology and reads the molecule's current attributes.
 #[derive(Debug)]
 pub struct RingViews<'a> {
     molecule: &'a Molecule,
-    rings: RingSet,
+    rings: Cow<'a, RingSet>,
 }
 
 impl<'a> RingViews<'a> {
     pub(crate) fn new(molecule: &'a Molecule, rings: RingSet) -> Self {
-        Self { molecule, rings }
+        Self {
+            molecule,
+            rings: Cow::Owned(rings),
+        }
+    }
+
+    /// Borrow existing ring data and its molecule without copying or perceiving rings.
+    ///
+    /// The set must describe the molecule's covalent topology and atom/bond ids
+    /// for meaningful readings. Reconstruction does not validate that relationship;
+    /// mismatched context does not panic but has no specified semantic result.
+    pub fn from_ring_set(rings: &'a RingSet, molecule: &'a Molecule) -> Self {
+        Self {
+            molecule,
+            rings: Cow::Borrowed(rings),
+        }
     }
 
     pub fn count(&self) -> usize {
@@ -64,9 +91,12 @@ impl<'a> RingViews<'a> {
         self.rings.max_ring_size()
     }
 
-    /// Consume this view, returning its owned `RingSet`.
+    /// Consume this view, moving owned ring data or cloning borrowed data.
+    ///
+    /// The returned set preserves all ring ids, members, and relations and is
+    /// independent of the molecule and any borrowed source set.
     pub fn into_ring_set(self) -> RingSet {
-        self.rings
+        self.rings.into_owned()
     }
 }
 
@@ -204,6 +234,9 @@ pub(crate) fn atom_ring_membership(rings: &RingSet, id: AtomId, scope: RingScope
 
 /// Count of incident bonds of atom `id` that lie in a ring. Always `Lit`.
 pub(crate) fn atom_ring_degree(molecule: &Molecule, rings: &RingSet, id: AtomId) -> NumForm {
+    if !molecule.raw_graph().contains_node(id.into()) {
+        return NumForm::Lit(0);
+    }
     let count = molecule
         .neighbors(id)
         .filter(|n| rings.contains_bond(n.bond().id()))
@@ -218,6 +251,9 @@ pub(crate) fn atom_ring_valence(
     rings: &RingSet,
     id: AtomId,
 ) -> Option<NumForm> {
+    if !molecule.raw_graph().contains_node(id.into()) {
+        return Some(NumForm::Lit(0));
+    }
     molecule
         .neighbors(id)
         .filter(|n| rings.contains_bond(n.bond().id()))
@@ -246,7 +282,7 @@ mod tests {
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::molecule::MoleculeEntries;
-    use crate::ir::ring::{RingConfig, RingModel};
+    use crate::ir::ring::{RingConfig, RingConnection, RingModel, RingRelation};
 
     // A six-membered ring (atoms 0-5, bonds 0-5) with a pendant chain atom 6
     // (bond 6, atom 0 to atom 6).
@@ -265,6 +301,164 @@ mod tests {
             ],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn fused_rings() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(0), BondForm::from_order(1)),
+                (AtomId(1), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(2), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        })
+    }
+
+    #[rstest]
+    #[case::owned(false)]
+    #[case::borrowed(true)]
+    fn test_ring_views_from_ring_set(fused_rings: Molecule, #[case] borrowed: bool) {
+        let ring_set = fused_rings
+            .rings(RingModel::default(), RingConfig::default())
+            .into_ring_set();
+        let views = if borrowed {
+            RingViews::from_ring_set(&ring_set, &fused_rings)
+        } else {
+            fused_rings.rings(RingModel::default(), RingConfig::default())
+        };
+        assert_eq!(views.kind(), RingSetKind::Relevant);
+        assert_eq!(views.max_ring_size(), 22);
+        assert_eq!(views.count(), 2);
+        assert_eq!(views.ids().collect::<Vec<_>>(), vec![RingId(0), RingId(1)]);
+        assert!(views.contains(RingId(0)));
+        assert!(!views.contains(RingId(2)));
+        assert_eq!(views.get(RingId(2)).map(|ring| ring.id), None);
+        let members: Vec<_> = views
+            .iter()
+            .map(|ring| {
+                let mut atoms = ring.atoms().to_vec();
+                let mut bonds = ring.bonds().to_vec();
+                atoms.sort_unstable();
+                bonds.sort_unstable();
+                (ring.id, atoms, bonds)
+            })
+            .collect();
+        assert_eq!(
+            members,
+            vec![
+                (
+                    RingId(0),
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    vec![BondId(0), BondId(1), BondId(2)]
+                ),
+                (
+                    RingId(1),
+                    vec![AtomId(1), AtomId(2), AtomId(3)],
+                    vec![BondId(1), BondId(3), BondId(4)]
+                ),
+            ]
+        );
+        assert_eq!(views.atom(AtomId(1)).ring_count(), NumForm::Lit(2));
+        assert_eq!(views.atom(AtomId(1)).smallest_ring_size(), Some(3));
+        assert_eq!(views.atom(AtomId(1)).ring_degree(), NumForm::Lit(3));
+        assert_eq!(views.atom(AtomId(1)).ring_valence(), Some(NumForm::Lit(3)));
+        assert_eq!(views.bond(BondId(1)).ring_count(), NumForm::Lit(2));
+        assert_eq!(views.bond(BondId(1)).smallest_ring_size(), Some(3));
+        if borrowed {
+            assert_eq!(
+                views.get(RingId(0)).unwrap().atoms().as_ptr(),
+                ring_set.get(RingId(0)).unwrap().atoms().as_ptr()
+            );
+            assert_eq!(
+                views.get(RingId(0)).unwrap().bonds().as_ptr(),
+                ring_set.get(RingId(0)).unwrap().bonds().as_ptr()
+            );
+        }
+    }
+
+    #[rstest]
+    #[case::literal(NumForm::Lit(2), Some(NumForm::Lit(3)))]
+    #[case::unknown(NumForm::Undetermined, Some(NumForm::Undetermined))]
+    #[case::singleton(NumForm::lit_set([2]), Some(NumForm::Lit(3)))]
+    #[case::bottom(NumForm::lit_set([]), None)]
+    fn test_ring_views_from_ring_set_mutation(
+        mut ring_with_chain: Molecule,
+        #[case] order: NumForm,
+        #[case] expected: Option<NumForm>,
+    ) {
+        let ring_set = ring_with_chain
+            .rings(RingModel::default(), RingConfig::default())
+            .into_ring_set();
+        assert_eq!(
+            RingViews::from_ring_set(&ring_set, &ring_with_chain)
+                .atom(AtomId(0))
+                .ring_valence(),
+            Some(NumForm::Lit(2))
+        );
+        ring_with_chain.bond_mut(BondId(0)).attributes_mut().order = order.clone();
+        let views = RingViews::from_ring_set(&ring_set, &ring_with_chain);
+        let atom = views.atom(AtomId(0));
+        assert_eq!(atom.ring_valence(), expected);
+        assert_eq!(atom.ring_degree(), NumForm::Lit(2));
+        assert_eq!(atom.ring_count(), NumForm::Lit(1));
+        assert_eq!(atom.ring_size_count(6), NumForm::Lit(1));
+        assert_eq!(atom.smallest_ring_size(), Some(6));
+        assert_eq!(
+            atom.rings().map(|ring| ring.id).collect::<Vec<_>>(),
+            vec![RingId(0)]
+        );
+        assert_eq!(views.bond(BondId(0)).ring_count(), NumForm::Lit(1));
+        assert_eq!(ring_with_chain.bond(BondId(0)).order(), &order);
+    }
+
+    #[rstest]
+    #[case::empty(0, vec![])]
+    #[case::smaller(2, vec![(0, 1)])]
+    #[case::different_topology(7, vec![(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6)])]
+    #[case::larger(8, vec![(0, 7)])]
+    fn test_ring_views_from_ring_set_context(
+        ring_with_chain: Molecule,
+        #[case] atom_count: usize,
+        #[case] bonds: Vec<(u32, u32)>,
+    ) {
+        let ring_set = ring_with_chain
+            .rings(RingModel::default(), RingConfig::default())
+            .into_ring_set();
+        let context = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); atom_count],
+            bonds: bonds
+                .into_iter()
+                .map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        });
+        let views = RingViews::from_ring_set(&ring_set, &context);
+        // Mismatched contextual readings promise only panic freedom.
+        for id in ring_with_chain
+            .atoms()
+            .ids()
+            .chain([AtomId(atom_count as u32)])
+        {
+            let atom = views.atom(id);
+            let _ = (atom.ring_degree(), atom.ring_valence());
+        }
+        let mut atoms = views.get(RingId(0)).unwrap().atoms().to_vec();
+        atoms.sort_unstable();
+        assert_eq!(
+            atoms,
+            vec![
+                AtomId(0),
+                AtomId(1),
+                AtomId(2),
+                AtomId(3),
+                AtomId(4),
+                AtomId(5)
+            ]
+        );
     }
 
     #[rstest]
@@ -363,12 +557,60 @@ mod tests {
 
     #[rstest]
     fn test_ring_views_into_ring_set(ring_with_chain: Molecule) {
-        let ring_set = ring_with_chain
-            .rings(RingModel::default(), RingConfig::default())
-            .into_ring_set();
+        let views = ring_with_chain.rings(RingModel::default(), RingConfig::default());
+        let atoms = views.get(RingId(0)).unwrap().atoms().as_ptr();
+        let bonds = views.get(RingId(0)).unwrap().bonds().as_ptr();
+        let ring_set = views.into_ring_set();
+        drop(ring_with_chain);
         assert_eq!(ring_set.count(), 1);
         assert!(ring_set.contains_atom(AtomId(0)));
         assert!(!ring_set.contains_atom(AtomId(6)));
+        assert_eq!(ring_set.get(RingId(0)).unwrap().atoms().as_ptr(), atoms);
+        assert_eq!(ring_set.get(RingId(0)).unwrap().bonds().as_ptr(), bonds);
+        assert_eq!(ring_set.atom_smallest_ring_size(AtomId(0)), Some(6));
+        assert_eq!(ring_set.bond_smallest_ring_size(BondId(0)), Some(6));
+        assert_eq!(ring_set.graph().edges(), &[]);
+    }
+
+    #[rstest]
+    fn test_ring_views_into_ring_set_borrowed(fused_rings: Molecule) {
+        let source = fused_rings
+            .rings(RingModel::default(), RingConfig::default())
+            .into_ring_set();
+        let ring_set = RingViews::from_ring_set(&source, &fused_rings).into_ring_set();
+        assert_ne!(
+            ring_set.get(RingId(0)).unwrap().atoms().as_ptr(),
+            source.get(RingId(0)).unwrap().atoms().as_ptr()
+        );
+        assert_ne!(
+            ring_set.get(RingId(0)).unwrap().bonds().as_ptr(),
+            source.get(RingId(0)).unwrap().bonds().as_ptr()
+        );
+        drop(source);
+        drop(fused_rings);
+        assert_eq!(ring_set.kind(), RingSetKind::Relevant);
+        assert_eq!(ring_set.max_ring_size(), 22);
+        assert_eq!(ring_set.count(), 2);
+        assert_eq!(
+            ring_set.shared_atoms(RingId(0), RingId(1)),
+            vec![AtomId(1), AtomId(2)]
+        );
+        assert_eq!(ring_set.shared_bonds(RingId(0), RingId(1)), vec![BondId(1)]);
+        assert_eq!(ring_set.relation(RingId(0), RingId(1)), RingRelation::Fused);
+        assert_eq!(ring_set.atom_smallest_ring_size(AtomId(1)), Some(3));
+        assert_eq!(ring_set.bond_smallest_ring_size(BondId(1)), Some(3));
+        assert_eq!(
+            ring_set.fused_components(),
+            vec![vec![RingId(0), RingId(1)]]
+        );
+        assert_eq!(
+            ring_set.graph().edges(),
+            &[RingConnection {
+                first: RingId(0),
+                second: RingId(1),
+                relation: RingRelation::Fused,
+            }]
+        );
     }
 
     #[rstest]

@@ -547,6 +547,10 @@ impl Molecule {
     }
 
     /// Rings selected by `model` and computed using `config`.
+    ///
+    /// Each call enumerates an owned ring set while borrowing this molecule.
+    /// Extract it with [`RingViews::into_ring_set`] and reuse it through
+    /// [`RingViews::from_ring_set`] while covalent topology and ids are unchanged.
     pub fn rings(&self, model: RingModel, config: RingConfig) -> RingViews<'_> {
         RingViews::new(self, RingSet::enumerate(&self.graph, model, config))
     }

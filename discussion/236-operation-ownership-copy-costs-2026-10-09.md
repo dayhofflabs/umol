@@ -351,9 +351,9 @@ performance trade-off on the measured workloads. Small standalone owned-read
 costs and rare-form copying remain as recorded; acceptance does not claim zero
 overhead or universal speedups. The diagnostic contracts and Python reading
 interface are also settled below. Shared container readings and diagnostic
-formatting are implemented in S3b; ring ownership and bindings follow in
-S3b1–S3b3. Later perception and discharge work retains its separately scheduled
-scope.
+formatting are implemented in S3b, and owned/borrowed ring data in S3b1. The
+Python bindings follow in S3b2–S3b3. Later perception and discharge work retains
+its separately scheduled scope.
 
 Every constraints view has six readings of a key: `asserted`, `derived`, and
 `evidenced`, and their complete variants. Each reading is the meet of its
@@ -858,8 +858,9 @@ below. No intermediate assertion reading keeps the incident-bond fallback.
 The reading signatures, closure rules, diagnostics, Python reading interface,
 and measured performance trade-off are accepted. S3b supplies the shared
 container implementation, diagnostic formatting, and Rust verification;
-S3b1–S3b3 implement ring ownership and the Python interface. The comparisons
-below emphasize common variants and keep rare-form stress results separate.
+S3b1 implements ring ownership, and S3b2–S3b3 supply the Python interface. The
+comparisons below emphasize common variants and keep rare-form stress results
+separate.
 
 ### Ring data and view ownership (accepted 2026-10-12)
 
@@ -1576,9 +1577,10 @@ This plan runs before 181's. Both plans together are the 0.10 release blocker.
 
 No production change starts before its subitem is written here. Subitem labels
 remain stable; implementation follows document order and the explicit
-dependencies. S3c, S3f, and S3g specify parts of S3b, as marked below. S3b is the
-Rust reading migration; S3b1–S3b3 sequence ring ownership, ring bindings, and
-semantic-reading bindings after it.
+dependencies, with the agreed exception that S3b1–S3b3 finish before returning
+to the open S3a3–S3a4 items. S3c, S3f, and S3g specify parts of S3b, as marked
+below. S3b is the Rust reading migration; S3b1–S3b3 sequence ring ownership,
+ring bindings, and semantic-reading bindings after it.
 
 ### S0 — Normal-form tower
 
@@ -2225,7 +2227,7 @@ report rare set/expression stress cases separately. Include projection
 invariance, bottom propagation, and unchanged infallible mutation in correctness
 coverage; performance acceptance does not replace these contracts.
 
-#### S3b1 — Owned and borrowed ring data in RingViews
+#### S3b1 — Owned and borrowed ring data in RingViews **Done**
 
 **Modules:** graph-IR ir/molecule, ir/ring, and ir/view/ring and their tests.
 **Additive, green.** [dep: S3b]
@@ -2253,6 +2255,20 @@ source molecule is dropped and independence of a set extracted from a borrowed
 view after the source set is dropped. Cover mismatched contextual inputs without
 requiring a semantic result. Run the existing matching, fingerprint, aromaticity,
 and constraint-validation suites that exercise owning ring context.
+
+**Completed 2026-10-12.** RingViews now stores Cow internally and exposes the
+borrowed reconstruction method. The two molecule-dependent ring readings guard
+absent atom ids before accessing adjacency. Existing owning consumers and query
+signatures are unchanged. Tests check borrowed storage identity, ownership-aware
+extraction, current attribute readings, and incompatible context; two new
+properties cover reconstruction equivalence and panic freedom under independent
+context.
+
+**Verification:** all 55 ring-view unit cases and four ring properties pass.
+The workspace test suite with all features passes (36,943 tests, 10 ignored),
+as do workspace Clippy with all targets/features and warnings denied, graph-IR
+rustdoc with warnings denied, formatting, and diff checks. Logs are in
+scratch/236-s3b1.
 
 #### S3b2 — Python ring data and views
 

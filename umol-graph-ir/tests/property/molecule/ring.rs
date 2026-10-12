@@ -1,10 +1,12 @@
 //! Molecule ring-enumeration properties.
+//! Reconstruction compares owning and borrowing routes on generated compatible
+//! molecules; independent context cases check the documented panic freedom.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_ir::ir::{NumForm, RingConfig, RingModel, RingSetKind};
+use umol_graph_ir::ir::{AtomId, BondId, NumForm, RingConfig, RingModel, RingSetKind, RingViews};
 
-use crate::strategies::*;
+use crate::strategies::molecule_strategy;
 
 proptest! {
     #![proptest_config(Config {
@@ -149,5 +151,84 @@ proptest! {
         actual.sort_unstable();
 
         prop_assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_ring_views_from_ring_set(
+        molecule in molecule_strategy(),
+        max_ring_size in 0usize..12,
+        relevant in any::<bool>(),
+    ) {
+        let model = RingModel {
+            kind: if relevant { RingSetKind::Relevant } else { RingSetKind::Simple },
+            max_ring_size,
+        };
+        let owned = molecule.rings(model, RingConfig::default());
+        let ring_set = molecule.rings(model, RingConfig::default()).into_ring_set();
+        let borrowed = RingViews::from_ring_set(&ring_set, &molecule);
+        prop_assert_eq!(borrowed.kind(), owned.kind());
+        prop_assert_eq!(borrowed.max_ring_size(), owned.max_ring_size());
+        prop_assert_eq!(borrowed.count(), owned.count());
+        prop_assert_eq!(borrowed.ids().collect::<Vec<_>>(), owned.ids().collect::<Vec<_>>());
+        prop_assert_eq!(
+            borrowed.iter().map(|ring| (ring.id, ring.atoms(), ring.bonds())).collect::<Vec<_>>(),
+            owned.iter().map(|ring| (ring.id, ring.atoms(), ring.bonds())).collect::<Vec<_>>()
+        );
+        for id in molecule.atoms().ids() {
+            let actual = borrowed.atom(id);
+            let expected = owned.atom(id);
+            prop_assert_eq!(actual.is_in_ring(), expected.is_in_ring());
+            prop_assert_eq!(actual.rings().map(|ring| ring.id).collect::<Vec<_>>(), expected.rings().map(|ring| ring.id).collect::<Vec<_>>());
+            prop_assert_eq!(actual.ring_count(), expected.ring_count());
+            prop_assert_eq!(actual.smallest_ring_size(), expected.smallest_ring_size());
+            prop_assert_eq!(actual.ring_degree(), expected.ring_degree());
+            prop_assert_eq!(actual.ring_valence(), expected.ring_valence());
+            for size in 0..=max_ring_size {
+                prop_assert_eq!(actual.ring_size_count(size as u8), expected.ring_size_count(size as u8));
+            }
+        }
+        for id in molecule.bonds().ids() {
+            let actual = borrowed.bond(id);
+            let expected = owned.bond(id);
+            prop_assert_eq!(actual.is_in_ring(), expected.is_in_ring());
+            prop_assert_eq!(actual.rings().map(|ring| ring.id).collect::<Vec<_>>(), expected.rings().map(|ring| ring.id).collect::<Vec<_>>());
+            prop_assert_eq!(actual.ring_count(), expected.ring_count());
+            prop_assert_eq!(actual.smallest_ring_size(), expected.smallest_ring_size());
+            for size in 0..=max_ring_size {
+                prop_assert_eq!(actual.ring_size_count(size as u8), expected.ring_size_count(size as u8));
+            }
+        }
+        let extracted = borrowed.into_ring_set();
+        prop_assert_eq!(extracted.kind(), ring_set.kind());
+        prop_assert_eq!(extracted.max_ring_size(), ring_set.max_ring_size());
+        prop_assert_eq!(
+            extracted.iter().map(|ring| (ring.id, ring.atoms(), ring.bonds())).collect::<Vec<_>>(),
+            ring_set.iter().map(|ring| (ring.id, ring.atoms(), ring.bonds())).collect::<Vec<_>>()
+        );
+        let extracted_graph = extracted.graph();
+        let source_graph = ring_set.graph();
+        prop_assert_eq!(extracted_graph.edges(), source_graph.edges());
+    }
+
+    #[test]
+    fn test_ring_views_from_ring_set_context(
+        source in molecule_strategy(),
+        context in molecule_strategy(),
+    ) {
+        let ring_set = source.rings(RingModel::default(), RingConfig::default()).into_ring_set();
+        let views = RingViews::from_ring_set(&ring_set, &context);
+        for id in source.atoms().ids().chain([AtomId(context.atoms().count() as u32)]) {
+            let atom = views.atom(id);
+            let _ = (atom.ring_degree(), atom.ring_valence());
+        }
+        for id in source.bonds().ids().chain([BondId(context.bonds().count() as u32)]) {
+            let bond = views.bond(id);
+            let _ = (bond.is_in_ring(), bond.ring_count(), bond.ring_size_count(3), bond.smallest_ring_size());
+            let _ = bond.rings().collect::<Vec<_>>();
+        }
+        prop_assert_eq!(
+            views.iter().map(|ring| (ring.id, ring.atoms(), ring.bonds())).collect::<Vec<_>>(),
+            ring_set.iter().map(|ring| (ring.id, ring.atoms(), ring.bonds())).collect::<Vec<_>>()
+        );
     }
 }
