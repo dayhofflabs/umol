@@ -118,7 +118,10 @@ use crate::{
         ResolveContradiction, ResolveReport, Solution, StereoFailurePolicy, StereoMismatchPolicy,
         StereoResolveConfig,
     },
-    ring::RingConfig,
+    ring::{
+        RingAtomView, RingBondView, RingConfig, RingConnection, RingGraph, RingModel, RingRelation,
+        RingSet, RingSetKind, RingView, RingViews,
+    },
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::{SpinState, UnpairedElectrons, UnpairedElectronsForm, UnpairedElectronsUpdate},
     stereo::{
@@ -328,6 +331,16 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Reaction>()?;
         module.add_class::<ReactionSpan>()?;
         module.add_class::<RingConfig>()?;
+        module.add_class::<RingSetKind>()?;
+        module.add_class::<RingModel>()?;
+        module.add_class::<RingRelation>()?;
+        module.add_class::<RingConnection>()?;
+        module.add_class::<RingGraph>()?;
+        module.add_class::<RingSet>()?;
+        module.add_class::<RingViews>()?;
+        module.add_class::<RingView>()?;
+        module.add_class::<RingAtomView>()?;
+        module.add_class::<RingBondView>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;
         module.add_class::<RefinementRounds>()?;

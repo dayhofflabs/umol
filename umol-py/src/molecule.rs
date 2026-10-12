@@ -48,6 +48,7 @@ use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
 use crate::reaction::{Reaction, ReactionApplicationConfig, ReactionProductsIter};
 use crate::resolve::{ResolveConfig, ResolveContradiction, ResolveReport, Solution};
+use crate::ring::{RingConfig, RingModel, RingViews};
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{
     StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand,
@@ -742,6 +743,21 @@ impl Molecule {
             .featurize(self.to_rust()?)
             .map(StructuralFeatureSet::from_rust)
             .map_err(fingerprint_error)
+    }
+
+    /// Compute rings under the supplied model and algorithms, retaining this molecule.
+    fn rings(
+        slf: Py<Self>,
+        py: Python<'_>,
+        model: RingModel,
+        config: RingConfig,
+    ) -> PyResult<RingViews> {
+        let rings = slf
+            .try_borrow(py)?
+            .to_rust()?
+            .rings(model.to_rust(), config.to_rust())
+            .into_ring_set();
+        RingViews::from_rust(py, rings, slf)
     }
 
     /// The atoms, indexed by integer position.

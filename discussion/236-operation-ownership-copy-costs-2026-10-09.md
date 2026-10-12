@@ -351,9 +351,9 @@ performance trade-off on the measured workloads. Small standalone owned-read
 costs and rare-form copying remain as recorded; acceptance does not claim zero
 overhead or universal speedups. The diagnostic contracts and Python reading
 interface are also settled below. Shared container readings and diagnostic
-formatting are implemented in S3b, and owned/borrowed ring data in S3b1. The
-Python bindings follow in S3b2–S3b3. Later perception and discharge work retains
-its separately scheduled scope.
+formatting are implemented in S3b, owned/borrowed ring data in S3b1, and Python
+ring bindings in S3b2. Python constraint readings follow in S3b3. Later
+perception and discharge work retains its separately scheduled scope.
 
 Every constraints view has six readings of a key: `asserted`, `derived`, and
 `evidenced`, and their complete variants. Each reading is the meet of its
@@ -858,9 +858,9 @@ below. No intermediate assertion reading keeps the incident-bond fallback.
 The reading signatures, closure rules, diagnostics, Python reading interface,
 and measured performance trade-off are accepted. S3b supplies the shared
 container implementation, diagnostic formatting, and Rust verification;
-S3b1 implements ring ownership, and S3b2–S3b3 supply the Python interface. The
-comparisons below emphasize common variants and keep rare-form stress results
-separate.
+S3b1 implements ring ownership, and S3b2 supplies the Python ring interface.
+S3b3 remains to bind the constraint readings. The comparisons below emphasize
+common variants and keep rare-form stress results separate.
 
 ### Ring data and view ownership (accepted 2026-10-12)
 
@@ -2270,7 +2270,7 @@ as do workspace Clippy with all targets/features and warnings denied, graph-IR
 rustdoc with warnings denied, formatting, and diff checks. Logs are in
 scratch/236-s3b1.
 
-#### S3b2 — Python ring data and views
+#### S3b2 — Python ring data and views **Done**
 
 **Modules:** umol-py ring and molecule bindings, extension registration, Python
 package exports, and ring tests. **Additive, green.** [dep: S3b1]
@@ -2297,6 +2297,33 @@ into_ring_set, including consumption and dependent-accessor invalidation, and
 reconstruction with incompatible context without a panic. Distinguish bottom
 from top in ring valence. Verify that creating or partially advancing an iterator
 does not materialize the remaining entries.
+
+**Completion (2026-10-12):** the ten ring types and Molecule.rings are bound and
+exported. Reconstruction retains the RingSet and Molecule owners without
+copying or perception. Consuming extraction moves an owned set or clones a
+borrowed one; storage-identity tests verify both costs. Rust's writable record
+fields remain writable, while borrowed graph edges and ring-member sequences
+are read-only. RingView.id is a writable label, independent of its member
+slices, matching Rust.
+
+Consumed RingViews raises ConsumedError; its dependent views, sequences, and
+iterators raise InvalidatedViewError. Molecule consumption and structural
+operations invalidate the entire molecule-backed view tree, including exhausted
+iterators. Attribute changes remain visible, and independent RingSet access
+remains available. All exceptions use the existing shared types.
+
+Collection adapters retain owners and convert only requested entries. Atom/bond
+rings() reconstructs the Rust filtered iterator and advances with nth, so each
+step rescans its visited prefix; it neither buffers the remaining rings nor
+retains a Rust borrow across calls. No Rust public API was added for this
+binding adaptation.
+
+**Verification:** 71 Python ring cases pass, including ownership, lifetime,
+invalidation, incompatible context, lazy access, and bottom-versus-top readings.
+The full Python suite passes (2,057 tests, two skipped) after rebuilding under
+Python 3.13.15. Workspace tests with all features pass (36,945 tests, ten
+ignored), as do workspace Clippy with all targets/features and warnings denied,
+formatting, and diff checks. Logs are in scratch/236-s3b2.
 
 #### S3b3 — Python constraint readings and numeric projections
 

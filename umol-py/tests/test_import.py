@@ -164,10 +164,20 @@ PUBLIC_EXPORTS = frozenset(
     ResolveConfig
     ResolveContradiction
     ResolveReport
+    RingAtomView
+    RingBondView
     RingConfig
+    RingConnection
+    RingGraph
     RingLimits
     RingMembershipForm
+    RingModel
+    RingRelation
     RingScope
+    RingSet
+    RingSetKind
+    RingView
+    RingViews
     RoleTaggedHashedFeatureSet
     SignedHashedFeatureSet
     SimpleCycleEnumerationAlgorithm
