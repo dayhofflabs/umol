@@ -3048,7 +3048,7 @@ These runs show a small added cost on the aromatic workloads. The closing
 discharge pass still runs until S3m; its removal is not included in these
 measurements. Executables, runner, raw samples, and logs are in scratch/236-s3l.
 
-#### S3h1 — Raising writes #a! on a single bond between aromatic atoms
+#### S3h1 — Raising writes #a! on a single bond between aromatic atoms **Done**
 
 **Modules:** umol-io table_ir/raise and its tests; graph ingest tests.
 **Green.** [dep: S3h, S3l]
@@ -3062,6 +3062,42 @@ not aromatic.
 rings and `#a` on every ring bond; raising `c1ccccc1C` and `CC` writes no
 aromatic constraint on their single bonds; ingesting `c1ccc-cc1` fails with an
 AromaticValenceFailure; other resolved ingestion results are unchanged.
+
+**Completion (2026-10-12):** molecule raising emits the negative aromatic bond
+assertion for a Single table bond whose two atoms are explicitly marked
+aromatic. Ordinary and explicitly Shared covalent bonds use the same path.
+Unknown endpoint flags do not imply aromaticity, and invalid endpoints still
+return the existing InvalidReference error. The standalone bond conversion has
+no endpoint context and keeps its existing behavior.
+
+Exact cases cover the biphenyl bridge and all its ring bonds, both orders of
+the aromatic/aliphatic neighbor, ethane, unknown flags, Shared bonds, and an
+invalid endpoint. The new ingestion rejection and three cases requiring `#a!`
+failed before the implementation change. All 4,157 IO unit tests, 241
+ingestion tests, 683 resolution conformance cases, and 26 SMILES property tests
+pass, including the existing exact resolved biphenyl fixture. Scoped Clippy
+with warnings denied, formatting of the two changed Rust files, and diff checks
+pass. Workspace tests and full-workspace formatting remain at their planned
+batch and final gates.
+
+The existing smiles_roundtrip/raise cases were compared with commit 8cceaccdd
+using saved executables, 40 samples, one-second warm-up, and two-second
+measurement. Two passes used opposite execution orders, without concurrent
+builds or tests. Changes below compare medians of per-iteration sample times:
+
+| Case | Before then after | After then before |
+| --- | ---: | ---: |
+| chain_64 | +0.34% | -0.33% |
+| branched | +1.62% | -0.55% |
+| aromatic_fused | -0.14% | +0.77% |
+| aromatic_lone_pair | -0.87% | -0.16% |
+
+Criterion's slope estimates ranged from -1.18% to +2.24% across these passes;
+outliers made its sample-mean comparisons noisier. The branched slowdown did
+not repeat, and these short runs do not establish a sub-percent cost. These
+inputs check overhead without adding a negative assertion; they do not measure
+the cost of storing the new bridge assertion. Executables, raw samples,
+estimates, and logs are saved in scratch/236-s3h1.
 
 #### S3m — Closing discharge pass removed
 

@@ -1018,6 +1018,14 @@ mod tests {
             ),
         ))
     )]
+    #[case::non_aromatic_bond_in_aromatic_ring(
+        "c1ccc-cc1",
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        ))
+    )]
     #[case::dangling_direction("F/C=C", SmilesInputError::Syntax(SmilesParseError::DanglingBondDirection { bond: 0 }))]
     #[case::conflicting_direction("F/C(\\Cl)=CF", SmilesInputError::Syntax(SmilesParseError::CisTransConflict { atom: 1 }))]
     #[case::ring_direction("C/1CC/1", SmilesInputError::Syntax(SmilesParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 }))]
