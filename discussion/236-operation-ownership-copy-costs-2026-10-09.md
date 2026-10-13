@@ -3978,7 +3978,7 @@ Criterion results, and the comparison script are in scratch/236-s4j/;
 final/ contains the accepted timing comparison. The earlier linear-scan and
 always-indexed trials are retained as experiment evidence.
 
-#### S4c — Resolver plan application as an invariant
+#### S4c — Resolver plan application as an invariant **Done**
 
 **Modules:** graph resolve, the five individual resolvers, and their tests.
 **Breaking, red→green within the subitem.** [dep: S3a, S4j]
@@ -3997,6 +3997,38 @@ invariant 1, replacing the four fixed-SMILES integrity properties: every
 determined result of the aromaticity resolver's resolve and project, the
 kekulizer, and the aromatizer passes the integrity check, and the consuming and
 in-place forms agree.
+
+**Completion (2026-10-13):** the eight individual Apply variants are removed.
+Application, probes, finalization, and commits of the resolvers' own plans now
+assert the planner's applicability and integrity guarantees. ResolveError's
+Isotope, Commit, and Apply variants and ProjectError::Apply are removed too.
+BondsError, IsotopeError, MulticenterBondsError, and StereoError remain empty
+enums; operation signatures and planning outcomes are unchanged.
+
+The composite borrowed operations retain Transaction::run. Its checked
+MoleculeApplyError boundary is asserted separately from the returned planning
+Result; only a determined result commits, so planning rejection still rolls
+back. Externally applying saved Edits remains checked, and the stale-plan tests
+remain. No tests constructed the removed resolver error variants. Rustdoc now
+states the trusted-plan guarantee and lists only planning errors. Python has no
+matches on the removed variants and needs no binding changes.
+
+The four fixed-SMILES integrity properties are replaced by three property groups
+over raw C/N/O/S ring skeletons, stored first-ring skeletons, and independently
+concrete saturated-carbon skeletons. They check standalone aromaticity resolution
+and projection, Kekulizer, Aromatizer, DelocalizeCharge, and composite resolution:
+successful publication passes the public editor integrity gate, consuming and
+in-place outcomes agree, and rejection preserves the input. Successful Kekulé
+outputs additionally exercise aromatization with localized double bonds. The
+separate Kekulizer valence-conservation property is unchanged.
+
+Validation passed: 643 resolver unit cases, the four publication properties,
+22 resolver-filtered property-target checks, 159 projection-filtered checks,
+and 34 aromatic resolution conformance cases. Property runs used 4,096 cases
+and seed 20261013. Graph-crate all-target clippy with proptest and conformance
+features, touched-file nightly formatting, and git diff --check passed. No
+workspace test run was added. The contract inventory and check logs are in
+scratch/236-s4c/.
 
 #### S4f — Individual resolver _into without a transaction
 

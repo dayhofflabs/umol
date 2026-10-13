@@ -28,7 +28,7 @@ use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorit
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValence, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondId, BooleanForm, Edit, Edits,
-    ElectronCountsForm, Molecule, MoleculeApplyError, RingConfig, RingModel, RingSet, RingSetKind,
+    ElectronCountsForm, Molecule, RingConfig, RingModel, RingSet, RingSetKind,
 };
 use umol_utils::solution::Solution;
 
@@ -51,8 +51,6 @@ pub enum AromaticityContradiction {
 pub enum AromaticityError {
     #[error("hmo: missing parameters: {0}")]
     HmoMissingParameters(String),
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
 }
 
 /// Algorithms used by aromaticity perception independently of the chemistry

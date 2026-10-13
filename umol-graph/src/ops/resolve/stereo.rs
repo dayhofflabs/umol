@@ -8,8 +8,8 @@ use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate, BondConstraintForm,
     BondConstraintKey, BondHandle, BondId, BondUpdate, CisTransStereoForm, Edit, Edits, Lattice,
-    Molecule, MoleculeApplyError, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId,
-    StereoCoset, StereoKind, TetrahedralStereoForm,
+    Molecule, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset,
+    StereoKind, TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -43,6 +43,12 @@ impl Default for StereoResolveConfig {
     }
 }
 
+/// Resolves structural stereo from the molecule's evidence.
+///
+/// # Semantic properties
+///
+/// Plans apply to their input and preserve molecule integrity. Consuming and in-place
+/// operations agree on outcomes and determined molecules for the same input and configuration.
 #[derive(Clone, Debug)]
 pub struct StereoResolver {
     perception: StereoPerception,
@@ -56,10 +62,7 @@ pub enum StereoContradiction {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum StereoError {
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
-}
+pub enum StereoError {}
 
 /// Failures to express stereo entities as fixed-frame atom and bond assertions.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -76,8 +79,6 @@ pub enum StereoProjectError {
     AtomAssertion { atom: AtomId },
     #[error("bond {bond:?} has an assertion incompatible with its stereo configuration")]
     BondAssertion { bond: BondId },
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
 }
 
 impl StereoResolver {
@@ -312,10 +313,6 @@ impl StereoResolver {
     ///
     /// Uses the same plan as [StereoResolver::resolve_into]. A determined result has checked
     /// molecule integrity; its stereo configurations may remain open. Rejection drops the input.
-    ///
-    /// # Errors
-    ///
-    /// Returns the planning or application error, including failure of the final integrity check.
     pub fn resolve(
         &self,
         molecule: Molecule,
@@ -329,9 +326,10 @@ impl StereoResolver {
         };
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("stereo resolve plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("stereo resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -343,10 +341,6 @@ impl StereoResolver {
     /// under Molecule::normalized_eq, including participant order.
     /// With consistent, realizable stereo evidence, resolution is idempotent under `==`.
     /// Stereo configurations may remain open in a determined result.
-    ///
-    /// # Errors
-    ///
-    /// Returns StereoError for planning, application, or final integrity-check failure.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
@@ -358,7 +352,9 @@ impl StereoResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("stereo resolve plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 
@@ -369,7 +365,7 @@ impl StereoResolver {
     ///
     /// # Errors
     ///
-    /// Returns the planning or application error, including failure of the final integrity check.
+    /// Returns the planning error described by [StereoResolver::plan_project].
     pub fn project(
         &self,
         molecule: Molecule,
@@ -377,9 +373,10 @@ impl StereoResolver {
         let edits = self.plan_project(&molecule)?;
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("stereo project plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("stereo project plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -403,13 +400,14 @@ impl StereoResolver {
     ///
     /// Rejects unsupported or undetermined kinds, unavailable model reference frames, ligand
     /// frames that cannot transport to those references, and conflicting existing assertions.
-    /// Apply reports an edit-application or final integrity-check failure.
     pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
         let edits = self.plan_project(molecule)?;
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("stereo project plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 

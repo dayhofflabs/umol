@@ -1,18 +1,22 @@
 //! Representation-integrity preservation by chemistry-layer publishers.
 //!
-//! Resolved SMILES fixtures also check equality between consuming and borrowed
-//! transformations; publication is checked through the editor's integrity gate.
-//! Constructed single and coupled C/N/O/S rings with added valence assertions and
-//! altered charges check Kekulizer's planned-atom conservation contract through
-//! output validation and derived constraint readings. The rings have fixed donor
-//! positions and admit matching; every failure must preserve the borrowed input.
+//! Raw C/N/O/S ring skeletons retain contradictions and undetermined fields. Stored
+//! first-ring skeletons supply literal contributions independently of perception.
+//! Saturated carbon skeletons supply an independently concrete resolution domain.
+//! Each operation checks consuming/in-place outcome agreement, publication through
+//! the editor's integrity gate, and preservation of the input on rejection.
+//! Successful Kekule outputs also exercise aromatization of localized double bonds.
+//! The separate Kekulizer valence property uses matching-admitting rings with fixed
+//! donor positions and tests electron conservation, not just representation integrity.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
-use umol_graph::ingest::ingest_smiles;
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel};
-use umol_graph::ops::resolve::Resolver;
+use umol_graph::ops::resolve::{
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, IsotopePolicy,
+    ResolveConfig, Resolver,
+};
 use umol_graph::ops::transform::{
     Aromatizer, DelocalizeCharge, KekulizeConfig, KekulizeError, Kekulizer,
     MaximumMatchingAlgorithm, Transformer,
@@ -20,25 +24,40 @@ use umol_graph::ops::transform::{
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondForm, Lattice,
-    Molecule, MoleculeEntries, NumForm,
+    Molecule, MoleculeEntries, Normalize, NumForm,
 };
 use umol_utils::solution::Solution;
 
-fn molecule_from_smiles(source: &str) -> Molecule {
-    ingest_smiles(source).expect("publication-property SMILES fixture resolves")
-}
+use super::strategies::{aromatic_skeleton, stored_aromatic_skeleton};
 
-fn kekule_molecule_strategy() -> impl Strategy<Value = Molecule> {
-    prop::sample::select(vec!["C1=CC=CC=C1", "C1=CC=CN=C1"]).prop_map(molecule_from_smiles)
-}
-
-fn aromatic_molecule_strategy() -> impl Strategy<Value = Molecule> {
-    prop::sample::select(vec!["c1ccccc1", "c1ccncc1"]).prop_map(molecule_from_smiles)
-}
-
-fn resolved_molecule_strategy() -> impl Strategy<Value = Molecule> {
-    prop::sample::select(vec!["C", "CC", "C=C", "N", "O", "c1ccccc1"])
-        .prop_map(molecule_from_smiles)
+fn publication_molecule() -> impl Strategy<Value = Molecule> {
+    prop_oneof![
+        aromatic_skeleton().prop_map(|skeleton| skeleton.molecule()),
+        stored_aromatic_skeleton(),
+        aromatic_skeleton().prop_map(|skeleton| {
+            let source = skeleton.molecule();
+            Molecule::from_entries(MoleculeEntries {
+                atoms: source
+                    .atoms()
+                    .iter()
+                    .map(|atom| {
+                        AtomForm::from_element(Element::C)
+                            .with_implicit_hydrogens(4 - atom.neighbors().count() as i64)
+                            .into_concrete()
+                    })
+                    .collect(),
+                bonds: source
+                    .bonds()
+                    .iter()
+                    .map(|bond| {
+                        let [a, b] = bond.atom_ids();
+                        (a, b, BondForm::from_order(1).into_concrete())
+                    })
+                    .collect(),
+                ..Default::default()
+            })
+        }),
+    ]
 }
 
 proptest! {
@@ -50,53 +69,113 @@ proptest! {
     })]
 
     #[test]
-    fn test_aromatizer_integrity_preservation(source in kekule_molecule_strategy()) {
-        let transformer = Aromatizer::new(&AromaticityModel::daylight());
+    fn test_aromaticity_resolver_resolve_publication(
+        source in publication_molecule(),
+        keep_valence in any::<bool>(),
+        keep_system in any::<bool>(),
+    ) {
+        let resolver = AromaticityResolver::with_config(&AromaticityModel::daylight(),
+            AromaticityResolveConfig {
+                aromatic_valence_failure: if keep_valence { AromaticityFailurePolicy::Keep }
+                    else { AromaticityFailurePolicy::Error },
+                aromatic_system_failure: if keep_system { AromaticityFailurePolicy::Keep }
+                    else { AromaticityFailurePolicy::Error },
+                ..Default::default()
+            });
         let mut borrowed = source.clone();
-        let published = transformer
-            .transform(source)
-            .map_err(|error| TestCaseError::fail(format!("aromatization failed: {error}")))?;
-        transformer.transform_into(&mut borrowed)
-            .map_err(|error| TestCaseError::fail(format!("aromatization failed: {error}")))?;
-
-        prop_assert_eq!(&borrowed, &published);
-        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+        let consumed = resolver.resolve(source.clone());
+        let in_place = resolver.resolve_into(&mut borrowed);
+        let mut projections = vec![source.clone()];
+        match consumed {
+            Ok(Solution::Determined(published)) => {
+                prop_assert_eq!(in_place, Ok(Solution::Determined(())));
+                prop_assert_eq!(&borrowed, &published);
+                prop_assert_eq!(published.clone().edit().finish(), Ok(published.clone()));
+                projections.push(published);
+            }
+            Ok(Solution::Underdetermined(())) => {
+                prop_assert_eq!(in_place, Ok(Solution::Underdetermined(())));
+                prop_assert_eq!(borrowed, source);
+            }
+            Ok(Solution::Contradictory(contradiction)) => {
+                prop_assert_eq!(in_place, Ok(Solution::Contradictory(contradiction)));
+                prop_assert_eq!(borrowed, source);
+            }
+            Err(error) => {
+                prop_assert_eq!(in_place, Err(error));
+                prop_assert_eq!(borrowed, source);
+            }
+        }
+        for source in projections {
+            let mut borrowed = source.clone();
+            let consumed = resolver.project(source.clone());
+            let in_place = resolver.project_into(&mut borrowed);
+            match consumed {
+                Ok(Solution::Determined(published)) => {
+                    prop_assert_eq!(in_place, Ok(Solution::Determined(())));
+                    prop_assert_eq!(&borrowed, &published);
+                    prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+                }
+                Ok(outcome) => return Err(TestCaseError::fail(format!(
+                    "projection has no non-determined success: {outcome:?}"))),
+                Err(error) => {
+                    prop_assert_eq!(in_place, Err(error));
+                    prop_assert!(borrowed.normalized_eq(&source));
+                }
+            }
+        }
     }
 
     #[test]
-    fn test_delocalize_charge_integrity_preservation(source in aromatic_molecule_strategy()) {
-        let mut borrowed = source.clone();
-        let published = DelocalizeCharge
-            .transform(source)
-            .expect("delocalized-charge transformation is infallible");
-        DelocalizeCharge.transform_into(&mut borrowed)
-            .expect("delocalized-charge transformation is infallible");
-
-        prop_assert_eq!(&borrowed, &published);
-        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
-    }
-
-    #[test]
-    fn test_kekulizer_integrity_preservation(
-        source in aromatic_molecule_strategy(),
+    fn test_transformer_transform_publication(
+        source in publication_molecule(),
         use_bipartite in any::<bool>(),
     ) {
+        let mut borrowed = source.clone();
+        let published = DelocalizeCharge.transform(source.clone()).unwrap();
+        prop_assert_eq!(DelocalizeCharge.transform_into(&mut borrowed), Ok(()));
+        prop_assert_eq!(&borrowed, &published);
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+
         let algorithm = if use_bipartite {
             MaximumMatchingAlgorithm::HopcroftKarp
         } else {
             MaximumMatchingAlgorithm::Edmonds
         };
-        let node_order = source.atoms().ids().collect::<Vec<AtomId>>();
-        let transformer = Kekulizer::new(KekulizeConfig::new(algorithm), node_order);
+        let transformer = Kekulizer::new(KekulizeConfig::new(algorithm), source.atoms().ids().collect());
         let mut borrowed = source.clone();
-        let published = transformer
-            .transform(source)
-            .map_err(|error| TestCaseError::fail(format!("kekulization failed: {error}")))?;
-        transformer.transform_into(&mut borrowed)
-            .map_err(|error| TestCaseError::fail(format!("kekulization failed: {error}")))?;
-
-        prop_assert_eq!(&borrowed, &published);
-        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+        let consumed = transformer.transform(source.clone());
+        let in_place = transformer.transform_into(&mut borrowed);
+        let mut kekule = vec![source.clone()];
+        match consumed {
+            Ok(published) => {
+                prop_assert_eq!(in_place, Ok(()));
+                prop_assert_eq!(&borrowed, &published);
+                prop_assert_eq!(published.clone().edit().finish(), Ok(published.clone()));
+                kekule.push(published);
+            }
+            Err(error) => {
+                prop_assert_eq!(in_place, Err(error));
+                prop_assert_eq!(borrowed, source);
+            }
+        }
+        let transformer = Aromatizer::new(&AromaticityModel::daylight());
+        for source in kekule {
+            let mut borrowed = source.clone();
+            let consumed = transformer.transform(source.clone());
+            let in_place = transformer.transform_into(&mut borrowed);
+            match consumed {
+                Ok(published) => {
+                    prop_assert_eq!(in_place, Ok(()));
+                    prop_assert_eq!(&borrowed, &published);
+                    prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+                }
+                Err(error) => {
+                    prop_assert_eq!(in_place, Err(error));
+                    prop_assert_eq!(borrowed, source);
+                }
+            }
+        }
     }
 
     #[test]
@@ -178,22 +257,35 @@ proptest! {
     }
 
     #[test]
-    fn test_resolver_integrity_preservation(mut source in resolved_molecule_strategy()) {
+    fn test_resolver_resolve_publication(source in publication_molecule()) {
         let model = ChemistryModel {
             valence: ValenceModel::smiles(),
             ..ChemistryModel::default()
         };
-        let resolver = Resolver::new(&model);
-        let consumed = resolver.resolve(source.clone())
-            .map_err(|error| TestCaseError::fail(format!("resolution failed: {error}")))?;
-        let Solution::Determined(published) = consumed else {
-            return Err(TestCaseError::fail("resolved input must remain determined"));
-        };
-        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
-        resolver
-            .resolve_into(&mut source)
-            .map_err(|error| TestCaseError::fail(format!("resolution failed: {error}")))?;
-
-        prop_assert_eq!(source.clone().edit().finish(), Ok(source));
+        let resolver = Resolver::with_config(&model, ResolveConfig {
+            isotope: IsotopePolicy::Natural, ..Default::default()
+        });
+        let mut borrowed = source.clone();
+        let consumed = resolver.resolve(source.clone());
+        let in_place = resolver.resolve_into(&mut borrowed);
+        match consumed {
+            Ok(Solution::Determined(published)) => {
+                prop_assert_eq!(in_place, Ok(Solution::Determined(())));
+                prop_assert_eq!(&borrowed, &published);
+                prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+            }
+            Ok(Solution::Underdetermined(())) => {
+                prop_assert_eq!(in_place, Ok(Solution::Underdetermined(())));
+                prop_assert!(borrowed.normalized_eq(&source));
+            }
+            Ok(Solution::Contradictory(contradiction)) => {
+                prop_assert_eq!(in_place, Ok(Solution::Contradictory(contradiction)));
+                prop_assert!(borrowed.normalized_eq(&source));
+            }
+            Err(error) => {
+                prop_assert_eq!(in_place, Err(error));
+                prop_assert!(borrowed.normalized_eq(&source));
+            }
+        }
     }
 }

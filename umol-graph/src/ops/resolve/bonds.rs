@@ -4,11 +4,16 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    BondHandle, BondUpdate, Edits, Lattice, Molecule, MoleculeApplyError, NumForm,
-    UnpairedElectronsForm,
+    BondHandle, BondUpdate, Edits, Lattice, Molecule, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
+/// Resolves localized-bond defaults from the molecule's evidence.
+///
+/// # Semantic properties
+///
+/// Plans apply to their input and preserve molecule integrity. Consuming and in-place
+/// operations agree on outcomes and determined molecules for the same input.
 #[derive(Clone, Debug, Default)]
 pub struct BondsResolver;
 
@@ -16,10 +21,7 @@ pub struct BondsResolver;
 pub enum BondsContradiction {}
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum BondsError {
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
-}
+pub enum BondsError {}
 
 impl BondsResolver {
     pub fn new() -> Self {
@@ -53,10 +55,6 @@ impl BondsResolver {
     ///
     /// Uses the same plan as [BondsResolver::resolve_into]. A determined result has checked
     /// molecule integrity. Rejection drops the input.
-    ///
-    /// # Errors
-    ///
-    /// Returns BondsError::Apply if application or the final integrity check fails.
     pub fn resolve(
         &self,
         molecule: Molecule,
@@ -64,9 +62,10 @@ impl BondsResolver {
         let edits = self.plan_resolve(&molecule);
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("bond resolve plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("bond resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -76,16 +75,14 @@ impl BondsResolver {
     ///
     /// Only Determined retains changes. Every other outcome preserves the molecule
     /// under Molecule::normalized_eq, including participant order.
-    ///
-    /// # Errors
-    ///
-    /// Returns BondsError::Apply if application or the final integrity check fails.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
         let edits = self.plan_resolve(molecule);
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("bond resolve plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 }
@@ -93,7 +90,9 @@ impl BondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{BondFieldChange, BondId, Edit, Edits, TransactionError};
+    use umol_graph_ir::ir::{
+        BondFieldChange, BondId, Edit, Edits, MoleculeApplyError, TransactionError,
+    };
     use umol_graph_ir::mol_dsl;
 
     use super::*;

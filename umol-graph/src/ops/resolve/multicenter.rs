@@ -3,8 +3,8 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomConstraintKey, Edits, Lattice, Molecule, MoleculeApplyError, MulticenterBondHandle,
-    MulticenterBondUpdate, NumForm, UnpairedElectronsForm,
+    AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate,
+    NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -12,6 +12,12 @@ use crate::ops::validate::{
     DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
 };
 
+/// Resolves multicenter-bond defaults from the molecule's evidence.
+///
+/// # Semantic properties
+///
+/// Plans apply to their input and preserve molecule integrity. Consuming and in-place
+/// operations agree on outcomes and determined molecules for the same input.
 #[derive(Clone, Debug, Default)]
 pub struct MulticenterBondsResolver;
 
@@ -22,10 +28,7 @@ pub enum MulticenterBondsContradiction {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum MulticenterBondsError {
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
-}
+pub enum MulticenterBondsError {}
 
 impl MulticenterBondsResolver {
     pub fn new() -> Self {
@@ -82,10 +85,6 @@ impl MulticenterBondsResolver {
     ///
     /// Uses the same plan as [MulticenterBondsResolver::resolve_into]. A determined result has checked
     /// molecule integrity. Rejection drops the input.
-    ///
-    /// # Errors
-    ///
-    /// Returns MulticenterBondsError::Apply if application or the final integrity check fails.
     pub fn resolve(
         &self,
         molecule: Molecule,
@@ -99,9 +98,10 @@ impl MulticenterBondsResolver {
         };
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("multicenter-bond resolve plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("multicenter-bond resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -111,10 +111,6 @@ impl MulticenterBondsResolver {
     ///
     /// Only Determined retains changes. Every other outcome preserves the molecule
     /// under Molecule::normalized_eq, including participant order.
-    ///
-    /// # Errors
-    ///
-    /// Returns MulticenterBondsError::Apply if application or the final integrity check fails.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
@@ -126,7 +122,9 @@ impl MulticenterBondsResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("multicenter-bond resolve plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 }
@@ -135,8 +133,8 @@ impl MulticenterBondsResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AtomConstraintForm, AtomId, Edit, Edits, MulticenterBondFieldChange, MulticenterBondId,
-        MulticenterValenceForm, TransactionError,
+        AtomConstraintForm, AtomId, Edit, Edits, MoleculeApplyError, MulticenterBondFieldChange,
+        MulticenterBondId, MulticenterValenceForm, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 

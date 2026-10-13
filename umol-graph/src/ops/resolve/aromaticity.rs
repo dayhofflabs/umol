@@ -12,8 +12,7 @@ use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
     AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
     BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, Edit,
-    Edits, ElectronCountsForm, Lattice, Molecule, MoleculeApplyError, NumForm,
-    UnpairedElectronsForm,
+    Edits, ElectronCountsForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -73,6 +72,12 @@ impl Default for AromaticityResolveConfig {
     }
 }
 
+/// Resolves aromatic systems from the molecule's evidence.
+///
+/// # Semantic properties
+///
+/// Plans apply to their input and preserve molecule integrity. Consuming and in-place
+/// operations agree on outcomes and determined molecules for the same input and configuration.
 #[derive(Clone, Debug)]
 pub struct AromaticityResolver {
     pub(super) perception: AromaticityPerceiver,
@@ -93,8 +98,6 @@ pub enum AromaticityProjectError {
     AtomAssertion { atom: AtomId },
     #[error("bond {bond:?} has an assertion incompatible with aromaticity")]
     BondAssertion { bond: BondId },
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
 }
 
 impl AromaticityResolver {
@@ -166,7 +169,7 @@ impl AromaticityResolver {
     ///
     /// # Errors
     ///
-    /// Returns the planning or application error, including failure of the final integrity check.
+    /// Returns an error if the selected aromaticity model lacks required parameters.
     pub fn resolve(
         &self,
         molecule: Molecule,
@@ -180,9 +183,10 @@ impl AromaticityResolver {
         };
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("aromaticity resolve plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("aromaticity resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -195,7 +199,7 @@ impl AromaticityResolver {
     ///
     /// # Errors
     ///
-    /// Returns AromaticityError for planning, application, or final integrity-check failure.
+    /// Returns an error if the selected aromaticity model lacks required parameters.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
@@ -207,7 +211,9 @@ impl AromaticityResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("aromaticity resolve plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 
@@ -218,7 +224,7 @@ impl AromaticityResolver {
     ///
     /// # Errors
     ///
-    /// Returns the planning or application error, including failure of the final integrity check.
+    /// Returns the planning error described by [AromaticityResolver::plan_project].
     pub fn project(
         &self,
         molecule: Molecule,
@@ -226,9 +232,10 @@ impl AromaticityResolver {
         let edits = self.plan_project(&molecule)?;
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("aromaticity project plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("aromaticity project plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -250,13 +257,14 @@ impl AromaticityResolver {
     ///
     /// Rejects non-concrete system contributions, charge, or spin; nonzero system charge;
     /// non-singlet or nonzero-unpaired system spin; and incompatible atom or bond assertions.
-    /// Apply reports an edit-application or final integrity-check failure.
     pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityProjectError> {
         let edits = self.plan_project(molecule)?;
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("aromaticity project plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 

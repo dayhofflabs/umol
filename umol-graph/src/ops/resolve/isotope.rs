@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomHandle, AtomId, AtomUpdate, Edits, IsotopeMassForm, Lattice, Molecule, MoleculeApplyError,
+    AtomHandle, AtomId, AtomUpdate, Edits, IsotopeMassForm, Lattice, Molecule,
 };
 use umol_utils::solution::Solution;
 
@@ -32,6 +32,9 @@ pub enum IsotopePolicy {
 /// For every molecule with ground isotope fields, successful projection followed
 /// by resolution under the same policy recovers the original molecule exactly.
 /// This law does not require the molecule's other fields to be ground.
+///
+/// Plans apply to their input and preserve molecule integrity. Consuming and in-place
+/// operations agree on outcomes and determined molecules for the same input and policy.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct IsotopeResolver {
     policy: IsotopePolicy,
@@ -41,20 +44,15 @@ pub struct IsotopeResolver {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum IsotopeContradiction {}
 
-/// Operational failures applying isotope completion.
+/// Isotope completion has no operational failure outcomes.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum IsotopeError {
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
-}
+pub enum IsotopeError {}
 
 /// Failures projecting a resolved isotope description.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum IsotopeProjectError {
     #[error("atom {atom:?} has a non-ground isotope")]
     NonGroundIsotope { atom: AtomId },
-    #[error(transparent)]
-    Apply(#[from] MoleculeApplyError),
 }
 
 impl IsotopeResolver {
@@ -98,10 +96,6 @@ impl IsotopeResolver {
     ///
     /// Uses the same plan as [IsotopeResolver::resolve_into]. A determined result has checked
     /// molecule integrity. Rejection drops the input.
-    ///
-    /// # Errors
-    ///
-    /// Returns IsotopeError::Apply if application or the final integrity check fails.
     pub fn resolve(
         &self,
         molecule: Molecule,
@@ -113,9 +107,10 @@ impl IsotopeResolver {
         };
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("isotope resolve plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("isotope resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -123,10 +118,6 @@ impl IsotopeResolver {
     ///
     /// Underdetermination leaves the entire molecule unchanged, including fields
     /// for which the plan proposed defaults.
-    ///
-    /// # Errors
-    ///
-    /// Returns IsotopeError::Apply if edit application or the final integrity check fails.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
@@ -136,7 +127,9 @@ impl IsotopeResolver {
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => match contradiction {},
         };
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("isotope resolve plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 
@@ -147,7 +140,7 @@ impl IsotopeResolver {
     ///
     /// # Errors
     ///
-    /// Returns the planning or application error, including failure of the final integrity check.
+    /// Returns the planning error described by [IsotopeResolver::plan_project].
     pub fn project(
         &self,
         molecule: Molecule,
@@ -155,9 +148,10 @@ impl IsotopeResolver {
         let edits = self.plan_project(&molecule)?;
         let molecule = molecule
             .edit()
-            .apply(edits)?
+            .apply(edits)
+            .expect("isotope project plan applies to its input")
             .finish()
-            .map_err(MoleculeApplyError::from)?;
+            .expect("isotope project plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
     }
 
@@ -170,15 +164,16 @@ impl IsotopeResolver {
     /// # Errors
     ///
     /// Returns IsotopeProjectError::NonGroundIsotope for the first atom whose
-    /// isotope is Undetermined, a set, or a variable, or Apply if edit application
-    /// or the final integrity check fails. Every error preserves the caller's molecule
+    /// isotope is Undetermined, a set, or a variable. Every error preserves the caller's molecule
     /// under Molecule::normalized_eq.
     pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeProjectError> {
         let edits = self.plan_project(molecule)?;
-        molecule.transact([edits])?;
+        molecule
+            .transact([edits])
+            .expect("isotope project plan applies and preserves molecule integrity");
         Ok(Solution::Determined(()))
     }
 
@@ -216,7 +211,9 @@ impl IsotopeResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AtomFieldChange, AtomForm, Edit, MoleculeEntries, TransactionError};
+    use umol_graph_ir::ir::{
+        AtomFieldChange, AtomForm, Edit, MoleculeApplyError, MoleculeEntries, TransactionError,
+    };
     use umol_graph_ir::mol_dsl;
 
     use super::*;
