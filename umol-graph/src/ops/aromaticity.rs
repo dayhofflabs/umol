@@ -91,6 +91,8 @@ pub struct AromaticityDerivation {
 pub enum AromaticityInconsistency {
     #[error("aromatic valence at atom {atom:?} cannot produce a valid aromatic system")]
     AromaticValenceFailure { atom: AtomId },
+    #[error("aromatic constraint at bond {bond:?} cannot produce a valid aromatic system")]
+    AromaticBondConstraintFailure { bond: BondId },
     #[error("aromatic system {system:?} is not realizable under the selected model")]
     AromaticSystemFailure { system: AromaticSystemId },
     #[error("aromatic valence at atom {atom:?} disagrees with aromatic system {system:?}")]
@@ -182,6 +184,8 @@ impl AromaticityPerceiver {
     /// Find candidate aromatic systems via the configured algorithm.
     /// The closure returns each atom's aromatic membership and π contribution.
     /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
+    /// No returned system contains both endpoints of a non-aromatic bond assertion.
+    /// Conflicting combined candidates are rejected without an alternative partition search.
     #[allow(clippy::complexity)]
     pub fn find_systems<F>(
         &self,
@@ -214,12 +218,39 @@ impl AromaticityPerceiver {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
+        self.find_systems_with_exclusions(
+            molecule,
+            rings,
+            config,
+            &bond_exclusions(molecule),
+            electrons_at,
+        )
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn find_systems_with_exclusions<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        config: AromaticityConfig,
+        excluded_bonds: &[[AtomId; 2]],
+        electrons_at: F,
+    ) -> Result<
+        Solution<Vec<(Vec<AtomId>, AromaticSystemForm)>, AromaticityContradiction>,
+        AromaticityError,
+    >
+    where
+        F: Fn(AtomId) -> AromaticValence,
+    {
         let systems = match self {
-            Self::Hueckel(m) => m.find_from_rings(molecule, rings, &electrons_at),
-            Self::Hmo(m) => match m.find_from_rings(
+            Self::Hueckel(m) => {
+                m.find_with_exclusions(molecule, rings, excluded_bonds, &electrons_at)
+            }
+            Self::Hmo(m) => match m.find_with_exclusions(
                 molecule,
                 rings,
                 config.connected_components_algorithm,
+                excluded_bonds,
                 &electrons_at,
             ) {
                 Ok(systems) => systems,
@@ -235,10 +266,11 @@ impl AromaticityPerceiver {
                     return Ok(Solution::Underdetermined(Vec::new()));
                 }
             },
-            Self::Clar(m) => match m.find_from_rings(
+            Self::Clar(m) => match m.find_with_exclusions(
                 molecule,
                 rings,
                 config.maximum_independent_set_algorithm,
+                excluded_bonds,
                 &electrons_at,
             ) {
                 Ok(systems) => systems,
@@ -308,16 +340,39 @@ impl AromaticityPerceiver {
             return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
         }
 
-        let systems =
-            match self.find_systems(molecule, config, |atom| contributions[atom.index()])? {
-                Solution::Determined(systems) => systems,
-                Solution::Underdetermined(_) => {
-                    return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
-                }
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction));
-                }
-            };
+        let rings = self.candidate_rings(molecule, config);
+        match self.check_stored_systems(molecule, &rings, config)? {
+            Solution::Determined(existing) => inconsistencies.extend(existing),
+            Solution::Underdetermined(_) => {
+                return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+            }
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction))
+            }
+        }
+        if inconsistencies.iter().any(|inconsistency| {
+            matches!(
+                inconsistency,
+                AromaticityInconsistency::AromaticBondConstraintMismatch { .. }
+            )
+        }) {
+            return Ok(Solution::Determined(AromaticityDerivation {
+                systems: Vec::new(),
+                inconsistencies: inconsistencies.into_iter().collect(),
+            }));
+        }
+
+        let systems = match self
+            .find_systems_from_rings(molecule, &rings, config, |atom| contributions[atom.index()])?
+        {
+            Solution::Determined(systems) => systems,
+            Solution::Underdetermined(_) => {
+                return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+            }
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
 
         let system_members: Vec<BTreeSet<AtomId>> = systems
             .iter()
@@ -334,39 +389,74 @@ impl AromaticityPerceiver {
                     .insert(AromaticityInconsistency::AromaticValenceFailure { atom: atom.id() });
             }
         }
+        for bond in molecule.bonds().iter() {
+            if matches!(
+                bond.attributes().constraints.aromatic(),
+                BooleanForm::Lit(true)
+            ) && !system_members
+                .iter()
+                .any(|members| bond.atom_ids().iter().all(|atom| members.contains(atom)))
+            {
+                inconsistencies.insert(AromaticityInconsistency::AromaticBondConstraintFailure {
+                    bond: bond.id(),
+                });
+            }
+        }
 
+        Ok(Solution::Determined(AromaticityDerivation {
+            systems,
+            inconsistencies: inconsistencies.into_iter().collect(),
+        }))
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(super) fn check_stored_systems(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        config: AromaticityConfig,
+    ) -> Result<Solution<Vec<AromaticityInconsistency>, AromaticityContradiction>, AromaticityError>
+    {
+        let mut inconsistencies = BTreeSet::new();
         let mut valid_existing = Vec::new();
         for existing in molecule.aromatic_systems().iter() {
             let ElectronCountsForm::Lit(existing_electrons) = &existing.attributes().electrons
             else {
-                return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
+                return Ok(Solution::Underdetermined(Vec::new()));
             };
             let existing_atoms: Vec<AtomId> = existing.atom_ids().collect();
+            if existing_electrons.len() != existing_atoms.len() {
+                inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
+                    system: existing.id(),
+                });
+                continue;
+            }
             let existing_contributions: Vec<(AtomId, i64)> = existing_atoms
                 .iter()
                 .copied()
                 .zip(existing_electrons.iter().copied())
                 .collect();
 
-            let perceived = match self.find_systems(molecule, config, |atom| {
-                existing_contributions
-                    .iter()
-                    .find_map(|&(candidate, electrons)| {
-                        (candidate == atom).then_some(AromaticValence::Aromatic(electrons))
-                    })
-                    .unwrap_or(AromaticValence::NotAromatic)
-            })? {
-                Solution::Determined(perceived) => perceived,
-                Solution::Underdetermined(_) => {
-                    return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
-                }
-                Solution::Contradictory(_) => {
-                    inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
-                        system: existing.id(),
-                    });
-                    continue;
-                }
-            };
+            let perceived =
+                match self.find_systems_with_exclusions(molecule, rings, config, &[], |atom| {
+                    existing_contributions
+                        .iter()
+                        .find_map(|&(candidate, electrons)| {
+                            (candidate == atom).then_some(AromaticValence::Aromatic(electrons))
+                        })
+                        .unwrap_or(AromaticValence::NotAromatic)
+                })? {
+                    Solution::Determined(perceived) => perceived,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(Vec::new()));
+                    }
+                    Solution::Contradictory(_) => {
+                        inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
+                            system: existing.id(),
+                        });
+                        continue;
+                    }
+                };
 
             let existing_members: BTreeSet<AtomId> = existing_atoms.iter().copied().collect();
             let valid = perceived.iter().any(|(perceived_atoms, perceived_system)| {
@@ -416,10 +506,7 @@ impl AromaticityPerceiver {
             }
         }
 
-        Ok(Solution::Determined(AromaticityDerivation {
-            systems,
-            inconsistencies: inconsistencies.into_iter().collect(),
-        }))
+        Ok(Solution::Determined(inconsistencies.into_iter().collect()))
     }
 
     /// Add perceived systems to the IR.
@@ -462,6 +549,20 @@ impl AromaticityPerceiver {
             max_ring_size,
         }
     }
+}
+
+fn bond_exclusions(molecule: &Molecule) -> Vec<[AtomId; 2]> {
+    molecule
+        .bonds()
+        .iter()
+        .filter(|bond| {
+            matches!(
+                bond.attributes().constraints.aromatic(),
+                BooleanForm::Lit(false)
+            )
+        })
+        .map(|bond| bond.atom_ids())
+        .collect()
 }
 
 /// Read complete aromatic evidence; a nonliteral count is None and a contradiction is Err.
@@ -647,6 +748,107 @@ mod tests {
         assert_eq!(first, second);
     }
 
+    #[rstest]
+    #[case::excluded_ring(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        vec![],
+    )]
+    #[case::peripheral_exclusion(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        vec![vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)]],
+    )]
+    #[case::separate_systems(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]
+                    [0 6 "1#a!"]]}"#),
+        vec![(0..6).map(AtomId).collect(), (6..12).map(AtomId).collect()],
+    )]
+    #[case::excluded_chord(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [0 3 "1#a!"]]}"#),
+        vec![],
+    )]
+    #[case::coronene_hub_exclusion_with_separate_benzene(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+                    "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+                    "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 12 "1"]
+                    [12 13 "1"] [13 14 "1"] [14 15 "1"] [15 16 "1"] [16 17 "1"] [17 18 "1"]
+                    [18 19 "1"] [19 20 "1"] [20 21 "1"] [21 22 "1"] [22 23 "1"] [23 6 "1"]
+                    [0 6 "1"] [1 9 "1"] [2 12 "1"] [3 15 "1"] [4 18 "1"] [5 21 "1"]
+                    [24 25 "1"] [25 26 "1"] [26 27 "1"] [27 28 "1"] [28 29 "1"] [29 24 "1"]]}"#),
+        vec![(24..30).map(AtomId).collect()],
+    )]
+    fn test_aromaticity_perceiver_find_systems_constraints(
+        #[case] molecule: Molecule,
+        #[case] members: Vec<Vec<AtomId>>,
+        #[values(
+            AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+            AromaticityRule::Hmo { stabilization_threshold: 0.1 },
+            AromaticityRule::Clar,
+        )]
+        rule: AromaticityRule,
+    ) {
+        let expected: Vec<_> = members
+            .into_iter()
+            .map(|atoms| {
+                let form = AromaticSystemForm {
+                    electrons: ElectronCountsForm::Lit(vec![1; atoms.len()]),
+                    charge: NumForm::Lit(0),
+                    unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                    constraints: Default::default(),
+                };
+                (atoms, form)
+            })
+            .collect();
+        let perception = AromaticityPerceiver::new(&AromaticityModel {
+            scope: ElementScope::Any,
+            rule,
+            tie_break: AromaticityTieBreak::Strict,
+        });
+        let config = AromaticityConfig::default();
+        let electrons_at = |_| AromaticValence::Aromatic(1);
+        assert_eq!(
+            perception.find_systems(&molecule, config, electrons_at),
+            Ok(Solution::Determined(expected.clone())),
+        );
+        let rings = perception.candidate_rings(&molecule, config);
+        let mut direct = match perception {
+            AromaticityPerceiver::Hueckel(rule) => {
+                rule.find_from_rings(&molecule, &rings, &electrons_at)
+            }
+            AromaticityPerceiver::Hmo(rule) => rule
+                .find_from_rings(
+                    &molecule,
+                    &rings,
+                    config.connected_components_algorithm,
+                    &electrons_at,
+                )
+                .unwrap(),
+            AromaticityPerceiver::Clar(rule) => rule
+                .find_from_rings(
+                    &molecule,
+                    &rings,
+                    config.maximum_independent_set_algorithm,
+                    &electrons_at,
+                )
+                .unwrap(),
+        };
+        direct.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(direct, expected);
+    }
+
     fn any_hueckel() -> AromaticityPerceiver {
         AromaticityPerceiver::new(&AromaticityModel {
             scope: ElementScope::Any,
@@ -807,6 +1009,11 @@ mod tests {
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(2) },
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(3) },
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(4) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(0) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(1) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(2) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(3) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(4) },
             ],
         }),
     )]
@@ -938,6 +1145,11 @@ mod tests {
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(2) },
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(3) },
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(4) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(0) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(1) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(2) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(3) },
+                AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(4) },
                 AromaticityInconsistency::AromaticSystemFailure {
                     system: AromaticSystemId(0),
                 },

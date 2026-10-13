@@ -10,6 +10,12 @@
 //! Stored-system assertions and unrelated keys survive; newly realized assertions
 //! and negative linking-bond assertions are removed. Resolution is idempotent.
 //!
+//! Added aromatic systems agree with the input atom evidence and contain no bond
+//! asserting non-aromaticity. The skeleton domain retains open, contradictory,
+//! and stored-system cases. A second rendering supplies complete carbon atoms
+//! with one-electron contributions while preserving topology and bond assertions,
+//! so successful additions are exercised independently of atom completion.
+//!
 //! Stereo discharge is checked against independent results for mixtures of stored
 //! and newly added tetrahedral and cis-trans entities with literal or open configurations.
 //! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
@@ -40,24 +46,26 @@ use umol_graph::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityInconsistency, AromaticityPerceiver,
 };
 use umol_graph::ops::model::{
-    AromaticityModel, AromaticityTieBreak, ChemistryModel, StereoModel, ValenceModel,
-    ValenceTieBreak,
+    AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
+    RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
 };
 use umol_graph::ops::resolve::{
-    AromaticityFailurePolicy, AromaticityResolver, ResolveState, Resolver, StereoResolver,
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, ResolveConfig,
+    ResolveState, Resolver, StereoResolver,
 };
 use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
-    BondConstraintForm, BondForm, BondId, BooleanForm, CisTransStereoForm, ElectronCountsForm,
-    ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel,
-    RingSetKind, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
+    AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondForm, BondId, BooleanForm,
+    CisTransStereoForm, ElectronCountsForm, ElementForm, IsotopeMassForm, Lattice, Molecule,
+    MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind, StereoAtomForm, StereoBondForm,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+    UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_utils::solution::Solution;
 
-use crate::strategies::{select_scenario, SelectScenario};
+use crate::strategies::{aromatic_skeleton, select_scenario, SelectScenario};
 
 fn contribution(form: &AtomForm) -> Option<u8> {
     match form.constraints.aromatic_valence() {
@@ -152,6 +160,18 @@ fn exhaustive_select(
     let mut accepted: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
     let mut tie_break_uses: BTreeSet<AtomId> = BTreeSet::new();
     let mut claimed: BTreeSet<AtomId> = BTreeSet::new();
+    let required_bonds: Vec<_> = molecule
+        .bonds()
+        .iter()
+        .filter(|bond| {
+            matches!(
+                bond.attributes().constraints.aromatic(),
+                BooleanForm::Lit(true)
+            )
+        })
+        .map(|bond| (bond.id(), bond.atom_ids()))
+        .collect();
+    let mut claimed_bonds = BTreeSet::new();
     for component in &components {
         let component_flexible: Vec<(AtomId, Vec<Option<u8>>)> = flexible
             .iter()
@@ -259,6 +279,28 @@ fn exhaustive_select(
         for (_, partition) in &valid {
             for (atoms, _) in partition {
                 claimed.extend(atoms.iter().copied());
+            }
+        }
+        if config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
+            valid.retain(|(_, partition)| {
+                required_bonds.iter().all(|(_, endpoints)| {
+                    !endpoints.iter().all(|atom| component.contains(atom))
+                        || partition
+                            .iter()
+                            .any(|(members, _)| endpoints.iter().all(|atom| members.contains(atom)))
+                })
+            });
+            if valid.is_empty() {
+                continue;
+            }
+            for &(bond, endpoints) in &required_bonds {
+                if valid.iter().any(|(_, partition)| {
+                    partition
+                        .iter()
+                        .any(|(members, _)| endpoints.iter().all(|atom| members.contains(atom)))
+                }) {
+                    claimed_bonds.insert(bond);
+                }
             }
         }
 
@@ -370,6 +412,13 @@ fn exhaustive_select(
             }) {
                 return Solution::Contradictory(
                     AromaticityInconsistency::AromaticValenceFailure { atom }.into(),
+                );
+            }
+        }
+        for (bond, _) in required_bonds {
+            if !claimed_bonds.contains(&bond) {
+                return Solution::Contradictory(
+                    AromaticityInconsistency::AromaticBondConstraintFailure { bond }.into(),
                 );
             }
         }
@@ -528,6 +577,88 @@ proptest! {
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
         prop_assert_eq!(resolver.resolve(molecule), Ok(Solution::Determined(expected)));
+    }
+
+    #[test]
+    fn test_resolver_resolve_aromatic_constraints(
+        skeleton in aromatic_skeleton(),
+        rule in 0usize..3,
+        keep in any::<bool>(),
+    ) {
+        let source = skeleton.molecule();
+        let concrete = Molecule::from_entries(MoleculeEntries {
+            atoms: source.atoms().iter().map(|atom| AtomForm {
+                element: ElementForm::Lit(Element::C),
+                isotope_mass: IsotopeMassForm::Natural,
+                charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(3 - atom.neighbors().count() as i64),
+                lone_pairs: NumForm::Lit(0),
+                unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                constraints: AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                ).into(),
+            }).collect(),
+            bonds: source.bonds().iter().map(|bond| {
+                let [a, b] = bond.atom_ids();
+                (a, b, BondForm {
+                    order: NumForm::Lit(1), charge: NumForm::Lit(0),
+                    unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                    constraints: bond.attributes().constraints.clone(),
+                })
+            }).collect(),
+            ..MoleculeEntries::default()
+        });
+        let model = ChemistryModel {
+            aromaticity: AromaticityModel {
+                scope: ElementScope::Any,
+                rule: match rule {
+                    0 => AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+                    1 => AromaticityRule::Hmo { stabilization_threshold: 0.1 },
+                    _ => AromaticityRule::Clar,
+                },
+                tie_break: AromaticityTieBreak::Strict,
+            },
+            ..ChemistryModel::default()
+        };
+        let config = AromaticityResolveConfig {
+            aromatic_valence_failure: if keep { AromaticityFailurePolicy::Keep } else { AromaticityFailurePolicy::Error },
+            aromatic_system_failure: if keep { AromaticityFailurePolicy::Keep } else { AromaticityFailurePolicy::Error },
+            ..AromaticityResolveConfig::default()
+        };
+        let standalone = AromaticityResolver::with_config(&model.aromaticity, config);
+        let composite = Resolver::with_config(&model, ResolveConfig {
+            aromaticity: config, ..ResolveConfig::default()
+        });
+        for input in [source, concrete] {
+            let mut outputs = Vec::new();
+            if let Ok(Solution::Determined(output)) = standalone.resolve(input.clone()) {
+                outputs.push(output);
+            }
+            if let Ok(Solution::Determined(output)) = composite.resolve(input.clone()) {
+                outputs.push(output);
+            }
+            for output in outputs {
+                for system in output.aromatic_systems().iter().skip(input.aromatic_systems().count()) {
+                    let ElectronCountsForm::Lit(electrons) = &system.attributes().electrons else {
+                        return Err(TestCaseError::fail("new system has nonliteral electron counts"));
+                    };
+                    let members: Vec<_> = system.atom_ids().collect();
+                    prop_assert_eq!(electrons.len(), members.len());
+                    for (&atom, &electrons) in members.iter().zip(electrons) {
+                        let literal = AtomConstraintForm::AromaticValence(
+                            AromaticValenceForm::Aromatic(NumForm::Lit(electrons)),
+                        );
+                        let evidence = input.atom(atom).constraints().evidenced(AtomConstraintKey::AromaticValence);
+                        prop_assert_eq!(evidence.and_then(|value| value.meet(&literal)), Some(literal));
+                    }
+                    for bond in input.bonds().iter() {
+                        if matches!(bond.attributes().constraints.aromatic(), BooleanForm::Lit(false)) {
+                            prop_assert!(!bond.atom_ids().iter().all(|atom| members.contains(atom)));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

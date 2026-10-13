@@ -9,13 +9,14 @@ use std::collections::BTreeMap;
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_core::ConnectedComponentsAlgorithm;
+use umol_graph_core::{ConnectedComponentsAlgorithm, Graph};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValence, AtomId, ElementForm, Molecule, RingSet,
     UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
+use super::bond_exclusions;
 use crate::ops::model::ElementScope;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -63,11 +64,33 @@ impl HmoAromaticity {
 
     /// Perceive systems from the supplied rings and aromatic contributions.
     /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
+    /// Non-aromatic bonds separate components or restrict them to admissible rings.
+    /// A recovered region still containing both endpoints is rejected before evaluation.
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
+        electrons_at: &F,
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
+    where
+        F: Fn(AtomId) -> AromaticValence,
+    {
+        self.find_with_exclusions(
+            molecule,
+            rings,
+            connected_components_algorithm,
+            &bond_exclusions(molecule),
+            electrons_at,
+        )
+    }
+
+    pub(super) fn find_with_exclusions<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        connected_components_algorithm: ConnectedComponentsAlgorithm,
+        excluded_bonds: &[[AtomId; 2]],
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
     where
@@ -92,24 +115,75 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let subgraph = molecule.induced_subgraph(&pi_atoms);
-        let extracted = molecule.extract(&subgraph);
-        let mut sorted_host: Vec<AtomId> = subgraph
-            .atoms()
-            .matched_pairs()
+        let mut positions = vec![None; molecule.atoms().count()];
+        for (index, atom) in pi_atoms.iter().enumerate() {
+            positions[atom.index()] = Some(index as u32);
+        }
+        let edges: Vec<[u32; 2]> = molecule
+            .bonds()
             .iter()
-            .map(|&(_, host)| host)
+            .filter_map(|bond| {
+                let [a, b] = bond.atom_ids();
+                let pair = [positions[a.index()]?, positions[b.index()]?];
+                (!excluded_bonds
+                    .iter()
+                    .any(|&pair| pair == [a, b] || pair == [b, a]))
+                .then_some(pair)
+            })
             .collect();
-        sorted_host.sort_unstable();
-        let components: Vec<Vec<AtomId>> = extracted
-            .graph()
-            .enumerate_connected_components(connected_components_algorithm)
-            .into_iter()
-            .map(|c| c.into_iter().map(|sub| sorted_host[sub.index()]).collect())
-            .collect();
+        let components = Graph::new(pi_atoms.len(), &edges)
+            .enumerate_connected_components(connected_components_algorithm);
+        let mut regions = Vec::new();
+        for component in components {
+            let atoms: Vec<_> = component
+                .into_iter()
+                .map(|atom| pi_atoms[atom.index()])
+                .collect();
+            if !excluded_bonds
+                .iter()
+                .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+            {
+                regions.push(atoms);
+                continue;
+            }
+            let edges: Vec<[u32; 2]> = rings
+                .iter()
+                .filter(|ring| {
+                    ring.atoms().iter().all(|atom| atoms.contains(atom))
+                        && !excluded_bonds
+                            .iter()
+                            .any(|[a, b]| ring.atoms().contains(a) && ring.atoms().contains(b))
+                })
+                .flat_map(|ring| {
+                    ring.bonds().iter().map(|&bond| {
+                        molecule.bond(bond).atom_ids().map(|atom| {
+                            positions[atom.index()].expect("ring is inside the pi component")
+                        })
+                    })
+                })
+                .collect();
+            regions.extend(
+                Graph::new(pi_atoms.len(), &edges)
+                    .enumerate_connected_components(connected_components_algorithm)
+                    .into_iter()
+                    .filter(|component| component.len() >= 3)
+                    .map(|component| {
+                        component
+                            .into_iter()
+                            .map(|atom| pi_atoms[atom.index()])
+                            .collect::<Vec<_>>()
+                    }),
+            );
+        }
 
         let mut candidates = Vec::new();
-        for component in &components {
+        for component in &regions {
+            if excluded_bonds
+                .iter()
+                .any(|[a, b]| component.contains(a) && component.contains(b))
+            {
+                continue;
+            }
             let has_ring_atom = component.iter().any(|a| rings.contains_atom(*a));
             if !has_ring_atom || component.len() < 3 {
                 continue;

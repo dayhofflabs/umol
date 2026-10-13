@@ -293,10 +293,10 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::{NodeId, Remapping};
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondConstraintForm, BondId,
-        BooleanForm, Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm,
-        Entity, MoleculeEntries, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm,
-        StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+        AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondId, BooleanForm, Canonicalize,
+        CanonicalizeContext, Deltas, ElectronCountsForm, Entity, MoleculeEntries,
+        MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset, StereoKind,
+        StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
     use umol_io::table_ir::{AtomPair, BondConfiguration};
@@ -310,8 +310,8 @@ mod tests {
         ValenceTieBreak,
     };
     use crate::ops::resolve::{
-        AromaticityFailurePolicy, AromaticityResolveConfig, DischargeContradiction,
-        StereoContradiction, StereoResolveConfig, ValenceContradiction,
+        AromaticityFailurePolicy, AromaticityResolveConfig, StereoContradiction,
+        StereoResolveConfig, ValenceContradiction,
     };
     use crate::ops::stereo::StereoInconsistency;
     use crate::ops::valence::{AtomTypeRegistry, AtomTypingError, CountsError};
@@ -1006,13 +1006,8 @@ mod tests {
         // must be explicitly represented; the unwritten bond raises as an
         // aromatic assertion no system can claim.
         "c1ccc(cc1)c1ccccc1",
-        SmilesInputError::Contradiction(ResolveContradiction::Discharge(
-            DischargeContradiction::Assertion {
-                constraint: Constraint::Bond(
-                    BondId(6),
-                    BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
-                ),
-            },
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
+            AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(6) }.into(),
         ))
     )]
     #[case::cyclobutadiene(

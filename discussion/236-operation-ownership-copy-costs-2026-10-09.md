@@ -469,6 +469,23 @@ AromaticBondConstraintMismatch. AromaticityInconsistency gains
 `AromaticBondConstraintFailure { bond: BondId }` and
 `AromaticValenceBondMismatch { atom: AtomId, bond: BondId }`.
 
+Explicit non-aromatic bonds delimit candidate aromatic systems under all three
+rules, including HMO. Two aromatic regions joined by such a bond remain separate
+systems, each evaluated under the selected rule. Giving the localized bond
+assertion priority over HMO's grouping by connected pi components is a deliberate
+pragmatic modeling choice. Within a fused region, the assertion excludes every
+candidate containing both endpoints; admissible neighboring rings remain
+candidates. Candidate construction and subsequent merging must both preserve
+these boundaries, since a system contains every bond between its member atoms.
+If merging or region recovery still produces a candidate containing both
+endpoints of an excluded bond, perception rejects that candidate. It does not
+search alternative partitions. This conservative loss of possible subregions is
+accepted for the edge case; other independent candidates remain available.
+HMO can numerically omit a coupling while retaining both endpoints, but the IR
+does not store coupling exclusions within a system. Such a region is therefore
+rejected before HMO evaluation rather than published with a contradictory bond
+reading.
+
 Projection is unchanged. The aromaticity and stereo projection plans meet each
 stored assertion with the projected value and fail during planning; they use no
 policy and no reset, and the composite resolver's projection runs them without a
@@ -2956,7 +2973,7 @@ Criterion detects no performance change in either case. These inputs carry no
 valence assertions, so the comparison checks overhead on ordinary resolution
 paths, not discharge savings. Executables and logs are saved in scratch/236-s3k.
 
-#### S3l — Aromaticity planning makes the closing pass's checks
+#### S3l — Aromaticity planning makes the closing pass's checks **Done**
 
 **Modules:** graph aromaticity, its rule modules, and resolve/aromaticity.
 **Green.** [dep: S3d, S3a]
@@ -2970,14 +2987,66 @@ system is the new AromaticityInconsistency variant
 include a system that contains a bond asserting non-aromaticity. A stored system
 that contains one remains an AromaticBondConstraintMismatch.
 
+Explicit non-aromatic bonds delimit candidates for HMO as well as Hückel and
+Clar. Candidate construction may recover several systems within a connected pi
+component; each candidate is evaluated separately under the selected rule.
+Any combined candidate that still contains a non-aromatic bond is rejected,
+without searching alternative partitions. This conservative handling of the
+overlap edge case is accepted for all three rules.
+
 **Tests:** each check in standalone and composite resolution under the Error and
 Keep failure policies; a benzene ring with one bond asserting non-aromaticity
 forms no system, so its aromatic atoms are an AromaticValenceFailure under Error
 and keep their assertions under Keep; naphthalene with such a bond on the
-periphery of one ring forms a system on the other ring; a property over the
-skeleton generator, for invariant 11: no system the resolver adds contains a
-bond asserting non-aromaticity or an atom whose evidence disagrees with its
-contribution.
+periphery of one ring forms a system on the other ring; under each rule, two
+benzene rings joined by a bond asserting non-aromaticity form separate systems;
+a coronene hub-bond exclusion rejects the conflicting combined region while a
+separate benzene remains perceived; a property over the skeleton generator, for
+invariant 11: no system the resolver adds contains a bond asserting
+non-aromaticity or an atom whose evidence disagrees with its contribution.
+
+**Completion (2026-10-12):** derive and completion selection report unclaimed
+positive bond assertions as AromaticBondConstraintFailure under the existing
+aromatic-valence failure policy. Selection also checks positive atom assertions
+without completion carriers. Stored systems are assessed independently of the
+negative-bond exclusions, preserving AromaticBondConstraintMismatch for a
+conflicting stored system.
+
+Hückel filters rings, unions, and merged candidates. HMO removes excluded bonds
+from component construction and recovers admissible ring regions when a fused
+component still contains both endpoints. Clar filters sextets and separates the
+selected regions at excluded bonds. All three reject any combined region that
+still contains an excluded bond, preserving independent candidates. HMO builds
+the component graph directly over eligible atoms without copying the molecule.
+The public rule methods and dispatcher enforce the same restriction.
+
+All 2,035 graph unit tests, six resolution properties, and 683 resolution
+conformance cases pass. The coronene regression failed under all three rules
+before the final rejection check. The property covers both the original open
+skeletons and complete carbon renderings with the same topology and bond
+assertions. Scoped Clippy with proptest and conformance enabled and warnings
+denied, formatting of changed files, and diff checks pass. Workspace and Python
+checks remain at the related-change and final gates.
+
+Seven existing default-rule workloads were measured against the saved executable
+from commit 0df8e928b. Two paired runs used 40 samples, one-second warm-up, and
+two-second measurement, without concurrent builds or tests. The second run
+reversed both executable and case order. Columns report observed changes in
+mean time:
+
+| Case | Before then after | After then before |
+| --- | ---: | ---: |
+| ingest benzene | +1.64% | +2.47% |
+| ingest naphthalene | +1.32% | +1.53% |
+| ingest quinoline | +0.48% | +0.59% |
+| ingest purine | +2.41% | +1.18% |
+| resolve chain_64 | -1.06% | -0.05% |
+| resolve aromatic_fused | +1.17% | -0.07% |
+| resolve aromatic_lone_pair | +0.81% | +1.93% |
+
+These runs show a small added cost on the aromatic workloads. The closing
+discharge pass still runs until S3m; its removal is not included in these
+measurements. Executables, runner, raw samples, and logs are in scratch/236-s3l.
 
 #### S3h1 — Raising writes #a! on a single bond between aromatic atoms
 
@@ -3418,6 +3487,8 @@ Rust-primer appendix listings exactly as printed.
 
 **Modules:** workspace. **Verification.** [dep: S0–S6]
 
+Run `cargo +nightly fmt --all` over the full workspace in this final pass.
+Formatting-only changes outside the implementation's scope are acceptable here.
 Run workspace tests and lints with all features, and the Python suite in the
 repository's Python 3.13 environment. Rerun benchmarks only for cases whose
 production code differs from what was measured.

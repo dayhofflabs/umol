@@ -13,6 +13,7 @@ use umol_graph_ir::ir::{
     UnpairedElectronsForm,
 };
 
+use super::bond_exclusions;
 use crate::ops::model::{ElementScope, RingLimits};
 
 #[derive(Clone, Debug)]
@@ -42,6 +43,8 @@ impl HueckelAromaticity {
 
     /// Perceive systems from the supplied rings and aromatic contributions.
     /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
+    /// Non-aromatic bonds exclude rings and unions containing both endpoints.
+    /// A conflicting merged candidate is rejected without searching for another partition.
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
@@ -51,9 +54,28 @@ impl HueckelAromaticity {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
+        self.find_with_exclusions(molecule, rings, &bond_exclusions(molecule), electrons_at)
+    }
+
+    pub(super) fn find_with_exclusions<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        excluded_bonds: &[[AtomId; 2]],
+        electrons_at: &F,
+    ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
+    where
+        F: Fn(AtomId) -> AromaticValence,
+    {
         let eligible_cycles: Vec<RingId> = rings
             .ids()
             .filter(|&i| self.filter_ring(molecule, rings, i, electrons_at))
+            .filter(|&i| {
+                let atoms = rings.get(i).expect("ring id from this set").atoms();
+                !excluded_bonds
+                    .iter()
+                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+            })
             .collect();
 
         let mut aromatic_atom_sets: Vec<HashSet<AtomId>> = Vec::new();
@@ -73,6 +95,12 @@ impl HueckelAromaticity {
         if self.ring_limits.include_unions {
             let fused_systems = self.enumerate_unions(rings, &eligible_cycles);
             for atoms in fused_systems {
+                if excluded_bonds
+                    .iter()
+                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+                {
+                    continue;
+                }
                 let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
                 if let Some(electrons) = ring_electron_count(&atom_vec, electrons_at) {
                     if check_4n_plus_2(electrons) {
@@ -86,6 +114,12 @@ impl HueckelAromaticity {
 
         let mut candidates = Vec::new();
         for atom_set in merged {
+            if excluded_bonds
+                .iter()
+                .any(|[a, b]| atom_set.contains(a) && atom_set.contains(b))
+            {
+                continue;
+            }
             let mut atoms: Vec<AtomId> = atom_set.into_iter().collect();
             atoms.sort_unstable();
 

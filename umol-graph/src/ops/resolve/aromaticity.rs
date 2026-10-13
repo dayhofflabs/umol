@@ -5,7 +5,7 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 
-use smallvec::smallvec;
+use smallvec::{smallvec, SmallVec};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
@@ -103,7 +103,8 @@ impl AromaticityResolver {
             Solution::Determined(derivation) => {
                 for &inconsistency in &derivation.inconsistencies {
                     let error = match inconsistency {
-                        AromaticityInconsistency::AromaticValenceFailure { .. } => {
+                        AromaticityInconsistency::AromaticValenceFailure { .. }
+                        | AromaticityInconsistency::AromaticBondConstraintFailure { .. } => {
                             self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error
                         }
                         AromaticityInconsistency::AromaticSystemFailure { .. } => {
@@ -550,6 +551,42 @@ impl AromaticityResolver {
         let rings = self
             .perception
             .candidate_rings(molecule, self.config.perception);
+        if molecule.aromatic_systems().iter().any(|system| {
+            system.bonds().any(|bond| {
+                matches!(
+                    bond.attributes().constraints.aromatic(),
+                    BooleanForm::Lit(false)
+                )
+            })
+        }) {
+            match self
+                .perception
+                .check_stored_systems(molecule, &rings, self.config.perception)?
+            {
+                Solution::Determined(inconsistencies) => {
+                    for inconsistency in inconsistencies {
+                        if !matches!(
+                            inconsistency,
+                            AromaticityInconsistency::AromaticSystemFailure { .. }
+                        ) || self.config.aromatic_system_failure
+                            == AromaticityFailurePolicy::Error
+                        {
+                            return Ok(Solution::Contradictory(inconsistency.into()));
+                        }
+                    }
+                }
+                Solution::Underdetermined(_) => {
+                    return Ok(Solution::Underdetermined(ResolveState {
+                        completions,
+                        systems,
+                        tie_breaks,
+                    }))
+                }
+                Solution::Contradictory(contradiction) => {
+                    return Ok(Solution::Contradictory(contradiction))
+                }
+            }
+        }
         let components = candidate_components(&rings, |atom_id| match completions.get(atom_id) {
             Some(disjuncts) => disjuncts
                 .iter()
@@ -594,9 +631,25 @@ impl AromaticityResolver {
             .collect();
 
         let claim_candidates = self.perception.claim_candidates(&rings);
+        let required_bonds: SmallVec<[(BondId, [AtomId; 2]); 16]> = molecule
+            .bonds()
+            .iter()
+            .filter(|bond| {
+                self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error
+                    && matches!(
+                        bond.attributes().constraints.aromatic(),
+                        BooleanForm::Lit(true)
+                    )
+            })
+            .map(|bond| (bond.id(), bond.atom_ids()))
+            .collect();
         let mut accepted: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
         let mut tie_break_uses: BTreeSet<AtomId> = BTreeSet::new();
         let mut claimed: BTreeSet<AtomId> = BTreeSet::new();
+        let mut claimed_bonds: SmallVec<[bool; 16]> = required_bonds
+            .iter()
+            .map(|(bond, _)| molecule.bond(*bond).is_in_aromatic_system())
+            .collect();
         for component in &components {
             // Flexible atoms ordered ring-by-ring for the search; every
             // component atom lies in a candidate ring, so the order is total.
@@ -639,14 +692,24 @@ impl AromaticityResolver {
                 .iter()
                 .copied()
                 .filter(|&atom| {
-                    completions.get(atom).is_some_and(|disjuncts| {
-                        disjuncts.iter().all(|form| {
-                            matches!(
-                                form.constraints.aromatic_valence(),
-                                AromaticValenceForm::Aromatic(_)
-                            )
-                        })
-                    })
+                    completions.get(atom).map_or_else(
+                        || {
+                            let view = molecule.atom(atom);
+                            view.aromatic_system_id().is_none()
+                                && matches!(
+                                    view.attributes().constraints.aromatic_valence(),
+                                    AromaticValenceForm::Aromatic(_)
+                                )
+                        },
+                        |disjuncts| {
+                            disjuncts.iter().all(|form| {
+                                matches!(
+                                    form.constraints.aromatic_valence(),
+                                    AromaticValenceForm::Aromatic(_)
+                                )
+                            })
+                        },
+                    )
                 })
                 .collect();
             let fixed_contributions: BTreeMap<AtomId, AromaticValence> = component
@@ -852,6 +915,28 @@ impl AromaticityResolver {
                     claimed.extend(atoms.iter().copied());
                 }
             }
+            if prune_enabled {
+                valid.retain(|(_, partition)| {
+                    required_bonds.iter().all(|(_, endpoints)| {
+                        !endpoints.iter().all(|atom| component.contains(atom))
+                            || partition
+                                .iter()
+                                .any(|(atoms, _)| endpoints.iter().all(|atom| atoms.contains(atom)))
+                    })
+                });
+                if valid.is_empty() {
+                    continue;
+                }
+                for (index, &(_, endpoints)) in required_bonds.iter().enumerate() {
+                    if valid.iter().any(|(_, partition)| {
+                        partition
+                            .iter()
+                            .any(|(atoms, _)| endpoints.iter().all(|atom| atoms.contains(atom)))
+                    }) {
+                        claimed_bonds[index] = true;
+                    }
+                }
+            }
 
             // Structural order under `MinElectronCount`: most claimed atoms
             // first, then the smallest electron total, member-set lists
@@ -962,22 +1047,38 @@ impl AromaticityResolver {
             }
         }
 
-        // A carrier atom whose every disjunct requires aromaticity but which
-        // no accepted or tied system claims cannot be completed; the failure
-        // policy decides between contradiction and keeping the assertion.
         if self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
-            for (atom, disjuncts) in completions.iter() {
+            for view in molecule.atoms().iter() {
+                let atom = view.id();
                 if claimed.contains(&atom) {
                     continue;
                 }
-                if disjuncts.iter().all(|form| {
-                    matches!(
-                        form.constraints.aromatic_valence(),
-                        AromaticValenceForm::Aromatic(_)
-                    )
-                }) {
+                if completions.get(atom).map_or_else(
+                    || {
+                        view.aromatic_system_id().is_none()
+                            && matches!(
+                                view.attributes().constraints.aromatic_valence(),
+                                AromaticValenceForm::Aromatic(_)
+                            )
+                    },
+                    |disjuncts| {
+                        disjuncts.iter().all(|form| {
+                            matches!(
+                                form.constraints.aromatic_valence(),
+                                AromaticValenceForm::Aromatic(_)
+                            )
+                        })
+                    },
+                ) {
                     return Ok(Solution::Contradictory(
                         AromaticityInconsistency::AromaticValenceFailure { atom }.into(),
+                    ));
+                }
+            }
+            for ((bond, _), claimed) in required_bonds.into_iter().zip(claimed_bonds) {
+                if !claimed {
+                    return Ok(Solution::Contradictory(
+                        AromaticityInconsistency::AromaticBondConstraintFailure { bond }.into(),
                     ));
                 }
             }
@@ -1061,7 +1162,10 @@ mod tests {
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
-    use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits};
+    use crate::ops::model::{
+        AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope, RingLimits,
+    };
+    use crate::ops::resolve::{ResolveConfig, ResolveContradiction, Resolver};
     use crate::ops::valence::AtomCompletions;
 
     #[rustfmt::skip]
@@ -1534,6 +1638,106 @@ mod tests {
             AromaticityResolver::new(&aromaticity_model).resolve(molecule),
             Ok(Solution::Determined(expected))
         );
+    }
+
+    #[rstest]
+    #[case::unclaimed_atom(
+        mol_dsl_concrete!(r#"{:atoms ["C#h3#a"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h3#a"]}"#),
+        AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+    )]
+    #[case::unclaimed_bond(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
+                    "C#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]
+                    [0 6 "1#a"]]}"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C#h" "C#h" "C#h" "C#h" "C#h"
+                    "C" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]
+                    [0 6 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}
+                               {:atoms [6 7 8 9 10 11] :attrs "[1,1,1,1,1,1]"}]}"#),
+        AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(12) },
+    )]
+    #[case::excluded_benzene(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+    )]
+    #[case::naphthalene_peripheral_exclusion(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#a" "C#a"
+                    "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C" "C"
+                    "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]
+            :aromatic-systems [{:atoms [4 5 6 7 8 9] :attrs "[1,1,1,1,1,1]"}]}"#),
+        AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+    )]
+    fn test_aromaticity_resolver_resolve_constraints(
+        aromaticity_model: AromaticityModel,
+        #[case] molecule: Molecule,
+        #[case] kept: Molecule,
+        #[case] inconsistency: AromaticityInconsistency,
+        #[values(AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep)]
+        failure: AromaticityFailurePolicy,
+    ) {
+        let config = AromaticityResolveConfig {
+            aromatic_valence_failure: failure,
+            ..AromaticityResolveConfig::default()
+        };
+        let expected = match failure {
+            AromaticityFailurePolicy::Error => Solution::Contradictory(inconsistency.into()),
+            AromaticityFailurePolicy::Keep => Solution::Determined(kept.clone()),
+        };
+        let expected_into = match failure {
+            AromaticityFailurePolicy::Error => Solution::Contradictory(inconsistency.into()),
+            AromaticityFailurePolicy::Keep => Solution::Determined(()),
+        };
+        let expected_molecule = match failure {
+            AromaticityFailurePolicy::Error => molecule.clone(),
+            AromaticityFailurePolicy::Keep => kept,
+        };
+        let resolver = AromaticityResolver::with_config(&aromaticity_model, config);
+        assert_eq!(resolver.resolve(molecule.clone()), Ok(expected.clone()));
+        let mut standalone = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into(&mut standalone),
+            Ok(expected_into.clone())
+        );
+        assert_eq!(standalone, expected_molecule);
+
+        let model = ChemistryModel {
+            aromaticity: aromaticity_model,
+            ..ChemistryModel::default()
+        };
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                aromaticity: config,
+                ..ResolveConfig::default()
+            },
+        );
+        let expected = expected.map_contradiction(ResolveContradiction::Aromaticity);
+        assert_eq!(resolver.resolve(molecule.clone()), Ok(expected.clone()));
+        let mut composite = molecule;
+        assert_eq!(
+            resolver.resolve_into(&mut composite),
+            Ok(expected_into.map_contradiction(ResolveContradiction::Aromaticity))
+        );
+        assert_eq!(composite, expected_molecule);
     }
 
     #[rstest]

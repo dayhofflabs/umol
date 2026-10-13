@@ -2710,9 +2710,9 @@ mod tests {
             :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
-        ResolveContradiction::Discharge(DischargeContradiction::Assertion {
-            constraint: Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(false))),
-        }),
+        ResolveContradiction::Aromaticity(AromaticityInconsistency::AromaticBondConstraintMismatch {
+            bond: BondId(0), system: AromaticSystemId(0),
+        }.into()),
     )]
     fn test_resolver_resolve_aromatic_mismatch(
         chemistry_model: ChemistryModel,
