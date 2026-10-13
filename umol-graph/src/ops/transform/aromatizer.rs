@@ -7,7 +7,7 @@
 //! If the input molecule already carries one or more aromatic systems, this is a
 //! no-op: re-aromatizing requires kekulizing first.
 
-use std::iter;
+use std::{iter, mem};
 
 use thiserror::Error;
 use umol_chem::element::Element;
@@ -244,9 +244,9 @@ impl Transformer for Aromatizer {
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizeError> {
         let edits = self.plan_transform(molecule)?;
         if !edits.is_empty() {
-            molecule
-                .transact([edits])
-                .expect("aromatization plan preserves molecule integrity");
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("aromatization plan applies and preserves molecule integrity");
         }
         Ok(())
     }

@@ -1,7 +1,7 @@
 //! Delocalize atom-localized charge over homogeneous aromatic systems.
 
 use std::convert::Infallible;
-use std::iter;
+use std::{iter, mem};
 
 use umol_graph_ir::ir::{
     AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate, AromaticValenceForm,
@@ -133,9 +133,9 @@ impl Transformer for DelocalizeCharge {
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
         let edits = self.plan_transform(molecule);
         if !edits.is_empty() {
-            molecule
-                .transact([edits])
-                .expect("charge delocalization plan preserves molecule integrity");
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("charge delocalization plan applies and preserves molecule integrity");
         }
         Ok(())
     }

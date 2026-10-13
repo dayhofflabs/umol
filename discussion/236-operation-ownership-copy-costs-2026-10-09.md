@@ -3499,7 +3499,7 @@ comparison, not a precise regression estimate against the earlier invalid-output
 implementation. Commands, manifests, diagnostic results, binaries, and raw timing
 samples are retained in scratch/236-s4b1.
 
-#### S4d — Kekulizer validity during planning
+#### S4d — Kekulizer validity during planning **Done**
 
 **Modules:** graph transform/kekulizer and the kekulization tests. **Breaking,
 red→green within the subitem.** [dep: S3a, S4a1, S4b1]
@@ -3616,11 +3616,27 @@ commands, full timing ranges, and raw samples are retained in scratch/236-s4d
 under the orders and orders-list comparisons. The production source exactly
 matches the tested table version.
 
-**Performance decision open.** The implementation and focused checks are
-complete. S4d is not marked Done pending the decision on its remaining consuming
-regression, in light of the stated concern about a five-percent slowdown.
+**Accepted and completed (2026-10-13).** The measured trade-off is accepted.
+The consuming regression is relative to its own pre-S4d baseline; the retained
+consuming implementation remains about 3–6% faster than the in-place version.
+The latest table measurements in the orders-list comparison give the following
+median run means across three passes:
 
-#### S4e — In-place transform_into without a transaction
+| Fixture | Consuming (µs) | In place (µs) |
+| --- | ---: | ---: |
+| Benzene | 6.467 | 6.860 |
+| Pyridine | 6.552 | 6.918 |
+| Pyrrole | 5.458 | 5.706 |
+| Furan | 5.493 | 5.692 |
+| Thiophene | 5.436 | 5.723 |
+| Azulene | 9.386 | 9.652 |
+| Indole with prescribed donor | 8.232 | 8.474 |
+
+Both paths share planning and consuming edit application. The in-place path
+also constructs and discards the empty replacement used by mem::take; its
+isolated cost was not measured, and the Criterion batching loops differ.
+
+#### S4e — In-place transform_into without a transaction **Done**
 
 **Modules:** graph transform/aromatizer and transform/delocalize_charge.
 **Green.** [dep: S4b1]
@@ -3630,6 +3646,21 @@ of through transact. Planning failures leave the receiver unchanged.
 
 **Tests:** existing transform_into results, and an unchanged receiver on
 Aromatizer planning failure.
+
+**Completed (2026-10-13).** Both transform_into implementations derive their
+complete plan before moving the receiver through Molecule::apply. Application
+uses the consuming editor without an undo journal or recovery copy, retaining
+the final integrity check. Empty plans leave the receiver untouched. Planning
+errors leave Aromatizer's receiver unchanged; DelocalizeCharge remains
+infallible. The planners, public signatures, and chemistry behavior are unchanged.
+
+Existing inline success, identity, and error cases already cover both ownership
+paths, including an Aromatizer failure in a later system. Reused that coverage
+without adding tests or fixtures. Verification passed: all 76 transform unit
+cases, both affected integrity properties at 512 cases each, graph-crate
+all-target Clippy with conformance and proptest enabled, touched-file formatting,
+and diff checks. No workspace gate or new timing comparison was run. The contract
+and verification logs are retained in scratch/236-s4e.
 
 #### S4g — Mismatch policies removed **Done**
 
