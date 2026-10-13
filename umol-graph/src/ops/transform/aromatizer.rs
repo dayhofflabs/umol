@@ -11,10 +11,7 @@ use std::iter;
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{
-    AromaticValence, AtomHandle, AtomId, BondConstraintForm, BondHandle, BondUpdate, Edits,
-    ElementForm, Molecule, NumForm,
-};
+use umol_graph_ir::ir::{AromaticValence, AtomId, Edits, ElementForm, Molecule, NumForm};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerceiver,
@@ -62,17 +59,11 @@ impl Aromatizer {
             })?
             .into_decisive(AromatizeError::Underdetermined)?;
         for (atoms, attributes) in systems {
-            let bond_ids = molecule.bonds().induced_ids(&atoms);
-            edits.add_aromatic_system(atoms.into_iter().map(AtomHandle::Id).collect(), attributes);
-            for id in bond_ids {
-                edits.update_bond(
-                    BondHandle::Id(id),
-                    molecule.bond(id).attributes(),
-                    &BondUpdate {
-                        constraints: BondConstraintForm::aromatic(true).into(),
-                        ..Default::default()
-                    },
-                );
+            for edit in self
+                .perception
+                .plan_aromatic_system(molecule, atoms, attributes)
+            {
+                edits.push(edit);
             }
         }
         Ok(edits)
@@ -213,7 +204,14 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
-            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "2#a"] [3 4 "1#a"] [4 5 "2#a"] [5 0 "1#a"]]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+    )]
+    #[case::aromatic_assertion(
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a#v3" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h#v3" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
     )]
     fn test_aromatizer_transform(#[case] molecule: Molecule, #[case] expected: Molecule) {
@@ -271,7 +269,7 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
-            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "2#a"] [3 4 "1#a"] [4 5 "2#a"] [5 0 "1#a"]]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
     )]
     fn test_aromatizer_transform_into(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
@@ -302,7 +300,7 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
-            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "2#a"] [3 4 "1#a"] [4 5 "2#a"] [5 0 "1#a"]]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
     )]
     fn test_aromatizer_transform_iter(#[case] molecule: Molecule, #[case] expected: Molecule) {

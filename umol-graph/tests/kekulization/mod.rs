@@ -6,18 +6,16 @@ use std::path::PathBuf;
 use rstest::rstest;
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
-use umol_graph::ops::aromaticity::AromaticityPerceiver;
 use umol_graph::ops::invariant::ValenceMismatch;
-use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph::ops::transform::{KekulizeConfig, KekulizeError, Kekulizer, Transformer};
 use umol_graph::ops::valence::ValenceTable;
 use umol_graph::ops::validate::ValenceInvariantsValidator;
-use umol_graph::parse::parse_mol;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
-    ElectronCountsForm, ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
+    ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -440,28 +438,17 @@ fn test_kekulizer_transform(
 }
 
 #[rstest]
-#[case::c60(include_str!(
-    "../../../umol-io/tests/mol_parsing/data/molecule/scifinder/99685-96-8.mol"
-))]
-fn test_kekulization_fixture_output_cage(#[case] source: &str) {
-    let mut input = parse_mol(source).unwrap();
-    let system_atoms: Vec<AtomId> = input.atoms().ids().collect();
-    let system_bonds: Vec<BondId> = input.bonds().ids().collect();
-    for bond in system_bonds {
-        input.bond_mut(bond).attributes_mut().order = NumForm::Lit(1);
-    }
-    AromaticityPerceiver::new(&AromaticityModel::daylight()).add_systems(
-        &mut input,
-        vec![(
-            system_atoms.clone(),
-            AromaticSystemForm {
-                electrons: ElectronCountsForm::Lit(vec![1; 60]),
-                charge: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-                ..Default::default()
-            },
-        )],
+#[case::c60(include_str!("data/c60_aromatic_input.edn"))]
+fn test_kekulizer_transform_cage(#[case] source: &str) {
+    let input = source
+        .parse::<MoleculeDsl>()
+        .unwrap()
+        .into_ir(&MoleculeDefaults::concrete());
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&input),
+        Ok(Solution::Determined(()))
     );
+    let system_atoms: Vec<AtomId> = input.atoms().ids().collect();
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);

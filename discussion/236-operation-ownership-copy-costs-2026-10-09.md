@@ -3374,6 +3374,31 @@ the DSL.
 **Tests:** aromatizer results without aromatic constraints on system bonds;
 existing resolution results.
 
+**Completed (2026-10-12).** The crate-private
+AromaticityPerceiver::plan_aromatic_system now owns system insertion and member
+assertion discharge. The standalone resolver, composite constitution plan, and
+aromatizer all use it. The public add_systems method is removed; no new public
+constructor, error, or Python interface is introduced. Resolver bond-assertion
+discharge remains unchanged. The C60 kekulization input is a DSL fixture that
+preserves the previous MOL-derived input, including its bond assertions.
+
+Verification passed: 50 shared-aromaticity unit cases, 615 resolver unit cases,
+14 aromatizer cases, 98 kekulization integration cases, 34 aromatic resolution
+conformance snapshots, and graph-crate all-target Clippy with conformance and
+proptest enabled. Touched Rust files are formatted and the full diff checked.
+No workspace gate or new timing comparison was run.
+
+**Outstanding correctness finding.** Before this change, at commit cb28e47b8,
+Aromatizer::transform on the valid benzene Kekulé fixture returned a molecule
+that failed ValenceInvariantsValidator with OrbitalCount at atom 0:
+orbital_count 10, electron_count 9. It adds the aromatic electron contributions
+but retains the Kekulé double bonds. S4b leaves that accounting unchanged;
+its output tests verify the insertion and discharge contract, not electron
+conservation. The benchmark setup likewise checks the perceived systems but
+does not validate the complete aromatized output. This correction is absent
+from S4k's evidence-reading scope; its placement in the plan remains to be
+settled. The baseline probe and input export are retained in scratch/236-s4b.
+
 #### S4d — Kekulizer validity during planning
 
 **Modules:** graph transform/kekulizer and the kekulization tests. **Breaking,

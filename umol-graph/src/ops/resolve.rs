@@ -1004,10 +1004,11 @@ impl<'a> Resolver<'a> {
             if existing.contains(&key) {
                 continue;
             }
-            for edit in self
-                .aromaticity
-                .plan_system(molecule, atoms.clone(), system.clone())
-            {
+            for edit in self.aromaticity.perception.plan_aromatic_system(
+                molecule,
+                atoms.clone(),
+                system.clone(),
+            ) {
                 edits.push(edit);
             }
         }

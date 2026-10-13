@@ -9,10 +9,10 @@ use smallvec::{smallvec, SmallVec};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
-    AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle,
-    AtomId, AtomUpdate, BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate,
-    BooleanForm, Edit, Edits, ElectronCountsForm, Lattice, Molecule, MoleculeApplyError, NumForm,
-    RingSet, UnpairedElectronsForm,
+    AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
+    BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, Edit,
+    Edits, ElectronCountsForm, Lattice, Molecule, MoleculeApplyError, NumForm, RingSet,
+    UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -53,7 +53,7 @@ impl Default for AromaticityResolveConfig {
 
 #[derive(Clone, Debug)]
 pub struct AromaticityResolver {
-    perception: AromaticityPerceiver,
+    pub(super) perception: AromaticityPerceiver,
     tie_break: AromaticityTieBreak,
     config: AromaticityResolveConfig,
 }
@@ -134,7 +134,10 @@ impl AromaticityResolver {
                     let mut key = atoms.clone();
                     key.sort_unstable();
                     if !existing.contains(&key) {
-                        for edit in self.plan_system(molecule, atoms, system) {
+                        for edit in self
+                            .perception
+                            .plan_aromatic_system(molecule, atoms, system)
+                        {
                             edits.push(edit);
                         }
                     }
@@ -398,31 +401,6 @@ impl AromaticityResolver {
         tie_break: ValenceTieBreak,
     ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
         self.select_completions(molecule, state, tie_break, true)
-    }
-
-    pub(crate) fn plan_system(
-        &self,
-        molecule: &Molecule,
-        atoms: Vec<AtomId>,
-        system: AromaticSystemForm,
-    ) -> Edits {
-        let mut edits = Edits::new();
-        edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), system);
-        for atom in atoms {
-            if let Some(asserted) = molecule
-                .atom(atom)
-                .attributes()
-                .constraints
-                .get(AtomConstraintKey::AromaticValence)
-            {
-                edits.push(Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(atom),
-                    old: Some(asserted.clone()),
-                    new: None,
-                });
-            }
-        }
-        edits
     }
 
     pub(crate) fn plan_bond_discharge(
