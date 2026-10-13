@@ -4,14 +4,14 @@
 //! and compares the delocalization energy per π-electron to a configured threshold.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::{ConnectedComponentsAlgorithm, Graph};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValence, AtomId, ElementForm, Molecule, RingSet,
+    AromaticSystemForm, AromaticValence, AtomId, BooleanForm, ElementForm, Molecule, RingSet,
     UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
@@ -56,9 +56,65 @@ impl HmoAromaticity {
         }
     }
 
+    pub(super) fn candidate_components(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        let pi_atoms: BTreeSet<AtomId> = molecule
+            .atoms()
+            .iter()
+            .filter(|atom| {
+                matches!(atom.attributes().element,
+                ElementForm::Lit(element) if self.is_element_supported(element))
+            })
+            .filter(|atom| can_contribute(atom.id()))
+            .map(|atom| atom.id())
+            .collect();
+        let edges: Vec<[u32; 2]> = molecule
+            .bonds()
+            .iter()
+            .filter(|bond| {
+                !matches!(
+                    bond.attributes().constraints.aromatic(),
+                    BooleanForm::Lit(false)
+                )
+            })
+            .map(|bond| bond.atom_ids())
+            .filter(|atoms| atoms.iter().all(|atom| pi_atoms.contains(atom)))
+            .map(|atoms| atoms.map(|atom| atom.0))
+            .collect();
+        let mut components: Vec<BTreeSet<AtomId>> = Graph::new(molecule.atoms().count(), &edges)
+            .enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs)
+            .into_iter()
+            .map(|atoms| atoms.into_iter().map(AtomId::from).collect::<BTreeSet<_>>())
+            .filter(|atoms| {
+                atoms
+                    .iter()
+                    .any(|atom| pi_atoms.contains(atom) && rings.contains_atom(*atom))
+            })
+            .collect();
+        components.sort();
+        components
+    }
+
+    pub(super) fn candidate_aromatic_systems(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        self.candidate_components(molecule, rings, can_contribute)
+            .into_iter()
+            .filter(|members| members.len() >= 3 && members.contains(&atom))
+            .collect()
+    }
+
     /// The HMO rule supplies no usable contribution bound: no candidate is
     /// settled early.
-    pub fn accepts_range(&self, _members: &[(u32, u32)]) -> bool {
+    pub(super) fn accepts_contributions(&self, _members: &[&[AromaticValence]]) -> bool {
         true
     }
 
@@ -533,10 +589,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_bound(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])]
-    fn test_hmo_aromaticity_accepts_range(#[case] members: &[(u32, u32)]) {
-        // No usable bound: every range is accepted, nothing settles early.
-        assert!(HmoAromaticity::new(ElementScope::Any, 0.0).accepts_range(members));
+    #[case::no_bound(vec![vec![AromaticValence::Aromatic(1)]; 5])]
+    #[case::non_aromatic(vec![vec![AromaticValence::NotAromatic]])]
+    #[case::empty_member(vec![vec![]])]
+    #[case::empty(vec![])]
+    fn test_hmo_aromaticity_accepts_contributions(#[case] members: Vec<Vec<AromaticValence>>) {
+        let members: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+        assert!(HmoAromaticity::new(ElementScope::Any, 0.0).accepts_contributions(&members));
     }
 
     #[rstest]

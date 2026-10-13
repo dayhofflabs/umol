@@ -5,7 +5,7 @@
 //! benzenoid hydrocarbons (all-carbon, all 6-membered rings); rejects
 //! non-benzenoid or heterocyclic input.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use thiserror::Error;
 use umol_chem::element::Element;
@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
     UnpairedElectronsForm,
 };
 
-use super::bond_exclusions;
+use super::{bond_exclusions, ring_components};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -27,9 +27,38 @@ pub enum ClarError {
 pub struct ClarAromaticity;
 
 impl ClarAromaticity {
+    pub(super) fn candidate_components(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        ring_components(rings, can_contribute)
+    }
+
+    pub(super) fn candidate_aromatic_systems(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        let mut candidates: Vec<BTreeSet<AtomId>> = rings
+            .iter()
+            .filter(|ring| {
+                ring.atoms().contains(&atom)
+                    && ring.atoms().iter().all(|&atom| can_contribute(atom))
+            })
+            .map(|ring| ring.atoms().iter().copied().collect())
+            .collect();
+        candidates.sort();
+        candidates.dedup();
+        candidates
+    }
+
     /// The Clar rule supplies no usable contribution bound: no candidate is
     /// settled early.
-    pub fn accepts_range(&self, _members: &[(u32, u32)]) -> bool {
+    pub(super) fn accepts_contributions(&self, _members: &[&[AromaticValence]]) -> bool {
         true
     }
 
@@ -311,10 +340,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_bound(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])]
-    fn test_clar_aromaticity_accepts_range(#[case] members: &[(u32, u32)]) {
-        // No usable bound: every range is accepted, nothing settles early.
-        assert!(ClarAromaticity.accepts_range(members));
+    #[case::no_bound(vec![vec![AromaticValence::Aromatic(1)]; 5])]
+    #[case::non_aromatic(vec![vec![AromaticValence::NotAromatic]])]
+    #[case::empty_member(vec![vec![]])]
+    #[case::empty(vec![])]
+    fn test_clar_aromaticity_accepts_contributions(#[case] members: Vec<Vec<AromaticValence>>) {
+        let members: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+        assert!(ClarAromaticity.accepts_contributions(&members));
     }
 
     #[rstest]

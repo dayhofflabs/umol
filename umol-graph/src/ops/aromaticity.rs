@@ -27,8 +27,7 @@ use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorit
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValence, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondId, BooleanForm, Edit, Edits,
-    ElectronCountsForm, Molecule, MoleculeApplyError, RingConfig, RingId, RingModel, RingSet,
-    RingSetKind,
+    ElectronCountsForm, Molecule, MoleculeApplyError, RingConfig, RingModel, RingSet, RingSetKind,
 };
 use umol_utils::solution::Solution;
 
@@ -147,38 +146,47 @@ impl AromaticityPerceiver {
             .into_ring_set()
     }
 
-    /// Whether some total contribution reachable from the members' ranges is
-    /// perceived as aromatic by the configured rule; rules without a usable
-    /// bound accept every range.
-    pub(crate) fn accepts_range(&self, members: &[(u32, u32)]) -> bool {
+    /// Independent search components over atoms that can still contribute.
+    /// Hückel and Clar connect overlapping rings; HMO connects eligible pi atoms
+    /// across bonds without a non-aromatic assertion, retaining ring-containing components.
+    pub(crate) fn candidate_components(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
         match self {
-            Self::Hueckel(m) => m.accepts_range(members),
-            Self::Hmo(m) => m.accepts_range(members),
-            Self::Clar(m) => m.accepts_range(members),
+            Self::Hueckel(m) => m.candidate_components(molecule, rings, can_contribute),
+            Self::Hmo(m) => m.candidate_components(molecule, rings, can_contribute),
+            Self::Clar(m) => m.candidate_components(molecule, rings, can_contribute),
         }
     }
 
-    /// The member sets a system could claim: every candidate ring, and —
-    /// under the Hückel rule — every ring union within the ring limits.
-    /// Member lists are sorted ascending.
-    pub(crate) fn claim_candidates(&self, rings: &RingSet) -> Vec<Vec<AtomId>> {
-        let mut candidates: Vec<Vec<AtomId>> = rings
-            .iter()
-            .map(|ring| {
-                let mut atoms = ring.atoms().to_vec();
-                atoms.sort_unstable();
-                atoms
-            })
-            .collect();
-        if let Self::Hueckel(m) = self {
-            let eligible: Vec<RingId> = rings.ids().collect();
-            for union in m.enumerate_unions(rings, &eligible) {
-                let mut atoms: Vec<AtomId> = union.into_iter().collect();
-                atoms.sort_unstable();
-                candidates.push(atoms);
-            }
+    /// Containing candidates under the remaining atom eligibility: rings and
+    /// permitted unions for Hückel, rings for Clar, and the ring-containing pi
+    /// component of at least three atoms for HMO. Results are sorted and distinct.
+    pub(crate) fn candidate_aromatic_systems(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        match self {
+            Self::Hueckel(m) => m.candidate_aromatic_systems(molecule, rings, atom, can_contribute),
+            Self::Hmo(m) => m.candidate_aromatic_systems(molecule, rings, atom, can_contribute),
+            Self::Clar(m) => m.candidate_aromatic_systems(molecule, rings, atom, can_contribute),
         }
-        candidates
+    }
+
+    /// False only when no choice of one aromatic contribution per member can
+    /// pass the rule. HMO and Clar provide no contribution bound and return true.
+    pub(crate) fn accepts_contributions(&self, members: &[&[AromaticValence]]) -> bool {
+        match self {
+            Self::Hueckel(m) => m.accepts_contributions(members),
+            Self::Hmo(m) => m.accepts_contributions(members),
+            Self::Clar(m) => m.accepts_contributions(members),
+        }
     }
 
     /// Find candidate aromatic systems via the configured algorithm.
@@ -548,6 +556,30 @@ impl AromaticityPerceiver {
     }
 }
 
+fn ring_components<F>(rings: &RingSet, capable: F) -> Vec<BTreeSet<AtomId>>
+where
+    F: Fn(AtomId) -> bool,
+{
+    let mut components: Vec<BTreeSet<AtomId>> = Vec::new();
+    for ring in rings.iter() {
+        if !ring.atoms().iter().all(|&atom| capable(atom)) {
+            continue;
+        }
+        let ring: BTreeSet<AtomId> = ring.atoms().iter().copied().collect();
+        let (connected, disjoint): (Vec<_>, Vec<_>) = components
+            .into_iter()
+            .partition(|component| !component.is_disjoint(&ring));
+        let mut merged = ring;
+        for component in connected {
+            merged.extend(component);
+        }
+        components = disjoint;
+        components.push(merged);
+    }
+    components.sort();
+    components
+}
+
 fn bond_exclusions(molecule: &Molecule) -> Vec<[AtomId; 2]> {
     molecule
         .bonds()
@@ -626,45 +658,140 @@ mod tests {
         );
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::hueckel_rings_and_union(
-        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
-        vec![
-            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-            vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
-            (0..10).map(AtomId).collect::<Vec<_>>(),
-        ]
-    )]
-    #[case::hmo_rings_only(
-        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
-        vec![
-            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-            vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
-        ]
-    )]
-    #[case::clar_rings_only(
-        AromaticityRule::Clar,
-        vec![
-            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-            vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
-        ]
-    )]
-    fn test_aromaticity_perceiver_claim_candidates(
-        #[case] rule: AromaticityRule,
-        #[case] expected: Vec<Vec<AtomId>>,
-    ) {
-        let molecule = mol_dsl!(r#"{
-            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+    #[case::fused_pair(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
-                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#);
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        &[], vec![(0..10).collect()], vec![(0..10).collect()]
+    )]
+    #[case::incapable_ring_atom(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        &[0], vec![vec![4, 5, 6, 7, 8, 9]], vec![(1..10).collect()]
+    )]
+    #[case::coupled_rings(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]]}"#),
+        &[], vec![(0..6).collect(), (6..12).collect()], vec![(0..12).collect()]
+    )]
+    #[case::non_aromatic_link(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1#a!"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]]}"#),
+        &[], vec![(0..6).collect(), (6..12).collect()], vec![(0..6).collect(), (6..12).collect()]
+    )]
+    #[case::acyclic(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        &[], vec![], vec![]
+    )]
+    fn test_aromaticity_perceiver_candidate_components(
+        #[values(
+            AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+            AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+            AromaticityRule::Clar
+        )]
+        rule: AromaticityRule,
+        #[case] molecule: Molecule,
+        #[case] excluded: &[u32],
+        #[case] ring_components: Vec<Vec<u32>>,
+        #[case] pi_components: Vec<Vec<u32>>,
+    ) {
+        let expected = if matches!(rule, AromaticityRule::Hmo { .. }) {
+            pi_components
+        } else {
+            ring_components
+        };
         let perception = AromaticityPerceiver::new(&AromaticityModel {
             scope: ElementScope::Any,
             rule,
             tie_break: AromaticityTieBreak::Strict,
         });
         let rings = perception.candidate_rings(&molecule, AromaticityConfig::default());
-        assert_eq!(perception.claim_candidates(&rings), expected);
+        assert_eq!(
+            perception.candidate_components(&molecule, &rings, |atom| !excluded.contains(&atom.0)),
+            expected
+                .into_iter()
+                .map(|atoms| atoms.into_iter().map(AtomId).collect::<BTreeSet<_>>())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
+    #[case::hueckel_rings_and_union(
+        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+        4, &[], vec![(0..6).collect(), (0..10).collect(), vec![4, 5, 6, 7, 8, 9]]
+    )]
+    #[case::hueckel_rings_only(
+        AromaticityRule::Hueckel { ring_limits: RingLimits { include_unions: false, ..Default::default() } },
+        4, &[], vec![(0..6).collect(), vec![4, 5, 6, 7, 8, 9]]
+    )]
+    #[case::hueckel_incapable_member(
+        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+        4, &[0], vec![vec![4, 5, 6, 7, 8, 9]]
+    )]
+    #[case::hueckel_non_ring_atom(
+        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+        11, &[], vec![]
+    )]
+    #[case::hmo_pi_component(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        4, &[], vec![(0..12).collect()]
+    )]
+    #[case::hmo_incapable_member(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        4, &[0], vec![(1..12).collect()]
+    )]
+    #[case::hmo_non_ring_atom(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        11, &[], vec![(0..12).collect()]
+    )]
+    #[case::hmo_short_component(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        0, &[2, 3, 4, 5, 6, 7, 8, 9, 10, 11], vec![]
+    )]
+    #[case::hmo_incapable_atom(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        4, &[4], vec![]
+    )]
+    #[case::clar_rings(
+        AromaticityRule::Clar, 4, &[], vec![(0..6).collect(), vec![4, 5, 6, 7, 8, 9]]
+    )]
+    #[case::clar_incapable_member(
+        AromaticityRule::Clar, 4, &[0], vec![vec![4, 5, 6, 7, 8, 9]]
+    )]
+    #[case::clar_non_ring_atom(
+        AromaticityRule::Clar, 11, &[], vec![]
+    )]
+    fn test_aromaticity_perceiver_candidate_aromatic_systems(
+        #[case] rule: AromaticityRule,
+        #[case] atom: u32,
+        #[case] excluded: &[u32],
+        #[case] expected: Vec<Vec<u32>>,
+    ) {
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"] [9 10 "1"] [10 11 "1"]]}"#
+        );
+        let perception = AromaticityPerceiver::new(&AromaticityModel {
+            scope: ElementScope::Any,
+            rule,
+            tie_break: AromaticityTieBreak::Strict,
+        });
+        let rings = perception.candidate_rings(&molecule, AromaticityConfig::default());
+        assert_eq!(
+            perception
+                .candidate_aromatic_systems(&molecule, &rings, AtomId(atom), |atom| !excluded
+                    .contains(&atom.0)),
+            expected
+                .into_iter()
+                .map(|atoms| atoms.into_iter().map(AtomId).collect::<BTreeSet<_>>())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[rustfmt::skip]

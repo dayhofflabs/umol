@@ -5,7 +5,7 @@
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
 //! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `Molecule::edit`.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
     UnpairedElectronsForm,
 };
 
-use super::bond_exclusions;
+use super::{bond_exclusions, ring_components};
 use crate::ops::model::{ElementScope, RingLimits};
 
 #[derive(Clone, Debug)]
@@ -30,15 +30,71 @@ impl HueckelAromaticity {
         }
     }
 
-    /// Whether some total contribution reachable from the members' ranges is
-    /// perceived as aromatic by the rule: a candidate whose range admits no
-    /// 4n+2 value is settled early.
-    pub fn accepts_range(&self, members: &[(u32, u32)]) -> bool {
-        let lower: u32 = members.iter().map(|&(lower, _)| lower).sum();
-        let upper: u32 = members.iter().map(|&(_, upper)| upper).sum();
-        let lower = lower.max(2);
-        let first = lower + ((2 + 4 - lower % 4) % 4);
-        first <= upper
+    pub(super) fn candidate_components(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        ring_components(rings, can_contribute)
+    }
+
+    pub(super) fn candidate_aromatic_systems(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        let eligible: Vec<RingId> = rings
+            .ids()
+            .filter(|&id| {
+                rings
+                    .get(id)
+                    .expect("ring id from this set")
+                    .atoms()
+                    .iter()
+                    .all(|&atom| can_contribute(atom))
+            })
+            .collect();
+        let mut candidates: Vec<BTreeSet<AtomId>> = eligible
+            .iter()
+            .filter_map(|&id| rings.get(id))
+            .filter(|ring| ring.atoms().contains(&atom))
+            .map(|ring| ring.atoms().iter().copied().collect())
+            .collect();
+        if self.ring_limits.include_unions {
+            candidates.extend(
+                self.enumerate_unions(rings, &eligible)
+                    .into_iter()
+                    .filter(|members| members.contains(&atom))
+                    .map(|members| members.into_iter().collect()),
+            );
+        }
+        candidates.sort();
+        candidates.dedup();
+        candidates
+    }
+
+    /// Some choice of one aromatic contribution per member totals 4n+2, with n >= 0.
+    /// For each residue, only the greatest reachable total is needed.
+    pub(super) fn accepts_contributions(&self, members: &[&[AromaticValence]]) -> bool {
+        let mut totals = [Some(0), None, None, None];
+        for member in members {
+            let mut next = [None; 4];
+            for &value in *member {
+                let AromaticValence::Aromatic(value) = value else {
+                    continue;
+                };
+                for total in totals.into_iter().flatten() {
+                    let sum = total + value;
+                    let best = &mut next[sum.rem_euclid(4) as usize];
+                    *best = Some(best.map_or(sum, |previous: i64| previous.max(sum)));
+                }
+            }
+            totals = next;
+        }
+        totals[2].is_some_and(|total| total >= 2)
     }
 
     /// Perceive systems from the supplied rings and aromatic contributions.
@@ -319,6 +375,7 @@ fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<Hash
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_ir::ir::AromaticValence::{Aromatic, NotAromatic};
     use umol_graph_ir::ir::{
         AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, ElectronCountsForm,
         ElementForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
@@ -582,18 +639,71 @@ mod tests {
     }
 
     #[rstest]
-    #[case::point_accepted(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1)], true)]
-    #[case::point_rejected(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)], false)]
-    #[case::span_accepted(&[(0, 3), (1, 1), (1, 1), (1, 1), (1, 1)], true)]
-    #[case::span_rejected(&[(3, 4), (1, 1), (1, 1), (1, 1), (1, 1)], false)]
-    #[case::two_electrons(&[(2, 2)], true)]
-    #[case::below_two(&[(0, 1)], false)]
-    #[case::empty(&[], false)]
-    fn test_hueckel_aromaticity_aromaticity_accepts_range(
-        #[case] members: &[(u32, u32)],
+    #[case::six_electrons(vec![vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)]], true)]
+    #[case::five_electrons(vec![vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)]], false)]
+    #[case::alternatives(vec![vec![Aromatic(0), Aromatic(2)], vec![Aromatic(4)]], true)]
+    #[case::unreachable_residue(vec![vec![Aromatic(0), Aromatic(4)]], false)]
+    #[case::aromatic_zero(vec![vec![Aromatic(0)], vec![Aromatic(2)]], true)]
+    #[case::non_aromatic_member(vec![vec![NotAromatic], vec![Aromatic(2)]], false)]
+    #[case::mixed_membership(vec![vec![NotAromatic, Aromatic(2)]], true)]
+    #[case::two_electrons(vec![vec![Aromatic(2)]], true)]
+    #[case::below_two(vec![vec![Aromatic(0), Aromatic(1)]], false)]
+    #[case::empty_member(vec![vec![]], false)]
+    #[case::empty(vec![], false)]
+    fn test_hueckel_aromaticity_accepts_contributions(
+        #[case] members: Vec<Vec<AromaticValence>>,
         #[case] expected: bool,
     ) {
-        assert_eq!(daylight_model().accepts_range(members), expected);
+        let members: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+        assert_eq!(daylight_model().accepts_contributions(&members), expected);
+    }
+
+    #[rstest]
+    #[case(0)]
+    #[case(1)]
+    #[case(2)]
+    #[case(3)]
+    fn test_hueckel_aromaticity_accepts_contributions_combinations(#[case] count: u32) {
+        let choices = [
+            NotAromatic,
+            Aromatic(0),
+            Aromatic(1),
+            Aromatic(2),
+            Aromatic(4),
+        ];
+        let model = daylight_model();
+        for encoding in 0..32usize.pow(count) {
+            let members: Vec<Vec<AromaticValence>> = (0..count)
+                .map(|position| {
+                    let mask = (encoding >> (5 * position)) & 31;
+                    choices
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| mask & (1 << index) != 0)
+                        .map(|(_, &value)| value)
+                        .collect()
+                })
+                .collect();
+            let mut totals = vec![0];
+            for member in &members {
+                totals = totals
+                    .iter()
+                    .flat_map(|total| {
+                        member.iter().filter_map(move |value| match value {
+                            Aromatic(value) => Some(total + value),
+                            NotAromatic => None,
+                        })
+                    })
+                    .collect();
+            }
+            let expected = totals.iter().any(|&total| total >= 2 && total % 4 == 2);
+            let slices: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+            assert_eq!(
+                model.accepts_contributions(&slices),
+                expected,
+                "{members:?}"
+            );
+        }
     }
 
     #[rstest]

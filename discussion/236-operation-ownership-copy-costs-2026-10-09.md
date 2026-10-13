@@ -3679,7 +3679,7 @@ Remove the Python classes, keywords, getters, and repr fields.
 **Tests:** each mismatch is a contradiction in standalone and composite
 resolution; tests of the removed branches go.
 
-#### S4h — Rule-supplied components and candidate systems
+#### S4h — Rule-supplied components and candidate systems **Done**
 
 **Modules:** graph aromaticity, its rule modules, and resolve/aromaticity.
 **Green.** [dep: S3d]
@@ -3703,6 +3703,51 @@ existing selection results.
 
 **Verification:** the resolve bench's selection group, against a baseline taken
 before the change.
+
+**Completed (2026-10-13).** The perceiver dispatches component discovery,
+containing candidates, and contribution acceptance to the three rules.
+Hückel's acceptance uses the actual alternatives, retaining the greatest
+reachable total for each residue modulo four in fixed stack storage. Zero is
+an aromatic contribution; NotAromatic is not. HMO and Clar retain their
+unconditional contribution bound. The old claim_candidates and accepts_range
+methods are removed; the new machinery is crate-private.
+
+The selection includes flexible non-ring atoms in HMO components. It reuses
+candidate topology while eligibility is unchanged and recomputes it when a
+selected NotAromatic alternative changes eligibility. Candidates are
+deduplicated and visited by increasing size. Each acceptance check covers all
+required member atoms together, preserving the per-atom pruning criterion
+without repeating that check for every member. Keep still disables pruning;
+the enumeration bound and public algorithm selection remain S4i's scope.
+
+Verification passed: 282 focused aromaticity cases, including all three rules'
+candidates and a flexible non-ring HMO atom in both option orders; an exhaustive
+comparison of 33,825 small contribution-choice domains with direct enumeration;
+the existing selection-equivalence and aromatic-constraint properties at 512
+cases each; 34 aromatic resolution snapshots; graph-crate all-target Clippy with
+conformance and proptest enabled; touched-file formatting and diff review.
+No external test fixtures, workspace gate, or Python changes were added.
+
+The initial implementation repeated candidate acceptance for different required
+atoms and measured 8.5–26.7% slower than the baseline. Removing that repetition
+and trying smaller candidates first recovered the cost while retaining the
+exact contribution predicate. The final consuming-resolution selection timings
+against pre-S4h commit 28173f19ceaa027138a809f3276f3878ac0741bb are:
+
+| Fixture | Before (ms) | After (ms) | Change |
+| --- | ---: | ---: | ---: |
+| Heptaazanaphthalene, 128 combinations | 0.401 | 0.280 | −30.3% |
+| Octaazanaphthalene, 256 combinations | 0.803 | 0.556 | −30.9% |
+| Decaazaanthracene, 1024 combinations | 7.255 | 5.525 | −23.8% |
+| Dodecaazatetracene, 4096 combinations | 82.869 | 77.023 | −6.9% |
+
+Absolute times are median run means from three paired passes; changes are the
+medians of the paired percentage changes. Each case used 40 samples, a one-second
+warmup, and a two-second requested measurement, extended by Criterion when needed.
+The middle pass reversed before/after order. Every pass improved on every fixture;
+no run was discarded. These are Hückel selection stress cases, not measurements
+of HMO, Clar, or resolution workloads generally. Source snapshots, binary hashes,
+commands, full timing ranges, and raw samples are retained in scratch/236-s4h.
 
 #### S4i — AtomSelectionAlgorithm and the search bound
 

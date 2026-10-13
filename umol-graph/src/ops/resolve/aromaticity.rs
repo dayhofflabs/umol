@@ -4,6 +4,7 @@
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
+use std::slice;
 
 use smallvec::{smallvec, SmallVec};
 use thiserror::Error;
@@ -11,7 +12,7 @@ use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
     AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
     BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, Edit,
-    Edits, ElectronCountsForm, Lattice, Molecule, MoleculeApplyError, NumForm, RingSet,
+    Edits, ElectronCountsForm, Lattice, Molecule, MoleculeApplyError, NumForm,
     UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -24,7 +25,7 @@ use crate::ops::model::{AromaticityModel, AromaticityTieBreak, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
 use crate::ops::valence::compare::compare_by_key;
 
-/// Maximum number of completion combinations per candidate-ring component.
+/// Maximum number of completion combinations per rule-supplied component.
 const MAX_COMPLETION_COMBINATIONS: usize = 4096;
 
 /// How aromaticity resolution handles an independently invalid constraint or entity.
@@ -522,10 +523,6 @@ impl AromaticityResolver {
             })
             .collect();
 
-        // The rule's acceptance couples atoms only within a candidate-ring
-        // component: enumeration and the combination bound are per component.
-        // A flexible atom outside every component has no candidate ring and
-        // falls through to the finalization tie-break.
         let rings = self
             .perception
             .candidate_rings(molecule, self.config.perception);
@@ -565,12 +562,14 @@ impl AromaticityResolver {
                 }
             }
         }
-        let components = candidate_components(&rings, |atom_id| match completions.get(atom_id) {
-            Some(disjuncts) => disjuncts
-                .iter()
-                .any(|form| matches!(contribution(form), AromaticValence::Aromatic(_))),
-            None => matches!(stored[atom_id.index()], AromaticValence::Aromatic(_)),
-        });
+        let components = self
+            .perception
+            .candidate_components(molecule, &rings, |atom_id| match completions.get(atom_id) {
+                Some(disjuncts) => disjuncts
+                    .iter()
+                    .any(|form| matches!(contribution(form), AromaticValence::Aromatic(_))),
+                None => matches!(stored[atom_id.index()], AromaticValence::Aromatic(_)),
+            });
         for component in &components {
             let component_flexible: Vec<&(AtomId, Vec<AromaticValence>)> = flexible
                 .iter()
@@ -608,7 +607,6 @@ impl AromaticityResolver {
             })
             .collect();
 
-        let claim_candidates = self.perception.claim_candidates(&rings);
         let required_bonds: SmallVec<[(BondId, [AtomId; 2]); 16]> = molecule
             .bonds()
             .iter()
@@ -629,8 +627,7 @@ impl AromaticityResolver {
             .map(|(bond, _)| molecule.bond(*bond).is_in_aromatic_system())
             .collect();
         for component in &components {
-            // Flexible atoms ordered ring-by-ring for the search; every
-            // component atom lies in a candidate ring, so the order is total.
+            // Visit ring atoms first, followed by any other pi-component atoms.
             let mut ordered_atoms: Vec<AtomId> = Vec::new();
             for ring in rings.iter() {
                 if !ring.atoms().iter().all(|atom| component.contains(atom)) {
@@ -646,6 +643,11 @@ impl AromaticityResolver {
                     {
                         ordered_atoms.push(atom);
                     }
+                }
+            }
+            for &(atom, _) in &flexible {
+                if component.contains(&atom) && !ordered_atoms.contains(&atom) {
+                    ordered_atoms.push(atom);
                 }
             }
             let component_flexible: Vec<(AtomId, Vec<AromaticValence>)> = ordered_atoms
@@ -703,70 +705,85 @@ impl AromaticityResolver {
                     )
                 })
                 .collect();
-            let component_candidates: Vec<&Vec<AtomId>> = claim_candidates
-                .iter()
-                .filter(|members| members.iter().all(|atom| component.contains(atom)))
-                .collect();
-
-            // A candidate is settled-rejected under a partial combination when
-            // no completion can make the rule accept it: a member fixed to a
-            // non-contribution, or a reachable total range the rule refuses.
-            let settled_rejected = |members: &[AtomId], path: &[usize]| -> bool {
-                let mut ranges: Vec<(u32, u32)> = Vec::with_capacity(members.len());
-                for atom in members {
-                    let range = match flexible_positions.get(atom) {
-                        Some(&position) => {
-                            let options = &component_flexible[position].1;
-                            let assigned = (position < path.len())
-                                .then(|| options[path[position]])
-                                .map(|value| match value {
-                                    AromaticValence::Aromatic(value) => {
-                                        Some((value as u32, value as u32))
-                                    }
-                                    AromaticValence::NotAromatic => None,
-                                });
-                            match assigned {
-                                Some(value) => value,
-                                None => {
-                                    let values: Vec<u32> = options
-                                        .iter()
-                                        .filter_map(|&value| match value {
-                                            AromaticValence::Aromatic(value) => Some(value as u32),
-                                            AromaticValence::NotAromatic => None,
-                                        })
-                                        .collect();
-                                    values
-                                        .iter()
-                                        .copied()
-                                        .min()
-                                        .zip(values.iter().copied().max())
-                                }
-                            }
+            let remaining_contributions = |atom: AtomId, path: &[usize]| -> &[AromaticValence] {
+                match flexible_positions.get(&atom) {
+                    Some(&position) => {
+                        let options = &component_flexible[position].1;
+                        if position < path.len() {
+                            slice::from_ref(&options[path[position]])
+                        } else {
+                            options
                         }
-                        None => match fixed_contributions[atom] {
-                            AromaticValence::Aromatic(value) => Some((value as u32, value as u32)),
-                            AromaticValence::NotAromatic => None,
-                        },
-                    };
-                    match range {
-                        Some(range) => ranges.push(range),
-                        None => return true,
+                    }
+                    None => slice::from_ref(&fixed_contributions[&atom]),
+                }
+            };
+            let can_contribute = |atom: AtomId, path: &[usize]| {
+                if let Some(&position) = flexible_positions.get(&atom) {
+                    if position < path.len() {
+                        return matches!(
+                            component_flexible[position].1[path[position]],
+                            AromaticValence::Aromatic(_)
+                        );
                     }
                 }
-                !self.perception.accepts_range(&ranges)
-            };
-            // A partial combination is certainly invalid when some
-            // aromatic-only atom has every claim candidate settled-rejected.
-            let certainly_invalid = |path: &[usize]| -> bool {
-                aromatic_only.iter().any(|&atom| {
-                    component_candidates
+                match completions.get(atom) {
+                    Some(disjuncts) => disjuncts
                         .iter()
-                        .filter(|members| members.contains(&atom))
-                        .all(|members| settled_rejected(members, path))
-                })
+                        .any(|form| matches!(contribution(form), AromaticValence::Aromatic(_))),
+                    None => matches!(stored[atom.index()], AromaticValence::Aromatic(_)),
+                }
             };
             let prune_enabled =
                 self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error;
+            let candidate_aromatic_systems = |path: &[usize]| {
+                let candidates: BTreeSet<_> = aromatic_only
+                    .iter()
+                    .flat_map(|&atom| {
+                        self.perception
+                            .candidate_aromatic_systems(molecule, &rings, atom, |atom| {
+                                can_contribute(atom, path)
+                            })
+                    })
+                    .collect();
+                let mut candidates: Vec<_> = candidates.into_iter().collect();
+                candidates.sort_by_key(BTreeSet::len);
+                candidates
+            };
+            let candidates = if prune_enabled {
+                candidate_aromatic_systems(&[])
+            } else {
+                Vec::new()
+            };
+            let certainly_invalid = |path: &[usize]| -> bool {
+                let eligibility_changed = path.iter().enumerate().any(|(position, &choice)| {
+                    component_flexible[position].1[choice] == AromaticValence::NotAromatic
+                });
+                let updated;
+                let candidates = if eligibility_changed {
+                    updated = candidate_aromatic_systems(path);
+                    &updated
+                } else {
+                    &candidates
+                };
+                let mut unclaimed: SmallVec<[AtomId; 32]> = aromatic_only.iter().copied().collect();
+                for members in candidates {
+                    if !unclaimed.iter().any(|atom| members.contains(atom)) {
+                        continue;
+                    }
+                    let contributions: SmallVec<[&[AromaticValence]; 16]> = members
+                        .iter()
+                        .map(|&atom| remaining_contributions(atom, path))
+                        .collect();
+                    if self.perception.accepts_contributions(&contributions) {
+                        unclaimed.retain(|atom| !members.contains(atom));
+                        if unclaimed.is_empty() {
+                            return false;
+                        }
+                    }
+                }
+                !unclaimed.is_empty()
+            };
 
             // Depth-first search over the flexible atoms; a subtree is cut
             // only when every completion below it is certainly invalid, so
@@ -1076,35 +1093,6 @@ impl AromaticityResolver {
     }
 }
 
-/// Connected components of the aromatic-candidate graph: the perception's
-/// rings whose members are all aromatic-capable, connected over shared
-/// atoms. The aromaticity rule's acceptance couples atoms only within a
-/// component, so enumeration, validity, selection, and the combination bound
-/// are all per component.
-fn candidate_components<F>(rings: &RingSet, capable: F) -> Vec<BTreeSet<AtomId>>
-where
-    F: Fn(AtomId) -> bool,
-{
-    let mut components: Vec<BTreeSet<AtomId>> = Vec::new();
-    for ring in rings.iter() {
-        if !ring.atoms().iter().all(|&atom| capable(atom)) {
-            continue;
-        }
-        let ring: BTreeSet<AtomId> = ring.atoms().iter().copied().collect();
-        let (connected, disjoint): (Vec<_>, Vec<_>) = components
-            .into_iter()
-            .partition(|component| !component.is_disjoint(&ring));
-        let mut merged = ring;
-        for component in connected {
-            merged.extend(component);
-        }
-        components = disjoint;
-        components.push(merged);
-    }
-    components.sort();
-    components
-}
-
 fn compare_restrictions(
     a: &[(AtomId, AtomForm)],
     b: &[(AtomId, AtomForm)],
@@ -1134,8 +1122,7 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, BondId, Edit, Edits, NumForm, RingConfig, RingModel, RingSetKind,
-        UnpairedElectronsForm,
+        AromaticSystemId, BondId, Edit, Edits, NumForm, RingConfig, UnpairedElectronsForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1145,74 +1132,6 @@ mod tests {
     };
     use crate::ops::resolve::{ResolveConfig, ResolveContradiction, Resolver};
     use crate::ops::valence::AtomCompletions;
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::fused_pair(
-        mol_dsl!(r#"{
-            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
-                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
-        vec![(0..10).map(AtomId).collect::<BTreeSet<_>>()]
-    )]
-    #[case::coupled_rings(
-        mol_dsl!(r#"{
-            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
-                    [5 6 "1"]
-                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]]}"#),
-        vec![
-            (0..6).map(AtomId).collect::<BTreeSet<_>>(),
-            (6..12).map(AtomId).collect::<BTreeSet<_>>(),
-        ]
-    )]
-    #[case::chain(
-        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
-        vec![]
-    )]
-    fn test_candidate_components(
-        #[case] molecule: Molecule,
-        #[case] expected: Vec<BTreeSet<AtomId>>,
-    ) {
-        let rings = molecule
-            .rings(
-                RingModel {
-                    kind: RingSetKind::Relevant,
-                    max_ring_size: 22,
-                },
-                RingConfig::default(),
-            )
-            .into_ring_set();
-        assert_eq!(candidate_components(&rings, |_| true), expected);
-    }
-
-    #[rstest]
-    fn test_candidate_components_capability() {
-        // One incapable atom removes its rings; the remaining candidate ring
-        // is its own component.
-        let molecule = mol_dsl!(
-            r#"{
-            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
-                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#
-        );
-        let rings = molecule
-            .rings(
-                RingModel {
-                    kind: RingSetKind::Relevant,
-                    max_ring_size: 22,
-                },
-                RingConfig::default(),
-            )
-            .into_ring_set();
-        assert_eq!(
-            candidate_components(&rings, |atom| atom != AtomId(0)),
-            vec![[4, 5, 6, 7, 8, 9]
-                .map(AtomId)
-                .into_iter()
-                .collect::<BTreeSet<_>>()]
-        );
-    }
 
     #[fixture]
     fn aromaticity_model() -> AromaticityModel {
@@ -1928,6 +1847,48 @@ mod tests {
         assert_eq!(
             AromaticityResolver::new(&model).plan_project(&resolved_benzene),
             Err(AromaticityProjectError::AtomAssertion { atom: AtomId(5) }),
+        );
+    }
+
+    #[rstest]
+    #[case::aromatic_last(smallvec![
+        atom_dsl!("N#c0#h2#n#a!"), atom_dsl!("N#c0#h2#n0#a2")
+    ])]
+    #[case::aromatic_first(smallvec![
+        atom_dsl!("N#c0#h2#n0#a2"), atom_dsl!("N#c0#h2#n#a!")
+    ])]
+    fn test_aromaticity_resolver_select(#[case] options: SmallVec<[AtomForm; 1]>) {
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "N"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"] [0 6 "1"]]}"#
+        );
+        let model = AromaticityModel {
+            scope: ElementScope::Any,
+            rule: AromaticityRule::Hmo {
+                stabilization_threshold: 0.0,
+            },
+            tie_break: AromaticityTieBreak::MinElectronCount,
+        };
+        let state = ResolveState {
+            completions: AtomCompletions::from_iter([(AtomId(6), options)]),
+            ..Default::default()
+        };
+        assert_eq!(
+            AromaticityResolver::new(&model).select(&molecule, state, ValenceTieBreak::Strict),
+            Ok(Solution::Determined(ResolveState {
+                completions: AtomCompletions::from_iter([(
+                    AtomId(6),
+                    smallvec![atom_dsl!("N#c0#h2#n0#a2")]
+                ),]),
+                systems: vec![(
+                    (0..7).map(AtomId).collect(),
+                    AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1, 2])
+                        .with_charge(0)
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+                )],
+                tie_breaks: Vec::new(),
+            }))
         );
     }
 
