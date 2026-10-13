@@ -4,7 +4,7 @@
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::slice;
+use std::{mem, slice};
 
 use smallvec::{smallvec, SmallVec};
 use thiserror::Error;
@@ -190,12 +190,12 @@ impl AromaticityResolver {
         Ok(Solution::Determined(molecule))
     }
 
-    /// Plan and atomically apply aromaticity resolution.
+    /// Plans and applies aromaticity resolution without a recovery journal.
     ///
     /// # Semantic properties
     ///
-    /// Only Determined retains changes. Every other outcome preserves the molecule
-    /// under Molecule::normalized_eq, including participant order.
+    /// Planning finishes before mutation. Only Determined changes the molecule;
+    /// every other outcome leaves it unchanged.
     ///
     /// # Errors
     ///
@@ -211,9 +211,11 @@ impl AromaticityResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        molecule
-            .transact([edits])
-            .expect("aromaticity resolve plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("aromaticity resolve plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 
@@ -250,7 +252,7 @@ impl AromaticityResolver {
     ///
     /// Projection is idempotent and independent of system participant order when electron
     /// counts are transported with their participants. Successful projection publishes all
-    /// edits together; every failure preserves the input under Molecule::normalized_eq.
+    /// edits together without a recovery journal; every failure leaves the input unchanged.
     /// System removal compacts constraints that refer to the removed systems.
     ///
     /// # Errors
@@ -262,9 +264,11 @@ impl AromaticityResolver {
         molecule: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityProjectError> {
         let edits = self.plan_project(molecule)?;
-        molecule
-            .transact([edits])
-            .expect("aromaticity project plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("aromaticity project plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 
@@ -1384,19 +1388,28 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_plan_resolve_partial(aromaticity_model: AromaticityModel) {
-        let molecule = mol_dsl!(
-            r#"{
+    #[case::open_contribution(
+        mol_dsl!(r#"{
             :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-        }"#
-        );
-
+        }"#)
+    )]
+    fn test_aromaticity_resolver_plan_resolve_partial(
+        aromaticity_model: AromaticityModel,
+        #[case] mut molecule: Molecule,
+    ) {
+        let original = molecule.clone();
+        let resolver = AromaticityResolver::new(&aromaticity_model);
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).plan_resolve(&molecule),
+            resolver.plan_resolve(&molecule),
             Ok(Solution::Underdetermined(Edits::new()))
         );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

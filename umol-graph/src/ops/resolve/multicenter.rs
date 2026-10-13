@@ -1,6 +1,8 @@
 //! Multicenter-bond resolver: fills `MulticenterBondForm` charge and unpaired-electron
 //! defaults parallel to `BondsResolver`.
 
+use std::mem;
+
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate,
@@ -105,12 +107,12 @@ impl MulticenterBondsResolver {
         Ok(Solution::Determined(molecule))
     }
 
-    /// Plan and atomically apply multicenter-bond defaults.
+    /// Plans and applies multicenter-bond defaults without a recovery journal.
     ///
     /// # Semantic properties
     ///
-    /// Only Determined retains changes. Every other outcome preserves the molecule
-    /// under Molecule::normalized_eq, including participant order.
+    /// Planning finishes before mutation. Only Determined changes the molecule;
+    /// every other outcome leaves it unchanged.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
@@ -122,9 +124,11 @@ impl MulticenterBondsResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        molecule
-            .transact([edits])
-            .expect("multicenter-bond resolve plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("multicenter-bond resolve plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 }
@@ -217,13 +221,17 @@ mod tests {
         Solution::Determined(Edits::new()),
     )]
     fn test_multicenter_bonds_resolver_plan_resolve_constraints(
-        #[case] molecule: Molecule,
+        #[case] mut molecule: Molecule,
         #[case] expected: Solution<Edits, MulticenterBondsContradiction>,
     ) {
+        let original = molecule.clone();
+        let resolver = MulticenterBondsResolver::new();
+        assert_eq!(resolver.plan_resolve(&molecule), expected);
         assert_eq!(
-            MulticenterBondsResolver::new().plan_resolve(&molecule),
-            expected
+            resolver.resolve_into(&mut molecule),
+            Ok(expected.map(|_| ()))
         );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

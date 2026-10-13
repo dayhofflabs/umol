@@ -1,5 +1,7 @@
 //! Isotope completion and projection under one policy, independent of valence resolution.
 
+use std::mem;
+
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomHandle, AtomId, AtomUpdate, Edits, IsotopeMassForm, Lattice, Molecule,
@@ -114,7 +116,7 @@ impl IsotopeResolver {
         Ok(Solution::Determined(molecule))
     }
 
-    /// Plans and atomically applies a determined isotope completion.
+    /// Plans and applies a determined isotope completion without a recovery journal.
     ///
     /// Underdetermination leaves the entire molecule unchanged, including fields
     /// for which the plan proposed defaults.
@@ -127,9 +129,11 @@ impl IsotopeResolver {
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => match contradiction {},
         };
-        molecule
-            .transact([edits])
-            .expect("isotope resolve plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("isotope resolve plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 
@@ -159,21 +163,22 @@ impl IsotopeResolver {
     ///
     /// Natural becomes Undetermined only under Natural; Strict retains it. Both
     /// policies preserve explicit masses. Other fields may remain unresolved.
-    /// Only a successful result publishes the projected molecule.
+    /// Planning finishes before mutation; the plan applies without a recovery journal.
     ///
     /// # Errors
     ///
     /// Returns IsotopeProjectError::NonGroundIsotope for the first atom whose
-    /// isotope is Undetermined, a set, or a variable. Every error preserves the caller's molecule
-    /// under Molecule::normalized_eq.
+    /// isotope is Undetermined, a set, or a variable. Every error leaves the input unchanged.
     pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeProjectError> {
         let edits = self.plan_project(molecule)?;
-        molecule
-            .transact([edits])
-            .expect("isotope project plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("isotope project plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 

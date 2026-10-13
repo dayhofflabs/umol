@@ -2,6 +2,8 @@
 //! whose corresponding inherent fields are still `Undetermined` after the
 //! valence and aromaticity passes.
 
+use std::mem;
+
 use thiserror::Error;
 use umol_graph_ir::ir::{
     BondHandle, BondUpdate, Edits, Lattice, Molecule, NumForm, UnpairedElectronsForm,
@@ -69,20 +71,22 @@ impl BondsResolver {
         Ok(Solution::Determined(molecule))
     }
 
-    /// Plan and atomically apply localized-bond defaults.
+    /// Plans and applies localized-bond defaults without a recovery journal.
     ///
     /// # Semantic properties
     ///
-    /// Only Determined retains changes. Every other outcome preserves the molecule
-    /// under Molecule::normalized_eq, including participant order.
+    /// Planning finishes before mutation. Only Determined changes the molecule;
+    /// every other outcome leaves it unchanged.
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
         let edits = self.plan_resolve(molecule);
-        molecule
-            .transact([edits])
-            .expect("bond resolve plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("bond resolve plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 }

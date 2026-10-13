@@ -3,6 +3,7 @@
 //! the discharge of their source assertions without mutating the molecule.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::mem;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -333,12 +334,12 @@ impl StereoResolver {
         Ok(Solution::Determined(molecule))
     }
 
-    /// Plan and atomically apply structural stereo resolution.
+    /// Plans and applies structural stereo resolution without a recovery journal.
     ///
     /// # Semantic properties
     ///
-    /// Only Determined retains changes. Every other outcome preserves the molecule
-    /// under Molecule::normalized_eq, including participant order.
+    /// Planning finishes before mutation. Only Determined changes the molecule;
+    /// every other outcome leaves it unchanged.
     /// With consistent, realizable stereo evidence, resolution is idempotent under `==`.
     /// Stereo configurations may remain open in a determined result.
     pub fn resolve_into(
@@ -352,9 +353,11 @@ impl StereoResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        molecule
-            .transact([edits])
-            .expect("stereo resolve plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("stereo resolve plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 
@@ -394,7 +397,8 @@ impl StereoResolver {
     ///
     /// Projection is idempotent. Transporting an entity's configuration together with its
     /// ligand frame preserves the resulting assertion. Other atom and bond fields are unchanged.
-    /// Success publishes all edits together; every error preserves the input under Molecule::normalized_eq.
+    /// Success publishes all edits together without a recovery journal;
+    /// every error leaves the input unchanged.
     ///
     /// # Errors
     ///
@@ -405,9 +409,11 @@ impl StereoResolver {
         molecule: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
         let edits = self.plan_project(molecule)?;
-        molecule
-            .transact([edits])
-            .expect("stereo project plan applies and preserves molecule integrity");
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("stereo project plan applies and preserves molecule integrity");
+        }
         Ok(Solution::Determined(()))
     }
 

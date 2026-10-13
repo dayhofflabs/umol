@@ -4030,7 +4030,7 @@ features, touched-file nightly formatting, and git diff --check passed. No
 workspace test run was added. The contract inventory and check logs are in
 scratch/236-s4c/.
 
-#### S4f — Individual resolver _into without a transaction
+#### S4f — Individual resolver _into without a transaction **Done**
 
 **Modules:** graph resolve isotope, aromaticity, stereo, bonds, multicenter.
 **Green.** [dep: S4c]
@@ -4041,6 +4041,23 @@ unchanged.
 
 **Tests:** existing _into results, and an unchanged receiver on
 underdetermination and contradiction.
+
+**Completion (2026-10-13):** all eight methods finish planning before moving
+the receiver through Molecule::apply. They use no undo journal or recovery copy;
+empty plans leave the receiver untouched. Nonempty plans retain the publication
+integrity check and S4c's asserted applicability guarantee. Planning errors,
+underdetermination, and contradiction leave the input exactly unchanged.
+Rustdoc states this contract; signatures, planning, and Python bindings are
+unchanged. The composite resolver's transactions remain for its later subitem.
+
+Existing aromaticity and multicenter planning cases now also assert receiver
+preservation through resolve_into. Validation passed: 643 resolver unit cases,
+four publication properties, 140 isotope-filtered property-target checks, and
+159 projection-filtered checks. Property runs used 4,096 cases and seed
+20261013. Graph-crate all-target clippy with proptest and conformance features,
+touched-file nightly formatting, and git diff --check passed. No workspace
+test run or timing comparison was added. The contract inventory and check logs
+are in scratch/236-s4f/.
 
 #### S4k — Aromatizer reads evidenced
 
