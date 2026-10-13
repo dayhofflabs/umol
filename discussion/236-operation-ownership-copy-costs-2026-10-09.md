@@ -3875,7 +3875,7 @@ ambiguity under Strict. The 4096-case search-equivalence property (seed
 property/conformance features also passed. The incremental diff was reviewed;
 workspace tests and the full formatting pass remain at their planned gates.
 
-#### S4j — One aromaticity resolution path
+#### S4j — One aromaticity resolution path **Done**
 
 **Modules:** graph resolve/aromaticity and aromaticity. **Green.** [dep: S3l,
 S4b, S4g, S4h, S3a]
@@ -3904,6 +3904,79 @@ the stored systems are unchanged.
 
 **Verification:** the resolve bench's AromaticityResolver::resolve group,
 against a baseline taken before the change.
+
+**Completion (2026-10-13).** Standalone resolution now calls the same selection
+as composite resolution, with an empty completion carrier. The perceiver owns
+contribution reading and inconsistency classification. Stored systems are checked
+against the whole perceived partition; their separate perception is removed.
+Keep excludes additions throughout a failed stored system's search component,
+while independent components can still resolve. Mismatches remain contradictions.
+Literal atom assertions can determine contributions when the stored electron
+vector is undetermined; genuinely nonliteral complete evidence still gives
+Underdetermined. Existing stored systems are preserved.
+
+Selection with no flexible contributions derives once for the whole molecule.
+Membership queries binary-search the already sorted member list for one system.
+Multiple systems use a sorted SmallVec of atom/system-index pairs, with inline
+storage through 32 perceived atoms. This avoids quadratic membership scans;
+it does not change perception or search complexity. S4i's ordered combination
+and restriction deduplication remain in place.
+
+The overlap regression was run against the pre-S4j production code: Error and
+Keep both reached Apply(Integrity(AromaticSystemsOverlap)), while conformance
+validation accepted the stored benzene inside naphthalene. The new code gives
+AromaticSystemFailure under Error and in validation, and preserves the molecule
+under Keep. Exact cases also cover stored systems outside the search components,
+aromatic bonds between systems, mismatches before pruning, electron-vector
+length failures, and report preservation. The Hückel skeleton property covers
+single, fused, and linked five- and six-membered rings, comparing resolution
+with and without the stored first ring. It checks exact resulting systems,
+Error/Keep, integrity, and agreement of consuming and in-place resolution.
+
+Validation passed: 305 aromaticity unit cases, 643 resolver unit cases,
+21 resolve-related property-target checks with PROPTEST_CASES=4096 and seed
+20261013, 34 aromatic resolution conformance cases, and graph Clippy with all
+targets, proptest/conformance, and warnings denied. Touched Rust files were
+formatted with nightly rustfmt; the full workspace format remains at S7a.
+No workspace or Python gate ran for this subitem.
+
+**Measurements.** Baseline: committed pre-S4j code at 52d1ef4e. Three before/after
+pairs per fixture used alternating order, 40 samples, one second of warmup, and
+two seconds of requested measurement, with no concurrent compilation or tests.
+The table gives the median paired percentage change and the range of the three
+pairs; negative is faster. These are per-fixture results, without workload
+weighting. Setup and input cloning are outside standalone resolution timing.
+
+| Standalone aromaticity resolution | Median change | Paired range |
+| --- | ---: | ---: |
+| benzene | +0.56% | -0.33% to +0.97% |
+| pyridine | -0.10% | -1.52% to +0.46% |
+| pyrrole | -0.39% | -0.76% to +0.13% |
+| furan | -0.49% | -0.52% to +0.33% |
+| thiophene | -0.32% | -0.99% to +0.56% |
+| naphthalene | -0.03% | -2.01% to +0.68% |
+| quinoline | -0.52% | -0.71% to +0.35% |
+| purine | +0.36% | +0.22% to +1.16% |
+| biphenyl | -0.69% | -1.72% to -0.49% |
+| anthracene | +0.51% | +0.10% to +0.53% |
+
+| Additional comparison | Median change | Paired range |
+| --- | ---: | ---: |
+| SMILES ingest: benzene | -20.40% | -21.09% to -19.76% |
+| SMILES ingest: pyridine | +1.81% | +1.72% to +2.38% |
+| Hückel selection: 128 choices | +1.41% | +0.25% to +2.18% |
+| Hückel selection: 4096 choices | +0.45% | +0.36% to +2.09% |
+
+Standalone median changes are within 0.7% of baseline. The benzene ingest saving
+comes with the path that avoids search setup for fixed contributions; pyridine
+ingest remains 1.81% slower in this comparison. The 4096-choice case is 0.45%
+slower, retaining S4i's large-search improvement. These changes are reported
+separately rather than combined into an overall speedup.
+
+Commands, regression logs, source snapshots, frozen binaries, individual
+Criterion results, and the comparison script are in scratch/236-s4j/;
+final/ contains the accepted timing comparison. The earlier linear-scan and
+always-indexed trials are retained as experiment evidence.
 
 #### S4c — Resolver plan application as an invariant
 

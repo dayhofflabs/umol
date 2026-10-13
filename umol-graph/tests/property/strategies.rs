@@ -155,6 +155,48 @@ pub(crate) fn atom_selection_skeleton() -> impl Strategy<Value = Molecule> {
     })
 }
 
+/// A stored first ring with explicit matching contributions and varied evidence on its neighbour.
+/// Topology and contribution choices are independent of aromaticity perception.
+pub(crate) fn stored_aromatic_skeleton() -> impl Strategy<Value = Molecule> {
+    ring_topology().prop_flat_map(|topology| {
+        let (atom_count, bonds) = skeleton(&topology);
+        let first_ring = match topology {
+            RingTopology::Single(a) | RingTopology::Fused(a, _) | RingTopology::Coupled(a, _) => a,
+        };
+        vec(0i64..=2, atom_count - first_ring).prop_map(move |neighbour| {
+            let mut contributions = vec![1; first_ring];
+            if first_ring == 5 {
+                contributions[0] = 2;
+            }
+            contributions.extend(neighbour);
+            Molecule::from_entries(MoleculeEntries {
+                atoms: contributions
+                    .iter()
+                    .map(|&electrons| AtomForm {
+                        element: ElementForm::Lit(Element::C),
+                        constraints: AtomConstraintForm::AromaticValence(
+                            AromaticValenceForm::Aromatic(NumForm::Lit(electrons)),
+                        )
+                        .into(),
+                        ..Default::default()
+                    })
+                    .collect(),
+                bonds: bonds
+                    .iter()
+                    .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondForm::from_order(1)))
+                    .collect(),
+                aromatic: vec![(
+                    (0..first_ring).map(|atom| AtomId(atom as u32)).collect(),
+                    AromaticSystemForm::from_electrons(contributions[..first_ring].to_vec())
+                        .with_charge(0)
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+                )],
+                ..Default::default()
+            })
+        })
+    })
+}
+
 #[derive(Clone, Debug)]
 struct SkeletonAtom {
     element: Element,

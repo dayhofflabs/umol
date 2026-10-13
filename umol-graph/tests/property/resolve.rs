@@ -16,6 +16,12 @@
 //! with one-electron contributions while preserving topology and bond assertions,
 //! so successful additions are exercised independently of atom completion.
 //!
+//! Stored-system preservation compares resolution with and without the stored first ring.
+//! One- and two-ring skeletons carry matching literal evidence and varied neighbouring
+//! contributions. If whole-molecule perception cannot reproduce that ring, Error rejects
+//! it during planning; Keep preserves it, and all determined results retain integrity.
+//! This relation checks stored-system handling, not the shared perception algorithm.
+//!
 //! Stereo discharge is checked against independent results for mixtures of stored
 //! and newly added tetrahedral and cis-trans entities with literal or open configurations.
 //! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
@@ -39,6 +45,7 @@ use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
+use umol_graph::ops::aromaticity::{AromaticityContradiction, AromaticityInconsistency};
 use umol_graph::ops::model::{
     AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
     RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
@@ -48,10 +55,10 @@ use umol_graph::ops::resolve::{
     AtomSelectionAlgorithm, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver, StereoResolver,
 };
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomForm,
-    AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId, BooleanForm,
-    CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm, Lattice,
-    Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, StereoAtomForm,
+    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
+    AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
+    BooleanForm, CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm,
+    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, StereoAtomForm,
     StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     TryIntoIr, UnpairedElectronsForm,
 };
@@ -60,7 +67,68 @@ use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
-use crate::strategies::{aromatic_skeleton, atom_selection_skeleton};
+use crate::strategies::{aromatic_skeleton, atom_selection_skeleton, stored_aromatic_skeleton};
+
+proptest! {
+    #[test]
+    fn test_aromaticity_resolver_resolve_stored_systems(input in stored_aromatic_skeleton()) {
+        let model = AromaticityModel::daylight();
+        let resolver = |failure| AromaticityResolver::with_config(&model, AromaticityResolveConfig {
+            aromatic_valence_failure: AromaticityFailurePolicy::Keep,
+            aromatic_system_failure: failure,
+            ..Default::default()
+        });
+        let without_stored = Molecule::from_entries(MoleculeEntries {
+            atoms: input.atoms().iter().map(|atom| atom.attributes().clone()).collect(),
+            bonds: input.bonds().iter().map(|bond| {
+                let [a, b] = bond.atom_ids(); (a, b, bond.attributes().clone())
+            }).collect(),
+            ..Default::default()
+        });
+        let Solution::Determined(perceived) = resolver(AromaticityFailurePolicy::Keep).resolve(without_stored).unwrap() else {
+            return Err(TestCaseError::fail("literal Hueckel perception must be determined under Keep"));
+        };
+        let stored_members: BTreeSet<_> = input.aromatic_system(AromaticSystemId(0)).atom_ids().collect();
+        let reproduced = perceived.aromatic_systems().iter().any(|aromatic_system| {
+            aromatic_system.atom_ids().collect::<BTreeSet<_>>() == stored_members
+        });
+        for failure in [AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep] {
+            let resolver = resolver(failure);
+            let outcome = resolver.resolve(input.clone()).unwrap();
+            if !reproduced && failure == AromaticityFailurePolicy::Error {
+                prop_assert_eq!(outcome, Solution::Contradictory(AromaticityContradiction::Inconsistency(
+                    AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) }
+                )));
+                let mut unchanged = input.clone();
+                prop_assert_eq!(resolver.resolve_into(&mut unchanged).unwrap(), Solution::Contradictory(
+                    AromaticityContradiction::Inconsistency(AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) })
+                ));
+                prop_assert_eq!(unchanged, input.clone());
+            } else {
+                let Solution::Determined(output) = outcome else {
+                    return Err(TestCaseError::fail("reproducible or retained stored system must resolve"));
+                };
+                prop_assert_eq!(output.clone().edit().finish(), Ok(output.clone()));
+                prop_assert_eq!(output.aromatic_system(AromaticSystemId(0)).atom_ids().collect::<Vec<_>>(),
+                    input.aromatic_system(AromaticSystemId(0)).atom_ids().collect::<Vec<_>>());
+                prop_assert_eq!(output.aromatic_system(AromaticSystemId(0)).attributes(), input.aromatic_system(AromaticSystemId(0)).attributes());
+                let mut expected_aromatic_systems = vec![(
+                    input.aromatic_system(AromaticSystemId(0)).atom_ids().collect::<Vec<_>>(),
+                    input.aromatic_system(AromaticSystemId(0)).attributes().clone(),
+                )];
+                expected_aromatic_systems.extend(perceived.aromatic_systems().iter()
+                    .filter(|aromatic_system| aromatic_system.atom_ids().all(|atom| !stored_members.contains(&atom)))
+                    .map(|aromatic_system| (aromatic_system.atom_ids().collect::<Vec<_>>(), aromatic_system.attributes().clone())));
+                prop_assert_eq!(output.aromatic_systems().iter().map(|aromatic_system|
+                    (aromatic_system.atom_ids().collect::<Vec<_>>(), aromatic_system.attributes().clone())
+                ).collect::<Vec<_>>(), expected_aromatic_systems);
+                let mut in_place = input.clone();
+                prop_assert_eq!(resolver.resolve_into(&mut in_place), Ok(Solution::Determined(())));
+                prop_assert_eq!(in_place, output);
+            }
+        }
+    }
+}
 
 proptest! {
     #[test]
