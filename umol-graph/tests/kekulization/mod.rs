@@ -15,8 +15,9 @@ use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
-    ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
+    ElementForm, IntoIr, Molecule, NumForm, UnpairedElectronsForm,
 };
+use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -489,45 +490,58 @@ fn test_kekulizer_transform_cage(#[case] source: &str) {
 
 #[rstest]
 #[case::localization(
-    NumForm::Undetermined,
-    NumForm::Lit(0),
+    {
+        let mut input = mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-#u0#s1"}]
+        }"#);
+        input.atom_mut(AtomId(4)).attributes_mut().charge = NumForm::Undetermined;
+        input
+    },
     KekulizeError::UndeterminedExposedAtomCharge {
         system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
 #[case::lone_pair_localization(
-    NumForm::Lit(0),
-    NumForm::Undetermined,
+    {
+        let mut input = mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-#u0#s1"}]
+        }"#);
+        input.atom_mut(AtomId(4)).attributes_mut().lone_pairs = NumForm::Undetermined;
+        input
+    },
     KekulizeError::UndeterminedExposedAtomLonePairs {
         system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
 #[case::valence_invariant(
-    NumForm::Lit(0),
-    NumForm::Lit(1),
-    KekulizeError::PostLocalizationValenceInvariant(ValenceMismatch::OrbitalCount {
-        atom_id: AtomId(4),
-        orbital_count: 10,
-        electron_count: 8,
-    })
+    mol_dsl_concrete!(r#"{
+        :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a#n"]
+        :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-#u0#s1"}]
+    }"#),
+    KekulizeError::ValenceInvariant {
+        aromatic_system: AromaticSystemId(0),
+        mismatch: ValenceMismatch::OrbitalCount {
+            atom_id: AtomId(4),
+            orbital_count: 10,
+            electron_count: 8,
+        },
+    }
 )]
-fn test_kekulization_fixture_output_error(
-    #[case] exposed_charge: NumForm,
-    #[case] exposed_lone_pairs: NumForm,
-    #[case] expected: KekulizeError,
-) {
-    let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")
-        .parse()
-        .unwrap();
-    let mut input = dsl.into_ir(&MoleculeDefaults::concrete());
-    input.atom_mut(AtomId(4)).attributes_mut().charge = exposed_charge;
-    input.atom_mut(AtomId(4)).attributes_mut().lone_pairs = exposed_lone_pairs;
+fn test_kekulizer_transform_error(#[case] mut input: Molecule, #[case] expected: KekulizeError) {
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
 
-    let result = Kekulizer::new(KekulizeConfig::default(), node_order).transform_into(&mut input);
+    let transformer = Kekulizer::new(KekulizeConfig::default(), node_order);
+    assert_eq!(transformer.transform(input.clone()), Err(expected.clone()));
+    assert_eq!(transformer.transform_iter(&input).next(), None);
+    let result = transformer.transform_into(&mut input);
 
     assert_eq!(result, Err(expected));
     assert_eq!(input, original);

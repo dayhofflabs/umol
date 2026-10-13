@@ -15,25 +15,21 @@
 //! nauty/Traces canonical labeling).
 
 use std::collections::HashSet;
-use std::iter;
+use std::{iter, mem};
 
 use thiserror::Error;
 use umol_graph_core::{
     BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NonBipartiteGraphError,
 };
 use umol_graph_ir::ir::{
-    AromaticSystemHandle, AromaticSystemId, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate,
-    BondConstraintKey, BondHandle, BondId, BondUpdate, Edit, Edits, ElectronCountsForm, Molecule,
-    MoleculeApplyError, NumForm, Transaction,
+    AromaticSystemHandle, AromaticSystemId, AtomConstraintForm, AtomConstraintKey, AtomForm,
+    AtomHandle, AtomId, AtomUpdate, BondConstraintKey, BondHandle, BondId, BondUpdate, Edit, Edits,
+    ElectronCountsForm, Lattice, Molecule, MulticenterValenceForm, Normalize, NumForm,
 };
 use umol_utils::solution::Solution;
 
-use crate::ops::invariant::ValenceMismatch;
+use crate::ops::invariant::{ValenceInvariantsValidator, ValenceMismatch};
 use crate::ops::transform::Transformer;
-use crate::ops::validate::{
-    SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator,
-    ValenceInvariantsError, ValenceInvariantsValidator,
-};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum KekulizeError {
@@ -94,14 +90,19 @@ pub enum KekulizeError {
         system: AromaticSystemId,
         atom: AtomId,
     },
-    #[error("post-localization valence-invariant contradiction: {0}")]
-    PostLocalizationValenceInvariant(ValenceMismatch),
-    #[error("post-localization valence-invariant validation error: {0}")]
-    PostLocalizationValenceInvariantError(ValenceInvariantsError),
-    #[error("post-localization spin-invariant contradiction: {0}")]
-    PostLocalizationSpinInvariant(SpinInvariantsContradiction),
-    #[error("post-localization spin-invariant validation error: {0}")]
-    PostLocalizationSpinInvariantError(SpinInvariantsError),
+    #[error(
+        "atom {atom:?} contradicts {constraint:?} in planned aromatic system {aromatic_system:?}"
+    )]
+    ContradictedAssertion {
+        aromatic_system: AromaticSystemId,
+        atom: AtomId,
+        constraint: AtomConstraintForm,
+    },
+    #[error("planned aromatic system {aromatic_system:?}: {mismatch}")]
+    ValenceInvariant {
+        aromatic_system: AromaticSystemId,
+        mismatch: ValenceMismatch,
+    },
     #[error("no perfect matching exists for aromatic system {0:?}")]
     NoMatching(AromaticSystemId),
     #[error("maximum matching requires a bipartite aromatic system {0:?}")]
@@ -233,8 +234,17 @@ impl Default for KekulizeConfig {
 /// Transformations report [`KekulizeError::NoMatching`] for an impossible fixed
 /// assignment and [`KekulizeError::UndeterminedExposedAtomLonePairs`] when restoring
 /// a donor pair requires a non-literal local count. They do not select another
-/// hydrogen placement or contribution assignment. In-place failure restores the
-/// input; consuming failure drops it.
+/// hydrogen placement or contribution assignment. Planned incidence must agree
+/// with retained valence assertions, and planned atoms must not contradict
+/// electron conservation. Unchanged spin data and unrelated atoms are preserved
+/// without whole-molecule validation.
+///
+/// # Semantic properties
+///
+/// When the required readings are determined, every localized system atom
+/// satisfies electron conservation and its retained valence assertions.
+/// All errors occur before mutation: in-place failure leaves the input exactly
+/// unchanged; consuming failure drops it. Unrelated undetermined state is retained.
 #[derive(Clone, Debug)]
 pub struct Kekulizer {
     config: KekulizeConfig,
@@ -260,11 +270,9 @@ impl Transformer for Kekulizer {
             .edit()
             .apply(edits)
             .expect("kekulization plan applies to its input");
-        let molecule = editor
+        Ok(editor
             .finish()
-            .expect("kekulization plan preserves molecule integrity");
-        validate_localized_candidate(&molecule)?;
-        Ok(molecule)
+            .expect("kekulization plan preserves molecule integrity"))
     }
 
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), KekulizeError> {
@@ -273,15 +281,10 @@ impl Transformer for Kekulizer {
         }
 
         let edits = self.plan_transform(molecule)?;
-        Transaction::run(molecule, |mut transaction| {
-            transaction.apply(edits)?;
-            let result = validate_localized_candidate(transaction.probe()?);
-            if result.is_ok() {
-                transaction.commit()?;
-            }
-            Ok::<_, MoleculeApplyError>(result)
-        })
-        .expect("kekulization plan preserves molecule integrity")
+        *molecule = mem::take(molecule)
+            .apply(edits)
+            .expect("kekulization plan applies and preserves molecule integrity");
+        Ok(())
     }
 
     fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
@@ -289,34 +292,11 @@ impl Transformer for Kekulizer {
     }
 }
 
-fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizeError> {
-    match ValenceInvariantsValidator
-        .validate(candidate)
-        .map_err(KekulizeError::PostLocalizationValenceInvariantError)?
-    {
-        Solution::Determined(()) | Solution::Underdetermined(()) => {}
-        Solution::Contradictory(contradiction) => {
-            return Err(KekulizeError::PostLocalizationValenceInvariant(
-                contradiction,
-            ));
-        }
-    }
-    match SpinInvariantsValidator
-        .validate(candidate)
-        .map_err(KekulizeError::PostLocalizationSpinInvariantError)?
-    {
-        Solution::Determined(()) | Solution::Underdetermined(()) => {}
-        Solution::Contradictory(contradiction) => {
-            return Err(KekulizeError::PostLocalizationSpinInvariant(contradiction));
-        }
-    }
-    Ok(())
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SystemPlan {
     system_idx: AromaticSystemId,
     atoms: Vec<AtomId>,
+    // Follows atoms order; a mobile exposure has only one entry.
     exposed_atoms: Vec<ExposedAtom>,
     mobile_charge: Option<i64>,
     matched_bonds: Vec<BondId>,
@@ -327,6 +307,7 @@ impl Kekulizer {
     fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, KekulizeError> {
         let plans = self.plan_systems(molecule)?;
         let mut edits = Edits::new();
+        let mut orders = vec![None; molecule.bonds().count()];
         for plan in &plans {
             debug_assert!(plan.matched_bonds.iter().all(|&bond| {
                 molecule.bond(bond).atom_ids().iter().all(|atom| {
@@ -342,6 +323,7 @@ impl Kekulizer {
                 .map(|&id| (id, 2))
                 .chain(plan.unmatched_bonds.iter().map(|&id| (id, 1)))
             {
+                orders[id.index()] = Some(order);
                 let bond = molecule.bond(id).attributes();
                 edits.update_bond(
                     BondHandle::Id(id),
@@ -359,10 +341,20 @@ impl Kekulizer {
                     });
                 }
             }
+            let mut exposed_atoms = plan.exposed_atoms.iter().peekable();
             for &id in &plan.atoms {
-                if let Some(old) = molecule
-                    .atom(id)
-                    .attributes()
+                let atom = molecule.atom(id);
+                let attributes = atom.attributes();
+                let mut planned = AtomForm {
+                    element: attributes.element.clone(),
+                    isotope_mass: attributes.isotope_mass.clone(),
+                    charge: attributes.charge.clone(),
+                    implicit_hydrogens: attributes.implicit_hydrogens.clone(),
+                    lone_pairs: attributes.lone_pairs.clone(),
+                    unpaired_electrons: attributes.unpaired_electrons.clone(),
+                    constraints: Default::default(),
+                };
+                if let Some(old) = attributes
                     .constraints
                     .get(AtomConstraintKey::AromaticValence)
                 {
@@ -372,33 +364,125 @@ impl Kekulizer {
                         new: None,
                     });
                 }
-            }
-            for exposed in &plan.exposed_atoms {
-                if exposed.electrons == 0 && plan.mobile_charge.is_none() {
-                    continue;
+                if let Some(exposed) = exposed_atoms.next_if(|exposed| exposed.atom == id) {
+                    let mut update = AtomUpdate::default();
+                    if let Some(system_charge) = plan.mobile_charge {
+                        let NumForm::Lit(local_charge) = planned.charge else {
+                            return Err(KekulizeError::UndeterminedExposedAtomCharge {
+                                system: plan.system_idx,
+                                atom: id,
+                            });
+                        };
+                        planned.charge = NumForm::Lit(local_charge + system_charge);
+                        update.charge = Some(planned.charge.clone());
+                    }
+                    if exposed.electrons == 2 {
+                        let NumForm::Lit(lone_pairs) = planned.lone_pairs else {
+                            return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
+                                system: plan.system_idx,
+                                atom: id,
+                            });
+                        };
+                        planned.lone_pairs = NumForm::Lit(lone_pairs + 1);
+                        update.lone_pairs = Some(planned.lone_pairs.clone());
+                    }
+                    edits.update_atom(AtomHandle::Id(id), atom.attributes(), &update);
                 }
-                let atom = molecule.atom(exposed.atom).attributes();
-                let mut update = AtomUpdate::default();
-                if let Some(system_charge) = plan.mobile_charge {
-                    let NumForm::Lit(local_charge) = atom.charge else {
-                        return Err(KekulizeError::UndeterminedExposedAtomCharge {
-                            system: plan.system_idx,
-                            atom: exposed.atom,
-                        });
+                let mut valence = NumForm::Lit(0);
+                for neighbor in atom.neighbors() {
+                    let order = match orders[neighbor.bond_id().index()] {
+                        Some(order) => NumForm::Lit(order),
+                        None => neighbor.bond().order().clone().normalize().map_err(|_| {
+                            KekulizeError::ValenceInvariant {
+                                aromatic_system: plan.system_idx,
+                                mismatch: ValenceMismatch::ContradictoryConstraint {
+                                    atom_id: id,
+                                    key: AtomConstraintKey::Valence,
+                                },
+                            }
+                        })?,
                     };
-                    update.charge = Some(NumForm::Lit(local_charge + system_charge));
+                    valence = valence + order;
                 }
-                if exposed.electrons == 2 {
-                    let NumForm::Lit(lone_pairs) = atom.lone_pairs else {
-                        return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
-                            system: plan.system_idx,
-                            atom: exposed.atom,
-                        });
+                let mut determined_incidence = true;
+                let has_dative = molecule.dative_bonds().has_incident(id);
+                for key in [
+                    AtomConstraintKey::Valence,
+                    AtomConstraintKey::MulticenterValence,
+                    AtomConstraintKey::DonatedPairs,
+                    AtomConstraintKey::AcceptedPairs,
+                ] {
+                    let assertion = attributes.constraints.get(key);
+                    let derived = match key {
+                        AtomConstraintKey::Valence => {
+                            Some(AtomConstraintForm::valence(valence.clone()))
+                        }
+                        AtomConstraintKey::MulticenterValence
+                            if assertion.is_none() && !atom.is_in_multicenter_bond() =>
+                        {
+                            continue;
+                        }
+                        AtomConstraintKey::DonatedPairs | AtomConstraintKey::AcceptedPairs
+                            if assertion.is_none() && !has_dative =>
+                        {
+                            continue;
+                        }
+                        _ => atom.constraints().derived_complete(key),
+                    }
+                    .ok_or(KekulizeError::ValenceInvariant {
+                        aromatic_system: plan.system_idx,
+                        mismatch: ValenceMismatch::ContradictoryConstraint { atom_id: id, key },
+                    })?;
+                    let value = match assertion {
+                        None => derived,
+                        Some(constraint) => attributes
+                            .constraints
+                            .asserted(key)
+                            .and_then(|asserted| asserted.meet(&derived))
+                            .ok_or_else(|| KekulizeError::ContradictedAssertion {
+                                aromatic_system: plan.system_idx,
+                                atom: id,
+                                constraint: constraint.clone(),
+                            })?,
                     };
-                    update.lone_pairs = Some(NumForm::Lit(lone_pairs + 1));
+                    determined_incidence &= !value.is_undetermined();
+                    match value {
+                        AtomConstraintForm::DonatedPairs(NumForm::Lit(0))
+                        | AtomConstraintForm::AcceptedPairs(NumForm::Lit(0))
+                        | AtomConstraintForm::MulticenterValence(
+                            MulticenterValenceForm::NotMulticenter,
+                        ) => {}
+                        _ => planned.constraints.set(value),
+                    }
                 }
-                edits.update_atom(AtomHandle::Id(exposed.atom), atom, &update);
+                // Bare-atom validation defaults absent incidence to zero.
+                if determined_incidence {
+                    if let Solution::Contradictory(mismatch) = ValenceInvariantsValidator
+                        .validate_atom(&planned)
+                        .unwrap_or_else(|error| match error {})
+                    {
+                        let mismatch = match mismatch {
+                            ValenceMismatch::OrbitalCount {
+                                orbital_count,
+                                electron_count,
+                                ..
+                            } => ValenceMismatch::OrbitalCount {
+                                atom_id: id,
+                                orbital_count,
+                                electron_count,
+                            },
+                            ValenceMismatch::ContradictoryConstraint { key, .. } => {
+                                ValenceMismatch::ContradictoryConstraint { atom_id: id, key }
+                            }
+                        };
+                        return Err(KekulizeError::ValenceInvariant {
+                            aromatic_system: plan.system_idx,
+                            mismatch,
+                        });
+                    }
+                }
             }
+            debug_assert!(exposed_atoms.next().is_none());
         }
         if !plans.is_empty() {
             edits.remove_aromatic_systems(
@@ -594,8 +678,6 @@ impl Kekulizer {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_chem::error::SpinStateError;
-    use umol_chem::spin::SpinMultiplicity;
     use umol_graph_ir::ir::{AromaticSystemId, AtomId, Molecule};
     use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
@@ -759,6 +841,50 @@ mod tests {
         vec![AtomId(0), AtomId(4), AtomId(1), AtomId(5), AtomId(2), AtomId(6), AtomId(3), AtomId(7)],
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
     )]
+    #[case::unchanged_spin(
+        mol_dsl_concrete!(r#"{:atoms ["N#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+        (0..6).map(AtomId).collect(),
+        mol_dsl_concrete!(r#"{:atoms ["N#u2#s2" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"]]}"#)
+    )]
+    #[case::unknown_external_order(
+        mol_dsl_concrete!(r#"{:atoms ["C#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "*"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic] [0 6 "*"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+        (0..7).map(AtomId).collect(),
+        mol_dsl_concrete!(r#"{:atoms ["C" "C#h" "C#h" "C#h" "C#h" "C#h" "*"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"] [0 6 "*"]]}"#)
+    )]
+    #[case::retained_incidence(
+        mol_dsl_concrete!(r#"{:atoms ["N#a#v3#d1" "C#h#a" "C#h#a" "N#a#m2" "C#h#a" "C#h#a" "B#h3" "B#h3"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+            :dative-bonds [{:donors [0] :acceptor 6 :attrs "1"}]
+            :multicenter-bonds [{:atoms [3 7] :attrs "[2,0]"}]}"#),
+        (0..8).map(AtomId).collect(),
+        mol_dsl_concrete!(r#"{:atoms ["N#v3#d1" "C#h" "C#h" "N#m2" "C#h" "C#h" "B#h3" "B#h3"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"]]
+            :dative-bonds [{:donors [0] :acceptor 6 :attrs "1"}]
+            :multicenter-bonds [{:atoms [3 7] :attrs "[2,0]"}]}"#)
+    )]
+    #[case::normalized_external_order(
+        {
+            let mut input = mol_dsl_concrete!(r#"{:atoms ["C#a#v4" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "F#n3"]
+                :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic] [0 6 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#);
+            input.bond_mut(BondId(6)).attributes_mut().order = NumForm::lit_set([1]);
+            input
+        },
+        (0..7).map(AtomId).collect(),
+        {
+            let mut expected = mol_dsl_concrete!(r#"{:atoms ["C#v4" "C#h" "C#h" "C#h" "C#h" "C#h" "F#n3"]
+                :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"] [0 6 "1"]]}"#);
+            expected.bond_mut(BondId(6)).attributes_mut().order = NumForm::lit_set([1]);
+            expected
+        }
+    )]
     fn test_kekulizer_transform_into(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
@@ -805,18 +931,58 @@ mod tests {
             duplicates: vec![AtomId(1)],
         }
     )]
-    #[case::spin_invariant(
-        mol_dsl_concrete!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+    #[case::contradicted_valence(
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a#v2" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
         (0..6).map(AtomId).collect(),
-        KekulizeError::PostLocalizationSpinInvariant(
-            SpinInvariantsContradiction::MoleculeAtom {
-                atom: AtomId(0),
-                error: SpinStateError::Incompatible {
-                    unpaired_electrons: 2,
-                    multiplicity: SpinMultiplicity::DOUBLET,
-                },
+        KekulizeError::ContradictedAssertion {
+            aromatic_system: AromaticSystemId(0),
+            atom: AtomId(2),
+            constraint: AtomConstraintForm::valence(2),
+        }
+    )]
+    #[case::later_system_mismatch(
+        mol_dsl_concrete!(r#"{:atoms ["*#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
+                                    "C#h#a" "C#h#a" "C#h#a#n" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]
+                    [6 7 :aromatic] [7 8 :aromatic] [8 9 :aromatic] [9 10 :aromatic] [10 11 :aromatic] [6 11 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}
+                               {:atoms [6 7 8 9 10 11] :attrs "[1,1,1,1,1,1]"}]}"#),
+        (0..12).map(AtomId).collect(),
+        KekulizeError::ValenceInvariant {
+            aromatic_system: AromaticSystemId(1),
+            mismatch: ValenceMismatch::OrbitalCount {
+                atom_id: AtomId(8), orbital_count: 10, electron_count: 8,
             },
-        )
+        }
+    )]
+    #[case::contradicted_donation(
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a#d1" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+        (0..6).map(AtomId).collect(),
+        KekulizeError::ContradictedAssertion {
+            aromatic_system: AromaticSystemId(0),
+            atom: AtomId(0),
+            constraint: AtomConstraintForm::DonatedPairs(NumForm::Lit(1)),
+        }
+    )]
+    #[case::contradictory_external_order(
+        {
+            let mut input = mol_dsl_concrete!(r#"{:atoms ["C#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "F#n3"]
+                :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic] [0 6 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#);
+            input.bond_mut(BondId(6)).attributes_mut().order = NumForm::lit_set([]);
+            input
+        },
+        (0..7).map(AtomId).collect(),
+        KekulizeError::ValenceInvariant {
+            aromatic_system: AromaticSystemId(0),
+            mismatch: ValenceMismatch::ContradictoryConstraint {
+                atom_id: AtomId(0), key: AtomConstraintKey::Valence,
+            },
+        }
     )]
     fn test_kekulizer_transform_into_error(
         #[case] input: Molecule,
@@ -878,18 +1044,6 @@ mod tests {
     #[case::no_matching(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]}"#),
         KekulizeError::NoMatching(AromaticSystemId(0))
-    )]
-    #[case::spin_invariant(
-        mol_dsl_concrete!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
-        KekulizeError::PostLocalizationSpinInvariant(
-            SpinInvariantsContradiction::MoleculeAtom {
-                atom: AtomId(0),
-                error: SpinStateError::Incompatible {
-                    unpaired_electrons: 2,
-                    multiplicity: SpinMultiplicity::DOUBLET,
-                },
-            },
-        )
     )]
     fn test_kekulizer_transform_iter_error(
         #[case] input: Molecule,

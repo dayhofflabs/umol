@@ -3529,6 +3529,97 @@ planning with ContradictedAssertion or ValenceInvariant.
 **Verification:** the transform bench's kekulizer cases, against a baseline
 taken before the change.
 
+**Implementation, 2026-10-13.** Kekulizer now checks the planned localized
+valence and retained multicenter/dative assertions, then electron conservation,
+before applying any edits. The two planned error variants replace the four
+PostLocalization variants. Both ownership paths use the same plan; transform_into
+moves the receiver's storage through the consuming application path after planning
+succeeds, without a transaction or recovery copy. Unchanged spin data and atoms
+outside the systems are not subjected to whole-molecule validation.
+
+The temporary validation form copies the intrinsic fields and constructs only
+the incidence constraints the conservation check uses. Absent aromatic incidence
+and zero multicenter/dative incidence use the bare validator's zero defaults.
+When both a relation and its own assertion are absent, no temporary reading or
+meet is needed. Exposed atoms are consumed once in participant order, avoiding
+a repeated search for each system atom. Unknown incidence remains underdetermined,
+rather than becoming zero; a bottom reading fails planning. These shortcuts do
+not rewrite stored assertions or add a whole-molecule groundness requirement.
+
+Inline unit cases cover incompatible valence and donation assertions, a later
+system's mismatch after an earlier partial atom, preserved spin and overlay
+data, unknown external bond order, and normalized or bottom external order.
+The existing cyclopentadienyl error cases now use inline inputs and check both
+ownership paths and iterator omission. No external fixture files or corpus
+tests were added. The new property constructs complete single and coupled
+C/N/O/S rings with fixed contributions, then varies a charge and an optional
+valence assertion. It checks output conservation, retained assertions, exact
+ownership-path agreement, and unchanged input on failure, without skipped cases.
+
+Focused verification passed: 76 transform unit cases, 98 existing kekulization
+cases, both Kekulizer properties at 512 cases each, and graph-crate all-target
+Clippy with conformance and proptest enabled. Touched-file formatting and diff
+checks passed. No workspace gate was run.
+
+The final implementation was compared with the clean pre-S4d binary at
+7432a0fb9b11dc28dec8cd22279e2f1c39e9c349. Three paired passes used the same seven
+fixtures and both ownership paths, with 40 samples, a one-second warmup, and a
+two-second measurement per case. The second and third passes reversed the first
+pass's before/after order. Each entry below is the median of the three paired
+percentage changes in the sample means; negative means faster.
+
+| Fixture | Consuming | In place |
+| --- | ---: | ---: |
+| Benzene | +1.1% | −5.0% |
+| Pyridine | +1.7% | −7.7% |
+| Pyrrole | +5.0% | −5.4% |
+| Furan | +2.5% | −7.9% |
+| Thiophene | +1.4% | −7.2% |
+| Azulene | +3.7% | −11.0% |
+| Indole with prescribed donor | +3.5% | −11.4% |
+
+There is material timing variation. The second pass's old pyrrole measurement
+and new furan measurement had large timing outliers, so pooled means would imply
+a misleading pyrrole improvement and exaggerate the furan regression. All runs,
+sample distributions, paired changes, source copies, binaries, and commands are
+retained in scratch/236-s4d; no run was discarded. The measurements support a
+remaining consuming-path cost, not a one-percent bound or a claim that the cost
+is unavoidable. The in-place improvement is consistent across all three passes.
+
+**Planned-order table comparison, 2026-10-13.** Two direct-valence trials remove
+the whole-molecule Vec<Option<i64>>. Internal bonds contribute one each, with
+one added for a matched atom; external bond orders retain the existing reading.
+The trials differ only in how they identify internal neighbors: the existing
+aromatic-system incidence index, or contains on the plan's existing atom list.
+The temporary atom construction, assertion meets, conservation check, matching,
+and edit application are unchanged. Both trials pass the same focused tests,
+512-case properties, and Clippy checks.
+
+Each trial was compared with both the table implementation and the pre-S4d
+binary in three passes, rotating execution order. The seven fixtures, both
+ownership paths, 40 samples, one-second warmup, and two-second measurement are
+unchanged. These ranges span the fixtures' median paired changes in sample
+means relative to the table implementation; positive means slower.
+
+| Direct-valence membership | Consuming | In place |
+| --- | ---: | ---: |
+| Aromatic-system incidence index | +1.0% to +4.7% | +1.1% to +3.0% |
+| Existing plan atom list | +1.2% to +3.3% | −0.6% to +1.6% |
+
+The table implementation is retained: neither replacement recovers the
+consuming regression. The atom-list trial's apparent in-place pyridine gain
+varies in sign across passes and also changes sign when using sample medians.
+Both replacements introduce membership work, so these timings do not isolate
+the allocation's cost or establish that the table is optimal. The scope remains
+the seven small aromatic fixtures. Source snapshots, exact diffs, binary hashes,
+commands, full timing ranges, and raw samples are retained in scratch/236-s4d
+under the orders and orders-list comparisons. The production source exactly
+matches the tested table version.
+
+**Performance decision open.** The implementation and focused checks are
+complete. S4d is not marked Done pending the decision on its remaining consuming
+regression, in light of the stated concern about a five-percent slowdown.
+
 #### S4e — In-place transform_into without a transaction
 
 **Modules:** graph transform/aromatizer and transform/delocalize_charge.
