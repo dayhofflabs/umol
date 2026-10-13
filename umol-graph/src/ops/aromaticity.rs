@@ -567,28 +567,39 @@ pub(super) fn read_aromatic_valence(
     let key = AtomConstraintKey::AromaticValence;
     match constraints.evidenced_complete(key) {
         Some(AtomConstraintForm::AromaticValence(value)) => Ok(value.as_lit()),
-        None => {
-            if constraints.asserted(key).is_none() {
-                return Err(AromaticityInconsistency::AromaticValenceFailure { atom });
-            }
-            if let Some(system) = view.aromatic_system_id() {
-                return Err(AromaticityInconsistency::AromaticValenceMismatch { atom, system });
-            }
-            if let Some(neighbor) = view.neighbors().find(|neighbor| {
-                matches!(
-                    neighbor.bond().constraints().aromatic(),
-                    BooleanForm::Lit(true)
-                )
-            }) {
-                return Err(AromaticityInconsistency::AromaticValenceBondMismatch {
-                    atom,
-                    bond: neighbor.bond_id(),
-                });
-            }
-            Err(AromaticityInconsistency::AromaticValenceFailure { atom })
-        }
+        None => Err(aromatic_valence_inconsistency(molecule, atom)),
         Some(_) => unreachable!("aromatic-valence reading preserves its key"),
     }
+}
+
+/// Classify bottom aromatic-valence evidence from the contributing assertions and relations.
+pub(super) fn aromatic_valence_inconsistency(
+    molecule: &Molecule,
+    atom: AtomId,
+) -> AromaticityInconsistency {
+    let view = molecule.atom(atom);
+    if view
+        .constraints()
+        .asserted(AtomConstraintKey::AromaticValence)
+        .is_none()
+    {
+        return AromaticityInconsistency::AromaticValenceFailure { atom };
+    }
+    if let Some(system) = view.aromatic_system_id() {
+        return AromaticityInconsistency::AromaticValenceMismatch { atom, system };
+    }
+    if let Some(neighbor) = view.neighbors().find(|neighbor| {
+        matches!(
+            neighbor.bond().constraints().aromatic(),
+            BooleanForm::Lit(true)
+        )
+    }) {
+        return AromaticityInconsistency::AromaticValenceBondMismatch {
+            atom,
+            bond: neighbor.bond_id(),
+        };
+    }
+    AromaticityInconsistency::AromaticValenceFailure { atom }
 }
 
 #[cfg(test)]

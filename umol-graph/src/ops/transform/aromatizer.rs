@@ -19,7 +19,8 @@ use umol_graph_ir::ir::{
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
-    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerceiver,
+    aromatic_valence_inconsistency, AromaticityConfig, AromaticityContradiction, AromaticityError,
+    AromaticityInconsistency, AromaticityPerceiver,
 };
 use crate::ops::invariant::{ValenceInvariantsValidator, ValenceMismatch};
 use crate::ops::model::AromaticityModel;
@@ -58,6 +59,13 @@ pub enum AromatizeError {
 /// [`AromatizeError::Underdetermined`]; the molecule need not be wholly ground.
 /// Planned valence contradictions are reported before mutation, so an in-place
 /// failure leaves the input unchanged.
+///
+/// # Semantic properties
+///
+/// On inputs without stored systems, every added system agrees with its members' open evidence
+/// and contains no bond asserting non-aromaticity. Non-aromatic atom evidence
+/// excludes that atom from perception. An incompatible selected contribution or
+/// an unclaimed positive atom or bond assertion is an aromaticity contradiction.
 #[derive(Clone, Debug)]
 pub struct Aromatizer {
     perception: AromaticityPerceiver,
@@ -82,27 +90,94 @@ impl Aromatizer {
             return Ok(edits);
         }
         let rings = self.perception.candidate_rings(molecule, self.config);
+        let mut contributions = Vec::with_capacity(if rings.count() == 0 {
+            0
+        } else {
+            molecule.atoms().count()
+        });
+        let mut required_atoms = Vec::new();
+        let mut mismatches = Vec::new();
+        for atom in molecule.atoms().iter() {
+            let evidence = atom
+                .constraints()
+                .evidenced(AtomConstraintKey::AromaticValence)
+                .ok_or_else(|| {
+                    AromaticityContradiction::from(aromatic_valence_inconsistency(
+                        molecule,
+                        atom.id(),
+                    ))
+                })?;
+            if matches!(
+                atom.attributes().constraints.aromatic_valence(),
+                AromaticValenceForm::Aromatic(_)
+            ) {
+                required_atoms.push(atom.id());
+            }
+            if rings.count() == 0 {
+                continue;
+            }
+            let contribution = if matches!(
+                evidence,
+                AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic)
+            ) {
+                AromaticValence::NotAromatic
+            } else {
+                match electrons_from_kekule(molecule, &rings, atom.id()) {
+                    Err(AromatizeError::Underdetermined) if !rings.contains_atom(atom.id()) => {
+                        AromaticValence::NotAromatic
+                    }
+                    result => result?,
+                }
+            };
+            if let AromaticValence::Aromatic(electrons) = contribution {
+                if !evidence.is_undetermined()
+                    && evidence
+                        .meet(&AtomConstraintForm::aromatic_valence(
+                            AromaticValenceForm::aromatic(electrons),
+                        ))
+                        .is_none()
+                {
+                    mismatches.push(atom.id());
+                }
+            }
+            contributions.push(contribution);
+        }
         if rings.count() == 0 {
+            if let Some(inconsistency) = self
+                .perception
+                .check_aromatic_systems(molecule, &required_atoms, &[])
+                .into_iter()
+                .next()
+            {
+                return Err(AromaticityContradiction::from(inconsistency).into());
+            }
             return Ok(edits);
         }
-        let contributions = molecule
-            .atoms()
-            .ids()
-            .map(|atom| match electrons_from_kekule(molecule, &rings, atom) {
-                Err(AromatizeError::Underdetermined) if !rings.contains_atom(atom) => {
-                    Ok(AromaticValence::NotAromatic)
-                }
-                result => result,
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let aromatic_systems = self
+        let derivation = self
             .perception
-            .find_systems_from_rings(molecule, &rings, self.config, |atom| {
+            .derive_from_rings(molecule, &rings, self.config, &required_atoms, |atom| {
                 contributions[atom.index()]
             })?
             .into_decisive(AromatizeError::Underdetermined)?;
-        for (index, (atoms, attributes)) in aromatic_systems.into_iter().enumerate() {
+        if let Some(inconsistency) = derivation.inconsistencies.into_iter().next() {
+            return Err(AromaticityContradiction::from(inconsistency).into());
+        }
+        for (index, (atoms, attributes)) in derivation.systems.into_iter().enumerate() {
             let aromatic_system = AromaticSystemId(index as u32);
+            if !mismatches.is_empty() {
+                if let Some(&atom) = atoms
+                    .iter()
+                    .find(|atom| mismatches.binary_search(atom).is_ok())
+                {
+                    return Err(AromaticityContradiction::from(
+                        AromaticityInconsistency::AromaticValenceMismatch {
+                            atom,
+                            system: aromatic_system,
+                        },
+                    )
+                    .into());
+                }
+            }
             let ElectronCountsForm::Lit(electrons) = &attributes.electrons else {
                 unreachable!("perception supplies literal aromatic contributions");
             };
@@ -326,7 +401,7 @@ mod tests {
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
-    use umol_graph_ir::ir::RingConfig;
+    use umol_graph_ir::ir::{BondId, RingConfig};
     use umol_graph_ir::mol_dsl_concrete;
 
     use super::*;
@@ -416,6 +491,28 @@ mod tests {
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
     )]
+    #[case::excluded_peripheral_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C" "C" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2#a!"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]
+                    [5 6 "1"] [6 7 "2"] [7 8 "1"] [8 9 "2"] [9 4 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C" "C" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2#a!"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]]
+            :aromatic-systems [{:atoms [4 5 6 7 8 9] :attrs "[1,1,1,1,1,1]"}]}"#),
+    )]
+    #[case::nonliteral_aromatic_assertion(
+        {
+            let mut molecule = mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+                :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#);
+            molecule.atom_mut(AtomId(0)).attributes_mut().constraints.set(
+                AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(NumForm::lit_set([0, 1])))
+            );
+            molecule
+        },
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+    )]
     #[case::unrelated_undetermined_fields(
         {
             let mut molecule = mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "*"]
@@ -446,27 +543,42 @@ mod tests {
     }
 
     #[rstest]
-    #[case::acyclic(mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    #[case::acyclic(mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#), AromaticityModel::daylight())]
+    #[case::acyclic_donor(
+        mol_dsl_concrete!(r#"{:atoms ["N#h3#n"]}"#),
+        AromaticityModel { rule: AromaticityRule::Clar, ..AromaticityModel::daylight() },
+    )]
+    #[case::excluded_atom(mol_dsl_concrete!(r#"{
+        :atoms ["C#h#a!" "C#h" "C#h" "C#h" "C#h" "C#h"]
+        :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]
+    }"#), AromaticityModel::daylight())]
+    #[case::excluded_undetermined_atom(mol_dsl_concrete!(r#"{
+        :atoms ["*#a!" "C#h" "C#h" "C#h" "C#h" "C#h"]
+        :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]
+    }"#), AromaticityModel::daylight())]
     #[case::saturated_ring(mol_dsl_concrete!(r#"{
         :atoms ["C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2"]
         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-    }"#))]
+    }"#), AromaticityModel::daylight())]
     #[case::unavailable_donor_pair(mol_dsl_concrete!(r#"{
         :atoms ["N#c+#h2" "C#h" "C#h" "C#h" "C#h"]
         :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"] [3 4 "2"] [4 0 "1"]]
-    }"#))]
+    }"#), AromaticityModel::daylight())]
     #[case::cumulated_bonds(mol_dsl_concrete!(r#"{
         :atoms ["C" "C#h" "C#h2" "C#h2" "C#h2" "C#h"]
         :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "2"]]
-    }"#))]
+    }"#), AromaticityModel::daylight())]
     #[case::already_aromatic(mol_dsl_concrete!(r#"{
         :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                 [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
         :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
-    }"#))]
-    fn test_aromatizer_transform_identity(#[case] molecule: Molecule) {
-        let transformer = Aromatizer::new(&AromaticityModel::daylight());
+    }"#), AromaticityModel::daylight())]
+    fn test_aromatizer_transform_identity(
+        #[case] molecule: Molecule,
+        #[case] model: AromaticityModel,
+    ) {
+        let transformer = Aromatizer::new(&model);
         let mut in_place = molecule.clone();
         assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
         assert_eq!(in_place, molecule);
@@ -474,6 +586,78 @@ mod tests {
     }
 
     #[rstest]
+    #[case::aromatic_contribution(
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a2" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceMismatch {
+            atom: AtomId(0), system: AromaticSystemId(0),
+        }.into()),
+    )]
+    #[case::later_aromatic_contribution(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"
+                    "C#h" "C#h" "C#h#a2" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]
+                    [6 7 "2"] [7 8 "1"] [8 9 "2"] [9 10 "1"] [10 11 "2"] [11 6 "1"]]
+        }"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceMismatch {
+            atom: AtomId(8), system: AromaticSystemId(1),
+        }.into()),
+    )]
+    #[case::nonliteral_aromatic_contribution(
+        {
+            let mut molecule = mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+                :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#);
+            molecule.atom_mut(AtomId(0)).attributes_mut().constraints.set(
+                AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(NumForm::lit_set([0, 2])))
+            );
+            molecule
+        },
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceMismatch {
+            atom: AtomId(0), system: AromaticSystemId(0),
+        }.into()),
+    )]
+    #[case::unclaimed_ring_atom(
+        mol_dsl_concrete!(r#"{:atoms ["C#h2#a" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceFailure {
+            atom: AtomId(0),
+        }.into()),
+    )]
+    #[case::unclaimed_ring_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticBondConstraintFailure {
+            bond: BondId(0),
+        }.into()),
+    )]
+    #[case::unclaimed_acyclic_atom(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#a"]}"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceFailure {
+            atom: AtomId(0),
+        }.into()),
+    )]
+    #[case::unclaimed_acyclic_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "1#a"]]}"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticBondConstraintFailure {
+            bond: BondId(0),
+        }.into()),
+    )]
+    #[case::conflicting_bond_evidence(
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a!" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2#a"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
+        AromaticityModel::daylight(),
+        AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceBondMismatch {
+            atom: AtomId(0), bond: BondId(0),
+        }.into()),
+    )]
     #[case::clar_heterocycle(
         mol_dsl_concrete!(r#"{
             :atoms ["N#n" "C#h" "C#h" "C#h" "C#h" "C#h"]

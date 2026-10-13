@@ -4059,7 +4059,7 @@ touched-file nightly formatting, and git diff --check passed. No workspace
 test run or timing comparison was added. The contract inventory and check logs
 are in scratch/236-s4f/.
 
-#### S4k — Aromatizer reads evidenced
+#### S4k — Aromatizer reads evidenced **Done**
 
 **Modules:** graph transform/aromatizer and aromaticity. **Green.** [dep: S3d,
 S3l, S4b1, S4j, S3a]
@@ -4084,6 +4084,62 @@ aromatizer.
 
 **Verification:** the transform bench's aromatizer cases, against a baseline
 taken before the change.
+
+**Completion (2026-10-13):** the aromatizer reads each atom's evidenced aromatic
+valence once, before recovering its localized contribution. Negative evidence
+excludes the atom; top evidence skips a redundant meet. Only conflicting atom
+ids are retained for comparison with selected systems, and a mismatch reports
+the id the system would receive on application. Nonliteral count assertions
+remain admissibility constraints: a set containing the recovered contribution
+is accepted; a disjoint set is an AromaticValenceMismatch.
+
+The shared derive_from_rings path checks required atoms and bonds without
+repeating ring perception. Bottom classification is shared with the complete
+reader; the latter's success path and signature are unchanged. Inputs without
+rings still undergo the evidence and claim checks, then return without running
+the rule or allocating a contribution vector. This preserves acyclic no-ops,
+including donors under Clar. All rejections precede mutation. The existing
+no-op for inputs already carrying aromatic systems remains unchanged.
+
+The original implementation fails nine new regression cases. Final verification
+passes 33 aromatizer cases, 418 aromatic-filtered unit cases (with some overlap),
+five publication properties at 4096 cases each and seed 20261013, 34 aromatic
+resolution conformance cases, graph all-target Clippy with proptest/conformance
+and warnings denied, targeted formatting, and diff checks. The new invariant 11
+property uses independently localized carbon skeletons, with and without varied
+atom/bond assertions, under Hückel, HMO, and Clar. Exact perception expectations
+state their model; the property does not require equal outcomes between rules.
+No external fixture files or public API changes were added. The workspace and
+Python gates were not rerun for this subitem.
+
+The pre-change transform executable was built from committed
+6c317534b1ff2a6ae02544db38dbbad672c27cea. The final comparison uses three
+alternating before/after pairs per case, 40 samples, one second of warmup, and
+two seconds requested measurement, with no concurrent builds or tests. Inputs
+are cloned outside timing. Changes below are medians of paired percentage
+changes; parentheses give the full paired range. Positive means slower.
+
+| Fixture | Consuming change | In-place change |
+| --- | ---: | ---: |
+| benzene | +0.48% (+0.18% to +0.91%) | +2.14% (+1.04% to +4.50%) |
+| pyridine | +0.82% (+0.72% to +1.76%) | +0.79% (-0.62% to +1.36%) |
+| pyrrole | +1.74% (+0.47% to +2.77%) | +0.87% (+0.60% to +2.20%) |
+| furan | +3.04% (+0.80% to +8.89%) | +3.42% (+0.88% to +3.66%) |
+| thiophene | +0.90% (-1.21% to +1.45%) | -0.23% (-0.97% to +1.53%) |
+| azulene | +0.53% (+0.47% to +0.94%) | +1.23% (-1.83% to +2.73%) |
+| indole, prescribed donor | +2.14% (+1.88% to +2.74%) | -0.01% (-1.49% to +9.00%) |
+
+Eight of fourteen medians are within one percent of baseline; the larger ones
+remain explicit above. The ranges do not establish a one-percent bound. These
+are fixed Hückel fixtures with unasserted aromatic valences, not a workload
+distribution or timings for HMO, Clar, or set/expression-heavy evidence.
+
+The final implementation avoids meeting top evidence, retaining full evidence
+forms, and repeating perception. The added work still includes evidence reads
+and shared claim checks; these timings do not isolate their individual costs.
+Source snapshots, frozen executables, exact commands, all raw timings, and
+verification logs are in scratch/236-s4k/. Its final/ directory contains the
+final comparison; the root-level timing files retain the initial implementation.
 
 #### S4l — Crate-private aromaticity machinery and composite phases
 
