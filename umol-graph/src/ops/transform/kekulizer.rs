@@ -1,8 +1,11 @@
 //! Kekulizer: aromatic-system form → Kekulé bond orders.
 //!
-//! For each aromatic system in the input, finds a perfect matching on the
-//! induced subgraph (atoms in the system, bonds between them). Matched bonds
-//! become order 2; unmatched bonds become order 1. The aromatic constraint is
+//! For each aromatic system, excludes fixed zero- and two-electron contributors
+//! and finds a perfect matching on the remaining one-electron contributors.
+//! Each two-electron contributor regains one local lone pair. An otherwise
+//! all-one-electron system with charge ±1 instead localizes that charge on the
+//! single atom left exposed by a maximum matching. Matched bonds become order 2;
+//! unmatched bonds become order 1. The aromatic constraint is
 //! removed from the system's bonds and from the system's atoms; the system
 //! entry itself is removed at the end.
 //!
@@ -10,8 +13,6 @@
 //! atom processing order — which controls determinism — is fixed at
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
-//!
-//! TODO: Expand to charged systems.
 
 use std::collections::HashSet;
 use std::iter;
@@ -60,11 +61,6 @@ pub enum KekulizeError {
     },
     #[error("aromatic system {0:?} is open-shell")]
     OpenShell(AromaticSystemId),
-    #[error("aromatic system {system:?} has {count} prescribed exposed atoms")]
-    MultiplePrescribedExposures {
-        system: AromaticSystemId,
-        count: usize,
-    },
     #[error("aromatic system {system:?} has unsupported charge {charge}")]
     UnsupportedCharge {
         system: AromaticSystemId,
@@ -119,7 +115,7 @@ enum MatchingInputMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct PrescribedExposure {
+struct ExposedAtom {
     atom: AtomId,
     electrons: i64,
 }
@@ -127,7 +123,7 @@ struct PrescribedExposure {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MatchingInput {
     required_covered: Vec<AtomId>,
-    required_exposed: Vec<PrescribedExposure>,
+    required_exposed: Vec<ExposedAtom>,
     exposed_count: usize,
     mode: MatchingInputMode,
 }
@@ -171,7 +167,7 @@ impl MatchingInput {
         for (&atom, &electrons) in atoms.iter().zip(electrons) {
             match electrons {
                 1 => required_covered.push(atom),
-                0 | 2 => required_exposed.push(PrescribedExposure { atom, electrons }),
+                0 | 2 => required_exposed.push(ExposedAtom { atom, electrons }),
                 contribution => {
                     return Err(KekulizeError::UnsupportedElectronContribution {
                         system,
@@ -182,12 +178,6 @@ impl MatchingInput {
             }
         }
 
-        if required_exposed.len() > 1 {
-            return Err(KekulizeError::MultiplePrescribedExposures {
-                system,
-                count: required_exposed.len(),
-            });
-        }
         if !required_exposed.is_empty() && *charge != 0 {
             return Err(KekulizeError::MixedExposureDemand(system));
         }
@@ -233,6 +223,18 @@ impl Default for KekulizeConfig {
     }
 }
 
+/// Localizes aromatic systems into single/double bonds and atom-local electrons.
+///
+/// Fixed two-electron donors regain one lone pair; fixed zero-electron acceptors
+/// retain their local state. The remaining one-electron contributors must admit
+/// a perfect matching. A delocalized system charge of ±1 is supported separately
+/// when all contributions are one, by localizing it on one exposed atom.
+///
+/// Transformations report [`KekulizeError::NoMatching`] for an impossible fixed
+/// assignment and [`KekulizeError::UndeterminedExposedAtomLonePairs`] when restoring
+/// a donor pair requires a non-literal local count. They do not select another
+/// hydrogen placement or contribution assignment. In-place failure restores the
+/// input; consuming failure drops it.
 #[derive(Clone, Debug)]
 pub struct Kekulizer {
     config: KekulizeConfig,
@@ -315,7 +317,7 @@ fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizeErro
 struct SystemPlan {
     system_idx: AromaticSystemId,
     atoms: Vec<AtomId>,
-    exposed_atoms: Vec<AtomId>,
+    exposed_atoms: Vec<ExposedAtom>,
     mobile_charge: Option<i64>,
     matched_bonds: Vec<BondId>,
     unmatched_bonds: Vec<BondId>,
@@ -327,11 +329,12 @@ impl Kekulizer {
         let mut edits = Edits::new();
         for plan in &plans {
             debug_assert!(plan.matched_bonds.iter().all(|&bond| {
-                molecule
-                    .bond(bond)
-                    .atom_ids()
-                    .iter()
-                    .all(|atom| !plan.exposed_atoms.contains(atom))
+                molecule.bond(bond).atom_ids().iter().all(|atom| {
+                    !plan
+                        .exposed_atoms
+                        .iter()
+                        .any(|exposed| exposed.atom == *atom)
+                })
             }));
             for (id, order) in plan
                 .matched_bonds
@@ -370,29 +373,31 @@ impl Kekulizer {
                     });
                 }
             }
-            if let Some(system_charge) = plan.mobile_charge {
-                let exposed = plan.exposed_atoms[0];
-                let atom = molecule.atom(exposed).attributes();
-                let NumForm::Lit(local_charge) = atom.charge else {
-                    return Err(KekulizeError::UndeterminedExposedAtomCharge {
-                        system: plan.system_idx,
-                        atom: exposed,
-                    });
-                };
-                let mut update = AtomUpdate {
-                    charge: Some(NumForm::Lit(local_charge + system_charge)),
-                    ..Default::default()
-                };
-                if system_charge == -1 {
+            for exposed in &plan.exposed_atoms {
+                if exposed.electrons == 0 && plan.mobile_charge.is_none() {
+                    continue;
+                }
+                let atom = molecule.atom(exposed.atom).attributes();
+                let mut update = AtomUpdate::default();
+                if let Some(system_charge) = plan.mobile_charge {
+                    let NumForm::Lit(local_charge) = atom.charge else {
+                        return Err(KekulizeError::UndeterminedExposedAtomCharge {
+                            system: plan.system_idx,
+                            atom: exposed.atom,
+                        });
+                    };
+                    update.charge = Some(NumForm::Lit(local_charge + system_charge));
+                }
+                if exposed.electrons == 2 {
                     let NumForm::Lit(lone_pairs) = atom.lone_pairs else {
                         return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
                             system: plan.system_idx,
-                            atom: exposed,
+                            atom: exposed.atom,
                         });
                     };
                     update.lone_pairs = Some(NumForm::Lit(lone_pairs + 1));
                 }
-                edits.update_atom(AtomHandle::Id(exposed), atom, &update);
+                edits.update_atom(AtomHandle::Id(exposed.atom), atom, &update);
             }
         }
         if !plans.is_empty() {
@@ -459,13 +464,11 @@ impl Kekulizer {
                     unreachable!("matching input requires a literal system charge")
                 }
             };
-            let prescribed_exposed: Vec<AtomId> = matching_input
+            let prescribed_exposed_set: HashSet<AtomId> = matching_input
                 .required_exposed
                 .iter()
                 .map(|exposure| exposure.atom)
                 .collect();
-            let prescribed_exposed_set: HashSet<AtomId> =
-                prescribed_exposed.iter().copied().collect();
             let matching_host_atoms: Vec<AtomId> = match matching_input.mode {
                 MatchingInputMode::Prescribed => ordered_host_atoms
                     .iter()
@@ -521,17 +524,18 @@ impl Kekulizer {
                 }
                 _ => {}
             }
-            let exposed_atoms: Vec<AtomId> = match matching_input.mode {
-                MatchingInputMode::Prescribed => prescribed_exposed,
+            let exposed_atoms: Vec<ExposedAtom> = match matching_input.mode {
+                MatchingInputMode::Prescribed => matching_input.required_exposed,
                 MatchingInputMode::OneMobileExposure => extracted
                     .atoms()
                     .ids()
                     .filter(|&sub| !matching.is_matched(sub))
-                    .map(|sub| {
-                        correspondence
+                    .map(|sub| ExposedAtom {
+                        atom: correspondence
                             .atoms()
                             .right_of(sub)
-                            .expect("extracted atom maps to the host molecule")
+                            .expect("extracted atom maps to the host molecule"),
+                        electrons: if mobile_charge == Some(-1) { 2 } else { 0 },
                     })
                     .collect(),
             };
@@ -548,7 +552,8 @@ impl Kekulizer {
                 .iter()
                 .flat_map(|&bond| molecule.bond(bond).atom_ids())
                 .collect();
-            let exposed_set: HashSet<AtomId> = exposed_atoms.iter().copied().collect();
+            let exposed_set: HashSet<AtomId> =
+                exposed_atoms.iter().map(|exposed| exposed.atom).collect();
             let actual_exposed: HashSet<AtomId> = system_atoms
                 .iter()
                 .copied()
@@ -610,7 +615,7 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["N" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[2,1,1]"}]}"#),
         MatchingInput {
             required_covered: vec![AtomId(1), AtomId(2)],
-            required_exposed: vec![PrescribedExposure { atom: AtomId(0), electrons: 2 }],
+            required_exposed: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             exposed_count: 1,
             mode: MatchingInputMode::Prescribed,
         }
@@ -619,8 +624,17 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C" "B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,0,1]"}]}"#),
         MatchingInput {
             required_covered: vec![AtomId(0), AtomId(2)],
-            required_exposed: vec![PrescribedExposure { atom: AtomId(1), electrons: 0 }],
+            required_exposed: vec![ExposedAtom { atom: AtomId(1), electrons: 0 }],
             exposed_count: 1,
+            mode: MatchingInputMode::Prescribed,
+        }
+    )]
+    #[case::multiple_prescribed_exposures(
+        mol_dsl_concrete!(r#"{:atoms ["B" "C" "N"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,2]"}]}"#),
+        MatchingInput {
+            required_covered: vec![AtomId(1)],
+            required_exposed: vec![ExposedAtom { atom: AtomId(0), electrons: 0 }, ExposedAtom { atom: AtomId(2), electrons: 2 }],
+            exposed_count: 2,
             mode: MatchingInputMode::Prescribed,
         }
     )]
@@ -679,13 +693,6 @@ mod tests {
     #[case::open_shell(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c0#u1#s2"}]}"#),
         KekulizeError::OpenShell(AromaticSystemId(0))
-    )]
-    #[case::multiple_prescribed_exposures(
-        mol_dsl!(r#"{:atoms ["B" "C" "N"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,2]#c0#u0#s1"}]}"#),
-        KekulizeError::MultiplePrescribedExposures {
-            system: AromaticSystemId(0),
-            count: 2,
-        }
     )]
     #[case::unsupported_charge(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c+2#u0#s1"}]}"#),
@@ -906,7 +913,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..5).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(0)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             mobile_charge: None,
             matched_bonds: vec![BondId(1), BondId(3)],
             unmatched_bonds: vec![BondId(0), BondId(4), BondId(2)],
@@ -918,7 +925,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..7).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(0)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 0 }],
             mobile_charge: None,
             matched_bonds: vec![BondId(1), BondId(3), BondId(5)],
             unmatched_bonds: vec![BondId(0), BondId(6), BondId(2), BondId(4)],
@@ -930,7 +937,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..9).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(0)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             mobile_charge: None,
             matched_bonds: vec![BondId(1), BondId(3), BondId(6), BondId(8)],
             unmatched_bonds: vec![BondId(0), BondId(4), BondId(2), BondId(9), BondId(5), BondId(7)],
@@ -942,7 +949,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (2..7).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(2)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(2), electrons: 2 }],
             mobile_charge: None,
             matched_bonds: vec![BondId(2), BondId(4)],
             unmatched_bonds: vec![BondId(1), BondId(5), BondId(3)],
@@ -954,7 +961,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..5).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(4)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(4), electrons: 2 }],
             mobile_charge: Some(-1),
             matched_bonds: vec![BondId(0), BondId(2)],
             unmatched_bonds: vec![BondId(4), BondId(1), BondId(3)],
@@ -966,7 +973,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..5).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(0)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             mobile_charge: Some(-1),
             matched_bonds: vec![BondId(1), BondId(3)],
             unmatched_bonds: vec![BondId(0), BondId(4), BondId(2)],
@@ -978,7 +985,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..7).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(6)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(6), electrons: 0 }],
             mobile_charge: Some(1),
             matched_bonds: vec![BondId(0), BondId(2), BondId(4)],
             unmatched_bonds: vec![BondId(6), BondId(1), BondId(3), BondId(5)],
@@ -990,7 +997,7 @@ mod tests {
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
             atoms: (0..7).map(AtomId).collect(),
-            exposed_atoms: vec![AtomId(1)],
+            exposed_atoms: vec![ExposedAtom { atom: AtomId(1), electrons: 0 }],
             mobile_charge: Some(1),
             matched_bonds: vec![BondId(6), BondId(2), BondId(4)],
             unmatched_bonds: vec![BondId(0), BondId(1), BondId(3), BondId(5)],

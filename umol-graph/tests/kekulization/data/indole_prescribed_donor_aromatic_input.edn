@@ -1,4 +1,4 @@
-{:atoms ["N#h#n1#a" "C#h#a" "C#h#a" "C#h0#a" "C#h0#a"
+{:atoms ["N#h#n0#a2" "C#h#a" "C#h#a" "C#h0#a" "C#h0#a"
          "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
  :bonds [[0 1 :aromatic]
          [1 2 :aromatic]

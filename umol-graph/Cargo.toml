@@ -118,6 +118,10 @@ harness = false
 name = "substructure"
 harness = false
 
+[[bench]]
+name = "transform"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

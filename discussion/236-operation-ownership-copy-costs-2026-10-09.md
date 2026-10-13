@@ -4,7 +4,9 @@ Status: In Progress
 Date: 2026-10-09
 Relates: [181](181-python-boundary-ownership-2026-08-03.md),
 [168](168-api-hygiene-2026-07-27.md),
-[213](213-editor-overlay-storage-2026-08-27.md)
+[213](213-editor-overlay-storage-2026-08-27.md),
+[166](166-molecule-ops-2026-07-27.md),
+[147](147-kekulization-single-structure-2026-07-13.md)
 
 ## Scope
 
@@ -3148,6 +3150,9 @@ placement and closing discharge. They preserve the molecule-level list exactly
 under Error policies, including bare entity leaves, singleton logical wrappers,
 and contradictions. The final integrity and concreteness checks remain.
 Molecule::inline_constraints and constraint validation remain explicit operations.
+A separately invoked general constraint-discharge transformer is tracked with
+the hydrogen transformers in
+[166](166-molecule-ops-2026-07-27.md#explicit-constraint-discharge).
 
 The conformance inputs now rely on the resolver's closed aromaticity reading:
 369 fixtures no longer request the blanket `:aromatic-valence :not-aromatic`
@@ -3198,20 +3203,165 @@ samples, and verification logs are retained in scratch/236-s3m.
 **Modules:** umol-graph benches/resolve.rs, a new benches/transform.rs target,
 and umol-graph Cargo.toml. **Additive, green.** [dep: none]
 
-Add to the resolve bench a selection group over fused aza-aromatics whose
-flexible atoms give option products from about 10² to beyond 4096, under the
-Hückel, HMO, and Clar rules, and a group for AromaticityResolver::resolve over
-the existing corpus. Add a transform bench target with the kekulizer over
-aromatic inputs and the aromatizer over Kekulé inputs. Input construction and
-cloning stay outside timing.
+Add to the resolve bench a Hückel selection group over fused aza-aromatics
+whose flexible atoms give option products from 128 through 4096, and a group
+for AromaticityResolver::resolve over aromatic cases from the existing corpus.
+Add a transform bench target with the kekulizer over aromatic inputs and the
+aromatizer over Kekulé inputs, through both consuming and in-place operations.
+Input construction and cloning stay outside timing.
+
+The selection scope was narrowed on 2026-10-12. Clar requires benzenoid inputs,
+so its rejection of aza-aromatics is not a useful selection baseline. HMO work
+is excluded from this subitem. The current selector returns Underdetermined for
+a component whose option product exceeds 4096 before searching; timing that
+exit would not measure selection work. Successful cases above that product
+belong with S4i's changed search bound. These deliberately flexible inputs are
+search stress cases, not a representative distribution of molecular inputs.
 
 **Tests:** each case's setup asserts that its input resolves or transforms.
+
+**Completed (2026-10-12).** The selection group times Resolver::resolve with
+atom typing, MostSaturated, and natural isotopes; admission checks outside timing
+verify the flexible-atom count and option product. The standalone group uses
+benzene, pyridine, pyrrole, furan, thiophene, naphthalene, quinoline, purine,
+biphenyl, and anthracene. Its setup projects aromaticity out of the resolved
+input and checks that standalone resolution restores the same framed molecule.
+
+The transform target uses the existing paired aromatic/Kekulé fixtures for
+benzene, pyridine, pyrrole, furan, thiophene, azulene, and indole with a prescribed
+donor. Setup checks exact kekulized outputs, perceived system members and forms,
+and agreement between consuming and in-place operations. No rejected input or
+no-op transformation is timed.
+
+The 42 new workloads have saved Criterion baselines against production commit
+810941e0a8ac2cc7ffc3b131332d5618e65854e4, using 40 samples, one-second warm-up,
+and a two-second measurement target. Criterion extended the 4096-option case to
+about 3.4 seconds to collect 40 samples. Mean selection times were:
+
+| Fixture | Flexible atoms | Option product | Mean time |
+| --- | ---: | ---: | ---: |
+| Heptaazanaphthalene | 7 | 128 | 0.411 ms |
+| Octaazanaphthalene | 8 | 256 | 0.822 ms |
+| Decaazaanthracene | 10 | 1024 | 7.461 ms |
+| Dodecaazatetracene | 12 | 4096 | 85.277 ms |
+
+Standalone aromaticity resolution ranges from 7.5 to 28.5 µs. Kekulization
+ranges from 5.2 to 9.3 µs consuming and 6.1 to 10.6 µs in place; aromatization
+from 7.0 to 15.6 µs consuming and 7.3 to 16.2 µs in place. These are starting
+measurements, not before/after comparisons. Executables, source copies, raw
+samples, confidence intervals, commands, and verification logs are retained in
+scratch/236-s4a.
+
+An untimed input probe also found that SMILES-resolved pyrrole, furan, thiophene,
+and purine fail the baseline Kekulizer with PostLocalizationValenceInvariant,
+carrying OrbitalCount with orbital_count 6 and electron_count 8. The transform
+bench inherited invalid aromatic donor inputs from the existing paired fixtures:
+they already stored the donor lone pair locally and asserted a one-electron
+contribution despite their two-electron system entries. Their passing transforms
+do not qualify those donor timings as correctness baselines. The failures
+reproduce on 2026-09-29 commit 6de803627e7621920e0af743b54c8202248d9e59;
+Kekulizer is unchanged between that commit and the S4a production baseline.
+S4a1 corrects the inputs and implementation before further transformer work.
+
+All 110 resolve benchmark checks and 28 transform benchmark checks pass, as do
+Clippy for both targets with warnings denied, touched-file formatting, and the
+diff check. No workspace gate was rerun for this benchmark-only subitem.
+
+#### S4a1 — Kekulizer donor localization and fixed exposures
+
+**Modules:** graph transform/kekulizer, tests/kekulization and its fixtures,
+benches/transform.rs. **Breaking, red→green within the subitem.** [dep: S4a]
+
+Restore one local lone pair for every stored two-electron aromatic contributor
+when removing its system. Preserve the local lone-pair count for zero- and
+one-electron contributors, and preserve atom charge, hydrogens, and spin for
+fixed exposures. Retain the separate existing localization of a mobile system
+charge; an anionic mobile exposure receives exactly one pair.
+
+Remove the first-release cap on the number of fixed zero-/two-electron sites.
+Exclude all such sites from double-bond matching and require a perfect matching
+on the remaining one-electron sites. This changes the fixed-site boundary of
+147; multiple mobile exposures, mixed fixed/mobile demand, and open-shell system
+support are unchanged. A fixed assignment without a matching still fails with
+NoMatching; this subitem does not change aromaticity selection or hydrogen
+placement to make it localizable.
+
+**Public contract:** Kekulizer and KekulizeConfig construction and the Transformer
+method signatures are unchanged. Remove KekulizeError::MultiplePrescribedExposures.
+Restoration requires a literal local lone-pair count and reuses
+UndeterminedExposedAtomLonePairs on failure. transform consumes its input;
+transform_into preserves its input on failure; transform_iter omits rejected
+candidates. No new public constructors, carriers, or Python methods are added.
+Post-localization validation and transaction removal remain S4d's work.
+
+**Tests:** correct the aromatic donor fixtures and their contribution assertions;
+validate inputs as well as outputs. Cover N, O, S, and locally charged C donors,
+zero-electron acceptors, multiple fixed sites, and existing mobile charge cases.
+Run the aromatic resolution corpus under atom typing and counts, asserting
+successful localization or the exact NoMatching result for F420's selected
+assignment. Check consuming/in-place agreement and unchanged input on failure.
+Qualify the corrected benchmark inputs and capture fresh kekulization timings;
+do not compare valid donor inputs against the invalid S4a donor measurements.
+
+**Verification:** focused Kekulizer and integration tests, aromatic resolution
+conformance, graph crate Clippy, transform benchmark setup checks and timings,
+touched-file formatting, and diff review. No workspace gate for this subitem.
+
+**Completed (2026-10-12).** The plan retains each exposed atom's zero-/two-electron
+state instead of losing it after matching. The existing fixed-site vector moves
+into the system plan; no second id vector is allocated for those sites. Fixed
+donors and mobile anionic exposures use one pair-restoration path. The
+MultiplePrescribedExposures variant and its rejection are removed.
+
+All 34 aromatic conformance fixtures were checked under atom typing and counts
+with MostSaturated. Each model now localizes 33 successfully, with valid inputs
+and outputs; this includes the six previously rejected, localizable multiple-site
+cases. F420's selected assignment returns NoMatching, preserving the input for
+the in-place operation. The N/O/S donor fixtures and borepin's zero-electron
+assertion are corrected, and benchmark setup now validates the paired inputs.
+
+F420's failure concerns its selected hydrogen/contribution assignment. Fixture
+atom N20 contributes one electron but has only the zero-electron carbonyl
+carbons C18 and C21 as neighbors. Removing fixed sites leaves N20 isolated and
+an odd nine-atom component; matching covers eight of ten required atoms.
+Specifying N17 H0 and N20 H1 before resolution swaps their donor roles: N17
+contributes one, N20 two. That assignment has a perfect residual matching and
+localizes successfully under both models. Both assignments have 14 aromatic
+electrons; the present Hückel ring/union count check does not establish
+localizability. S4a1 leaves this selection behavior unchanged.
+
+Verification passes: 41 Kekulizer unit cases, 98 integration cases (including
+the corpus and both explicit-hydrogen F420 cases), the existing public Kekulizer
+integrity property, all 34 aromatic conformance cases with unchanged snapshots,
+graph crate Clippy over all targets with conformance/proptest and warnings
+denied, and all 28 transform benchmark setup checks. Diagnostic sources,
+before/after logs, matching evidence, executables, and benchmark samples are
+retained in scratch/236-kekulizer-diagnosis.
+
+Fresh valid-donor baseline means are 5.48–8.53 µs consuming and 6.38–10.52 µs
+in place. The unchanged benzene, pyridine, and azulene inputs were compared
+against the saved S4a executable in both run orders (40 samples, one-second
+warm-up, two-second measurement). Changes in mean time were:
+
+| Case | Before then after | After then before |
+| --- | ---: | ---: |
+| benzene consuming | +40.32% | +4.09% |
+| benzene in place | +17.06% | +0.62% |
+| pyridine consuming | +7.69% | +1.27% |
+| pyridine in place | +0.55% | +3.32% |
+| azulene consuming | +3.14% | -0.15% |
+| azulene in place | +0.15% | -2.55% |
+
+The large initial benzene difference did not persist. These variable runs do
+not establish a precise small-effect bound. Donor measurements are new
+baselines, not comparisons with the invalid former inputs. No workspace test
+or formatting gate was run; touched files are formatted and the diff checked.
 
 #### S4b — Shared system addition
 
 **Modules:** graph aromaticity, resolve/aromaticity, resolve,
 transform/aromatizer, and tests/kekulization. **Breaking, red→green within the
-subitem.** [dep: S3i]
+subitem.** [dep: S3i, S4a1]
 
 Move plan_system to `AromaticityPerceiver::plan_aromatic_system(&self, molecule:
 &Molecule, atoms: Vec<AtomId>, form: AromaticSystemForm) -> Edits`, keeping the
@@ -3227,7 +3377,7 @@ existing resolution results.
 #### S4d — Kekulizer validity during planning
 
 **Modules:** graph transform/kekulizer and the kekulization tests. **Breaking,
-red→green within the subitem.** [dep: S3a]
+red→green within the subitem.** [dep: S3a, S4a1]
 
 In planning, build each system atom's planned form: the atom as the plan leaves
 it, with its planned charge and lone pairs and without the aromatic valence
@@ -3428,7 +3578,8 @@ taken before the change.
 **Modules:** graph aromaticity, transform/aromatizer, resolve,
 resolve/aromaticity, resolve/valence, valence/atom_typing, valence/counts, and
 valence/completion; tests/property/resolve.rs, tests/property/atom_typing.rs,
-and tests/matching. **Breaking, red→green within the subitem.** [dep: S4i, S4j]
+tests/matching, and benches/resolve.rs. **Breaking, red→green within the
+subitem.** [dep: S4i, S4j]
 
 Make crate-private: AromaticityPerceiver and AromaticityDerivation; the hueckel,
 hmo, and clar modules with their rule types, errors, and output;
@@ -3436,7 +3587,8 @@ electrons_from_kekule; select and select_with_report; the admit methods of
 ValenceResolver, AtomTypingValence, and CountsValence; and ResolveState and
 AtomCompletions. Remove the test-side exhaustive selection and select_scenario,
 which S4i's property replaces; the other tests that called them use the public
-operations.
+operations. Migrate the resolve bench's admission timings and selection setup
+checks with these consumers; keep its public-operation selection timings.
 
 **Tests:** the property suite and tests/matching through the public operations.
 
@@ -3599,4 +3751,5 @@ production code differs from what was measured.
 
 **Critical paths:** S3a1 → S3b → S3d → S3l → S4j, then S4c → S4f → S4n
 and S4l → S4n. Both join S6a → S7a, after the remaining stage dependencies.
+S4a → S4a1 establishes the correctness baseline before S4b and S4d.
 The binding path is S3b → S3b1 → S3b2 → S3b3 → S7a.
