@@ -10,21 +10,32 @@
 //! The `valence_readings` group measures counts/registry admission, registry
 //! classification of resolved molecules, and complete resolution with atom typing.
 //! `aromatic_selection/hueckel` stresses joint selection with 128–4096 admitted
-//! assignments. `aromaticity_resolve/hueckel` isolates standalone resolution of
+//! assignments under both search algorithms and 8192 under BacktrackingDfs.
+//! `aromatic_selection/duplicate_combinations` supplies synthetic completion
+//! states whose varying contributions all lie outside the sole accepted ring.
+//! `aromaticity_resolve/hueckel` isolates standalone resolution of
 //! projected aromatic molecules. Setup and input cloning are outside timing.
 
 use std::collections::BTreeSet;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use smallvec::smallvec;
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{
-    AromaticityResolver, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver,
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
+    AtomSelectionAlgorithm, IsotopePolicy, ProjectFlags, ResolveConfig, ResolveState, Resolver,
 };
-use umol_graph::ops::valence::{AtomTypeRegistry, AtomTypingValence, CountsValence, ValenceTable};
-use umol_graph_ir::ir::{AsLit, ElementForm, Molecule, Reframe, TryIntoIr, UnpairedElectronsForm};
+use umol_graph::ops::valence::{
+    AtomCompletions, AtomTypeRegistry, AtomTypingValence, CountsValence, ValenceTable,
+};
+use umol_graph_ir::ir::{
+    AromaticSystemForm, AsLit, AtomId, ElementForm, Molecule, Reframe, TryIntoIr,
+    UnpairedElectronsForm,
+};
+use umol_graph_ir::{atom_dsl, mol_dsl};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
@@ -204,70 +215,151 @@ fn bench_aromaticity_project(c: &mut Criterion) {
 fn bench_aromatic_selection(c: &mut Criterion) {
     let mut model = ChemistryModel::default();
     model.valence.tie_break = ValenceTieBreak::MostSaturated;
-    let resolver = Resolver::with_config(
+    for (algorithm_name, atom_selection_algorithm) in [
+        ("backtracking_dfs", AtomSelectionAlgorithm::BacktrackingDfs),
+        ("full_dfs", AtomSelectionAlgorithm::FullDfs),
+    ] {
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                isotope: IsotopePolicy::Natural,
+                aromaticity: AromaticityResolveConfig {
+                    atom_selection_algorithm,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..Default::default()
+            },
+        );
+        let mut group = c.benchmark_group(format!("aromatic_selection/hueckel/{algorithm_name}"));
+        for (name, smiles, nitrogen_count, expected_combinations) in [
+            ("heptaazanaphthalene", "c1ccc2ccccc2c1", 7, 128),
+            ("octaazanaphthalene", "c1ccc2ccccc2c1", 8, 256),
+            ("decaazaanthracene", "c1ccc2cc3ccccc3cc2c1", 10, 1024),
+            ("dodecaazatetracene", "c1ccc2cc3cc4ccccc4cc3cc2c1", 12, 4096),
+            ("tridecaazaannulene", "c1ccccccccccccc1", 13, 8192),
+        ] {
+            let table = Smiles::parse(smiles).unwrap().into_table_ir();
+            let mut molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+            let nitrogens: Vec<_> = molecule
+                .atoms()
+                .iter()
+                .filter(|atom| atom.neighbors().count() == 2)
+                .map(|atom| atom.id())
+                .take(nitrogen_count)
+                .collect();
+            assert_eq!(nitrogens.len(), nitrogen_count, "{name}");
+            for atom in molecule.atoms().ids().collect::<Vec<_>>() {
+                molecule.atom_mut(atom).attributes_mut().unpaired_electrons =
+                    UnpairedElectronsForm::closed_shell();
+            }
+            for atom in nitrogens {
+                molecule.atom_mut(atom).attributes_mut().element = ElementForm::Lit(Element::N);
+            }
+            let Solution::Determined(state) = resolver.valence.admit(&molecule).unwrap() else {
+                panic!("{name}: valence admission must be determined");
+            };
+            let mut flexible_atoms = 0;
+            let mut combinations = 1;
+            for (_, forms) in state.completions.iter() {
+                let contributions: Option<BTreeSet<_>> = forms
+                    .iter()
+                    .map(|form| form.constraints.aromatic_valence().as_lit())
+                    .collect();
+                let contributions =
+                    contributions.expect("fixture completions have literal contributions");
+                if contributions.len() > 1 {
+                    flexible_atoms += 1;
+                    combinations *= forms.len();
+                }
+            }
+            assert_eq!(flexible_atoms, nitrogen_count, "{name}");
+            assert_eq!(combinations, expected_combinations, "{name}");
+            if expected_combinations > 4096
+                && atom_selection_algorithm == AtomSelectionAlgorithm::FullDfs
+            {
+                assert_eq!(
+                    resolver.resolve(molecule).unwrap(),
+                    Solution::Underdetermined(()),
+                    "{name}"
+                );
+                continue;
+            }
+            assert!(
+                matches!(
+                    resolver.resolve(molecule.clone()).unwrap(),
+                    Solution::Determined(_)
+                ),
+                "{name}"
+            );
+            group.bench_function(BenchmarkId::new(name, combinations), |b| {
+                b.iter_batched(
+                    || molecule.clone(),
+                    |molecule| resolver.resolve(black_box(molecule)).unwrap(),
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+        group.finish();
+    }
+}
+
+fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
+    let model = AromaticityModel::daylight();
+    let resolver = AromaticityResolver::with_config(
         &model,
-        ResolveConfig {
-            isotope: IsotopePolicy::Natural,
+        AromaticityResolveConfig {
+            aromatic_valence_failure: AromaticityFailurePolicy::Keep,
             ..Default::default()
         },
     );
-    let mut group = c.benchmark_group("aromatic_selection/hueckel");
-    for (name, smiles, nitrogen_count, expected_combinations) in [
-        ("heptaazanaphthalene", "c1ccc2ccccc2c1", 7, 128),
-        ("octaazanaphthalene", "c1ccc2ccccc2c1", 8, 256),
-        ("decaazaanthracene", "c1ccc2cc3ccccc3cc2c1", 10, 1024),
-        ("dodecaazatetracene", "c1ccc2cc3cc4ccccc4cc3cc2c1", 12, 4096),
-    ] {
-        let table = Smiles::parse(smiles).unwrap().into_table_ir();
-        let mut molecule: Molecule = (&table).try_into_ir(&()).unwrap();
-        let nitrogens: Vec<_> = molecule
-            .atoms()
-            .iter()
-            .filter(|atom| atom.neighbors().count() == 2)
-            .map(|atom| atom.id())
-            .take(nitrogen_count)
-            .collect();
-        assert_eq!(nitrogens.len(), nitrogen_count, "{name}");
-        for atom in molecule.atoms().ids().collect::<Vec<_>>() {
-            molecule.atom_mut(atom).attributes_mut().unpaired_electrons =
-                UnpairedElectronsForm::closed_shell();
-        }
-        for atom in nitrogens {
-            molecule.atom_mut(atom).attributes_mut().element = ElementForm::Lit(Element::N);
-        }
-        let Solution::Determined(state) = resolver.valence.admit(&molecule).unwrap() else {
-            panic!("{name}: valence admission must be determined");
+    let molecule = mol_dsl!(
+        r#"{
+        :atoms ["C#c0#a" "C#c0#a" "C#c0#a" "C#c0#a" "C#c0#a" "C#c0#a"
+                "N#c0#a0" "N#c0#a0" "N#c0#a0" "N#c0#a0" "N#c0#a0" "N#c0#a0"
+                "N#c0#a0" "N#c0#a0" "N#c0#a0" "N#c0#a0" "N#c0#a0" "N#c0#a0" "C#c0#a"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"]
+                [11 12 "1"] [12 13 "1"] [13 14 "1"] [14 15 "1"] [15 16 "1"]
+                [16 17 "1"] [17 18 "1"] [18 4 "1"]]}"#
+    );
+    let mut group = c.benchmark_group("aromatic_selection/duplicate_combinations");
+    for flexible_atoms in [4, 8, 12] {
+        let state = ResolveState {
+            completions: AtomCompletions::from_iter((6..6 + flexible_atoms).map(|atom| {
+                (
+                    AtomId(atom),
+                    smallvec![atom_dsl!("N#c0#a0"), atom_dsl!("N#c0#a2")],
+                )
+            })),
+            ..Default::default()
         };
-        let mut flexible_atoms = 0;
-        let mut combinations = 1;
-        for (_, forms) in state.completions.iter() {
-            let contributions: Option<BTreeSet<_>> = forms
-                .iter()
-                .map(|form| form.constraints.aromatic_valence().as_lit())
-                .collect();
-            let contributions =
-                contributions.expect("fixture completions have literal contributions");
-            if contributions.len() > 1 {
-                flexible_atoms += 1;
-                combinations *= forms.len();
-            }
-        }
-        assert_eq!(flexible_atoms, nitrogen_count, "{name}");
-        assert_eq!(combinations, expected_combinations, "{name}");
-        assert!(
-            matches!(
-                resolver.resolve(molecule.clone()).unwrap(),
-                Solution::Determined(_)
-            ),
-            "{name}"
+        let expected = ResolveState {
+            systems: vec![(
+                (0..6).map(AtomId).collect(),
+                AromaticSystemForm::from_electrons(vec![1; 6])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )],
+            ..state.clone()
+        };
+        assert_eq!(
+            resolver.select_with_report(&molecule, state.clone(), ValenceTieBreak::Strict),
+            Ok(Solution::Determined(expected)),
         );
-        group.bench_function(BenchmarkId::new(name, combinations), |b| {
-            b.iter_batched(
-                || molecule.clone(),
-                |molecule| resolver.resolve(black_box(molecule)).unwrap(),
-                BatchSize::SmallInput,
-            );
-        });
+        group.bench_function(
+            BenchmarkId::new("same_partition", 1 << flexible_atoms),
+            |b| {
+                b.iter_batched(
+                    || state.clone(),
+                    |state| {
+                        resolver
+                            .select(&molecule, black_box(state), ValenceTieBreak::Strict)
+                            .unwrap()
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
     }
     group.finish();
 }
@@ -487,6 +579,7 @@ criterion_group!(
     bench_valence,
     bench_aromaticity_project,
     bench_aromatic_selection,
+    bench_aromatic_selection_duplicates,
     bench_aromaticity_resolve,
     bench_stereo_project,
     bench_project,

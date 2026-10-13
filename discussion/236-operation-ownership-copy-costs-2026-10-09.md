@@ -3749,7 +3749,7 @@ no run was discarded. These are Hückel selection stress cases, not measurements
 of HMO, Clar, or resolution workloads generally. Source snapshots, binary hashes,
 commands, full timing ranges, and raw samples are retained in scratch/236-s4h.
 
-#### S4i — AtomSelectionAlgorithm and the search bound
+#### S4i — AtomSelectionAlgorithm and the search bound **Done**
 
 **Modules:** graph resolve/aromaticity and resolve; umol-py resolve bindings,
 the Python package exports, and Python tests. **Breaking, red→green within the
@@ -3776,6 +3776,104 @@ Resolver::resolve_with_report wherever both stay within the bound.
 
 **Verification:** the selection group under both algorithms, and under
 BacktrackingDfs against a baseline taken before the change.
+
+**Completed (2026-10-13).** AtomSelectionAlgorithm is available in Rust and
+Python, including the config keyword, getter, and representation;
+BacktrackingDfs remains the default. Validity checks apply independently of
+algorithm choice. The bound allows 4096 search perception calls per component;
+an attempted additional call returns Underdetermined. The option-product
+precheck and its temporary allocation are removed.
+
+Public resolver tests cover a full search at the bound and a 14-membered ring
+with thirteen flexible nitrogens: its 8192 assignments exceed FullDfs's bound,
+but BacktrackingDfs resolves it. Under Keep, both algorithms reach the bound.
+The public-resolution property replaces the copied test-side selector and
+compares outcomes and reports over small skeletons with undetermined hydrogen
+counts, both valence sources, both tie-breaks, both failure policies, and the
+Hückel, HMO, and Clar rules, without filtering outcomes.
+
+The flexible-nitrogen indole case gives the same HmoInvalidInput contradiction
+under both algorithms at thresholds 0.2 and 0.1. One admitted completion has
+nine pi electrons; HMO rejects odd electron counts and selection propagates
+that contradiction. This existing behavior is preserved and tested exactly;
+these cases do not demonstrate successful HMO resolution.
+
+**Verification:** 622 resolver unit cases, 4096 generated search-equivalence
+cases (seed 20261013), 34 aromatic resolution snapshots, 52 Rust binding cases,
+and 220 Python cases passed. Graph and Python all-target Clippy passed with
+property/conformance features and warnings denied. Touched Rust files were
+formatted and the full diff reviewed. Workspace tests and the full formatting
+pass remain at their planned gates.
+
+**Performance:** baseline commit 278432e482988543ca3dcc69c5e9cdd13ffda938 was
+built and measured before edits. Three passes rotate the baseline,
+BacktrackingDfs, and FullDfs order, with 40 samples, one-second warmup, and
+two-second requested measurement time. No builds or tests ran concurrently.
+Times are medians of the three run means; changes are paired percentages.
+
+| Case | Before (ms) | BacktrackingDfs (ms) | FullDfs (ms) | Median default change | Paired range |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| heptaazanaphthalene, 128 assignments | 0.283 | 0.280 | 0.368 | −1.04% | −2.39% to −0.68% |
+| octaazanaphthalene, 256 assignments | 0.560 | 0.558 | 0.752 | −0.40% | −1.21% to +0.29% |
+| decaazaanthracene, 1024 assignments | 5.568 | 5.299 | 7.177 | −5.18% | −5.44% to −4.82% |
+| dodecaazatetracene, 4096 assignments | 78.533 | 70.170 | 84.854 | −10.65% | −11.30% to −10.07% |
+
+The additional tridecaazaannulene case, with 8192 assignments, resolves under
+BacktrackingDfs in 65.279 ms (64.400–66.691 ms). Its baseline and FullDfs
+outcomes are Underdetermined, so those exits are not timed. These Hückel search
+stress cases do not establish a workload distribution or HMO/Clar performance.
+The measurements do not isolate the cause of the larger cases' improvements.
+Commands, binaries, source hashes, and all raw samples are in scratch/236-s4i.
+
+**Deduplication follow-up (2026-10-13).** Direct timing of the completion
+membership scan found 36.75 ms, or 52.3% of resolution time, in the largest
+fixture. Its 1712 distinct perceived combinations required 1,464,616 failed
+equality comparisons. The later restriction scan received one survivor and
+performed no equality comparisons. The diagnostic is in scratch/236-s4i-scaling.
+
+Removing early deduplication preserved the checked results and reduced the
+largest case by 53.2%, but retaining repeated combinations made the
+4096-assignment duplicate fixture 8.0% slower. Insertion-ordered hash sets
+retained early compaction, but hashing complete forms increased the smallest
+search fixture by 7.9% with the default hasher and 11.4% with XXH3.
+
+The retained implementation uses BTreeMap for full-combination identity,
+recording each distinct combination's first discovery position and restoring
+that order before validity and selection. With P perceived combinations and K
+distinct results, collection uses O(P log(K + 1)) key comparisons and order
+restoration uses O(K log K) integer comparisons. It retains K combinations and
+introduces no form cloning or dependency. The later restriction scan uses a
+HashSet of borrowed references, retaining first-occurrence order; a single
+survivor needs no hash set. Search order, the perception-call bound, failure
+policies, and tie-break semantics are unchanged.
+
+Three alternating paired passes use the same 40-sample, one-second-warmup,
+two-second-measurement protocol. The baseline is the working S4i implementation
+before this follow-up. Times below are medians of run means; percentages are
+medians of paired changes, not ratios of the displayed medians.
+
+| Case | Before (ms) | Ordered map (ms) | Median paired change | Paired range |
+| --- | ---: | ---: | ---: | ---: |
+| heptaazanaphthalene, 128 assignments | 0.291 | 0.300 | +1.28% | −1.31% to +2.88% |
+| octaazanaphthalene, 256 assignments | 0.572 | 0.563 | −1.55% | −1.82% to −0.52% |
+| decaazaanthracene, 1024 assignments | 5.548 | 4.659 | −16.40% | −16.58% to −15.75% |
+| dodecaazatetracene, 4096 assignments | 73.422 | 38.804 | −46.62% | −47.45% to −46.53% |
+
+Synthetic selection fixtures make 16, 256, or 4096 assignments produce the same
+single ring and restriction; their median changes are +0.48%, −0.62%, and
+−0.07%. They exercise duplicate handling, not a chemistry workload distribution.
+End-to-end benzene and pyridine ingestion changed by +0.41% and +1.10%
+respectively. No builds or tests ran concurrently with measurements, and no
+runs or samples were discarded. All four trial implementations, raw samples,
+commands, binaries, and source snapshots are retained in scratch/236-s4i-dedup.
+
+**Verification:** 628 resolver cases, including three duplicate-selection
+behaviors under both algorithms, passed. Those cases check a shared restriction,
+selection between distinct restrictions with its exact report, and retained
+ambiguity under Strict. The 4096-case search-equivalence property (seed
+20261013), 34 aromatic resolution snapshots, and graph all-target Clippy with
+property/conformance features also passed. The incremental diff was reviewed;
+workspace tests and the full formatting pass remain at their planned gates.
 
 #### S4j — One aromaticity resolution path
 

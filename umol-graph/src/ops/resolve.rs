@@ -16,7 +16,9 @@ use std::any::Any;
 use std::collections::BTreeSet;
 
 use aromaticity::AromaticityProjectError;
-pub use aromaticity::{AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver};
+pub use aromaticity::{
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, AtomSelectionAlgorithm,
+};
 use bitflags::bitflags;
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 use isotope::IsotopeProjectError;
@@ -1030,7 +1032,7 @@ mod tests {
         StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
         StereoLigandKind, Stereogenicity, StereogenicityForm, TetrahedralStereoForm,
     };
-    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
+    use umol_graph_ir::{atom_dsl, bond_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ingest::ingest_smiles;
@@ -1072,6 +1074,19 @@ mod tests {
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
                 :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+        )
+    }
+
+    #[fixture]
+    fn indole_skeleton() -> Molecule {
+        mol_dsl!(
+            r#"{
+            :atoms ["N#i=#c0#u0#s#a+" "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a"
+                    "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a"
+                    "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]
+                    [3 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 4 "1"]]
+        }"#
         )
     }
 
@@ -1229,6 +1244,157 @@ mod tests {
             Ok(expected_report.map(|_| ()))
         );
         assert_eq!(without_report, expected_molecule);
+    }
+
+    #[rstest]
+    #[case::higher_threshold(0.2)]
+    #[case::lower_threshold(0.1)]
+    fn test_resolver_resolve_with_report_hmo_error(
+        indole_skeleton: Molecule,
+        #[case] stabilization_threshold: f64,
+        #[values(
+            AtomSelectionAlgorithm::FullDfs,
+            AtomSelectionAlgorithm::BacktrackingDfs
+        )]
+        atom_selection_algorithm: AtomSelectionAlgorithm,
+    ) {
+        let model = ChemistryModel {
+            aromaticity: AromaticityModel {
+                scope: ElementScope::Any,
+                rule: AromaticityRule::Hmo {
+                    stabilization_threshold,
+                },
+                tie_break: AromaticityTieBreak::MinElectronCount,
+            },
+            ..ChemistryModel::default()
+        };
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    atom_selection_algorithm,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        assert_eq!(
+            resolver.resolve_with_report(indole_skeleton),
+            Ok(Solution::Contradictory(ResolveContradiction::Aromaticity(
+                AromaticityContradiction::HmoInvalidInput(
+                    "open-shell pi-system (odd electron count) not supported by HMO".to_owned(),
+                ),
+            ))),
+        );
+    }
+
+    #[rstest]
+    #[case::full_at_bound(
+        12,
+        AtomSelectionAlgorithm::FullDfs,
+        AromaticityFailurePolicy::Error,
+        true
+    )]
+    #[case::full_above_bound(
+        13,
+        AtomSelectionAlgorithm::FullDfs,
+        AromaticityFailurePolicy::Error,
+        false
+    )]
+    #[case::pruned_above_product_bound(
+        13,
+        AtomSelectionAlgorithm::BacktrackingDfs,
+        AromaticityFailurePolicy::Error,
+        true
+    )]
+    #[case::keep_full(
+        13,
+        AtomSelectionAlgorithm::FullDfs,
+        AromaticityFailurePolicy::Keep,
+        false
+    )]
+    #[case::keep_backtracking(
+        13,
+        AtomSelectionAlgorithm::BacktrackingDfs,
+        AromaticityFailurePolicy::Keep,
+        false
+    )]
+    fn test_resolver_resolve_search_bound(
+        #[case] nitrogen_count: usize,
+        #[case] atom_selection_algorithm: AtomSelectionAlgorithm,
+        #[case] aromatic_valence_failure: AromaticityFailurePolicy,
+        #[case] determined: bool,
+    ) {
+        let bonds: Vec<_> = (0..14)
+            .map(|atom| {
+                (
+                    AtomId(atom),
+                    AtomId((atom + 1) % 14),
+                    bond_dsl!("1#c0#u0#s"),
+                )
+            })
+            .collect();
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: (0..14)
+                .map(|atom| {
+                    if atom < nitrogen_count {
+                        atom_dsl!("N#i=#c0#u0#s#a+")
+                    } else {
+                        atom_dsl!("C#i=#c0#u0#s#a")
+                    }
+                })
+                .collect(),
+            bonds: bonds.clone(),
+            ..MoleculeEntries::default()
+        });
+        let mut model = ChemistryModel::default();
+        model.aromaticity.tie_break = AromaticityTieBreak::MinElectronCount;
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    atom_selection_algorithm,
+                    aromatic_valence_failure,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        let Solution::Determined(admitted) = resolver.valence.admit(&molecule).unwrap() else {
+            panic!("the ring has complete valence candidates");
+        };
+        assert_eq!(
+            admitted
+                .completions
+                .iter()
+                .map(|(_, forms)| forms.len())
+                .product::<usize>(),
+            1 << nitrogen_count
+        );
+        let expected = if determined {
+            Solution::Determined(Molecule::from_entries(MoleculeEntries {
+                atoms: (0..14)
+                    .map(|atom| {
+                        if atom < nitrogen_count {
+                            atom_dsl!("N#i=#c0#h0#n1#u0#s")
+                        } else {
+                            atom_dsl!("C#i=#c0#h1#n0#u0#s")
+                        }
+                    })
+                    .collect(),
+                bonds,
+                aromatic: vec![(
+                    (0..14).map(AtomId).collect(),
+                    AromaticSystemForm::from_electrons(vec![1; 14])
+                        .with_charge(0)
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+                )],
+                ..MoleculeEntries::default()
+            }))
+        } else {
+            Solution::Underdetermined(())
+        };
+        assert_eq!(resolver.resolve(molecule), Ok(expected));
     }
 
     #[rstest]

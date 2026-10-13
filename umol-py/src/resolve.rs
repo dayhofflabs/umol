@@ -4,7 +4,8 @@
 use pyo3::prelude::*;
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy as GraphAromaticityFailurePolicy,
-    AromaticityResolveConfig as GraphAromaticityResolveConfig, IsotopePolicy as GraphIsotopePolicy,
+    AromaticityResolveConfig as GraphAromaticityResolveConfig,
+    AtomSelectionAlgorithm as GraphAtomSelectionAlgorithm, IsotopePolicy as GraphIsotopePolicy,
     ResolveConfig as GraphResolveConfig, ResolveContradiction as GraphResolveContradiction,
     StereoFailurePolicy as GraphStereoFailurePolicy,
     StereoResolveConfig as GraphStereoResolveConfig,
@@ -93,6 +94,30 @@ impl StereoFailurePolicy {
     }
 }
 
+/// Search algorithm for joint atom completion and aromatic-system selection.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AtomSelectionAlgorithm {
+    FullDfs,
+    BacktrackingDfs,
+}
+
+impl AtomSelectionAlgorithm {
+    pub(crate) fn from_rust(algorithm: GraphAtomSelectionAlgorithm) -> Self {
+        match algorithm {
+            GraphAtomSelectionAlgorithm::FullDfs => Self::FullDfs,
+            GraphAtomSelectionAlgorithm::BacktrackingDfs => Self::BacktrackingDfs,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphAtomSelectionAlgorithm {
+        match self {
+            Self::FullDfs => GraphAtomSelectionAlgorithm::FullDfs,
+            Self::BacktrackingDfs => GraphAtomSelectionAlgorithm::BacktrackingDfs,
+        }
+    }
+}
+
 /// Operational policy for aromaticity resolution.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,14 +126,16 @@ pub struct AromaticityResolveConfig(GraphAromaticityResolveConfig);
 #[pymethods]
 impl AromaticityResolveConfig {
     #[new]
-    #[pyo3(signature = (*, perception=AromaticityConfig::default(), aromatic_valence_failure=AromaticityFailurePolicy::Error, aromatic_system_failure=AromaticityFailurePolicy::Error))]
+    #[pyo3(signature = (*, perception=AromaticityConfig::default(), atom_selection_algorithm=AtomSelectionAlgorithm::BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy::Error, aromatic_system_failure=AromaticityFailurePolicy::Error))]
     fn new(
         perception: AromaticityConfig,
+        atom_selection_algorithm: AtomSelectionAlgorithm,
         aromatic_valence_failure: AromaticityFailurePolicy,
         aromatic_system_failure: AromaticityFailurePolicy,
     ) -> Self {
         Self(GraphAromaticityResolveConfig {
             perception: perception.to_rust(),
+            atom_selection_algorithm: atom_selection_algorithm.to_rust(),
             aromatic_valence_failure: aromatic_valence_failure.to_rust(),
             aromatic_system_failure: aromatic_system_failure.to_rust(),
         })
@@ -117,6 +144,11 @@ impl AromaticityResolveConfig {
     #[getter]
     fn perception(&self) -> AromaticityConfig {
         AromaticityConfig::from_rust(self.0.perception)
+    }
+
+    #[getter]
+    fn atom_selection_algorithm(&self) -> AtomSelectionAlgorithm {
+        AtomSelectionAlgorithm::from_rust(self.0.atom_selection_algorithm)
     }
 
     #[getter]
@@ -131,8 +163,9 @@ impl AromaticityResolveConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "AromaticityResolveConfig(perception={}, aromatic_valence_failure=AromaticityFailurePolicy.{:?}, aromatic_system_failure=AromaticityFailurePolicy.{:?})",
+            "AromaticityResolveConfig(perception={}, atom_selection_algorithm=AtomSelectionAlgorithm.{:?}, aromatic_valence_failure=AromaticityFailurePolicy.{:?}, aromatic_system_failure=AromaticityFailurePolicy.{:?})",
             self.perception().__repr__(),
+            self.atom_selection_algorithm(),
             self.aromatic_valence_failure(),
             self.aromatic_system_failure(),
         )
@@ -367,19 +400,36 @@ mod tests {
     }
 
     #[rstest]
+    #[case::full(GraphAtomSelectionAlgorithm::FullDfs, AtomSelectionAlgorithm::FullDfs)]
+    #[case::backtracking(
+        GraphAtomSelectionAlgorithm::BacktrackingDfs,
+        AtomSelectionAlgorithm::BacktrackingDfs
+    )]
+    fn test_atom_selection_algorithm_from_rust(
+        #[case] algorithm: GraphAtomSelectionAlgorithm,
+        #[case] expected: AtomSelectionAlgorithm,
+    ) {
+        assert_eq!(AtomSelectionAlgorithm::from_rust(algorithm), expected);
+        assert_eq!(expected.to_rust(), algorithm);
+    }
+
+    #[rstest]
     #[case::default(
         AromaticityConfig::default(),
+        AtomSelectionAlgorithm::BacktrackingDfs,
         AromaticityFailurePolicy::Error,
         AromaticityFailurePolicy::Error,
         GraphAromaticityResolveConfig::default()
     )]
-    #[case::configured(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, GraphAromaticityResolveConfig {
+    #[case::configured(AromaticityConfig::default(), AtomSelectionAlgorithm::FullDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, GraphAromaticityResolveConfig {
         perception: Default::default(),
+        atom_selection_algorithm: GraphAtomSelectionAlgorithm::FullDfs,
         aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
         aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
     })]
     fn test_aromaticity_resolve_config_new(
         #[case] perception: AromaticityConfig,
+        #[case] atom_selection_algorithm: AtomSelectionAlgorithm,
         #[case] aromatic_valence_failure: AromaticityFailurePolicy,
         #[case] aromatic_system_failure: AromaticityFailurePolicy,
         #[case] expected: GraphAromaticityResolveConfig,
@@ -387,6 +437,7 @@ mod tests {
         assert_eq!(
             AromaticityResolveConfig::new(
                 perception,
+                atom_selection_algorithm,
                 aromatic_valence_failure,
                 aromatic_system_failure,
             )
@@ -397,12 +448,12 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
-        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Error, aromatic_system_failure=AromaticityFailurePolicy.Error)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Error, aromatic_system_failure=AromaticityFailurePolicy.Error)"
     )]
     #[case::nondefault(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
-        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep)"
     )]
     fn test_aromaticity_resolve_config_repr(
         #[case] config: AromaticityResolveConfig,
@@ -415,6 +466,7 @@ mod tests {
     #[case::default(GraphAromaticityResolveConfig::default())]
     #[case::nondefault(GraphAromaticityResolveConfig {
         perception: Default::default(),
+        atom_selection_algorithm: GraphAtomSelectionAlgorithm::BacktrackingDfs,
         aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
         aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
     })]
@@ -425,11 +477,13 @@ mod tests {
     #[rstest]
     #[case::default(AromaticityResolveConfig::new(
         AromaticityConfig::default(),
+        AtomSelectionAlgorithm::BacktrackingDfs,
         AromaticityFailurePolicy::Error,
         AromaticityFailurePolicy::Error
     ))]
     #[case::nondefault(AromaticityResolveConfig::new(
         AromaticityConfig::default(),
+        AtomSelectionAlgorithm::BacktrackingDfs,
         AromaticityFailurePolicy::Keep,
         AromaticityFailurePolicy::Keep
     ))]
@@ -512,6 +566,7 @@ mod tests {
     #[case::default(
         AromaticityResolveConfig::new(
             AromaticityConfig::default(),
+            AtomSelectionAlgorithm::BacktrackingDfs,
             AromaticityFailurePolicy::Error,
             AromaticityFailurePolicy::Error
         ),
@@ -524,12 +579,13 @@ mod tests {
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
         StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig {
                 perception: Default::default(),
+                atom_selection_algorithm: GraphAtomSelectionAlgorithm::BacktrackingDfs,
                 aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
                 aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
             },
@@ -537,7 +593,7 @@ mod tests {
         },
     )]
     #[case::stereo(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
         StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
@@ -577,11 +633,11 @@ mod tests {
     #[case::default(ResolveConfig::default(), "ResolveConfig.default()")]
     #[case::configured(
         ResolveConfig::new(
-            AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
+            AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
             StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
             IsotopePolicy::Strict,
         ),
-        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep))",
+        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -593,6 +649,7 @@ mod tests {
         isotope: GraphIsotopePolicy::Strict,
         aromaticity: GraphAromaticityResolveConfig {
             perception: Default::default(),
+            atom_selection_algorithm: GraphAtomSelectionAlgorithm::BacktrackingDfs,
             aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
             aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
         },
@@ -612,6 +669,7 @@ mod tests {
     #[case::configured(ResolveConfig::new(
         AromaticityResolveConfig::new(
             AromaticityConfig::default(),
+            AtomSelectionAlgorithm::BacktrackingDfs,
             AromaticityFailurePolicy::Keep,
             AromaticityFailurePolicy::Keep
         ),

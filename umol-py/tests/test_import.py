@@ -35,6 +35,7 @@ PUBLIC_EXPORTS = frozenset(
     AtomDelta
     AtomFieldChange
     AtomRingSizeCounts
+    AtomSelectionAlgorithm
     AtomTypeRegistry
     AtomView
     AtomViews

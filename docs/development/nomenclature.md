@@ -277,7 +277,8 @@ higher layers follow the same suffix.
 
 **Not:** config (which may *contain* an algorithm selection), model, policy.
 **In code:** `*Algorithm` enums in `umol-graph-core`, e.g. `CommonSubgraphEnumerationAlgorithm`,
-`RelevantCycleEnumerationAlgorithm`; also higher-layer selectors such as `SubstructureMatchAlgorithm`.
+`RelevantCycleEnumerationAlgorithm`; also higher-layer selectors such as `SubstructureMatchAlgorithm`
+and `AtomSelectionAlgorithm`.
 
 ### Application
 

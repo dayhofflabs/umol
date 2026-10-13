@@ -1,12 +1,9 @@
 //! Shared proptest generators for the umol-graph property suite.
 //!
-//! `select_scenario` emits the aromatic-selection operational domain: one- and
-//! two-ring skeletons (fused or coupled) under the Hückel rule, every ring
-//! atom carrying a carrier entry, at most three flexible atoms drawn from a
-//! fixed completion pool, all contributions literal, no stored systems and no
-//! atom-level assertions. One localized bond carries a positive aromaticity
-//! constraint to activate selection. Policies vary over both failure policies,
-//! both aromaticity tie-breaks, and both valence tie-breaks.
+//! `atom_selection_skeleton` emits small rings with open hydrogen counts and
+//! at most three varied C/N/O/S sites. Aromatic assertions may be open at those
+//! sites, and one bond may assert non-aromaticity. Other atoms are carbon with
+//! a one-electron aromatic assertion. No stored systems or stereo assertions.
 //!
 //! `aromatic_skeleton` emits aromatic skeletons: one five- or six-membered
 //! ring, two fused rings, or two rings coupled by a bond, over C, N, O, and S
@@ -28,31 +25,14 @@ use proptest::sample::subsequence;
 use proptest::strategy::ValueTree;
 use proptest::test_runner::{Config, FileFailurePersistence, TestRunner};
 use rstest::rstest;
-use smallvec::{smallvec, SmallVec};
 use umol_chem::element::Element;
-use umol_graph::ops::model::{
-    AromaticityModel, AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits,
-    ValenceTieBreak,
-};
-use umol_graph::ops::resolve::{AromaticityFailurePolicy, AromaticityResolveConfig};
-use umol_graph::ops::valence::AtomCompletions;
-use umol_graph_ir::atom_dsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomId,
-    BondConstraintForm, BondForm, BooleanForm, ElementForm, Lattice, Molecule, MoleculeEntries,
-    NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
+    BondConstraintForm, BondForm, BooleanForm, ElementForm, IsotopeMassForm, Lattice, Molecule,
+    MoleculeEntries, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::Smiles;
-
-#[derive(Clone, Debug)]
-pub(crate) struct SelectScenario {
-    pub(crate) molecule: Molecule,
-    pub(crate) completions: AtomCompletions,
-    pub(crate) model: AromaticityModel,
-    pub(crate) config: AromaticityResolveConfig,
-    pub(crate) tie_break: ValenceTieBreak,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RingTopology {
@@ -96,94 +76,82 @@ fn ring_topology() -> impl Strategy<Value = RingTopology> {
     ]
 }
 
-/// The completion pool: index 0 is the fixed unit contributor; the others are
-/// flexible — aromatic-only pairs, a mixed aromatic/non-aromatic pair, and an
-/// aromatic-only triple.
-fn completion_pool(index: usize) -> SmallVec<[AtomForm; 1]> {
-    match index {
-        0 => smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
-        1 => smallvec![
-            atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
-            atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
-        ],
-        2 => smallvec![
-            atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a"),
-            atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
-        ],
-        3 => smallvec![
-            atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
-            atom_dsl!("C#i=#c0#h2#n0#u0#s#v2#a!"),
-        ],
-        _ => smallvec![
-            atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
-            atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a"),
-            atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
-        ],
-    }
-}
-
-pub(crate) fn select_scenario() -> impl Strategy<Value = SelectScenario> {
+pub(crate) fn atom_selection_skeleton() -> impl Strategy<Value = Molecule> {
     ring_topology().prop_flat_map(|topology| {
         let (atom_count, bonds) = skeleton(&topology);
+        let degree_two: Vec<_> = (0..atom_count)
+            .filter(|&atom| {
+                bonds
+                    .iter()
+                    .filter(|&&(a, b)| a == atom || b == atom)
+                    .count()
+                    == 2
+            })
+            .collect();
         (
-            subsequence((0..atom_count).collect::<Vec<usize>>(), 0..=3),
-            vec(1usize..=4, 3),
-            prop_oneof![
-                Just(AromaticityFailurePolicy::Error),
-                Just(AromaticityFailurePolicy::Keep),
-            ],
-            prop_oneof![
-                Just(AromaticityTieBreak::Strict),
-                Just(AromaticityTieBreak::MinElectronCount),
-            ],
-            prop_oneof![
-                Just(ValenceTieBreak::Strict),
-                Just(ValenceTieBreak::MostSaturated)
-            ],
+            subsequence(degree_two, 0..=3),
+            vec(
+                (
+                    prop::sample::select(vec![Element::C, Element::N, Element::O, Element::S]),
+                    any::<bool>(),
+                ),
+                3,
+            ),
+            prop::option::of(0..bonds.len()),
         )
-            .prop_map(
-                move |(flexible_atoms, pool_picks, failure, structural, value)| {
-                    let atoms = vec!["\"C#c0\""; atom_count].join(" ");
-                    let bond_list = bonds
+            .prop_map(move |(varied, choices, excluded_bond)| {
+                Molecule::from_entries(MoleculeEntries {
+                    atoms: (0..atom_count)
+                        .map(|atom| {
+                            let (element, aromatic_valence) =
+                                varied.iter().position(|&id| id == atom).map_or(
+                                    (Element::C, AromaticValenceForm::Aromatic(NumForm::Lit(1))),
+                                    |index| {
+                                        let (element, requires_aromaticity) = choices[index];
+                                        (
+                                            element,
+                                            if requires_aromaticity {
+                                                AromaticValenceForm::Aromatic(NumForm::Undetermined)
+                                            } else {
+                                                AromaticValenceForm::Undetermined
+                                            },
+                                        )
+                                    },
+                                );
+                            AtomForm {
+                                element: ElementForm::Lit(element),
+                                isotope_mass: IsotopeMassForm::Natural,
+                                charge: NumForm::Lit(0),
+                                unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                                constraints: AtomConstraintForm::AromaticValence(aromatic_valence)
+                                    .into(),
+                                ..AtomForm::default()
+                            }
+                        })
+                        .collect(),
+                    bonds: bonds
                         .iter()
                         .enumerate()
-                        .map(|(index, (from, to))| {
-                            let attributes = if index == 0 { "1#a+" } else { "1" };
-                            format!("[{from} {to} \"{attributes}\"]")
+                        .map(|(index, &(a, b))| {
+                            (
+                                AtomId::from(a),
+                                AtomId::from(b),
+                                BondForm {
+                                    order: NumForm::Lit(1),
+                                    charge: NumForm::Lit(0),
+                                    unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                                    constraints: if excluded_bond == Some(index) {
+                                        BondConstraintForm::Aromatic(BooleanForm::Lit(false)).into()
+                                    } else {
+                                        Default::default()
+                                    },
+                                },
+                            )
                         })
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    let molecule: Molecule = format!("{{:atoms [{atoms}] :bonds [{bond_list}]}}")
-                        .parse()
-                        .expect("generated skeleton parses");
-                    let completions = AtomCompletions::from_iter((0..atom_count).map(|atom| {
-                        let pool = flexible_atoms
-                            .iter()
-                            .position(|&flexible| flexible == atom)
-                            .map_or(0, |idx| pool_picks[idx]);
-                        (
-                            AtomId(u32::try_from(atom).expect("small skeleton")),
-                            completion_pool(pool),
-                        )
-                    }));
-                    SelectScenario {
-                        molecule,
-                        completions,
-                        model: AromaticityModel {
-                            scope: ElementScope::Any,
-                            rule: AromaticityRule::Hueckel {
-                                ring_limits: RingLimits::default(),
-                            },
-                            tie_break: structural,
-                        },
-                        config: AromaticityResolveConfig {
-                            aromatic_valence_failure: failure,
-                            ..AromaticityResolveConfig::default()
-                        },
-                        tie_break: value,
-                    }
-                },
-            )
+                        .collect(),
+                    ..MoleculeEntries::default()
+                })
+            })
     })
 }
 

@@ -26,422 +26,41 @@
 //! Projection followed by resolution reproduces the systems modulo participant frames
 //! and removes the assertions written by projection under the same chemistry model.
 //!
-//! Semantic property: for carriers whose components stay within the
-//! enumeration bound, both aromatic selectors return the outcome of a
-//! selection that enumerates every completion combination of every component
-//! exhaustively — the pruned search never removes a valid completion combination.
-//!
-//! Operational domain: `strategies::select_scenario` — one- and two-ring
-//! Hückel skeletons, all ring atoms in the carrier with literal
-//! contributions, no stored systems, one positive localized-bond aromaticity
-//! constraint, both failure policies and both tie-breaks on each axis.
-//!
-//! Validation method: comparison with the definition-level selection below,
-//! which enumerates completion combinations flat with no pruning. Perception
-//! (`find_systems`) and the value-key comparison (`compare_by_key`) are
-//! shared with production — the property targets the search and selection
-//! stages, not the perception rule. The explicit report method also matches the
-//! reference tie-break list; ordinary selection leaves that list empty.
+//! Search independence compares full and pruned depth-first enumeration through
+//! Resolver::resolve_with_report, including contradictions and complete reports.
+//! The domain uses one- and two-ring skeletons with undetermined hydrogen counts,
+//! up to three varied C/N/O/S sites, and optional non-aromatic linking or ring bonds.
+//! Both failure policies and tie-breaks are exercised under Hückel, HMO, and Clar.
+//! The small number of flexible sites keeps both searches within their call bound;
+//! no outcomes are discarded. The algorithms share perception and selection, so
+//! this property specifically checks pruning soundness rather than those stages.
 
-use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
-use umol_graph::ops::aromaticity::{
-    AromaticityConfig, AromaticityContradiction, AromaticityInconsistency, AromaticityPerceiver,
-};
 use umol_graph::ops::model::{
     AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
     RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
 };
 use umol_graph::ops::resolve::{
-    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, IsotopePolicy,
-    ProjectFlags, ResolveConfig, ResolveState, Resolver, StereoResolver,
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
+    AtomSelectionAlgorithm, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver, StereoResolver,
 };
-use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
-    AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
-    BooleanForm, CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm,
-    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, RingConfig,
-    RingModel, RingSetKind, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomForm,
+    AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId, BooleanForm,
+    CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm, Lattice,
+    Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, StereoAtomForm,
+    StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+    TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
-use crate::strategies::{aromatic_skeleton, select_scenario, SelectScenario};
-
-fn contribution(form: &AtomForm) -> Option<u8> {
-    match form.constraints.aromatic_valence() {
-        AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
-        _ => None,
-    }
-}
-
-fn compare_restrictions(
-    a: &[(AtomId, AtomForm)],
-    b: &[(AtomId, AtomForm)],
-    tie_break: ValenceTieBreak,
-) -> Ordering {
-    let key = tie_break.key();
-    let b_forms: BTreeMap<AtomId, &AtomForm> = b.iter().map(|(atom, form)| (*atom, form)).collect();
-    for (atom, a_form) in a {
-        let Some(b_form) = b_forms.get(atom) else {
-            continue;
-        };
-        let ordering = compare_by_key(key, a_form, b_form);
-        if ordering != Ordering::Equal {
-            return ordering;
-        }
-    }
-    Ordering::Equal
-}
-
-/// Definition-level selection: enumerates completion combinations per component
-/// without pruning or an enumeration bound, then applies the documented validity
-/// and selection stages. Scoped to the generated domain: no stored systems,
-/// no atom-level assertions, every ring atom in the carrier.
-fn exhaustive_select(
-    scenario: &SelectScenario,
-) -> Solution<ResolveState, AromaticityContradiction> {
-    let SelectScenario {
-        molecule,
-        completions,
-        model,
-        config,
-        tie_break,
-    } = scenario;
-    let perception = AromaticityPerceiver::new(model);
-    let mut completions = completions.clone();
-    let mut systems: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
-    let mut tie_breaks: Vec<AtomId> = Vec::new();
-
-    let flexible: Vec<(AtomId, Vec<Option<u8>>)> = completions
-        .iter()
-        .filter_map(|(atom, disjuncts)| {
-            let contributions: Vec<Option<u8>> = disjuncts.iter().map(contribution).collect();
-            (contributions.iter().collect::<BTreeSet<_>>().len() > 1)
-                .then_some((atom, contributions))
-        })
-        .collect();
-
-    let rings = molecule
-        .rings(
-            RingModel {
-                kind: RingSetKind::Relevant,
-                max_ring_size: 22,
-            },
-            RingConfig::default(),
-        )
-        .into_ring_set();
-    let capable = |atom: AtomId| {
-        completions
-            .get(atom)
-            .is_some_and(|disjuncts| disjuncts.iter().any(|form| contribution(form).is_some()))
-    };
-    let mut components: Vec<BTreeSet<AtomId>> = Vec::new();
-    for ring in rings.iter() {
-        if !ring.atoms().iter().all(|&atom| capable(atom)) {
-            continue;
-        }
-        let ring: BTreeSet<AtomId> = ring.atoms().iter().copied().collect();
-        let (connected, disjoint): (Vec<_>, Vec<_>) = components
-            .into_iter()
-            .partition(|component| !component.is_disjoint(&ring));
-        let mut merged = ring;
-        for component in connected {
-            merged.extend(component);
-        }
-        components = disjoint;
-        components.push(merged);
-    }
-    components.sort();
-
-    type CompletionCombination = (
-        Vec<(AtomId, AtomForm)>,
-        Vec<(Vec<AtomId>, AromaticSystemForm)>,
-    );
-    let mut accepted: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
-    let mut tie_break_uses: BTreeSet<AtomId> = BTreeSet::new();
-    let mut claimed: BTreeSet<AtomId> = BTreeSet::new();
-    let required_bonds: Vec<_> = molecule
-        .bonds()
-        .iter()
-        .filter(|bond| {
-            matches!(
-                bond.attributes().constraints.aromatic(),
-                BooleanForm::Lit(true)
-            )
-        })
-        .map(|bond| (bond.id(), bond.atom_ids()))
-        .collect();
-    let mut claimed_bonds = BTreeSet::new();
-    for component in &components {
-        let component_flexible: Vec<(AtomId, Vec<Option<u8>>)> = flexible
-            .iter()
-            .filter(|(atom, _)| component.contains(atom))
-            .cloned()
-            .collect();
-        let aromatic_only: Vec<AtomId> = component
-            .iter()
-            .copied()
-            .filter(|&atom| {
-                completions.get(atom).is_some_and(|disjuncts| {
-                    disjuncts.iter().all(|form| {
-                        matches!(
-                            form.constraints.aromatic_valence(),
-                            AromaticValenceForm::Aromatic(_)
-                        )
-                    })
-                })
-            })
-            .collect();
-
-        let mut combinations: Vec<CompletionCombination> = Vec::new();
-        let mut completion_indices = vec![0usize; component_flexible.len()];
-        loop {
-            let choice: BTreeMap<AtomId, usize> = component_flexible
-                .iter()
-                .zip(&completion_indices)
-                .map(|(&(atom, _), &index)| (atom, index))
-                .collect();
-            let outcome = perception
-                .find_systems(molecule, AromaticityConfig::default(), |atom| {
-                    match choice.get(&atom) {
-                        Some(&index) => {
-                            contribution(&completions.get(atom).expect("flexible atom")[index])
-                        }
-                        None => completions
-                            .get(atom)
-                            .and_then(|disjuncts| contribution(&disjuncts[0])),
-                    }
-                    .map(|value| AromaticValence::Aromatic(i64::from(value)))
-                    .unwrap_or(AromaticValence::NotAromatic)
-                })
-                .expect("Hückel perception is infallible");
-            let found = match outcome {
-                Solution::Determined(found) => found,
-                Solution::Underdetermined(_) => {
-                    return Solution::Underdetermined(ResolveState {
-                        completions,
-                        systems,
-                        tie_breaks,
-                    });
-                }
-                Solution::Contradictory(contradiction) => {
-                    return Solution::Contradictory(contradiction);
-                }
-            };
-            let mut partition: Vec<(Vec<AtomId>, AromaticSystemForm)> = found
-                .into_iter()
-                .filter(|(atoms, _)| atoms.iter().all(|atom| component.contains(atom)))
-                .collect();
-            partition.sort_by(|(a, _), (b, _)| a.cmp(b));
-            let restriction: Vec<(AtomId, AtomForm)> = choice
-                .iter()
-                .filter(|(atom, _)| partition.iter().any(|(atoms, _)| atoms.contains(atom)))
-                .map(|(&atom, &index)| {
-                    (
-                        atom,
-                        completions.get(atom).expect("flexible atom")[index].clone(),
-                    )
-                })
-                .collect();
-            let combination = (restriction, partition);
-            if !combinations.contains(&combination) {
-                combinations.push(combination);
-            }
-
-            let mut position = component_flexible.len();
-            loop {
-                if position == 0 {
-                    break;
-                }
-                position -= 1;
-                completion_indices[position] += 1;
-                if completion_indices[position] < component_flexible[position].1.len() {
-                    break;
-                }
-                completion_indices[position] = 0;
-            }
-            if component_flexible.is_empty() || completion_indices.iter().all(|&index| index == 0) {
-                break;
-            }
-        }
-
-        let mut valid = combinations;
-        if config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
-            valid.retain(|(_, partition)| {
-                aromatic_only
-                    .iter()
-                    .all(|atom| partition.iter().any(|(atoms, _)| atoms.contains(atom)))
-            });
-        }
-        if valid.is_empty() {
-            continue;
-        }
-        for (_, partition) in &valid {
-            for (atoms, _) in partition {
-                claimed.extend(atoms.iter().copied());
-            }
-        }
-        if config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
-            valid.retain(|(_, partition)| {
-                required_bonds.iter().all(|(_, endpoints)| {
-                    !endpoints.iter().all(|atom| component.contains(atom))
-                        || partition
-                            .iter()
-                            .any(|(members, _)| endpoints.iter().all(|atom| members.contains(atom)))
-                })
-            });
-            if valid.is_empty() {
-                continue;
-            }
-            for &(bond, endpoints) in &required_bonds {
-                if valid.iter().any(|(_, partition)| {
-                    partition
-                        .iter()
-                        .any(|(members, _)| endpoints.iter().all(|atom| members.contains(atom)))
-                }) {
-                    claimed_bonds.insert(bond);
-                }
-            }
-        }
-
-        let mut structural_decided = false;
-        if model.tie_break == AromaticityTieBreak::MinElectronCount {
-            let structure = |partition: &Vec<(Vec<AtomId>, AromaticSystemForm)>| {
-                (
-                    Reverse(
-                        partition
-                            .iter()
-                            .map(|(atoms, _)| atoms.len())
-                            .sum::<usize>(),
-                    ),
-                    partition
-                        .iter()
-                        .map(|(_, form)| match &form.electrons {
-                            ElectronCountsForm::Lit(electrons) => electrons.iter().sum(),
-                            _ => i64::MAX,
-                        })
-                        .sum::<i64>(),
-                    partition
-                        .iter()
-                        .map(|(atoms, _)| atoms.clone())
-                        .collect::<Vec<_>>(),
-                )
-            };
-            let best = valid
-                .iter()
-                .map(|(_, partition)| structure(partition))
-                .min()
-                .expect("non-empty survivors");
-            structural_decided = valid
-                .iter()
-                .any(|(_, partition)| structure(partition) != best);
-            valid.retain(|(_, partition)| structure(partition) == best);
-        }
-
-        let mut restrictions: Vec<&Vec<(AtomId, AtomForm)>> = Vec::new();
-        for (restriction, _) in &valid {
-            if !restrictions.contains(&restriction) {
-                restrictions.push(restriction);
-            }
-        }
-        let (winner_restriction, by_key) = if restrictions.len() == 1 {
-            (restrictions[0], false)
-        } else {
-            if tie_break.key().is_empty() {
-                continue;
-            }
-            let domain: BTreeSet<AtomId> = restrictions[0].iter().map(|(atom, _)| *atom).collect();
-            if !restrictions.iter().all(|restriction| {
-                restriction
-                    .iter()
-                    .map(|(atom, _)| *atom)
-                    .collect::<BTreeSet<_>>()
-                    == domain
-            }) {
-                continue;
-            }
-            let best = restrictions
-                .iter()
-                .copied()
-                .max_by(|a, b| compare_restrictions(a, b, *tie_break))
-                .expect("non-empty restrictions");
-            let unique = restrictions
-                .iter()
-                .filter(|restriction| compare_restrictions(restriction, best, *tie_break).is_eq())
-                .count()
-                == 1;
-            if !unique {
-                continue;
-            }
-            (best, true)
-        };
-        let (_, partition) = valid
-            .iter()
-            .filter(|(restriction, _)| restriction == winner_restriction)
-            .min_by(|(_, a), (_, b)| {
-                a.iter()
-                    .map(|(atoms, _)| atoms)
-                    .cmp(b.iter().map(|(atoms, _)| atoms))
-            })
-            .expect("winner restriction present");
-        accepted.extend(partition.iter().cloned());
-        if structural_decided {
-            for (atoms, _) in partition {
-                tie_break_uses.extend(atoms.iter().copied());
-            }
-        }
-        let narrowed: Vec<(AtomId, AtomForm)> = winner_restriction.clone();
-        for (atom, form) in &narrowed {
-            if by_key && completions.get(*atom).is_some_and(|entry| entry.len() > 1) {
-                tie_break_uses.insert(*atom);
-            }
-            completions.insert(*atom, smallvec::smallvec![form.clone()]);
-        }
-    }
-
-    if config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
-        for (atom, disjuncts) in completions.iter() {
-            if claimed.contains(&atom) {
-                continue;
-            }
-            if disjuncts.iter().all(|form| {
-                matches!(
-                    form.constraints.aromatic_valence(),
-                    AromaticValenceForm::Aromatic(_)
-                )
-            }) {
-                return Solution::Contradictory(
-                    AromaticityInconsistency::AromaticValenceFailure { atom }.into(),
-                );
-            }
-        }
-        for (bond, _) in required_bonds {
-            if !claimed_bonds.contains(&bond) {
-                return Solution::Contradictory(
-                    AromaticityInconsistency::AromaticBondConstraintFailure { bond }.into(),
-                );
-            }
-        }
-    }
-
-    systems.extend(accepted);
-    tie_breaks.extend(tie_break_uses);
-    tie_breaks.sort_unstable();
-    tie_breaks.dedup();
-    Solution::Determined(ResolveState {
-        completions,
-        systems,
-        tie_breaks,
-    })
-}
+use crate::strategies::{aromatic_skeleton, atom_selection_skeleton};
 
 proptest! {
     #[test]
@@ -830,34 +449,42 @@ proptest! {
     }
 
     #[test]
-    fn test_aromaticity_resolver_select_with_report_search_independence(
-        scenario in select_scenario()
+    fn test_resolver_resolve_with_report_search_independence(
+        molecule in atom_selection_skeleton(),
+        rule in prop_oneof![
+            Just(AromaticityRule::Hueckel { ring_limits: RingLimits::default() }),
+            Just(AromaticityRule::Hmo { stabilization_threshold: 0.1 }),
+            Just(AromaticityRule::Hmo { stabilization_threshold: 0.2 }),
+            Just(AromaticityRule::Clar),
+        ],
+        aromaticity_tie_break in prop_oneof![
+            Just(AromaticityTieBreak::Strict), Just(AromaticityTieBreak::MinElectronCount),
+        ],
+        valence_tie_break in prop_oneof![
+            Just(ValenceTieBreak::Strict), Just(ValenceTieBreak::MostSaturated),
+        ],
+        failure in prop_oneof![Just(AromaticityFailurePolicy::Error), Just(AromaticityFailurePolicy::Keep)],
+        typing in any::<bool>(),
     ) {
-        let resolver = AromaticityResolver::with_config(&scenario.model, scenario.config);
-        let actual = resolver
-            .select_with_report(
-                &scenario.molecule,
-                ResolveState {
-                    completions: scenario.completions.clone(),
-                    ..ResolveState::default()
-                },
-                scenario.tie_break,
-            )
-            .expect("Hückel perception is infallible");
-        let expected = exhaustive_select(&scenario);
-        prop_assert_eq!(actual, expected.clone());
-        let without_report = resolver.select(
-            &scenario.molecule,
-            ResolveState {
-                completions: scenario.completions.clone(),
-                ..ResolveState::default()
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            aromaticity: AromaticityModel {
+                scope: ElementScope::Any, rule, tie_break: aromaticity_tie_break,
             },
-            scenario.tie_break,
-        ).expect("Hückel perception is infallible");
-        prop_assert_eq!(without_report, expected.map(|mut state| {
-            state.tie_breaks.clear();
-            state
-        }));
+            ..ChemistryModel::default()
+        };
+        model.valence.tie_break = valence_tie_break;
+        let resolve = |atom_selection_algorithm| {
+            Resolver::with_config(&model, ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    atom_selection_algorithm,
+                    aromatic_valence_failure: failure,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            }).resolve_with_report(molecule.clone())
+        };
+        prop_assert_eq!(resolve(AtomSelectionAlgorithm::BacktrackingDfs), resolve(AtomSelectionAlgorithm::FullDfs));
     }
 }
 

@@ -8,6 +8,7 @@ from umol import (
     AromaticityResolveConfig,
     AtomCompletions,
     AtomForm,
+    AtomSelectionAlgorithm,
     AtomTypeRegistry,
     ChemistryModel,
     ElementScope,
@@ -114,10 +115,32 @@ def test_stereo_policy_mutation(policy):
         policy.value = "changed"
 
 
+@pytest.mark.parametrize(
+    ("algorithm", "expected"),
+    [
+        (AtomSelectionAlgorithm.FullDfs, "AtomSelectionAlgorithm.FullDfs"),
+        (AtomSelectionAlgorithm.BacktrackingDfs, "AtomSelectionAlgorithm.BacktrackingDfs"),
+    ],
+)
+def test_atom_selection_algorithm_repr(algorithm, expected):
+    assert repr(algorithm) == expected
+
+
+def test_atom_selection_algorithm_hash():
+    algorithms = {
+        AtomSelectionAlgorithm.FullDfs: "full",
+        AtomSelectionAlgorithm.BacktrackingDfs: "pruned",
+    }
+
+    assert algorithms[AtomSelectionAlgorithm.FullDfs] == "full"
+    assert algorithms[AtomSelectionAlgorithm.BacktrackingDfs] == "pruned"
+
+
 def test_aromaticity_resolve_config_default():
     config = AromaticityResolveConfig()
 
     assert config.perception == AromaticityConfig()
+    assert config.atom_selection_algorithm == AtomSelectionAlgorithm.BacktrackingDfs
     assert config.aromatic_valence_failure == AromaticityFailurePolicy.Error
     assert config.aromatic_system_failure == AromaticityFailurePolicy.Error
     assert config == AromaticityResolveConfig()
@@ -125,33 +148,39 @@ def test_aromaticity_resolve_config_default():
 
 @pytest.mark.parametrize(
     (
+        "atom_selection_algorithm",
         "aromatic_valence_failure",
         "aromatic_system_failure",
     ),
     [
         (
+            AtomSelectionAlgorithm.BacktrackingDfs,
             AromaticityFailurePolicy.Error,
             AromaticityFailurePolicy.Error,
         ),
         (
+            AtomSelectionAlgorithm.FullDfs,
             AromaticityFailurePolicy.Keep,
             AromaticityFailurePolicy.Keep,
         ),
     ],
 )
 def test_aromaticity_resolve_config_new(
+    atom_selection_algorithm,
     aromatic_valence_failure,
     aromatic_system_failure,
 ):
     perception = AromaticityConfig()
     config = AromaticityResolveConfig(
         perception=perception,
+        atom_selection_algorithm=atom_selection_algorithm,
         aromatic_valence_failure=aromatic_valence_failure,
         aromatic_system_failure=aromatic_system_failure,
     )
 
     assert config.perception == perception
     assert config.perception is not perception
+    assert config.atom_selection_algorithm == atom_selection_algorithm
     assert config.aromatic_valence_failure == aromatic_valence_failure
     assert config.aromatic_system_failure == aromatic_system_failure
 
@@ -174,6 +203,7 @@ def test_aromaticity_resolve_config_new_error():
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Error, "
             "aromatic_system_failure=AromaticityFailurePolicy.Error)",
         ),
@@ -190,6 +220,7 @@ def test_aromaticity_resolve_config_new_error():
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
             "aromatic_system_failure=AromaticityFailurePolicy.Keep)",
         ),
@@ -203,6 +234,7 @@ def test_aromaticity_resolve_config_repr(config, expected):
     ("field", "value"),
     [
         ("perception", AromaticityConfig()),
+        ("atom_selection_algorithm", AtomSelectionAlgorithm.FullDfs),
         ("aromatic_valence_failure", AromaticityFailurePolicy.Keep),
         ("aromatic_system_failure", AromaticityFailurePolicy.Keep),
     ],
@@ -411,6 +443,7 @@ def test_resolve_config_equality(other):
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
             "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
             "stereo=StereoResolveConfig(tetrahedral_stereo_failure="

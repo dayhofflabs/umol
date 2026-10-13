@@ -3,7 +3,7 @@
 //! discharges the assertions they realize without mutating the source molecule.
 
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::slice;
 
 use smallvec::{smallvec, SmallVec};
@@ -25,8 +25,26 @@ use crate::ops::model::{AromaticityModel, AromaticityTieBreak, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
 use crate::ops::valence::compare::compare_by_key;
 
-/// Maximum number of completion combinations per rule-supplied component.
-const MAX_COMPLETION_COMBINATIONS: usize = 4096;
+/// Maximum number of search perception calls per rule-supplied component.
+const MAX_PERCEPTION_CALLS: usize = 4096;
+
+/// Search algorithm for joint atom completion and aromatic-system selection.
+///
+/// Both algorithms apply the same validity checks and tie-breaks. A search needing
+/// more than 4096 perception calls in one component is underdetermined.
+///
+/// # Semantic properties
+///
+/// When both searches stay within the bound, resolution outcomes and reports agree.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AtomSelectionAlgorithm {
+    /// Visit every completion combination, subject to the perception-call bound.
+    FullDfs,
+    /// Prune certainly invalid subtrees under the Error aromatic-valence policy.
+    /// Under Keep, visit the same combinations as FullDfs.
+    #[default]
+    BacktrackingDfs,
+}
 
 /// How aromaticity resolution handles an independently invalid constraint or entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +56,8 @@ pub enum AromaticityFailurePolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AromaticityResolveConfig {
     pub perception: AromaticityConfig,
+    /// Completion search; defaults to BacktrackingDfs.
+    pub atom_selection_algorithm: AtomSelectionAlgorithm,
     pub aromatic_valence_failure: AromaticityFailurePolicy,
     pub aromatic_system_failure: AromaticityFailurePolicy,
 }
@@ -46,6 +66,7 @@ impl Default for AromaticityResolveConfig {
     fn default() -> Self {
         Self {
             perception: AromaticityConfig::default(),
+            atom_selection_algorithm: AtomSelectionAlgorithm::default(),
             aromatic_valence_failure: AromaticityFailurePolicy::Error,
             aromatic_system_failure: AromaticityFailurePolicy::Error,
         }
@@ -351,7 +372,7 @@ impl AromaticityResolver {
     /// tie_break; equal completions use the lexicographically smallest partition.
     /// Ties and combinations restricting different atoms leave those atoms plural.
     ///
-    /// More than MAX_COMPLETION_COMBINATIONS combinations in a component, a
+    /// More than 4096 search perception calls in a component, a
     /// nonliteral stored contribution outside the candidate sets, or undetermined
     /// perception yields Underdetermined. Contradictory evidence outside the candidate
     /// sets yields Contradictory. An uncovered atom requiring aromaticity
@@ -367,9 +388,8 @@ impl AromaticityResolver {
     /// # Semantic properties
     ///
     /// Within the enumeration bound, completions, accepted systems, and outcome equal
-    /// exhaustive selection: pruning removes no valid combination. Cross-checked in
-    /// the property test target against flat enumeration over generated one- and
-    /// two-ring Hückel scenarios under every policy combination.
+    /// exhaustive selection: pruning removes no valid combination. Cross-checked
+    /// through Resolver::resolve_with_report under Hückel, HMO, and Clar.
     pub fn select(
         &self,
         molecule: &Molecule,
@@ -570,23 +590,6 @@ impl AromaticityResolver {
                     .any(|form| matches!(contribution(form), AromaticValence::Aromatic(_))),
                 None => matches!(stored[atom_id.index()], AromaticValence::Aromatic(_)),
             });
-        for component in &components {
-            let component_flexible: Vec<&(AtomId, Vec<AromaticValence>)> = flexible
-                .iter()
-                .filter(|(atom, _)| component.contains(atom))
-                .collect();
-            let combination_count: usize = component_flexible
-                .iter()
-                .map(|(_, contributions)| contributions.len())
-                .product();
-            if combination_count > MAX_COMPLETION_COMBINATIONS {
-                return Ok(Solution::Underdetermined(ResolveState {
-                    completions,
-                    systems,
-                    tie_breaks,
-                }));
-            }
-        }
 
         // A completion combination per index choice: the partition (the perceived
         // systems inside the component, sorted by member list) and the
@@ -734,8 +737,10 @@ impl AromaticityResolver {
                     None => matches!(stored[atom.index()], AromaticValence::Aromatic(_)),
                 }
             };
-            let prune_enabled =
+            let require_aromaticity =
                 self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error;
+            let prune_enabled = require_aromaticity
+                && self.config.atom_selection_algorithm == AtomSelectionAlgorithm::BacktrackingDfs;
             let candidate_aromatic_systems = |path: &[usize]| {
                 let candidates: BTreeSet<_> = aromatic_only
                     .iter()
@@ -788,11 +793,20 @@ impl AromaticityResolver {
             // Depth-first search over the flexible atoms; a subtree is cut
             // only when every completion below it is certainly invalid, so
             // the valid combinations equal the flat enumeration's.
-            let mut combinations: Vec<CompletionCombination> = Vec::new();
+            let mut combinations: BTreeMap<CompletionCombination, usize> = BTreeMap::new();
             let mut path: Vec<usize> = Vec::new();
             let mut next = 0usize;
+            let mut perception_calls = 0;
             loop {
                 if path.len() == component_flexible.len() && next == 0 {
+                    if perception_calls == MAX_PERCEPTION_CALLS {
+                        return Ok(Solution::Underdetermined(ResolveState {
+                            completions,
+                            systems,
+                            tie_breaks,
+                        }));
+                    }
+                    perception_calls += 1;
                     let choice: BTreeMap<AtomId, usize> = component_flexible
                         .iter()
                         .zip(&path)
@@ -843,10 +857,10 @@ impl AromaticityResolver {
                             )
                         })
                         .collect();
-                    let combination = (restriction, partition);
-                    if !combinations.contains(&combination) {
-                        combinations.push(combination);
-                    }
+                    let discovery_order = combinations.len();
+                    combinations
+                        .entry((restriction, partition))
+                        .or_insert(discovery_order);
                     match path.pop() {
                         Some(index) => next = index + 1,
                         None => break,
@@ -872,8 +886,13 @@ impl AromaticityResolver {
             // Validity under the `Error` failure policy first — the search
             // prunes by the same criterion: a combination may not leave an
             // aromatic-only component atom unclaimed.
-            let mut valid = combinations;
-            if prune_enabled {
+            let mut ordered_combinations: Vec<_> = combinations.into_iter().collect();
+            ordered_combinations.sort_unstable_by_key(|(_, discovery_order)| *discovery_order);
+            let mut valid: Vec<_> = ordered_combinations
+                .into_iter()
+                .map(|(combination, _)| combination)
+                .collect();
+            if require_aromaticity {
                 valid.retain(|(_, partition)| {
                     aromatic_only
                         .iter()
@@ -910,7 +929,7 @@ impl AromaticityResolver {
                     claimed.extend(atoms.iter().copied());
                 }
             }
-            if prune_enabled {
+            if require_aromaticity {
                 valid.retain(|(_, partition)| {
                     required_bonds.iter().all(|(_, endpoints)| {
                         !endpoints.iter().all(|atom| component.contains(atom))
@@ -979,11 +998,11 @@ impl AromaticityResolver {
             // members stay plural. Restriction-identical survivors take the
             // lexicographically smallest partition — representation
             // canonicalization, not policy.
-            let mut restrictions: Vec<&Vec<(AtomId, AtomForm)>> = Vec::new();
-            for (restriction, _) in &valid {
-                if !restrictions.contains(&restriction) {
-                    restrictions.push(restriction);
-                }
+            let mut restrictions: Vec<&Vec<(AtomId, AtomForm)>> =
+                valid.iter().map(|(restriction, _)| restriction).collect();
+            if restrictions.len() > 1 {
+                let mut seen = HashSet::new();
+                restrictions.retain(|restriction| seen.insert(*restriction));
             }
             let (winner_restriction, by_key) = if restrictions.len() == 1 {
                 (restrictions[0], false)
@@ -1157,6 +1176,17 @@ mod tests {
     }
 
     #[fixture]
+    fn quinoline() -> Molecule {
+        mol_dsl!(
+            r#"{
+            :atoms ["C#c0#a" "C#c0#a" "C#c0#a" "C#c0#a" "C#c0#a"
+                    "C#c0#a" "C#c0#a" "C#c0#a" "N#c0" "C#c0#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]]}"#
+        )
+    }
+
+    #[fixture]
     fn resolved_benzene() -> Molecule {
         mol_dsl_concrete!(
             r#"{
@@ -1197,6 +1227,7 @@ mod tests {
             AromaticityResolveConfig::default(),
             AromaticityResolveConfig {
                 perception: AromaticityConfig::default(),
+                atom_selection_algorithm: AtomSelectionAlgorithm::BacktrackingDfs,
                 aromatic_valence_failure: AromaticityFailurePolicy::Error,
                 aromatic_system_failure: AromaticityFailurePolicy::Error,
             }
@@ -2176,6 +2207,127 @@ mod tests {
                 state.clone(),
                 tie_break
             ),
+            Ok(Solution::Determined(state))
+        );
+    }
+
+    #[rstest]
+    #[case::shared_restriction(
+        AtomCompletions::from_iter([
+            (AtomId(8), smallvec![atom_dsl!("N#c0#a0"), atom_dsl!("N#c0#a2")]),
+        ]),
+        ValenceTieBreak::Strict,
+        AtomCompletions::from_iter([
+            (AtomId(8), smallvec![atom_dsl!("N#c0#a0"), atom_dsl!("N#c0#a2")]),
+        ]),
+        vec![((0..6).map(AtomId).collect(),
+            AromaticSystemForm::from_electrons(vec![1; 6])
+                .with_charge(0)
+                .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()))],
+        Vec::new()
+    )]
+    #[case::distinct_restrictions(
+        AtomCompletions::from_iter([
+            (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v2#a0"), atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")]),
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v2#a0"), atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")]),
+            (AtomId(8), smallvec![atom_dsl!("N#c0#a0"), atom_dsl!("N#c0#a2")]),
+        ]),
+        ValenceTieBreak::MostSaturated,
+        AtomCompletions::from_iter([
+            (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v2#a0")]),
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")]),
+            (AtomId(8), smallvec![atom_dsl!("N#c0#a0"), atom_dsl!("N#c0#a2")]),
+        ]),
+        vec![((0..6).map(AtomId).collect(),
+            AromaticSystemForm::from_electrons(vec![0, 2, 1, 1, 1, 1])
+                .with_charge(0)
+                .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()))],
+        (0..6).map(AtomId).collect()
+    )]
+    fn test_aromaticity_resolver_select_with_report_duplicates(
+        quinoline: Molecule,
+        #[case] completions: AtomCompletions,
+        #[case] tie_break: ValenceTieBreak,
+        #[case] expected_completions: AtomCompletions,
+        #[case] systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+        #[case] tie_breaks: Vec<AtomId>,
+        #[values(
+            AtomSelectionAlgorithm::FullDfs,
+            AtomSelectionAlgorithm::BacktrackingDfs
+        )]
+        atom_selection_algorithm: AtomSelectionAlgorithm,
+    ) {
+        let model = AromaticityModel::daylight();
+        let resolver = AromaticityResolver::with_config(
+            &model,
+            AromaticityResolveConfig {
+                atom_selection_algorithm,
+                aromatic_valence_failure: AromaticityFailurePolicy::Keep,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            resolver.select_with_report(
+                &quinoline,
+                ResolveState {
+                    completions,
+                    ..Default::default()
+                },
+                tie_break,
+            ),
+            Ok(Solution::Determined(ResolveState {
+                completions: expected_completions,
+                systems,
+                tie_breaks,
+            }))
+        );
+    }
+
+    #[rstest]
+    #[case::strict(ValenceTieBreak::Strict)]
+    fn test_aromaticity_resolver_select_with_report_duplicates_identity(
+        quinoline: Molecule,
+        #[case] tie_break: ValenceTieBreak,
+        #[values(
+            AtomSelectionAlgorithm::FullDfs,
+            AtomSelectionAlgorithm::BacktrackingDfs
+        )]
+        atom_selection_algorithm: AtomSelectionAlgorithm,
+    ) {
+        let state = ResolveState {
+            completions: AtomCompletions::from_iter([
+                (
+                    AtomId(0),
+                    smallvec![
+                        atom_dsl!("C#i=#c0#h1#n0#u0#s#v2#a0"),
+                        atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")
+                    ],
+                ),
+                (
+                    AtomId(1),
+                    smallvec![
+                        atom_dsl!("C#i=#c0#h1#n0#u0#s#v2#a0"),
+                        atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")
+                    ],
+                ),
+                (
+                    AtomId(8),
+                    smallvec![atom_dsl!("N#c0#a0"), atom_dsl!("N#c0#a2")],
+                ),
+            ]),
+            ..Default::default()
+        };
+        let model = AromaticityModel::daylight();
+        let resolver = AromaticityResolver::with_config(
+            &model,
+            AromaticityResolveConfig {
+                atom_selection_algorithm,
+                aromatic_valence_failure: AromaticityFailurePolicy::Keep,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            resolver.select_with_report(&quinoline, state.clone(), tie_break),
             Ok(Solution::Determined(state))
         );
     }
