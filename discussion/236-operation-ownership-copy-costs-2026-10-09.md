@@ -3198,7 +3198,7 @@ samples, and verification logs are retained in scratch/236-s3m.
 
 ### S4 — Resolvers and transformers
 
-#### S4a — Resolution and transform benchmark cases
+#### S4a — Resolution and transform benchmark cases **Done**
 
 **Modules:** umol-graph benches/resolve.rs, a new benches/transform.rs target,
 and umol-graph Cargo.toml. **Additive, green.** [dep: none]
@@ -3267,7 +3267,7 @@ All 110 resolve benchmark checks and 28 transform benchmark checks pass, as do
 Clippy for both targets with warnings denied, touched-file formatting, and the
 diff check. No workspace gate was rerun for this benchmark-only subitem.
 
-#### S4a1 — Kekulizer donor localization and fixed exposures
+#### S4a1 — Kekulizer donor localization and fixed exposures **Done**
 
 **Modules:** graph transform/kekulizer, tests/kekulization and its fixtures,
 benches/transform.rs. **Breaking, red→green within the subitem.** [dep: S4a]
@@ -3357,7 +3357,7 @@ not establish a precise small-effect bound. Donor measurements are new
 baselines, not comparisons with the invalid former inputs. No workspace test
 or formatting gate was run; touched files are formatted and the diff checked.
 
-#### S4b — Shared system addition
+#### S4b — Shared system addition **Done**
 
 **Modules:** graph aromaticity, resolve/aromaticity, resolve,
 transform/aromatizer, and tests/kekulization. **Breaking, red→green within the
@@ -3395,14 +3395,114 @@ orbital_count 10, electron_count 9. It adds the aromatic electron contributions
 but retains the Kekulé double bonds. S4b leaves that accounting unchanged;
 its output tests verify the insertion and discharge contract, not electron
 conservation. The benchmark setup likewise checks the perceived systems but
-does not validate the complete aromatized output. This correction is absent
-from S4k's evidence-reading scope; its placement in the plan remains to be
-settled. The baseline probe and input export are retained in scratch/236-s4b.
+does not validate the complete aromatized output. S4b1 corrects this before S4d;
+S4k retains its separate evidence-reading scope. The baseline probe and input
+export are retained in scratch/236-s4b.
+
+#### S4b1 — Aromatizer contribution recovery and electron transfers **Done**
+
+**Modules:** graph transform/aromatizer and its unit tests, aromaticity where
+contribution context requires it, benches/transform.rs.
+**Breaking, red→green within the subitem.** [dep: S4b]
+
+Correct contribution recovery from the localized representation. Distinguish
+double bonds that supply the candidate system from exocyclic double bonds;
+recover zero-electron carbonyl sites and two-electron anionic carbon donors.
+Use the atom's charge and available lone pairs when identifying donors instead
+of assigning two electrons from the element alone.
+
+For each selected system, plan the corresponding electron transfers: change
+its contributing localized double bonds to single bonds and withdraw one local
+lone pair from each two-electron donor. Zero-electron sites withdraw no pair;
+external double bonds remain localized. Preserve charge, hydrogens, spin, and
+unaffected atom and bond state. These transfers belong to Aromatizer's plan,
+not the shared system-insertion helper: resolver inputs already account for
+their aromatic electrons differently.
+
+Establish the planned atoms' electron/valence validity before applying edits.
+Keep the Transformer entry points, ownership behavior, and existing-system
+no-op contract. Move electrons_from_kekule's agreed crate-private visibility
+forward from S4l and reuse the perception's ring context for contribution
+recovery. Add `AromatizeError::ContradictedAssertion { aromatic_system:
+AromaticSystemId, atom: AtomId, constraint: AtomConstraintForm }` and
+`AromatizeError::ValenceInvariant { aromatic_system: AromaticSystemId,
+mismatch: ValenceMismatch }`, matching S4d's vocabulary. The system id is the
+one the planned insertion receives. Missing information needed for a transfer
+uses the existing Underdetermined variant; incomplete unrelated state does not
+require whole-molecule groundness. Every failure precedes mutation. S4e still
+owns transaction removal, and S4k owns evidence handling.
+HMO/Clar changes and resolver selection/backtracking remain outside this fix.
+
+**Investigation (2026-10-12).** At commit 7173a14f1, the aromatic conformance
+corpus gives 34 testable Kekulé inputs per valence model, using atom typing and
+counts with MostSaturated and Daylight Hückel. This includes F420 with prescribed
+hydrogens; the original F420 assignment retains S4a1's NoMatching result.
+Aromatizer produces 28 electron-invalid outputs and six unchanged inputs per
+model. Diagnostic transfers restore conservation, but contribution recovery
+still misses six systems and only recovers F420's benzene ring. Supplying the
+reference contributions and membership plus those transfers reproduces all
+34 references; that control uses information unavailable to a real reader and
+is not an implementation. The manifest, probe, results, and faithful input/output
+exports are retained in scratch/236-aromatizer-diagnosis.
+
+**Tests:** use inline parameterized success, identity, and error cases for
+one-electron bond transfer, two-electron N/O/S and anionic-C pair transfer,
+zero-electron sites retaining external double bonds, unchanged ineligible or
+already-aromatic input, required versus unrelated undetermined data, assertion
+conflicts, and electron-count mismatches. Check exact outputs, ownership-path
+agreement, and unchanged input even when a later candidate fails. Do not add
+external fixture files or a permanent suite copied from the conformance corpus.
+
+The conformance-derived inputs remain a diagnostic sweep in scratch/236-s4b1,
+under both valence models, including F420 with prescribed hydrogens. Validate
+complete inputs and outputs. Distinguish conservation from exact system recovery:
+porphine-annulene permits a larger electron-valid perceived system after
+localization, so a universal exact-membership roundtrip is not the contract.
+
+**Verification:** focused transform tests and the diagnostic sweep, aromatic resolution
+conformance, graph crate Clippy, touched-file formatting, and diff review.
+Strengthen transform benchmark setup to validate complete aromatized outputs
+and capture fresh consuming/in-place timings. Earlier timings of electron-invalid
+outputs are not equivalent-correctness baselines. No workspace gate for this
+subitem.
+
+**Completed (2026-10-12).** Aromatizer reuses one candidate ring set and reads
+localized contributions once. Its plan transfers internal double bonds and
+donor lone pairs, retains external carbonyl bonds, and checks the planned atoms
+before mutation. The approved ContradictedAssertion and ValenceInvariant errors
+identify the affected planned system and atom; unrelated underdetermined state
+is preserved. electrons_from_kekule is crate-private. Existing-system no-op and
+Transformer ownership contracts remain unchanged.
+
+Permanent coverage consists of three inline behavior tables: nine successful
+transformations, five identities, and five failures, plus the existing
+configuration test. Success cases include N/O/S and anionic-C donor variants,
+zero-electron sites, assertion discharge with unrelated-assertion preservation,
+and unrelated partial state. The later-system failure checks that the input is
+unchanged. No external fixture files or corpus integration tests were added.
+
+Verification passed: 70 transform unit cases, 98 existing kekulization cases,
+34 aromatic resolution conformance snapshots, the Aromatizer integrity property,
+and graph-crate all-target Clippy with conformance and proptest enabled. The
+scratch diagnostic passed all 68 runs across the 34 inputs and two valence models,
+validating complete inputs and outputs and comparing ownership paths. All 28
+transform benchmark setups pass with complete output validation. The final
+20 Aromatizer unit cases, touched-file formatting, and diff checks pass. No
+workspace gate was run.
+
+Fresh timings cover seven fixtures through consuming and in-place Aromatizer
+paths. Final means span 7.45–16.84 µs. A single sequential comparison against the
+first corrected implementation measured 4.6–13.4% lower means after omitting
+redundant zero-default constraints from temporary validation forms, keeping the
+common form within its inline capacity. This is an exploratory optimization
+comparison, not a precise regression estimate against the earlier invalid-output
+implementation. Commands, manifests, diagnostic results, binaries, and raw timing
+samples are retained in scratch/236-s4b1.
 
 #### S4d — Kekulizer validity during planning
 
 **Modules:** graph transform/kekulizer and the kekulization tests. **Breaking,
-red→green within the subitem.** [dep: S3a, S4a1]
+red→green within the subitem.** [dep: S3a, S4a1, S4b1]
 
 In planning, build each system atom's planned form: the atom as the plan leaves
 it, with its planned charge and lone pairs and without the aromatic valence
@@ -3432,7 +3532,7 @@ taken before the change.
 #### S4e — In-place transform_into without a transaction
 
 **Modules:** graph transform/aromatizer and transform/delocalize_charge.
-**Green.** [dep: none]
+**Green.** [dep: S4b1]
 
 Aromatizer and DelocalizeCharge transform_into apply their plan in place instead
 of through transact. Planning failures leave the receiver unchanged.
@@ -3575,7 +3675,7 @@ underdetermination and contradiction.
 #### S4k — Aromatizer reads evidenced
 
 **Modules:** graph transform/aromatizer and aromaticity. **Green.** [dep: S3d,
-S3l, S4b, S4j, S3a]
+S3l, S4b1, S4j, S3a]
 
 The aromatizer runs derive with each atom's Kekulé contribution and reads each
 atom's `evidenced` aromatic valence. An atom whose evidence is non-aromatic is
@@ -3608,12 +3708,13 @@ subitem.** [dep: S4i, S4j]
 
 Make crate-private: AromaticityPerceiver and AromaticityDerivation; the hueckel,
 hmo, and clar modules with their rule types, errors, and output;
-electrons_from_kekule; select and select_with_report; the admit methods of
+select and select_with_report; the admit methods of
 ValenceResolver, AtomTypingValence, and CountsValence; and ResolveState and
 AtomCompletions. Remove the test-side exhaustive selection and select_scenario,
 which S4i's property replaces; the other tests that called them use the public
 operations. Migrate the resolve bench's admission timings and selection setup
 checks with these consumers; keep its public-operation selection timings.
+S4b1 owns electrons_from_kekule's visibility change.
 
 **Tests:** the property suite and tests/matching through the public operations.
 
@@ -3776,5 +3877,6 @@ production code differs from what was measured.
 
 **Critical paths:** S3a1 → S3b → S3d → S3l → S4j, then S4c → S4f → S4n
 and S4l → S4n. Both join S6a → S7a, after the remaining stage dependencies.
-S4a → S4a1 establishes the correctness baseline before S4b and S4d.
+S4a → S4a1 → S4b → S4b1 establishes the corrected transformer baseline
+before S4d, S4e, and S4k.
 The binding path is S3b → S3b1 → S3b2 → S3b3 → S7a.

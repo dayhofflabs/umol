@@ -86,6 +86,11 @@ fn bench_transform(c: &mut Criterion) {
 
         let perceived = aromatizer.transform(kekule.clone()).unwrap();
         assert_eq!(
+            ValenceInvariantsValidator.validate(&perceived),
+            Ok(Solution::Determined(())),
+            "{name} aromatized output"
+        );
+        assert_eq!(
             perceived
                 .aromatic_systems()
                 .iter()
