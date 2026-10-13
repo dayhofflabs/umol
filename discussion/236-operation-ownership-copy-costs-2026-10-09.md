@@ -147,6 +147,14 @@ intrinsic to the value. inline moves the constraints instead of cloning them
 into a validation plan. 166 still owns lift's treatment of an undetermined
 stereo kind.
 
+Placement is explicit. Composite resolution does not normalize the molecule-level
+list or move its entity leaves into entity stores. Entity assertions remain
+available as operands of logical constraints; accepting those expressions does
+not require automatic placement. The MOL/SMILES ingestion path already writes
+its assertions directly on entities and produces an empty molecule-level list.
+Callers that want to move bare leaves can invoke inline_constraints themselves;
+that operation leaves logical subtrees in place.
+
 ## Decided: derivations
 
 extract, tracked_extract, edits, split, and tracked_split keep borrowing. They
@@ -435,8 +443,9 @@ non-aromatic and one of its bonds aromatic. Elsewhere, the absence of aromatic
 evidence already reads non-aromatic under `evidenced_complete`. Raising writes
 no `#m!`.
 
-The composite resolver has no closing discharge pass. Discharge is part of each
-resolver's plan: the plan removes the assertions that its own results realize.
+The composite resolver has no opening placement or closing discharge pass.
+Discharge is part of each resolver's plan: the plan removes the assertions that
+its own results realize.
 Valence discharges `#v` on each atom it completes. Aromaticity discharges the
 aromatic valence of each member of a system it adds, and the aromatic constraint
 of each bond outside the stored systems that its result confirms; it writes no
@@ -445,6 +454,9 @@ constraint at each site where it adds an entity. `reset_aromatic_valence` and
 `reset_stereo_constraints` are removed. Assertions on entities that resolution
 neither adds nor completes stay. Resolution no longer evaluates the other
 assertions or the molecule-level list; the validators report a violated one.
+It does not normalize or inline that list. Existing failure policies that
+explicitly request removal still remove the selected assertions or entities;
+entity removal retains its required constraint-reference compaction.
 
 Standalone stereo resolution completes the structural step without requiring a
 literal configuration. Positive open assertions `#T+` and `#C+` can become
@@ -1480,8 +1492,9 @@ plan.
    bond outside the stored systems that its result confirms, the tetrahedral or
    cis-trans constraint at each site where it adds an entity, and `#v` on each
    atom it completes.
-6. Every other assertion, and the molecule-level list, leaves resolution
-   unchanged.
+6. Resolution preserves every other assertion and the molecule-level list,
+   without normalization, placement, or evaluation. Explicit removal policies
+   retain their requested removals and the associated reference compaction.
 7. A SMILES or MOL input that resolves under the Error policies carries no
    aromatic or stereo assertion afterward.
 8. Resolving a projected molecule leaves no projected assertion and, under the
@@ -3099,21 +3112,28 @@ inputs check overhead without adding a negative assertion; they do not measure
 the cost of storing the new bridge assertion. Executables, raw samples,
 estimates, and logs are saved in scratch/236-s3h1.
 
-#### S3m — Closing discharge pass removed
+#### S3m — Automatic placement and closing discharge removed **Done**
 
-**Modules:** graph resolve and ingest tests; docs/development/nomenclature.md.
+**Modules:** graph resolve, property and resolution conformance tests;
+docs/development/nomenclature.md.
 **Breaking, red→green within the subitem.** [dep: S3h, S3h1, S3i, S3j, S3k, S3l,
 S3a]
 
 Remove plan_discharge and its call sites, DischargeContradiction,
 ResolveContradiction::Discharge, and ResolveError::DischargeEvaluation and
-Discharge. Rewrite the nomenclature guide's Discharge entry: discharge is part
+Discharge. Also remove plan_placement and its four call sites,
+PlacementContradiction, ResolveContradiction::Placement, and
+ResolveError::Placement. Molecule::inline_constraints remains an explicit
+operation. Rewrite the nomenclature guide's Discharge entry: discharge is part
 of each resolver's plan and removes the assertions that its own results realize.
 Adjust the Concrete entry's reference to the closing pass.
 
 **Tests:** composite resolution keeps assertions on entities it neither adds nor
-completes and keeps the molecule-level list unevaluated; tests of the removed
-variants go; properties over the skeleton generator: for invariants 5 and 6, the
+completes and keeps the molecule-level list unchanged, including bare entity
+leaves, singleton wrappers, logical subtrees, and contradictory assertions;
+tests of the removed variants go. List preservation is checked under Error
+policies; explicit Remove policies retain their existing compaction behavior.
+Properties over the skeleton generator: for invariants 5 and 6, the
 resolved assertions in standalone and composite resolution are the input's
 without the discharged ones, and the molecule-level list is unchanged; for
 invariant 7, the renderings that resolve under the Error policies carry no
@@ -3122,6 +3142,54 @@ leaves no projected assertion and reproduces its systems under the same model.
 
 **Verification:** the resolve bench groups, against a baseline taken before the
 change.
+
+**Completion (2026-10-12):** all four composite entry points omit automatic
+placement and closing discharge. They preserve the molecule-level list exactly
+under Error policies, including bare entity leaves, singleton logical wrappers,
+and contradictions. The final integrity and concreteness checks remain.
+Molecule::inline_constraints and constraint validation remain explicit operations.
+
+The conformance inputs now rely on the resolver's closed aromaticity reading:
+369 fixtures no longer request the blanket `:aromatic-valence :not-aromatic`
+default, and 15 omit redundant explicit atom `#a!` marks; one fixture needed
+both changes. All 683 cases pass against their original, unchanged snapshots.
+Without positive atom, incident-bond, or stored-system evidence, an atom reads
+NotAromatic and is excluded from resolution's aromaticity perception. S3h and
+S3h1 already cover the boundary cases that require explicit exclusions.
+The DSL default retains its meaning, including its use for registry patterns;
+deliberately supplied negative assertions retain their meaning and preservation
+tests. No general negative-assertion discharge is added.
+
+The related-change gate passed 37,045 workspace tests with all features enabled,
+including 177 graph properties, with 10 ignored; workspace Clippy with all
+targets/features and warnings denied; and 2,200 Python tests with 2 skipped
+after rebuilding against the repository's Python 3.13 environment. That gate
+preceded the fixture correction; the corrected corpus then passed its 683
+conformance cases without snapshot updates. Formatting and diff checks pass.
+
+The 33 existing resolve workloads were compared with the saved executable from
+commit 63e8152ca, using 40 samples, one-second warm-up, and two-second measurement.
+Initial apparent regressions prompted paired repeats of six affected cases and
+two controls, with executable order reversed in the second pair. These are
+changes in mean time, with negative values meaning faster:
+
+| Case | Before then after | After then before |
+| --- | ---: | ---: |
+| ingest methane | -2.64% | -6.32% |
+| ingest benzene | +0.15% | -1.91% |
+| ingest pyridine | -1.02% | -2.23% |
+| ingest naphthalene | -1.25% | -0.22% |
+| counts chain_64 | -8.61% | +1.00% |
+| counts aromatic_fused | -12.06% | -7.48% |
+| typing chain_64 | -1.55% | -2.58% |
+| dense88 unique ownership | -2.18% | +7.25% |
+
+Three further dense88 pairs, using 80 samples and four-second measurement,
+gave +0.21%, +2.40%, and -3.29%. The larger initial slowdowns were not sustained;
+the variation does not establish a uniform speedup or a precise small-effect
+bound. These benchmarks do not consume the migrated conformance inputs, and
+the measured production code is unchanged by that correction. Executables,
+samples, and verification logs are retained in scratch/236-s3m.
 
 ### S4 — Resolvers and transformers
 

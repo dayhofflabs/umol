@@ -20,6 +20,12 @@
 //! and newly added tetrahedral and cis-trans entities with literal or open configurations.
 //! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
 //!
+//! Skeleton properties compare each determined standalone or composite result's exact
+//! remaining assertions with those realized by its additions and completions. SMILES and
+//! MOL renderings that resolve under Error policies leave no aromatic or stereo assertion.
+//! Projection followed by resolution reproduces the systems modulo participant frames
+//! and removes the assertions written by projection under the same chemistry model.
+//!
 //! Semantic property: for carriers whose components stay within the
 //! enumeration bound, both aromatic selectors return the outcome of a
 //! selection that enumerates every completion combination of every component
@@ -50,19 +56,21 @@ use umol_graph::ops::model::{
     RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
 };
 use umol_graph::ops::resolve::{
-    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, ResolveConfig,
-    ResolveState, Resolver, StereoResolver,
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, IsotopePolicy,
+    ProjectFlags, ResolveConfig, ResolveState, Resolver, StereoResolver,
 };
 use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
-    AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondForm, BondId, BooleanForm,
-    CisTransStereoForm, ElectronCountsForm, ElementForm, IsotopeMassForm, Lattice, Molecule,
-    MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind, StereoAtomForm, StereoBondForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
-    UnpairedElectronsForm,
+    AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
+    BooleanForm, CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm,
+    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, RingConfig,
+    RingModel, RingSetKind, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
+use umol_io::ctfile::parser::parse_mol_to_ir;
+use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
 use crate::strategies::{aromatic_skeleton, select_scenario, SelectScenario};
@@ -570,13 +578,173 @@ proptest! {
             }
         }
         expected.aromatic.extend(additions);
+        let constraint = Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: None, sum: NumForm::Lit(1),
+        });
+        source.constraints.push(constraint.clone());
+        expected.constraints.push(constraint);
         let mut molecule = Molecule::from_entries(source);
         let expected = Molecule::from_entries(expected);
         let resolver = AromaticityResolver::new(&AromaticityModel::daylight());
+        let model = ChemistryModel::default();
+        let composite = Resolver::new(&model);
+        prop_assert_eq!(composite.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
+        let mut borrowed = molecule.clone();
+        prop_assert_eq!(composite.resolve_into(&mut borrowed), Ok(Solution::Determined(())));
+        prop_assert_eq!(borrowed, expected.clone());
         prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
         prop_assert_eq!(resolver.resolve(molecule), Ok(Solution::Determined(expected)));
+    }
+
+    #[test]
+    fn test_resolver_resolve_discharge(
+        skeleton in aromatic_skeleton(),
+        typing in any::<bool>(),
+    ) {
+        let raw = skeleton.molecule();
+        let mut editor = raw.clone().edit();
+        for atom in raw.atoms().iter() {
+            let degree = atom.neighbors().count() as i64;
+            let mut target = editor.atom_mut(atom.id());
+            let constraints = &mut target.attributes_mut().constraints;
+            constraints.set(AtomConstraintForm::Valence(NumForm::Lit(degree)));
+            constraints.set(AtomConstraintForm::Degree(NumForm::Lit(degree + 1)));
+        }
+        editor.constraints_mut().push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: None, sum: NumForm::Lit(1),
+        }));
+        let input = editor.finish().unwrap();
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..ChemistryModel::default()
+        };
+        model.valence.tie_break = ValenceTieBreak::MostSaturated;
+        let resolver = Resolver::with_config(&model, ResolveConfig {
+            isotope: IsotopePolicy::Natural, ..ResolveConfig::default()
+        });
+        let mut results = Vec::new();
+        if let Ok(Solution::Determined(output)) = resolver.aromaticity.resolve(input.clone()) {
+            results.push((true, false, false, output));
+        }
+        if let Ok(Solution::Determined(output)) = resolver.stereo.resolve(input.clone()) {
+            results.push((false, true, false, output));
+        }
+        if let Ok(Solution::Determined(output)) = resolver.resolve(input.clone()) {
+            results.push((true, true, true, output));
+        }
+        for (aromatic, stereo, completes_atoms, output) in results {
+            prop_assert_eq!(output.constraints(), input.constraints());
+            let added_members: BTreeSet<_> = output.aromatic_systems().iter()
+                .skip(input.aromatic_systems().count()).flat_map(|system| system.atom_ids()).collect();
+            let added_atoms: BTreeSet<_> = output.stereo_atoms().iter()
+                .skip(input.stereo_atoms().count()).map(|site| site.site_id()).collect();
+            let added_bonds: BTreeSet<_> = output.stereo_bonds().iter()
+                .skip(input.stereo_bonds().count()).map(|site| site.site_id()).collect();
+            for atom in input.atoms().iter() {
+                let mut expected = atom.attributes().constraints.clone();
+                if aromatic && added_members.contains(&atom.id()) {
+                    expected.remove(AtomConstraintKey::AromaticValence);
+                }
+                if stereo && added_atoms.contains(&atom.id()) {
+                    expected.remove(AtomConstraintKey::TetrahedralStereo);
+                }
+                if completes_atoms {
+                    expected.remove(AtomConstraintKey::Valence);
+                }
+                prop_assert_eq!(&output.atom(atom.id()).attributes().constraints, &expected);
+            }
+            for bond in input.bonds().iter() {
+                let mut expected = bond.attributes().constraints.clone();
+                if aromatic && !bond.is_in_aromatic_system() {
+                    if let Some(BondConstraintForm::Aromatic(asserted)) = expected.get(BondConstraintKey::Aromatic) {
+                        let realized = BooleanForm::Lit(output.bond(bond.id()).is_in_aromatic_system());
+                        if asserted.meet(&realized).is_some() {
+                            expected.remove(BondConstraintKey::Aromatic);
+                        }
+                    }
+                }
+                if stereo && added_bonds.contains(&bond.id()) {
+                    expected.remove(BondConstraintKey::CisTransStereo);
+                }
+                prop_assert_eq!(&output.bond(bond.id()).attributes().constraints, &expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolver_resolve_renderings(
+        skeleton in aromatic_skeleton(),
+        typing in any::<bool>(),
+    ) {
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..ChemistryModel::default()
+        };
+        model.valence.tie_break = ValenceTieBreak::MostSaturated;
+        let resolver = Resolver::with_config(&model, ResolveConfig {
+            isotope: IsotopePolicy::Natural, ..ResolveConfig::default()
+        });
+        let smiles: Molecule = Smiles::parse(&skeleton.smiles()).unwrap()
+            .as_table_ir().try_into_ir(&()).unwrap();
+        let molfile = parse_mol_to_ir(&skeleton.molfile()).unwrap();
+        for input in [smiles, molfile] {
+            let Ok(Solution::Determined(output)) = resolver.resolve(input) else { continue; };
+            for atom in output.atoms().iter() {
+                prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::AromaticValence), None);
+                prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::TetrahedralStereo), None);
+            }
+            for bond in output.bonds().iter() {
+                prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::Aromatic), None);
+                prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::CisTransStereo), None);
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolver_project_roundtrip(
+        skeleton in aromatic_skeleton(),
+        typing in any::<bool>(),
+    ) {
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..ChemistryModel::default()
+        };
+        model.valence.tie_break = ValenceTieBreak::MostSaturated;
+        let resolver = Resolver::with_config(&model, ResolveConfig {
+            isotope: IsotopePolicy::Natural, ..ResolveConfig::default()
+        });
+        let smiles: Molecule = Smiles::parse(&skeleton.smiles()).unwrap()
+            .as_table_ir().try_into_ir(&()).unwrap();
+        let molfile = parse_mol_to_ir(&skeleton.molfile()).unwrap();
+        for input in [skeleton.molecule(), smiles, molfile] {
+            let Ok(Solution::Determined(source)) = resolver.resolve(input) else { continue; };
+            let Solution::Determined(projected) = resolver.project(source.clone(),
+                ProjectFlags::AROMATICITY | ProjectFlags::STEREO).unwrap() else {
+                return Err(TestCaseError::fail("projection of a resolved skeleton was not determined"));
+            };
+            let mut expected = source.clone().edit();
+            for system in source.aromatic_systems().iter() {
+                for atom in system.atom_ids() {
+                    expected.atom_mut(atom).attributes_mut().constraints.remove(AtomConstraintKey::AromaticValence);
+                }
+            }
+            for bond in source.bonds().iter().filter(|bond| bond.is_in_aromatic_system()) {
+                expected.bond_mut(bond.id()).attributes_mut().constraints.remove(BondConstraintKey::Aromatic);
+            }
+            for site in source.stereo_atoms().iter() {
+                expected.atom_mut(site.site_id()).attributes_mut().constraints.remove(AtomConstraintKey::TetrahedralStereo);
+            }
+            for site in source.stereo_bonds().iter() {
+                expected.bond_mut(site.site_id()).attributes_mut().constraints.remove(BondConstraintKey::CisTransStereo);
+            }
+            let expected = expected.finish().unwrap();
+            let Solution::Determined(restored) = resolver.resolve(projected).unwrap() else {
+                return Err(TestCaseError::fail("projected skeleton did not resolve under the same model"));
+            };
+            prop_assert!(restored.framed_eq(&expected));
+        }
     }
 
     #[test]

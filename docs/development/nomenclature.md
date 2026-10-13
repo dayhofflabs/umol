@@ -405,7 +405,8 @@ primitive fields.
 An entity is **concrete** when its chemical attributes — the inherent fields — are determined;
 a molecule is concrete when every entity form is. The constraint channel does not bear on
 concreteness: assertions are not attributes, so a concrete molecule may carry non-ground
-assertions until discharge removes the determined-redundant ones. Concreteness is the
+or unsatisfied assertions. Resolution discharges assertions according to each phase's contract;
+validation checks the remaining assertions explicitly. Concreteness is the
 chemistry-level determinedness of a structure; lattice groundness is the algebraic notion over
 the full product including the constraint coordinates, and the two decompose per form as
 `is_ground() == is_concrete() && constraints.is_ground()`. The pattern/concrete asymmetry names
@@ -662,17 +663,20 @@ return `Determined` with a payload that is not ground if the operation's own con
 
 ### Discharge
 
-**Discharge** is the closing pass of the resolve pipeline that removes stored assertions the
-structure has come to determine: per key, a ground derived value under the closure that refines
-the assertion makes it redundant and removes it; a meet of `⊥` is a contradiction; a non-ground
-derived value keeps the assertion. Discharge is the only removal concept for the constraint
-channel. An operation that realizes an assertion may remove it early in its own transaction as an
-implementation liberty; a transform that deletes a relation removes the assertions its output no
-longer satisfies, which is the separate emit-compliance policy.
+**Discharge** removes stored assertions realized by an operation's own results.
+It belongs to each resolver's plan: valence discharges `#v` on completed atoms;
+aromaticity discharges member aromatic-valence assertions when adding a system and confirmed
+bond-aromaticity assertions outside stored systems; stereo discharges the site assertion when
+adding a stereo entity. Each plan checks the assertions it discharges before applying its edits.
 
-**Not:** cache invalidation — nothing derivable from structure is ever stored; not *consume* or a
-per-operation contract.
-**In code:** — (the planned closing `Resolver` stage).
+Resolution has no general closing discharge pass. Other assertions and molecule-level logical
+constraints remain unevaluated; explicit validators check them. Failure policies may separately
+request removal of inconsistent assertions or entities, with the usual reference compaction.
+A transform that deletes a relation removes assertions its output no longer satisfies under the
+separate emit-compliance policy.
+
+**Not:** cache invalidation, constraint placement, normalization, or general constraint validation.
+**In code:** ValenceResolver, AromaticityResolver, StereoResolver, Resolver::plan_constitution.
 
 ### Donor and acceptor
 
