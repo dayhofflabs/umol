@@ -10,6 +10,7 @@ mod integrity;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem;
+use std::sync::Arc;
 use std::vec::IntoIter;
 
 use dpo::check_reaction_dpo;
@@ -69,10 +70,16 @@ use super::substructure::SubstructureMatchConfig;
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
+///
+/// Clones share storage until a transformation requires owned values.
+///
+/// # Semantic properties
+///
+/// Transforming or extracting the parts of one clone leaves the other unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Reaction {
     lhs: Molecule,
-    deltas: Deltas,
+    deltas: Arc<Deltas>,
 }
 
 /// One-shot reaction applications over an eagerly enumerated correspondence set.
@@ -882,9 +889,12 @@ fn reframe_reaction_deltas(
 
 impl Normalize for Reaction {
     fn normalize(self) -> Result<Self, Contradiction> {
-        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas)?;
+        let deltas = normalize_reaction_deltas(&self.lhs, Arc::unwrap_or_clone(self.deltas))?;
         let lhs = self.lhs.normalize()?;
-        Ok(Self { lhs, deltas })
+        Ok(Self {
+            lhs,
+            deltas: Arc::new(deltas),
+        })
     }
 }
 
@@ -892,9 +902,13 @@ impl FrameTransport for Reaction {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        let deltas = reframe_reaction_deltas(&self.lhs, self.deltas, actions)?;
+        let deltas =
+            reframe_reaction_deltas(&self.lhs, Arc::unwrap_or_clone(self.deltas), actions)?;
         let lhs = self.lhs.reframe_by(actions)?;
-        Some(Self { lhs, deltas })
+        Some(Self {
+            lhs,
+            deltas: Arc::new(deltas),
+        })
     }
 }
 
@@ -907,10 +921,18 @@ impl Reframe for Reaction {
         let normalized = self.normalize()?;
         let domain = ReactionFrameActionDomain::from_deltas(&normalized.deltas);
         let actions = reaction_frame_action(&normalized.lhs, &normalized.deltas, Some(&domain));
-        let deltas = reframe_reaction_deltas(&normalized.lhs, normalized.deltas, &actions)
-            .ok_or(Contradiction)?;
+        let deltas = reframe_reaction_deltas(
+            &normalized.lhs,
+            Arc::unwrap_or_clone(normalized.deltas),
+            &actions,
+        )
+        .ok_or(Contradiction)?;
         let lhs = normalized.lhs.reframe()?;
-        Self { lhs, deltas }.normalize()
+        Self {
+            lhs,
+            deltas: Arc::new(deltas),
+        }
+        .normalize()
     }
 }
 
@@ -940,7 +962,10 @@ impl Reaction {
     /// Returns [`ReactionIntegrityError`] when the supplied parts do not form an interpretable
     /// reaction representation.
     pub fn try_new(lhs: Molecule, deltas: Deltas) -> Result<Self, ReactionIntegrityError> {
-        let reaction = Self { lhs, deltas };
+        let reaction = Self {
+            lhs,
+            deltas: Arc::new(deltas),
+        };
         reaction.check_integrity()?;
         Ok(reaction)
     }
@@ -956,8 +981,10 @@ impl Reaction {
     }
 
     /// Consume the reaction and return its left-hand side and deltas.
+    ///
+    /// Uniquely owned deltas are moved; deltas shared with another clone are copied.
     pub fn into_parts(self) -> (Molecule, Deltas) {
-        (self.lhs, self.deltas)
+        (self.lhs, Arc::unwrap_or_clone(self.deltas))
     }
 
     /// The reaction transforming `lhs` into `rhs` under `atom_correspondence`: induce the full
@@ -1156,7 +1183,7 @@ impl Reaction {
             }
         }
 
-        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas.clone())?;
+        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas().clone())?;
         self.apply_deltas_at(host, correspondence, deltas)
     }
 
@@ -2166,7 +2193,7 @@ impl Reaction {
         if !stereo_delta_domains_are_valid(&self.lhs, &self.deltas) {
             return Err(ApplyPreconditionError::InconsistentReaction);
         }
-        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas.clone())
+        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas().clone())
             .map_err(|_| ApplyPreconditionError::InconsistentReaction)?;
 
         check_reaction_dpo(&self.lhs, &deltas).map_err(ApplyPreconditionError::ReactionDpo)?;
@@ -3132,7 +3159,7 @@ mod tests {
         )
         .unwrap();
         let mut changed_reaction = reaction;
-        changed_reaction.deltas = Deltas::new();
+        changed_reaction.deltas = Arc::new(Deltas::new());
         let expected_changed_reaction = Reaction::new(changed_reaction.lhs.clone(), Deltas::new());
         let mut changed_host = host;
         changed_host.combine_from(&Molecule::from_entries(MoleculeEntries {
@@ -3303,7 +3330,13 @@ mod tests {
 
         let reaction = Reaction::new(lhs.clone(), deltas.clone());
 
-        assert_eq!(reaction, Reaction { lhs, deltas });
+        assert_eq!(
+            reaction,
+            Reaction {
+                lhs,
+                deltas: Arc::new(deltas),
+            },
+        );
     }
 
     #[rstest]
@@ -3341,7 +3374,13 @@ mod tests {
 
         let reaction = Reaction::try_new(lhs.clone(), deltas.clone()).unwrap();
 
-        assert_eq!(reaction, Reaction { lhs, deltas });
+        assert_eq!(
+            reaction,
+            Reaction {
+                lhs,
+                deltas: Arc::new(deltas),
+            },
+        );
     }
 
     #[rstest]
@@ -3506,7 +3545,10 @@ mod tests {
 
         assert_eq!(
             Reaction::try_new(lhs.clone(), deltas.clone()),
-            Ok(Reaction { lhs, deltas }),
+            Ok(Reaction {
+                lhs,
+                deltas: Arc::new(deltas),
+            }),
         );
     }
 
@@ -4239,7 +4281,7 @@ mod tests {
             Reaction::try_new(stereo_domain_lhs.clone(), deltas.clone()),
             Ok(Reaction {
                 lhs: stereo_domain_lhs,
-                deltas,
+                deltas: Arc::new(deltas),
             }),
         );
     }
@@ -4257,7 +4299,7 @@ mod tests {
         let deltas = Deltas::from_iter([addition]);
         let expected = Reaction {
             lhs: stereo_domain_lhs.clone(),
-            deltas: deltas.clone(),
+            deltas: Arc::new(deltas.clone()),
         };
 
         let reaction = Reaction::try_new(stereo_domain_lhs, deltas).unwrap();
@@ -4493,10 +4535,16 @@ mod tests {
     #[case::noncovalent(EntityKind::NoncovalentBond)]
     #[case::stereo_atom(EntityKind::StereoAtom)]
     #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_reaction_normalize_removal(#[case] entity_kind: EntityKind) {
+    fn test_reaction_normalize_removal(
+        #[case] entity_kind: EntityKind,
+        #[values(false, true)] shared: bool,
+    ) {
         let (owner, local) = removal_frame_reactions(entity_kind);
+        let original = Reaction::new(local.lhs().clone(), local.deltas().clone());
+        let retained = shared.then(|| local.clone());
 
         assert_eq!(local.normalize(), owner.normalize());
+        assert_eq!(retained, shared.then_some(original));
     }
 
     #[rstest]
@@ -4605,7 +4653,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_reframe_change_chain() {
+    fn test_reaction_reframe_change_chain(#[values(false, true)] shared: bool) {
         let id = AromaticSystemId(0);
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
@@ -4651,7 +4699,11 @@ mod tests {
             })]),
         );
 
+        let original = Reaction::new(reaction.lhs().clone(), reaction.deltas().clone());
+        let retained = shared.then(|| reaction.clone());
+
         assert_eq!(reaction.reframe(), Ok(expected));
+        assert_eq!(retained, shared.then_some(original));
     }
 
     #[rstest]
@@ -4963,13 +5015,42 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_into_parts_shared_storage(#[values(false, true)] shared: bool) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let deltas = Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Undetermined,
+                new: NumForm::Lit(1),
+            },
+        })]);
+        let reaction = Reaction::new(lhs.clone(), deltas.clone());
+        let retained = shared.then(|| reaction.clone());
+        let buffer = reaction.deltas().as_slice().as_ptr();
+
+        let (returned_lhs, mut returned_deltas) = reaction.into_parts();
+
+        assert_eq!(returned_lhs, lhs);
+        assert_eq!(returned_deltas, deltas);
+        assert_eq!(returned_deltas.as_slice().as_ptr() == buffer, !shared);
+        returned_deltas.push(Delta::Atom(AtomDelta::Add {
+            id: AtomId(1),
+            attributes: AtomForm::from_element(Element::O),
+        }));
+        assert_eq!(retained, shared.then(|| Reaction::new(lhs, deltas)));
+    }
+
+    #[rstest]
     #[case::unavailable_atom(
         Reaction {
             lhs: Molecule::default(),
-            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+            deltas: Arc::new(Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::default(),
-            })]),
+            })])),
         },
         ReactionIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(0)),
@@ -4980,7 +5061,7 @@ mod tests {
         #[case] expected: ReactionIntegrityError,
     ) {
         assert_eq!(
-            Reaction::try_new(reaction.lhs, reaction.deltas),
+            Reaction::try_new(reaction.lhs, Arc::unwrap_or_clone(reaction.deltas)),
             Err(expected)
         );
     }
@@ -5030,7 +5111,10 @@ mod tests {
 
         assert_eq!(
             Reaction::try_new(lhs.clone(), deltas.clone()),
-            Ok(Reaction { lhs, deltas }),
+            Ok(Reaction {
+                lhs,
+                deltas: Arc::new(deltas),
+            }),
         );
     }
 
@@ -5060,7 +5144,7 @@ mod tests {
             reaction,
             Reaction {
                 lhs: stereo_kind_change_lhs,
-                deltas,
+                deltas: Arc::new(deltas),
             },
         );
         assert_eq!(

@@ -1528,8 +1528,8 @@ plan.
 ## Copy-on-write storage
 
 Molecule's graph, atom and bond tables, six overlay collections, and molecule-level
-constraints are Arc-backed. A clone increments reference counts, and the first
-write to shared storage copies that storage. Reaction's deltas and ReactionSpan's
+constraints are Arc-backed, as are Reaction's deltas. A clone increments reference
+counts, and the first write to shared storage copies that storage. ReactionSpan's
 tables and overlay span sets still copy their contents on clone.
 [213](213-editor-overlay-storage-2026-08-27.md#remaining-costs) recorded the
 Molecule constraint copy as a remaining cost; S5a removes it.
@@ -1538,23 +1538,22 @@ Molecule constraint copy as a remaining cost; S5a removes it.
 | --- | --- | --- | --- |
 | Molecule | constraints | `Arc<Constraints>` | Yes |
 | Reaction | lhs | Molecule | As Molecule |
-| Reaction | deltas | Deltas, wrapping `Vec<Delta>` | No |
+| Reaction | deltas | `Arc<Deltas>` | Yes |
 | ReactionSpan | graph | Graph | Yes |
 | ReactionSpan | atoms, bonds | `Vec<EntitySpan<AtomForm>>`, `Vec<EntitySpan<BondForm>>` | No |
 | ReactionSpan | six overlay span sets | Newtypes wrapping their relation set directly | No |
 | ReactionSpan | constraints | `Vec<ConstraintSpan>` | No |
 
-Known clone sites that copy this storage:
+Known clone sites that copy the remaining unshared storage:
 
-- Reaction::apply and Reaction::tracked_apply snapshot the reaction into the
-  returned iterator, copying its Deltas.
-- Reaction and ReactionSpan use the default framed_eq, which clones both
+- ReactionSpan uses the default framed_eq, which clones both
   operands.
 - Python ReactionSpan canonicalize and tracked_canonicalize clone the wrapped
   span.
 
-The application iterator also clones its prepared Deltas for every match. Each
-match reframes its own copy, so that copy remains.
+Reaction application iterators share the reaction snapshot's delta storage after
+S5b. Each iterator still owns its prepared Deltas and clones them for every match.
+Each match reframes its own copy, so that copy remains.
 
 ### Design
 
@@ -4307,9 +4306,9 @@ generated cases and seed 20261013. The final expansion of the normalization
 error cases passed all eight focused checks. Graph-IR all-target Clippy with
 proptest and warnings denied, touched-file nightly formatting, git diff --check,
 and full diff review passed. The contract inventory and logs are in
-scratch/236-s5a/. S5b is next.
+scratch/236-s5a/.
 
-#### S5b — Reaction deltas
+#### S5b — Reaction deltas **Done**
 
 **Modules:** graph-IR reaction. **Green.** [dep: none]
 
@@ -4320,6 +4319,25 @@ Arc::unwrap_or_clone. The application iterator keeps its own Deltas field.
 **Tests:** migrate the test literals and assignments that set the field.
 Add clone-independence cases through normalize and reframe, and into_parts of a
 shared and of a uniquely owned reaction.
+
+**Completed (2026-10-13).** Reaction stores its deltas in Arc. normalize,
+reframe_by, reframe, and into_parts use Arc::unwrap_or_clone, preserving the move
+path for uniquely owned deltas and copying shared deltas before transformation
+or extraction. Borrowing application paths explicitly clone the inner Deltas
+when preparing them. ReactionApplicationIter retains its owned prepared Deltas.
+Constructors, accessors, errors, and Python component ownership are unchanged.
+
+The six overlay-removal normalization cases and the reframing change-chain case
+now check both unique and shared delta storage, including preservation of a
+retained clone. into_parts checks exact parts, buffer preservation when unique,
+and independence when shared; its empty case remains covered.
+
+**Verification:** 186 reaction unit tests passed, with 3 ignored. The full
+graph-IR unit, integration, property, and doc suites passed: 10,483 passed,
+7 ignored, no failures. The 433 property-target checks used 256 generated cases
+and seed 20261013. Graph-IR all-target Clippy with proptest and warnings denied,
+touched-file nightly formatting, git diff --check, and full diff review passed.
+The contract inventory and logs are in scratch/236-s5b/. S5c is next.
 
 #### S5c — ReactionSpan tables
 
