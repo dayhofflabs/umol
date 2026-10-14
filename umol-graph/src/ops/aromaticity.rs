@@ -225,39 +225,12 @@ impl AromaticityPerceiver {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
-        self.find_systems_with_exclusions(
-            molecule,
-            rings,
-            config,
-            &bond_exclusions(molecule),
-            electrons_at,
-        )
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn find_systems_with_exclusions<F>(
-        &self,
-        molecule: &Molecule,
-        rings: &RingSet,
-        config: AromaticityConfig,
-        excluded_bonds: &[[AtomId; 2]],
-        electrons_at: F,
-    ) -> Result<
-        Solution<Vec<(Vec<AtomId>, AromaticSystemForm)>, AromaticityContradiction>,
-        AromaticityError,
-    >
-    where
-        F: Fn(AtomId) -> AromaticValence,
-    {
         let systems = match self {
-            Self::Hueckel(m) => {
-                m.find_with_exclusions(molecule, rings, excluded_bonds, &electrons_at)
-            }
-            Self::Hmo(m) => match m.find_with_exclusions(
+            Self::Hueckel(m) => m.find_from_rings(molecule, rings, &electrons_at),
+            Self::Hmo(m) => match m.find_from_rings(
                 molecule,
                 rings,
                 config.connected_components_algorithm,
-                excluded_bonds,
                 &electrons_at,
             ) {
                 Ok(systems) => systems,
@@ -273,11 +246,10 @@ impl AromaticityPerceiver {
                     return Ok(Solution::Underdetermined(Vec::new()));
                 }
             },
-            Self::Clar(m) => match m.find_with_exclusions(
+            Self::Clar(m) => match m.find_from_rings(
                 molecule,
                 rings,
                 config.maximum_independent_set_algorithm,
-                excluded_bonds,
                 &electrons_at,
             ) {
                 Ok(systems) => systems,

@@ -381,6 +381,11 @@ impl AromaticityResolver {
     /// Leaves state.tie_breaks unchanged; use [`Self::select_with_report`] to include
     /// this selection's tie-break uses.
     ///
+    /// # Assumes
+    ///
+    /// State is contextually valid for the molecule: its candidate sets were admitted
+    /// for that molecule, and its pending aromatic systems are compatible with it.
+    ///
     /// # Errors
     ///
     /// Returns errors from aromaticity perception, including missing model parameters.
@@ -390,7 +395,7 @@ impl AromaticityResolver {
     /// Within the enumeration bound, completions, accepted systems, and outcome equal
     /// exhaustive selection: pruning removes no valid combination. Cross-checked
     /// through Resolver::resolve_with_report under Hückel, HMO, and Clar.
-    pub fn select(
+    pub(crate) fn select(
         &self,
         molecule: &Molecule,
         state: ResolveState,
@@ -406,6 +411,10 @@ impl AromaticityResolver {
     /// tie-break to state.tie_breaks, sorting and deduplicating the result. If aromatic
     /// selection is unnecessary or underdetermined, keeps the existing tie-break list.
     ///
+    /// # Assumes
+    ///
+    /// The same contextual validity requirements as [`Self::select`].
+    ///
     /// # Errors
     ///
     /// Returns the same aromaticity perception errors as select.
@@ -415,7 +424,7 @@ impl AromaticityResolver {
     /// Completions, accepted systems, contradictions, and errors agree with select.
     /// Within the enumeration bound, the full solution equals exhaustive selection,
     /// including tie-break uses, as checked by the property test target.
-    pub fn select_with_report(
+    pub(crate) fn select_with_report(
         &self,
         molecule: &Molecule,
         state: ResolveState,

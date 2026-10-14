@@ -231,8 +231,8 @@ to it, and under Keep the stored system's component gains no system. The
 aromatizer plans nothing when systems exist, and the kekulizer and projection
 only remove systems.
 
-The aromatic perception machinery is shared and crate-private, and no individual
-operation duplicates it. The perceiver dispatches to its three rules, and its
+The aromatic perception machinery is shared, and no individual operation
+duplicates it. The perceiver dispatches to its three rules, and its
 methods give what each rule supplies: its candidate rings, its perception from
 the atoms' contributions, its components, its candidate systems, and its
 acceptance test. `candidate_components(&self, molecule: &Molecule, rings:
@@ -271,14 +271,24 @@ and discharges its members' aromatic valence; the standalone resolver, the
 composite resolver, and the aromatizer use it.
 AromaticityPerceiver::add_systems, which no production code calls, is removed.
 
-The perceiver, its derivation, the three rule types with their errors and
-output, and electrons_from_kekule are crate-private. So are the composite
-resolver's phases and the state they pass: the selection, select and
-select_with_report; the admit methods of ValenceResolver, AtomTypingValence, and
-CountsValence; and ResolveState and AtomCompletions. Outside the crate only
-tests use them, and those tests move to the public operations. Outside the
-crate, aromaticity is reached through the resolver's resolve and project and
-their plans, the aromatizer, the kekulizer, and the conformance validator.
+The perceiver, its derivation, the hueckel, hmo, and clar modules with their
+rule types, errors, and output, and ResolveState and AtomCompletions remain
+public. AromaticityPerceiver's new, find_systems, and derive and the admit
+methods of ValenceResolver, AtomTypingValence, and CountsValence also remain
+public: they establish their ring context or candidate sets from the supplied
+molecule. AtomCompletions is also part of the public ResolveReport and its
+Python interface.
+
+Restrict only the currently public methods that rely on unchecked relationships
+between independently supplied inputs. The three rule types' find_from_rings
+methods become crate-private because they assume the supplied RingSet belongs
+to the molecule. AromaticityResolver's select and select_with_report become
+crate-private because they assume candidate sets admitted for that molecule and
+compatible pending aromatic systems in ResolveState. Public access to those
+consumers would require additional input checks; the data carriers themselves
+do not need restricted visibility. Their external test and benchmark callers
+move to the public perceiver or resolver operations. Existing internal helpers,
+including electrons_from_kekule, retain their visibility.
 
 The aromatizer reads `evidenced`, not `evidenced_complete`: its input's aromatic
 facts are by purpose unstated, and the closure would read every unmarked atom as
@@ -4141,25 +4151,61 @@ Source snapshots, frozen executables, exact commands, all raw timings, and
 verification logs are in scratch/236-s4k/. Its final/ directory contains the
 final comparison; the root-level timing files retain the initial implementation.
 
-#### S4l — Crate-private aromaticity machinery and composite phases
+#### S4l — Restrict methods with unchecked contextual inputs **Done**
 
-**Modules:** graph aromaticity, transform/aromatizer, resolve,
-resolve/aromaticity, resolve/valence, valence/atom_typing, valence/counts, and
-valence/completion; tests/property/resolve.rs, tests/property/atom_typing.rs,
-tests/matching, and benches/resolve.rs. **Breaking, red→green within the
+**Modules:** graph aromaticity and its rule modules, resolve/aromaticity;
+tests/matching and benches/resolve.rs. **Breaking, red→green within the
 subitem.** [dep: S4i, S4j]
 
-Make crate-private: AromaticityPerceiver and AromaticityDerivation; the hueckel,
-hmo, and clar modules with their rule types, errors, and output;
-select and select_with_report; the admit methods of
-ValenceResolver, AtomTypingValence, and CountsValence; and ResolveState and
-AtomCompletions. Remove the test-side exhaustive selection and select_scenario,
-which S4i's property replaces; the other tests that called them use the public
-operations. Migrate the resolve bench's admission timings and selection setup
-checks with these consumers; keep its public-operation selection timings.
-S4b1 owns electrons_from_kekule's visibility change.
+Make only these five currently public methods crate-private:
 
-**Tests:** the property suite and tests/matching through the public operations.
+- HueckelAromaticity::find_from_rings, HmoAromaticity::find_from_rings, and
+  ClarAromaticity::find_from_rings: their RingSet and molecule must agree.
+- AromaticityResolver::select and select_with_report: their ResolveState must
+  contain candidates admitted for the supplied molecule and compatible pending
+  aromatic systems.
+
+Keep the modules, rule types, errors, HmoOutput, AromaticityPerceiver,
+AromaticityDerivation, ResolveState, and AtomCompletions public. Keep the
+perceiver's new, find_systems, and derive and all three admit methods public.
+ResolveReport and its Python interface retain the same candidate carrier.
+Existing crate-private helpers retain their visibility; S4b1 already changed
+electrons_from_kekule.
+
+Migrate tests/matching's direct Clar call to AromaticityPerceiver::find_systems
+under the Clar model, preserving the fixture and expected result. Adapt the
+direct-selection duplicate-combination benchmark to a public Resolver entry
+point with candidates produced by admission; verify that admission supplies the
+intended alternatives during setup. Preserve its duplicate-combination coverage
+and the existing admission and public-operation selection benchmarks. S4i has
+already replaced the test-side exhaustive selector with its public-resolution
+property; no further property removal is needed.
+
+**Tests:** the existing graph property suite and tests/matching through the
+public operations; build the resolve benchmark target.
+
+**Completed (2026-10-13).** Only the five named methods became crate-private;
+their Assumes sections state contextual validity prerequisites. The modules,
+data types, admission methods, public perception operations, and report
+interfaces retain their visibility. The perceiver now calls the rule methods
+directly, replacing its redundant dispatch wrapper; each perception still
+computes bond exclusions once, with unchanged algorithms and error mapping.
+
+The Clar matching fixture uses the public perceiver and checks its complete
+18-member result. The duplicate-combination benchmark now obtains its candidates
+through admission and times Resolver::resolve. Setup checks the exact admitted
+alternatives, verifies the same perceived system for every one of the 16, 256,
+and 4096 assignments, and checks the unresolved report. Its case name is now
+resolve_same_partition because composite-resolution timings are not comparable
+with the former selection-only timings. The other benchmarks and property laws
+are unchanged.
+
+Verification passed: the matching case, 418 aromaticity-filtered unit cases,
+179 checks in the graph property target with 256 cases and seed 20261013,
+all three migrated Criterion cases in test mode, and graph all-target Clippy
+with proptest and conformance enabled. Focused formatting and git diff --check
+passed. No timing comparison or workspace/Python gate was run for this subitem.
+The contract and verification logs are in scratch/236-s4l/.
 
 #### S4m — Planning rule in the data-type guide
 

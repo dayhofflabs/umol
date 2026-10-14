@@ -1,12 +1,14 @@
 use rstest::rstest;
 use serde::Deserialize;
 use umol_chem::element::Element;
-use umol_graph::ops::aromaticity::ClarAromaticity;
+use umol_graph::ops::aromaticity::{AromaticityConfig, AromaticityPerceiver};
+use umol_graph::ops::model::{AromaticityModel, AromaticityRule};
 use umol_graph_core::MaximumIndependentSetAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticValence, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm,
-    ElementForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
+    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
+    BondForm, Molecule, MoleculeEntries, NumForm, UnpairedElectronsForm,
 };
+use umol_utils::solution::Solution;
 
 #[derive(Deserialize)]
 struct GraphFixture {
@@ -15,7 +17,7 @@ struct GraphFixture {
 }
 
 #[rstest]
-fn test_clar_aromaticity_find_from_rings() {
+fn test_aromaticity_perceiver_find_systems_clar() {
     let fixture: GraphFixture = toml::from_str(include_str!("data/coronene_planar.toml")).unwrap();
     let atoms: Vec<_> = (0..fixture.node_count)
         .map(|_| {
@@ -36,27 +38,27 @@ fn test_clar_aromaticity_find_from_rings() {
         bonds,
         ..Default::default()
     });
-    let rings = molecule
-        .rings(
-            RingModel {
-                kind: RingSetKind::Relevant,
-                max_ring_size: 6,
-            },
-            RingConfig::default(),
-        )
-        .into_ring_set();
-    let systems = ClarAromaticity
-        .find_from_rings(
+    let perception = AromaticityPerceiver::new(&AromaticityModel {
+        rule: AromaticityRule::Clar,
+        ..AromaticityModel::daylight()
+    });
+    assert_eq!(
+        perception.find_systems(
             &molecule,
-            &rings,
-            MaximumIndependentSetAlgorithm::BranchAndBound,
-            &|view| match &molecule.atom(view).attributes().element {
-                ElementForm::Lit(Element::C) => AromaticValence::Aromatic(1),
-                _ => AromaticValence::NotAromatic,
+            AromaticityConfig {
+                maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
+                ..Default::default()
             },
-        )
-        .unwrap();
-
-    assert_eq!(systems.len(), 1);
-    assert_eq!(systems[0].0.len(), 18);
+            |_| AromaticValence::Aromatic(1),
+        ),
+        Ok(Solution::Determined(vec![(
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21]
+                .into_iter()
+                .map(AtomId)
+                .collect(),
+            AromaticSystemForm::from_electrons(vec![1; 18])
+                .with_charge(0)
+                .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+        )]))
+    );
 }

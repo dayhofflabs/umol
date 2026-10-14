@@ -122,7 +122,12 @@ impl HmoAromaticity {
     /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
     /// Non-aromatic bonds separate components or restrict them to admissible rings.
     /// A recovered region still containing both endpoints is rejected before evaluation.
-    pub fn find_from_rings<F>(
+    ///
+    /// # Assumes
+    ///
+    /// The ring set is contextually valid for the molecule: its atom and bond ids
+    /// and ring incidence agree with the molecule.
+    pub(crate) fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,

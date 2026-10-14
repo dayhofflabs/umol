@@ -101,7 +101,12 @@ impl HueckelAromaticity {
     /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
     /// Non-aromatic bonds exclude rings and unions containing both endpoints.
     /// A conflicting merged candidate is rejected without searching for another partition.
-    pub fn find_from_rings<F>(
+    ///
+    /// # Assumes
+    ///
+    /// The ring set is contextually valid for the molecule: its atom and bond ids
+    /// and ring incidence agree with the molecule.
+    pub(crate) fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
