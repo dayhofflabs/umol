@@ -10,6 +10,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::Hash;
 use std::mem;
+use std::sync::Arc;
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -64,18 +65,24 @@ use super::traits::{EntityPatch, FrameTransport, Normalize, Reframe};
 /// has one dense union id space. Entry construction preserves any valid union order; spans derived
 /// from a reaction use lhs ids first and append right-only entities. `atoms` and `bonds` are indexed
 /// parallel to the graph's nodes and edges.
+///
+/// Clones share the atom, bond, and constraint tables until a transformation requires owned values.
+///
+/// # Semantic properties
+///
+/// Transforming one clone leaves the other unchanged.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReactionSpan {
     graph: Graph,
-    atoms: Vec<EntitySpan<AtomForm>>,
-    bonds: Vec<EntitySpan<BondForm>>,
+    atoms: Arc<Vec<EntitySpan<AtomForm>>>,
+    bonds: Arc<Vec<EntitySpan<BondForm>>>,
     dative_bonds: DativeBondSpans,
     aromatic_systems: AromaticSystemSpans,
     multicenter_bonds: MulticenterBondSpans,
     noncovalent_bonds: NoncovalentBondSpans,
     stereo_atoms: StereoAtomSpans,
     stereo_bonds: StereoBondSpans,
-    constraints: Vec<ConstraintSpan>,
+    constraints: Arc<Vec<ConstraintSpan>>,
 }
 
 /// Flat, independently assembled constructor input for [`ReactionSpan`]. Each [`EntitySpan`] is
@@ -191,15 +198,15 @@ impl ReactionSpan {
 
         let span = Self {
             graph: Graph::new(atoms.len(), &edges),
-            atoms,
-            bonds: bond_values,
+            atoms: Arc::new(atoms),
+            bonds: Arc::new(bond_values),
             dative_bonds,
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
             stereo_atoms,
             stereo_bonds,
-            constraints,
+            constraints: Arc::new(constraints),
         };
         span.check_integrity()?;
         Ok(span)
@@ -224,7 +231,7 @@ impl ReactionSpan {
     /// stored form.
     fn check_constraint_span_states(&self) -> Result<(), ReactionSpanIntegrityError> {
         let mut states = BTreeMap::new();
-        for span in &self.constraints {
+        for span in self.constraints.iter() {
             let constraint = match span {
                 ConstraintSpan::Unchanged(constraint)
                 | ConstraintSpan::Added(constraint)
@@ -363,8 +370,7 @@ impl ReactionSpan {
                 .remap_vec(self.stereo_bonds.remap(graph_remapping).into_entries()),
         );
         let correspondence = MoleculeCorrespondence::from(remapping);
-        let constraints = self
-            .constraints
+        let constraints = Arc::unwrap_or_clone(self.constraints)
             .into_iter()
             .map(|span| match span {
                 ConstraintSpan::Unchanged(value) => {
@@ -376,20 +382,26 @@ impl ReactionSpan {
                 }
             })
             .collect();
-        let atoms = remapping.graph().nodes().remap_vec(self.atoms);
-        let bonds = remapping.graph().edges().remap_vec(self.bonds);
+        let atoms = remapping
+            .graph()
+            .nodes()
+            .remap_vec(Arc::unwrap_or_clone(self.atoms));
+        let bonds = remapping
+            .graph()
+            .edges()
+            .remap_vec(Arc::unwrap_or_clone(self.bonds));
 
         Some(Self {
             graph: Graph::new(atoms.len(), &edges),
-            atoms,
-            bonds,
+            atoms: Arc::new(atoms),
+            bonds: Arc::new(bonds),
             dative_bonds,
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
             stereo_atoms,
             stereo_bonds,
-            constraints,
+            constraints: Arc::new(constraints),
         })
     }
 }
@@ -1179,7 +1191,7 @@ impl ReactionSpan {
 
     pub(crate) fn entries(&self) -> ReactionSpanEntries {
         ReactionSpanEntries {
-            atoms: self.atoms.clone(),
+            atoms: self.atoms.as_ref().clone(),
             bonds: self
                 .bonds
                 .iter()
@@ -1256,7 +1268,7 @@ impl ReactionSpan {
                     )
                 })
                 .collect(),
-            constraints: self.constraints.clone(),
+            constraints: self.constraints.as_ref().clone(),
         }
     }
 
@@ -1306,30 +1318,33 @@ impl ReactionSpan {
 
         Self {
             graph: self.graph.clone(),
-            atoms: self
-                .atoms
-                .iter()
-                .cloned()
-                .map(reverse_entity_span)
-                .collect(),
-            bonds: self
-                .bonds
-                .iter()
-                .cloned()
-                .map(reverse_entity_span)
-                .collect(),
+            atoms: Arc::new(
+                self.atoms
+                    .iter()
+                    .cloned()
+                    .map(reverse_entity_span)
+                    .collect(),
+            ),
+            bonds: Arc::new(
+                self.bonds
+                    .iter()
+                    .cloned()
+                    .map(reverse_entity_span)
+                    .collect(),
+            ),
             dative_bonds: DativeBondSpans::new(dative_bonds),
             aromatic_systems: AromaticSystemSpans::new(aromatic_systems),
             multicenter_bonds: MulticenterBondSpans::new(multicenter_bonds),
             noncovalent_bonds: NoncovalentBondSpans::new(noncovalent_bonds),
             stereo_atoms: StereoAtomSpans::new(stereo_atoms),
             stereo_bonds: StereoBondSpans::new(stereo_bonds),
-            constraints: self
-                .constraints
-                .iter()
-                .cloned()
-                .map(reverse_constraint_span)
-                .collect(),
+            constraints: Arc::new(
+                self.constraints
+                    .iter()
+                    .cloned()
+                    .map(reverse_constraint_span)
+                    .collect(),
+            ),
         }
     }
 
@@ -1594,7 +1609,7 @@ impl ReactionSpan {
         if let Some(correspondence) = &correspondence {
             // One delta per normal form: normalized-equal removed constraints share one Remove.
             let mut emitted = BTreeSet::new();
-            for span in &self.constraints {
+            for span in self.constraints.iter() {
                 let (constraint, added) = match span {
                     ConstraintSpan::Added(c) => (c, true),
                     ConstraintSpan::Removed(c) => (c, false),
@@ -1877,15 +1892,17 @@ fn normalize_constraint_spans(
 
 impl Normalize for ReactionSpan {
     fn normalize(mut self) -> Result<Self, Contradiction> {
-        self.atoms = normalize_entity_spans(self.atoms)?;
-        self.bonds = normalize_entity_spans(self.bonds)?;
+        self.atoms = Arc::new(normalize_entity_spans(Arc::unwrap_or_clone(self.atoms))?);
+        self.bonds = Arc::new(normalize_entity_spans(Arc::unwrap_or_clone(self.bonds))?);
         self.dative_bonds = self.dative_bonds.normalize()?;
         self.aromatic_systems = self.aromatic_systems.normalize()?;
         self.multicenter_bonds = self.multicenter_bonds.normalize()?;
         self.noncovalent_bonds = self.noncovalent_bonds.normalize()?;
         self.stereo_atoms = self.stereo_atoms.normalize()?;
         self.stereo_bonds = self.stereo_bonds.normalize()?;
-        self.constraints = normalize_constraint_spans(self.constraints)?;
+        self.constraints = Arc::new(normalize_constraint_spans(Arc::unwrap_or_clone(
+            self.constraints,
+        ))?);
         Ok(self)
     }
 }
@@ -1906,11 +1923,12 @@ impl FrameTransport for ReactionSpan {
             .reframe_by(actions.noncovalent_bonds())?;
         self.stereo_atoms = self.stereo_atoms.reframe_by(actions.stereo_atoms())?;
         self.stereo_bonds = self.stereo_bonds.reframe_by(actions.stereo_bonds())?;
-        self.constraints = self
-            .constraints
-            .into_iter()
-            .map(|span| span.reframe_by(actions))
-            .collect::<Option<_>>()?;
+        self.constraints = Arc::new(
+            Arc::unwrap_or_clone(self.constraints)
+                .into_iter()
+                .map(|span| span.reframe_by(actions))
+                .collect::<Option<_>>()?,
+        );
         Some(self)
     }
 }
@@ -1929,13 +1947,13 @@ impl Reframe for ReactionSpan {
 
     fn reframe(mut self) -> Result<Self, Contradiction> {
         let mut action_domain = ConstraintFrameActionDomain::default();
-        for span in &self.constraints {
+        for span in self.constraints.iter() {
             span.collect_frame_action_domain(&mut action_domain);
         }
 
-        self.atoms = normalize_entity_spans(self.atoms)?;
-        self.bonds = normalize_entity_spans(self.bonds)?;
-        self.constraints = normalize_constraint_spans(self.constraints)?;
+        self.atoms = Arc::new(normalize_entity_spans(Arc::unwrap_or_clone(self.atoms))?);
+        self.bonds = Arc::new(normalize_entity_spans(Arc::unwrap_or_clone(self.bonds))?);
+        let constraints = normalize_constraint_spans(Arc::unwrap_or_clone(self.constraints))?;
 
         let mut actions = ConstraintFrameActionMap::default();
         self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
@@ -2001,12 +2019,11 @@ impl Reframe for ReactionSpan {
                 }
             })?
         };
-        self.constraints = self
-            .constraints
+        let constraints = constraints
             .into_iter()
             .map(|span| span.reframe_by_actions(&actions).map_err(|_| Contradiction))
             .collect::<Result<_, _>>()?;
-        self.constraints = normalize_constraint_spans(self.constraints)?;
+        self.constraints = Arc::new(normalize_constraint_spans(constraints)?);
         Ok(self)
     }
 }
@@ -3071,14 +3088,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_normalize() {
+    fn test_reaction_span_normalize(#[values(false, true)] shared: bool) {
         let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
         let connected = |atoms| {
             ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected {
                 atoms: Some(atoms),
             }))
         };
-        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+        let entries = ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Modified {
                     lhs: lhs_atom.clone(),
@@ -3148,7 +3165,17 @@ mod tests {
                 connected(vec![AtomId(1), AtomId(0)]),
                 connected(vec![AtomId(0), AtomId(1)]),
             ],
-        });
+        };
+        let source = ReactionSpan::from_entries(entries.clone());
+        let retained = shared.then(|| source.clone());
+        if let Some(retained) = &retained {
+            assert_eq!(source.atoms().as_ptr(), retained.atoms().as_ptr());
+            assert_eq!(source.bonds().as_ptr(), retained.bonds().as_ptr());
+            assert_eq!(
+                source.constraints().as_ptr(),
+                retained.constraints().as_ptr()
+            );
+        }
         let expected = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(lhs_atom),
@@ -3195,12 +3222,16 @@ mod tests {
         });
 
         assert_eq!(source.normalize(), Ok(expected));
+        assert_eq!(
+            retained,
+            shared.then(|| ReactionSpan::from_entries(entries))
+        );
     }
 
     #[rstest]
-    fn test_reaction_span_reframe_by() {
+    fn test_reaction_span_reframe_by(#[values(false, true)] shared: bool) {
         let predicate = |value| Box::new(AtomConstraintForm::valence(NumForm::Lit(value)));
-        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+        let entries = ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(
                     AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64])),
@@ -3221,7 +3252,9 @@ mod tests {
                 },
             ))],
             ..Default::default()
-        });
+        };
+        let source = ReactionSpan::from_entries(entries.clone());
+        let retained = shared.then(|| source.clone());
         let expected = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(
@@ -3245,8 +3278,16 @@ mod tests {
             ..Default::default()
         });
         let action = source.representative_action();
+        let atom_buffer = source.atoms().as_ptr();
 
-        assert_eq!(source.reframe_by(&action), Some(expected));
+        let transported = source.reframe_by(&action).unwrap();
+
+        assert_eq!(transported.atoms().as_ptr(), atom_buffer);
+        assert_eq!(transported, expected);
+        assert_eq!(
+            retained,
+            shared.then(|| ReactionSpan::from_entries(entries))
+        );
     }
 
     #[rstest]
@@ -3269,7 +3310,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_reframe() {
+    fn test_reaction_span_reframe(#[values(false, true)] shared: bool) {
         let lhs = StereoBondForm::new(StereoKind::CisTrans, 0u32);
         let rhs = StereoBondForm::new(StereoKind::CisTrans, 1u32);
         let action = Permutation::from_image(&[3, 2, 1, 0]);
@@ -3301,7 +3342,7 @@ mod tests {
                 EntitySpan::Unchanged(BondForm::from_order(1)),
             ),
         ];
-        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+        let mut entries = ReactionSpanEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
             stereo_bonds: vec![(
@@ -3315,8 +3356,21 @@ mod tests {
                     rhs: rhs.clone(),
                 },
             )],
+            constraints: vec![ConstraintSpan::Unchanged(Constraint::And(vec![
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            ]))],
             ..Default::default()
-        });
+        };
+        entries.atoms[0] = EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::from_element(Element::C),
+        };
+        entries.bonds[0].2 = EntitySpan::Modified {
+            lhs: BondForm::from_order(2),
+            rhs: BondForm::from_order(2),
+        };
+        let source = ReactionSpan::from_entries(entries.clone());
+        let retained = shared.then(|| source.clone());
         let expected = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms,
             bonds,
@@ -3335,10 +3389,17 @@ mod tests {
                         .expect("the block-preserving action is admissible"),
                 },
             )],
+            constraints: vec![ConstraintSpan::Unchanged(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: None },
+            ))],
             ..Default::default()
         });
 
         assert_eq!(source.reframe(), Ok(expected));
+        assert_eq!(
+            retained,
+            shared.then(|| ReactionSpan::from_entries(entries))
+        );
     }
 
     #[rstest]

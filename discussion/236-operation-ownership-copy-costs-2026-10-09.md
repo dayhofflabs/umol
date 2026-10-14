@@ -1528,9 +1528,10 @@ plan.
 ## Copy-on-write storage
 
 Molecule's graph, atom and bond tables, six overlay collections, and molecule-level
-constraints are Arc-backed, as are Reaction's deltas. A clone increments reference
-counts, and the first write to shared storage copies that storage. ReactionSpan's
-tables and overlay span sets still copy their contents on clone.
+constraints are Arc-backed, as are Reaction's deltas and ReactionSpan's atom, bond,
+and constraint tables. A clone increments reference counts, and the first write
+to shared storage copies that storage. ReactionSpan's six overlay span sets still
+copy their contents on clone.
 [213](213-editor-overlay-storage-2026-08-27.md#remaining-costs) recorded the
 Molecule constraint copy as a remaining cost; S5a removes it.
 
@@ -1540,9 +1541,9 @@ Molecule constraint copy as a remaining cost; S5a removes it.
 | Reaction | lhs | Molecule | As Molecule |
 | Reaction | deltas | `Arc<Deltas>` | Yes |
 | ReactionSpan | graph | Graph | Yes |
-| ReactionSpan | atoms, bonds | `Vec<EntitySpan<AtomForm>>`, `Vec<EntitySpan<BondForm>>` | No |
+| ReactionSpan | atoms, bonds | `Arc<Vec<EntitySpan<AtomForm>>>`, `Arc<Vec<EntitySpan<BondForm>>>` | Yes |
 | ReactionSpan | six overlay span sets | Newtypes wrapping their relation set directly | No |
-| ReactionSpan | constraints | `Vec<ConstraintSpan>` | No |
+| ReactionSpan | constraints | `Arc<Vec<ConstraintSpan>>` | Yes |
 
 Known clone sites that copy the remaining unshared storage:
 
@@ -4337,9 +4338,9 @@ graph-IR unit, integration, property, and doc suites passed: 10,483 passed,
 7 ignored, no failures. The 433 property-target checks used 256 generated cases
 and seed 20261013. Graph-IR all-target Clippy with proptest and warnings denied,
 touched-file nightly formatting, git diff --check, and full diff review passed.
-The contract inventory and logs are in scratch/236-s5b/. S5c is next.
+The contract inventory and logs are in scratch/236-s5b/.
 
-#### S5c — ReactionSpan tables
+#### S5c — ReactionSpan tables **Done**
 
 **Modules:** graph-IR reaction_span. **Green.** [dep: S2b]
 
@@ -4350,6 +4351,28 @@ uniquely owned tables and cloning shared ones. The borrowing entries accessor
 clones the inner Vec where it needs an owned table.
 
 **Tests:** clone-independence cases through normalize and reframe.
+
+**Completed (2026-10-13).** ReactionSpan's atom, bond, and constraint tables are
+Arc-backed. Consuming normalization, reframing, and remapping move uniquely owned
+tables with Arc::unwrap_or_clone and copy shared tables before rebuilding them.
+reframe keeps constraints owned through normalization and transport, wrapping
+only the final result. reframe_by rebuilds constraints while retaining the atom
+and bond tables. Construction and side reversal wrap their output tables; the
+borrowing entries accessor clones the inner vectors. ReactionSpanEntries,
+public slice accessors, errors, and Python ownership are unchanged.
+
+Existing normalization, frame-transport, and reframing cases now check unique
+and shared storage against independent originals. They cover actual atom, bond,
+and constraint rewrites, shared table buffers, and preservation of the atom
+buffer through frame transport. Existing remapping and inverse-remapping tests
+cover both shared and unique consumption.
+
+**Verification:** all 135 reaction-span unit tests passed. The full graph-IR
+unit, integration, property, and doc suites passed: 10,486 passed, 7 ignored,
+no failures. The 433 property-target checks used 256 generated cases and seed
+20261013. Graph-IR all-target Clippy with proptest and warnings denied,
+touched-file nightly formatting, git diff --check, and full diff review passed.
+The contract inventory and logs are in scratch/236-s5c/. S5d is next.
 
 #### S5d — ReactionSpan overlay span newtypes
 
