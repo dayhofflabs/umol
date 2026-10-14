@@ -1757,8 +1757,8 @@ transaction and restores its entry state. Explicit rollback, cancellation, and c
 between completed edits also restore that state.
 
 Molecule::transact applies prepared batches and commits once. Its tracked counterpart returns the
-whole transaction's entity correspondence, constructed from the journal on request. The journal is
-private; Undo remains a public data type.
+whole transaction's entity correspondence, accumulated after each successful batch independently
+of the journal. The journal is private; Undo remains a public data type.
 
 **Not:** a detached journal container; *patch algebra*, which is the entity-level `apply`/`diff` pair.
 **In code:** `Transaction`, `TransactionError`; Transaction::run, Transaction::apply,

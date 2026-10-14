@@ -886,8 +886,10 @@ borrowing the molecule, and finish checks it before transferring ownership.
 
 Discarding a batch correspondence gives the same editor state as plain apply.
 Correspondences from consecutive batches compose to the whole operation's mapping.
-Transaction::tracked_commit derives that whole-transaction mapping from its journal.
-A failed application retains the completed prefix and returns no correspondence.
+Transaction accumulates that whole-transaction mapping after each successful batch,
+independently of its undo journal, and tracked_commit returns it.
+A failed editor application retains the completed prefix and returns no correspondence;
+a failed transaction application restores its entry state and aborts.
 
 These correspondences track entity ids. Replacing an entity's atoms, ligands, or site preserves
 that entity's pairing; the correspondence does not map positions within those lists.

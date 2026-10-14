@@ -1,5 +1,7 @@
 //! Scoped molecule transactions with private undo-based restoration.
 
+use std::mem;
+
 use thiserror::Error;
 use umol_graph_core::Correspondence;
 
@@ -57,6 +59,7 @@ pub enum TransactionError {
 pub struct Transaction<'scope> {
     molecule: &'scope mut Molecule,
     journal: &'scope mut Vec<Undo>,
+    correspondence: &'scope mut MoleculeCorrespondence,
     status: &'scope mut TransactionStatus,
 }
 
@@ -80,14 +83,26 @@ impl Transaction<'_> {
     where
         E: From<MoleculeApplyError>,
     {
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::identity(molecule.atoms().count()),
+            Correspondence::identity(molecule.bonds().count()),
+            Correspondence::identity(molecule.dative_bonds().count()),
+            Correspondence::identity(molecule.aromatic_systems().count()),
+            Correspondence::identity(molecule.multicenter_bonds().count()),
+            Correspondence::identity(molecule.noncovalent_bonds().count()),
+            Correspondence::identity(molecule.stereo_atoms().count()),
+            Correspondence::identity(molecule.stereo_bonds().count()),
+        );
         let mut guard = TransactionGuard {
             molecule,
+            correspondence,
             journal: Vec::new(),
             status: TransactionStatus::Active,
         };
         let value = f(Transaction {
             molecule: guard.molecule,
             journal: &mut guard.journal,
+            correspondence: &mut guard.correspondence,
             status: &mut guard.status,
         })?;
         match guard.status {
@@ -130,6 +145,7 @@ impl Transaction<'_> {
                 }
             }
         }
+        state.update_correspondence(self.correspondence);
         Ok(())
     }
 
@@ -173,7 +189,7 @@ impl Transaction<'_> {
     ///
     /// Entity ids are paired across all batches. Added and removed entities remain
     /// unmatched; attribute and participant changes preserve the entity's pairing.
-    /// The correspondence is constructed from the private journal when requested.
+    /// The correspondence is accumulated after each successful batch, independently of rollback.
     ///
     /// # Errors
     ///
@@ -182,6 +198,8 @@ impl Transaction<'_> {
     /// # Semantic properties
     ///
     /// Discarding the correspondence gives commit's result and final molecule state.
+    /// Regrouping the same ordered edits into batches preserves the final molecule and
+    /// correspondence, provided handles name the same entities in each batch's namespace.
     pub fn tracked_commit(self) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
         if *self.status == TransactionStatus::Aborted {
             return Err(TransactionError::Aborted.into());
@@ -193,179 +211,11 @@ impl Transaction<'_> {
             *self.status = TransactionStatus::Aborted;
             return Err(error.into());
         }
-        let mut atoms = self.molecule.atoms().count();
-        let mut bonds = self.molecule.bonds().count();
-        let mut dative_bonds = self.molecule.dative_bonds().count();
-        let mut aromatic_systems = self.molecule.aromatic_systems().count();
-        let mut multicenter_bonds = self.molecule.multicenter_bonds().count();
-        let mut noncovalent_bonds = self.molecule.noncovalent_bonds().count();
-        let mut stereo_atoms = self.molecule.stereo_atoms().count();
-        let mut stereo_bonds = self.molecule.stereo_bonds().count();
-        for undo in self.journal.iter().rev() {
-            match undo {
-                Undo::RemoveAddedTopology {
-                    atoms: added_atoms,
-                    bonds: added_bonds,
-                } => {
-                    atoms -= added_atoms.len();
-                    bonds -= added_bonds.len();
-                }
-                Undo::RemoveAddedDativeBond(_) => dative_bonds -= 1,
-                Undo::RemoveAddedAromaticSystem(_) => aromatic_systems -= 1,
-                Undo::RemoveAddedMulticenterBond(_) => multicenter_bonds -= 1,
-                Undo::RemoveAddedNoncovalentBond(_) => noncovalent_bonds -= 1,
-                Undo::RemoveAddedStereoAtom(_) => stereo_atoms -= 1,
-                Undo::RemoveAddedStereoBond(_) => stereo_bonds -= 1,
-                Undo::RestoreRemovedTopology {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedDativeBonds {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedAromaticSystems {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedMulticenterBonds {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedNoncovalentBonds {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedStereoAtoms {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedStereoBonds {
-                    undo_compaction, ..
-                } => {
-                    let compaction = undo_compaction.forward();
-                    atoms = compaction.graph().nodes().source_count();
-                    bonds = compaction.graph().edges().source_count();
-                    dative_bonds = compaction.dative_bonds().source_count();
-                    aromatic_systems = compaction.aromatic_systems().source_count();
-                    multicenter_bonds = compaction.multicenter_bonds().source_count();
-                    noncovalent_bonds = compaction.noncovalent_bonds().source_count();
-                    stereo_atoms = compaction.stereo_atoms().source_count();
-                    stereo_bonds = compaction.stereo_bonds().source_count();
-                }
-                Undo::RestoreDativeBondDonors { .. }
-                | Undo::RestoreDativeBondAcceptor { .. }
-                | Undo::RestoreAromaticSystemAtoms { .. }
-                | Undo::RestoreMulticenterBondAtoms { .. }
-                | Undo::RestoreNoncovalentBondAtoms { .. }
-                | Undo::RestoreStereoAtomSite { .. }
-                | Undo::RestoreStereoAtomLigands { .. }
-                | Undo::RestoreStereoBondSite { .. }
-                | Undo::RestoreStereoBondLigands { .. }
-                | Undo::ModifyAtomField { .. }
-                | Undo::ModifyBondField { .. }
-                | Undo::ModifyDativeBondField { .. }
-                | Undo::ModifyAromaticSystemField { .. }
-                | Undo::ModifyMulticenterBondField { .. }
-                | Undo::ModifyNoncovalentBondField { .. }
-                | Undo::ModifyStereoAtomField { .. }
-                | Undo::ModifyStereoBondField { .. }
-                | Undo::RestoreAtomConstraint { .. }
-                | Undo::RestoreBondConstraint { .. }
-                | Undo::RestoreDativeBondConstraint { .. }
-                | Undo::RestoreAromaticSystemConstraint { .. }
-                | Undo::RestoreMulticenterBondConstraint { .. }
-                | Undo::RestoreNoncovalentBondConstraint { .. }
-                | Undo::RestoreStereoAtomConstraint { .. }
-                | Undo::RestoreStereoBondConstraint { .. }
-                | Undo::RemoveAddedMoleculeConstraint { .. }
-                | Undo::RestoreMoleculeConstraints(_) => {}
-            }
-        }
-        let mut correspondence = MoleculeCorrespondence::new(
-            Correspondence::identity(atoms),
-            Correspondence::identity(bonds),
-            Correspondence::identity(dative_bonds),
-            Correspondence::identity(aromatic_systems),
-            Correspondence::identity(multicenter_bonds),
-            Correspondence::identity(noncovalent_bonds),
-            Correspondence::identity(stereo_atoms),
-            Correspondence::identity(stereo_bonds),
-        );
-        for undo in self.journal.iter() {
-            match undo {
-                Undo::RemoveAddedTopology { atoms, bonds } => {
-                    correspondence.extend_right(EntityKind::Atom, atoms.len());
-                    correspondence.extend_right(EntityKind::Bond, bonds.len());
-                }
-                Undo::RemoveAddedDativeBond(_) => {
-                    correspondence.extend_right(EntityKind::DativeBond, 1)
-                }
-                Undo::RemoveAddedAromaticSystem(_) => {
-                    correspondence.extend_right(EntityKind::AromaticSystem, 1)
-                }
-                Undo::RemoveAddedMulticenterBond(_) => {
-                    correspondence.extend_right(EntityKind::MulticenterBond, 1)
-                }
-                Undo::RemoveAddedNoncovalentBond(_) => {
-                    correspondence.extend_right(EntityKind::NoncovalentBond, 1)
-                }
-                Undo::RemoveAddedStereoAtom(_) => {
-                    correspondence.extend_right(EntityKind::StereoAtom, 1)
-                }
-                Undo::RemoveAddedStereoBond(_) => {
-                    correspondence.extend_right(EntityKind::StereoBond, 1)
-                }
-                Undo::RestoreRemovedTopology {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedDativeBonds {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedAromaticSystems {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedMulticenterBonds {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedNoncovalentBonds {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedStereoAtoms {
-                    undo_compaction, ..
-                }
-                | Undo::RestoreRemovedStereoBonds {
-                    undo_compaction, ..
-                } => {
-                    correspondence
-                        .compact_right(undo_compaction.forward())
-                        .expect("recorded compaction follows the preceding journal entries");
-                }
-                Undo::RestoreDativeBondDonors { .. }
-                | Undo::RestoreDativeBondAcceptor { .. }
-                | Undo::RestoreAromaticSystemAtoms { .. }
-                | Undo::RestoreMulticenterBondAtoms { .. }
-                | Undo::RestoreNoncovalentBondAtoms { .. }
-                | Undo::RestoreStereoAtomSite { .. }
-                | Undo::RestoreStereoAtomLigands { .. }
-                | Undo::RestoreStereoBondSite { .. }
-                | Undo::RestoreStereoBondLigands { .. }
-                | Undo::ModifyAtomField { .. }
-                | Undo::ModifyBondField { .. }
-                | Undo::ModifyDativeBondField { .. }
-                | Undo::ModifyAromaticSystemField { .. }
-                | Undo::ModifyMulticenterBondField { .. }
-                | Undo::ModifyNoncovalentBondField { .. }
-                | Undo::ModifyStereoAtomField { .. }
-                | Undo::ModifyStereoBondField { .. }
-                | Undo::RestoreAtomConstraint { .. }
-                | Undo::RestoreBondConstraint { .. }
-                | Undo::RestoreDativeBondConstraint { .. }
-                | Undo::RestoreAromaticSystemConstraint { .. }
-                | Undo::RestoreMulticenterBondConstraint { .. }
-                | Undo::RestoreNoncovalentBondConstraint { .. }
-                | Undo::RestoreStereoAtomConstraint { .. }
-                | Undo::RestoreStereoBondConstraint { .. }
-                | Undo::RemoveAddedMoleculeConstraint { .. }
-                | Undo::RestoreMoleculeConstraints(_) => {}
-            }
-        }
         *self.status = TransactionStatus::CommitRequested;
-        Ok(correspondence)
+        Ok(mem::replace(
+            self.correspondence,
+            MoleculeCorrespondence::empty(),
+        ))
     }
 
     /// Restore transaction-entry state and consume the handle.
@@ -429,6 +279,7 @@ impl Molecule {
 struct TransactionGuard<'a> {
     molecule: &'a mut Molecule,
     journal: Vec<Undo>,
+    correspondence: MoleculeCorrespondence,
     status: TransactionStatus,
 }
 
@@ -874,6 +725,47 @@ mod lifecycle_tests {
     }
 
     #[rstest]
+    fn test_transaction_tracked_commit_additions(mut molecule: Molecule) {
+        let mut edits = Edits::new();
+        let nitrogen = edits.add_atom(AtomForm::from_element(Element::N));
+        let oxygen = edits.add_atom(AtomForm::from_element(Element::O));
+        edits.add_bond(
+            AtomHandle::Id(AtomId(0)),
+            nitrogen.clone(),
+            BondForm::from_order(1),
+        );
+        edits.add_bond(nitrogen.clone(), oxygen.clone(), BondForm::from_order(1));
+        edits.remove_atom(nitrogen);
+        let fluorine = edits.add_atom(AtomForm::from_element(Element::F));
+        edits.add_bond(oxygen, fluorine, BondForm::from_order(1));
+        let correspondence = molecule.tracked_transact([edits]).unwrap();
+        assert_eq!(
+            molecule,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: [Element::C, Element::O, Element::F]
+                    .into_iter()
+                    .map(AtomForm::from_element)
+                    .collect(),
+                bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))],
+                ..MoleculeEntries::default()
+            })
+        );
+        assert_eq!(
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(AtomId(0), AtomId(0))], 1, 3).unwrap(),
+                Correspondence::new(Vec::new(), 0, 1).unwrap(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+            )
+        );
+    }
+
+    #[rstest]
     #[case::dative_bond(EntityKind::DativeBond)]
     #[case::aromatic_system(EntityKind::AromaticSystem)]
     #[case::multicenter_bond(EntityKind::MulticenterBond)]
@@ -1086,9 +978,16 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_transaction_tracked_commit_identity(mut all_entities: Molecule) {
+    #[case::no_batches(0)]
+    #[case::empty_batches(3)]
+    fn test_transaction_tracked_commit_identity(
+        mut all_entities: Molecule,
+        #[case] batches: usize,
+    ) {
         let original = all_entities.clone();
-        let correspondence = all_entities.tracked_transact([]).unwrap();
+        let correspondence = all_entities
+            .tracked_transact((0..batches).map(|_| Edits::new()))
+            .unwrap();
         assert_eq!(all_entities, original);
         assert_eq!(
             correspondence,

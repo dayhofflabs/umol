@@ -937,6 +937,32 @@ proptest! {
         prop_assert_eq!(restored, base);
     }
 
+    /// Descending atom removals and subsequent additions name the same entities under any
+    /// batch split. Cascaded overlay removals must preserve that partition independence too.
+    #[test]
+    fn test_molecule_tracked_transact_partition(
+        (base, removed) in molecule_with_atom_subset_strategy(),
+        added in prop::collection::vec(atom_form_strategy(), 0..=6),
+        batch_size in 1usize..=4,
+    ) {
+        let mut edits = Edits::new();
+        for id in removed.into_iter().rev() {
+            edits.remove_atom(AtomHandle::Id(id));
+        }
+        for attributes in added {
+            edits.add_atom(attributes);
+        }
+        let raw: Vec<_> = edits.iter().cloned().collect();
+        let mut single = base.clone();
+        let expected = single.tracked_transact([edits]).unwrap();
+        let mut partitioned = base;
+        let actual = partitioned.tracked_transact(
+            raw.chunks(batch_size).map(|chunk| Edits::from_iter(chunk.iter().cloned()))
+        ).unwrap();
+        prop_assert_eq!(actual, expected);
+        prop_assert_eq!(partitioned, single);
+    }
+
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
     /// leaf from the molecule list; a meet to `⊥` fails. Combinator-nested entries, relational leaves,
     /// molecule-scope leaves are preserved.

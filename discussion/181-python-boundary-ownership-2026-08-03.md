@@ -348,12 +348,17 @@ consuming route. No normative contract is changed by this inventory.
 
 ## 2. Mutating APIs: journals versus cloning
 
-### Transaction interface and rollback selection — 2026-10-08
+### Transaction interface and rollback selection — revised 2026-10-14
 
-Keep Transaction::run, apply, probe, commit, tracked_commit, and rollback, and
-Molecule transact/tracked_transact. The current implementation records and
-replays undo. The proposed interface provides both implementations through an
-explicit selector:
+Select tracking at transaction entry through separate scoped handle types.
+Transaction exposes run, apply, probe, commit and rollback; TrackedTransaction
+exposes the same method names. Transaction::commit returns unit, while
+TrackedTransaction::commit returns MoleculeCorrespondence. Remove
+Transaction::tracked_commit. Molecule transact/tracked_transact retain their
+plain/tracked results and select the corresponding handle internally.
+
+Tracking and recovery are independent choices. Both types provide both recovery
+implementations through an explicit selector:
 
 ```rust
 pub enum RollbackMethod {
@@ -362,8 +367,9 @@ pub enum RollbackMethod {
 }
 ```
 
-Transaction::run takes RollbackMethod after the molecule argument and before the
-callback. Selection applies to the entire transaction, not to each batch or phase.
+Transaction::run and TrackedTransaction::run take RollbackMethod after the
+molecule argument and before the callback. Selection applies to the entire
+transaction, not to each batch or phase.
 Clone uses one working copy and installs it on success; Journal records undo
 while modifying the receiver. Both preserve the original on failure and retain
 the same callback, commit/rollback, integrity-checking, error, and correspondence
@@ -405,10 +411,10 @@ publication. No undo replay is needed to preserve the receiver.
 
 ### Editor relationship and convenience methods
 
-The clone-based transaction holds its working molecule in
-TransactionStorage::Clone(Option<Molecule>) and applies batches through the
-molecule's edit application methods. It does not contain an editor. Transaction
-exposes batches and checked observation, not direct mutable entity views.
+Both clone-based transaction types hold their working molecule in
+TransactionStorage::Clone(Option<Molecule>) and apply batches through the
+molecule's edit application methods. Neither contains an editor. Both expose
+batches and checked observation, not direct mutable entity views.
 Editor apply failure retains partial working state for further editing;
 transaction apply failure aborts the entire transaction.
 
@@ -425,10 +431,18 @@ working copy, discarded on failure and installed only after commit and callback
 success. Transaction states, error behavior, checked probe access, and batch
 handle namespaces stay the same.
 
-Both recovery methods maintain one correspondence from transaction entry to the
-accepted result, independently of Undo. Initialize it to identity at run entry
-and update it through ApplicationState after each successful batch. tracked_commit
-returns it; plain commit discards it. S0e specifies the implementation and cost checks.
+TrackedTransaction maintains one correspondence from transaction entry to the
+state at commit, independently of Undo, with either recovery method. Initialize
+it to identity at tracked run entry and update it through ApplicationState after
+each successful batch. TrackedTransaction::commit returns it; acceptance still
+requires a successful callback return. Transaction maintains no aggregate
+correspondence. Its per-batch ApplicationState remains necessary for handle
+resolution, but it performs no correspondence construction or updates.
+
+S0e established independent tracking and measured its unconditional cost. The
+2026-10-14 decision replaces that unconditional requirement with these separate
+types. S0e1/S0e2 introduce the split and repeat the Journal comparison; S0f adds
+and measures both recovery methods on both types.
 
 Both implementations are retained. The selected Undo/Edit boxing and batching
 work below improves their costs without choosing between them. Destructive
@@ -1892,12 +1906,30 @@ The settled signatures keep the callback last on run and put batches before
 execution policy on the prepared-batch conveniences:
 
 ```rust
+// Transaction
 pub fn run<T, E>(
     molecule: &mut Molecule,
     rollback_method: RollbackMethod,
     f: impl for<'scope> FnOnce(Transaction<'scope>) -> Result<T, E>,
 ) -> Result<T, E>
 where E: From<MoleculeApplyError>;
+
+pub fn commit(self) -> Result<(), MoleculeApplyError>;
+
+// TrackedTransaction
+pub fn run<T, E>(
+    molecule: &mut Molecule,
+    rollback_method: RollbackMethod,
+    f: impl for<'scope> FnOnce(TrackedTransaction<'scope>) -> Result<T, E>,
+) -> Result<T, E>
+where E: From<MoleculeApplyError>;
+
+pub fn commit(self) -> Result<MoleculeCorrespondence, MoleculeApplyError>;
+
+// Both scoped handles
+pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError>;
+pub fn probe(&self) -> Result<&Molecule, MoleculeIntegrityError>;
+pub fn rollback(self);
 
 // Molecule
 pub fn transact(
@@ -1912,6 +1944,33 @@ pub fn tracked_transact(
 ) -> Result<MoleculeCorrespondence, MoleculeApplyError>;
 ```
 
+Both handles are operation-issued, with private fields and no public constructor
+other than their scoped run entry point. They borrow run-owned state and cannot
+replace the receiver or recovery storage. They are not copyable or cloneable and
+have no conversion or mutable access to the other handle type. In particular,
+tracked application cannot bypass correspondence updates through an exposed
+ordinary handle. Export TrackedTransaction beside Transaction through molecule
+and ir; add no public tracking trait, mode flag or tracking-disabled error.
+
+Each type preserves the existing callback lifetime, separate batch namespaces,
+abort latch and recovery contract. apply checks edit preconditions and can leave
+transient state; probe and commit check representation integrity. Probe returns
+MoleculeIntegrityError; application and commit failures use MoleculeApplyError,
+including the existing TransactionError variants. No new failure condition is
+introduced by selecting tracking. Failed probe leaves the transaction active;
+failed application or commit restores entry state and aborts. Explicit rollback,
+uncommitted return, callback error, forgotten handle and callback unwinding
+between completed edits retain the existing restoration guarantees.
+
+run returns the callback's T for both types. A tracked commit returns its mapping
+to the callback; it does not independently accept changes. Explicit rollback and
+return without commit do not request a correspondence, so run needs no additional
+optional mapping result. For equivalent edit sequences, discarding the tracked commit result
+preserves the ordinary final state and errors. Correspondence covers all eight
+entity-id spaces, composes across batches and does not map participant positions.
+Regrouping edits preserves the mapping when handles name the same entities in
+each batch's namespace. These scoped handles have no DSL or serialization form.
+
 Python transact/tracked_transact expose RollbackMethod through a keyword-only
 rollback_method argument defaulting to Journal. Clone remains selectable. Both
 methods provide the same recovery guarantee with either choice. Journal is the
@@ -1924,6 +1983,8 @@ ProjectFlags). Rust callers select explicitly. Python resolve_into and
 resolve_into_with_report expose a keyword-only rollback_method defaulting to
 Clone; Journal remains selectable. This is not a universal performance claim.
 Python transact retains its separately agreed Journal default.
+Python continues to expose prepared-batch operations; neither scoped Rust handle
+is introduced as a Python callback interface.
 
 ### Correspondence without Undo payload retention
 
@@ -1932,18 +1993,21 @@ new handles within that batch. Its update_correspondence method can incorporate
 the batch's removals and surviving additions. Reuse that behavior rather than
 reconstructing mappings from old attribute and constraint payloads.
 
-The selected candidate maintains one MoleculeCorrespondence directly in both
-recovery modes. Initialize it to identity at transaction entry and update it after
-each successful batch through ApplicationState::update_correspondence. Drop each
-batch's ApplicationState afterward. tracked_commit returns the accumulated value;
-plain commit discards it. Neither mode retains batch mapping history or uses Undo
-to reconstruct correspondence.
+TrackedTransaction maintains one MoleculeCorrespondence directly in both
+recovery modes. Initialize it to identity at tracked transaction entry and update
+it after each successful batch through ApplicationState::update_correspondence.
+Drop each batch's ApplicationState afterward. TrackedTransaction::commit moves
+out the accumulated value. Transaction has no aggregate mapping to construct,
+update or discard. Neither type retains batch mapping history or uses Undo to
+reconstruct correspondence.
 
-This makes ordinary transactions pay for correspondence construction and updates.
-Whether that cost is significant has not been established. Measure time and memory
-for plain and tracked transactions before introducing delayed construction,
-structural records, or another tracking-selection interface. S0e measures the
-Journal path; S0f measures Clone when that implementation is available.
+S0e measured a real cost for unconditional tracking, including a 32.8% increase
+for a plain single charge edit on a unique 96-atom chain and 1,528 bytes of
+retained mapping storage. S0e2 compares the split implementation with the saved
+pre-S0e Journal baseline and S0e's eager candidate, including identity construction
+and mapping updates only on the tracked path. S0f measures both types with Clone
+and Journal recovery. The S0e measurements remain historical evidence; they do
+not establish performance of the new split.
 
 ### Transaction guard
 
@@ -1956,9 +2020,11 @@ enum TransactionStorage {
 }
 ```
 
-Transaction::run owns TransactionGuard, which retains the receiver's mutable
-borrow, TransactionStorage, the accumulated correspondence and TransactionStatus.
-The callback's Transaction borrows those fields; it does not own recovery.
+Both run entry points own a private TransactionGuard retaining the receiver's
+mutable borrow, TransactionStorage and TransactionStatus. TrackedTransaction::run
+additionally owns the accumulated correspondence and lends its mutable borrow to
+the tracked handle. The ordinary run owns no correspondence storage. Share
+recovery and acceptance logic privately; neither callback handle owns recovery.
 Journal applies edits to the receiver with undo recording. Clone applies edits
 without undo recording to its working copy, leaving the receiver untouched.
 
@@ -2087,7 +2153,7 @@ S0f migrates those transaction calls; S10a exposes their recovery selector.
 Individual operations still migrate with editor/application interface changes
 in S0b and plan emission changes in S3.
 
-The baseline precedes all production changes. The six migration groups follow.
+The baseline precedes all production changes. The migration subitems follow.
 The migration interface review distinguishes settled interfaces from remaining
 proposals; an unresolved interface must be specified before its item starts.
 Each implementation subitem includes its callers and focused tests; none is a
@@ -2309,7 +2375,11 @@ proptest enabled and warnings denied, nightly formatting of changed Rust files,
 and git diff --check. Logs are in `scratch/181-s0d/`; full workspace tests remain
 at the stage gate.
 
-#### S0e — Transaction correspondence independent of Undo
+#### S0e — Transaction correspondence independent of Undo (done)
+
+Completed candidate and measurement record. The unconditional tracking described
+here is replaced by the 2026-10-14 decision scheduled in S0e1/S0e2; its independent
+correspondence mechanism and measurements remain the starting point.
 
 **Modules:** graph-IR molecule apply/transact and correspondence tests.
 **Internal implementation change, green; tracked_commit's public result is unchanged.**
@@ -2342,16 +2412,162 @@ of newly added entities, separate batches, attribute-only batches, empty
 transactions, and rollback/abort. Measure retained mapping memory separately from
 undo storage; changing batch partition must not change the resulting mapping.
 
+Completed 2026-10-14. The private guard now owns the entry-to-result
+MoleculeCorrespondence and Transaction borrows it. run constructs all eight
+identity components; successful apply calls update them through ApplicationState.
+tracked_commit checks integrity and moves out the mapping. Both journal-inspection
+passes are removed. Undo still supplies Journal rollback; public signatures,
+errors, acceptance and restoration behavior are unchanged. Rustdoc and the
+development guides now describe independent correspondence accumulation.
+
+Verification passed: 1,256 molecule unit tests, 25 feature-gated edit tests,
+all-target graph-IR Clippy with proptest and warnings denied, nightly formatting
+and git diff --check. Exact cases cover temporary additions removed within a
+batch and empty batches, alongside existing all-kind identity, overlays, cascades,
+cross-batch creation/removal and recovery cases. The new partition property varies
+batch size over descending atom removals and subsequent additions, including
+cascaded overlay removals. Full workspace checks remain at the stage gate.
+
+The cost comparison rebuilds the preceding Journal implementation at
+7d98315387d1b55c9e484bbd833cdcf766c9cbf4 and this implementation with the same
+harness. It uses S0a's resolved chains and charge edits, extended with empty
+transactions, empty batches and structural changes. Three sequential before/after
+pairs alternate binary order; each row below is the median of three run medians,
+each from 20 means of 32 calls. Input preparation and final molecule destruction
+are excluded; transaction entry, mapping updates, integrity checking and recovery/
+correspondence destruction are included. Allocation measurements use separate
+instrumented binaries. All 15 fixtures pass output/correspondence checks; 60
+case/ownership/tracking combinations are measured. Sources, binaries, commands,
+per-run spread, allocation counts and retained memory probes are in
+`scratch/181-s0e/`; these are bounded cases, not a workload mix.
+
+Times in µs, before → after:
+
+| Atoms / operation / ownership | Plain | Tracked |
+| --- | --- | --- |
+| 96 / no batches / unique | 0.333 → 0.488 (+46.5%) | 0.505 → 0.510 (+0.9%) |
+| 8 / 1 charge edit / unique | 0.240 → 0.318 (+32.9%) | 0.305 → 0.342 (+12.1%) |
+| 96 / 1 charge edit / unique | 0.520 → 0.690 (+32.8%) | 0.687 → 0.704 (+2.5%) |
+| 384 / 1 charge edit / unique | 1.400 → 1.640 (+17.1%) | 1.630 → 1.670 (+2.4%) |
+| 96 / 1 charge edit / shared | 1.859 → 1.978 (+6.4%) | 2.005 → 2.003 (−0.1%) |
+| 96 / 8 charge edits / unique | 0.950 → 1.169 (+23.1%) | 1.120 → 1.191 (+6.3%) |
+| 96 / 64 charge edits / unique | 4.805 → 5.003 (+4.1%) | 5.019 → 5.013 (−0.1%) |
+| 384 / 64 charge edits / unique | 5.494 → 5.727 (+4.2%) | 5.783 → 5.783 (0.0%) |
+| 384 / structural batch / unique | 72.639 → 73.765 (+1.6%) | 73.832 → 73.841 (0.0%) |
+
+The structural batch removes an initial atom and its incident bond, adds an atom
+and bond, then adds and removes a temporary atom. Across both ownership cases and
+8/96/384 atoms, plain structural medians increase 1.6–3.0%; tracked medians change
+−0.2–+1.9%. Small tracked attribute cases also have measurable overhead: the largest
+relative increase is the 8-atom single edit, +37 ns (+12.1%). No frequency-weighted
+or blanket performance-neutral conclusion follows from these measurements.
+
+The identity map adds two allocations and 120/1,528/6,136 requested heap bytes
+for chains of 8/96/384 atoms. Callback-entry live-memory probes isolate that storage
+before any Undo exists. After 1/8/64 scalar changes, retained journal buffers remain
+3,008/6,016/48,128 bytes, independently of molecule size. Plain commits now pay the
+mapping cost even with no edits; an empty molecule still allocates nothing.
+Tracked attribute-only allocation traffic is unchanged, but peak extra memory
+increases because the mapping is live during application. For a unique 96-atom,
+one-edit operation, plain calls/bytes/peak change from 1/3,008/3,008 to
+3/4,536/4,536; tracked changes from 3/4,536/3,424 to 3/4,536/4,536. Structural
+tracking adds one allocation and 28 requested bytes beyond the old tracked path,
+while reusing the existing batch compaction logic.
+
+This completed the eager tracking candidate and established its plain-commit
+cost. The selected follow-up is separate Transaction and TrackedTransaction
+handles in S0e1/S0e2. Clone-mode measurements remain part of S0f.
+
+#### S0e1 — TrackedTransaction scoped handle
+
+**Modules:** graph-IR molecule/transact, molecule and ir exports, transaction
+unit tests and edit properties. **Additive, green.** [dep: S0e]
+
+Add TrackedTransaction with the settled run, apply, probe, commit and rollback
+surface. At this boundary run takes the molecule and callback, matching the
+currently implemented Journal-only Transaction::run. S0f adds RollbackMethod to
+both entry points together. Export the new type beside Transaction through
+molecule and ir. Use the existing errors and keep fields private; add no arbitrary
+construction, conversion, mutable dereference to Transaction or Python handle.
+
+TrackedTransaction::commit consumes the handle, checks integrity and returns the
+entry-to-commit-state MoleculeCorrespondence. Acceptance still requires callback
+success. run owns the restoration guard and returns the callback's T; the handle
+only borrows scoped state. apply consumes one batch and returns unit; probe lends
+the checked molecule; rollback consumes the handle. Retain every existing abort,
+cancellation and restoration behavior. Reuse S0e's correspondence mechanism and
+shared private recovery logic without constructing a second mapping.
+
+This additive boundary leaves Transaction::tracked_commit and its existing
+tracking behavior temporarily in place; S0e2 removes them and migrates their
+callers. Document the new type's contract here without prematurely claiming that
+ordinary transactions have no mapping cost.
+
+**Checks:** exact correspondence for all eight entity kinds, additions,
+removals/cascades, deletion of newly added entities, separate handle namespaces,
+participant replacement and empty/attribute-only batches. Cover successful commit,
+first/later application failure, failed commit, failed probe, explicit rollback,
+uncommitted return, callback error after commit, unwinding between completed edits,
+forgotten handles and probe after abort. Check the same errors and restoration as
+Transaction. Extend public-operation properties for batch composition/partition,
+rollback and equality of plain/tracked outcomes after discarding correspondence.
+
+#### S0e2 — Ordinary transactions without correspondence
+
+**Modules:** graph-IR transaction implementation and callers, molecule
+conveniences, transaction/property tests, development guides, and bounded recovery
+measurements. **Breaking method removal, red→green within the subitem.**
+[dep: S0e1]
+
+Remove Transaction::tracked_commit. Remove aggregate correspondence storage,
+identity construction and update_correspondence calls from ordinary Transaction
+execution. Keep ApplicationState for per-batch handle resolution. Shared recovery
+storage and acceptance logic remain independent of tracking; only the tracked
+run owns a MoleculeCorrespondence and only tracked apply updates it. Neither
+public type exposes mutation through the other. Do not replace the removed
+method with a runtime tracking-disabled error or optional commit result.
+
+Migrate Molecule::tracked_transact to TrackedTransaction::run and commit;
+Molecule::transact stays on Transaction::run and commit. Their public signatures
+and Python results remain unchanged here. Migrate direct tracked_commit callers
+in transaction tests and examples at the same boundary. Preserve their callback
+error/unwind-after-commit and aborted-commit scenarios with the new tracked type;
+do not reduce them to ordinary commit cases. Composite Resolver continues to use
+ordinary Transaction. Audit workspace consumers, feature-gated properties and
+benchmarks for the retired method.
+
+Update rustdoc and data-types.md, integrity.md and nomenclature.md to describe
+the two operation-issued handles and their commit results. Remove tracked_commit
+from current API examples and publication tables. Python's prepared-batch
+operations continue to delegate to the corresponding Rust convenience; scoped
+callback handles remain Rust-only. This is the documentation boundary for the
+split, rather than waiting for S11b.
+
+**Checks and cost gate:** retain S0e1's lifecycle and correspondence coverage on
+both types, including plain/tracked result/error parity and batch partition
+independence. Run focused transaction/molecule and feature-gated edit tests.
+Repeat the S0e empty, attribute and structural cases across small/larger molecules
+and unique/shared storage. Compare the split with both saved pre-S0e Journal and
+S0e eager-tracking binaries; record timing, allocation traffic, peak extra memory
+and retained correspondence separately from Undo. Verify by implementation
+inspection and allocation probes that ordinary transactions neither construct
+nor retain aggregate mapping storage. Include entry/update costs on the tracked
+path and check its output before timing. Report residual differences from the
+original baseline rather than assuming the split removes all overhead. Record
+the result before S0f; retain the saved measurements and harness boundaries.
+
 #### S0f — Clone and Journal transaction recovery
 
-**Modules:** graph-IR transaction, Rust Transaction::run callers, and tests.
-**Breaking run signature, red→green within the subitem.** [dep: S0e]
+**Modules:** graph-IR Transaction and TrackedTransaction recovery, both run
+entry points' Rust callers, and tests.
+**Breaking run signatures, red→green within the subitem.** [dep: S0e2]
 
-Add RollbackMethod::{Clone, Journal} and the agreed selector position on run:
-receiver, rollback method, callback. Clone applies to one working molecule and
-installs only after successful commit plus callback return. Journal retains
-undo-based restoration. Keep apply/probe/commit/tracked_commit/rollback signatures,
-separate batch namespaces, and abort behavior. Both modes use S0e's tracking.
+Add RollbackMethod::{Clone, Journal} and the agreed selector position on both
+run methods: receiver, rollback method, callback. Clone applies to one working
+molecule and installs only after successful commit plus callback return. Journal
+retains undo-based restoration. Keep each type's apply/probe/commit/rollback signatures,
+separate batch namespaces and abort behavior. TrackedTransaction accumulates
+correspondence with either recovery method; Transaction does not.
 
 Migrate run callers together. Existing transact/tracked_transact conveniences
 retain their signatures at this boundary and explicitly pass Journal internally;
@@ -2359,35 +2575,42 @@ S0g exposes the selector on those conveniences. Composite Resolver callers also
 pass Journal until S10a exposes the operation's recovery selector.
 
 **run caller migration in this subitem:** Molecule transact/tracked_transact in
-`ir/molecule/transact.rs`, composite Resolver resolve_into/resolve_into_with_report/
-project_into pass Journal in the new second argument.
+`ir/molecule/transact.rs` pass Journal to Transaction::run and
+TrackedTransaction::run respectively. Composite Resolver resolve_into/
+resolve_into_with_report/project_into pass Journal to ordinary Transaction::run.
 Their public signatures stay unchanged here. Update graph-IR molecule/transaction
-unit tests, edit properties, and run's rustdoc examples at the same boundary.
-Exercise both methods in transaction recovery tests; retain Journal explicitly
-where a test specifically exercises undo restoration. No run caller waits for S10.
+unit tests, edit properties and both run methods' rustdoc examples at the same
+boundary. Exercise both recovery methods on both handle types; retain Journal
+explicitly where a test specifically exercises undo restoration. No run caller
+waits for S10.
 
-**Guard storage:** retain the receiver borrow, correspondence and status on
+**Guard storage:** retain the receiver borrow and status on the shared
 TransactionGuard; replace its journal field with the approved TransactionStorage
-enum above. Transaction borrows those fields. run initializes Journal with an
-empty Vec or Clone with Some(receiver.clone()). Keep restoration owned by run;
-no empty placeholder is installed in the receiver. Application dispatch selects
-apply_edit_with_undo for Journal and apply_edit for Clone. Both feed the same
-per-batch ApplicationState and accumulated correspondence.
+enum above. Each handle borrows recovery state; only the tracked handle also
+borrows correspondence owned by its run. Both run methods initialize Journal
+with an empty Vec or Clone with Some(receiver.clone()). Keep restoration owned
+by run; no empty placeholder is installed in the receiver. Application dispatch
+selects apply_edit_with_undo for Journal and apply_edit for Clone. Both feed the same
+per-batch ApplicationState; only TrackedTransaction uses it to update the
+accumulated correspondence.
 
 Probe selects the working copy while Clone is active and the receiver after
 abort; Journal always probes the receiver. Commit checks that same active
 molecule. Accept Clone only after commit plus callback success, moving its value
 from the Option into the receiver. Rollback and guard Drop replay Journal undo
 or discard the Clone value. Retain the existing status transitions and scoped
-callback lifetime. Measure S0e's direct-correspondence cost for Clone plain/tracked
-execution as well. Export RollbackMethod beside Transaction through
-molecule and ir, following the existing transaction-type exports.
+callback lifetime. Repeat S0e2's cost cases for both Clone and Journal, keeping
+ordinary and tracked execution separate and including recovery setup/disposal.
+Export RollbackMethod beside Transaction and TrackedTransaction through molecule
+and ir, following the existing transaction-type exports.
 
-**Checks:** both modes on success, first/later application failure, failed commit,
-explicit rollback, callback error after commit, unwinding between completed edits,
-forgotten handles, and tracked structural changes. Probe after abort observes the
-restored entry value. Do not add recovery from allocation failure or internal
-partial-Edit panics.
+**Checks:** both recovery modes and both handle types on success, first/later
+application failure, failed commit, explicit rollback, callback error after commit,
+unwinding between completed edits, forgotten handles, and tracked structural
+changes. Probe after abort observes the
+restored entry value. Extend composition, partition and plain/tracked parity
+properties across both recovery modes. Do not add recovery from allocation failure
+or internal partial-Edit panics.
 
 #### S0g — Prepared-batch transaction entry points
 
@@ -2397,7 +2620,8 @@ rollback-selector binding/exports, callers, and tests.
 
 Expose RollbackMethod through Molecule transact/tracked_transact and Python
 prepared-batch calls. Delegate to Transaction::run, apply each batch immediately,
-and commit once. Preserve the existing whole-operation correspondence result.
+and commit once for transact; tracked_transact delegates to TrackedTransaction::run
+and its commit. Preserve the existing whole-operation correspondence result.
 Python continues to accept arbitrary iterables, extract the batch objects before
 receiver mutation, and transfer Edits sequentially without prechecking the entire
 list for consumed or repeated objects. Failure transferring a later batch may
@@ -2407,7 +2631,7 @@ unchanged. Before execution, advance the molecule counter under the existing rul
 **Interface status:** Rust takes batches followed by rollback_method. Python
 exposes RollbackMethod and a keyword-only rollback_method defaulting to Journal;
 Clone remains selectable. These signatures and the default are settled. Scoped
-Python Transaction handles/callbacks are not introduced.
+Python Transaction or TrackedTransaction handles/callbacks are not introduced.
 
 **Prepared-batch caller migration in this subitem:**
 
@@ -2427,7 +2651,7 @@ arbitrary iterables, repeated/consumed batch inputs, independent batch namespace
 source restoration, and unchanged view invalidation timing. Update the operation
 docs with the selected Python default and exact receiver/input guarantees.
 
-**Compilation and test boundaries:** S0b, S0c2, S0f and S0g include their
+**Compilation and test boundaries:** S0b, S0c2, S0e1, S0e2, S0f and S0g include their
 binding/caller changes in the same subitem. Each ends with affected libraries,
 tests and benches compiling and focused tests passing; no compatibility wrapper
 or disabled test bridges the interval to S10. Check feature-gated property callers
@@ -2438,8 +2662,10 @@ MSRV runs remain at S12b; baseline timings are not rerun after every subitem.
 
 **S0 gate:** all listed interface decisions are resolved where marked, affected
 Rust/Python callers compile and pass their focused tests, and lifecycle/recovery
-contracts are verified before the boxing and batching stages. Full workspace and
-MSRV verification remains at the final combined gate.
+contracts are verified before the boxing and batching stages. Transaction exposes
+no tracked_commit and performs no aggregate correspondence work; tracked results
+come from TrackedTransaction::commit. The S0e2 and S0f cost comparisons are recorded.
+Full workspace and MSRV verification remain at the final combined gate.
 
 ### S1 — Box the selected large payloads
 
@@ -3675,7 +3901,7 @@ removing scratch artifacts. Close 181 only when its agreed work is complete;
 then start the Reaction ownership work already scheduled in 231.
 
 **Dependencies:** S0a precedes every production change;
-S0b → S0c2 and S0b → S0d; S0e → S0f → S0g;
+S0b → S0c2 and S0b → S0d; S0e → S0e1 → S0e2 → S0f → S0g;
 then S1a/S1b → S2a–S2h → S3a/S3b → S4a;
 independently, S5a → S5b, S6a/S6b/S6c, and S7a → S7b → S7c.
 S1a/S1b and S2a–S2f are independent within their stages. The stereo sequence is
