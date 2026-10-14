@@ -66,7 +66,7 @@ use super::traits::{EntityPatch, FrameTransport, Normalize, Reframe};
 /// from a reaction use lhs ids first and append right-only entities. `atoms` and `bonds` are indexed
 /// parallel to the graph's nodes and edges.
 ///
-/// Clones share the atom, bond, and constraint tables until a transformation requires owned values.
+/// Clones share storage until mutation.
 ///
 /// # Semantic properties
 ///
@@ -1957,63 +1957,54 @@ impl Reframe for ReactionSpan {
 
         let mut actions = ConstraintFrameActionMap::default();
         self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
-            mem::take(&mut self.dative_bonds).reframe()?
+            self.dative_bonds.reframe()?
         } else {
-            reframe_dative_bond_spans_with(mem::take(&mut self.dative_bonds), |id, action| {
+            reframe_dative_bond_spans_with(self.dative_bonds, |id, action| {
                 if action_domain.contains_dative_bond(id) {
                     actions.insert_dative_bond(id, action.clone());
                 }
             })?
         };
         self.aromatic_systems = if action_domain.count(EntityKind::AromaticSystem) == 0 {
-            mem::take(&mut self.aromatic_systems).reframe()?
+            self.aromatic_systems.reframe()?
         } else {
-            reframe_aromatic_system_spans_with(
-                mem::take(&mut self.aromatic_systems),
-                |id, action| {
-                    if action_domain.contains_aromatic_system(id) {
-                        actions.insert_aromatic_system(id, action.clone());
-                    }
-                },
-            )?
+            reframe_aromatic_system_spans_with(self.aromatic_systems, |id, action| {
+                if action_domain.contains_aromatic_system(id) {
+                    actions.insert_aromatic_system(id, action.clone());
+                }
+            })?
         };
         self.multicenter_bonds = if action_domain.count(EntityKind::MulticenterBond) == 0 {
-            mem::take(&mut self.multicenter_bonds).reframe()?
+            self.multicenter_bonds.reframe()?
         } else {
-            reframe_multicenter_bond_spans_with(
-                mem::take(&mut self.multicenter_bonds),
-                |id, action| {
-                    if action_domain.contains_multicenter_bond(id) {
-                        actions.insert_multicenter_bond(id, action.clone());
-                    }
-                },
-            )?
+            reframe_multicenter_bond_spans_with(self.multicenter_bonds, |id, action| {
+                if action_domain.contains_multicenter_bond(id) {
+                    actions.insert_multicenter_bond(id, action.clone());
+                }
+            })?
         };
         self.noncovalent_bonds = if action_domain.count(EntityKind::NoncovalentBond) == 0 {
-            mem::take(&mut self.noncovalent_bonds).reframe()?
+            self.noncovalent_bonds.reframe()?
         } else {
-            reframe_noncovalent_bond_spans_with(
-                mem::take(&mut self.noncovalent_bonds),
-                |id, action| {
-                    if action_domain.contains_noncovalent_bond(id) {
-                        actions.insert_noncovalent_bond(id, action.clone());
-                    }
-                },
-            )?
+            reframe_noncovalent_bond_spans_with(self.noncovalent_bonds, |id, action| {
+                if action_domain.contains_noncovalent_bond(id) {
+                    actions.insert_noncovalent_bond(id, action.clone());
+                }
+            })?
         };
         self.stereo_atoms = if action_domain.count(EntityKind::StereoAtom) == 0 {
-            mem::take(&mut self.stereo_atoms).reframe()?
+            self.stereo_atoms.reframe()?
         } else {
-            reframe_stereo_atom_spans_with(mem::take(&mut self.stereo_atoms), |id, action| {
+            reframe_stereo_atom_spans_with(self.stereo_atoms, |id, action| {
                 if action_domain.contains_stereo_atom(id) {
                     actions.insert_stereo_atom(id, action);
                 }
             })?
         };
         self.stereo_bonds = if action_domain.count(EntityKind::StereoBond) == 0 {
-            mem::take(&mut self.stereo_bonds).reframe()?
+            self.stereo_bonds.reframe()?
         } else {
-            reframe_stereo_bond_spans_with(mem::take(&mut self.stereo_bonds), |id, action| {
+            reframe_stereo_bond_spans_with(self.stereo_bonds, |id, action| {
                 if action_domain.contains_stereo_bond(id) {
                     actions.insert_stereo_bond(id, action);
                 }

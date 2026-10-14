@@ -1529,9 +1529,8 @@ plan.
 
 Molecule's graph, atom and bond tables, six overlay collections, and molecule-level
 constraints are Arc-backed, as are Reaction's deltas and ReactionSpan's atom, bond,
-and constraint tables. A clone increments reference counts, and the first write
-to shared storage copies that storage. ReactionSpan's six overlay span sets still
-copy their contents on clone.
+constraint, and six overlay span collections. A clone increments reference counts,
+and the first write to shared storage copies that storage.
 [213](213-editor-overlay-storage-2026-08-27.md#remaining-costs) recorded the
 Molecule constraint copy as a remaining cost; S5a removes it.
 
@@ -1542,15 +1541,12 @@ Molecule constraint copy as a remaining cost; S5a removes it.
 | Reaction | deltas | `Arc<Deltas>` | Yes |
 | ReactionSpan | graph | Graph | Yes |
 | ReactionSpan | atoms, bonds | `Arc<Vec<EntitySpan<AtomForm>>>`, `Arc<Vec<EntitySpan<BondForm>>>` | Yes |
-| ReactionSpan | six overlay span sets | Newtypes wrapping their relation set directly | No |
+| ReactionSpan | six overlay span sets | Newtypes wrapping their relation set in Arc | Yes |
 | ReactionSpan | constraints | `Arc<Vec<ConstraintSpan>>` | Yes |
 
-Known clone sites that copy the remaining unshared storage:
-
-- ReactionSpan uses the default framed_eq, which clones both
-  operands.
-- Python ReactionSpan canonicalize and tracked_canonicalize clone the wrapped
-  span.
+ReactionSpan's default framed_eq clones both operands, and Python canonicalize
+and tracked_canonicalize clone the wrapped span. These clones share all storage;
+the subsequent transformations copy shared storage when they write or rebuild it.
 
 Reaction application iterators share the reaction snapshot's delta storage after
 S5b. Each iterator still owns its prepared Deltas and clones them for every match.
@@ -4372,11 +4368,12 @@ unit, integration, property, and doc suites passed: 10,486 passed, 7 ignored,
 no failures. The 433 property-target checks used 256 generated cases and seed
 20261013. Graph-IR all-target Clippy with proptest and warnings denied,
 touched-file nightly formatting, git diff --check, and full diff review passed.
-The contract inventory and logs are in scratch/236-s5c/. S5d is next.
+The contract inventory and logs are in scratch/236-s5c/.
 
-#### S5d — ReactionSpan overlay span newtypes
+#### S5d — ReactionSpan overlay span newtypes **Done**
 
-**Modules:** graph-IR dative, aromatic, multicenter, noncovalent, stereo.
+**Modules:** graph-IR dative, aromatic, multicenter, noncovalent, stereo,
+reaction_span.
 **Green.** [dep: none]
 
 Wrap the relation set of DativeBondSpans, AromaticSystemSpans,
@@ -4387,6 +4384,27 @@ reframe implementations write through Arc::make_mut.
 
 **Tests:** migrate the unit tests that permute participants directly. Add a
 clone-independence case per type through normalize and reframe.
+
+**Completed (2026-10-13).** All six overlay span collections wrap their relation
+sets in Arc. normalize, reframe_by, and reframe obtain mutable storage once per
+operation, copying only when shared. into_entries moves uniquely owned relation
+sets through Arc::unwrap_or_clone. new and the mapping methods wrap their results;
+mapping retains graph-core's existing borrowing rebuild without a preliminary
+relation-set copy. ReactionSpan::reframe moves its overlay fields directly,
+avoiding six temporary default Arc allocations. Public interfaces, validation,
+failure behavior, and Python ownership are unchanged.
+
+The existing tests now check clone independence for every collection through
+normalization, direct and tracked reframing, and frame transport. Normalization
+covers both unique and shared storage with full expected collection values;
+reframing also checks initial storage sharing and retains independent originals.
+
+**Verification:** all 68 focused span tests passed. The full graph-IR unit,
+integration, property, and doc suites passed: 10,492 passed, 7 ignored, no
+failures. The 433 property-target checks used 256 generated cases and seed
+20261013. Graph-IR all-target Clippy with proptest and warnings denied,
+touched-file nightly formatting, git diff --check, and full diff review passed.
+The contract inventory and logs are in scratch/236-s5d/. S5e is next.
 
 #### S5e — Benchmark cases
 

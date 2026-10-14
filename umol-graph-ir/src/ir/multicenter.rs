@@ -452,12 +452,18 @@ impl Reframe for MulticenterBonds {
 /// through a payload parameter: a type parameter on the molecule-level aggregates would complicate
 /// the primary carrier to serve this one. Values are issued by
 /// [`ReactionSpan`](super::reaction_span::ReactionSpan).
+///
+/// Clones share storage until mutation.
+///
+/// # Semantic properties
+///
+/// Transforming one clone leaves the other unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct MulticenterBondSpans(VarRelationSet<NodeId, EntitySpan<MulticenterBondForm>>);
+pub struct MulticenterBondSpans(Arc<VarRelationSet<NodeId, EntitySpan<MulticenterBondForm>>>);
 
 impl MulticenterBondSpans {
     pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> {
-        self.0
+        Arc::unwrap_or_clone(self.0)
             .into_entries()
             .into_iter()
             .map(|(atoms, span)| (atoms.into_iter().map(AtomId::from).collect(), span))
@@ -465,12 +471,12 @@ impl MulticenterBondSpans {
     }
 
     pub(crate) fn new(entries: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)>) -> Self {
-        Self(VarRelationSet::new(
+        Self(Arc::new(VarRelationSet::new(
             entries
                 .into_iter()
                 .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
                 .collect(),
-        ))
+        )))
     }
 
     pub fn count(&self) -> usize {
@@ -509,18 +515,19 @@ impl MulticenterBondSpans {
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
     pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        self.0.try_map(correspondence).map(Self)
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
     pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
-        Self(self.0.remap(remapping))
+        Self(Arc::new(self.0.remap(remapping)))
     }
 }
 
 impl Normalize for MulticenterBondSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
-        for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
+        let set = Arc::make_mut(&mut self.0);
+        for id in set.ids().collect::<Vec<_>>() {
+            *set.data_mut(id) = mem::take(set.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -530,15 +537,14 @@ impl FrameTransport for MulticenterBondSpans {
     type Action = MulticenterBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
             let action = actions.action(MulticenterBondId::from(relation_id))?;
-            if action.degree() != self.0.participants(relation_id).len() {
+            if action.degree() != set.participants(relation_id).len() {
                 return None;
             }
-            *self.0.data_mut(relation_id) =
-                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
-            self.0
-                .permute_participants(relation_id, &participant_order(action));
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
+            set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -563,21 +569,18 @@ pub(crate) fn reframe_multicenter_bond_spans_with(
     mut multicenter_bonds: MulticenterBondSpans,
     mut visit: impl FnMut(MulticenterBondId, &DynPermutation),
 ) -> Result<MulticenterBondSpans, Contradiction> {
-    for relation_id in multicenter_bonds.0.ids().collect::<Vec<_>>() {
+    let set = Arc::make_mut(&mut multicenter_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
         let id = MulticenterBondId::from(relation_id);
-        let stored = multicenter_bonds
-            .0
+        let stored = set
             .participants(relation_id)
             .iter()
             .map(|&atom| AtomId::from(atom))
             .collect();
         let action = multicenter_bond_representative_action(stored);
-        let span = mem::take(multicenter_bonds.0.data_mut(relation_id)).normalize()?;
-        *multicenter_bonds.0.data_mut(relation_id) =
-            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-        multicenter_bonds
-            .0
-            .permute_participants(relation_id, &participant_order(&action));
+        let span = mem::take(set.data_mut(relation_id)).normalize()?;
+        *set.data_mut(relation_id) = span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        set.permute_participants(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(multicenter_bonds)
@@ -1453,7 +1456,7 @@ mod tests {
                 rhs: MulticenterBondForm::from_electrons(vec![11, 21, 31]),
             },
         )]);
-        spans.0.permute_participants(
+        Arc::make_mut(&mut spans.0).permute_participants(
             RelationId(0),
             &[
                 ParticipantPosition(2),
@@ -1462,7 +1465,9 @@ mod tests {
             ],
         );
 
+        let original = MulticenterBondSpans::new(spans.clone().into_entries());
         let source = spans.clone();
+        assert!(Arc::ptr_eq(&spans.0, &source.0));
         let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
 
         assert_eq!(
@@ -1480,25 +1485,33 @@ mod tests {
             actions.action(MulticenterBondId(0)),
             Some(&DynPermutation::try_from(vec![1, 2, 0]).expect("expected action is valid")),
         );
-        assert_eq!(source.reframe_by(&actions), Some(reframed));
+        assert_eq!(source.clone().reframe(), Ok(reframed.clone()));
+        assert_eq!(source.clone().reframe_by(&actions), Some(reframed));
+        assert_eq!(source, original);
     }
 
     #[rstest]
-    fn test_multicenter_bond_spans_normalize() {
-        let spans = MulticenterBondSpans::new(vec![(
+    fn test_multicenter_bond_spans_normalize(#[values(false, true)] shared: bool) {
+        let entries = vec![(
             vec![AtomId(1), AtomId(2)],
             EntitySpan::Modified {
                 lhs: MulticenterBondForm::default().with_charge(NumForm::lit_set([0])),
                 rhs: MulticenterBondForm::default().with_charge(0),
             },
-        )]);
+        )];
+        let spans = MulticenterBondSpans::new(entries.clone());
+        let retained = shared.then(|| spans.clone());
 
         let normalized = spans.normalize().expect("the forms are satisfiable");
 
         assert_eq!(
-            normalized.attributes(MulticenterBondId(0)),
-            &EntitySpan::Unchanged(MulticenterBondForm::default().with_charge(0)),
+            normalized,
+            MulticenterBondSpans::new(vec![(
+                vec![AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(MulticenterBondForm::default().with_charge(0)),
+            )]),
         );
+        assert_eq!(retained, shared.then(|| MulticenterBondSpans::new(entries)));
     }
 
     #[rstest]
@@ -1539,7 +1552,7 @@ mod tests {
                 rhs: MulticenterBondForm::from_electrons(vec![11, 21]),
             },
         )]);
-        unsorted.0.permute_participants(
+        Arc::make_mut(&mut unsorted.0).permute_participants(
             RelationId(0),
             &[ParticipantPosition(1), ParticipantPosition(0)],
         );

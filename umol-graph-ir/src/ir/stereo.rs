@@ -919,16 +919,22 @@ impl Reframe for StereoBonds {
 /// The reaction span's stereo atoms, one [`EntitySpan`] per entity against a single ligand frame.
 /// The `Molecule` peer is [`StereoAtoms`]. Values are issued by
 /// [`ReactionSpan`](super::reaction_span::ReactionSpan).
+///
+/// Clones share storage until mutation.
+///
+/// # Semantic properties
+///
+/// Transforming one clone leaves the other unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoAtomSpans(
-    FixedVarBirelationSet<NodeId, 1, StereoLigand, EntitySpan<StereoAtomForm>>,
+    Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, EntitySpan<StereoAtomForm>>>,
 );
 
 impl StereoAtomSpans {
     pub(crate) fn into_entries(
         self,
     ) -> Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> {
-        self.0
+        Arc::unwrap_or_clone(self.0)
             .into_entries()
             .into_iter()
             .map(|(site, ligands, span)| (AtomId::from(site[0]), ligands, span))
@@ -938,12 +944,12 @@ impl StereoAtomSpans {
     pub(crate) fn new(
         entries: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)>,
     ) -> Self {
-        Self(FixedVarBirelationSet::new(
+        Self(Arc::new(FixedVarBirelationSet::new(
             entries
                 .into_iter()
                 .map(|(site, ligands, span)| ([NodeId::from(site)], ligands, span))
                 .collect(),
-        ))
+        )))
     }
 
     pub fn count(&self) -> usize {
@@ -984,18 +990,19 @@ impl StereoAtomSpans {
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
     pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        self.0.try_map(correspondence).map(Self)
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
     pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
-        Self(self.0.remap(remapping))
+        Self(Arc::new(self.0.remap(remapping)))
     }
 }
 
 impl Normalize for StereoAtomSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
-        for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
+        let set = Arc::make_mut(&mut self.0);
+        for id in set.ids().collect::<Vec<_>>() {
+            *set.data_mut(id) = mem::take(set.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -1005,15 +1012,14 @@ impl FrameTransport for StereoAtomSpans {
     type Action = StereoAtomsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
             let action = actions.action(StereoAtomId::from(relation_id))?;
-            if action.degree() != self.0.participants_2(relation_id).len() {
+            if action.degree() != set.participants_2(relation_id).len() {
                 return None;
             }
-            *self.0.data_mut(relation_id) =
-                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
-            self.0
-                .permute_participants_2(relation_id, &participant_order(*action));
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
+            set.permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
     }
@@ -1041,16 +1047,14 @@ pub(crate) fn reframe_stereo_atom_spans_with(
     mut stereo_atoms: StereoAtomSpans,
     mut visit: impl FnMut(StereoAtomId, Permutation),
 ) -> Result<StereoAtomSpans, Contradiction> {
-    for relation_id in stereo_atoms.0.ids().collect::<Vec<_>>() {
+    let set = Arc::make_mut(&mut stereo_atoms.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
         let id = StereoAtomId::from(relation_id);
-        let action = stereo_atom_representative_action(stereo_atoms.0.participants_2(relation_id))
+        let action = stereo_atom_representative_action(set.participants_2(relation_id))
             .ok_or(Contradiction)?;
-        let span = mem::take(stereo_atoms.0.data_mut(relation_id)).normalize()?;
-        *stereo_atoms.0.data_mut(relation_id) =
-            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-        stereo_atoms
-            .0
-            .permute_participants_2(relation_id, &participant_order(action));
+        let span = mem::take(set.data_mut(relation_id)).normalize()?;
+        *set.data_mut(relation_id) = span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        set.permute_participants_2(relation_id, &participant_order(action));
         visit(id, action);
     }
     Ok(stereo_atoms)
@@ -1059,16 +1063,22 @@ pub(crate) fn reframe_stereo_atom_spans_with(
 /// The reaction span's stereo bonds, one [`EntitySpan`] per entity against a single ligand frame.
 /// The `Molecule` peer is [`StereoBonds`]. Values are issued by
 /// [`ReactionSpan`](super::reaction_span::ReactionSpan).
+///
+/// Clones share storage until mutation.
+///
+/// # Semantic properties
+///
+/// Transforming one clone leaves the other unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoBondSpans(
-    FixedVarBirelationSet<EdgeId, 1, StereoLigand, EntitySpan<StereoBondForm>>,
+    Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, EntitySpan<StereoBondForm>>>,
 );
 
 impl StereoBondSpans {
     pub(crate) fn into_entries(
         self,
     ) -> Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> {
-        self.0
+        Arc::unwrap_or_clone(self.0)
             .into_entries()
             .into_iter()
             .map(|(site, ligands, span)| (BondId::from(site[0]), ligands, span))
@@ -1078,12 +1088,12 @@ impl StereoBondSpans {
     pub(crate) fn new(
         entries: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)>,
     ) -> Self {
-        Self(FixedVarBirelationSet::new(
+        Self(Arc::new(FixedVarBirelationSet::new(
             entries
                 .into_iter()
                 .map(|(site, ligands, span)| ([EdgeId::from(site)], ligands, span))
                 .collect(),
-        ))
+        )))
     }
 
     pub fn count(&self) -> usize {
@@ -1124,18 +1134,19 @@ impl StereoBondSpans {
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
     pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        self.0.try_map(correspondence).map(Self)
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
     pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
-        Self(self.0.remap(remapping))
+        Self(Arc::new(self.0.remap(remapping)))
     }
 }
 
 impl Normalize for StereoBondSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
-        for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
+        let set = Arc::make_mut(&mut self.0);
+        for id in set.ids().collect::<Vec<_>>() {
+            *set.data_mut(id) = mem::take(set.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -1145,15 +1156,14 @@ impl FrameTransport for StereoBondSpans {
     type Action = StereoBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
             let action = actions.action(StereoBondId::from(relation_id))?;
-            if action.degree() != self.0.participants_2(relation_id).len() {
+            if action.degree() != set.participants_2(relation_id).len() {
                 return None;
             }
-            *self.0.data_mut(relation_id) =
-                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
-            self.0
-                .permute_participants_2(relation_id, &participant_order(*action));
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
+            set.permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
     }
@@ -1181,16 +1191,14 @@ pub(crate) fn reframe_stereo_bond_spans_with(
     mut stereo_bonds: StereoBondSpans,
     mut visit: impl FnMut(StereoBondId, Permutation),
 ) -> Result<StereoBondSpans, Contradiction> {
-    for relation_id in stereo_bonds.0.ids().collect::<Vec<_>>() {
+    let set = Arc::make_mut(&mut stereo_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
         let id = StereoBondId::from(relation_id);
-        let action = stereo_bond_representative_action(stereo_bonds.0.participants_2(relation_id))
+        let action = stereo_bond_representative_action(set.participants_2(relation_id))
             .ok_or(Contradiction)?;
-        let span = mem::take(stereo_bonds.0.data_mut(relation_id)).normalize()?;
-        *stereo_bonds.0.data_mut(relation_id) =
-            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-        stereo_bonds
-            .0
-            .permute_participants_2(relation_id, &participant_order(action));
+        let span = mem::take(set.data_mut(relation_id)).normalize()?;
+        *set.data_mut(relation_id) = span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        set.permute_participants_2(relation_id, &participant_order(action));
         visit(id, action);
     }
     Ok(stereo_bonds)
@@ -5711,7 +5719,9 @@ mod tests {
             },
         )]);
 
+        let original = StereoAtomSpans::new(spans.clone().into_entries());
         let source = spans.clone();
+        assert!(Arc::ptr_eq(&spans.0, &source.0));
         let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
         let action = actions
             .action(StereoAtomId(0))
@@ -5736,12 +5746,14 @@ mod tests {
                     .expect("a parent-group action"),
             },
         );
-        assert_eq!(source.reframe_by(&actions), Some(reframed));
+        assert_eq!(source.clone().reframe(), Ok(reframed.clone()));
+        assert_eq!(source.clone().reframe_by(&actions), Some(reframed));
+        assert_eq!(source, original);
     }
 
     #[rstest]
-    fn test_stereo_atom_spans_normalize() {
-        let spans = StereoAtomSpans::new(vec![(
+    fn test_stereo_atom_spans_normalize(#[values(false, true)] shared: bool) {
+        let entries = vec![(
             AtomId(0),
             [1, 2, 3, 4]
                 .into_iter()
@@ -5751,14 +5763,24 @@ mod tests {
                 lhs: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([1])),
                 rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
             },
-        )]);
+        )];
+        let spans = StereoAtomSpans::new(entries.clone());
+        let retained = shared.then(|| spans.clone());
 
         let normalized = spans.normalize().expect("the forms are satisfiable");
 
         assert_eq!(
-            normalized.attributes(StereoAtomId(0)),
-            &EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32)),
+            normalized,
+            StereoAtomSpans::new(vec![(
+                AtomId(0),
+                [1, 2, 3, 4]
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32)),
+            )]),
         );
+        assert_eq!(retained, shared.then(|| StereoAtomSpans::new(entries)));
     }
 
     #[rstest]
@@ -5930,7 +5952,9 @@ mod tests {
             },
         )]);
 
+        let original = StereoBondSpans::new(spans.clone().into_entries());
         let source = spans.clone();
+        assert!(Arc::ptr_eq(&spans.0, &source.0));
         let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
         let action = actions
             .action(StereoBondId(0))
@@ -5954,12 +5978,14 @@ mod tests {
                     .expect("a parent-group action"),
             },
         );
-        assert_eq!(source.reframe_by(&actions), Some(reframed));
+        assert_eq!(source.clone().reframe(), Ok(reframed.clone()));
+        assert_eq!(source.clone().reframe_by(&actions), Some(reframed));
+        assert_eq!(source, original);
     }
 
     #[rstest]
-    fn test_stereo_bond_spans_normalize() {
-        let spans = StereoBondSpans::new(vec![(
+    fn test_stereo_bond_spans_normalize(#[values(false, true)] shared: bool) {
+        let entries = vec![(
             BondId(0),
             [1, 2, 3, 4]
                 .into_iter()
@@ -5969,14 +5995,24 @@ mod tests {
                 lhs: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([1])),
                 rhs: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
             },
-        )]);
+        )];
+        let spans = StereoBondSpans::new(entries.clone());
+        let retained = shared.then(|| spans.clone());
 
         let normalized = spans.normalize().expect("the forms are satisfiable");
 
         assert_eq!(
-            normalized.attributes(StereoBondId(0)),
-            &EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, 1_u32)),
+            normalized,
+            StereoBondSpans::new(vec![(
+                BondId(0),
+                [1, 2, 3, 4]
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, 1_u32)),
+            )]),
         );
+        assert_eq!(retained, shared.then(|| StereoBondSpans::new(entries)));
     }
 
     #[rstest]
