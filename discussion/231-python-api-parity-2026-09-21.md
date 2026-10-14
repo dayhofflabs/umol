@@ -3,6 +3,7 @@
 Status: In Progress
 Date: 2026-09-21
 Relates: [213](213-editor-overlay-storage-2026-08-27.md),
+[149](149-molecule-ring-cache-and-hashing-2026-07-13.md),
 [192](192-python-api-type-roles-2026-08-09.md),
 [181](181-python-boundary-ownership-2026-08-03.md),
 [Python API guide](../docs/development/python-api.md),
@@ -81,6 +82,22 @@ for StereoBondForm. Record this correction with the stereo entity review: equali
 must compare the Rust form value, independent of the wrapper's read-only flag.
 Verify equal and unequal values for both types, including mutable/read-only forms.
 No production fix or complete equality audit is claimed by that study.
+
+## Canonical hashing — 2026-10-13
+
+**Requested binding addition:** expose canonical_hash on Molecule, Reaction, and
+ReactionSpan. Rust's Canonicalize::canonical_hash borrows its receiver and returns
+a u64 or a canonicalization error; none of the three Python bindings currently exposes it.
+
+Use `canonical_hash(*, stereo_model=None, config=None) -> int`, following the
+existing canonicalization arguments and exception mappings in umol-py/src/canonicalize.rs.
+Delegate to the Rust query without consuming or changing the receiver. Coordinate
+Reaction access with the retained Rust storage correction above.
+
+Verify agreement with Rust under the same context, equal successful hashes for
+canonically equal values, invariance under valid remapping, canonicalization
+errors, and receiver preservation. The result may collide and is not a persistent
+identifier. This explicit query does not add Python `__hash__` to mutable objects.
 
 ## Type-role review consolidated from 192 — 2026-10-08
 
@@ -450,7 +467,7 @@ machinery may share evidence, with its members and exceptions identified.
 | graph-ir | Edit, Edits, handles, and ConstraintEdit | First pass and challenge complete; findings and open questions below |
 | graph-ir | Lattice operations and normalization | Unreviewed |
 | graph-ir | Reframe and frame transport | Unreviewed |
-| graph-ir / graph | Canonicalization and its configuration | Unreviewed |
+| graph-ir / graph | Canonicalization and its configuration | canonical_hash addition requested; remaining surface unreviewed. |
 | graph-ir | Delta, Deltas, field changes, and lowering boundary | First pass and challenge complete; findings and open questions below |
 | graph-ir | Molecule correspondence | Unreviewed |
 | graph-ir | Molecule compaction | Unreviewed |

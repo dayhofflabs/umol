@@ -1,13 +1,26 @@
 # 199 — Open-container integrity and operation boundaries
 
-Status: Proposed
+Status: Superseded
 Date: 2026-08-18
 Relates: [148](148-validated-transactions-operations-2026-07-13.md),
 [179](179-python-editing-and-transactions-2026-08-02.md),
+[181](181-python-boundary-ownership-2026-08-03.md),
 [198](198-resolver-performance-2026-08-17.md),
 [201](201-molecular-data-first-steps-2026-08-19.md),
+[213](213-editor-overlay-storage-2026-08-27.md),
+[215](215-integrity-minimization-2026-08-28.md),
 [data-type contracts](../docs/development/data-types.md),
 [nomenclature](../docs/development/nomenclature.md)
+
+## Superseded — 2026-10-13
+
+[215](215-integrity-minimization-2026-08-28.md) established the minimal
+closed-container integrity contract. [213](213-editor-overlay-storage-2026-08-27.md)
+subsequently moved entity-attribute agreement to its consumers, retained free
+attribute mutation, and implemented checked editor and transaction publication.
+These decisions replace the open alternatives below; the development guides
+record the current contract. Remaining lifecycle and recovery changes belong to
+[181](181-python-boundary-ownership-2026-08-03.md).
 
 ## Motivation
 

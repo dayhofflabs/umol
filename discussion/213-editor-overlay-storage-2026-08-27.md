@@ -5,6 +5,7 @@ Date: 2026-08-27
 Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [166](166-molecule-ops-2026-07-27.md),
 [181](181-python-boundary-ownership-2026-08-03.md),
+[199](199-open-container-integrity-2026-08-18.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
 [231](231-python-api-parity-2026-09-21.md),

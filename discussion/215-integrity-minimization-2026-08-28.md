@@ -3,6 +3,7 @@
 Status: Completed
 Date: 2026-08-28
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
+[199](199-open-container-integrity-2026-08-18.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
 [232](232-aggregate-integrity-review-2026-09-22.md),
 [data-type guide](../docs/development/data-types.md),

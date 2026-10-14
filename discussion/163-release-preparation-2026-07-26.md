@@ -1,6 +1,6 @@
 # Preparations for Rust and Python package release
 
-Status: In Progress
+Status: Completed
 Date: 2026-07-26
 Relates: [151](151-python-molecule-workflows-2026-07-13.md),
 [197](197-deferred-dsl-features-2026-08-16.md)

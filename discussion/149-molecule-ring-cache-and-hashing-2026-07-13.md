@@ -1,13 +1,24 @@
 # 149 · MoleculeAst ring cache placement & hashing semantics
 
-Status: **In Progress** — Part A is complete; Part B hashing remains open.
-The unfinished `RingView` API cleanup moved to
-[165](165-ast-api-worklist-2026-07-27.md).
+Status: Completed
 Date: 2026-07-13
 Relates: 137 (Python-binding R1 audit — where this surfaced), 113/095 (lazy
 canonicalization; structural vs canonical equality), 114 (interning; the future
 immutable/finalized molecule form), 143 (vendored nauty — the canonical-numbering
-oracle), [234](234-view-arguments-2026-09-25.md) (view arguments in operations)
+oracle), [234](234-view-arguments-2026-09-25.md) (view arguments in operations),
+[231](231-python-api-parity-2026-09-21.md)
+
+## Completion — 2026-10-13
+
+Ring-cache removal, Rust structural Hash, and borrowing canonical_hash are
+implemented. The Python structural `__hash__` proposal below is superseded by the
+[Python API contract](../docs/development/python-api.md#equality-and-hashing):
+mutable objects are not value-hashable.
+
+Python canonical_hash bindings are tracked in
+[231](231-python-api-parity-2026-09-21.md#canonical-hashing--2026-10-13).
+The RingView API cleanup was transferred to
+[165](165-ast-api-worklist-2026-07-27.md).
 
 ## Context
 
