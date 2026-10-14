@@ -1728,8 +1728,9 @@ not a claim that the unimplemented migration has passed its verification gates.
 
 ### S0 — Molecule, editor, and transaction migration
 
-[236](236-operation-ownership-copy-costs-2026-10-09.md)'s implementation plan runs first. Both plans together are the 0.10 release
-blocker. After 236, the resolvers, transformers, and AromaticityPerceiver no
+[236](236-operation-ownership-copy-costs-2026-10-09.md) closes before this plan begins.
+Both plans together are the 0.10 release blocker.
+After 236, the resolvers, transformers, and AromaticityPerceiver no
 longer use transactions, so they need no migration here.
 
 The baseline precedes all production changes. The six migration groups follow.
@@ -3056,12 +3057,23 @@ measurements; those remain assigned to 231.
 
 #### S12b — Final integration and closeout
 
-**Modules:** workspace, Python package, guides, discussion/status records.
+**Modules:** workspace, Python package, guides, discussion/status records,
+whitepaper/main.tex (read-only review), whitepaper/listings/, and whitepaper/tests/.
 **Verification/documentation, green.** [dep: S0–S7, S10–S12a]
 
 Audit the final public symbols, production callers, examples, and lifecycle docs
 against this plan. Run the full workspace tests/lints, required feature-gated
 suites, rebuilt Python suite, formatting, and the final Rust 1.87 gate once.
+
+Run the manuscript's extracted-listing harness against the final library:
+from the manuscript repository, run `python tests/run.py /path/to/umol` using
+an environment with umol and pytest installed. Check inline API references for
+names, signatures, ownership, and results. Report discrepancies to the author;
+manuscript prose is author-owned and must not be edited by agents. Listing
+corrections require authorization. Keep test scaffolding outside the printed
+code; do not expand schematic examples or assume a shared namespace between
+independent listings.
+
 Preserve measurements and remaining review items in durable documents before
 removing scratch artifacts. Close 181 only when its agreed work is complete;
 then start the Reaction ownership work already scheduled in 231.

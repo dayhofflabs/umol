@@ -1662,7 +1662,8 @@ calls chain left to right, needs a separate design.
 
 ## Implementation plan
 
-This plan runs before 181's. Both plans together are the 0.10 release blocker.
+This plan closes after S7a, before 181's plan begins.
+Both plans together are the 0.10 release blocker.
 
 No production change starts before its subitem is written here. Subitem labels
 remain stable; implementation follows document order and the explicit
@@ -4471,12 +4472,11 @@ all-target Clippy with the same feature and warnings denied passed. After
 maturin develop in the repository's Python 3.13.16 environment, Python passed
 2,204 tests with 2 skipped. Touched-file nightly formatting, git diff --check,
 and full diff review passed. Artifacts and commands are in scratch/236-s5e/.
-S6a is next.
 
 
 ### S6 — Development guides
 
-#### S6a — Ownership rules in the guides
+#### S6a — Ownership rules in the guides **Done**
 
 **Modules:** docs/development/data-types.md and nomenclature.md.
 **Documentation.** [dep: S0–S5]
@@ -4504,23 +4504,27 @@ form's update applies an update record and returns a new form; a container's
 update merges a same-type container in place by key. Note in the Combine entry
 that combine consumes its receiver.
 
-#### S6b — Whitepaper code against the library
+**Completed (2026-10-13).** The data-type guide records consuming and borrowing
+contracts, two-operand exceptions, borrowed semantic equalities, atomic molecule
+operations, and aggregate copy-on-write storage. Recovery covers both
+transactions and complete planning before mutation. The nomenclature guide
+defines the _into suffix and both update meanings, and records combine's
+consuming receiver.
 
-**Modules:** whitepaper/main.tex and umol-graph/tests/whitepaper.rs.
-**Documentation.** [dep: S0–S5]
+**Verification:** checked the rules and named examples against the current Rust
+signatures and implementations. Full diff review and git diff --check passed.
+Documentation only; no code or tests changed.
 
-Check every code listing and inline code reference in the whitepaper against
-the library after this plan: names, signatures, ownership, and results. Update
-the listings that differ, and keep umol-graph/tests/whitepaper.rs compiling the
-Rust-primer appendix listings exactly as printed.
+#### S6b — Moved to 181 S12b
 
-**Tests:** the whitepaper test.
+Manuscript listing tests and the read-only inline API review are part of
+[181 S12b](181-python-boundary-ownership-2026-08-03.md#s12b--final-integration-and-closeout).
 
 ### S7 — Verification
 
 #### S7a — Final gate
 
-**Modules:** workspace. **Verification.** [dep: S0–S6]
+**Modules:** workspace. **Verification.** [dep: S0–S5, S6a]
 
 Run `cargo +nightly fmt --all` over the full workspace in this final pass.
 Formatting-only changes outside the implementation's scope are acceptable here.
@@ -4533,3 +4537,4 @@ and S4l → S4n. Both join S6a → S7a, after the remaining stage dependencies.
 S4a → S4a1 → S4b → S4b1 establishes the corrected transformer baseline
 before S4d, S4e, and S4k.
 The binding path is S3b → S3b1 → S3b2 → S3b3 → S7a.
+The cross-document sequence is S7a → close 236 → 181.

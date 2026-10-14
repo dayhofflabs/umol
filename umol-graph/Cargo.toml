@@ -38,9 +38,6 @@ name = "kekulization"
 [[test]]
 name = "fingerprint"
 
-[[test]]
-name = "whitepaper"
-
 [[bin]]
 name = "test_mol_file"
 bench = false

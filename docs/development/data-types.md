@@ -73,6 +73,31 @@ and integer forms (NumForm) follow the same rules.
 | Validation | A tier-2 invariant or tier-3 conformance property | Mutation or repair |
 | Transformation | An explicitly named change of representation or state | Pretend that the input was already valid or canonical |
 
+### Operation ownership
+
+For operations that rewrite a graph-IR value or resolve, project, or transform a molecule, the bare
+verb consumes the value and returns the result. An `_into` counterpart mutates a borrowed molecule
+in place with recovery. A caller that keeps its input clones it explicitly before calling the
+consuming operation. Failure returns neither the input nor a partially rewritten value.
+
+A consuming implementation uses its ownership: it moves fields and reuses storage instead of
+cloning an input it already owns. Shared backing storage may still require a copy when written;
+see [copy-on-write aggregate storage](#copy-on-write-aggregate-storage).
+
+Logical analogs share an ownership contract. The normal-form tower's normalize, reframe, and
+canonicalize operations consume, including their tracked forms. Graph-IR transport operations
+map, remap, compact, and reframe_by likewise consume the transported value, including checked and
+tracked variants where present. They borrow the supplied correspondence, remapping, compaction,
+or frame action. Graph-core relation-set map and remap retain their borrowing rebuild contract.
+Queries and derivations that keep the source as the primary object, such as extract, edits, and
+split, borrow it.
+
+Two-operand operations borrow both operands: meet, join, frame-action compose, meet_pushout, and
+Reaction::compose follow this rule. An infallible operation whose result extends its receiver
+instead consumes the receiver, borrows the other operand, and reuses the receiver's storage;
+Molecule::combine is the example. In-place counterparts use `_from` or `_with`, as in
+combine_from, narrow_from, and widen_with.
+
 ## Integrity checks and validation tiers
 
 `# Semantic properties` states the laws of an operation algebra — composition, roundtrips,
@@ -232,6 +257,17 @@ complete remapping, constraint transport, and canonical representative construct
 `umol-graph` may project `StereoModel::para_stereo` and its operation config into the public graph-IR
 context, but canonicalization itself remains in `umol-graph-ir`.
 
+### Copy-on-write aggregate storage
+
+Molecule, Reaction, and ReactionSpan share their backing storage when cloned. Cloning increments
+reference counts for topology, entity tables, constraints, and reaction deltas without copying
+their payloads. The clones remain independent values: changing one leaves the others unchanged.
+
+In-place writes to shared storage use Arc::make_mut. Unique storage is reused; shared storage is
+copied before mutation. A consuming rebuild that needs an owned payload uses Arc::unwrap_or_clone
+to move it when uniquely owned and clone it only when another owner remains. Owning an aggregate
+does not establish unique ownership of its backing storage.
+
 ### Construction
 
 Construction enforces the minimum invariants needed for the value to be a coherent instance of its
@@ -288,6 +324,13 @@ The error belongs to the failed boundary:
   not to the target constructor.
 
 ### Raw representation and semantic normal form
+
+The equalities normalized_eq, framed_eq, and canonical_eq borrow both operands. A default may
+clone the inputs and run the consuming normal-form operation; implementations override it with
+borrowing computations where copy costs matter, preserving the same equality and failure
+semantics. Trivially normal scalar variants compare directly. canonical_hash likewise borrows its
+input. A caller that needs the normalized value itself from a reference writes
+`value.clone().normalize()`.
 
 Derived structural equality may observe storage details that are deliberately absent from the
 semantic model. Their presence in a raw IR value does not require every operation or intermediate
@@ -788,6 +831,12 @@ do not clone molecular payloads or require intermediate molecules. Ordinary `com
 borrowed and returns a separate correspondence.
 
 ### Molecule mutation and publication
+
+Every fallible operation on a published Molecule is atomic at its public boundary. A rejected
+in-place operation preserves the entry state under its documented equivalence; a consuming
+operation drops its input without publishing a partial result. In-place editing exists only with
+recovery. This may use a transaction, or a complete plan that reports every rejection before
+mutation and guarantees successful application and publication on its unchanged input.
 
 Molecule entity views expose mutable attributes and entity-level constraints. Structural changes
 use MoleculeEditor or Transaction. Molecule::edit moves the molecule into an editor without cloning.

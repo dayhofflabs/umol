@@ -349,6 +349,10 @@ Named families: `Symmetric(n)`, `Alternating(n)`, `Cyclic(n)`, `Dihedral(n)`. Ge
 
 **Combine** forms the disjoint union of two structures, yielding one structure with two components.
 
+Molecule::combine consumes its receiver and borrows the other molecule. It extends the receiver,
+reusing its storage, and returns it. combine_from performs the same append in place; combine_all
+borrows every input and builds one result without a receiver.
+
 Named `join` originally; renamed to avoid collision with the lattice join. Implemented and unlikely
 to gain analogues, so it is recorded rather than generative.
 
@@ -1005,6 +1009,18 @@ public validator or `*Checker` object.
 **Not:** a validator. Validators return semantic `Solution` values and belong in `umol-graph`.
 **In code:** crate-private `Molecule::check_integrity`, `Reaction::check_integrity`, and
 `ReactionSpan::check_integrity`; the public corresponding `*IntegrityError` types.
+
+### Into suffix
+
+The **`_into` suffix** names the in-place counterpart of a consuming operation. It mutably borrows
+the value being transformed and preserves its entry state on rejection under the operation's
+documented equivalence. The bare verb consumes that value. Recovery may use a transaction or
+complete planning before mutation; the suffix does not require a rollback journal.
+
+**Not:** the `into_` conversion prefix; the `_from` or `_with` names of in-place two-operand
+operations.
+**In code:** Resolver::resolve_into, Resolver::project_into, Resolver::resolve_into_with_report,
+Transformer::transform_into.
 
 ### Invariant
 
@@ -1797,6 +1813,17 @@ absent or undetermined constraint is vacuous and does not assert that an entity 
 
 **Not:** *underdetermined*, which is an operation outcome. Do not use the two interchangeably.
 **In code:** `NumForm::Undetermined` and the per-type equivalents.
+
+### Update
+
+An entity form's **update** borrows the form and an update record and returns a new form. Omitted
+fields and constraint keys retain their existing values. A per-entity constraint container's
+update instead merges a borrowed same-type container into its receiver in place by key. Supplied
+entries replace the corresponding entries; an undetermined entry removes its key.
+
+**Not:** normalization or lattice meet.
+**In code:** AtomForm::update with AtomUpdate; AtomConstraintsForm::update with AtomConstraintsForm,
+and the corresponding operations for the other entity kinds.
 
 ### Valence
 
