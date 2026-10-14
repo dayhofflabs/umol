@@ -55,7 +55,8 @@ error. Its asserted sibling runs the same check and panics when its producer con
 Boundary adapters translate the checked error into their own parse, conversion, or binding error;
 they do not reproduce the checks.
 
-MoleculeEditor::apply checks each edit's preconditions and returns a transient editor. Its probe
+MoleculeEditor::apply checks each edit's preconditions and mutates transient state without rollback;
+failure retains completed edits for further inspection and mutation. Its probe
 checks integrity before lending a molecule; failure retains the editor. Its finish checks integrity
 before returning the owned molecule; failure drops the editor. Molecule::apply and tracked_apply
 include finish. Transaction::apply also permits intermediate states that violate integrity;

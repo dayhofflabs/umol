@@ -292,7 +292,10 @@ fn bench_removal(c: &mut Criterion) {
                             removal(kind, reordered),
                         )
                     },
-                    |(editor, edits)| black_box(editor.apply(edits).unwrap()),
+                    |(mut editor, edits)| {
+                        editor.apply(edits).unwrap();
+                        black_box(editor)
+                    },
                     BatchSize::SmallInput,
                 );
             });

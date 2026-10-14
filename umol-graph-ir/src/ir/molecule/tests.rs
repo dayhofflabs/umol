@@ -5162,8 +5162,9 @@ fn test_molecule_editor_tracked_apply() {
     let added = edits.add_atom(AtomForm::from_element(Element::Cl));
     edits.remove_atom(added);
     edits.add_atom(AtomForm::from_element(Element::N));
-    let plain = editor.clone().apply(edits.clone()).unwrap();
-    let (tracked, witness) = editor.tracked_apply(edits).unwrap();
+    let mut plain = editor.clone();
+    plain.apply(edits.clone()).unwrap();
+    let witness = editor.tracked_apply(edits).unwrap();
     let expected = mol_dsl!(r#"{:atoms ["O" "F" "N"]}"#);
     let local = MoleculeCorrespondence::new(
         Correspondence::new(vec![(AtomId(1), AtomId(0)), (AtomId(2), AtomId(1))], 3, 3).unwrap(),
@@ -5177,7 +5178,7 @@ fn test_molecule_editor_tracked_apply() {
     );
     assert_eq!(witness, local);
     assert_eq!(plain.finish(), Ok(expected.clone()));
-    assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(editor.finish(), Ok(expected));
 }
 
 #[rstest]
@@ -5186,8 +5187,7 @@ fn test_molecule_editor_tracked_apply_transient() {
     let mut editor = source.edit();
     editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
     let mut plain = editor.clone();
-    let (editor, applied) = editor.tracked_apply(Edits::new()).unwrap();
-    let mut editor = editor;
+    let applied = editor.tracked_apply(Edits::new()).unwrap();
     let expected = MoleculeCorrespondence::new(
         Correspondence::identity(2),
         Correspondence::identity(2),
@@ -5215,7 +5215,7 @@ fn test_molecule_editor_tracked_apply_identity(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries);
-    let editor = source.clone().edit();
+    let mut editor = source.clone().edit();
     let witness = MoleculeCorrespondence::new(
         Correspondence::new(
             vec![
@@ -5245,7 +5245,7 @@ fn test_molecule_editor_tracked_apply_identity(
         Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
         Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1).unwrap(),
     );
-    let (editor, actual) = editor.tracked_apply(Edits::new()).unwrap();
+    let actual = editor.tracked_apply(Edits::new()).unwrap();
     assert_eq!(actual, witness);
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));

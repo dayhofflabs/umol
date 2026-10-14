@@ -159,12 +159,15 @@ Structural changes use MoleculeEditor or prepared transaction batches. Ordinary 
 entity-level constraints are assigned through the molecule's entity views. Molecule-level
 constraints are read-only on the molecule; changing them requires editing and publication.
 
-Molecule.edit consumes its receiver. MoleculeEditor.apply consumes the editor and Edits and returns
-a new transient editor; tracked_apply also returns the batch correspondence. Molecule.apply and
-tracked_apply include finish and return a checked Molecule, with the correspondence in the tracked
-case. Both owning types are consumed before the Edits contents are transferred. An unavailable
-batch therefore still leaves the receiver consumed. Molecule.copy explicitly retains an
-independent value.
+MoleculeEditor.apply mutates the editor, consumes Edits and returns None; tracked_apply returns
+only the batch correspondence. Application failure retains completed edits and leaves the editor
+available. An unavailable editor is rejected before Edits transfer; failed transfer leaves an
+available editor unchanged. Finish consumes the editor on both success and integrity failure.
+
+Molecule.edit consumes its receiver. Molecule.apply and tracked_apply include finish and return a
+checked Molecule, with the correspondence in the tracked case. Molecule is consumed before the
+Edits contents are transferred, including when the batch is unavailable. Molecule.copy explicitly
+retains an independent value.
 
 Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
 They restore it on application or integrity failure; tracked_transact returns the whole

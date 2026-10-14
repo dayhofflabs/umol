@@ -98,10 +98,11 @@ impl MulticenterBondsResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("multicenter-bond resolve plan applies to its input")
+            .expect("multicenter-bond resolve plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("multicenter-bond resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
@@ -277,7 +278,7 @@ mod tests {
             .charge = NumForm::Lit(9);
         let expected = molecule.clone();
         assert_eq!(
-            molecule.clone().edit().apply(edits.clone()).map(|_| ()),
+            molecule.clone().edit().apply(edits.clone()),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

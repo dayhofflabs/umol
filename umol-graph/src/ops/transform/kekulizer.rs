@@ -273,8 +273,8 @@ impl Transformer for Kekulizer {
         }
 
         let edits = self.plan_transform(&molecule)?;
-        let editor = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
             .expect("kekulization plan applies to its input");
         Ok(editor

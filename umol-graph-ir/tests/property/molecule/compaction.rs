@@ -38,13 +38,13 @@ proptest! {
             molecule.stereo_atoms().count(),
             molecule.stereo_bonds().count(),
         );
-        let editor = molecule.clone().edit();
+        let mut editor = molecule.clone().edit();
         let mut edits = Edits::new();
         edits.remove_topology(
             atoms.iter().copied().map(AtomHandle::Id).collect(),
             bonds.iter().copied().map(BondHandle::Id).collect(),
         );
-        let (editor, correspondence) = editor.tracked_apply(edits).unwrap();
+        let correspondence = editor.tracked_apply(edits).unwrap();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::new(counts.0, correspondence.atoms().left_unmatched().into_iter().map(Into::into).collect()).unwrap(),
@@ -130,9 +130,10 @@ proptest! {
         let mut expected = molecule.clone();
         let complete = expected.tracked_transact([first.clone(), addition.clone(), last.clone()]).unwrap();
 
-        let (editor, first) = molecule.edit().tracked_apply(first).unwrap();
-        let (editor, addition) = editor.tracked_apply(addition).unwrap();
-        let (editor, last) = editor.tracked_apply(last).unwrap();
+        let mut editor = molecule.edit();
+        let first = editor.tracked_apply(first).unwrap();
+        let addition = editor.tracked_apply(addition).unwrap();
+        let last = editor.tracked_apply(last).unwrap();
         let composed = first.compose(&addition).unwrap().compose(&last).unwrap();
         prop_assert_eq!(composed, complete);
         prop_assert_eq!(editor.finish(), Ok(expected));
@@ -149,10 +150,10 @@ proptest! {
             .collect::<Vec<_>>();
         let remapping = MoleculeCorrespondence::from(&remapping);
 
-        let removal_editor = remapped.clone().edit();
+        let mut removal_editor = remapped.clone().edit();
         let mut edits = Edits::new();
         edits.remove_topology(removed.into_iter().map(AtomHandle::Id).collect(), vec![]);
-        let (removal_editor, compaction) = removal_editor.tracked_apply(edits).unwrap();
+        let compaction = removal_editor.tracked_apply(edits).unwrap();
         let compacted = removal_editor.finish().unwrap();
 
         let mut edits = Edits::new();

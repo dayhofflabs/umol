@@ -9,7 +9,11 @@ use criterion::Criterion;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     ArithExpr, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId,
-    BondForm, Molecule, MoleculeEntries, NumForm,
+    BondForm, BondId, Lattice, Molecule, MoleculeEntries, Normalize, NumForm,
+    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomForm, StereoAtomId,
+    StereoBondConstraintForm, StereoBondConstraintKey, StereoBondForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    Stereogenicity, StereogenicityForm,
 };
 
 struct CountingAllocator;
@@ -41,6 +45,172 @@ unsafe impl GlobalAlloc for CountingAllocator {
 
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
+
+fn measure<T>(
+    criterion: &mut Criterion,
+    allocations: bool,
+    id: &str,
+    mut operation: impl FnMut() -> T,
+) {
+    if allocations {
+        black_box(operation());
+        ALLOCATIONS.store(0, Ordering::Relaxed);
+        BYTES.store(0, Ordering::Relaxed);
+        COUNTING.store(true, Ordering::Relaxed);
+        for _ in 0..1000 {
+            black_box(operation());
+        }
+        COUNTING.store(false, Ordering::Relaxed);
+        println!(
+            "{id}\t{}\t{}",
+            ALLOCATIONS.load(Ordering::Relaxed) / 1000,
+            BYTES.load(Ordering::Relaxed) / 1000
+        );
+    } else {
+        criterion.bench_function(id, |b| b.iter(&mut operation));
+    }
+}
+
+macro_rules! stereo_readings {
+    ($criterion:expr, $allocations:expr, $name:literal, $kind:expr, $form:ident,
+     $constraint:ident, $key:ident, $entity:ident, $id:expr, $entries:ident, $site:expr,
+     $bonds:expr, $ligands:expr) => {
+        for (group, name, configuration, assertion) in [
+            (
+                "common",
+                "literal_empty",
+                StereoConfigurationForm::kinded($kind, 0_u32),
+                None,
+            ),
+            (
+                "common",
+                "unknown_coset",
+                StereoConfigurationForm::kinded($kind, StereoCoset::Undetermined),
+                None,
+            ),
+            (
+                "common",
+                "literal_assertion",
+                StereoConfigurationForm::kinded($kind, 0_u32),
+                Some(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+            ),
+            (
+                "common",
+                "kindless_empty",
+                StereoConfigurationForm::Undetermined,
+                None,
+            ),
+            (
+                "semantic_change",
+                "kindless_assertion",
+                StereoConfigurationForm::Undetermined,
+                Some(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+            ),
+            (
+                "rare",
+                "singleton_assertion",
+                StereoConfigurationForm::kinded($kind, 0_u32),
+                Some(StereogenicityForm::lit_set([Stereogenicity::Stereogenic])),
+            ),
+            (
+                "semantic_change",
+                "kindless_bottom",
+                StereoConfigurationForm::Undetermined,
+                Some(StereogenicityForm::lit_set([])),
+            ),
+        ] {
+            let mut form = $form {
+                configuration,
+                ..Default::default()
+            };
+            if let Some(value) = assertion {
+                form.constraints.set($constraint::Stereogenicity(value));
+            }
+            let molecule = Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 6],
+                bonds: $bonds
+                    .into_iter()
+                    .map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+                    .collect(),
+                $entries: vec![(
+                    $site,
+                    $ligands
+                        .into_iter()
+                        .map(|i| StereoLigand::new(AtomId(i), StereoLigandKind::Atom))
+                        .collect(),
+                    form.clone(),
+                )],
+                ..Default::default()
+            });
+            let key = $key::Stereogenicity;
+            let top = Some($constraint::Stereogenicity(
+                StereogenicityForm::Undetermined,
+            ));
+            let expected = match name {
+                "literal_assertion" | "kindless_assertion" | "singleton_assertion" => {
+                    Some($constraint::Stereogenicity(StereogenicityForm::Lit(
+                        Stereogenicity::Stereogenic,
+                    )))
+                }
+                "kindless_bottom" => None,
+                _ => top.clone(),
+            };
+            let reading = molecule.$entity($id).constraints();
+            assert_eq!(reading.asserted(key), expected);
+            assert_eq!(reading.asserted_complete(key), expected);
+            assert_eq!(reading.evidenced(key), expected);
+            assert_eq!(reading.evidenced_complete(key), expected);
+            assert_eq!(reading.derived(key), top);
+            assert_eq!(reading.derived_complete(key), top);
+            let prefix = format!("stereo_readings/{}/{group}/{name}", $name);
+            macro_rules! reading {
+                ($method:ident) => {
+                    measure(
+                        $criterion,
+                        $allocations,
+                        &format!("{prefix}/{}", stringify!($method)),
+                        || {
+                            black_box(&molecule)
+                                .$entity($id)
+                                .constraints()
+                                .$method(black_box(key))
+                        },
+                    );
+                };
+            }
+            reading!(asserted);
+            reading!(asserted_complete);
+            reading!(derived);
+            reading!(derived_complete);
+            reading!(evidenced);
+            reading!(evidenced_complete);
+            if name != "kindless_bottom" {
+                let other = form.clone();
+                let normalized = form.clone().normalize().unwrap();
+                assert!(form.normalized_eq(&form));
+                assert_eq!(form.meet(&form), Some(normalized.clone()));
+                assert_eq!(form.join(&form).unwrap(), normalized);
+                assert!(form.matches(&form));
+                assert!(form.is_compatible(&form));
+                macro_rules! operation {
+                    ($method:ident) => {
+                        measure(
+                            $criterion,
+                            $allocations,
+                            &format!("{prefix}/{}", stringify!($method)),
+                            || black_box(&form).$method(black_box(&other)),
+                        );
+                    };
+                }
+                operation!(normalized_eq);
+                operation!(meet);
+                operation!(join);
+                operation!(matches);
+                operation!(is_compatible);
+            }
+        }
+    };
+}
 
 fn main() {
     let allocations = env::args().any(|arg| arg == "--allocations");
@@ -147,6 +317,36 @@ fn main() {
             }
         }
     }
+    stereo_readings!(
+        &mut criterion,
+        allocations,
+        "atom",
+        StereoKind::Tetrahedral,
+        StereoAtomForm,
+        StereoAtomConstraintForm,
+        StereoAtomConstraintKey,
+        stereo_atom,
+        StereoAtomId(0),
+        stereo_atoms,
+        AtomId(0),
+        [(0, 1), (0, 2), (0, 3), (0, 4)],
+        [1, 2, 3, 4]
+    );
+    stereo_readings!(
+        &mut criterion,
+        allocations,
+        "bond",
+        StereoKind::CisTrans,
+        StereoBondForm,
+        StereoBondConstraintForm,
+        StereoBondConstraintKey,
+        stereo_bond,
+        StereoBondId(0),
+        stereo_bonds,
+        BondId(0),
+        [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5)],
+        [2, 3, 4, 5]
+    );
     if !allocations {
         criterion.final_summary();
     }

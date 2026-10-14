@@ -12,7 +12,7 @@ use crate::edit::Edits;
 use crate::error::{molecule_apply_error, molecule_integrity_error, ConsumedError};
 use crate::molecule::Molecule;
 
-/// An owning molecule editor, consumed by application or publication.
+/// An owning molecule editor, consumed by publication.
 #[pyclass]
 pub struct MoleculeEditor {
     inner: Option<GraphIrMoleculeEditor>,
@@ -38,36 +38,29 @@ impl MoleculeEditor {
             .map_err(molecule_integrity_error)
     }
 
-    /// Consume this editor and apply an edit batch, checking each edit's preconditions.
+    /// Apply an edit batch to this editor, checking each edit's preconditions.
     ///
-    /// Returns a transient editor without checking molecule integrity or recording undo.
-    /// The editor is consumed before the batch contents are transferred; failure leaves it consumed.
-    fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
+    /// Returns None without checking molecule integrity or recording undo. Failure retains
+    /// completed edits and leaves the editor available; a transferred batch stays consumed.
+    fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<()> {
         self.inner
-            .take()
+            .as_mut()
             .ok_or_else(consumed_editor_error)?
             .apply(edits.try_borrow_mut(py)?.take()?)
-            .map(Self::from_rust)
             .map_err(molecule_apply_error)
     }
 
-    /// Consume the editor and batch as in apply, also returning the batch's input-to-result
-    /// correspondence.
+    /// Apply a batch as in apply, returning its input-to-result correspondence.
     fn tracked_apply(
         &mut self,
         py: Python<'_>,
         edits: Py<Edits>,
-    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+    ) -> PyResult<MoleculeCorrespondence> {
         self.inner
-            .take()
+            .as_mut()
             .ok_or_else(consumed_editor_error)?
             .tracked_apply(edits.try_borrow_mut(py)?.take()?)
-            .map(|(editor, correspondence)| {
-                (
-                    Self::from_rust(editor),
-                    MoleculeCorrespondence::from_rust(correspondence),
-                )
-            })
+            .map(MoleculeCorrespondence::from_rust)
             .map_err(molecule_apply_error)
     }
 
@@ -146,12 +139,14 @@ fn consumed_editor_error() -> PyErr {
 
 #[cfg(test)]
 mod tests {
+    use pyo3::exceptions::PyRuntimeError;
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
         AtomConstraintForm as GraphIrAtomConstraintForm, AtomForm as GraphIrAtomForm,
         AtomId as GraphIrAtomId, BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
-        Entity as GraphIrEntity, MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
+        Edits as GraphIrEdits, Entity as GraphIrEntity,
+        MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
         StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
         StereoAtomId as GraphIrStereoAtomId, StereoKind as GraphIrStereoKind,
         StereogenicityForm as GraphIrStereogenicityForm,
@@ -251,6 +246,51 @@ mod tests {
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 expected.to_string()
             );
+        });
+    }
+
+    #[rstest]
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_editor_apply_borrowed_edits(
+        mut carbon_editor: MoleculeEditor,
+        #[case] tracked: bool,
+    ) {
+        Python::attach(|py| {
+            let mut changes = GraphIrEdits::new();
+            changes.add_atom(GraphIrAtomForm::from_element(ChemElement::N));
+            let edits = Py::new(py, Edits::from_rust(changes.clone())).unwrap();
+            let borrowed = edits.borrow(py);
+            let result = if tracked {
+                carbon_editor
+                    .tracked_apply(py, edits.clone_ref(py))
+                    .map(|_| ())
+            } else {
+                carbon_editor.apply(py, edits.clone_ref(py))
+            };
+            let error = result.unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(borrowed.to_rust().unwrap(), &changes);
+            assert_eq!(
+                carbon_editor.inner.as_ref().unwrap().probe(),
+                Ok(&mol_dsl!(r#"{:atoms ["C"]}"#))
+            );
+            drop(borrowed);
+
+            carbon_editor.apply(py, edits.clone_ref(py)).unwrap();
+            assert_eq!(
+                carbon_editor.finish().unwrap().to_rust().unwrap(),
+                &mol_dsl!(r#"{:atoms ["C" "N"]}"#)
+            );
+            assert!(edits
+                .borrow(py)
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
         });
     }
 }

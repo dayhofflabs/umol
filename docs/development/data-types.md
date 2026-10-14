@@ -844,7 +844,7 @@ Direct editor mutations and edit batches can be interleaved; neither records und
 
 | Operation | Successful result | Failure |
 | --- | --- | --- |
-| MoleculeEditor::apply | Consumes the editor and Edits; returns the transient editor after checking each edit's preconditions | Drops the editor and its molecule |
+| MoleculeEditor::apply | Mutably borrows the editor, consumes Edits, and returns unit after checking each edit's preconditions | Retains the completed prefix for inspection and further changes, without rollback |
 | MoleculeEditor::probe | Checks integrity and lends `&Molecule` | Retains the editor for further changes |
 | MoleculeEditor::finish | Consumes the editor, checks integrity, returns Molecule | Drops the editor and its molecule |
 | Molecule::apply | Consumes Molecule and Edits; applies edits and finishes | Drops the molecule |
@@ -873,13 +873,13 @@ between independently prepared batches.
 MoleculeEditor owns its molecule. Direct mutation and apply do not accumulate a
 correspondence. tracked_apply returns the current batch's input-to-result mapping
 over all eight entity kinds. Earlier direct changes and batches are outside that
-mapping. The returned editor remains transient; probe checks integrity before
+mapping. The editor remains transient; probe checks integrity before
 borrowing the molecule, and finish checks it before transferring ownership.
 
 Discarding a batch correspondence gives the same editor state as plain apply.
 Correspondences from consecutive batches compose to the whole operation's mapping.
 Transaction::tracked_commit derives that whole-transaction mapping from its journal.
-A failed application returns no correspondence.
+A failed application retains the completed prefix and returns no correspondence.
 
 These correspondences track entity ids. Replacing an entity's atoms, ligands, or site preserves
 that entity's pairing; the correspondence does not map positions within those lists.

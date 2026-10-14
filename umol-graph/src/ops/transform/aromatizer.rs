@@ -307,8 +307,8 @@ impl Transformer for Aromatizer {
 
     fn transform(&self, molecule: Molecule) -> Result<Molecule, AromatizeError> {
         let edits = self.plan_transform(&molecule)?;
-        let editor = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
             .expect("aromatization plan applies to its input");
         Ok(editor

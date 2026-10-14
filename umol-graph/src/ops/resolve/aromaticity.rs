@@ -181,10 +181,11 @@ impl AromaticityResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("aromaticity resolve plan applies to its input")
+            .expect("aromaticity resolve plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("aromaticity resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
@@ -232,10 +233,11 @@ impl AromaticityResolver {
         molecule: Molecule,
     ) -> Result<Solution<Molecule, AromaticityContradiction, ()>, AromaticityProjectError> {
         let edits = self.plan_project(&molecule)?;
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("aromaticity project plan applies to its input")
+            .expect("aromaticity project plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("aromaticity project plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))

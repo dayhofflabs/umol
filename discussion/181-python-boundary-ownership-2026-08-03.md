@@ -1,6 +1,6 @@
 # 181 — Python boundary ownership and copy costs
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-03
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
@@ -498,6 +498,289 @@ It must inform the recovery choice; it does not authorize automatic size-based
 dispatch beyond the agreed RollbackMethod selector. Reaction measurements must retain
 their source/product ownership requirements rather than timing a different
 mutation contract.
+
+### S0a baseline — 2026-10-14
+
+**Completed before production changes.** Source 7fa2bd203b12c406b738a49c3df99db72d6365eb,
+after completed 236; the only tracked Rust change is the stereo extension to
+the maintained constraint_readings benchmark. The earlier dated studies below
+remain historical evidence, not measurements of this revision.
+
+Rust/Cargo 1.96.0, aarch64-apple-darwin, macOS 15.7.3; Python 3.13.16 from the
+repository environment. Criterion uses the workspace bench profile (optimized,
+debug information enabled); the recovery and Python harnesses use release defaults.
+No compilation overlapped timing; measurements ran sequentially. Named Criterion
+baseline: `181-s0a-20261014`, 30 samples, 250 ms warmup, 1 s measurement,
+10,000 resamples, no plots. Tables report medians, not Criterion slope estimates.
+Some short cases have wide confidence intervals: sparse8 unique apply is
+0.104 µs with a 95% median interval recorded in the raw data; its interval width
+is 26% of the estimate. This baseline alone cannot establish percent-level changes.
+
+Coverage: 348 Criterion cases (editor 24, reaction 32, resolve 118,
+constraint_readings 174); 41 recovery fixtures producing 298 timing rows and
+298 memory rows, plus four reaction memory rows; 48 Python cases. All benchmark
+fixture checks, recovery/result checks, and the three Python harness tests passed.
+The Python harness calls actual production methods through PyO3 dispatch in a
+fresh release test binary; the root extension was also freshly built and imported.
+Only cfg(test) measurement modules differ in the isolated Python source copy.
+
+The current measurements use these boundaries:
+
+| Measurement | Preparation | Included execution and destruction |
+| --- | --- | --- |
+| Criterion editor/ownership | Input and prepared Edits outside the batched timer | Operation and publication; final returned/input storage destruction deferred by the existing batched harness |
+| Criterion reaction/readings | Fixed operands prepared outside | Operation and returned-value destruction inside iter |
+| Recovery | Fresh unique input or a clone sharing retained storage; Edits outside | Source copy when required, application, publication, restoration/discard and replaced-receiver destruction inside; final returned values outside |
+| Python | Input owner, batch and model outside | Dispatch, conversion, operation, input-owner and output destruction inside |
+
+Recovery timing retains 20 sample means of 32 executions with rotating route
+order. Python uses 15 sample means of 32 prepared calls or 1,024 inverse calls,
+after five warmups. Allocation measurements are separate runs: calls include
+reallocations, bytes sum requested sizes, and peak is extra live requested Rust
+heap above operation entry, excluding allocator overhead, CPython heap and RSS.
+Stereo allocation rows average 1,000 calls. Reaction memory keeps the returned
+products alive until counting stops; its Criterion time includes their destruction.
+
+#### Editor, reaction and composite operations
+
+Editor sparse8 is an eight-atom chain with one charge edit; dense80 is an
+80-atom chain with eight charge edits, eight dative bonds and eight aromatic
+systems. Time is µs, including editor creation/publication.
+
+| Fixture / ownership | Direct | Apply | Transact |
+| --- | --- | --- | --- |
+| sparse8 / unique | 0.057 | 0.104 | 0.185 |
+| sparse8 / shared | 0.268 | 0.276 | 0.345 |
+| dense80 / unique | 0.723 | 0.896 | 1.269 |
+| dense80 / shared | 2.382 | 2.479 | 2.900 |
+
+The five-atom overlay-removal fixture also covers all six relation kinds in
+stored/reordered frames. Median times range from 0.366–0.523 µs stored and
+0.402–0.846 µs reordered; each kind remains a separate saved case.
+
+Reaction application retains the six-atom/six-bond source and produces an
+independent product, updating aromatic electron counts across a rotated frame.
+Enumeration has one match. Memory entries are calls / bytes / peak bytes.
+
+| Operation | Time, µs | Memory |
+| --- | --- | --- |
+| Supplied match | 3.279 | 61 / 7,898 / 3,232 |
+| Tracked supplied match | 3.274 | 61 / 7,898 / 3,232 |
+| Enumerated | 4.337 | 85 / 10,410 / 4,712 |
+| Tracked enumerated | 4.350 | 85 / 11,690 / 4,712 |
+
+The other maintained reaction cases include editor/application/tracking,
+combine/split/meet_pushout and reversal. The resolver ownership cases below use
+the actual in-place composite methods: sparse8 is an eight-carbon chain;
+dense88 contains eight copies of [13CH3][C@H](F)/C=C/c1ccccc1. These use the
+SMILES valence model and Natural isotope policy. Time is µs.
+
+| Fixture / ownership | Resolve into | Project into |
+| --- | --- | --- |
+| sparse8 / unique | 10.585 | 0.998 |
+| sparse8 / shared | 10.956 | 1.182 |
+| dense88 / unique | 270.551 | 55.104 |
+| dense88 / shared | 275.294 | 63.226 |
+
+#### Recovery and transformer paths
+
+The bounded fixtures retain the definitions in the historical ownership study
+below: active-component / unaffected-chain-atom pairs (1,0), (1,64), (1,256),
+(4,64), (16,0), both ownership modes, and the same controlled failure cases.
+Resolve/project components have 11 atoms, benzene components six, and the
+charge-delocalization component five. Counts and bonds are saved per row.
+
+Consume has no receiver-preservation guarantee; Copy retains the source and
+returns a result. Install is the existing harness's clone/apply/install reference,
+not the future RollbackMethod::Clone implementation. InPlace calls current public
+operations: composite Resolver and prepared transactions use journals; the three
+transformers apply complete plans without journals. Transformers therefore have
+no Install-versus-journal comparison. The following times are µs, unique input.
+
+| Operation | Groups / extra atoms | Consume | Copy | Install | InPlace |
+| --- | --- | --- | --- | --- | --- |
+| Resolve | 1 / 64 | 45.714 | 48.386 | 49.545 | 50.160 |
+| Resolve | 16 / 0 | 462.370 | 468.877 | 479.759 | 610.900 |
+| Project | 1 / 64 | 9.779 | 12.344 | 13.361 | 15.443 |
+| Project | 16 / 0 | 81.303 | 90.675 | 96.310 | 122.501 |
+| Kekulize | 1 / 64 | 11.385 | 12.774 | — | 11.947 |
+| Kekulize | 16 / 0 | 205.377 | 207.362 | — | 206.016 |
+| Aromatize | 1 / 64 | 17.703 | 19.029 | — | 18.210 |
+| Aromatize | 16 / 0 | 157.520 | 158.410 | — | 162.161 |
+| Delocalize | 1 / 64 | 1.003 | 2.169 | — | 1.318 |
+| Delocalize | 16 / 0 | 9.310 | 11.238 | — | 9.605 |
+
+Memory for unique input with 16 active components and no extra chain:
+
+| Operation | Consume: calls / bytes / peak | InPlace: calls / bytes / peak |
+| --- | --- | --- |
+| Resolve | 7,553 / 2,662,334 / 796,794 | 7,618 / 5,742,530 / 1,751,366 |
+| Project | 612 / 351,130 / 83,374 | 690 / 1,127,962 / 472,006 |
+| Kekulize | 1,697 / 262,606 / 24,358 | 1,713 / 264,006 / 24,358 |
+| Aromatize | 3,050 / 571,220 / 404,076 | 3,066 / 572,620 / 404,076 |
+| Delocalize | 86 / 35,270 / 17,730 | 102 / 36,670 / 19,070 |
+
+Prepared charge batches vary molecule and mutation sizes independently.
+Each effective edit produces one scalar Undo; no owned payload allocation is
+needed for that Undo. Edit is 256 bytes and Undo 752 bytes. A separate Vec push
+probe matching the journal's growth records 1/8/64 entries at capacities 4/8/64:
+3,008/6,016/48,128 buffer bytes, of which 752/6,016/48,128 hold entries.
+The following operation peaks also include application scratch storage.
+
+| Atoms / edits / ownership | Install, µs | Journal, µs | Install peak, B | Journal peak, B |
+| --- | --- | --- | --- | --- |
+| 8 / 1 / unique | 0.438 | 0.271 | 1582 | 3014 |
+| 96 / 1 / unique | 2.462 | 0.552 | 18478 | 3014 |
+| 384 / 1 / unique | 12.175 | 1.452 | 73774 | 3014 |
+| 96 / 8 / unique | 2.557 | 1.127 | 18478 | 6022 |
+| 96 / 64 / unique | 3.305 | 5.202 | 18478 | 48134 |
+| 384 / 64 / unique | 13.132 | 6.113 | 73774 | 48134 |
+| 96 / 1 / shared | 1.815 | 1.863 | 18478 | 21486 |
+| 96 / 64 / shared | 2.634 | 6.263 | 18478 | 66606 |
+
+At 96 unique atoms, journal allocation traffic for 1/8/64 changes is
+2/3/6 calls and 3,014/9,030/93,254 bytes; Install is three calls and 18,478 bytes
+in each case. Tracked 1/64-edit times are 2.634/3.501 µs Install and
+0.727/5.028 µs journal. Both tracked correspondence checks passed.
+
+Failure medians, unique input, include recovery. The four edit cases use
+64 prepared changes on 96 atoms; the integrity case adds a duplicate bond.
+
+| Outcome | Install/discard, µs | Journal/recovery, µs |
+| --- | --- | --- |
+| Isotope underdetermination | 1.821 | 2.092 |
+| Stereo contradiction | 1.426 | 1.518 |
+| Unsupported bond charge | 0.311 | 0.296 |
+| Early invalid handle | 0.587 | 0.590 |
+| Late invalid handle | 3.294 | 6.708 |
+| Final integrity failure | 6.569 | 15.260 |
+| Explicit rollback | 3.286 | 5.427 |
+
+These are bounded baseline cases. Chemistry-operation journal counts/capacities
+and a complete edit-kind/payload matrix are not measured here; do not infer them
+from allocation totals or the controlled scalar-edit cases.
+
+#### Stereo readings and lattice operations
+
+The maintained benchmark now includes tetrahedral stereo atoms and cis/trans
+stereo bonds on six-atom fixtures with actual ligand incidence. Stereogenicity
+is the bounded assertion key. All six reading methods and normalized_eq, meet,
+join, matches and is_compatible are separate cases, with distinct equal form
+operands prepared outside measurement. Internally contradictory forms measure
+readings only. Common, rare singleton-set and semantic-change rows stay separate;
+there is no assumed frequency-weighted aggregate.
+
+Each cell below is atom / bond median in ns. L = known kind/literal coset,
+U = known kind/undetermined coset, K = kindless configuration.
+
+| Case | asserted | evidenced | normalized_eq | meet | join | matches | is_compatible |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Common: L, empty | 5.96 / 6.00 | 10.42 / 10.45 | 3.73 / 3.73 | 99.58 / 102.26 | 271.97 / 271.53 | 264.89 / 265.31 | 4.11 / 4.10 |
+| Common: U, empty | 5.94 / 5.92 | 10.36 / 10.40 | 3.73 / 3.73 | 98.23 / 98.34 | 101.85 / 101.76 | 263.40 / 263.47 | 3.94 / 3.94 |
+| Common: L, literal assertion | 13.70 / 13.60 | 20.24 / 20.13 | 5.59 / 5.61 | 295.33 / 298.90 | 473.29 / 475.95 | 187.14 / 186.61 | 8.41 / 8.39 |
+| Common: K, empty | 5.96 / 5.93 | 10.36 / 10.47 | 2.80 / 2.80 | 16.21 / 16.21 | 15.87 / 15.86 | 147.92 / 149.53 | 2.80 / 2.80 |
+| Changed semantics: K, literal assertion | 13.63 / 13.75 | 20.01 / 20.13 | 4.97 / 4.98 | 206.32 / 206.33 | 208.14 / 209.74 | 78.02 / 78.32 | 6.85 / 6.85 |
+| Rare: L, singleton assertion | 106.24 / 106.67 | 111.89 / 111.36 | 13.38 / 13.37 | 292.26 / 291.15 | 472.38 / 472.26 | 184.49 / 184.36 | 11.88 / 11.82 |
+| Changed semantics: K, bottom assertion | 66.69 / 66.16 | 67.65 / 66.69 | — | — | — | — | — |
+
+Derived and derived_complete return Undetermined on these fixtures and take
+2.44–2.48 ns without allocations. The complete asserted/evidenced variants have
+the same expected values as their non-closed counterparts here. Allocation
+counts/bytes below are identical for both entity families; normalized_eq and
+is_compatible allocate nothing on the measured non-bottom forms.
+
+| Case | Asserted/evidenced calls / B | Meet calls / B | Join calls / B | Matches calls / B |
+| --- | --- | --- | --- | --- |
+| Common: L, empty | 0 / 0 | 0 / 0 | 5 / 240 | 4 / 54 |
+| Common: U, empty | 0 / 0 | 0 / 0 | 0 / 0 | 4 / 54 |
+| Common: L, literal assertion | 0 / 0 | 7 / 131 | 12 / 371 | 2 / 48 |
+| Common: K, empty | 0 / 0 | 0 / 0 | 0 / 0 | 4 / 54 |
+| Changed semantics: K, literal assertion | 0 / 0 | 7 / 131 | 7 / 131 | 2 / 48 |
+| Rare: L, singleton assertion | 4 / 75 | 7 / 131 | 12 / 371 | 2 / 48 |
+| Changed semantics: K, bottom assertion | 2 / 27 | — | — | — |
+
+The baseline still reads a stored kindless literal assertion as literal and a
+stored bottom assertion as None. S2g1 changes those semantics to vacuity; their
+timings must not be presented as same-result optimizations. No production
+normalization, reading or lattice behavior changed in S0a.
+
+#### Python boundary and inverse baselines
+
+Resolved carbon chains have 8/80 atoms and 1/8 prepared charge edits. Edit
+includes an unchanged finish; apply/tracked_apply consume, while the transaction
+methods mutate. Unique/shared pairs below include final owner destruction, so a
+shared case can be faster even when it detaches storage: the retained fixture
+keeps other tables alive. These are current consuming-contract measurements;
+they do not hide a required retained-source copy in preparation.
+
+Times are µs; every paired cell is unique / shared. Allocation figures count
+Rust traffic only.
+
+| Atoms / method | Time | Calls | Bytes | Peak B |
+| --- | --- | --- | --- | --- |
+| 8 / edit | 0.749 / 0.345 | 0 / 0 | 0 / 0 | 0 / 0 |
+| 8 / apply | 0.781 / 0.556 | 0 / 2 | 0 / 1576 | 0 / 1576 |
+| 8 / tracked_apply | 0.993 / 0.736 | 2 / 4 | 120 / 1696 | 120 / 1696 |
+| 8 / transact | 1.237 / 0.866 | 4 / 6 | 3400 / 4976 | 3360 / 4936 |
+| 8 / tracked_transact | 1.404 / 1.006 | 6 / 8 | 3520 / 5096 | 3360 / 4936 |
+| 80 / edit | 1.692 / 0.582 | 0 / 0 | 0 / 0 | 0 / 0 |
+| 80 / apply | 1.833 / 2.273 | 0 / 2 | 0 / 15400 | 0 / 15400 |
+| 80 / tracked_apply | 2.120 / 2.521 | 2 / 4 | 1272 / 16672 | 1272 / 16672 |
+| 80 / transact | 2.693 / 2.897 | 5 / 7 | 9416 / 24816 | 6368 / 21768 |
+| 80 / tracked_transact | 2.941 / 3.189 | 7 / 9 | 10688 / 26088 | 6368 / 21768 |
+
+Resolution uses resolved chains with only lone-pair counts reset to Undetermined
+during preparation; isotope composition and implicit hydrogens remain specified.
+Both default-model routes must recover the exact source chain, matching successful
+Rust resolution. The model argument is either omitted or a prepared Python conversion
+of ChemistryModel::default. Input storage is shared; resolve consumes and
+resolve_into mutates. Memory entries are calls / bytes / peak bytes.
+
+| Atoms / model | Resolve, µs | Resolve into, µs | Resolve memory | Resolve into memory |
+| --- | --- | --- | --- | --- |
+| 8 / omitted_default | 9.112 | 9.358 | 71 / 12,956 / 8,028 | 73 / 21,980 / 14,044 |
+| 8 / supplied_default | 247.087 | 250.769 | 2,883 / 919,642 / 906,692 | 2,885 / 928,666 / 906,692 |
+| 80 / omitted_default | 82.223 | 86.695 | 662 / 167,668 / 96,884 | 668 / 357,172 / 193,140 |
+| 80 / supplied_default | 325.928 | 327.970 | 3,474 / 1,074,354 / 906,692 | 3,480 / 1,263,858 / 906,692 |
+
+Inverse covers both Add and Remove, direct entity and aggregate Delta methods.
+Atom payloads contain element-variable strings; aromatic payloads contain atom
+ids and electron counts. Sizes are cost probes, not a workload distribution.
+The table reports Add medians in µs; Remove has the same memory counts and
+separate retained timing rows. Exact inverse values are checked against Rust.
+
+| Payload | Entity inverse | Aggregate inverse | Calls / bytes / peak B |
+| --- | --- | --- | --- |
+| atom / 16 | 0.278 | 0.348 | 4 / 144 / 144 |
+| atom / 256 | 0.284 | 0.340 | 4 / 624 / 624 |
+| atom / 4096 | 0.417 | 0.473 | 4 / 8,304 / 8,304 |
+| aromatic / 6 | 0.263 | 0.337 | 4 / 144 / 144 |
+| aromatic / 64 | 0.331 | 0.406 | 4 / 1,536 / 1,536 |
+
+#### Reproduction and retained evidence
+
+The maintained targets are built with cargo bench --offline --no-run:
+graph-IR editor/reaction/constraint_readings and graph resolve. The recovery
+harness is built twice with cargo build --offline --release, preserving the
+non-instrumented executable before enabling its alloc feature. The isolated
+Python harness uses cargo test --offline --release -p umol-py --lib --no-run
+with the repository Python environment activated. The root extension is built
+with maturin develop --offline --release. Build commands, logs, source hashes,
+fixture definitions and exact executable invocations are retained in
+scratch/181-s0a/README.md, manifest.json, build-*.log and runs.jsonl.
+
+With builds complete and the Python environment active, run.py executes the
+targets sequentially; summarize.py produces criterion.csv, recovery-time.csv,
+recovery-alloc.csv and python.csv. readings-alloc.log holds all reading allocation
+rows. criterion-baseline.tar.gz preserves every named Criterion baseline directory,
+including raw samples and confidence intervals; the named baseline also remains
+in the Cargo target directory. The maintained benchmark diff is saved as
+benchmark.patch. Keep these inputs and raw data for S2g1/S4a/S12a comparisons.
+
+S0a establishes the pre-change reference only. It introduces no recovery selector,
+ownership API, boxing, batching or stereo semantic changes. The documented
+figures preserve a useful baseline even if temporary artifacts are later removed;
+the raw paired cases are needed for the planned implementation comparisons.
 
 ### Bounded ownership experiment — 2026-10-08
 
@@ -1113,7 +1396,7 @@ the full measurements. These tables preserve the findings independently of scrat
 
 ## 5. Python consumed-object errors
 
-ConsumedError currently applies to Molecule, MoleculeEditor, and Edits.
+ConsumedError currently applies to Molecule, MoleculeEditor, Edits, and RingViews.
 
 Python Molecule will hold GraphIrMolecule directly, without Option. Migrate its
 current consuming methods—edit, apply, tracked_apply, resolve, and
@@ -1124,6 +1407,8 @@ The destructive Rust editor entry point is not required on the Python surface.
 
 Edits retains consumption on transfer and gains an explicit copy method.
 MoleculeEditor retains consumption at finish; application mutably borrows it.
+RingViews retains consumption through into_ring_set, including ConsumedError for
+the consumed owner and InvalidatedViewError for its dependent accessors.
 
 ### Remaining consumed wrappers — review, 2026-10-08
 
@@ -1709,30 +1994,98 @@ no blanket consuming-to-borrowed trait rewrite is included. [236](236-operation-
 ownership contracts of these traits; it removes Normalize::normalized and makes
 canonical_hash borrow.
 
-### Outstanding review before implementation
+### Kindless stereo constraints — decision, 2026-10-14
 
-- Higher-level lifecycle/naming is settled in [236](236-operation-ownership-copy-costs-2026-10-09.md). The Python
-  resolution rollback default is Clone; the prepared-transaction default is
-  Journal.
+The stereo kind is the subtype of the entire stereo entity. Its constraints
+derive their meaning from that owning kind; they do not carry an independent
+intrinsic kind. For both StereoAtomForm and StereoBondForm, constraints are
+semantically vacuous when the configuration is Undetermined (`"*"`). A known
+kind with an undetermined coset (`"Th*"`, for example) retains meaningful
+constraints and does not fall under this rule.
 
-S1's carrier names, enum declarations, and 88/104 layouts are settled. S2's
-Rust and Python interfaces, field/key grouping, prefix recovery, and DSL syntax
-are settled, including singular entity keys, row shapes, and parameterized keys.
+**Raw storage and mutation.** Attribute mutation and form updates remain
+infallible. They may retain constraints while the kind is undetermined; assigning
+or clearing a kind does not eagerly normalize or erase the stored payload. Raw
+equality and hashing continue to observe it. A later raw kind assignment can
+make retained data meaningful; normalization or serialization may already have
+discarded that data. Raw mutation is not required to commute with normalization.
 
-The crate-private owned resolver/projector functions and leaving unrelated value
-traits unchanged follow the scoped design; they do not require a new mechanism
-or an independent lifecycle decision. No further semantic gap is identified in
-tracking or the two recovery implementations. This is a design-review inventory,
-not a claim that the unimplemented migration has passed its verification gates.
+**Normalization and lattice operations.** Normalization of a kindless stereo
+entity clears its constraints before inspecting or normalizing their contents.
+An internally contradictory but vacuous constraint therefore cannot make the
+entity contradictory. Known-kind entities retain the existing normalization of
+their configuration and constraints. The rule belongs to the owning entity;
+a standalone constraint container has no kind context of its own.
+
+normalized_eq compares the resulting normal forms. is_undetermined, is_ground,
+meet, join, matches, and is_compatible must use the same vacuity rule. In
+particular, meeting a kindless entity with a kinded entity must not transfer the
+kindless operand's stored constraints into the result. A join whose resulting
+kind is undetermined likewise has vacuous constraints. Results must agree
+semantically whether the operands were normalized first or not. Entity-bound
+semantic constraint readings likewise ignore kindless stored constraints and
+return top at the requested key: Some containing that key's undetermined form.
+None continues to mean bottom. Raw storage access remains available for
+observing and mutating the retained payload.
+
+**Updates and lowering.** Keep the uniform infallible update interfaces,
+including Edits::update_stereo_atom and Edits::update_stereo_bond. No additional
+kind argument or stereo-specific rejection path is introduced. An Unchanged
+configuration update does not assert an undetermined kind: when a supplied
+current form has a kind, that context remains available for constraint changes.
+A Kinded update supplies context explicitly; an Undetermined update clears the
+configuration, making constraints in the resulting entity vacuous. Lowering
+uses the resulting configuration's kind; an explicit Undetermined update does
+not fall back to the source kind.
+
+Semantic differences and lowering must respect the applicable source/update
+kind context. Two kindless forms differing only in stored constraints have no
+semantic difference. Ignore constraint contributions for which there is no
+determined kind context, while retaining actual configuration changes and
+constraint changes with known context. Ignoring a constraint must not become a
+constraint-removal operation. Retained edits still use the stored source values
+for their old-state preconditions; semantic vacuity is not permission to replace
+a stored old value with absence. This decision adds no kind-presence or kind-match
+rejection to edit application.
+
+**Serialization.** Entity forms, attribute updates, and single-entry and batched
+edits use the same kind-scoped constraint syntax and vacuity convention. Omit
+constraints with no determined kind context instead of returning a formatting
+error or reaching an expect/panic during conversion. A kindless entity renders
+as `"*"`. An update retains its configuration intent: Unchanged and an explicit
+Undetermined update remain distinct after their vacuous constraints are omitted.
+Use an available supplied current-form context during lowering; standalone
+serialization does not invent or infer a kind from a molecule.
+
+For a kindless constraint-only edit or batch row, omit the entire constraint
+operation, including both its expectation and update. Do not encode just its new
+value as absent, which would request removal. Preserve unrelated configuration
+and other edits and the order of retained operations. Raw Rust/Python value
+conversion can retain the payload; DSL export applies the semantic omission.
+The entity roundtrip is under normalized_eq for this vacuity, not raw equality;
+it does not promise to preserve discarded payload for later raw kind assignment.
+
+Harmonize the existing behaviors: entity serialization already omits kindless
+constraints, whereas update formatting and edit conversion currently fail on
+them. Apply the same omission before those failure paths. Keep the existing
+kind-scoped constraint grammar; do not add a separate raw encoding or require
+fallible mutation. This does not weaken the kind requirement of molecule-level
+stereo constraint leaves.
+The shared LigandSymmetry and Fluxionality batch-key syntax remains a separate
+unresolved design point in S2; full permutation-image encoding remains rejected.
 
 ## Implementation plan
 
 ### S0 — Molecule, editor, and transaction migration
 
-[236](236-operation-ownership-copy-costs-2026-10-09.md) closes before this plan begins.
-Both plans together are the 0.10 release blocker.
-After 236, the resolvers, transformers, and AromaticityPerceiver no
-longer use transactions, so they need no migration here.
+[236](236-operation-ownership-copy-costs-2026-10-09.md) is completed; this plan
+remains the 0.10 release blocker. Individual resolvers and transformers complete
+planning before mutation and apply without transactions. AromaticityPerceiver
+does not use transactions. Composite Resolver's borrowed operations retain one
+transaction across phases because later planning can reject earlier changes.
+S0f migrates those transaction calls; S10a exposes their recovery selector.
+Individual operations still migrate with editor/application interface changes
+in S0b and plan emission changes in S3.
 
 The baseline precedes all production changes. The six migration groups follow.
 The migration interface review distinguishes settled interfaces from remaining
@@ -1740,15 +2093,16 @@ proposals; an unresolved interface must be specified before its item starts.
 Each implementation subitem includes its callers and focused tests; none is a
 separate task merely to write another plan.
 
-#### S0a — Benchmark baseline
+#### S0a — Benchmark baseline (done)
 
-**Modules:** existing graph-IR editor/reaction benches, graph resolve benches,
-bounded operation/Python measurements, and this record. **Measurement, green.**
+**Modules:** existing graph-IR editor/reaction/constraint_readings benches, graph
+resolve benches, bounded operation/Python measurements, and this record.
+**Measurement, green.**
 [dep: 236 complete; precedes every production-change subitem here]
 
-Run the existing editor, reaction, and resolve benchmark targets before changing
-production code. Record the source revision, toolchain, build settings, fixture
-sizes, ownership mode, and measurement boundaries with the results in section 4.
+Run the editor, reaction, constraint_readings, and resolve benchmark targets before
+changing production code. Record the source revision, toolchain, build settings,
+fixture sizes, ownership mode, and measurement boundaries with the results in section 4.
 Retain a named Criterion baseline for subsequent comparisons; raw outputs may live
 in scratch but are not the only record of the results.
 
@@ -1757,14 +2111,31 @@ in scratch but are not the only record of the results.
 | graph-IR `editor` | sparse8/dense80, unique/shared, direct/apply/transact, and six overlay-removal kinds in stored/reordered frames |
 | graph-IR `reaction` | supplied-match and enumerated application, tracked counterparts, editor/application cases, combine/split/meet_pushout, and reversal |
 | graph `resolve` | ingestion, resolution, individual aromaticity/stereo projection, composite projection, and sparse8/dense88 ownership cases |
+| graph-IR `constraint_readings` | stereo-atom and stereo-bond readings, normalized_eq, meet, join, matches, and is_compatible on bounded literal/undetermined cases |
 
-Reuse the bounded recovery study's fixtures and harness for all three transformers,
-clone/install versus journal, bounded failure, and separate allocation/peak-memory
-measurements absent from Criterion. Verify its source dependencies against the
-current production revision before running; do not rerun the boxing-layout matrix.
+Extend the existing constraint_readings timing/allocation harness for the stereo
+cases before production changes; reuse its Criterion and allocation-count paths.
+Cover known kinds with literal or undetermined cosets, empty constraints, and
+literal assertions, plus kindless forms with and without stored payloads. Keep
+unusual payloads in separately reported cases; do not combine them into an
+assumed workload distribution or let sets/expressions dominate the comparison.
+Record time, allocation count, and allocated bytes with fixed preparation and
+destruction boundaries. Check results outside timing and distinguish kindless
+cases whose expected results change from cases with unchanged semantics. S2g1
+owns the comparison against this baseline.
+
+Reuse the bounded recovery study's fixtures for all three transformers, bounded
+failure, and separate allocation/peak-memory measurements absent from Criterion.
+Adapt its harness to the implemented consuming and in-place complete-plan paths
+of individual resolvers and transformers. Scope clone/install-versus-journal
+comparisons to composite operations and prepared transactions. Keep historical
+measurements tied to their recorded revisions; fresh baselines use the completed
+236 paths. Verify the harness's source dependencies against the current production
+revision before running; do not rerun the boxing-layout matrix.
 Use the existing Python-study harness for actual Molecule edit/apply/tracked_apply,
 prepared transactions, and resolve calls, with default and supplied models; add
 missing call cases to that harness rather than another benchmark framework.
+Include direct entity and aggregate Delta inverse allocation baselines for S6c.
 Most fixtures have no molecule-level constraints.
 
 Check result and recovery agreement outside timing. For each row specify whether
@@ -1776,10 +2147,14 @@ must not silently change what a benchmark measures. Python uses the repository's
 3.13 environment and a freshly built extension. Run measurements sequentially.
 
 **Completion:** actual timing and memory results, commands, and fixture definitions
-are recorded durably here, with reusable inputs for S4a/S12a. This item produces
+are recorded durably here, with reusable inputs for S2g1/S4a/S12a. This item produces
 the pre-change baseline; S12a performs the final comparison.
 
-#### S0b — Mutable editor batch application
+Completed 2026-10-14. The [S0a measurement record](#s0a-baseline--2026-10-14)
+contains the current timing/allocation results, fixture and ownership boundaries,
+verification, and retained baseline artifacts. Production code is unchanged.
+
+#### S0b — Mutable editor batch application (done)
 
 **Modules:** graph-IR molecule/editor/transact, all Rust consumers, Python editor
 binding, and affected tests. **Breaking, red→green within the subitem.** [dep: S0a]
@@ -1802,9 +2177,9 @@ consumed. Finish consumes on both success and integrity failure.
 | Current caller | Required change |
 | --- | --- |
 | graph-IR Molecule apply/tracked_apply in `ir/molecule.rs` | Hold a mutable editor; apply returns unit, tracked_apply returns only the correspondence; finish that editor. Molecule methods keep consuming. |
-| graph composite Resolver resolve/resolve_with_report/project in `ops/resolve.rs` | Remove every `editor = editor.apply(...)` reassignment, retain phase order, probe locations, error mappings, and final finish. |
+| graph composite Resolver resolve/resolve_with_report/project in `ops/resolve.rs` | Remove every `editor = editor.apply(...)` reassignment; retain phase order, probe locations, planning-error mappings, application/publication assertions, and final finish. |
 | graph individual resolvers: aromaticity/isotope/stereo resolve and project; bonds/multicenter resolve | Split edit/apply/finish chains into a mutable editor, application, then finish. Preserve current public receivers and result types. |
-| graph Kekulizer/Aromatizer/DelocalizeCharge transform | Split editor chains likewise; retain existing plan assertions and Kekulizer's post-publication validation. |
+| graph Kekulizer/Aromatizer/DelocalizeCharge transform | Split editor chains likewise; retain Kekulizer's validation during planning and existing plan-application/publication assertions. |
 | Python `src/transaction.rs` | Use Option::as_mut for apply/tracked_apply; return None/correspondence. Only finish uses take. Reject an unavailable editor before consuming Edits. |
 
 Migrate Rust editor application tests in `ir/edit.rs`, `ir/molecule/tests.rs`,
@@ -1814,7 +2189,9 @@ the same editor. Test retained partial state on error; do not weaken publication
 or old-state precondition assertions. Python `test_transaction.py` and
 `test_edit.py`, and binding unit tests, must distinguish terminal finish from
 nonterminal apply, including Edits-transfer failure. These changes cannot wait
-for S11.
+for S11. In `test_molecule.py`, migrate the editor=True branch of
+test_molecule_apply_consumed_edits here: a failed Edits transfer leaves the editor
+available. The Molecule branch migrates in S0c2.
 
 In `benches/editor.rs`, removal still measures application to an existing editor:
 make the input editor mutable and return it after applying, rather than measuring
@@ -1828,6 +2205,23 @@ editor/Edits lifecycle. Migrate callers and tests with the signature change.
 **Interface status:** the apply/tracked_apply receiver and return changes,
 partial-state behavior, checked probe, and terminal finish are specified above.
 No additional interface decision is identified for this subitem.
+
+Completed 2026-10-14. Rust and Python editor application now mutates the existing
+editor; failure retains completed edits and permits further mutation and batches.
+All callers and affected lifecycle tests are migrated, with existing planning,
+probe, and publication boundaries preserved. The removal benchmark still returns
+the editor from the timed closure, preserving its result-destruction boundary.
+The data-type, integrity, and Python API guides describe the implemented contract.
+
+Verification passed: graph-IR molecule tests (1,245), edit tests (86), graph
+operation tests (1,603), feature-gated edit properties (21) and compaction
+properties (3), Python binding editor unit tests (6), and Python transaction,
+edit, and molecule tests (331) against a freshly built extension in Python 3.13.
+All-target Clippy for graph-IR, graph, and Python passed with graph-IR proptest
+enabled and warnings denied, including compilation of the editor benchmark.
+Changed Rust files pass nightly formatting checks; git diff --check passes.
+Logs are retained in `scratch/181-s0b/`. Full workspace tests remain at the stage
+gate.
 
 #### S0c1 — Dropped
 
@@ -1846,12 +2240,16 @@ correspondence.
 Python Molecule still has Option storage because resolve/resolve_with_report
 consume until S10a. Keep to_rust fallible and retain take for those consumers;
 S11a removes that storage only after the last consuming binding changes. Update
-binding unit tests and `test_transaction.py`, `test_edit.py`, `test_molecule.py`
-and `test_molecule_view.py` where consumption/invalidation was caused by these
-three methods. Remove redundant copy-before-edit/apply in Python
+binding unit tests and edit/apply-triggered cases in `test_transaction.py`,
+`test_edit.py`, `test_molecule.py`, `test_molecule_view.py`, `test_ring.py`,
+`test_constraint_readings.py`, `test_molecule_constraint.py`, `test_depiction.py`,
+`test_reaction.py`, and `test_resolve.py`. Cover retained nested views and molecules
+obtained from Reaction and Solution. Preserve invalidation coverage under actual
+whole-molecule mutations. Remove redundant copy-before-edit/apply in Python
 `test_resolve.py` and `test_workflow.py`; retain the source-preservation assertions.
-Keep consumption tests for resolution until its migration. Update the Python
-guide's Molecule editing paragraph.
+Keep resolution-triggered consumption tests until S10a; edit-triggered cases in
+the resolver tests migrate here. Update the Python guide's Molecule editing
+paragraph.
 
 **Checks:** source preservation on success/failure, independent results, retained
 source views, and correct tracked results. Rust edit/apply/tracked_apply,
@@ -1926,8 +2324,8 @@ separate batch namespaces, and abort behavior. Both modes use S0e's tracking.
 
 Migrate run callers together. Existing transact/tracked_transact conveniences
 retain their signatures at this boundary and explicitly pass Journal internally;
-S0g exposes the selector on those conveniences. Higher-level operation callers
-also pass Journal until their own migration selects otherwise.
+S0g exposes the selector on those conveniences. Composite Resolver callers also
+pass Journal until S10a exposes the operation's recovery selector.
 
 **run caller migration in this subitem:** Molecule transact/tracked_transact in
 `ir/molecule/transact.rs`, composite Resolver resolve_into/resolve_into_with_report/
@@ -2147,6 +2545,12 @@ affected callers pass, and the selected representation has no extra semantic wor
 
 ### S2 — Field/key batches and corresponding undos
 
+The stereo subitems follow the [kindless stereo constraint decision](#kindless-stereo-constraints--decision-2026-10-14).
+S2g1 implements form semantics and readings for both stereo entity kinds; S2g2
+implements their update lowering and existing serialization paths. S2g3 and S2h
+then add the atom and bond batches. The remaining shared stereo-key syntax must
+be settled before S2g3; it does not block S2g1 or S2g2.
+
 **Interfaces:** use the study's typed vectors and direct
 application/replay loops. Put each new variant beside the corresponding entity's
 single-entry variants in Edit and Undo. Do not retain ExperimentEditBatch,
@@ -2207,7 +2611,13 @@ of Python Edit values retains the existing Python Edit conversion lifecycle.
 Edits methods reject consumed receivers through the existing exception. No new
 consumed state or view-invalidation mechanism is introduced for row values.
 
-**Native DSL — operation list and row shapes approved:** use singular entity
+The Edit variant's changes property returns a tuple of row tuples. Constraint-batch
+keys and the forms and constraints in each row are immutable observations,
+including their nested collections. Later mutation of constructor input lists or
+mutable input values does not alter the Edit. This follows the Python API guide's
+property contract.
+
+**Native DSL — stereo constraint key syntax unresolved:** use singular entity
 keys for all 19 field-batch operations and :modify-constraints on each of the
 eight entity kinds. Each table gives the exact field verb. Existing :modify,
 addition, removal, and replacement syntax stays unchanged. For example:
@@ -2223,8 +2633,9 @@ complete configuration head (`"*"`, `"Th*"`, `"Th0"`, etc.), with no constraint
 tail or omitted-coset update shorthand. A constraint batch is `{:atom {:modify-constraints {:key <key> :changes
 [[handle {:expect <old-constraint-or-nil> :update <new-constraint-or-nil>}]]}}}`,
 with the appropriate singular entity key. Values use the existing entity constraint
-DSL. Stereo rows additionally carry `:kind <kind-or-nil>` in the expect/update
-map, used by both constraint operands. No kind is inferred from the molecule.
+DSL. Retained stereo rows carry `:kind <kind>` in the expect/update map for both
+constraint operands. Omit kindless constraint-only rows and both their operands
+under the vacuity decision above. No kind is inferred from the molecule.
 
 The key encoding is explicit even for empty batches. Unit keys use their existing
 constraint keyword (for example :valence, :aromatic, :electron-count,
@@ -2232,13 +2643,14 @@ constraint keyword (for example :valence, :aromatic, :electron-count,
 
 - RingMembership(All): `{:ring-membership {}}`;
   RingMembership(Size(n)): `{:ring-membership {:size n}}`.
-- LigandSymmetry: `{:ligand-symmetry {:image [p0 p1 ...]
-  :orientation :proper}}` (or :improper).
-- Fluxionality: `{:fluxionality {:image [p0 p1 ...]}}`.
 - Topicity: `{:topicity {:pair [i j]}}`.
 
-The complete permutation image retains its degree without choosing a stereo kind
-for the shared key; constraint values retain their existing kind-based syntax.
+**Rejected — 2026-10-14:** full permutation-image encoding for stereo constraint
+keys was not approved and is rejected. LigandSymmetry and Fluxionality key syntax,
+including context for empty batches, remains to be settled. Kindless-row omission
+is settled by the vacuity decision above. No replacement key encoding is selected.
+The existing uniform infallible update-helper interfaces are retained.
+
 Reject malformed key encodings at deserialization. Key/value agreement remains
 an application precondition, just as independently supplied old/new values do.
 
@@ -2246,9 +2658,11 @@ Extend EditsDsl's existing trait boundary and per-entity EditInput organization.
 Provide tree readers and tree rendering for the new forms, with
 read_edn_/render_ naming where free functions are needed. Do not add a
 public batch DSL type or a generic parser that obscures the per-entity grammar.
-Valid batches preserve their variant, key, row order, empty rows, and stereo kind
-context through DSL and Python conversion. The study's expansion into individual
-edits is not a production conversion. No Delta variants are added.
+Apart from omission of vacuous kindless stereo-constraint rows, valid batches
+preserve their variant, key, retained row order, empty rows, and stereo kind
+context through DSL conversion. Rust/Python value conversion preserves the raw
+batch payload. The study's expansion into individual edits is not a production
+conversion. No Delta variants are added.
 
 **Reuse from the study:** port the final direct loops, not the initial recursive
 prototype. Journal-free loops resolve a handle, compare the current field with
@@ -2261,10 +2675,10 @@ study code; the other six entities extend that same structure with their types.
 Add the explicit row-key/batch-key comparison: the study's trusted planner always
 provided matching keys, whereas the production Edit is independently constructible.
 
-All S2 subitems use the following execution contract. Each subitem includes its
-own vocabulary, Edits construction, application, undo replay, DSL/Python conversion,
-and tests. Entity application loops are independent; S2h reuses the stereo
-configuration/key grammar introduced in S2g.
+All S2 batch subitems use the following execution contract. Each batch subitem
+includes its own vocabulary, Edits construction, application, undo replay,
+DSL/Python conversion, and tests. Entity application loops are independent;
+S2h reuses the stereo configuration/key grammar introduced in S2g3.
 
 - Field values use the same form types and old-value comparisons as the existing
   single-field variants. Field undos preserve the current inverse old/new shape;
@@ -2291,6 +2705,8 @@ old-value mismatch at first/middle/last entries; constraint add/remove/modify an
 key mismatch; rollback after preceding successful edits; tracked correspondence;
 no panics from manipulated undo payloads. Include DSL/Python construction and conversion checks with each entity,
 preserving typed batches rather than expanding them into individual edits.
+Python checks also cover independence from constructor inputs and rejection of
+mutation through changes, key, row values, and their nested collections.
 Property tests exercise sequence equivalence and restoration independently of
 the batching implementation. Invalid histories need not produce correct values.
 
@@ -2486,11 +2902,108 @@ DSL/Python conversion. Leave the two atom IDs and their replacement API unchange
 literal/undetermined forms, new and removed handles, repeated kind changes, and
 unchanged atom IDs and correspondence through successful execution and rollback.
 
-#### S2g — Stereo atom field and constraint batches
+#### S2g1 — Stereo form semantics and constraint readings
 
-**Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
-**Additive vocabulary with exhaustive-match/caller migration; green at completion.**
+**Modules:** graph-IR ir/stereo, ir/view/stereo, ir/view/constraints; Python
+stereo and constraint/stereo; their unit and property tests.
+**Semantic implementation changes; signatures unchanged, green at completion.**
 [dep: S1a, S1b]
+
+Implement kind-aware Normalize and Lattice behavior for StereoAtomForm and
+StereoBondForm at the entity level. Clear constraints before normalizing their
+contents when configuration is Undetermined. Retain the existing known-kind
+behavior, including a known kind with an undetermined coset. Make normalized_eq,
+is_undetermined, is_ground, meet, join, matches, and is_compatible agree with
+that normalization. Neither a meet nor a join may make vacuous input constraints
+meaningful; a kindless result has vacuous constraints.
+
+Apply the same rule to asserted/asserted_complete and their evidenced/comparison
+consumers in StereoAtomConstraintsView and StereoBondConstraintsView. Preserve
+the existing derived readings. Cover both molecule-backed and value-backed
+Python views through the owning form's kind. Keep raw storage access, equality,
+hashing, mutation, and the standalone constraint containers' semantics intact;
+do not normalize eagerly or change the general-purpose derives. Update the
+affected API rustdoc to state the raw/semantic distinction.
+
+**Checks:** exact kindless normal forms with ordinary and internally contradictory
+payloads; meaningful constraints on known-kind/undetermined-coset forms; meet in
+both operand orders; joins losing the kind; and all four stereo constraint keys.
+Extend the existing stereo/lattice/constraint-reading properties to cover raw
+kindless payloads and invariance under prior normalization, retaining the lattice
+laws. Check raw payload retention separately from semantic equality and verify
+Python parity for owned forms and molecule views. Standalone container readings
+must still interpret their contents without an owning kind.
+
+In tests/property/constraint_readings, retain view/container assertion equality
+for known-kind stereo and the other entity kinds. For kindless stereo, assert
+the key's undetermined form on the entity view independently of the stored
+container's reading. Generate raw kindless forms with nonempty and contradictory
+payloads; do not normalize them before exercising the operation under test.
+Retain the existing normalized lattice laws and add raw-versus-normalized
+operation/readings agreement on normalizable inputs, including kindless inputs
+whose payload would contradict if interpreted independently.
+
+**Performance:** repeat S0a's bounded stereo cases after these changes and record
+time and allocation differences. Inspect added cloning, repeated normalization,
+or lost allocation-free paths before accepting a regression on unchanged
+semantics. Keep common and unusual cases separate in the results.
+
+#### S2g2 — Stereo updates, lowering, and single-entry serialization
+
+**Modules:** graph-IR ir/stereo, ir/edit, dsl/stereo, dsl/edit and their molecule
+serialization consumers; Python stereo/edit; affected unit and property tests.
+**Semantic implementation changes; signatures unchanged, green at completion.**
+[dep: S2g1]
+
+Keep StereoAtomForm::update and StereoBondForm::update as infallible raw updates.
+Make both difference_to methods ignore differences that remain kindless.
+In Edits::update_stereo_atom and Edits::update_stereo_bond, derive constraint
+context from the resulting configuration: Unchanged retains the supplied source
+kind, Kinded supplies its kind, and Undetermined supplies none. Omit constraint
+contributions without that context while retaining configuration changes. Use
+actual stored old constraints for retained edit preconditions. Keep the existing
+signatures and application checks; add no kind-presence or kind-match rejection.
+
+Harmonize StereoAtomDsl, StereoBondDsl, both update DSL types, and the single-entry
+EditsDsl conversion. Omit kindless constraints before kind-dependent formatting
+or conversion can fail. Omit an entire kindless constraint edit, including its
+expectation, rather than emitting a removal. Preserve configuration intent and
+the order of retained operations. Use the existing kind-scoped grammar and trait
+boundaries; Rust/Python value conversion continues to retain raw payloads.
+Document entity roundtrips under normalized_eq and the explicit omission rule
+for standalone updates/edits; do not promise context-free update serialization
+preserves a constraint change that only acquires a kind when applied to a source.
+
+**Checks:** raw update retention; no semantic difference between kindless forms;
+Unchanged with and without a source kind; explicit clearing without fallback to
+the old kind; and Kinded updates with retained raw old-state preconditions.
+Check lowered edits through both application paths. Test Display,
+ToEdn, molecule export, and the public EditsDsl conversion with constructed
+kindless payloads, including contradictory ones. Assert exact omission, distinct
+Unchanged/Undetermined update heads, retained surrounding edits, and absence of
+panics through Python's corresponding export paths. Extend the existing stereo
+serialization properties to cover these raw states under the stated equivalence;
+retain exact roundtrips on the existing lossless domain.
+
+Add generated difference/update and lowering/application properties for both
+stereo families. For normalizable source and target forms, applying
+source.difference_to(target) to that raw source must be normalized_eq to the
+target. For a single update whose source and direct result normalize, applying
+the edits lowered against that same raw source must be normalized_eq to the
+direct raw form update, through both application paths. Include raw kindless
+payloads, known-kind/undetermined-coset forms, kind assignment, and kind clearing.
+Compare the immediate semantic results; these laws do not require raw equality or preservation of latent
+payload for a subsequent kind assignment. Preserve the exact stored old-value
+preconditions in the generated lowering cases.
+
+#### S2g3 — Stereo atom field and constraint batches
+
+**Modules:** graph-IR ir/edit, molecule/apply, dsl/stereo, dsl/edit; Python edit;
+their tests.
+**Additive vocabulary with exhaustive-match/caller migration; green at completion.**
+[dep: S1a, S1b, S2g2]
+
+**Design prerequisite:** settle the shared stereo-key syntax recorded in S2.
 
 **Concrete interfaces:** H = StereoAtomHandle; I = StereoAtomId.
 DSL entity key: :stereo-atom.
@@ -2515,23 +3028,34 @@ constraint key does not imply a shared kind. Preserve existing configuration
 comparison and restoration semantics, without adding coset normalization/checks.
 Site and ligand mutation remain separate existing operations.
 
+Extend S2g2's serialization omission to constraint batch rows: a row with no
+kind contributes neither an expectation nor an update. Preserve retained row
+order and configuration batches; do not infer context from a molecule or turn
+omission into removal. Raw batch construction, Python value conversion,
+application, and undo keep the corresponding single-entry contracts.
+
 In dsl/stereo, reuse stereo_configuration and fmt_stereo_configuration to expose
 crate-private read_edn_stereo_configuration, read_stereo_configuration, and
 render_stereo_configuration for the two edit grammars. The readers require the
 complete configuration head and reject trailing constraint text. These are
-boundary functions for EditsDsl, not a new public configuration type. Implement
-the shared stereo-key grammar here as well; the atom/bond batch readers supply
-their corresponding key type.
+boundary functions for EditsDsl, not a new public configuration type. The shared
+stereo-key grammar remains unresolved as recorded in S2. Settle it before
+implementing the constraint readers; the atom/bond batch readers use that grammar
+with their corresponding key type.
 
 **Checks:** shared S2 cases for configuration and stereo-atom constraint keys;
 include different kinds within a keyed batch, per-entry DSL kind context,
 configuration changes followed by rejection, and retained site/ligand order.
+Add mixed kinded/kindless and entirely kindless constraint batches, including
+contradictory omitted payloads. Assert exact serialized omission and retained
+order under the settled key grammar, raw Rust/Python payload preservation, and
+that export neither panics nor introduces a constraint removal.
 
 #### S2h — Stereo bond field and constraint batches
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
-[dep: S1a, S1b, S2g (shared stereo DSL grammar)]
+[dep: S1a, S1b, S2g2, S2g3 (shared stereo DSL grammar)]
 
 **Concrete interfaces:** H = StereoBondHandle; I = StereoBondId.
 DSL entity key: :stereo-bond.
@@ -2555,23 +3079,40 @@ replay, and DSL/Python conversion. Retain kind context per constraint entry and
 the existing configuration semantics. Do not narrow the representation to
 coset-only changes or change the separate site/ligand replacement operations.
 
+Reuse the form, reading, lowering, and single-entry serialization semantics from
+S2g1/S2g2. Apply S2g3's whole-row omission rule to stereo-bond constraint batch
+serialization, preserving raw construction/conversion and application/undo
+contracts. Do not add a separate bond-specific kind policy.
+
 **Checks:** shared S2 cases for configuration and stereo-bond constraint keys;
 include new and removed handles, per-entry geometry context, sequential
 configuration changes, failure after earlier batches, and retained site/ligand order.
+Cover mixed kinded/kindless and entirely kindless batches, exact omission without
+removal, retained order, raw Rust/Python payload preservation, and panic-free export.
 
 **S2 gate:** all eight entity kinds have the same applicable semantics, all
 workspace consumers compile and pass their relevant tests, and the new variants
 do not defeat the selected compact enum layouts. If a payload would widen an
 enum, settle its representation before proceeding; do not silently undo S1.
+Run the affected stereo/lattice/constraint-reading property suites explicitly,
+alongside the focused Rust and rebuilt Python suites. Both stereo entity kinds
+must obey the vacuity decision across normalization, readings, updates, lowering,
+and existing and batched DSL export; raw mutation remains infallible.
+The S2g1 time/allocation comparison against S0a must be recorded and reviewed,
+with any regression's cause and disposition stated before this gate closes.
 
 #### S2i — Edits DSL fuzz target
 
-**Modules:** umol-graph-ir fuzz. **Additive, green.** [dep: S2a–S2h]
+**Modules:** umol-graph-ir fuzz and scripts/run-fuzz.sh. **Additive, green.**
+[dep: S2a–S2h]
 
 Add `fuzz_edits` beside the existing targets: parsing arbitrary input as
-EditsDsl must not panic, and a parsed value converts to Edits without
-panicking. EditsDsl has one parser, the tree path behind from_edn_str, so there
-is no streaming parity to check. Register it in the fuzz Cargo.toml.
+EditsDsl must not panic, and a parsed value converts to Edits, renders back
+through EditsDsl, and reparses without panicking. Constructor-based kindless
+cases remain covered in S2g2/S2g3/S2h; parser fuzzing alone cannot supply those
+raw payloads. EditsDsl has one parser, the tree path behind from_edn_str, so there
+is no streaming parity to check. Register it in the fuzz Cargo.toml and the
+GRAPH_IR_TARGETS list in scripts/run-fuzz.sh before S2j removes fuzz_constraints.
 
 #### S2j — Remove fuzz_constraints
 
@@ -2629,8 +3170,10 @@ batch variants without post-construction packing or temporary per-entry journals
 Compare the production implementation with the recorded pre-change measurements
 and experimental candidates. Report boxing and batching effects separately where the
 reference permits: whole-operation time, allocation count/bytes, peak extra
-memory, and Edit/Undo counts/capacities. Include no-recovery and clone/install
-paths alongside journals, plus failures and structural edits that incur boxes.
+memory, and Edit/Undo counts/capacities. Measure the implemented complete-plan
+paths for individual resolvers and transformers. Compare no-recovery,
+clone/install, and journal paths for composite operations and prepared
+transactions, including failures and structural edits that incur boxes.
 Keep interpretation tied to decisions: a smaller outer journal is not the whole
 memory footprint, and unchanged resolution time must not be presented as a speedup.
 
@@ -2791,7 +3334,7 @@ constraint deltas, independent appends, unchanged source iterators, and payload
 independence. Re-run the Study 3 Deltas direct-copy comparison through Python
 dispatch. Document copy alongside construction and append.
 
-#### S6c — Move owned entity inverse results into Python forms
+#### S6c — Move owned inverse results into Python forms
 
 **Modules:** umol-py entity, delta, and affected conversion callers/tests.
 **Internal conversion signature changes, red→green within the subitem; Python
@@ -2808,19 +3351,25 @@ pub(crate) fn from_rust(py: Python<'_>, value: T::RustForm) -> PyResult<Self>;
 // AtomDelta shown; use the corresponding types for the other seven kinds.
 pub(crate) fn from_rust(py: Python<'_>, delta: GraphIrAtomDelta) -> PyResult<Self>;
 
+// Aggregate Delta: move entity payloads into the corresponding converters.
+pub(crate) fn from_rust(py: Python<'_>, delta: GraphIrDelta) -> PyResult<Self>;
+
 // Existing Python method remains unchanged.
 fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>>;
 ```
 
 Cover AtomDelta, BondDelta, DativeBondDelta, AromaticSystemDelta,
-MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, and StereoBondDelta.
+MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta, and
+aggregate Delta.
 Continue calling Rust inverse. Match its owned result by value and move Add/Remove
 forms into the existing read-only Python form representation; move owned atom,
 ligand, and site lists through their existing conversions as applicable.
 Do not borrow the owned inverse merely to clone its complete form again.
 
-Migrate genuinely borrowed producers, including indexing, iteration, and aggregate
-Delta conversion, to make their required clone explicit before this boundary.
+Aggregate Delta.inverse passes its owned Rust result through the outer converter,
+which dispatches entity payloads by value without an intervening clone.
+Migrate genuinely borrowed producers, including indexing and iteration, to make
+their required clone explicit before this boundary.
 Migrate all Readonly from_rust callers, including Edit conversion, in the same
 subitem. Their required independent copies stay in place; no supplied Python form
 is consumed. Keep existing field-change and constraint conversion semantics; this
@@ -2831,8 +3380,9 @@ Rust inverse. No normalization or integrity checks are introduced.
 variant; retained read-only form behavior; exact borrowed-entry conversions and
 independence after source/container mutation. Exercise both entity inverse and
 aggregate Delta inverse. Repeat the measured AtomDelta Add/Remove cases and add
-allocation comparisons for overlay forms with owned lists. Confirm removal of
-the second whole-form copy without claiming every nested allocation disappears.
+allocation comparisons for overlay forms with owned lists, covering both direct
+entity and aggregate inverse paths against S0a. Confirm removal of the second
+whole-form copy in both paths without claiming every nested allocation disappears.
 
 **S6 gate:** focused Rust/Python suites pass after rebuilding with the repository
 Python environment; the Python API guide records explicit copy semantics and
@@ -2942,9 +3492,9 @@ within each subitem; it does not repair a build left broken by S0.
 | Boundary | State before S10 | Change owned by S10 |
 | --- | --- | --- |
 | Composite resolve/resolve_with_report/project | Consume Molecule; use edit internally | Unchanged Rust signatures |
-| Composite _into methods | Existing signatures, one Journal transaction | Expose the approved selector and forward it through that transaction |
-| Individual resolvers | Consuming ordinary methods, journaled _into methods | No change in 181; see 236 |
-| Transformer | Consuming transform; transform_iter clones once; _into uses Journal | No change in 181; see 236 |
+| Composite _into methods | Existing signatures; one transaction across phases, using Journal after S0f | Expose the approved selector and forward it through that transaction |
+| Individual resolvers | Consuming ordinary methods; _into applies a complete plan in place without a transaction | No further ownership/recovery change in S10; implemented by 236 |
+| Transformer | Consuming transform; transform_iter clones once per result; transform_into applies a complete plan without a transaction | No further ownership/recovery change in S10; implemented by 236 |
 | Python resolve/resolve_with_report | Still take the molecule; Option and consumed checks remain | Clone the source and consume the clone; preserve source/views, enabling S11a to remove Option |
 
 Each S10 item includes its changed Rust/Python callers, tests, benchmark call
@@ -2964,25 +3514,33 @@ selected transaction for _into execution; no per-phase recovery scopes or
 additional source copy. Only Determined commits. Other outcomes preserve the
 receiver and diagnostics.
 
+Preserve the planner applicability and integrity assertions established by
+[236](236-operation-ownership-copy-costs-2026-10-09.md) S4c. Returned resolver
+errors remain planning errors; application, probe, and publication failures of
+internally produced plans are implementation defects. Externally supplied edits
+remain checked by the editor and transaction APIs, with failure coverage in S0.
+
 Update Python resolve/resolve_with_report to clone the source, consume the clone,
 and preserve the source's views. The two _into methods retain their receiver and invalidation contracts and
 expose the approved rollback selector. Keep ChemistryModel borrowing from S5 if
 already implemented; do not restore extraction copies.
 
 **Checks:** complete determined results, underdetermination, contradictions,
-execution failures, optional report equivalence, late projection failure,
+planning errors, optional report equivalence, late projection rejection,
 ingest/export fixtures, and unique/shared inputs. Count copies at call boundaries
 rather than inferring their number from API names.
 
 #### S10b — Dropped
 
 The individual resolvers keep their consuming ordinary methods. Their in-place
-_into methods are planned in [236](236-operation-ownership-copy-costs-2026-10-09.md) (S3b, S3e).
+_into methods already apply complete plans without transactions, implemented in
+[236](236-operation-ownership-copy-costs-2026-10-09.md) (S4f).
 
 #### S10c — Dropped
 
 transform keeps consuming and transform_iter keeps its per-result clone.
-transform_into's in-place application is planned in [236](236-operation-ownership-copy-costs-2026-10-09.md) (S3c, S3d).
+transform_into's in-place application without a transaction is implemented in
+[236](236-operation-ownership-copy-costs-2026-10-09.md) (S4d, S4e).
 
 ### S11 — Python molecule storage and guarantees
 
@@ -3006,7 +3564,9 @@ fn check_access(&self, expected: u64, accessor: &'static str) -> PyResult<()>;
 Keep from_rust taking an owned molecule. check_access checks counter equality,
 not consumed state. Migrate every binding caller in the same subitem, removing
 only fallibility caused by consumed Molecule. PyO3 borrow failures and actual
-operation errors remain. Keep ConsumedError for Edits and terminal editor finish.
+operation errors remain. Keep ConsumedError for Edits, terminal editor finish,
+and consumed RingViews. RingViews retains its optional storage and the
+InvalidatedViewError contract for dependent accessors after consumption.
 Keep all *Storage types and counter terminology; add no replacement lifecycle
 wrapper, weak-reference list, or cache.
 
@@ -3014,6 +3574,7 @@ wrapper, weak-reference list, or cache.
 views after copying, invalidation before whole-molecule mutation including rollback/
 no-op, extraction failure before execution, ordinary setter visibility, and
 existing invalid-access exceptions. Exercise nested views, not just entity roots.
+Retain RingViews consumption and dependent-accessor invalidation checks.
 
 #### S11b — Python guarantees and user-facing migration
 
@@ -3024,10 +3585,10 @@ and affected Rust data-type/nomenclature guides. **Documentation/tests, green.**
 Document source/result/receiver ownership for each changed operation, terminal
 editor finish, explicit Edits copy, rollback selection, and view invalidation.
 Remove consumed-Molecule examples and exception claims without deleting the
-remaining Edits/editor lifecycle guarantees. Justify Python defaults and copying
-against the selected Rust operations. Preserve current-state documentation rather
-than narrating the migration. Value-trait ownership and the general operation
-ownership rules are documented through [236](236-operation-ownership-copy-costs-2026-10-09.md)'s S5a.
+remaining Edits, editor, and RingViews lifecycle guarantees. Justify Python
+defaults and copying against the selected Rust operations. Preserve current-state
+documentation rather than narrating the migration. Value-trait ownership and the general operation
+ownership rules are documented through [236](236-operation-ownership-copy-costs-2026-10-09.md)'s S6a.
 
 ### S12 — Whole-operation comparison and final verification
 
@@ -3047,9 +3608,12 @@ comparison was insufficient. Most cases have no molecule-level constraints.
 Measure whole-operation time, allocation traffic, peak extra memory, Undo count/
 capacity/payload sizes, and separate correspondence storage. Count clone/installation,
 publication checks, rollback/discard, and result destruction consistently. Include
-actual Python calls. No-recovery is an overhead reference, not a recovery-equivalent
-competitor. Reaction application keeps its source/product contract; do not insert
-a recovery journal into product construction simply to create a comparison.
+actual Python calls. For composite operations and prepared transactions,
+no-recovery execution is an overhead reference rather than a recovery-equivalent
+competitor. Compare Clone/Journal only at those boundaries; individual resolvers
+and transformers use their implemented complete-plan paths. Reaction application
+keeps its source/product contract; do not insert a recovery journal into product
+construction simply to create a comparison.
 
 **Checks:** identical successful results and agreed recovery guarantees before
 interpreting timings. Record which workloads favor which selector without an
@@ -3083,9 +3647,11 @@ then start the Reaction ownership work already scheduled in 231.
 S0b → S0c2 and S0b → S0d; S0e → S0f → S0g;
 then S1a/S1b → S2a–S2h → S3a/S3b → S4a;
 independently, S5a → S5b, S6a/S6b/S6c, and S7a → S7b → S7c.
-S1a/S1b and S2a–S2g are independent within their stages; S2h follows S2g
-once their prerequisites are met, S2i follows S2a–S2h, and S2j follows S2i. S5 needs no boxing, batching, or molecule
+S1a/S1b and S2a–S2f are independent within their stages. The stereo sequence is
+S2g1 → S2g2 → S2g3 → S2h; S2g3 also requires the shared stereo-key syntax to be
+settled. S2g1/S2g2 can proceed independently of S2a–S2f. S2i follows S2a–S2h,
+and S2j follows S2i. S5 needs no boxing, batching, or molecule
 lifecycle change and is not deferred. S0 assigns lifecycle/recovery; S10–S12
 assign operation, Python, and final-measurement work. S8/S9 material has moved
 to S0; later labels are retained. Their dependencies are listed per item. The
-migration interface review has no open interface points.
+migration interface review retains the unresolved shared stereo-key syntax.

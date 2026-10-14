@@ -1523,7 +1523,8 @@ impl Molecule {
     /// Success establishes the same integrity contract as construction. Failure drops the input
     /// and any applied changes. No molecule copy or undo journal is created for recovery.
     pub fn apply(self, edits: Edits) -> Result<Self, MoleculeApplyError> {
-        let editor = self.edit().apply(edits)?;
+        let mut editor = self.edit();
+        editor.apply(edits)?;
         Ok(editor.finish()?)
     }
 
@@ -1541,7 +1542,8 @@ impl Molecule {
         self,
         edits: Edits,
     ) -> Result<(Self, MoleculeCorrespondence), MoleculeApplyError> {
-        let (editor, correspondence) = self.edit().tracked_apply(edits)?;
+        let mut editor = self.edit();
+        let correspondence = editor.tracked_apply(edits)?;
         Ok((editor.finish()?, correspondence))
     }
 

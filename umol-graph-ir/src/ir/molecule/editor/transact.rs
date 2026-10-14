@@ -11,45 +11,46 @@ use crate::ir::molecule::apply::ApplicationState;
 impl MoleculeEditor {
     /// Apply an ordered [`Edits`] batch without constructing an undo journal.
     ///
-    /// The editor is consumed so that a failed batch cannot expose partially applied state. On
-    /// success, the returned editor remains transient. MoleculeEditor::probe and
+    /// The editor remains transient after application, including on failure. MoleculeEditor::probe and
     /// MoleculeEditor::finish check molecule integrity before publishing access or ownership.
     ///
     /// # Errors
     ///
     /// Returns MoleculeApplyError::Transaction when an edit handle, precondition, or shape is
-    /// invalid for the evolving editor state. No editor is returned on failure, including any
-    /// earlier direct or batch changes.
+    /// invalid for the evolving editor state. Earlier completed edits remain applied; later edits
+    /// are not attempted. The editor remains available for inspection and further changes.
     ///
     /// # Semantic properties
     ///
     /// Applying the same batch with or without undo recording produces the same molecule on
-    /// successful publication. On failure, no intermediate editor state is returned.
-    pub fn apply(mut self, edits: Edits) -> Result<Self, MoleculeApplyError> {
+    /// successful publication. Each call starts a fresh handle namespace at its current state.
+    /// Failure retains the completed prefix without rollback.
+    pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
         let mut state = ApplicationState::new(&self.molecule);
         for edit in edits {
             self.molecule.apply_edit(edit, &mut state)?;
         }
-        Ok(self)
+        Ok(())
     }
 
-    /// Consume the editor and apply a batch, returning the resulting editor and batch correspondence.
+    /// Apply a batch and return its input-to-result correspondence.
     ///
     /// The witness starts at this batch's input, not the editor's session origin. The resulting
     /// editor remains transient; publication performs the integrity check.
     ///
     /// # Errors
     ///
-    /// Returns the same transaction error as [`Self::apply`], consuming the editor on failure.
+    /// Returns the same transaction error as [`Self::apply`], retaining the completed prefix
+    /// without returning a correspondence.
     ///
     /// # Semantic properties
     ///
-    /// Discarding the witness gives the same editor as the plain operation. Earlier direct changes
+    /// Discarding the witness gives the same editor state as the plain operation. Earlier direct changes
     /// and batches are outside this correspondence; its source is the state at this call.
     pub fn tracked_apply(
-        mut self,
+        &mut self,
         edits: Edits,
-    ) -> Result<(Self, MoleculeCorrespondence), MoleculeApplyError> {
+    ) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
         let mut correspondence = MoleculeCorrespondence::new(
             Correspondence::identity(self.atom_count()),
             Correspondence::identity(self.bond_count()),
@@ -65,7 +66,7 @@ impl MoleculeEditor {
             self.molecule.apply_edit(edit, &mut state)?;
         }
         state.update_correspondence(&mut correspondence);
-        Ok((self, correspondence))
+        Ok(correspondence)
     }
 }
 
@@ -137,10 +138,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_apply(empty: MoleculeEditor) {
+    fn test_molecule_editor_apply(mut empty: MoleculeEditor) {
         let mut edits = Edits::new();
         edits.add_atom(AtomForm::from_element(Element::C));
-        let empty = empty.apply(edits).unwrap();
+        empty.apply(edits).unwrap();
         assert_eq!(empty.atom_count(), 1);
         assert_eq!(
             empty.atom(AtomId(0)).attributes().element,
@@ -157,13 +158,13 @@ mod tests {
         let oxygen = first.add_atom(AtomForm::from_element(Element::O));
         first.add_bond(AtomHandle::Id(AtomId(0)), oxygen, BondForm::from_order(1));
 
-        let mut editor = editor.apply(first).unwrap();
+        editor.apply(first).unwrap();
         editor.bond_mut(BondId(0)).attributes_mut().order = NumForm::Lit(2);
         let mut second = Edits::new();
         let fluorine = second.add_atom(AtomForm::from_element(Element::F));
         second.add_bond(AtomHandle::Id(AtomId(1)), fluorine, BondForm::from_order(1));
 
-        let editor = editor.apply(second).unwrap();
+        editor.apply(second).unwrap();
         assert_eq!(
             editor.finish(),
             Ok(mol_dsl!(
@@ -173,19 +174,24 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_apply_replace_dative_bond_acceptor(batched_overlays: MoleculeEditor) {
-        let editor = batched_overlays
+    fn test_molecule_editor_apply_replace_dative_bond_acceptor(
+        mut batched_overlays: MoleculeEditor,
+    ) {
+        batched_overlays
             .apply(Edits::from_iter([Edit::ReplaceDativeBondAcceptor {
                 id: DativeBondHandle::Id(DativeBondId(0)),
                 old: AtomHandle::Id(AtomId(1)),
                 new: AtomHandle::Id(AtomId(3)),
             }]))
             .unwrap();
-        assert_eq!(editor.dative_bond(DativeBondId(0)).acceptor_id(), AtomId(3));
+        assert_eq!(
+            batched_overlays.dative_bond(DativeBondId(0)).acceptor_id(),
+            AtomId(3)
+        );
     }
 
     #[rstest]
-    fn test_molecule_editor_apply_error(empty: MoleculeEditor) {
+    fn test_molecule_editor_apply_error(mut empty: MoleculeEditor) {
         let mut edits = Edits::new();
         edits.remove_atom(AtomHandle::Id(AtomId(0)));
         let error = match empty.apply(edits) {
@@ -205,22 +211,20 @@ mod tests {
     #[rstest]
     #[case::plain(false)]
     #[case::tracked(true)]
-    fn test_molecule_editor_apply_destructive_error(
-        mut empty: MoleculeEditor,
-        #[case] tracked: bool,
-    ) {
+    fn test_molecule_editor_apply_partial(mut empty: MoleculeEditor, #[case] tracked: bool) {
         empty.add_atom(AtomForm::from_element(Element::C));
         let mut first = Edits::new();
         first.add_atom(AtomForm::from_element(Element::N));
-        let editor = empty.apply(first).unwrap();
+        empty.apply(first).unwrap();
         let mut second = Edits::new();
         second.add_atom(AtomForm::from_element(Element::O));
         second.remove_atom(AtomHandle::Id(AtomId(7)));
+        second.add_atom(AtomForm::from_element(Element::Cl));
 
         let error = if tracked {
-            editor.tracked_apply(second).err().unwrap()
+            empty.tracked_apply(second).unwrap_err()
         } else {
-            editor.apply(second).err().unwrap()
+            empty.apply(second).unwrap_err()
         };
 
         assert_eq!(
@@ -230,6 +234,18 @@ mod tests {
                 index: 7,
                 count: 2,
             })
+        );
+        assert_eq!(empty.probe(), Ok(&mol_dsl!(r#"{:atoms ["C" "N" "O"]}"#)));
+        empty.atom_mut(AtomId(2)).attributes_mut().charge = NumForm::Lit(1);
+        let mut third = Edits::new();
+        let fluorine = third.add_atom(AtomForm::from_element(Element::F));
+        third.add_bond(AtomHandle::Id(AtomId(2)), fluorine, BondForm::from_order(1));
+        empty.apply(third).unwrap();
+        assert_eq!(
+            empty.finish(),
+            Ok(mol_dsl!(
+                r#"{:atoms ["C" "N" "O#c1" "F"] :bonds [[2 3 "1"]]}"#
+            ))
         );
     }
 }

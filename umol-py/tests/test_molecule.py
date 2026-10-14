@@ -1479,10 +1479,10 @@ def test_molecule_apply_consumed_edits(method, editor):
 
     with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
         getattr(receiver, method)(edits)
-    with pytest.raises(ConsumedError, match="has been consumed$"):
-        if editor:
-            receiver.finish()
-        else:
+    if editor:
+        assert receiver.finish() == Molecule.parse('{:atoms ["C"]}')
+    else:
+        with pytest.raises(ConsumedError, match="has been consumed$"):
             receiver.copy()
 
 

@@ -256,7 +256,7 @@ impl<'a> Resolver<'a> {
             Solution::Contradictory(contradiction) => match contradiction {},
         };
         let mut editor = molecule.edit();
-        editor = editor
+        editor
             .apply(isotope_edits)
             .expect("isotope resolve plan applies to its input");
         let isotopic = editor
@@ -301,7 +301,7 @@ impl<'a> Resolver<'a> {
         }
 
         let edits = self.plan_constitution(isotopic, &state);
-        editor = editor
+        editor
             .apply(edits)
             .expect("constitution plan applies to its input");
         let working = editor
@@ -325,10 +325,10 @@ impl<'a> Resolver<'a> {
         // Plan stereo and bond defaults from the same post-constitution molecule.
         let bond_edits = self.bonds.plan_resolve(working);
         let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
-        editor = editor
+        editor
             .apply(edits)
             .expect("stereo resolve plan applies to its input");
-        editor = editor
+        editor
             .apply(bond_edits)
             .expect("bond resolve plan applies to its input");
 
@@ -342,7 +342,7 @@ impl<'a> Resolver<'a> {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        editor = editor
+        editor
             .apply(edits)
             .expect("multicenter-bond resolve plan applies to its input");
 
@@ -378,7 +378,7 @@ impl<'a> Resolver<'a> {
             Solution::Contradictory(contradiction) => match contradiction {},
         };
         let mut editor = molecule.edit();
-        editor = editor
+        editor
             .apply(isotope_edits)
             .expect("isotope resolve plan applies to its input");
         let isotopic = editor
@@ -425,7 +425,7 @@ impl<'a> Resolver<'a> {
         }
 
         let edits = self.plan_constitution(isotopic, &state);
-        editor = editor
+        editor
             .apply(edits)
             .expect("constitution plan applies to its input");
         let working = editor
@@ -452,10 +452,10 @@ impl<'a> Resolver<'a> {
         // Plan stereo and bond defaults from the same post-constitution molecule.
         let bond_edits = self.bonds.plan_resolve(working);
         let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
-        editor = editor
+        editor
             .apply(edits)
             .expect("stereo resolve plan applies to its input");
-        editor = editor
+        editor
             .apply(bond_edits)
             .expect("bond resolve plan applies to its input");
 
@@ -472,7 +472,7 @@ impl<'a> Resolver<'a> {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        editor = editor
+        editor
             .apply(edits)
             .expect("multicenter-bond resolve plan applies to its input");
 
@@ -842,7 +842,7 @@ impl<'a> Resolver<'a> {
                         .expect("resolver phase plans preserve molecule integrity"),
                 )?,
             };
-            editor = editor
+            editor
                 .apply(edits)
                 .expect("stereo project plan applies to its input");
         }
@@ -855,7 +855,7 @@ impl<'a> Resolver<'a> {
                         .expect("resolver phase plans preserve molecule integrity"),
                 )?,
             };
-            editor = editor
+            editor
                 .apply(edits)
                 .expect("aromaticity project plan applies to its input");
         }
@@ -869,7 +869,7 @@ impl<'a> Resolver<'a> {
                         .expect("resolver phase plans preserve molecule integrity"),
                 )?,
             };
-            editor = editor
+            editor
                 .apply(edits)
                 .expect("isotope project plan applies to its input");
         }
@@ -2605,8 +2605,10 @@ mod tests {
             ..ResolveState::default()
         };
         let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        let mut editor = molecule.edit();
+        editor.apply(edits).unwrap();
         assert_eq!(
-            molecule.edit().apply(edits).unwrap().finish().unwrap(),
+            editor.finish().unwrap(),
             mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!#T*" "C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
         );
     }

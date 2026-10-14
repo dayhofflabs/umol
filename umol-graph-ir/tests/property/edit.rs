@@ -1,8 +1,9 @@
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, Molecule, MoleculeApplyError,
-    MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId, Transaction,
+    AromaticSystemId, AtomHandle, AtomId, BondId, DativeBondId, EntityKind, Molecule,
+    MoleculeApplyError, MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
+    Transaction, TransactionError,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -510,7 +511,8 @@ proptest! {
             });
         }
 
-        let editor = base.edit().apply(edits).unwrap();
+        let mut editor = base.edit();
+        editor.apply(edits).unwrap();
 
         if kinds.contains(&EntityKind::Atom) {
             prop_assert_eq!(&editor.atom(AtomId(4)).attributes().charge, &NumForm::Lit(1));
@@ -679,7 +681,8 @@ proptest! {
         case in constraint_compaction_case_strategy(),
     ) {
         let base = case.base();
-        let editor = base.clone().edit().apply(case.edits()).unwrap();
+        let mut editor = base.clone().edit();
+        editor.apply(case.edits()).unwrap();
         let constraints = editor.constraints().iter().cloned().collect::<Vec<_>>();
         prop_assert_eq!(constraints.as_slice(), case.expected());
 
@@ -804,8 +807,35 @@ proptest! {
     fn test_molecule_editor_apply((base, edits) in transaction_edits_strategy()) {
         let mut checked = base.clone();
         checked.transact([edits.clone()]).unwrap();
-        let applied = base.edit().apply(edits).unwrap();
+        let mut applied = base.edit();
+        applied.apply(edits).unwrap();
         prop_assert_eq!(applied.finish().unwrap(), checked);
+    }
+
+    /// A rejected edit leaves the same completed prefix as successful transaction execution.
+    /// A later batch can still be applied and published from that state.
+    #[test]
+    fn test_molecule_editor_apply_partial((base, mut edits) in transaction_edits_strategy()) {
+        let mut expected = base.clone();
+        expected.transact([edits.clone()]).unwrap();
+        let count = base.atoms().count();
+        edits.remove_atom(AtomHandle::Id(AtomId(count as u32)));
+        for tracked in [false, true] {
+            let mut editor = base.clone().edit();
+            let error = if tracked {
+                editor.tracked_apply(edits.clone()).unwrap_err()
+            } else {
+                editor.apply(edits.clone()).unwrap_err()
+            };
+            prop_assert_eq!(error, MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange {
+                kind: EntityKind::Atom,
+                index: count,
+                count,
+            }));
+            prop_assert_eq!(editor.probe().unwrap(), &expected);
+            editor.apply(Edits::new()).unwrap();
+            prop_assert_eq!(editor.finish().unwrap(), expected.clone());
+        }
     }
 
     /// A transaction spanning consecutive batches has the composed batch correspondence and the
@@ -817,7 +847,8 @@ proptest! {
         let mut separate = base.clone();
         let first = separate.tracked_transact([first_edits.clone()]).unwrap();
         let first_result = separate.clone();
-        let (applied, applied_witness) = separate.clone().edit().tracked_apply(second_edits.clone()).unwrap();
+        let mut applied = separate.clone().edit();
+        let applied_witness = applied.tracked_apply(second_edits.clone()).unwrap();
         let second = separate.tracked_transact([second_edits.clone()]).unwrap();
         prop_assert_eq!(applied_witness, second.clone());
         prop_assert_eq!(applied.finish().unwrap(), separate.clone());

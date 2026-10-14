@@ -107,10 +107,11 @@ impl IsotopeResolver {
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => match contradiction {},
         };
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("isotope resolve plan applies to its input")
+            .expect("isotope resolve plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("isotope resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
@@ -150,10 +151,11 @@ impl IsotopeResolver {
         molecule: Molecule,
     ) -> Result<Solution<Molecule, IsotopeContradiction, ()>, IsotopeProjectError> {
         let edits = self.plan_project(&molecule)?;
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("isotope project plan applies to its input")
+            .expect("isotope project plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("isotope project plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
@@ -318,7 +320,7 @@ mod tests {
         molecule.atom_mut(AtomId(1)).attributes_mut().isotope_mass = IsotopeMassForm::Lit(18);
         let expected = molecule.clone();
         assert_eq!(
-            molecule.clone().edit().apply(edits.clone()).map(|_| ()),
+            molecule.clone().edit().apply(edits.clone()),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

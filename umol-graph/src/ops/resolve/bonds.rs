@@ -62,10 +62,11 @@ impl BondsResolver {
         molecule: Molecule,
     ) -> Result<Solution<Molecule, BondsContradiction, ()>, BondsError> {
         let edits = self.plan_resolve(&molecule);
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("bond resolve plan applies to its input")
+            .expect("bond resolve plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("bond resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
@@ -168,7 +169,7 @@ mod tests {
         molecule.bond_mut(BondId(1)).attributes_mut().charge = NumForm::Lit(9);
         let expected = molecule.clone();
         assert_eq!(
-            molecule.clone().edit().apply(edits.clone()).map(|_| ()),
+            molecule.clone().edit().apply(edits.clone()),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

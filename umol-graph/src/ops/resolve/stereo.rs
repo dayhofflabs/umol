@@ -325,10 +325,11 @@ impl StereoResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("stereo resolve plan applies to its input")
+            .expect("stereo resolve plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("stereo resolve plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))
@@ -374,10 +375,11 @@ impl StereoResolver {
         molecule: Molecule,
     ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoProjectError> {
         let edits = self.plan_project(&molecule)?;
-        let molecule = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
-            .expect("stereo project plan applies to its input")
+            .expect("stereo project plan applies to its input");
+        let molecule = editor
             .finish()
             .expect("stereo project plan preserves molecule integrity");
         Ok(Solution::Determined(molecule))

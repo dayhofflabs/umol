@@ -121,8 +121,8 @@ impl Transformer for DelocalizeCharge {
 
     fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error> {
         let edits = self.plan_transform(&molecule);
-        let editor = molecule
-            .edit()
+        let mut editor = molecule.edit();
+        editor
             .apply(edits)
             .expect("charge delocalization plan applies to its input");
         Ok(editor

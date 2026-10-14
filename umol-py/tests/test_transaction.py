@@ -183,12 +183,15 @@ def test_molecule_editor_consumed(method):
     editor = molecule.edit()
     alias = editor
     if method in ("apply", "tracked_apply"):
-        result = getattr(editor, method)(Edits())
-        if method == "tracked_apply":
-            result = result[0]
-        assert result.finish() == expected
-    else:
-        assert editor.finish() == expected
+        edits = Edits()
+        result = getattr(editor, method)(edits)
+        if method == "apply":
+            assert result is None
+        else:
+            assert result.atoms == Correspondence([(0, 0)], 1, 1)
+        with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+            len(edits)
+    assert editor.finish() == expected
 
     with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$") as error:
         alias.finish()
@@ -198,11 +201,48 @@ def test_molecule_editor_consumed(method):
 def test_molecule_editor_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
     copied = molecule.copy()
-    plain = molecule.edit().apply(add_carbon_edits())
-    tracked, correspondence = copied.edit().tracked_apply(add_carbon_edits())
+    plain = molecule.edit()
+    tracked = copied.edit()
+    assert plain.apply(add_carbon_edits()) is None
+    correspondence = tracked.tracked_apply(add_carbon_edits())
 
     assert tracked.finish() == plain.finish()
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_editor_apply_partial(method):
+    editor = Molecule.parse('{:atoms ["C"]}').edit()
+    editor.apply(Edits([Edit.AddAtoms(atoms=[AtomForm.parse("N")])]))
+    edits = Edits([
+        Edit.AddAtoms(atoms=[AtomForm.parse("O")]),
+        Edit.RemoveTopology(atoms=[7], bonds=[]),
+        Edit.AddAtoms(atoms=[AtomForm.parse("Cl")]),
+    ])
+
+    with pytest.raises(TransactionError, match="^atom handle 7 is out of range for 2 entries$"):
+        getattr(editor, method)(edits)
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        len(edits)
+
+    editor.remove_topology([1], [])
+    next_edits = Edits()
+    fluorine = next_edits.add_atom(AtomForm.parse("F"))
+    next_edits.add_bond(1, fluorine, BondForm(1))
+    editor.apply(next_edits)
+    assert editor.finish() == Molecule.parse('{:atoms ["C" "O" "F"] :bonds [[1 2 "1"]]}')
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_editor_apply_consumed(method):
+    editor = Molecule().edit()
+    editor.finish()
+    edits = add_carbon_edits()
+    expected = list(edits)
+
+    with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$"):
+        getattr(editor, method)(edits)
+    assert list(edits) == expected
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
