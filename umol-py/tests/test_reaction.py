@@ -18,6 +18,7 @@ from umol import (
     Correspondence,
     ContradictionError,
     ConsumedError,
+    Edits,
     Delta,
     Deltas,
     Element,
@@ -318,14 +319,34 @@ def test_reaction_components():
     )
 
 
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_reaction_lhs_edit(method):
+    reaction = Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
+    lhs = reaction.lhs
+    view = lhs.atoms[0]
+    if method == "edit":
+        product = lhs.edit().finish()
+    else:
+        result = getattr(lhs, method)(Edits())
+        product = result[0] if method == "tracked_apply" else result
+
+    assert product == lhs
+    product.atoms[0].charge = 1
+    assert reaction.lhs is lhs
+    assert reaction == Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
+    assert view.id == 0
+    view.charge = -1
+    assert reaction.lhs == Molecule.parse('{:atoms ["C#c-1"]}')
+    assert product == Molecule.parse('{:atoms ["C#c1"]}')
+
+
 def test_reaction_lhs_consumption():
     reaction = Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
     lhs = reaction.lhs
     expected = lhs.copy()
-    molecule = lhs.edit().finish()
+    lhs.resolve()
 
     assert reaction.lhs is lhs
-    assert molecule == expected
     for access in (
         lambda: repr(reaction),
         lambda: reaction.render(),
@@ -336,7 +357,7 @@ def test_reaction_lhs_consumption():
         with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
             access()
 
-    reaction.lhs = molecule
+    reaction.lhs = expected
     assert reaction == Reaction(lhs=expected)
 
 

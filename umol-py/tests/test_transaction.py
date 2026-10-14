@@ -172,8 +172,7 @@ def test_molecule_editor_finish():
     editor = molecule.edit()
 
     assert editor.finish() == expected
-    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-        str(molecule)
+    assert molecule == expected
 
 
 @pytest.mark.parametrize("method", ["finish", "apply", "tracked_apply"])
@@ -200,14 +199,14 @@ def test_molecule_editor_consumed(method):
 
 def test_molecule_editor_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
-    copied = molecule.copy()
     plain = molecule.edit()
-    tracked = copied.edit()
+    tracked = molecule.edit()
     assert plain.apply(add_carbon_edits()) is None
     correspondence = tracked.tracked_apply(add_carbon_edits())
 
     assert tracked.finish() == plain.finish()
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
+    assert molecule == Molecule.parse('{:atoms ["N#h3"]}')
 
 
 @pytest.mark.parametrize("method", ["apply", "tracked_apply"])

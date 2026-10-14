@@ -6,6 +6,7 @@ from umol import (
     Constraint,
     ConstraintDelta,
     ConstraintEdit,
+    Edits,
     Element,
     InvalidatedViewError,
     NumForm,
@@ -139,7 +140,7 @@ def test_constraints_view_index_error(index):
         molecule.constraints[index]
 
 
-@pytest.mark.parametrize("operation", ["combine_from", "edit"])
+@pytest.mark.parametrize("operation", ["combine_from", "transact"])
 def test_constraints_view_invalidation(operation):
     first = Constraint.And([Constraint.Not(Constraint.Or([]))])
     molecule = Molecule.from_entries([], constraints=[first])
@@ -150,8 +151,8 @@ def test_constraints_view_invalidation(operation):
     child = children[0]._0
     copied = entry.copy()
     delta = ConstraintDelta.Add(constraint=entry)
-    if operation == "edit":
-        molecule = molecule.edit().finish()
+    if operation == "transact":
+        molecule.transact([])
     else:
         molecule.combine_from(Molecule())
 
@@ -172,6 +173,32 @@ def test_constraints_view_invalidation(operation):
 
     assert copied == first
     assert list(molecule.constraints) == [first]
+
+
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_constraints_view_edit(method):
+    first = Constraint.And([Constraint.Not(Constraint.Or([]))])
+    molecule = Molecule.from_entries([], constraints=[first])
+    collection = molecule.constraints
+    iterator = iter(collection)
+    entry = next(iterator)
+    children = entry._0
+    child = children[0]._0
+    delta = ConstraintDelta.Add(constraint=entry)
+    if method == "edit":
+        product = molecule.edit().finish()
+    else:
+        result = getattr(molecule, method)(Edits())
+        product = result[0] if method == "tracked_apply" else result
+
+    assert product == molecule
+    assert list(collection) == [first]
+    assert next(iterator, None) is None
+    assert entry == entry.copy() == first
+    assert list(children) == [Constraint.Not(Constraint.Or([]))]
+    assert child == Constraint.Or([])
+    assert ConstraintEdit(entry) == ConstraintEdit(first)
+    assert delta.inverse() == ConstraintDelta.Remove(constraint=first)
 
 
 def test_constraints_view_attribute_mutation():

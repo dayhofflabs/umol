@@ -321,32 +321,34 @@ impl Molecule {
         Ok(Self::from_rust(self.to_rust()?.clone()))
     }
 
-    /// Consume this molecule and move its contents into an editor.
-    fn edit(&mut self) -> PyResult<MoleculeEditor> {
-        Ok(MoleculeEditor::from_rust(self.take()?.edit()))
+    /// Copy this molecule into an independent editor, preserving the source and its views.
+    fn edit(&self) -> PyResult<MoleculeEditor> {
+        Ok(MoleculeEditor::from_rust(self.to_rust()?.clone().edit()))
     }
 
-    /// Consume this molecule and the edit batch, returning the changed molecule.
+    /// Consume the edit batch and return a changed copy of this molecule.
     ///
     /// Raises `TransactionError` when the edits cannot be applied and `InvalidStructureError` when
     /// the modified draft cannot be published as a molecule.
-    /// The molecule is consumed before the batch contents are transferred. Failure leaves it
-    /// consumed, including when the batch was already consumed.
-    fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
-        self.take()?
+    /// The source and its views remain unchanged on success or failure. A transferred batch stays
+    /// consumed even if application or publication fails.
+    fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
+        self.to_rust()?
+            .clone()
             .apply(edits.try_borrow_mut(py)?.take()?)
             .map(Self::from_rust)
             .map_err(molecule_apply_error)
     }
 
-    /// Consume this molecule and the batch as in apply, also returning the source-to-result
+    /// Apply the batch to a copy as in apply, also returning the source-to-result
     /// correspondence.
     fn tracked_apply(
-        &mut self,
+        &self,
         py: Python<'_>,
         edits: Py<Edits>,
     ) -> PyResult<(Self, MoleculeCorrespondence)> {
-        self.take()?
+        self.to_rust()?
+            .clone()
             .tracked_apply(edits.try_borrow_mut(py)?.take()?)
             .map(|(molecule, correspondence)| {
                 (
@@ -1296,8 +1298,9 @@ mod tests {
     fn test_molecule_edit() {
         Python::attach(|py| {
             let expected = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
-            let editor =
-                Py::new(py, Molecule::from_rust(expected.clone()).edit().unwrap()).unwrap();
+            let mut molecule = Molecule::from_rust(expected.clone());
+            molecule.advance_counter().unwrap();
+            let editor = Py::new(py, molecule.edit().unwrap()).unwrap();
             let published = editor
                 .bind(py)
                 .call_method0("finish")
@@ -1306,11 +1309,15 @@ mod tests {
                 .unwrap();
 
             assert_eq!(published.bind(py).borrow().to_rust().unwrap(), &expected);
+            assert_eq!(molecule.to_rust().unwrap(), &expected);
+            assert_eq!(molecule.view_counter().unwrap(), 1);
         });
     }
 
     #[rstest]
-    fn test_molecule_apply() {
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply(#[case] tracked: bool) {
         let initial = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.update_atom(
@@ -1328,28 +1335,34 @@ mod tests {
             methyl,
             GraphIrBondForm::from_order(1),
         );
-        let mut molecule = Molecule::from_rust(initial);
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter().unwrap();
 
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
 
-            let result = molecule.apply(py, edits).unwrap();
+            let result = if tracked {
+                molecule.tracked_apply(py, edits).unwrap().0
+            } else {
+                molecule.apply(py, edits).unwrap()
+            };
 
             assert_eq!(
                 result.to_rust().unwrap(),
                 &mol_dsl!(r#"{:atoms ["N#h2" "C#h3"] :bonds [[0 1 "1"]]}"#)
             );
-            assert!(molecule
-                .to_rust()
-                .unwrap_err()
-                .is_instance_of::<ConsumedError>(py));
+            assert_eq!(molecule.to_rust().unwrap(), &initial);
+            assert_eq!(molecule.view_counter().unwrap(), 1);
         });
     }
 
     #[rstest]
-    fn test_molecule_apply_error() {
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply_error(#[case] tracked: bool) {
         let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
-        let mut molecule = Molecule::from_rust(initial);
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter().unwrap();
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         rust_edits.push(GraphIrEdit::ModifyAtomField {
@@ -1363,24 +1376,29 @@ mod tests {
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
 
-            let error = molecule.apply(py, edits).unwrap_err();
+            let error = if tracked {
+                molecule.tracked_apply(py, edits).unwrap_err()
+            } else {
+                molecule.apply(py, edits).unwrap_err()
+            };
 
             assert!(error.is_instance_of::<TransactionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "atom handle 7 is out of range for 1 entries"
             );
-            assert!(molecule
-                .to_rust()
-                .unwrap_err()
-                .is_instance_of::<ConsumedError>(py));
+            assert_eq!(molecule.to_rust().unwrap(), &initial);
+            assert_eq!(molecule.view_counter().unwrap(), 1);
         });
     }
 
     #[rstest]
-    fn test_molecule_apply_publication_error() {
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply_publication_error(#[case] tracked: bool) {
         let initial = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-        let mut molecule = Molecule::from_rust(initial);
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter().unwrap();
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.add_bond(
             GraphIrAtomHandle::Id(GraphIrAtomId(0)),
@@ -1391,17 +1409,45 @@ mod tests {
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
 
-            let error = molecule.apply(py, edits).unwrap_err();
+            let error = if tracked {
+                molecule.tracked_apply(py, edits).unwrap_err()
+            } else {
+                molecule.apply(py, edits).unwrap_err()
+            };
 
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
-            assert!(molecule
-                .to_rust()
-                .unwrap_err()
-                .is_instance_of::<ConsumedError>(py));
+            assert_eq!(molecule.to_rust().unwrap(), &initial);
+            assert_eq!(molecule.view_counter().unwrap(), 1);
+        });
+    }
+
+    #[rstest]
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply_borrowed_edits(#[case] tracked: bool) {
+        Python::attach(|py| {
+            let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+            let mut molecule = Molecule::from_rust(initial.clone());
+            molecule.advance_counter().unwrap();
+            let edits = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let borrowed = edits.borrow(py);
+            let error = if tracked {
+                molecule.tracked_apply(py, edits.clone_ref(py)).unwrap_err()
+            } else {
+                molecule.apply(py, edits.clone_ref(py)).unwrap_err()
+            };
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(borrowed.to_rust().unwrap(), &GraphIrEdits::new());
+            assert_eq!(molecule.to_rust().unwrap(), &initial);
+            assert_eq!(molecule.view_counter().unwrap(), 1);
         });
     }
 

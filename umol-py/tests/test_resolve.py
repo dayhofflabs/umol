@@ -13,6 +13,7 @@ from umol import (
     ChemistryModel,
     ElementScope,
     ConsumedError,
+    Edits,
     InvalidatedViewError,
     NumForm,
     IsotopePolicy,
@@ -669,12 +670,14 @@ def test_molecule_resolve_isotope(method, consuming, with_report, isotope):
         assert isinstance(result, Solution.Determined)
         if consuming:
             assert result.molecule == expected
-            assert result.molecule.copy().edit().finish() == expected
+            assert result.molecule.edit().finish() == expected
+            assert result.molecule == expected
         else:
             assert result == Solution.Determined()
             assert result.molecule is None
             assert alias == expected
-            assert source.copy().edit().finish() == expected
+            assert source.edit().finish() == expected
+            assert source == expected
     if consuming:
         with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
             repr(alias)
@@ -829,10 +832,9 @@ def test_molecule_resolve_arguments(method, argument):
 )
 def test_molecule_resolve_consumed(method):
     source = Molecule.from_smiles("C")
-    editor = source.edit()
+    source.resolve()
     with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
         getattr(source, method)()
-    assert editor.finish() == Molecule.from_smiles("C")
 
 
 @pytest.mark.parametrize(
@@ -847,7 +849,8 @@ def test_solution_repr(solution, expected):
     assert not hasattr(solution, "report")
 
 
-def test_solution_molecule():
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_solution_molecule(method):
     source = Molecule.from_smiles("C")
     original = source.copy()
     result = source.resolve()
@@ -866,14 +869,20 @@ def test_solution_molecule():
     assert independent != result
     assert independent.molecule == original
 
-    published = molecule.edit().finish()
+    view = molecule.atoms[0]
+    if method == "edit":
+        published = molecule.edit().finish()
+    else:
+        applied = getattr(molecule, method)(Edits())
+        published = applied[0] if method == "tracked_apply" else applied
     assert published.atoms[0].charge == NumForm.Lit(1)
     assert result.molecule is molecule
-    for access in (
-        lambda: molecule.atoms, lambda: same.molecule.atoms,
-        lambda: repr(result), lambda: result == independent,
-        lambda: independent == result,
-    ):
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            access()
+    assert same == result
+    assert result != independent
+    assert independent != result
+    assert repr(result) == "Solution.Determined(molecule=Molecule(atoms=1, bonds=0))"
+    published.atoms[0].charge = -1
+    assert view.charge == NumForm.Lit(1)
+    assert same.molecule.atoms[0].charge == NumForm.Lit(1)
+    assert published.atoms[0].charge == NumForm.Lit(-1)
     assert copied == original

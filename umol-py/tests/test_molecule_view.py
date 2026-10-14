@@ -78,7 +78,6 @@ def entity(request):
 
 @pytest.mark.parametrize("operation", [
     "combine_empty", "combine_nonempty", "transact", "tracked_transact",
-    "edit", "apply", "tracked_apply", "apply_error",
 ])
 def test_molecule_view_invalidation(molecule, entity, operation):
     name, field, form = entity
@@ -95,14 +94,6 @@ def test_molecule_view_invalidation(molecule, entity, operation):
 
     if operation.startswith("combine"):
         molecule.combine_from(molecule if operation == "combine_nonempty" else Molecule())
-    elif operation == "edit":
-        molecule = molecule.edit().finish()
-    elif operation in ("apply", "tracked_apply"):
-        result = getattr(molecule, operation)(Edits())
-        molecule = result[0] if operation == "tracked_apply" else result
-    elif operation == "apply_error":
-        with pytest.raises(TransactionError, match="^atom handle 8 is out of range for 5 entries$"):
-            molecule.apply(Edits([Edit.RemoveTopology(atoms=[8], bonds=[])]))
     else:
         getattr(molecule, operation)([Edits()])
 
@@ -138,15 +129,50 @@ def test_molecule_view_invalidation(molecule, entity, operation):
             constraints.asdict()
 
     assert copied == saved[field]
-    if operation == "apply_error":
-        return
-
     fresh = getattr(molecule, name)
     assert len(fresh) == count * (2 if operation == "combine_nonempty" else 1)
     assert fresh[0].id == 0
     assert fresh[0].asdict() == saved
     assert copied == saved[field]
     assert next(iter(fresh)).id == 0
+
+
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply", "apply_error", "tracked_apply_error"])
+def test_molecule_view_edit(molecule, entity, method):
+    name, field, form = entity
+    original = molecule.copy()
+    collection = getattr(molecule, name)
+    view = collection[0]
+    constraints = view.constraints
+    saved_constraints = list(constraints)
+    iterator = iter(collection)
+    first = next(iterator)
+    exhausted = iter(collection)
+    list(exhausted)
+    result = None
+    if method == "edit":
+        result = molecule.edit().finish()
+    elif method.endswith("_error"):
+        edits = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("O")]),
+                       Edit.RemoveTopology(atoms=[8], bonds=[])])
+        with pytest.raises(TransactionError, match="^atom handle 8 is out of range for 5 entries$"):
+            getattr(molecule, method.removesuffix("_error"))(edits)
+    else:
+        applied = getattr(molecule, method)(Edits())
+        result = applied[0] if method == "tracked_apply" else applied
+
+    assert molecule == original
+    assert view.id == first.id == 0
+    assert view.asdict() == getattr(original, name)[0].asdict()
+    assert list(constraints) == saved_constraints
+    assert [entry.id for entry in iterator] == list(range(1, len(collection)))
+    assert next(exhausted, None) is None
+    assert iter(exhausted) is exhausted
+    if result is not None:
+        assert result == original
+        getattr(result, name)[0] = form
+        assert molecule == original
+        assert getattr(view, field) == getattr(getattr(original, name)[0], field)
 
 
 def test_molecule_view_setters(molecule, entity):
@@ -191,7 +217,7 @@ def test_molecule_combine_from_argument_error(molecule, entity):
     "atoms", "bonds", "dative_bonds", "aromatic_systems",
     "multicenter_bonds", "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
 ])
-@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact", "edit"])
+@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact", "edit", "apply", "tracked_apply"])
 def test_molecule_view_empty_iterator(name, method):
     molecule = Molecule()
     collection = getattr(molecule, name)
@@ -199,20 +225,26 @@ def test_molecule_view_empty_iterator(name, method):
     assert next(iterator, None) is None
 
     if method == "edit":
-        molecule = molecule.edit().finish()
+        assert molecule.edit().finish() == molecule
+    elif method in ("apply", "tracked_apply"):
+        getattr(molecule, method)(Edits())
     else:
         getattr(molecule, method)(Molecule() if method == "combine_from" else [])
 
-    with pytest.raises(InvalidatedViewError):
-        next(iterator, None)
-    with pytest.raises(InvalidatedViewError):
-        iter(iterator)
+    if method in ("edit", "apply", "tracked_apply"):
+        assert next(iterator, None) is None
+        assert iter(iterator) is iterator
+    else:
+        with pytest.raises(InvalidatedViewError):
+            next(iterator, None)
+        with pytest.raises(InvalidatedViewError):
+            iter(iterator)
     assert list(getattr(molecule, name)) == []
 
 
 @pytest.mark.parametrize("name", ["atoms", "bonds", "dative_bonds"])
-@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact", "edit"])
-def test_molecule_view_ring_size_invalidation(molecule, name, method):
+@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact", "edit", "apply", "tracked_apply"])
+def test_molecule_view_ring_size(molecule, name, method):
     view = getattr(molecule, name)[0]
     constraints = view.constraints
     sizes = constraints.ring_size_count
@@ -224,22 +256,30 @@ def test_molecule_view_ring_size_invalidation(molecule, name, method):
     assert view.constraints.ring_size_count[6] == NumForm.Lit(1)
 
     if method == "edit":
-        molecule = molecule.edit().finish()
+        assert molecule.edit().finish() == molecule
+    elif method in ("apply", "tracked_apply"):
+        getattr(molecule, method)(Edits())
     else:
         getattr(molecule, method)(Molecule() if method == "combine_from" else [])
 
-    for access in (
-        lambda: constraints.ring_size_count,
-        lambda: sizes[6],
-        lambda: sizes.__setitem__(6, 2),
-        lambda: sizes.__delitem__(6),
-        lambda: 6 in sizes,
-        lambda: len(sizes),
-        lambda: repr(sizes),
-        lambda: iter(sizes),
-    ):
-        with pytest.raises(InvalidatedViewError):
-            access()
+    if method in ("edit", "apply", "tracked_apply"):
+        assert sizes[6] == NumForm.Lit(1)
+        sizes[6] = 2
+        assert view.constraints.ring_size_count[6] == NumForm.Lit(2)
+        sizes[6] = 1
+    else:
+        for access in (
+            lambda: constraints.ring_size_count,
+            lambda: sizes[6],
+            lambda: sizes.__setitem__(6, 2),
+            lambda: sizes.__delitem__(6),
+            lambda: 6 in sizes,
+            lambda: len(sizes),
+            lambda: repr(sizes),
+            lambda: iter(sizes),
+        ):
+            with pytest.raises(InvalidatedViewError):
+                access()
 
     assert list(copied_iterator) == [6]
     assert list(copied_items) == copied

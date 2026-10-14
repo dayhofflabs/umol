@@ -334,7 +334,7 @@ def test_molecule_rings(fused_rings, kind, limit, expected):
 @pytest.mark.parametrize("borrowed", [False, True], ids=["owned", "borrowed"])
 def test_ring_views_from_ring_set_error(fused_rings, borrowed):
     source = fused_rings.rings(RingModel(), RingConfig()).into_ring_set()
-    fused_rings.edit()
+    fused_rings.resolve()
     with pytest.raises(ConsumedError, match="Molecule has been consumed"):
         if borrowed:
             RingViews.from_ring_set(source, fused_rings)
@@ -481,7 +481,45 @@ def test_ring_views_from_ring_set_lifetime(fused_rings, borrowed):
 
 
 @pytest.mark.parametrize("borrowed", [False, True], ids=["owned", "borrowed"])
-@pytest.mark.parametrize("operation", ["extract", "edit", "transact", "tracked_transact", "combine"])
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_ring_views_from_ring_set_edit(fused_rings, borrowed, method):
+    original = fused_rings.copy()
+    source = fused_rings.rings(RingModel(), RingConfig()).into_ring_set()
+    rings = (RingViews.from_ring_set(source, fused_rings) if borrowed
+             else fused_rings.rings(RingModel(), RingConfig()))
+    ring = rings[0]
+    members = ring.atoms
+    expected_members = list(members)
+    atom = rings.atom(1)
+    bond = rings.bond(1)
+    iterator = iter(rings)
+    edits = Edits()
+    edits.remove_topology([4], [])
+    if method == "edit":
+        editor = fused_rings.edit()
+        editor.apply(edits)
+        product = editor.finish()
+    else:
+        result = getattr(fused_rings, method)(edits)
+        product = result[0] if method == "tracked_apply" else result
+
+    assert fused_rings == original
+    assert product == Molecule.parse(
+        '{:atoms ["C" "C" "C" "C"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"] [1 3 "1"] [3 2 "1"]]}'
+    )
+    assert list(members) == expected_members
+    assert ring.id == 0
+    assert sorted(ring.copy().atoms) == [0, 1, 2]
+    assert sorted(ring.copy().bonds) == [0, 1, 2]
+    assert atom.ring_count == NumForm.Lit(2)
+    assert bond.ring_count == NumForm.Lit(2)
+    assert [item.id for item in iterator] == [0, 1]
+    assert list(rings.ids()) == [0, 1]
+
+
+@pytest.mark.parametrize("borrowed", [False, True], ids=["owned", "borrowed"])
+@pytest.mark.parametrize("operation", ["extract", "resolve", "transact", "tracked_transact", "combine"])
 def test_ring_views_from_ring_set_invalidation(fused_rings, borrowed, operation):
     source = fused_rings.rings(RingModel(), RingConfig()).into_ring_set()
     rings = (
@@ -507,8 +545,8 @@ def test_ring_views_from_ring_set_invalidation(fused_rings, borrowed, operation)
         assert extracted.shared_bonds(0, 1) == [1]
         root_error = ConsumedError
     else:
-        if operation == "edit":
-            fused_rings.edit()
+        if operation == "resolve":
+            fused_rings.resolve()
         elif operation == "combine":
             fused_rings.combine_from(Molecule())
         else:

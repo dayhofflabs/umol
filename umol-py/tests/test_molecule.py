@@ -1394,7 +1394,7 @@ def test_molecule_correspondence_constructor():
 
 
 @pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
-def test_molecule_consumption(method):
+def test_molecule_apply_identity(method):
     molecule = Molecule.parse('{:atoms ["C"]}')
     alias = molecule
     copied = molecule.copy()
@@ -1406,7 +1406,19 @@ def test_molecule_consumption(method):
             result = result[0]
     assert result == copied
     result.atoms[0].charge = 1
-    assert copied == Molecule.parse('{:atoms ["C"]}')
+    assert result == Molecule.parse('{:atoms ["C#c1"]}')
+    assert alias == molecule == copied == Molecule.parse('{:atoms ["C"]}')
+    alias.atoms[0].charge = -1
+    assert molecule == Molecule.parse('{:atoms ["C#c-1"]}')
+    assert result == Molecule.parse('{:atoms ["C#c1"]}')
+
+
+@pytest.mark.parametrize("method", ["resolve", "resolve_with_report"])
+def test_molecule_consumption(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    alias = molecule
+    copied = molecule.copy()
+    getattr(molecule, method)()
 
     for access in (
         lambda: repr(alias), lambda: str(alias), lambda: alias.render(),
@@ -1441,21 +1453,22 @@ def test_molecule_consumption(method):
     ("application", TransactionError, "atom handle 7"),
     ("integrity", InvalidStructureError, "parallel bonds"),
 ])
-def test_molecule_consumption_error(method, kind, error, message):
+def test_molecule_apply_error(method, kind, error, message):
     molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
     copied = molecule.copy()
+    view = molecule.atoms[0]
     edits = Edits()
+    edits.add_atom(AtomForm.parse("O"))
     if kind == "application":
         edits.remove_topology([7], [])
     else:
         edits.add_bond(0, 1, BondForm(1))
     with pytest.raises(error, match=message):
         getattr(molecule, method)(edits)
-    with pytest.raises(ConsumedError):
-        str(molecule)
-    with pytest.raises(ConsumedError):
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
         len(edits)
-    assert copied == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    assert view.id == 0
+    assert molecule == copied == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
 
 
 @pytest.mark.parametrize("method", ["apply", "tracked_apply"])
@@ -1474,6 +1487,7 @@ def test_molecule_apply_consumed_edits(method, editor):
     edits = Edits()
     Molecule().apply(edits)
     receiver = Molecule.parse('{:atoms ["C"]}')
+    view = receiver.atoms[0]
     if editor:
         receiver = receiver.edit()
 
@@ -1482,8 +1496,21 @@ def test_molecule_apply_consumed_edits(method, editor):
     if editor:
         assert receiver.finish() == Molecule.parse('{:atoms ["C"]}')
     else:
-        with pytest.raises(ConsumedError, match="has been consumed$"):
-            receiver.copy()
+        assert receiver == Molecule.parse('{:atoms ["C"]}')
+    assert view.id == 0
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_apply_consumed(method):
+    molecule = Molecule.from_smiles("C")
+    molecule.resolve()
+    edits = Edits()
+    edits.add_atom(AtomForm.parse("N"))
+    expected = list(edits)
+
+    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+        getattr(molecule, method)(edits)
+    assert list(edits) == expected
 
 
 def test_molecule_tracked_apply():
@@ -1495,6 +1522,7 @@ def test_molecule_tracked_apply():
     product, correspondence = molecule.tracked_apply(edits)
 
     assert product == original.apply(copied)
+    assert molecule == original == Molecule.parse('{:atoms ["N#h3"]}')
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
     assert correspondence.bonds == Correspondence([], 0, 0)
 

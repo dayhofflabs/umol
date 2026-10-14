@@ -285,16 +285,14 @@ def test_entity_constraints_view_derived_error(
 @pytest.mark.parametrize(
     "namespace,container_type,raw,expected,top,derived,closed", ENTITY_CASES
 )
-@pytest.mark.parametrize("operation", ["edit", "transact", "tracked_transact", "combine"])
+@pytest.mark.parametrize("operation", ["transact", "tracked_transact", "combine"])
 def test_entity_constraints_view_evidenced_invalidation(
     molecule, namespace, container_type, raw, expected, top, derived, closed, operation,
 ):
     view = getattr(molecule, namespace)[0].constraints
     view.set(raw)
     saved = view.evidenced(raw.key)
-    if operation == "edit":
-        molecule.edit()
-    elif operation == "combine":
+    if operation == "combine":
         molecule.combine_from(Molecule())
     else:
         getattr(molecule, operation)([Edits()])
@@ -305,6 +303,27 @@ def test_entity_constraints_view_evidenced_invalidation(
         with pytest.raises(InvalidatedViewError):
             getattr(view, method)(container_type([]))
     assert saved == expected
+
+
+@pytest.mark.parametrize(
+    "namespace,container_type,raw,expected,top,derived,closed", ENTITY_CASES
+)
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_entity_constraints_view_evidenced_edit(
+    molecule, namespace, container_type, raw, expected, top, derived, closed, method,
+):
+    view = getattr(molecule, namespace)[0].constraints
+    view.set(raw)
+    before = [getattr(view, reading)(raw.key) for reading in READINGS]
+    if method == "edit":
+        assert molecule.edit().finish() == molecule
+    else:
+        getattr(molecule, method)(Edits())
+    assert [getattr(view, reading)(raw.key) for reading in READINGS] == before
+    for reading in ("satisfies", "is_compatible"):
+        assert getattr(view, reading)(container_type([]))
+    view.set(raw)
+    assert getattr(molecule, namespace)[0].constraints.get(raw.key) == raw
 
 
 @pytest.mark.parametrize(
@@ -539,7 +558,7 @@ def test_entity_constraints_view_with_rings_error(triangle, forms, namespace):
     with pytest.raises(ValueError, match="requires molecule context"):
         forms[namespace].constraints.with_rings(rings)
     view = getattr(triangle, namespace)[0].constraints
-    triangle.edit()
+    triangle.transact([])
     with pytest.raises(InvalidatedViewError):
         view.with_rings(rings)
 
@@ -567,23 +586,36 @@ def test_entity_constraints_view_derived_ring_error(triangle, namespace, contain
 
 
 @pytest.mark.parametrize("namespace", ["atoms", "bonds"])
-@pytest.mark.parametrize("operation", ["edit", "transact"])
+@pytest.mark.parametrize("operation", ["transact", "tracked_transact"])
 def test_entity_constraints_view_with_rings_invalidation(triangle, namespace, operation):
     rings = triangle.rings(RingModel(), RingConfig()).into_ring_set()
     view = getattr(triangle, namespace)[0].constraints.with_rings(rings)
     key = (AtomConstraintKey.RingMembership(RingScope.All()) if namespace == "atoms"
            else BondConstraintKey.RingMembership(RingScope.All()))
     saved = view.derived(key)
-    if operation == "edit":
-        triangle.edit()
-    else:
-        triangle.transact([Edits()])
+    getattr(triangle, operation)([Edits()])
     for method in READINGS:
         with pytest.raises(InvalidatedViewError):
             getattr(view, method)(key)
     assert saved == (AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(1)))
                      if namespace == "atoms" else
                      BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(1))))
+    assert list(rings.ids()) == [0]
+
+
+@pytest.mark.parametrize("namespace", ["atoms", "bonds"])
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_entity_constraints_view_with_rings_edit(triangle, namespace, method):
+    rings = triangle.rings(RingModel(), RingConfig()).into_ring_set()
+    view = getattr(triangle, namespace)[0].constraints.with_rings(rings)
+    key = (AtomConstraintKey.RingMembership(RingScope.All()) if namespace == "atoms"
+           else BondConstraintKey.RingMembership(RingScope.All()))
+    before = [getattr(view, reading)(key) for reading in READINGS]
+    if method == "edit":
+        assert triangle.edit().finish() == triangle
+    else:
+        getattr(triangle, method)(Edits())
+    assert [getattr(view, reading)(key) for reading in READINGS] == before
     assert list(rings.ids()) == [0]
 
 
@@ -647,7 +679,9 @@ def test_atom_view_projection(name, expected):
     molecule.atoms[0].charge = NumForm.LitSet(set())
     assert getattr(atom, name) == NumForm.Lit(expected)
     assert molecule.bonds[0].order == NumForm.LitSet({2})
-    molecule.edit()
+    assert molecule.edit().finish() == molecule
+    assert getattr(atom, name) == value
+    molecule.transact([])
     with pytest.raises(InvalidatedViewError):
         getattr(atom, name)
     assert value == NumForm.Lit(expected)

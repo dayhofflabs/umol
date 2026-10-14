@@ -164,10 +164,12 @@ only the batch correspondence. Application failure retains completed edits and l
 available. An unavailable editor is rejected before Edits transfer; failed transfer leaves an
 available editor unchanged. Finish consumes the editor on both success and integrity failure.
 
-Molecule.edit consumes its receiver. Molecule.apply and tracked_apply include finish and return a
-checked Molecule, with the correspondence in the tracked case. Molecule is consumed before the
-Edits contents are transferred, including when the batch is unavailable. Molecule.copy explicitly
-retains an independent value.
+Molecule.edit returns an independent editor from a copy of the source. Molecule.apply and
+tracked_apply consume Edits and apply them to a copy, returning a checked Molecule after finish,
+with the correspondence in the tracked case. The source, its aliases, and its views remain valid
+and unchanged on success or failure. An unavailable molecule is rejected before Edits transfer;
+a transferred batch stays consumed if application or publication fails. The copies share Rust
+copy-on-write storage until mutation. Molecule.copy explicitly returns an independent value.
 
 Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
 They restore it on application or integrity failure; tracked_transact returns the whole

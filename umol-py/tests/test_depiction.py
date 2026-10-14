@@ -414,7 +414,7 @@ def test_molecule_depict_layout_tetrahedral_error():
 def test_molecule_consumption(method):
     molecule = Molecule.parse('{:atoms ["C"]}')
     layout = MoleculeLayout([(0.0, 0.0)])
-    molecule.edit()
+    molecule.resolve()
 
     with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
         if method == "layout":

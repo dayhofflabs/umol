@@ -2227,7 +2227,7 @@ gate.
 
 into_editor is not added; owned callers keep `edit(self)`. See [236](236-operation-ownership-copy-costs-2026-10-09.md).
 
-#### S0c2 — Python Molecule editing without consumption
+#### S0c2 — Python Molecule editing without consumption (done)
 
 **Modules:** Python Molecule edit/apply, binding tests, and the Python guide.
 **Python behavior change; Rust signatures unchanged.** [dep: S0b]
@@ -2254,6 +2254,23 @@ paragraph.
 **Checks:** source preservation on success/failure, independent results, retained
 source views, and correct tracked results. Rust edit/apply/tracked_apply,
 resolver/transformer signatures, and ingestion/export calls remain unchanged.
+
+Completed 2026-10-14. Python edit/apply/tracked_apply borrow the source and consume
+a Rust copy, preserving source aliases, views, and the accessor counter. Edits
+transfer and failure behavior remain explicit: an unavailable source does not
+consume Edits; a transferred batch stays consumed on application or publication
+failure. Tests cover independent results, retained entity and nested constraint
+views, rings, and molecules held by Reaction and Solution. Consumption and
+invalidation tests now use operations that still consume or mutate. The Python
+guide and binding docstrings describe the implemented behavior.
+
+Verification: 77 Rust molecule-binding tests passed. Across the eleven affected
+Python test files, 1,064 cases passed after correcting the new test assertions;
+two existing molecule-scope constraint-matching cases remain skipped for doc 195.
+The corrected molecule/ring files passed their 208-case rerun. Tests used a fresh
+extension in Python 3.13. All-target Clippy for umol-py with warnings denied,
+nightly formatting of the changed Rust file, and git diff --check passed. Logs
+are in `scratch/181-s0c2/`; full workspace tests remain at the stage gate.
 
 #### S0d — Scoped in-place editing conveniences
 

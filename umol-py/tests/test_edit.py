@@ -361,6 +361,7 @@ def test_edits_consumption(receiver, method):
         result = result[0]
 
     assert result == Molecule.parse('{:atoms ["C"]}')
+    assert molecule == Molecule()
     with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
         len(alias)
     assert copied == Edits([edit])
@@ -388,6 +389,7 @@ def test_edits_consumption_error(receiver, method):
         getattr(target, method)(edits)
     with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
         edits.render()
+    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
 @pytest.mark.parametrize(
