@@ -836,7 +836,8 @@ Every fallible operation on a published Molecule is atomic at its public boundar
 in-place operation preserves the entry state under its documented equivalence; a consuming
 operation drops its input without publishing a partial result. In-place editing exists only with
 recovery. This may use a transaction, or a complete plan that reports every rejection before
-mutation and guarantees successful application and publication on its unchanged input.
+mutation and guarantees successful application and publication on its unchanged input, or a
+working copy installed only after successful publication.
 
 Molecule entity views expose mutable attributes and entity-level constraints. Structural changes
 use MoleculeEditor or Transaction. Molecule::edit moves the molecule into an editor without cloning.
@@ -848,9 +849,16 @@ Direct editor mutations and edit batches can be interleaved; neither records und
 | MoleculeEditor::probe | Checks integrity and lends `&Molecule` | Retains the editor for further changes |
 | MoleculeEditor::finish | Consumes the editor, checks integrity, returns Molecule | Drops the editor and its molecule |
 | Molecule::apply | Consumes Molecule and Edits; applies edits and finishes | Drops the molecule |
+| Molecule::edit_into | Lends an editor over one working copy to a callback, checks integrity, installs success, and returns the callback's value | Callback error, integrity failure, or callback unwinding leaves the receiver unchanged under structural equality |
+| Molecule::apply_into | Consumes Edits, applies them to one working copy, and installs the checked result | Leaves the receiver unchanged under structural equality |
 | Transaction::apply | Consumes Edits and immediately applies it to the borrowed molecule, recording undo | Restores transaction-entry state and aborts the transaction |
 | Transaction::probe | Checks integrity and lends `&Molecule` | Leaves the transaction active |
 | Transaction::commit | Consumes the handle, checks integrity, requests acceptance by Transaction::run | Restores transaction-entry state and aborts the transaction |
+
+Molecule::edit_into does not abort when its callback catches an editor application error. The
+completed prefix remains available for further editing; a successful callback return installs
+that state if the final integrity check succeeds. Callback errors propagate unchanged, and
+publication errors convert through MoleculeApplyError into the callback's error type.
 
 Molecule::transact accepts prepared batches, applies each, and commits once. Transaction::run
 also supports planning later batches from probe results. Commit succeeds only as a request:

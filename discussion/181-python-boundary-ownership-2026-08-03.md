@@ -2272,7 +2272,7 @@ extension in Python 3.13. All-target Clippy for umol-py with warnings denied,
 nightly formatting of the changed Rust file, and git diff --check passed. Logs
 are in `scratch/181-s0c2/`; full workspace tests remain at the stage gate.
 
-#### S0d — Scoped in-place editing conveniences
+#### S0d — Scoped in-place editing conveniences (done)
 
 **Modules:** graph-IR molecule and tests. **Additive, green.**
 [dep: S0b]
@@ -2294,6 +2294,20 @@ publication. Keep the no-recovery editor contract distinct from this receiver gu
 **Interface status:** edit_into/apply_into and the callback signature in the
 migration interface review are settled. The signature follows the selected
 clone-once, checked-installation and receiver-preservation semantics.
+
+Completed 2026-10-14. Molecule::edit_into and apply_into use one working copy and
+install only after successful publication. Callback errors propagate unchanged;
+integrity errors convert through MoleculeApplyError. The tests cover returned
+values, custom errors, propagated application errors, publication failure,
+unwinding, repeated use, and repair after catching a partial application failure.
+The public rustdoc and data-type guide state the structural-equality recovery
+contract. Python bindings are unchanged.
+
+Verification passed: 555 focused molecule tests, 24 feature-gated edit properties
+(including three new scoped-editing properties), all-target graph-IR Clippy with
+proptest enabled and warnings denied, nightly formatting of changed Rust files,
+and git diff --check. Logs are in `scratch/181-s0d/`; full workspace tests remain
+at the stage gate.
 
 #### S0e — Transaction correspondence independent of Undo
 

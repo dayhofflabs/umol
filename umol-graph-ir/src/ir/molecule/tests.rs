@@ -1,7 +1,9 @@
 use std::collections::HashSet;
-use std::iter;
+use std::error::Error;
 use std::ops::ControlFlow;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
+use std::{io, iter};
 
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -4886,6 +4888,136 @@ fn test_molecule_edits_identity(#[from(rich_molecule)] molecule: Molecule) {
 }
 
 #[rstest]
+fn test_molecule_edit_into() {
+    let original = mol_dsl!(r#"{:atoms ["C"]}"#);
+    let mut molecule = original.clone();
+    let label = String::from("added nitrogen");
+    let result = molecule.edit_into(|editor| -> Result<_, MoleculeApplyError> {
+        editor.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(1);
+        let mut edits = Edits::new();
+        edits.add_atom(AtomForm::from_element(Element::N));
+        editor.apply(edits)?;
+        Ok(label)
+    });
+    assert_eq!(result, Ok(String::from("added nitrogen")));
+    assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#c1" "N"]}"#));
+    assert_eq!(original, mol_dsl!(r#"{:atoms ["C"]}"#));
+
+    let added = molecule.edit_into(|editor| -> Result<_, MoleculeApplyError> {
+        Ok(editor.add_atom(AtomForm::from_element(Element::O)))
+    });
+    assert_eq!(added, Ok(AtomId(2)));
+    assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#c1" "N" "O"]}"#));
+}
+
+#[rstest]
+fn test_molecule_edit_into_identity(#[from(rich_molecule)] mut molecule: Molecule) {
+    let original = molecule.clone();
+    assert_eq!(
+        molecule.edit_into(|_| Ok::<_, MoleculeApplyError>(())),
+        Ok(())
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+fn test_molecule_edit_into_callback_error() {
+    let original = mol_dsl!(r#"{:atoms ["C"]}"#);
+    let mut molecule = original.clone();
+    let error = molecule
+        .edit_into(|editor| -> Result<(), Box<dyn Error>> {
+            editor.add_atom(AtomForm::from_element(Element::N));
+            Err(Box::new(io::Error::other("cancelled scoped edit")))
+        })
+        .unwrap_err()
+        .downcast::<io::Error>()
+        .unwrap();
+    assert_eq!(error.kind(), io::ErrorKind::Other);
+    assert_eq!(error.to_string(), "cancelled scoped edit");
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+fn test_molecule_edit_into_integrity_error() {
+    let original = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let mut molecule = original.clone();
+    let error = molecule
+        .edit_into(|editor| -> Result<(), Box<dyn Error>> {
+            editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(2));
+            Ok(())
+        })
+        .unwrap_err()
+        .downcast::<MoleculeApplyError>()
+        .unwrap();
+    assert_eq!(
+        *error,
+        MoleculeApplyError::Integrity(MoleculeIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        })
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+fn test_molecule_edit_into_unwind(#[from(rich_molecule)] mut molecule: Molecule) {
+    let original = molecule.clone();
+    let error = catch_unwind(AssertUnwindSafe(|| {
+        molecule.edit_into(|editor| -> Result<(), MoleculeApplyError> {
+            editor.remove_topology(&[AtomId(0)], &[]);
+            panic!("scoped editing interrupted");
+        })
+    }))
+    .unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<&str>(),
+        Some(&"scoped editing interrupted")
+    );
+    assert_eq!(molecule, original);
+    assert_eq!(molecule.apply_into(Edits::new()), Ok(()));
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+fn test_molecule_edit_into_repair() {
+    let mut molecule = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let result = molecule.edit_into(|editor| -> Result<_, MoleculeApplyError> {
+        let mut edits = Edits::new();
+        edits.add_bond(
+            AtomHandle::Id(AtomId(0)),
+            AtomHandle::Id(AtomId(1)),
+            BondForm::from_order(2),
+        );
+        edits.remove_atom(AtomHandle::Id(AtomId(7)));
+        assert_eq!(
+            editor.apply(edits),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::HandleOutOfRange {
+                    kind: EntityKind::Atom,
+                    index: 7,
+                    count: 2,
+                }
+            ))
+        );
+        assert_eq!(
+            editor.probe(),
+            Err(MoleculeIntegrityError::ParallelBonds {
+                atoms: [AtomId(0), AtomId(1)]
+            })
+        );
+        editor.remove_topology(&[], &[BondId(0)]);
+        let mut next = Edits::new();
+        next.add_atom(AtomForm::from_element(Element::O));
+        editor.apply(next)?;
+        Ok(editor.bond(BondId(0)).attributes().order.clone())
+    });
+    assert_eq!(result, Ok(NumForm::Lit(2)));
+    assert_eq!(
+        molecule,
+        mol_dsl!(r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "2"]]}"#)
+    );
+}
+
+#[rstest]
 #[case::add_atom(
     mol_dsl!(r#"{:atoms ["C"]}"#),
     Edits::from_iter([Edit::AddAtoms {
@@ -4940,6 +5072,55 @@ fn test_molecule_apply_error(
         Err(expected.clone())
     );
     assert_eq!(molecule.apply(edits), Err(expected));
+}
+
+#[rstest]
+#[case::add_atom(
+    mol_dsl!(r#"{:atoms ["C"]}"#),
+    Edits::from_iter([Edit::AddAtoms { atoms: vec![AtomForm::from_element(Element::N)] }]),
+    mol_dsl!(r#"{:atoms ["C" "N"]}"#),
+)]
+fn test_molecule_apply_into(
+    #[case] mut molecule: Molecule,
+    #[case] edits: Edits,
+    #[case] expected: Molecule,
+) {
+    assert_eq!(molecule.apply_into(edits), Ok(()));
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::application(
+    Edits::from_iter([
+        Edit::AddAtoms { atoms: vec![AtomForm::from_element(Element::O)] },
+        Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge { old: NumForm::Lit(1), new: NumForm::Lit(2) },
+        },
+    ]),
+    MoleculeApplyError::Transaction(TransactionError::OldStateMismatch),
+)]
+#[case::integrity(
+    Edits::from_iter([Edit::AddBonds {
+        bonds: vec![AddBond {
+            endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+            attributes: BondForm::from_order(2),
+        }],
+    }]),
+    MoleculeApplyError::Integrity(MoleculeIntegrityError::ParallelBonds { atoms: [AtomId(0), AtomId(1)] }),
+)]
+fn test_molecule_apply_into_error(#[case] edits: Edits, #[case] expected: MoleculeApplyError) {
+    let original = mol_dsl!(r#"{:atoms ["C#c0" "N"] :bonds [[0 1 "1"]]}"#);
+    let mut molecule = original.clone();
+    assert_eq!(molecule.apply_into(edits.clone()), Err(expected.clone()));
+    assert_eq!(molecule, original);
+    assert_eq!(
+        molecule.edit_into(|editor| editor.apply(edits)),
+        Err(expected)
+    );
+    assert_eq!(molecule, original);
+    assert_eq!(molecule.apply_into(Edits::new()), Ok(()));
+    assert_eq!(molecule, original);
 }
 
 #[rstest]

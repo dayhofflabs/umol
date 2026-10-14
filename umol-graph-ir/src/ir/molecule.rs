@@ -1510,6 +1510,36 @@ impl Molecule {
         )
     }
 
+    /// Edit a working copy and install it after successful callback return and publication.
+    ///
+    /// Clones the receiver once and lends its editor to the callback without recording undo.
+    /// After the callback returns Ok, checks molecule integrity and installs the result before
+    /// returning the callback's value. The callback does not call MoleculeEditor::finish.
+    ///
+    /// # Errors
+    ///
+    /// Returns callback errors unchanged. Converts publication failure through
+    /// MoleculeApplyError::Integrity and E.
+    ///
+    /// # Semantic properties
+    ///
+    /// Error or callback unwinding preserves the receiver under structural equality (`==`).
+    /// Success establishes the same integrity contract as construction. Editor application
+    /// errors retain their completed prefix without aborting the scope: the callback may catch
+    /// an error, repair the working state, and return Ok for publication.
+    pub fn edit_into<T, E>(
+        &mut self,
+        f: impl FnOnce(&mut MoleculeEditor) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<MoleculeApplyError>,
+    {
+        let mut editor = self.clone().edit();
+        let value = f(&mut editor)?;
+        *self = editor.finish().map_err(MoleculeApplyError::from)?;
+        Ok(value)
+    }
+
     /// Consume the molecule, apply an edit batch, and publish the checked result.
     ///
     /// # Errors
@@ -1526,6 +1556,23 @@ impl Molecule {
         let mut editor = self.edit();
         editor.apply(edits)?;
         Ok(editor.finish()?)
+    }
+
+    /// Apply a batch to a working copy and install the checked result in this molecule.
+    ///
+    /// Uses Self::edit_into with one receiver clone and no undo journal.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same transaction or integrity error as Self::apply. The batch is consumed
+    /// on either outcome.
+    ///
+    /// # Semantic properties
+    ///
+    /// Success installs the same molecule as consuming Self::apply on an equal input.
+    /// Failure preserves the receiver under structural equality (`==`).
+    pub fn apply_into(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
+        self.edit_into(|editor| editor.apply(edits))
     }
 
     /// Apply a batch and return the resulting molecule with its source-to-result correspondence.

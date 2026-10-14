@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomHandle, AtomId, BondId, DativeBondId, EntityKind, Molecule,
+    AromaticSystemId, AtomHandle, AtomId, BondId, DativeBondId, Edits, EntityKind, Molecule,
     MoleculeApplyError, MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
     Transaction, TransactionError,
 };
@@ -801,6 +801,60 @@ proptest! {
         )
         .unwrap();
         prop_assert_eq!(molecule, base);
+    }
+
+    /// Scoped application agrees with journaled execution on generated valid edit batches.
+    #[test]
+    fn test_molecule_apply_into((base, edits) in transaction_edits_strategy()) {
+        let mut expected = base.clone();
+        expected.transact([edits.clone()]).unwrap();
+        let mut molecule = base;
+        prop_assert_eq!(molecule.apply_into(edits), Ok(()));
+        prop_assert_eq!(molecule, expected);
+    }
+
+    /// One callback containing consecutive batches and repeated apply_into calls have the same
+    /// result as a transaction containing those batches, including their separate handle spaces.
+    #[test]
+    fn test_molecule_edit_into(
+        (base, first, second) in consecutive_transaction_strategy(),
+    ) {
+        let mut expected = base.clone();
+        expected.transact([first.clone(), second.clone()]).unwrap();
+        let mut molecule = base.clone();
+        let result = molecule.edit_into(|editor| -> Result<_, MoleculeApplyError> {
+            editor.apply(first.clone())?;
+            editor.apply(second.clone())?;
+            Ok(editor.atom_count())
+        });
+        prop_assert_eq!(result, Ok(expected.atoms().count()));
+        prop_assert_eq!(&molecule, &expected);
+        let mut repeated = base;
+        repeated.apply_into(first).unwrap();
+        repeated.apply_into(second).unwrap();
+        prop_assert_eq!(repeated, expected);
+    }
+
+    /// A failing edit after a valid generated prefix preserves the complete entry representation.
+    /// This checks recovery, separately from the successful journal/application agreement above.
+    #[test]
+    fn test_molecule_apply_into_error((base, mut edits) in transaction_edits_strategy()) {
+        let count = base.atoms().count();
+        edits.remove_atom(AtomHandle::Id(AtomId(count as u32)));
+        for scoped in [false, true] {
+            let mut molecule = base.clone();
+            let result = if scoped {
+                molecule.edit_into(|editor| editor.apply(edits.clone()))
+            } else {
+                molecule.apply_into(edits.clone())
+            };
+            prop_assert_eq!(result, Err(MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange {
+                kind: EntityKind::Atom,
+                index: count,
+                count,
+            })));
+            prop_assert_eq!(molecule, base.clone());
+        }
     }
 
     #[test]
