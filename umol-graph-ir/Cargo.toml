@@ -107,6 +107,10 @@ harness = false
 name = "constraint_readings"
 harness = false
 
+[[bench]]
+name = "aggregate_storage"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

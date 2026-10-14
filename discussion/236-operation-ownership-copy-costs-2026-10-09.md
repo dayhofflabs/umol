@@ -1611,6 +1611,50 @@ Reaction::new. The load average was about 10 at the start of the comparison and
 about 3 during the baseline, so the small construction changes are within
 noise.
 
+### S5 production measurement (2026-10-13)
+
+The aggregate_storage benchmark compares 888d7884c, immediately before S5a,
+with 2793335a5, after S5d. Both revisions run the same benchmark source. This is
+a fresh comparison of the twelve case categories above; the earlier experiment's
+absolute timings are not the baseline for these results.
+
+The fixtures are a six-carbon benzene with an aromatic overlay and a 100-carbon
+chain. The constrained molecule carries 100 distinct molecule-level ChargeSum
+constraints over individual atoms. Each reaction has one element-change delta;
+the spans have unchanged entities. All forms are literal or undetermined.
+Molecule and span construction measure from_entries; reaction construction
+measures new. Criterion batches input preparation outside construction timing
+and drops the results afterward. Clone timing includes dropping each clone while
+retaining its source. No parsing is timed.
+
+Four sequential runs used before/after/after/before order, 50 samples per case,
+1-second warmup, 2-second measurement, and 20,000 resamples, with no concurrent
+builds or tests. The ranges below are the two run estimates, not confidence
+intervals; changes compare their means.
+
+| Case | Before, two-run range | After, two-run range | Change |
+| --- | ---: | ---: | ---: |
+| Molecule construction, benzene | 735.24–753.21 ns | 732.48–741.06 ns | −1.0% |
+| Molecule construction, 100-atom chain | 2.215 µs | 2.155–2.278 µs | +0.0% |
+| Reaction::new, 100-atom chain | 48.19–48.45 ns | 32.71–33.47 ns | −31.5% |
+| ReactionSpan construction, benzene | 4.159–4.206 µs | 4.099–4.153 µs | −1.4% |
+| ReactionSpan construction, 100-atom chain | 17.766–17.990 µs | 17.819–17.990 µs | +0.1% |
+| Molecule clone, benzene | 38.21–38.85 ns | 33.24–33.31 ns | −13.6% |
+| Molecule clone, 100-atom chain | 38.29–38.81 ns | 33.25–33.32 ns | −13.7% |
+| Molecule clone, 100 molecule-level constraints | 2.462–2.471 µs | 33.27–33.31 ns | −98.7% |
+| Reaction clone, benzene | 69.40–70.28 ns | 36.45–36.95 ns | −47.5% |
+| Reaction clone, 100-atom chain | 68.74–69.14 ns | 36.44–36.70 ns | −46.9% |
+| ReactionSpan clone, benzene | 572.91–574.07 ns | 33.27–33.29 ns | −94.2% |
+| ReactionSpan clone, 100-atom chain | 3.799–3.810 µs | 33.25–33.39 ns | −99.1% |
+
+The clone reductions repeat across both comparisons. No construction slowdown
+repeats across both: the molecule-chain result varies from +2.8% to −2.7%, so its
+near-zero mean is not evidence that the added Arc allocation is free. These
+microbenchmarks measure construction and clone/drop, not mutation after sharing
+or end-to-end operation throughput. Raw Criterion samples, confidence intervals,
+the baseline snapshot, binaries, commands, and run metadata are in
+scratch/236-s5e/.
+
 ## Outside this document
 
 Calling resolvers and transformers with the molecule as receiver, so that their
@@ -4404,13 +4448,30 @@ integration, property, and doc suites passed: 10,492 passed, 7 ignored, no
 failures. The 433 property-target checks used 256 generated cases and seed
 20261013. Graph-IR all-target Clippy with proptest and warnings denied,
 touched-file nightly formatting, git diff --check, and full diff review passed.
-The contract inventory and logs are in scratch/236-s5d/. S5e is next.
+The contract inventory and logs are in scratch/236-s5d/.
 
-#### S5e — Benchmark cases
+#### S5e — Benchmark cases **Done**
 
 **Modules:** graph-IR benches. **Additive, green.** [dep: S5a–S5d]
 
 Add the aggregate_storage bench target with the twelve measured cases.
+
+**Completed (2026-10-13).** Added aggregate_storage with all twelve construction
+and clone cases, using inline Rust fixtures and public constructors. Input
+preparation and result destruction are excluded from constructor timing; clone
+timing includes destruction of the clone. The production comparison against the
+commit before S5a, including both run estimates, is recorded in the copy-on-write
+storage section above. No production implementation or public API changed.
+
+**Verification:** all twelve cases built and executed on both revisions, followed
+by four full timing runs. The S5 workspace test gate passed with graph-IR's
+proptest feature enabled: 22,421 passed, 10 ignored, no failures. The 433 graph-IR
+property-target checks used 256 generated cases and seed 20261013. Workspace
+all-target Clippy with the same feature and warnings denied passed. After
+maturin develop in the repository's Python 3.13.16 environment, Python passed
+2,204 tests with 2 skipped. Touched-file nightly formatting, git diff --check,
+and full diff review passed. Artifacts and commands are in scratch/236-s5e/.
+S6a is next.
 
 
 ### S6 — Development guides
