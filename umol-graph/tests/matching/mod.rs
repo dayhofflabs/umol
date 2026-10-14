@@ -17,7 +17,7 @@ struct GraphFixture {
 }
 
 #[rstest]
-fn test_aromaticity_perceiver_find_systems_clar() {
+fn test_aromaticity_perceiver_find_aromatic_systems_clar() {
     let fixture: GraphFixture = toml::from_str(include_str!("data/coronene_planar.toml")).unwrap();
     let atoms: Vec<_> = (0..fixture.node_count)
         .map(|_| {
@@ -43,7 +43,7 @@ fn test_aromaticity_perceiver_find_systems_clar() {
         ..AromaticityModel::daylight()
     });
     assert_eq!(
-        perception.find_systems(
+        perception.find_aromatic_systems(
             &molecule,
             AromaticityConfig {
                 maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,

@@ -221,18 +221,18 @@ fn test_kekulizer_transform_input(#[case] source: &str, #[case] expected: Kekuli
     assert!(molecule.is_concrete());
     assert_eq!(molecule.aromatic_systems().count(), 1);
 
-    let system = molecule.aromatic_systems().iter().next().unwrap();
-    let ElectronCountsForm::Lit(electrons) = system.electrons() else {
+    let aromatic_system = molecule.aromatic_systems().iter().next().unwrap();
+    let ElectronCountsForm::Lit(electrons) = aromatic_system.electrons() else {
         panic!("fixture aromatic electron contributions are undetermined");
     };
-    let NumForm::Lit(charge) = system.charge() else {
+    let NumForm::Lit(charge) = aromatic_system.charge() else {
         panic!("fixture aromatic charge is undetermined");
     };
     let actual = KekulizationFixture {
-        participants: system.atom_ids().collect(),
+        participants: aromatic_system.atom_ids().collect(),
         electrons: electrons.clone(),
         charge: *charge,
-        unpaired_electrons: system.unpaired_electrons().clone(),
+        unpaired_electrons: aromatic_system.unpaired_electrons().clone(),
         elements: molecule
             .atoms()
             .iter()
@@ -370,15 +370,12 @@ fn test_kekulizer_transform(
             NumForm::Lit(charge) => charge,
             _ => panic!("input atom charge is undetermined"),
         })
-        .chain(
-            input
-                .aromatic_systems()
-                .iter()
-                .map(|system| match system.attributes().charge {
-                    NumForm::Lit(charge) => charge,
-                    _ => panic!("input aromatic-system charge is undetermined"),
-                }),
-        )
+        .chain(input.aromatic_systems().iter().map(|aromatic_system| {
+            match aromatic_system.attributes().charge {
+                NumForm::Lit(charge) => charge,
+                _ => panic!("input aromatic-system charge is undetermined"),
+            }
+        }))
         .sum();
     let output_total_charge: i64 = first
         .atoms()
@@ -388,7 +385,7 @@ fn test_kekulizer_transform(
             _ => panic!("output atom charge is undetermined"),
         })
         .sum();
-    let system_charge = match input
+    let aromatic_system_charge = match input
         .aromatic_systems()
         .iter()
         .next()
@@ -425,11 +422,14 @@ fn test_kekulizer_transform(
         let NumForm::Lit(before_charge) = before.charge else {
             panic!("input exposed-atom charge is undetermined");
         };
-        assert_eq!(after.charge, NumForm::Lit(before_charge + system_charge));
+        assert_eq!(
+            after.charge,
+            NumForm::Lit(before_charge + aromatic_system_charge)
+        );
         assert_eq!(after.lone_pairs, *expected.atom(exposed).lone_pairs());
         assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
         assert_eq!(after.unpaired_electrons, before.unpaired_electrons);
-        if system_charge != 0 {
+        if aromatic_system_charge != 0 {
             assert_eq!(
                 after.unpaired_electrons,
                 UnpairedElectronsForm::from((0, 1))
@@ -449,7 +449,7 @@ fn test_kekulizer_transform_cage(#[case] source: &str) {
         ValenceInvariantsValidator.validate(&input),
         Ok(Solution::Determined(()))
     );
-    let system_atoms: Vec<AtomId> = input.atoms().ids().collect();
+    let aromatic_system_atoms: Vec<AtomId> = input.atoms().ids().collect();
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
@@ -468,7 +468,7 @@ fn test_kekulizer_transform_cage(#[case] source: &str) {
         .filter(|bond| bond.attributes().order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
-    let expected_covered_atoms: HashSet<AtomId> = system_atoms.into_iter().collect();
+    let expected_covered_atoms: HashSet<AtomId> = aromatic_system_atoms.into_iter().collect();
 
     assert_eq!(input, original);
     assert_eq!(first, second);
@@ -500,7 +500,7 @@ fn test_kekulizer_transform_cage(#[case] source: &str) {
         input
     },
     KekulizeError::UndeterminedExposedAtomCharge {
-        system: AromaticSystemId(0),
+        aromatic_system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
@@ -515,7 +515,7 @@ fn test_kekulizer_transform_cage(#[case] source: &str) {
         input
     },
     KekulizeError::UndeterminedExposedAtomLonePairs {
-        system: AromaticSystemId(0),
+        aromatic_system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
@@ -685,7 +685,7 @@ fn test_kekulizer_transform_donor_error(#[case] source: &str) {
         .into_ir(&MoleculeDefaults::concrete());
     input.atom_mut(AtomId(0)).attributes_mut().lone_pairs = NumForm::Undetermined;
     let expected = KekulizeError::UndeterminedExposedAtomLonePairs {
-        system: AromaticSystemId(0),
+        aromatic_system: AromaticSystemId(0),
         atom: AtomId(0),
     };
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());

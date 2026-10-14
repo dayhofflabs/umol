@@ -162,7 +162,7 @@ impl Aromatizer {
         if let Some(inconsistency) = derivation.inconsistencies.into_iter().next() {
             return Err(AromaticityContradiction::from(inconsistency).into());
         }
-        for (index, (atoms, attributes)) in derivation.systems.into_iter().enumerate() {
+        for (index, (atoms, attributes)) in derivation.aromatic_systems.into_iter().enumerate() {
             let aromatic_system = AromaticSystemId(index as u32);
             if !mismatches.is_empty() {
                 if let Some(&atom) = atoms
@@ -172,7 +172,7 @@ impl Aromatizer {
                     return Err(AromaticityContradiction::from(
                         AromaticityInconsistency::AromaticValenceMismatch {
                             atom,
-                            system: aromatic_system,
+                            aromatic_system,
                         },
                     )
                     .into());
@@ -591,7 +591,7 @@ mod tests {
             :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
         AromaticityModel::daylight(),
         AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceMismatch {
-            atom: AtomId(0), system: AromaticSystemId(0),
+            atom: AtomId(0), aromatic_system: AromaticSystemId(0),
         }.into()),
     )]
     #[case::later_aromatic_contribution(
@@ -603,7 +603,7 @@ mod tests {
         }"#),
         AromaticityModel::daylight(),
         AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceMismatch {
-            atom: AtomId(8), system: AromaticSystemId(1),
+            atom: AtomId(8), aromatic_system: AromaticSystemId(1),
         }.into()),
     )]
     #[case::nonliteral_aromatic_contribution(
@@ -617,7 +617,7 @@ mod tests {
         },
         AromaticityModel::daylight(),
         AromatizeError::Contradiction(AromaticityInconsistency::AromaticValenceMismatch {
-            atom: AtomId(0), system: AromaticSystemId(0),
+            atom: AtomId(0), aromatic_system: AromaticSystemId(0),
         }.into()),
     )]
     #[case::unclaimed_ring_atom(

@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::assertion_without_system(
+    #[case::assertion_without_aromatic_system(
         AromaticityModel::daylight(),
         mol_dsl!(r#"{:atoms ["C#a"]}"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
@@ -146,7 +146,7 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
-            AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) },
+            AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) },
         )),
     )]
     #[case::participant_set_mismatch(
@@ -158,7 +158,7 @@ mod tests {
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -171,7 +171,7 @@ mod tests {
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -186,7 +186,7 @@ mod tests {
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticBondConstraintMismatch {
                 bond: BondId(0),
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -201,7 +201,7 @@ mod tests {
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceMismatch {
                 atom: AtomId(0),
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -214,7 +214,7 @@ mod tests {
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]

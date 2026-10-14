@@ -154,8 +154,8 @@ impl HueckelAromaticity {
         }
 
         if self.ring_limits.include_unions {
-            let fused_systems = self.enumerate_unions(rings, &eligible_cycles);
-            for atoms in fused_systems {
+            let fused_aromatic_systems = self.enumerate_unions(rings, &eligible_cycles);
+            for atoms in fused_aromatic_systems {
                 if excluded_bonds
                     .iter()
                     .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
@@ -171,7 +171,7 @@ impl HueckelAromaticity {
             }
         }
 
-        let merged = merge_overlapping_systems(aromatic_atom_sets);
+        let merged = merge_overlapping_aromatic_systems(aromatic_atom_sets);
 
         let mut candidates = Vec::new();
         for atom_set in merged {
@@ -336,7 +336,9 @@ where
     Some(total)
 }
 
-fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<HashSet<AtomId>> {
+fn merge_overlapping_aromatic_systems(
+    aromatic_systems: Vec<HashSet<AtomId>>,
+) -> Vec<HashSet<AtomId>> {
     if aromatic_systems.len() < 2 {
         return aromatic_systems;
     }
@@ -345,30 +347,30 @@ fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<Hash
     let mut components = UnionFind::new(n);
     let atom_capacity = aromatic_systems
         .iter()
-        .flat_map(|system| system.iter())
+        .flat_map(|aromatic_system| aromatic_system.iter())
         .map(|atom| atom.index() + 1)
         .max()
         .unwrap_or(0);
     let mut owner = vec![None; atom_capacity];
 
-    for (system_index, system) in aromatic_systems.iter().enumerate() {
-        for atom in system {
+    for (aromatic_system_index, aromatic_system) in aromatic_systems.iter().enumerate() {
+        for atom in aromatic_system {
             match owner[atom.index()] {
-                Some(previous) => components.union(system_index, previous),
-                None => owner[atom.index()] = Some(system_index),
+                Some(previous) => components.union(aromatic_system_index, previous),
+                None => owner[atom.index()] = Some(aromatic_system_index),
             }
         }
     }
 
     let mut result: Vec<HashSet<AtomId>> = Vec::new();
     let mut output_for_root: Vec<Option<usize>> = vec![None; n];
-    for (system_index, system) in aromatic_systems.into_iter().enumerate() {
-        let root = components.find(system_index);
+    for (aromatic_system_index, aromatic_system) in aromatic_systems.into_iter().enumerate() {
+        let root = components.find(aromatic_system_index);
         match output_for_root[root] {
-            Some(output) => result[output].extend(system),
+            Some(output) => result[output].extend(aromatic_system),
             None => {
                 output_for_root[root] = Some(result.len());
-                result.push(system);
+                result.push(aromatic_system);
             }
         }
     }
@@ -636,8 +638,8 @@ mod tests {
         ])
     }
 
-    fn electron_total(system: &(Vec<AtomId>, AromaticSystemForm)) -> i64 {
-        match &system.1.electrons {
+    fn electron_total(aromatic_system: &(Vec<AtomId>, AromaticSystemForm)) -> i64 {
+        match &aromatic_system.1.electrons {
             ElectronCountsForm::Lit(counts) => counts.iter().sum(),
             ElectronCountsForm::Undetermined => 0,
         }
@@ -738,7 +740,7 @@ mod tests {
             )
             .into_ring_set();
         let model = daylight_model();
-        let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+        let aromatic_systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
             .attributes()
             .constraints
@@ -749,9 +751,9 @@ mod tests {
             }
             _ => AromaticValence::NotAromatic,
         });
-        assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].0.len(), expected_atoms);
-        assert_eq!(electron_total(&systems[0]), expected_electrons);
+        assert_eq!(aromatic_systems.len(), 1);
+        assert_eq!(aromatic_systems[0].0.len(), expected_atoms);
+        assert_eq!(electron_total(&aromatic_systems[0]), expected_electrons);
     }
 
     #[rstest]
@@ -773,7 +775,7 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+        let aromatic_systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
             .attributes()
             .constraints
@@ -784,7 +786,7 @@ mod tests {
             }
             _ => AromaticValence::NotAromatic,
         });
-        assert!(systems.is_empty());
+        assert!(aromatic_systems.is_empty());
     }
 
     #[rstest]
@@ -807,20 +809,21 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
-            .atom(v)
-            .attributes()
-            .constraints
-            .aromatic_valence()
-        {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
-                AromaticValence::Aromatic(*n)
-            }
-            _ => AromaticValence::NotAromatic,
-        });
+        let aromatic_systems =
+            daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
+                .atom(v)
+                .attributes()
+                .constraints
+                .aromatic_valence()
+            {
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
+            });
 
         assert_eq!(
-            systems,
+            aromatic_systems,
             vec![(
                 (0..7).map(AtomId).collect::<Vec<_>>(),
                 AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 0, 1, 1])
@@ -841,20 +844,21 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
-            .atom(v)
-            .attributes()
-            .constraints
-            .aromatic_valence()
-        {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
-                AromaticValence::Aromatic(*n)
-            }
-            _ => AromaticValence::NotAromatic,
-        });
-        assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].0.len(), 6);
-        assert_eq!(electron_total(&systems[0]), 6);
+        let aromatic_systems =
+            permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
+                .atom(v)
+                .attributes()
+                .constraints
+                .aromatic_valence()
+            {
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
+            });
+        assert_eq!(aromatic_systems.len(), 1);
+        assert_eq!(aromatic_systems[0].0.len(), 6);
+        assert_eq!(electron_total(&aromatic_systems[0]), 6);
     }
 
     #[rstest]
@@ -905,14 +909,14 @@ mod tests {
             vec![AtomId(5), AtomId(6), AtomId(7)],
         ]
     )]
-    fn test_merge_overlapping_systems(
+    fn test_merge_overlapping_aromatic_systems(
         #[case] aromatic_systems: Vec<HashSet<AtomId>>,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
-        let mut merged: Vec<Vec<AtomId>> = merge_overlapping_systems(aromatic_systems)
+        let mut merged: Vec<Vec<AtomId>> = merge_overlapping_aromatic_systems(aromatic_systems)
             .into_iter()
-            .map(|system| {
-                let mut atoms: Vec<AtomId> = system.into_iter().collect();
+            .map(|aromatic_system| {
+                let mut atoms: Vec<AtomId> = aromatic_system.into_iter().collect();
                 atoms.sort_unstable();
                 atoms
             })

@@ -817,7 +817,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::contribution_asserted(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#a2"]}"#))]
-    #[case::in_system(
+    #[case::in_aromatic_system(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!("C#i=#c0#h1#n0#u0#s")],
             aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::from_electrons(vec![1]))],

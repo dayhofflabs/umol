@@ -92,7 +92,7 @@ impl<'a> ValenceResolver<'a> {
         };
         Ok(completions.map(|completions| ResolveState {
             completions,
-            systems: Vec::new(),
+            aromatic_systems: Vec::new(),
             tie_breaks: Vec::new(),
         }))
     }
@@ -251,7 +251,7 @@ mod tests {
                 );
                 completions
             },
-            systems: Vec::new(),
+            aromatic_systems: Vec::new(),
             tie_breaks: Vec::new(),
         }),
     )]

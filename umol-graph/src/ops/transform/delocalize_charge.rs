@@ -16,15 +16,15 @@ pub struct DelocalizeCharge;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DelocalizationPlan {
-    system: AromaticSystemId,
+    aromatic_system: AromaticSystemId,
     charge: i64,
     electrons: Vec<i64>,
     atoms: Vec<(AtomId, i64)>,
 }
 
 impl DelocalizationPlan {
-    fn derive(molecule: &Molecule, system: AromaticSystemId) -> Option<Self> {
-        let view = molecule.aromatic_system(system);
+    fn derive(molecule: &Molecule, aromatic_system: AromaticSystemId) -> Option<Self> {
+        let view = molecule.aromatic_system(aromatic_system);
         let atom_ids: Vec<AtomId> = view.atom_ids().collect();
         let (&first, rest) = atom_ids.split_first()?;
         let ElementForm::Lit(element) = molecule.atom(first).attributes().element else {
@@ -73,7 +73,7 @@ impl DelocalizationPlan {
         }
 
         Some(Self {
-            system,
+            aromatic_system,
             charge,
             electrons,
             atoms,
@@ -84,8 +84,8 @@ impl DelocalizationPlan {
 impl DelocalizeCharge {
     fn plan_transform(&self, molecule: &Molecule) -> Edits {
         let mut edits = Edits::new();
-        for system in molecule.aromatic_systems().ids() {
-            let Some(plan) = DelocalizationPlan::derive(molecule, system) else {
+        for aromatic_system in molecule.aromatic_systems().ids() {
+            let Some(plan) = DelocalizationPlan::derive(molecule, aromatic_system) else {
                 continue;
             };
             for (id, contribution) in plan.atoms {
@@ -103,8 +103,8 @@ impl DelocalizeCharge {
                 );
             }
             edits.update_aromatic_system(
-                AromaticSystemHandle::Id(plan.system),
-                molecule.aromatic_system(plan.system).attributes(),
+                AromaticSystemHandle::Id(plan.aromatic_system),
+                molecule.aromatic_system(plan.aromatic_system).attributes(),
                 &AromaticSystemUpdate {
                     charge: Some(NumForm::Lit(plan.charge)),
                     electrons: Some(ElectronCountsForm::Lit(plan.electrons)),
@@ -191,7 +191,7 @@ mod tests {
                                 :attrs "[1,1,1,1,1,1,1]#c+"}]
         }"#)
     )]
-    #[case::multiple_systems(
+    #[case::multiple_aromatic_systems(
         mol_dsl_concrete!(r#"{
             :atoms ["C#c+#h#a0" "C#h#a" "C#h#a"
                     "C#c+#h#a0" "C#h#a" "C#h#a"]

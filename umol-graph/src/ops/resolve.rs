@@ -75,7 +75,7 @@ bitflags! {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ResolveState {
     pub completions: AtomCompletions,
-    pub systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+    pub aromatic_systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     pub tie_breaks: Vec<AtomId>,
 }
 
@@ -1033,7 +1033,7 @@ impl<'a> Resolver<'a> {
     fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> Edits {
         let mut edits = self
             .aromaticity
-            .plan_bond_discharge(molecule, &state.systems);
+            .plan_bond_discharge(molecule, &state.aromatic_systems);
         for (atom, disjuncts) in state.completions.iter() {
             let current = molecule.atom(atom).attributes();
             // Preserve other stored assertions when selecting field values.
@@ -1046,13 +1046,13 @@ impl<'a> Resolver<'a> {
         let existing: BTreeSet<Vec<AtomId>> = molecule
             .aromatic_systems()
             .iter()
-            .map(|system| {
-                let mut atoms: Vec<AtomId> = system.atom_ids().collect();
+            .map(|aromatic_system| {
+                let mut atoms: Vec<AtomId> = aromatic_system.atom_ids().collect();
                 atoms.sort_unstable();
                 atoms
             })
             .collect();
-        for (atoms, system) in &state.systems {
+        for (atoms, aromatic_system) in &state.aromatic_systems {
             let mut key = atoms.clone();
             key.sort_unstable();
             if existing.contains(&key) {
@@ -1061,7 +1061,7 @@ impl<'a> Resolver<'a> {
             for edit in self.aromaticity.perception.plan_aromatic_system(
                 molecule,
                 atoms.clone(),
-                system.clone(),
+                aromatic_system.clone(),
             ) {
                 edits.push(edit);
             }
@@ -2182,7 +2182,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom_system(
+    #[case::atom_aromatic_system(
         mol_dsl_concrete!(r#"{
             :atoms ["C#h#a2" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
@@ -2194,14 +2194,14 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#h3#a!" "C#h3#a"] :bonds [[0 1 "1#a"]]}"#),
         ResolveContradiction::Valence(ValenceContradiction::Counts(CountsError::NoMatch)),
     )]
-    #[case::bond_system(
+    #[case::bond_aromatic_system(
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
         ResolveContradiction::Aromaticity(AromaticityInconsistency::AromaticBondConstraintMismatch {
-            bond: BondId(0), system: AromaticSystemId(0),
+            bond: BondId(0), aromatic_system: AromaticSystemId(0),
         }.into()),
     )]
     fn test_resolver_resolve_aromatic_mismatch(
@@ -2516,9 +2516,9 @@ mod tests {
     #[case::stereo(StereoConfigurationForm::Undetermined, NumForm::Lit(0), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Natural,
         ProjectError::Stereo(StereoProjectError::UnsupportedStereoAtom { stereo_atom: StereoAtomId(0) }))]
     #[case::aromatic_charge(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(1), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Natural,
-        ProjectError::Aromaticity(AromaticityProjectError::ChargedSystem { system: AromaticSystemId(0) }))]
+        ProjectError::Aromaticity(AromaticityProjectError::ChargedAromaticSystem { aromatic_system: AromaticSystemId(0) }))]
     #[case::aromatic_spin(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(0), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, IsotopeMassForm::Natural,
-        ProjectError::Aromaticity(AromaticityProjectError::SystemSpin { system: AromaticSystemId(0) }))]
+        ProjectError::Aromaticity(AromaticityProjectError::AromaticSystemSpin { aromatic_system: AromaticSystemId(0) }))]
     #[case::isotope(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(0), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Undetermined,
         ProjectError::Isotope(IsotopeProjectError::NonGroundIsotope { atom: AtomId(0) }))]
     fn test_resolver_project_phase_error(

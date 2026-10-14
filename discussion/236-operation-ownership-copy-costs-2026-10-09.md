@@ -3206,7 +3206,7 @@ bound. These benchmarks do not consume the migrated conformance inputs, and
 the measured production code is unchanged by that correction. Executables,
 samples, and verification logs are retained in scratch/236-s3m.
 
-### S4 — Resolvers and transformers
+### S4 — Resolvers and transformers **Done**
 
 #### S4a — Resolution and transform benchmark cases **Done**
 
@@ -4207,10 +4207,10 @@ with proptest and conformance enabled. Focused formatting and git diff --check
 passed. No timing comparison or workspace/Python gate was run for this subitem.
 The contract and verification logs are in scratch/236-s4l/.
 
-#### S4m — Planning rule in the data-type guide
+#### S4m — Planning rule in the data-type guide **Done**
 
-**Modules:** docs/development/data-types.md. **Documentation.** [dep: S4d, S4e,
-S4f]
+**Modules:** docs/development/data-types.md, docs/development/nomenclature.md,
+and the graph Transformer trait rustdoc. **Documentation.** [dep: S4d, S4e, S4f]
 
 Replace the transformer paragraph, which says transform_into uses a transaction
 and restores on error, with the rule: a transformer derives a complete plan from
@@ -4222,7 +4222,13 @@ transaction or rollback method. State the same rule for the individual
 resolvers' resolve_into and project_into. Check that the nomenclature guide's
 Transformation entry still agrees.
 
-#### S4n — Aromatic system names in the reworked code
+**Completed (2026-10-13).** The data-type guide, Transformation entry, and
+Transformer rustdoc now state complete planning before mutation, rejection
+without changing the input, and application/publication failure as a defect.
+The guide applies the same rule to individual resolvers and explains why the
+composite Resolver retains its transaction across phases.
+
+#### S4n — Aromatic system names in the reworked code **Done**
 
 **Modules:** graph aromaticity and its rule modules, resolve,
 resolve/aromaticity, transform/aromatizer, transform/kekulizer, and
@@ -4244,6 +4250,25 @@ aromaticity validator and in_system in counts become
 assertion_without_aromatic_system and in_aromatic_system.
 
 **Tests:** existing results under the new names.
+
+**Completed (2026-10-13).** The public methods, result fields, diagnostic
+variants and fields, private methods and locals, test names, and benchmark
+callers use the aromatic-system names. The private Kekulizer SystemPlan is now
+AromaticSystemPlan. Valence admission also constructs the renamed ResolveState
+field. The changes preserve operation behavior, test inputs, property laws, and
+diagnostic display text; derived Debug output uses the renamed fields and variants.
+
+**S4 verification (2026-10-13).** All checks passed:
+
+- Graph property target: 179 checks, with 256 generated cases and seed 20261013.
+- Graph resolution conformance: all 683 cases, with unchanged snapshots.
+- Full workspace tests: 21,962 passed, 9 ignored, no failures.
+- Workspace all-target Clippy with graph proptest/conformance enabled and warnings denied.
+- Python 3.13 extension rebuilt with maturin; pytest: 2,204 passed, 2 skipped.
+- Touched-file nightly formatting, git diff --check, and full diff review.
+
+The contract inventory and logs are in scratch/236-s4mn/. The full workspace
+formatting pass remains at S7a. S4 is complete; S5a is next.
 
 ### S5 — Copy-on-write storage
 

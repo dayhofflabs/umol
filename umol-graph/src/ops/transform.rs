@@ -11,11 +11,14 @@ use umol_graph_ir::ir::Molecule;
 
 /// Rewrites a determined molecular representation.
 ///
+/// Derives a complete plan before mutation, reporting every rejection during planning.
+/// The plan applies to its unchanged input and preserves representation integrity;
+/// a failed application or publication is an implementation defect.
+///
 /// # Semantic properties
 ///
 /// - Successful `transform` and `transform_into` produce the same molecule.
-/// - Failed `transform_into` restores the input under `Molecule::normalized_eq`,
-///   preserving participant order.
+/// - Rejected `transform_into` leaves the input unchanged.
 /// - Every published result satisfies molecule representation integrity.
 /// - `transform_iter` preserves its source and yields independently mutable molecules.
 pub trait Transformer {
@@ -29,12 +32,11 @@ pub trait Transformer {
     /// Returns the transformation's error on rejection. The input is dropped.
     fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error>;
 
-    /// Transforms the borrowed molecule in place, restoring it on failure.
+    /// Plans and transforms the borrowed molecule in place without a transaction or rollback.
     ///
     /// # Errors
     ///
-    /// Returns the same errors as `transform`; the input is restored under
-    /// `Molecule::normalized_eq` before returning.
+    /// Returns the same planning errors as `transform`; rejection leaves the input unchanged.
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error>;
 
     /// Lazily yields the transformation's independent results.

@@ -1756,7 +1756,10 @@ aromatization, and charge delocalization are transformations because they alter 
 representation rather than fill undetermined state.
 
 Transformer::transform consumes its molecule and returns the result; failure drops the input.
-Transformer::transform_into mutably borrows the molecule and restores it on failure.
+Both transform and transform_into derive a complete plan before mutation. Planning reports every
+rejection, including representation-integrity failures; application of that plan to its unchanged
+input must succeed. Transformer::transform_into applies the plan in place without a transaction
+or rollback and leaves the molecule unchanged on rejection.
 Transformer::transform_iter borrows its source and lazily produces independent transformed copies.
 
 **Not:** a resolver policy; not resolution.

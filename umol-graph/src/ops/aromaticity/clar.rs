@@ -175,7 +175,7 @@ impl ClarAromaticity {
             regions.push(selected_atoms.into_iter().collect());
         }
 
-        let mut systems = Vec::new();
+        let mut aromatic_systems = Vec::new();
         for mut atoms in regions {
             if excluded_bonds
                 .iter()
@@ -188,15 +188,15 @@ impl ClarAromaticity {
                 .iter()
                 .map(|&id| electrons_at(id).valence_count())
                 .collect();
-            systems.push((
+            aromatic_systems.push((
                 atoms,
                 AromaticSystemForm::from_electrons(electrons)
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             ));
         }
-        systems.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(systems)
+        aromatic_systems.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(aromatic_systems)
     }
 }
 
@@ -387,7 +387,7 @@ mod tests {
     #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
     fn test_clar_aromaticity_find_from_rings(
         #[case] molecule: Molecule,
-        #[case] expected_systems: usize,
+        #[case] expected_aromatic_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
         let rings = molecule
@@ -400,7 +400,7 @@ mod tests {
             )
             .into_ring_set();
         let model = ClarAromaticity;
-        let systems = model
+        let aromatic_systems = model
             .find_from_rings(
                 &molecule,
                 &rings,
@@ -413,10 +413,11 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(systems.len(), expected_systems);
-        assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
-        if let Some((system_atoms_vec, _)) = systems.first() {
-            let system_atoms: HashSet<AtomId> = system_atoms_vec.iter().copied().collect();
+        assert_eq!(aromatic_systems.len(), expected_aromatic_systems);
+        assert_eq!(aromatic_systems.first().map(|s| s.0.len()), expected_atoms);
+        if let Some((aromatic_system_atoms_vec, _)) = aromatic_systems.first() {
+            let aromatic_system_atoms: HashSet<AtomId> =
+                aromatic_system_atoms_vec.iter().copied().collect();
             let expected_atoms: HashSet<AtomId> = select_disjoint_sextets(
                 &rings,
                 &hex_ring_indices(&molecule, &rings),
@@ -426,7 +427,7 @@ mod tests {
             .filter_map(|id| rings.get(id))
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
-            assert_eq!(system_atoms, expected_atoms);
+            assert_eq!(aromatic_system_atoms, expected_atoms);
         }
     }
 

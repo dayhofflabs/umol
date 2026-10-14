@@ -339,7 +339,7 @@ fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
                 [16 17 "1"] [17 18 "1"] [18 4 "1"]]}"#
     );
     let perception = AromaticityPerceiver::new(&model.aromaticity);
-    let expected_systems = Solution::Determined(vec![(
+    let expected_aromatic_systems = Solution::Determined(vec![(
         (0..6).map(AtomId).collect(),
         AromaticSystemForm::from_electrons(vec![1; 6])
             .with_charge(0)
@@ -375,7 +375,7 @@ fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
         );
         for assignment in 0..1 << flexible_atoms {
             assert_eq!(
-                perception.find_systems(&molecule, AromaticityConfig::default(), |atom| {
+                perception.find_aromatic_systems(&molecule, AromaticityConfig::default(), |atom| {
                     let contribution = if atom.0 < 6 || atom.0 == 18 {
                         1
                     } else if atom.0 < 6 + flexible_atoms {
@@ -385,7 +385,7 @@ fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
                     };
                     AromaticValence::Aromatic(contribution)
                 }),
-                Ok(expected_systems.clone()),
+                Ok(expected_aromatic_systems.clone()),
             );
         }
         let expected = ResolveReport {

@@ -40,54 +40,56 @@ pub enum KekulizeError {
     #[error("unpaired electrons are undetermined for aromatic system {0:?}")]
     UndeterminedUnpairedElectrons(AromaticSystemId),
     #[error(
-        "aromatic system {system:?} has {member_count} members but {electron_count} electron contributions"
+        "aromatic system {aromatic_system:?} has {member_count} members but {electron_count} electron contributions"
     )]
     ElectronCountMismatch {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         member_count: usize,
         electron_count: usize,
     },
     #[error(
-        "atom {atom:?} in aromatic system {system:?} has unsupported electron contribution {contribution}"
+        "atom {atom:?} in aromatic system {aromatic_system:?} has unsupported electron contribution {contribution}"
     )]
     UnsupportedElectronContribution {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         atom: AtomId,
         contribution: i64,
     },
     #[error("aromatic system {0:?} is open-shell")]
     OpenShell(AromaticSystemId),
-    #[error("aromatic system {system:?} has unsupported charge {charge}")]
+    #[error("aromatic system {aromatic_system:?} has unsupported charge {charge}")]
     UnsupportedCharge {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         charge: i64,
     },
     #[error("aromatic system {0:?} mixes prescribed and mobile exposed atoms")]
     MixedExposureDemand(AromaticSystemId),
     #[error(
-        "node order for aromatic system {system:?} has missing atoms {missing:?} and duplicate atoms {duplicates:?}"
+        "node order for aromatic system {aromatic_system:?} has missing atoms {missing:?} and duplicate atoms {duplicates:?}"
     )]
     InvalidNodeOrder {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         missing: Vec<AtomId>,
         duplicates: Vec<AtomId>,
     },
     #[error(
-        "maximum matching for aromatic system {system:?} has deficiency {actual}; expected {expected}"
+        "maximum matching for aromatic system {aromatic_system:?} has deficiency {actual}; expected {expected}"
     )]
     MatchingDeficiency {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         expected: usize,
         actual: usize,
     },
-    #[error("charge is undetermined for exposed atom {atom:?} in aromatic system {system:?}")]
+    #[error(
+        "charge is undetermined for exposed atom {atom:?} in aromatic system {aromatic_system:?}"
+    )]
     UndeterminedExposedAtomCharge {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         atom: AtomId,
     },
-    #[error("lone pairs are undetermined for exposed atom {atom:?} in aromatic system {system:?}")]
+    #[error("lone pairs are undetermined for exposed atom {atom:?} in aromatic system {aromatic_system:?}")]
     UndeterminedExposedAtomLonePairs {
-        system: AromaticSystemId,
+        aromatic_system: AromaticSystemId,
         atom: AtomId,
     },
     #[error(
@@ -130,35 +132,40 @@ struct MatchingInput {
 }
 
 impl MatchingInput {
-    fn from_system(molecule: &Molecule, system: AromaticSystemId) -> Result<Self, KekulizeError> {
-        let view = molecule.aromatic_system(system);
+    fn from_aromatic_system(
+        molecule: &Molecule,
+        aromatic_system: AromaticSystemId,
+    ) -> Result<Self, KekulizeError> {
+        let view = molecule.aromatic_system(aromatic_system);
         let atoms: Vec<AtomId> = view.atom_ids().collect();
         let ElectronCountsForm::Lit(electrons) = view.electrons() else {
-            return Err(KekulizeError::UndeterminedElectrons(system));
+            return Err(KekulizeError::UndeterminedElectrons(aromatic_system));
         };
         if electrons.len() != atoms.len() {
             return Err(KekulizeError::ElectronCountMismatch {
-                system,
+                aromatic_system,
                 member_count: atoms.len(),
                 electron_count: electrons.len(),
             });
         }
 
         let NumForm::Lit(charge) = view.charge() else {
-            return Err(KekulizeError::UndeterminedCharge(system));
+            return Err(KekulizeError::UndeterminedCharge(aromatic_system));
         };
         let (NumForm::Lit(unpaired_electrons), NumForm::Lit(multiplicity)) = (
             &view.unpaired_electrons().count,
             &view.unpaired_electrons().multiplicity,
         ) else {
-            return Err(KekulizeError::UndeterminedUnpairedElectrons(system));
+            return Err(KekulizeError::UndeterminedUnpairedElectrons(
+                aromatic_system,
+            ));
         };
         if (*unpaired_electrons, *multiplicity) != (0, 1) {
-            return Err(KekulizeError::OpenShell(system));
+            return Err(KekulizeError::OpenShell(aromatic_system));
         }
         if charge.abs() > 1 {
             return Err(KekulizeError::UnsupportedCharge {
-                system,
+                aromatic_system,
                 charge: *charge,
             });
         }
@@ -171,7 +178,7 @@ impl MatchingInput {
                 0 | 2 => required_exposed.push(ExposedAtom { atom, electrons }),
                 contribution => {
                     return Err(KekulizeError::UnsupportedElectronContribution {
-                        system,
+                        aromatic_system,
                         atom,
                         contribution,
                     });
@@ -180,7 +187,7 @@ impl MatchingInput {
         }
 
         if !required_exposed.is_empty() && *charge != 0 {
-            return Err(KekulizeError::MixedExposureDemand(system));
+            return Err(KekulizeError::MixedExposureDemand(aromatic_system));
         }
 
         if required_exposed.is_empty() && *charge != 0 {
@@ -293,8 +300,8 @@ impl Transformer for Kekulizer {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct SystemPlan {
-    system_idx: AromaticSystemId,
+struct AromaticSystemPlan {
+    aromatic_system_idx: AromaticSystemId,
     atoms: Vec<AtomId>,
     // Follows atoms order; a mobile exposure has only one entry.
     exposed_atoms: Vec<ExposedAtom>,
@@ -305,7 +312,7 @@ struct SystemPlan {
 
 impl Kekulizer {
     fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, KekulizeError> {
-        let plans = self.plan_systems(molecule)?;
+        let plans = self.plan_aromatic_systems(molecule)?;
         let mut edits = Edits::new();
         let mut orders = vec![None; molecule.bonds().count()];
         for plan in &plans {
@@ -366,20 +373,20 @@ impl Kekulizer {
                 }
                 if let Some(exposed) = exposed_atoms.next_if(|exposed| exposed.atom == id) {
                     let mut update = AtomUpdate::default();
-                    if let Some(system_charge) = plan.mobile_charge {
+                    if let Some(aromatic_system_charge) = plan.mobile_charge {
                         let NumForm::Lit(local_charge) = planned.charge else {
                             return Err(KekulizeError::UndeterminedExposedAtomCharge {
-                                system: plan.system_idx,
+                                aromatic_system: plan.aromatic_system_idx,
                                 atom: id,
                             });
                         };
-                        planned.charge = NumForm::Lit(local_charge + system_charge);
+                        planned.charge = NumForm::Lit(local_charge + aromatic_system_charge);
                         update.charge = Some(planned.charge.clone());
                     }
                     if exposed.electrons == 2 {
                         let NumForm::Lit(lone_pairs) = planned.lone_pairs else {
                             return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
-                                system: plan.system_idx,
+                                aromatic_system: plan.aromatic_system_idx,
                                 atom: id,
                             });
                         };
@@ -394,7 +401,7 @@ impl Kekulizer {
                         Some(order) => NumForm::Lit(order),
                         None => neighbor.bond().order().clone().normalize().map_err(|_| {
                             KekulizeError::ValenceInvariant {
-                                aromatic_system: plan.system_idx,
+                                aromatic_system: plan.aromatic_system_idx,
                                 mismatch: ValenceMismatch::ContradictoryConstraint {
                                     atom_id: id,
                                     key: AtomConstraintKey::Valence,
@@ -430,7 +437,7 @@ impl Kekulizer {
                         _ => atom.constraints().derived_complete(key),
                     }
                     .ok_or(KekulizeError::ValenceInvariant {
-                        aromatic_system: plan.system_idx,
+                        aromatic_system: plan.aromatic_system_idx,
                         mismatch: ValenceMismatch::ContradictoryConstraint { atom_id: id, key },
                     })?;
                     let value = match assertion {
@@ -440,7 +447,7 @@ impl Kekulizer {
                             .asserted(key)
                             .and_then(|asserted| asserted.meet(&derived))
                             .ok_or_else(|| KekulizeError::ContradictedAssertion {
-                                aromatic_system: plan.system_idx,
+                                aromatic_system: plan.aromatic_system_idx,
                                 atom: id,
                                 constraint: constraint.clone(),
                             })?,
@@ -476,7 +483,7 @@ impl Kekulizer {
                             }
                         };
                         return Err(KekulizeError::ValenceInvariant {
-                            aromatic_system: plan.system_idx,
+                            aromatic_system: plan.aromatic_system_idx,
                             mismatch,
                         });
                     }
@@ -490,10 +497,10 @@ impl Kekulizer {
                     .into_iter()
                     .map(|plan| {
                         (
-                            AromaticSystemHandle::Id(plan.system_idx),
+                            AromaticSystemHandle::Id(plan.aromatic_system_idx),
                             plan.atoms.into_iter().map(AtomHandle::Id).collect(),
                             molecule
-                                .aromatic_system(plan.system_idx)
+                                .aromatic_system(plan.aromatic_system_idx)
                                 .attributes()
                                 .clone(),
                         )
@@ -505,15 +512,18 @@ impl Kekulizer {
     }
 
     /// Build the per-system matching plan against an immutable molecule.
-    fn plan_systems(&self, molecule: &Molecule) -> Result<Vec<SystemPlan>, KekulizeError> {
+    fn plan_aromatic_systems(
+        &self,
+        molecule: &Molecule,
+    ) -> Result<Vec<AromaticSystemPlan>, KekulizeError> {
         let mut plans = Vec::with_capacity(molecule.aromatic_systems().count());
         for view in molecule.aromatic_systems().iter() {
-            let system_idx = view.id();
-            let system_atoms: Vec<AtomId> = view.atom_ids().collect();
+            let aromatic_system_idx = view.id();
+            let aromatic_system_atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
-            let atom_set: HashSet<AtomId> = system_atoms.iter().copied().collect();
-            let mut seen = HashSet::with_capacity(system_atoms.len());
-            let mut ordered_host_atoms = Vec::with_capacity(system_atoms.len());
+            let atom_set: HashSet<AtomId> = aromatic_system_atoms.iter().copied().collect();
+            let mut seen = HashSet::with_capacity(aromatic_system_atoms.len());
+            let mut ordered_host_atoms = Vec::with_capacity(aromatic_system_atoms.len());
             let mut duplicates = Vec::new();
             for atom in self
                 .node_order
@@ -527,20 +537,20 @@ impl Kekulizer {
                     duplicates.push(atom);
                 }
             }
-            let missing: Vec<AtomId> = system_atoms
+            let missing: Vec<AtomId> = aromatic_system_atoms
                 .iter()
                 .copied()
                 .filter(|atom| !seen.contains(atom))
                 .collect();
             if !missing.is_empty() || !duplicates.is_empty() {
                 return Err(KekulizeError::InvalidNodeOrder {
-                    system: system_idx,
+                    aromatic_system: aromatic_system_idx,
                     missing,
                     duplicates,
                 });
             }
 
-            let matching_input = MatchingInput::from_system(molecule, view.id())?;
+            let matching_input = MatchingInput::from_aromatic_system(molecule, view.id())?;
             let mobile_charge = match (matching_input.mode, view.charge()) {
                 (MatchingInputMode::OneMobileExposure, NumForm::Lit(charge)) => Some(*charge),
                 (MatchingInputMode::Prescribed, _) => None,
@@ -562,7 +572,7 @@ impl Kekulizer {
                 MatchingInputMode::OneMobileExposure => ordered_host_atoms.clone(),
             };
 
-            let correspondence_host_atoms: Vec<AtomId> = system_atoms
+            let correspondence_host_atoms: Vec<AtomId> = aromatic_system_atoms
                 .iter()
                 .copied()
                 .filter(|atom| !prescribed_exposed_set.contains(atom))
@@ -589,19 +599,19 @@ impl Kekulizer {
                         BipartiteMaximumMatchingAlgorithm::HopcroftKarp,
                     )
                     .map_err(|NonBipartiteGraphError| {
-                        KekulizeError::NonBipartiteMatching(system_idx)
+                        KekulizeError::NonBipartiteMatching(aromatic_system_idx)
                     })?,
             };
             let deficiency = extracted.atoms().count() - 2 * matching.size();
             match matching_input.mode {
                 MatchingInputMode::Prescribed if deficiency != 0 => {
-                    return Err(KekulizeError::NoMatching(system_idx));
+                    return Err(KekulizeError::NoMatching(aromatic_system_idx));
                 }
                 MatchingInputMode::OneMobileExposure
                     if deficiency != matching_input.exposed_count =>
                 {
                     return Err(KekulizeError::MatchingDeficiency {
-                        system: system_idx,
+                        aromatic_system: aromatic_system_idx,
                         expected: matching_input.exposed_count,
                         actual: deficiency,
                     });
@@ -638,7 +648,7 @@ impl Kekulizer {
                 .collect();
             let exposed_set: HashSet<AtomId> =
                 exposed_atoms.iter().map(|exposed| exposed.atom).collect();
-            let actual_exposed: HashSet<AtomId> = system_atoms
+            let actual_exposed: HashSet<AtomId> = aromatic_system_atoms
                 .iter()
                 .copied()
                 .filter(|atom| !matched_atoms.contains(atom))
@@ -647,7 +657,7 @@ impl Kekulizer {
                 MatchingInputMode::Prescribed => {
                     matching_input.required_covered.iter().copied().collect()
                 }
-                MatchingInputMode::OneMobileExposure => system_atoms
+                MatchingInputMode::OneMobileExposure => aromatic_system_atoms
                     .iter()
                     .copied()
                     .filter(|atom| !exposed_set.contains(atom))
@@ -657,14 +667,14 @@ impl Kekulizer {
                 || matched_atoms != required_covered
                 || actual_exposed != exposed_set
             {
-                return Err(KekulizeError::NoMatching(system_idx));
+                return Err(KekulizeError::NoMatching(aromatic_system_idx));
             }
             let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) =
                 bonds.iter().copied().partition(|b| matched.contains(b));
 
-            plans.push(SystemPlan {
-                system_idx,
-                atoms: system_atoms,
+            plans.push(AromaticSystemPlan {
+                aromatic_system_idx,
+                atoms: aromatic_system_atoms,
                 exposed_atoms,
                 mobile_charge,
                 matched_bonds,
@@ -738,19 +748,25 @@ mod tests {
             mode: MatchingInputMode::OneMobileExposure,
         }
     )]
-    fn test_matching_input_from_system(#[case] input: Molecule, #[case] expected: MatchingInput) {
-        let system = input.aromatic_systems().ids().next().unwrap();
-        assert_eq!(MatchingInput::from_system(&input, system), Ok(expected));
+    fn test_matching_input_from_aromatic_system(
+        #[case] input: Molecule,
+        #[case] expected: MatchingInput,
+    ) {
+        let aromatic_system = input.aromatic_systems().ids().next().unwrap();
+        assert_eq!(
+            MatchingInput::from_aromatic_system(&input, aromatic_system),
+            Ok(expected)
+        );
     }
 
     #[rstest]
     #[case::short_counts(
         mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2]"}]}"#),
-        KekulizeError::ElectronCountMismatch { system: AromaticSystemId(0), member_count: 3, electron_count: 2 }
+        KekulizeError::ElectronCountMismatch { aromatic_system: AromaticSystemId(0), member_count: 3, electron_count: 2 }
     )]
     #[case::long_counts(
         mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2,0,5]"}]}"#),
-        KekulizeError::ElectronCountMismatch { system: AromaticSystemId(0), member_count: 3, electron_count: 4 }
+        KekulizeError::ElectronCountMismatch { aromatic_system: AromaticSystemId(0), member_count: 3, electron_count: 4 }
     )]
     #[case::undetermined_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "*#c0#u0#s1"}]}"#),
@@ -767,7 +783,7 @@ mod tests {
     #[case::unsupported_contribution_at_positional_atom(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,3]#c0#u0#s1"}]}"#),
         KekulizeError::UnsupportedElectronContribution {
-            system: AromaticSystemId(0),
+            aromatic_system: AromaticSystemId(0),
             atom: AtomId(1),
             contribution: 3,
         }
@@ -779,7 +795,7 @@ mod tests {
     #[case::unsupported_charge(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c+2#u0#s1"}]}"#),
         KekulizeError::UnsupportedCharge {
-            system: AromaticSystemId(0),
+            aromatic_system: AromaticSystemId(0),
             charge: 2,
         }
     )]
@@ -787,12 +803,15 @@ mod tests {
         mol_dsl!(r#"{:atoms ["B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[0,1]#c+#u0#s1"}]}"#),
         KekulizeError::MixedExposureDemand(AromaticSystemId(0))
     )]
-    fn test_matching_input_from_system_error(
+    fn test_matching_input_from_aromatic_system_error(
         #[case] input: Molecule,
         #[case] expected: KekulizeError,
     ) {
-        let system = input.aromatic_systems().ids().next().unwrap();
-        assert_eq!(MatchingInput::from_system(&input, system), Err(expected));
+        let aromatic_system = input.aromatic_systems().ids().next().unwrap();
+        assert_eq!(
+            MatchingInput::from_aromatic_system(&input, aromatic_system),
+            Err(expected)
+        );
     }
 
     #[rstest]
@@ -836,7 +855,7 @@ mod tests {
         vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(1)],
         mol_dsl_concrete!(r#"{:atoms ["O#h#n2" "H" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :single] [2 3 :double] [3 4 :single] [4 5 :double] [5 6 :single] [6 7 :double] [2 7 :single]]}"#)
     )]
-    #[case::multiple_disjoint_systems(
+    #[case::multiple_disjoint_aromatic_systems(
         mol_dsl_concrete!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"} {:atoms [4 5 6 7] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(4), AtomId(1), AtomId(5), AtomId(2), AtomId(6), AtomId(3), AtomId(7)],
         mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
@@ -913,20 +932,20 @@ mod tests {
         (0..5).map(AtomId).collect(),
         KekulizeError::NoMatching(AromaticSystemId(0))
     )]
-    #[case::missing_system_atom(
+    #[case::missing_aromatic_system_atom(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(1), AtomId(2)],
         KekulizeError::InvalidNodeOrder {
-            system: AromaticSystemId(0),
+            aromatic_system: AromaticSystemId(0),
             missing: vec![AtomId(3)],
             duplicates: vec![],
         }
     )]
-    #[case::duplicate_system_atom(
+    #[case::duplicate_aromatic_system_atom(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(1), AtomId(1), AtomId(2), AtomId(3)],
         KekulizeError::InvalidNodeOrder {
-            system: AromaticSystemId(0),
+            aromatic_system: AromaticSystemId(0),
             missing: vec![],
             duplicates: vec![AtomId(1)],
         }
@@ -942,7 +961,7 @@ mod tests {
             constraint: AtomConstraintForm::valence(2),
         }
     )]
-    #[case::later_system_mismatch(
+    #[case::later_aromatic_system_mismatch(
         mol_dsl_concrete!(r#"{:atoms ["*#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
                                     "C#h#a" "C#h#a" "C#h#a#n" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]
@@ -1064,8 +1083,8 @@ mod tests {
     #[case::five_membered_ring(
         mol_dsl_concrete!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
         (0..5).map(AtomId).collect(),
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..5).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             mobile_charge: None,
@@ -1076,8 +1095,8 @@ mod tests {
     #[case::seven_membered_ring(
         mol_dsl_concrete!(r#"{:atoms ["B#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[0,1,1,1,1,1,1]"}]}"#),
         (0..7).map(AtomId).collect(),
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..7).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 0 }],
             mobile_charge: None,
@@ -1088,8 +1107,8 @@ mod tests {
     #[case::fused_heterocycle(
         mol_dsl_concrete!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 8 :aromatic] [8 3 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[2,1,1,1,1,1,1,1,1]"}]}"#),
         (0..9).map(AtomId).collect(),
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..9).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             mobile_charge: None,
@@ -1100,8 +1119,8 @@ mod tests {
     #[case::nontrivial_host_ids(
         mol_dsl_concrete!(r#"{:atoms ["O" "H" "N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 2 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6] :attrs "[2,1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(1)],
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (2..7).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(2), electrons: 2 }],
             mobile_charge: None,
@@ -1112,8 +1131,8 @@ mod tests {
     #[case::five_membered_mobile_hole_natural_order(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..5).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(4), electrons: 2 }],
             mobile_charge: Some(-1),
@@ -1124,8 +1143,8 @@ mod tests {
     #[case::five_membered_mobile_hole_rotated_order(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         vec![AtomId(2), AtomId(3), AtomId(4), AtomId(0), AtomId(1)],
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..5).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(0), electrons: 2 }],
             mobile_charge: Some(-1),
@@ -1136,8 +1155,8 @@ mod tests {
     #[case::seven_membered_mobile_hole_natural_order(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[1,1,1,1,1,1,1]#c+"}]}"#),
         (0..7).map(AtomId).collect(),
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..7).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(6), electrons: 0 }],
             mobile_charge: Some(1),
@@ -1148,8 +1167,8 @@ mod tests {
     #[case::seven_membered_mobile_hole_rotated_order(
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[1,1,1,1,1,1,1]#c+"}]}"#),
         vec![AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(0), AtomId(1), AtomId(2)],
-        vec![SystemPlan {
-            system_idx: AromaticSystemId(0),
+        vec![AromaticSystemPlan {
+            aromatic_system_idx: AromaticSystemId(0),
             atoms: (0..7).map(AtomId).collect(),
             exposed_atoms: vec![ExposedAtom { atom: AtomId(1), electrons: 0 }],
             mobile_charge: Some(1),
@@ -1157,14 +1176,14 @@ mod tests {
             unmatched_bonds: vec![BondId(0), BondId(1), BondId(3), BondId(5)],
         }]
     )]
-    fn test_kekulizer_plan_systems(
+    fn test_kekulizer_plan_aromatic_systems(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
-        #[case] mut expected: Vec<SystemPlan>,
+        #[case] mut expected: Vec<AromaticSystemPlan>,
     ) {
         let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
-        let mut actual = kekulizer.plan_systems(&input).unwrap();
-        assert_eq!(kekulizer.plan_systems(&input), Ok(actual.clone()));
+        let mut actual = kekulizer.plan_aromatic_systems(&input).unwrap();
+        assert_eq!(kekulizer.plan_aromatic_systems(&input), Ok(actual.clone()));
         for plan in actual.iter_mut().chain(&mut expected) {
             plan.matched_bonds.sort_unstable();
             plan.unmatched_bonds.sort_unstable();
@@ -1182,17 +1201,17 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
         KekulizeError::MatchingDeficiency {
-            system: AromaticSystemId(0),
+            aromatic_system: AromaticSystemId(0),
             expected: 1,
             actual: 3,
         }
     )]
-    fn test_kekulizer_plan_systems_error(
+    fn test_kekulizer_plan_aromatic_systems_error(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizeError,
     ) {
         let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
-        assert_eq!(kekulizer.plan_systems(&input), Err(expected));
+        assert_eq!(kekulizer.plan_aromatic_systems(&input), Err(expected));
     }
 }

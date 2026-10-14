@@ -71,7 +71,7 @@ use crate::strategies::{aromatic_skeleton, atom_selection_skeleton, stored_aroma
 
 proptest! {
     #[test]
-    fn test_aromaticity_resolver_resolve_stored_systems(input in stored_aromatic_skeleton()) {
+    fn test_aromaticity_resolver_resolve_stored_aromatic_systems(input in stored_aromatic_skeleton()) {
         let model = AromaticityModel::daylight();
         let resolver = |failure| AromaticityResolver::with_config(&model, AromaticityResolveConfig {
             aromatic_valence_failure: AromaticityFailurePolicy::Keep,
@@ -97,11 +97,11 @@ proptest! {
             let outcome = resolver.resolve(input.clone()).unwrap();
             if !reproduced && failure == AromaticityFailurePolicy::Error {
                 prop_assert_eq!(outcome, Solution::Contradictory(AromaticityContradiction::Inconsistency(
-                    AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) }
+                    AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }
                 )));
                 let mut unchanged = input.clone();
                 prop_assert_eq!(resolver.resolve_into(&mut unchanged).unwrap(), Solution::Contradictory(
-                    AromaticityContradiction::Inconsistency(AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) })
+                    AromaticityContradiction::Inconsistency(AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) })
                 ));
                 prop_assert_eq!(unchanged, input.clone());
             } else {
@@ -242,17 +242,17 @@ proptest! {
                 expected.bonds.push((a, b, if stored { asserted.clone() } else { bond }));
                 source.bonds.push((a, b, asserted));
             }
-            let system = ((offset..offset + 6).map(AtomId::from).collect(), AromaticSystemForm {
+            let aromatic_system = ((offset..offset + 6).map(AtomId::from).collect(), AromaticSystemForm {
                 electrons: ElectronCountsForm::Lit(vec![1; 6]),
                 charge: NumForm::Lit(0),
                 unpaired_electrons: UnpairedElectronsForm::closed_shell(),
                 constraints: Default::default(),
             });
             if stored {
-                source.aromatic.push(system.clone());
-                expected.aromatic.push(system);
+                source.aromatic.push(aromatic_system.clone());
+                expected.aromatic.push(aromatic_system);
             } else {
-                additions.push(system);
+                additions.push(aromatic_system);
             }
             if linked && ring > 0 {
                 let a = AtomId::from(offset - 3);
@@ -324,7 +324,7 @@ proptest! {
         for (aromatic, stereo, completes_atoms, output) in results {
             prop_assert_eq!(output.constraints(), input.constraints());
             let added_members: BTreeSet<_> = output.aromatic_systems().iter()
-                .skip(input.aromatic_systems().count()).flat_map(|system| system.atom_ids()).collect();
+                .skip(input.aromatic_systems().count()).flat_map(|aromatic_system| aromatic_system.atom_ids()).collect();
             let added_atoms: BTreeSet<_> = output.stereo_atoms().iter()
                 .skip(input.stereo_atoms().count()).map(|site| site.site_id()).collect();
             let added_bonds: BTreeSet<_> = output.stereo_bonds().iter()
@@ -412,8 +412,8 @@ proptest! {
                 return Err(TestCaseError::fail("projection of a resolved skeleton was not determined"));
             };
             let mut expected = source.clone().edit();
-            for system in source.aromatic_systems().iter() {
-                for atom in system.atom_ids() {
+            for aromatic_system in source.aromatic_systems().iter() {
+                for atom in aromatic_system.atom_ids() {
                     expected.atom_mut(atom).attributes_mut().constraints.remove(AtomConstraintKey::AromaticValence);
                 }
             }
@@ -493,11 +493,11 @@ proptest! {
                 outputs.push(output);
             }
             for output in outputs {
-                for system in output.aromatic_systems().iter().skip(input.aromatic_systems().count()) {
-                    let ElectronCountsForm::Lit(electrons) = &system.attributes().electrons else {
+                for aromatic_system in output.aromatic_systems().iter().skip(input.aromatic_systems().count()) {
+                    let ElectronCountsForm::Lit(electrons) = &aromatic_system.attributes().electrons else {
                         return Err(TestCaseError::fail("new system has nonliteral electron counts"));
                     };
-                    let members: Vec<_> = system.atom_ids().collect();
+                    let members: Vec<_> = aromatic_system.atom_ids().collect();
                     prop_assert_eq!(electrons.len(), members.len());
                     for (&atom, &electrons) in members.iter().zip(electrons) {
                         let literal = AtomConstraintForm::AromaticValence(

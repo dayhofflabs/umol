@@ -656,7 +656,7 @@ mod tests {
     fn test_hmo_aromaticity_find_from_rings(
         hmo_model: HmoAromaticity,
         #[case] molecule: Molecule,
-        #[case] expected_systems: usize,
+        #[case] expected_aromatic_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
         let ring_info = molecule
@@ -668,7 +668,7 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = hmo_model
+        let aromatic_systems = hmo_model
             .find_from_rings(
                 &molecule,
                 &ring_info,
@@ -681,8 +681,8 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(systems.len(), expected_systems);
-        assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
+        assert_eq!(aromatic_systems.len(), expected_aromatic_systems);
+        assert_eq!(aromatic_systems.first().map(|s| s.0.len()), expected_atoms);
     }
 
     #[rstest]

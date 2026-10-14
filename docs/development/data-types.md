@@ -839,7 +839,7 @@ that entity's pairing; the correspondence does not map positions within those li
 
 Resolver::resolve and project consume a molecule and execute through one editor, without a recovery
 copy or journal. Only a determined result returns a molecule; underdetermination, contradiction,
-and execution errors drop it. Resolver::resolve_into and project_into borrow mutably and use a
+and planning errors drop it. Resolver::resolve_into and project_into borrow mutably and use a
 transaction: only a determined result retains changes. Every other outcome restores the molecule
 under the transaction's equivalence. Intermediate probe and final finish/commit check integrity.
 
@@ -848,10 +848,22 @@ return it with determined or underdetermined outcomes; contradictions carry only
 The ordinary resolution methods do not construct a report. Ingestion consumes its newly raised
 molecule and treats underdetermination as an error without a report.
 
-Transformer::transform consumes its molecule and executes changes through the editor. Its borrowed
-transform_into counterpart uses a transaction and restores on error. transform_iter borrows the
-source and lazily clones and transforms it; each yielded molecule is independent. Rejected
-candidates are omitted. Callers choose the route according to ownership and recovery requirements.
+Each transformer derives a complete edit plan from its input before mutation. Planning reports
+every rejection, including any condition that would make the planned result violate representation
+integrity. The plan must apply to the unchanged molecule it was derived from and preserve its
+integrity; a failed application or publication is an implementation defect.
+
+Transformer::transform consumes its molecule and applies the plan through an editor.
+Transformer::transform_into applies the same plan in place without a transaction or rollback
+method; rejection leaves the input unchanged. transform_iter borrows the source and lazily clones
+and transforms it; each yielded molecule is independent. Rejected candidates are omitted.
+
+The individual resolvers' resolve_into and project_into follow the same planning rule. They
+complete planning before mutation and apply a determined plan without a transaction or rollback
+method. Underdetermination, contradiction, and planning errors leave the input unchanged. Plan
+application and publication must succeed on that input; failure is an implementation defect.
+The composite Resolver retains its transaction across phases because a later phase can reject
+changes already applied by an earlier phase.
 
 ## Pushout results
 
