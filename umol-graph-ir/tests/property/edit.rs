@@ -3,7 +3,7 @@ use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomHandle, AtomId, BondId, DativeBondId, Edits, EntityKind, Molecule,
     MoleculeApplyError, MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
-    Transaction, TransactionError,
+    TrackedTransaction, Transaction, TransactionError,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -892,10 +892,63 @@ proptest! {
         }
     }
 
+    /// A rejected edit after a valid prefix preserves the primary error and restores the entry
+    /// state identically through both scoped handles.
+    #[test]
+    fn test_tracked_transaction_run_error(
+        (base, prefix) in transaction_edits_strategy(),
+    ) {
+        let atom_count = base.atoms().count();
+        let edits: Edits = prefix
+            .into_iter()
+            .chain([Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(atom_count as u32)),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
+                },
+            }])
+            .collect();
+        let expected = MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange {
+            kind: EntityKind::Atom,
+            index: atom_count,
+            count: atom_count,
+        });
+        let mut ordinary = base.clone();
+        let plain = ordinary.transact([edits.clone()]);
+        let mut tracked = base.clone();
+        let result = TrackedTransaction::run(&mut tracked, |mut transaction| {
+            transaction.apply(edits)?;
+            transaction.commit()
+        });
+        prop_assert_eq!(result.map(|_| ()), Err(expected.clone()));
+        prop_assert_eq!(plain, Err(expected));
+        prop_assert_eq!(tracked, base.clone());
+        prop_assert_eq!(ordinary, base);
+    }
+
+    /// Discarding a tracked commit's correspondence gives the ordinary outcome; the mapping
+    /// and resulting molecule also agree with consuming application of the same edits.
+    #[test]
+    fn test_tracked_transaction_commit(
+        (base, edits) in transaction_edits_strategy(),
+    ) {
+        let expected = base.clone().tracked_apply(edits.clone()).unwrap();
+        let mut ordinary = base.clone();
+        ordinary.transact([edits.clone()]).unwrap();
+        let mut tracked = base;
+        let correspondence = TrackedTransaction::run(&mut tracked, |mut transaction| {
+            transaction.apply(edits)?;
+            transaction.commit()
+        }).unwrap();
+        prop_assert_eq!(&tracked, &ordinary);
+        prop_assert_eq!((tracked, correspondence), expected);
+    }
+
     /// A transaction spanning consecutive batches has the composed batch correspondence and the
     /// same result as separate commits. Rolling both batches back restores the initial molecule.
     #[test]
-    fn test_molecule_tracked_transact_composition(
+    fn test_tracked_transaction_commit_composition(
         (base, first_edits, second_edits) in consecutive_transaction_strategy(),
     ) {
         let mut separate = base.clone();
@@ -912,9 +965,11 @@ proptest! {
         );
 
         let mut together = base.clone();
-        let composed = together
-            .tracked_transact([first_edits.clone(), second_edits.clone()])
-            .unwrap();
+        let composed = TrackedTransaction::run(&mut together, |mut transaction| {
+            transaction.apply(first_edits.clone())?;
+            transaction.apply(second_edits.clone())?;
+            transaction.commit()
+        }).unwrap();
         prop_assert_eq!(composed, first.compose(&second).unwrap());
         prop_assert_eq!(together, separate.clone());
         let mut plain = base.clone();
@@ -924,7 +979,7 @@ proptest! {
         prop_assert_eq!(plain, separate);
 
         let mut restored = base.clone();
-        Transaction::run(
+        TrackedTransaction::run(
             &mut restored,
             |mut transaction| -> Result<(), MoleculeApplyError> {
                 transaction.apply(first_edits)?;
@@ -938,9 +993,9 @@ proptest! {
     }
 
     /// Descending atom removals and subsequent additions name the same entities under any
-    /// batch split. Cascaded overlay removals must preserve that partition independence too.
+    /// batch split. Accumulation and composition of separate commits agree, including cascades.
     #[test]
-    fn test_molecule_tracked_transact_partition(
+    fn test_tracked_transaction_commit_partition(
         (base, removed) in molecule_with_atom_subset_strategy(),
         added in prop::collection::vec(atom_form_strategy(), 0..=6),
         batch_size in 1usize..=4,
@@ -955,12 +1010,42 @@ proptest! {
         let raw: Vec<_> = edits.iter().cloned().collect();
         let mut single = base.clone();
         let expected = single.tracked_transact([edits]).unwrap();
+        let mut separate = base.clone();
+        let mut composed = separate.tracked_transact([]).unwrap();
+        for chunk in raw.chunks(batch_size) {
+            let next = separate
+                .tracked_transact([Edits::from_iter(chunk.iter().cloned())])
+                .unwrap();
+            composed = composed.compose(&next).unwrap();
+        }
         let mut partitioned = base;
-        let actual = partitioned.tracked_transact(
-            raw.chunks(batch_size).map(|chunk| Edits::from_iter(chunk.iter().cloned()))
-        ).unwrap();
-        prop_assert_eq!(actual, expected);
+        let actual = TrackedTransaction::run(&mut partitioned, |mut transaction| {
+            for chunk in raw.chunks(batch_size) {
+                transaction.apply(Edits::from_iter(chunk.iter().cloned()))?;
+            }
+            transaction.commit()
+        }).unwrap();
+        prop_assert_eq!(&actual, &expected);
+        prop_assert_eq!(composed, expected);
+        prop_assert_eq!(&partitioned, &separate);
         prop_assert_eq!(partitioned, single);
+    }
+
+    /// Explicit cancellation restores the complete entry representation after a generated batch.
+    #[test]
+    fn test_tracked_transaction_rollback(
+        (base, edits) in transaction_edits_strategy(),
+    ) {
+        let mut molecule = base.clone();
+        TrackedTransaction::run(
+            &mut molecule,
+            |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(edits)?;
+                transaction.rollback();
+                Ok(())
+            },
+        ).unwrap();
+        prop_assert_eq!(molecule, base);
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow

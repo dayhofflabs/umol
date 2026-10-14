@@ -2478,7 +2478,7 @@ This completed the eager tracking candidate and established its plain-commit
 cost. The selected follow-up is separate Transaction and TrackedTransaction
 handles in S0e1/S0e2. Clone-mode measurements remain part of S0f.
 
-#### S0e1 — TrackedTransaction scoped handle
+#### S0e1 — TrackedTransaction scoped handle (done)
 
 **Modules:** graph-IR molecule/transact, molecule and ir exports, transaction
 unit tests and edit properties. **Additive, green.** [dep: S0e]
@@ -2511,6 +2511,24 @@ uncommitted return, callback error after commit, unwinding between completed edi
 forgotten handles and probe after abort. Check the same errors and restoration as
 Transaction. Extend public-operation properties for batch composition/partition,
 rollback and equality of plain/tracked outcomes after discarding correspondence.
+
+Completed 2026-10-14. TrackedTransaction exposes run, apply, probe, commit and
+rollback, with private fields and exports through molecule and ir. Its commit
+returns MoleculeCorrespondence and still requires callback success for acceptance.
+The implementation privately reuses Transaction and its restoration guard; it
+constructs no second mapping and exposes no conversion or mutable access to the
+ordinary handle. Transaction::tracked_commit and ordinary eager tracking remain
+until S0e2.
+
+Exact correspondence cases now exercise the new handle, with lifecycle cases
+covering cancellation, first/later application failure, probe repair, aborted and
+failed commit, callback errors/unwinding after commit, and forgotten handles.
+Properties check plain/tracked outcomes and errors, rollback, and composition and
+partition independence, including structural edits and cascades. Verification
+passed: 1,272 molecule unit tests, 28 feature-gated edit tests, all-target graph-IR
+Clippy with proptest and warnings denied, nightly formatting and git diff --check.
+Logs are in `scratch/181-s0e1/`. Cost comparisons remain in S0e2 and workspace
+checks remain at the stage gate.
 
 #### S0e2 — Ordinary transactions without correspondence
 

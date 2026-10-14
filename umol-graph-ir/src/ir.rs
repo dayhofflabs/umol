@@ -101,7 +101,7 @@ pub use matching::BondMatching;
 pub use molecule::{
     spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
     MoleculeIntegrityError, MoleculePushoutCorrespondence, MoleculeSpec, MoleculeSpecTerm, Port,
-    PortArg, Transaction, TransactionError,
+    PortArg, TrackedTransaction, Transaction, TransactionError,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
 pub use noncovalent::{
