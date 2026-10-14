@@ -367,6 +367,23 @@ fn equiv_molecule_entries() -> MoleculeEntries {
 }
 
 #[fixture]
+fn constrained_molecule_entries() -> MoleculeEntries {
+    MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::N),
+        ],
+        constraints: vec![
+            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(0)),
+            Constraint::Atom(AtomId(2), AtomConstraintForm::degree(0)),
+        ]
+        .into(),
+        ..Default::default()
+    }
+}
+
+#[fixture]
 fn molecule_reframe_source(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
 ) -> Molecule {
@@ -469,7 +486,7 @@ fn test_molecule_try_from_entries(#[from(equiv_molecule_entries)] mut entries: M
         noncovalent_bonds: NoncovalentBonds::new(entries.noncovalent.clone()),
         stereo_atoms: StereoAtoms::new(entries.stereo_atoms.clone()),
         stereo_bonds: StereoBonds::new(entries.stereo_bonds.clone()),
-        constraints: entries.constraints.clone(),
+        constraints: Arc::new(entries.constraints.clone()),
     };
 
     assert_eq!(Molecule::try_from_entries(entries), Ok(expected));
@@ -1725,10 +1742,14 @@ fn test_molecule_normalize_shared_storage(
 
     entries.atoms[0].charge = NumForm::lit_set([1_i64]);
     entries.aromatic[0].1.charge = NumForm::lit_set([0_i64]);
+    entries
+        .constraints
+        .push(entries.constraints.as_slice()[0].clone());
+    let snapshot = Molecule::from_entries(entries.clone());
     let source = Molecule::from_entries(entries);
-    let snapshot = source.clone();
     let shared = source.clone();
     assert!(Arc::ptr_eq(&source.atoms, &shared.atoms));
+    assert!(Arc::ptr_eq(&source.constraints, &shared.constraints));
 
     let normalized = shared.normalize().expect("the molecule is satisfiable");
 
@@ -1761,16 +1782,27 @@ fn test_molecule_normalize_idempotence(
         StereoCoset::lit_set(Vec::<u32>::new()),
     );
 })]
+#[case::molecule_constraint(|entries: &mut MoleculeEntries| {
+    entries.constraints = Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::degree(NumForm::lit_set(Vec::<i64>::new())),
+    ).into();
+})]
 fn test_molecule_normalize_error(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] contradict: fn(&mut MoleculeEntries),
+    #[values(false, true)] shared: bool,
 ) {
     contradict(&mut entries);
+    let source = Molecule::from_entries(entries.clone());
+    let input = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries.clone())
+    };
 
-    assert_eq!(
-        Molecule::from_entries(entries).normalize(),
-        Err(Contradiction),
-    );
+    assert_eq!(input.normalize(), Err(Contradiction));
+    assert_eq!(source, Molecule::from_entries(entries));
 }
 
 #[rstest]
@@ -4183,12 +4215,14 @@ fn test_molecule_extend_constraints(restoration_entries: MoleculeEntries) {
     molecule.push_constraint(constraint.clone());
     molecule.extend_constraints(vec![constraint.clone(), constraint.clone()]);
     let mut expected = original.clone();
-    expected.constraints = original
-        .constraints
-        .iter()
-        .cloned()
-        .chain([constraint.clone(), constraint.clone(), constraint])
-        .collect();
+    expected.constraints = Arc::new(
+        original
+            .constraints()
+            .iter()
+            .cloned()
+            .chain([constraint.clone(), constraint.clone(), constraint])
+            .collect(),
+    );
     assert_eq!(molecule, expected);
     molecule.extend_constraints(vec![]);
     assert_eq!(molecule, expected);
@@ -4208,7 +4242,7 @@ fn test_molecule_remove_constraint_at(restoration_entries: MoleculeEntries) {
     assert_eq!(
         molecule,
         Molecule {
-            constraints: Constraints::new(),
+            constraints: Arc::new(Constraints::new()),
             ..original
         }
     );
@@ -4223,7 +4257,7 @@ fn test_molecule_compact_constraints(
     let old = Constraint::Atom(AtomId(6), AtomConstraintForm::degree(2));
     let new = Constraint::Atom(AtomId(4), AtomConstraintForm::degree(2));
     let original = Molecule {
-        constraints: vec![removed.clone(), old.clone(), old.clone()].into(),
+        constraints: Arc::new(vec![removed.clone(), old.clone(), old.clone()].into()),
         ..Molecule::from_entries(restoration_entries)
     };
     let mut molecule = original.clone();
@@ -4267,7 +4301,7 @@ fn test_molecule_compact_constraints(
     assert_eq!(
         molecule,
         Molecule {
-            constraints: vec![new.clone(), new].into(),
+            constraints: Arc::new(vec![new.clone(), new].into()),
             ..original
         }
     );
@@ -5218,6 +5252,58 @@ fn test_molecule_editor_tracked_apply_identity(
 }
 
 #[rstest]
+fn test_molecule_editor_constraints_mut_shared_storage(
+    constrained_molecule_entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(constrained_molecule_entries.clone());
+    let mut editor = source.clone().edit();
+    assert_eq!(
+        editor.constraints_mut().remove_at(0),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::degree(0)),
+    );
+    editor
+        .constraints_mut()
+        .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: None,
+            sum: NumForm::Lit(0),
+        }));
+    let expected = Molecule::from_entries(MoleculeEntries {
+        constraints: vec![
+            Constraint::Atom(AtomId(2), AtomConstraintForm::degree(0)),
+            Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: NumForm::Lit(0),
+            }),
+        ]
+        .into(),
+        ..constrained_molecule_entries.clone()
+    });
+
+    assert_eq!(editor.finish(), Ok(expected));
+    assert_eq!(source, Molecule::from_entries(constrained_molecule_entries));
+}
+
+#[rstest]
+fn test_molecule_editor_remove_topology_shared_storage(
+    constrained_molecule_entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(constrained_molecule_entries.clone());
+    let mut editor = source.clone().edit();
+    editor.remove_topology(&[AtomId(0)], &[]);
+    let expected = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::N),
+        ],
+        constraints: Constraint::Atom(AtomId(1), AtomConstraintForm::degree(0)).into(),
+        ..Default::default()
+    });
+
+    assert_eq!(editor.finish(), Ok(expected));
+    assert_eq!(source, Molecule::from_entries(constrained_molecule_entries));
+}
+
+#[rstest]
 fn test_molecule_editor_finish_additions(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
     let expected = Molecule::from_entries(entries.clone());
     let mut editor = Molecule::new().edit();
@@ -5280,6 +5366,41 @@ fn test_molecule_editor_probe_error(#[case] expected: MoleculeIntegrityError) {
     editor.remove_topology(&[], &[added]);
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));
+}
+
+#[rstest]
+fn test_transaction_rollback_constraints_shared_storage(
+    constrained_molecule_entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(constrained_molecule_entries.clone());
+    let mut molecule = source.clone();
+    let mut edits = Edits::new();
+    edits.remove_atom(AtomHandle::Id(AtomId(0)));
+    let compacted = Transaction::run(&mut molecule, |mut transaction| {
+        transaction.apply(edits)?;
+        assert_eq!(
+            source,
+            Molecule::from_entries(constrained_molecule_entries.clone())
+        );
+        let snapshot = transaction.probe()?.clone();
+        transaction.rollback();
+        Ok::<_, MoleculeApplyError>(snapshot)
+    });
+    let expected_compacted = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::N),
+        ],
+        constraints: Constraint::Atom(AtomId(1), AtomConstraintForm::degree(0)).into(),
+        ..Default::default()
+    });
+
+    assert_eq!(compacted, Ok(expected_compacted));
+    assert_eq!(
+        molecule,
+        Molecule::from_entries(constrained_molecule_entries.clone())
+    );
+    assert_eq!(source, Molecule::from_entries(constrained_molecule_entries));
 }
 
 #[rstest]

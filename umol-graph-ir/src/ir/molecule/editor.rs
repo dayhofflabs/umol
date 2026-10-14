@@ -68,7 +68,7 @@ impl MoleculeEditor {
         noncovalent_bonds: NoncovalentBonds,
         stereo_atoms: StereoAtoms,
         stereo_bonds: StereoBonds,
-        constraints: Constraints,
+        constraints: Arc<Constraints>,
     ) -> Self {
         Self {
             molecule: Molecule {

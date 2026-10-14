@@ -118,8 +118,7 @@ impl Molecule {
                 .remap_vec(self.stereo_bonds.remap(graph_remapping).into_entries()),
         );
         let correspondence = MoleculeCorrespondence::from(remapping);
-        let constraints: Constraints = self
-            .constraints
+        let constraints: Constraints = Arc::unwrap_or_clone(self.constraints)
             .into_iter()
             .map(|constraint| constraint.map(&correspondence))
             .collect();
@@ -135,7 +134,7 @@ impl Molecule {
                 noncovalent_bonds,
                 stereo_atoms,
                 stereo_bonds,
-                constraints,
+                Arc::new(constraints),
             )
             .expect("dense molecule remapping preserves representation integrity"),
         )

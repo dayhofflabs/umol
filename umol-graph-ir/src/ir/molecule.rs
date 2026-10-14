@@ -70,6 +70,13 @@ mod transact;
 /// Entity attributes and entity-level constraints are mutable through entity views.
 /// Structural edits and molecule-level constraint changes go through `MoleculeEditor` via
 /// [`Molecule::edit`].
+///
+/// Clones share storage until mutation.
+///
+/// # Semantic properties
+///
+/// Editing or transforming one clone leaves the other unchanged, including its
+/// molecule-level constraints.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Molecule {
     graph: Graph,
@@ -81,7 +88,7 @@ pub struct Molecule {
     noncovalent_bonds: NoncovalentBonds,
     stereo_atoms: StereoAtoms,
     stereo_bonds: StereoBonds,
-    constraints: Constraints,
+    constraints: Arc<Constraints>,
 }
 
 /// Constructor input for [`Molecule::from_entries`].
@@ -157,7 +164,7 @@ impl Molecule {
             NoncovalentBonds::new(noncovalent),
             StereoAtoms::new(stereo_atoms),
             StereoBonds::new(stereo_bonds),
-            constraints,
+            Arc::new(constraints),
         )
     }
 
@@ -172,7 +179,7 @@ impl Molecule {
         noncovalent_bonds: NoncovalentBonds,
         stereo_atoms: StereoAtoms,
         stereo_bonds: StereoBonds,
-        constraints: Constraints,
+        constraints: Arc<Constraints>,
     ) -> Result<Self, MoleculeIntegrityError> {
         let molecule = Self {
             graph,
@@ -711,7 +718,7 @@ impl Molecule {
     }
 
     pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
-        &mut self.constraints
+        Arc::make_mut(&mut self.constraints)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -850,7 +857,7 @@ impl Molecule {
     /// is a contradiction. Combinator subtrees, `Relational`, and `Molecule`
     /// entries are left in place.
     pub fn inline_constraints(mut self) -> Result<Self, Contradiction> {
-        for c in self.constraints.take() {
+        for c in self.constraints_mut().take() {
             match c {
                 Constraint::Atom(id, inner) => {
                     let mut entity = self.atom_mut(id);
@@ -930,7 +937,7 @@ impl Molecule {
                 | Constraint::Molecule(_)
                 | Constraint::And(_)
                 | Constraint::Or(_)
-                | Constraint::Not(_)) => self.constraints.push(c),
+                | Constraint::Not(_)) => self.constraints_mut().push(c),
             }
         }
         Ok(self)
@@ -1295,11 +1302,11 @@ impl Molecule {
     }
 
     pub(crate) fn push_constraint(&mut self, constraint: Constraint) {
-        self.constraints.push(constraint);
+        self.constraints_mut().push(constraint);
     }
 
     pub(crate) fn extend_constraints(&mut self, constraints: Vec<Constraint>) {
-        self.constraints.extend(constraints);
+        self.constraints_mut().extend(constraints);
     }
 
     /// Remove a constraint at its stored position.
@@ -1308,20 +1315,21 @@ impl Molecule {
     ///
     /// Panics if the position is outside the current constraints.
     pub(crate) fn remove_constraint_at(&mut self, position: usize) -> Constraint {
-        self.constraints.remove_at(position)
+        self.constraints_mut().remove_at(position)
     }
 
     pub(crate) fn compact_constraints(&mut self, compaction: &MoleculeCompaction) {
-        let constraints = mem::take(self.constraints_mut());
-        *self.constraints_mut() = constraints.compact(compaction);
+        let constraints = self.constraints_mut();
+        *constraints = mem::take(constraints).compact(compaction);
     }
 
     pub(crate) fn tracked_compact_constraints(
         &mut self,
         compaction: &MoleculeCompaction,
     ) -> CascadedConstraints {
-        let (constraints, update) = mem::take(self.constraints_mut()).tracked_compact(compaction);
-        *self.constraints_mut() = constraints;
+        let constraints = self.constraints_mut();
+        let (compacted, update) = mem::take(constraints).tracked_compact(compaction);
+        *constraints = compacted;
         update
     }
 
@@ -1479,7 +1487,7 @@ impl Molecule {
 
     /// Restore molecule constraints from their saved positions and values.
     pub(crate) fn restore_constraints(&mut self, changes: &CascadedConstraints) {
-        self.constraints.restore(changes);
+        self.constraints_mut().restore(changes);
     }
 
     /// Consume the molecule and move its storage into an editor.
@@ -2476,7 +2484,8 @@ impl Normalize for Molecule {
         self.noncovalent_bonds = mem::take(&mut self.noncovalent_bonds).normalize()?;
         self.stereo_atoms = mem::take(&mut self.stereo_atoms).normalize()?;
         self.stereo_bonds = mem::take(&mut self.stereo_bonds).normalize()?;
-        self.constraints = mem::take(&mut self.constraints).normalize()?;
+        let constraints = self.constraints_mut();
+        *constraints = mem::take(constraints).normalize()?;
         Ok(self)
     }
 }
@@ -2497,7 +2506,7 @@ impl FrameTransport for Molecule {
             .reframe_by(actions.noncovalent_bonds())?;
         self.stereo_atoms = self.stereo_atoms.reframe_by(actions.stereo_atoms())?;
         self.stereo_bonds = self.stereo_bonds.reframe_by(actions.stereo_bonds())?;
-        self.constraints = self.constraints.reframe_by(actions)?;
+        self.constraints = Arc::new(Arc::unwrap_or_clone(self.constraints).reframe_by(actions)?);
         Some(self)
     }
 }
@@ -2522,7 +2531,7 @@ impl Reframe for Molecule {
         for attributes in Arc::make_mut(&mut self.bonds) {
             *attributes = mem::take(attributes).normalize()?;
         }
-        self.constraints = mem::take(&mut self.constraints).normalize()?;
+        let constraints = Arc::unwrap_or_clone(self.constraints).normalize()?;
 
         let mut actions = ConstraintFrameActionMap::default();
         self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
@@ -2579,11 +2588,12 @@ impl Reframe for Molecule {
                 }
             })?
         };
-        self.constraints = self
-            .constraints
-            .reframe_by_actions(&actions)
-            .map_err(|_| Contradiction)?
-            .normalize()?;
+        self.constraints = Arc::new(
+            constraints
+                .reframe_by_actions(&actions)
+                .map_err(|_| Contradiction)?
+                .normalize()?,
+        );
         Ok(self)
     }
 }

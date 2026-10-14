@@ -1527,16 +1527,16 @@ plan.
 
 ## Copy-on-write storage
 
-Molecule's graph, atom and bond tables, and six overlay collections are
-Arc-backed. A clone increments reference counts, and the first write to a shared
-table copies that table. Three storages do not follow this rule. Cloning them
-copies their contents.
+Molecule's graph, atom and bond tables, six overlay collections, and molecule-level
+constraints are Arc-backed. A clone increments reference counts, and the first
+write to shared storage copies that storage. Reaction's deltas and ReactionSpan's
+tables and overlay span sets still copy their contents on clone.
 [213](213-editor-overlay-storage-2026-08-27.md#remaining-costs) recorded the
-Molecule constraint copy as a remaining cost.
+Molecule constraint copy as a remaining cost; S5a removes it.
 
 | Aggregate | Field | Current type | Shared on clone |
 | --- | --- | --- | --- |
-| Molecule | constraints | Constraints, wrapping `Vec<Constraint>` | No |
+| Molecule | constraints | `Arc<Constraints>` | Yes |
 | Reaction | lhs | Molecule | As Molecule |
 | Reaction | deltas | Deltas, wrapping `Vec<Delta>` | No |
 | ReactionSpan | graph | Graph | Yes |
@@ -1546,8 +1546,6 @@ Molecule constraint copy as a remaining cost.
 
 Known clone sites that copy this storage:
 
-- Every Molecule clone copies its constraint list. Most molecules have none,
-  and cloning an empty Vec allocates nothing.
 - Reaction::apply and Reaction::tracked_apply snapshot the reaction into the
   returned iterator, copying its Deltas.
 - Reaction and ReactionSpan use the default framed_eq, which clones both
@@ -4268,11 +4266,11 @@ diagnostic display text; derived Debug output uses the renamed fields and varian
 - Touched-file nightly formatting, git diff --check, and full diff review.
 
 The contract inventory and logs are in scratch/236-s4mn/. The full workspace
-formatting pass remains at S7a. S4 is complete; S5a is next.
+formatting pass remains at S7a. S4 is complete.
 
 ### S5 — Copy-on-write storage
 
-#### S5a — Molecule constraints
+#### S5a — Molecule constraints **Done**
 
 **Modules:** graph-IR molecule, molecule/editor, molecule/pushout,
 molecule/remap, molecule/tests. **Green.** [dep: none]
@@ -4289,6 +4287,27 @@ need an owned list call constraints().clone().
 Add clone-independence cases: after cloning a molecule with molecule-level
 constraints, a constraint edit, compaction, transaction rollback, and normalize
 on one copy leave the other unchanged.
+
+**Completed (2026-10-13).** Molecule stores its constraints in Arc, and all
+mutating access detaches shared storage through constraints_mut. Normalization
+takes the inner Constraints without replacing the Arc; reframing and remapping
+move uniquely owned constraints with Arc::unwrap_or_clone. Both compaction paths
+obtain mutable storage once. MoleculeEntries and the public constraint accessors
+retain their owned and borrowed types, respectively; no public signature or
+failure behavior changes.
+
+Clone-independence tests cover editor constraint mutation, topology compaction,
+transaction rollback with snapshots of both the entry and intermediate states,
+and normalization. Contradictory normalization is checked with both unique and
+shared storage.
+
+**Verification:** the graph-IR unit, integration, property, and doc tests passed
+(10,470 passed, 7 ignored), including 433 property-target checks with 256
+generated cases and seed 20261013. The final expansion of the normalization
+error cases passed all eight focused checks. Graph-IR all-target Clippy with
+proptest and warnings denied, touched-file nightly formatting, git diff --check,
+and full diff review passed. The contract inventory and logs are in
+scratch/236-s5a/. S5b is next.
 
 #### S5b — Reaction deltas
 
