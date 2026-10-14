@@ -6,8 +6,7 @@
 //! relation-id order, so anchored searches can select the first matching row.
 
 use super::participant::ParticipantRefs;
-use crate::id::RelationId;
-use crate::id::{EdgeId, NodeId};
+use crate::id::{EdgeId, NodeId, RelationId};
 
 /// Union incidence index: a node → relations pair and an edge → relations pair,
 /// each stored as parallel key and relation-id vectors. Participants self-route via `refs()`, so a

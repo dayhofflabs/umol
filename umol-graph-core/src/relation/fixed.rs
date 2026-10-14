@@ -10,8 +10,7 @@ use super::{
 };
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::GraphCorrespondence;
-use crate::id::{EdgeId, NodeId};
-use crate::id::{IdRange, RelationId};
+use crate::id::{EdgeId, IdRange, NodeId, RelationId};
 use crate::remap::GraphRemapping;
 
 /// Fixed-arity relations over typed participants, with opaque payloads.

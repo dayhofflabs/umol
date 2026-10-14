@@ -1,6 +1,6 @@
 # 236 — Operation ownership and copy costs
 
-Status: In Progress
+Status: Completed
 Date: 2026-10-09
 Relates: [181](181-python-boundary-ownership-2026-08-03.md),
 [168](168-api-hygiene-2026-07-27.md),
@@ -4522,7 +4522,7 @@ Manuscript listing tests and the read-only inline API review are part of
 
 ### S7 — Verification
 
-#### S7a — Final gate
+#### S7a — Final gate **Done**
 
 **Modules:** workspace. **Verification.** [dep: S0–S5, S6a]
 
@@ -4531,6 +4531,20 @@ Formatting-only changes outside the implementation's scope are acceptable here.
 Run workspace tests and lints with all features, and the Python suite in the
 repository's Python 3.13 environment. Rerun benchmarks only for cases whose
 production code differs from what was measured.
+
+**Completed (2026-10-13).** Full workspace nightly formatting grouped imports in
+six graph-core relation modules. No behavior changed, so the recorded benchmark
+results were retained without rerunning them.
+
+**Verification:** cargo test --locked --workspace --all-features --no-fail-fast
+passed: 37,239 tests, 10 ignored, no failures, including the feature-gated
+property and conformance suites and doctests. The run set PROPTEST_CASES=256
+and PROPTEST_RNG_SEED=20261013. Workspace all-target Clippy with all features
+and warnings denied passed. After maturin develop --locked --all-features,
+the Python 3.13.16 suite passed: 2,204 tests, 2 skipped. The final nightly format
+check, git diff --check, and full diff review passed. The Rust toolchain was
+1.96.0; source revision f41db411e plus the import formatting. Logs, commands,
+test totals, and environment details are in scratch/236-s7a/.
 
 **Critical paths:** S3a1 → S3b → S3d → S3l → S4j, then S4c → S4f → S4n
 and S4l → S4n. Both join S6a → S7a, after the remaining stage dependencies.
