@@ -10,9 +10,9 @@ use smallvec::{smallvec, SmallVec};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
-    AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
-    BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, Edits,
-    ElectronCountsForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
+    AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle,
+    AtomId, BondConstraintForm, BondConstraintKey, BondHandle, BondId, BooleanForm, Edits,
+    ElectronCountsForm, Lattice, Molecule, Normalize, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -287,7 +287,8 @@ impl AromaticityResolver {
         if !molecule.has_aromatic_systems() {
             return Ok(Edits::new());
         }
-        let mut edits = Edits::new();
+        let mut atom_constraints = Vec::new();
+        let mut bond_constraints = Vec::new();
         for aromatic_system in molecule.aromatic_systems().iter() {
             let AromaticSystemForm {
                 electrons: ElectronCountsForm::Lit(electrons),
@@ -323,11 +324,13 @@ impl AromaticityResolver {
                         .meet(&aromatic)
                         .ok_or(AromaticityProjectError::AtomAssertion { atom })?,
                 };
-                let mut update = AtomUpdate::default();
-                update
+                let new = AtomConstraintForm::aromatic_valence(assertion);
+                let old = attributes
                     .constraints
-                    .set(AtomConstraintForm::aromatic_valence(assertion));
-                edits.update_atom(AtomHandle::Id(atom), attributes, &update);
+                    .get(AtomConstraintKey::AromaticValence);
+                if old.is_none_or(|old| !old.normalized_eq(&new)) {
+                    atom_constraints.push((AtomHandle::Id(atom), old.cloned(), Some(new)));
+                }
             }
             for bond in aromatic_system.bond_ids() {
                 let attributes = molecule.bond(bond).attributes();
@@ -336,12 +339,19 @@ impl AromaticityResolver {
                     .aromatic()
                     .meet(&BooleanForm::Lit(true))
                     .ok_or(AromaticityProjectError::BondAssertion { bond })?;
-                let mut update = BondUpdate::default();
-                update
-                    .constraints
-                    .set(BondConstraintForm::Aromatic(assertion));
-                edits.update_bond(BondHandle::Id(bond), attributes, &update);
+                let new = BondConstraintForm::Aromatic(assertion);
+                let old = attributes.constraints.get(BondConstraintKey::Aromatic);
+                if old.is_none_or(|old| !old.normalized_eq(&new)) {
+                    bond_constraints.push((BondHandle::Id(bond), old.cloned(), Some(new)));
+                }
             }
+        }
+        let mut edits = Edits::new();
+        if !atom_constraints.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::AromaticValence, atom_constraints);
+        }
+        if !bond_constraints.is_empty() {
+            edits.modify_bond_constraints(BondConstraintKey::Aromatic, bond_constraints);
         }
         edits.remove_aromatic_systems(
             molecule
@@ -1223,7 +1233,7 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AddAromaticSystem, AromaticSystemId, AtomConstraintKey, BondId, Edit, Edits, NumForm,
-        RingConfig, UnpairedElectronsForm,
+        RingConfig, RollbackMethod, UnpairedElectronsForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -2036,6 +2046,102 @@ mod tests {
             .plan_project(&molecule)
             .unwrap();
         let molecule = molecule.apply(edits).unwrap();
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    fn test_aromaticity_resolver_plan_project_constraints(
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let mut molecule = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#c+#h#D2" "C#h#a+" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1#a"] [2 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]}"#
+        );
+        let raw = AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(
+            NumForm::LitSet(Box::new(BTreeSet::from([0]))),
+        ));
+        molecule
+            .atom_mut(AtomId(0))
+            .attributes_mut()
+            .constraints
+            .set(raw.clone());
+        molecule
+            .bond_mut(BondId(0))
+            .attributes_mut()
+            .constraints
+            .set(BondConstraintForm::Aromatic(BooleanForm::Undetermined));
+        let model = AromaticityModel::daylight();
+        let edits = AromaticityResolver::new(&model)
+            .plan_project(&molecule)
+            .unwrap();
+        assert_eq!(
+            edits,
+            Edits::from_iter([
+                Edit::ModifyAtomConstraints {
+                    key: AtomConstraintKey::AromaticValence,
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            Some(AtomConstraintForm::AromaticValence(
+                                AromaticValenceForm::Aromatic(NumForm::Undetermined)
+                            )),
+                            Some(AtomConstraintForm::AromaticValence(
+                                AromaticValenceForm::Aromatic(NumForm::Lit(1))
+                            ))
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(2)),
+                            None,
+                            Some(AtomConstraintForm::AromaticValence(
+                                AromaticValenceForm::Aromatic(NumForm::Lit(1))
+                            ))
+                        ),
+                    ],
+                },
+                Edit::ModifyBondConstraints {
+                    key: BondConstraintKey::Aromatic,
+                    changes: vec![
+                        (
+                            BondHandle::Id(BondId(0)),
+                            Some(BondConstraintForm::Aromatic(BooleanForm::Undetermined)),
+                            Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
+                        ),
+                        (
+                            BondHandle::Id(BondId(2)),
+                            None,
+                            Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
+                        ),
+                    ],
+                },
+                Edit::RemoveAromaticSystems {
+                    removes: vec![(
+                        AromaticSystemHandle::Id(AromaticSystemId(0)),
+                        vec![
+                            AtomHandle::Id(AtomId(0)),
+                            AtomHandle::Id(AtomId(1)),
+                            AtomHandle::Id(AtomId(2))
+                        ],
+                        AromaticSystemForm::new(ElectronCountsForm::Lit(vec![0, 1, 1]))
+                            .with_charge(0)
+                            .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+                    )],
+                },
+            ])
+        );
+        let mut expected = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#c+#h#D2" "C#h#a1" "C#h#a1"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 0 "1#a"]]}"#
+        );
+        expected
+            .atom_mut(AtomId(0))
+            .attributes_mut()
+            .constraints
+            .set(raw);
+        assert_eq!(molecule.clone().apply(edits.clone()), Ok(expected.clone()));
+        assert_eq!(molecule.transact([edits], rollback), Ok(()));
         assert_eq!(molecule, expected);
     }
 

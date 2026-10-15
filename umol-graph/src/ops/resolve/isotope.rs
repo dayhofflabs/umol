@@ -3,9 +3,7 @@
 use std::mem;
 
 use thiserror::Error;
-use umol_graph_ir::ir::{
-    AtomHandle, AtomId, AtomUpdate, Edits, IsotopeMassForm, Lattice, Molecule,
-};
+use umol_graph_ir::ir::{AtomHandle, AtomId, Edits, IsotopeMassForm, Lattice, Molecule};
 use umol_utils::solution::Solution;
 
 /// How isotope resolution handles an Undetermined isotope.
@@ -194,7 +192,7 @@ impl IsotopeResolver {
     ///
     /// Returns IsotopeProjectError::NonGroundIsotope for the first non-ground isotope.
     pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, IsotopeProjectError> {
-        let mut edits = Edits::new();
+        let mut isotope_masses = Vec::new();
         for atom in molecule.atoms().iter() {
             if !atom.attributes().isotope_mass.is_ground() {
                 return Err(IsotopeProjectError::NonGroundIsotope { atom: atom.id() });
@@ -202,15 +200,16 @@ impl IsotopeResolver {
             if self.policy == IsotopePolicy::Natural
                 && matches!(atom.attributes().isotope_mass, IsotopeMassForm::Natural)
             {
-                edits.update_atom(
+                isotope_masses.push((
                     AtomHandle::Id(atom.id()),
-                    atom.attributes(),
-                    &AtomUpdate {
-                        isotope_mass: Some(IsotopeMassForm::Undetermined),
-                        ..Default::default()
-                    },
-                );
+                    IsotopeMassForm::Natural,
+                    IsotopeMassForm::Undetermined,
+                ));
             }
+        }
+        let mut edits = Edits::new();
+        if !isotope_masses.is_empty() {
+            edits.modify_atom_isotope_masses(isotope_masses);
         }
         Ok(edits)
     }
@@ -220,8 +219,7 @@ impl IsotopeResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AtomFieldChange, AtomForm, Edit, MoleculeApplyError, MoleculeEntries, RollbackMethod,
-        TransactionError,
+        AtomForm, Edit, MoleculeApplyError, MoleculeEntries, RollbackMethod, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -468,17 +466,16 @@ mod tests {
 
     #[rstest]
     #[case::natural(IsotopePolicy::Natural, Edits::from_iter([
-        Edit::ModifyAtomField {
-            id: AtomHandle::Id(AtomId(0)),
-            change: AtomFieldChange::IsotopeMass {
-                old: IsotopeMassForm::Natural,
-                new: IsotopeMassForm::Undetermined,
-            },
+        Edit::ModifyAtomIsotopeMasses {
+            changes: vec![
+                (AtomHandle::Id(AtomId(0)), IsotopeMassForm::Natural, IsotopeMassForm::Undetermined),
+                (AtomHandle::Id(AtomId(2)), IsotopeMassForm::Natural, IsotopeMassForm::Undetermined),
+            ],
         },
     ]))]
     #[case::strict(IsotopePolicy::Strict, Edits::new())]
     fn test_isotope_resolver_plan_project(#[case] policy: IsotopePolicy, #[case] expected: Edits) {
-        let molecule = mol_dsl!(r#"{:atoms ["C#i=" "O#i18"]}"#);
+        let molecule = mol_dsl!(r#"{:atoms ["C#i=" "O#i18" "N#i="]}"#);
         assert_eq!(
             IsotopeResolver::new(policy).plan_project(&molecule),
             Ok(expected)

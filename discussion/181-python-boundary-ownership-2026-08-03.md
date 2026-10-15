@@ -4500,7 +4500,7 @@ isotope default emission. Broader workload, allocation and recovery comparisons
 remain in S4a. Saved executables, raw samples, source diff, settings and verification
 logs are retained in scratch/181-s3a/.
 
-#### S3b — Projection plans
+#### S3b — Projection plans (done)
 
 **Modules:** stereo, aromaticity and isotope projection; composite projector.
 **Implementation change, green.** [dep: S2a–S2h]
@@ -4514,6 +4514,47 @@ projection semantics or its existing error and publication boundaries.
 after stereo/aromatic changes with restoration of the original; both execution
 paths and ownership conditions. **S3 gate:** production planners exercise the
 batch variants without post-construction packing or temporary per-entry journals.
+
+**Implemented — 2026-10-15.** Isotope projection emits one typed mass batch;
+stereo and aromaticity projection emit typed constraint batches followed by their
+existing entity removals. Normalized-equivalent stored assertions retain their raw
+representation. Chemistry decisions, phase order, first-error selection, public
+signatures and recovery behavior are unchanged. The S3 gate is satisfied: these
+planners emit batches directly, without packing an intermediate Edit list or
+constructing per-entry journals.
+
+**Verification — 2026-10-15.** The full graph crate gate with proptest and
+conformance enabled passed 3,202 cases; one existing doctest remains ignored.
+Coverage includes exact plans and complete projected molecules, raw assertion
+preservation, explicit isotope retention, unique/shared storage, consuming/mutating
+projection, and restoration after late isotope rejection following stereo and
+aromaticity changes. Direct plan application and Clone/Journal execution are
+covered. Conformance snapshots and property laws are unchanged. Strict graph
+all-target Clippy with proptest/conformance enabled, changed-file nightly
+formatting and git diff --check passed. Full workspace/Python checks remain at
+the planned combined gate.
+
+**Bounded timing comparison — 2026-10-15.** Compared the saved pre-S3b executable
+at 17125ea76 with the candidate using the existing resolve_project_ownership
+project_into cases on aarch64-apple-darwin, Rust 1.96.0. Three runs per executable
+used 30 samples, one-second warmup and two-second measurement, ordered before/after,
+after/before, before/after, after builds and tests finished. Input preparation and
+result molecule destruction remain outside timing. Each time below is the median
+of the three run medians; parentheses give their range, in microseconds.
+
+| Fixture / storage | Before, µs | After, µs | Time change |
+| --- | --- | --- | --- |
+| sparse8 / unique | 0.814 (0.788–0.816) | 0.546 (0.544–0.551) | −32.9% |
+| sparse8 / shared | 1.014 (1.005–1.014) | 0.757 (0.736–0.761) | −25.3% |
+| dense88 / unique | 37.183 (36.203–38.060) | 29.776 (28.549–31.202) | −19.9% |
+| dense88 / shared | 40.626 (40.549–40.855) | 34.115 (32.878–34.603) | −16.0% |
+
+Every candidate run median was below every baseline run median in its case.
+All eight resolved carbons in sparse8 undergo natural-isotope default elision.
+The dense88 fixture retains eight explicit carbon-13 masses and elides the other
+80 natural defaults, alongside stereo and aromaticity projection. Broader workload,
+allocation and recovery comparisons remain in S4a. Saved executables, raw samples,
+source diff, settings and verification logs are retained in scratch/181-s3b/.
 
 ### S4 — Verification and decision record
 

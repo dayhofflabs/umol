@@ -2415,7 +2415,31 @@ mod tests {
     #[case::natural(
         mol_dsl_concrete!(r#"{:atoms ["C#h3#u1#s2" "C#i13#c-#h3#n1"]}"#),
         mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u1#s2" "C#i13#c-#h3#n1#u0#s"]}"#))]
-    fn test_resolver_project(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
+    #[case::all_stages(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#i13#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [6 8 "1"] [6 9 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+            :stereo-atoms [{:site 6 :ligands [7 8 9 [:h 6]] :attrs "Th0"}]}"#),
+        mol_dsl!(r#"{
+            :atoms ["C#i13#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
+                    "C#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
+                    "C#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
+                    "C#c0#h#n0#u0#s#T0" "F#c0#h0#n0#u0#s"
+                    "Cl#c0#h0#n0#u0#s" "Br#c0#h0#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"]
+                    [3 4 "1#c0#u0#s#a"] [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]
+                    [6 7 "1#c0#u0#s"] [6 8 "1#c0#u0#s"] [6 9 "1#c0#u0#s"]]}"#),
+    )]
+    fn test_resolver_project(
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+        #[values(false, true)] consuming: bool,
+        #[values(false, true)] shared: bool,
+    ) {
+        let original = Molecule::combine_all([&molecule]);
+        let retained = shared.then(|| molecule.clone());
         let model = ChemistryModel::default();
         let resolver = Resolver::with_config(
             &model,
@@ -2424,15 +2448,21 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(
-            resolver.project(molecule.clone(), ProjectFlags::all()),
-            Ok(Solution::Determined(expected.clone()))
-        );
-        assert_eq!(
-            resolver.project_into(&mut molecule, ProjectFlags::all()),
-            Ok(Solution::Determined(()))
-        );
-        assert_eq!(molecule, expected);
+        if consuming {
+            assert_eq!(
+                resolver.project(molecule, ProjectFlags::all()),
+                Ok(Solution::Determined(expected))
+            );
+        } else {
+            assert_eq!(
+                resolver.project_into(&mut molecule, ProjectFlags::all()),
+                Ok(Solution::Determined(()))
+            );
+            assert_eq!(molecule, expected);
+        }
+        if let Some(retained) = retained {
+            assert_eq!(retained, original);
+        }
     }
 
     #[rstest]
@@ -2624,7 +2654,12 @@ mod tests {
         #[case] expected: ProjectError,
         #[values(ProjectFlags::all(), ProjectFlags::all() - ProjectFlags::VALENCE)]
         flags: ProjectFlags,
+        #[values((false, false), (false, true), (true, false), (true, true))] execution: (
+            bool,
+            bool,
+        ),
     ) {
+        let (consuming, shared) = execution;
         let source = mol_dsl_concrete!(
             r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"]]
@@ -2659,7 +2694,8 @@ mod tests {
             ),
         ]));
         let mut molecule = editor.finish().unwrap();
-        let original = molecule.clone();
+        let original = Molecule::combine_all([&molecule]);
+        let retained = shared.then(|| molecule.clone());
         let model = ChemistryModel::default();
         let resolver = Resolver::with_config(
             &model,
@@ -2668,12 +2704,15 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(
-            resolver.project(molecule.clone(), flags),
-            Err(expected.clone())
-        );
-        assert_eq!(resolver.project_into(&mut molecule, flags), Err(expected));
-        assert_eq!(molecule, original);
+        if consuming {
+            assert_eq!(resolver.project(molecule, flags), Err(expected));
+        } else {
+            assert_eq!(resolver.project_into(&mut molecule, flags), Err(expected));
+            assert_eq!(molecule, original);
+        }
+        if let Some(retained) = retained {
+            assert_eq!(retained, original);
+        }
     }
 
     #[rstest]

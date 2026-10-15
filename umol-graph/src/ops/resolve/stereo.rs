@@ -7,10 +7,10 @@ use std::mem;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate, BondConstraintForm,
-    BondConstraintKey, BondHandle, BondId, BondUpdate, CisTransStereoForm, Edits, Lattice,
-    Molecule, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset,
-    StereoKind, TetrahedralStereoForm,
+    AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondConstraintForm,
+    BondConstraintKey, BondHandle, BondId, CisTransStereoForm, Edits, Lattice, Molecule, Normalize,
+    StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset, StereoKind,
+    TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -432,7 +432,7 @@ impl StereoResolver {
         if !molecule.has_stereo_atoms() && !molecule.has_stereo_bonds() {
             return Ok(Edits::new());
         }
-        let mut edits = Edits::new();
+        let mut atom_constraints = Vec::new();
         for stereo in molecule.stereo_atoms().iter() {
             let stereo_atom = stereo.id();
             if stereo.attributes().configuration.kind() != Some(StereoKind::Tetrahedral) {
@@ -454,12 +454,15 @@ impl StereoResolver {
                     .meet(&projected)
                     .ok_or(StereoProjectError::AtomAssertion { atom })?,
             };
-            let mut update = AtomUpdate::default();
-            update
+            let new = AtomConstraintForm::TetrahedralStereo(assertion);
+            let old = attributes
                 .constraints
-                .set(AtomConstraintForm::TetrahedralStereo(assertion));
-            edits.update_atom(AtomHandle::Id(atom), attributes, &update);
+                .get(AtomConstraintKey::TetrahedralStereo);
+            if old.is_none_or(|old| !old.normalized_eq(&new)) {
+                atom_constraints.push((AtomHandle::Id(atom), old.cloned(), Some(new)));
+            }
         }
+        let mut bond_constraints = Vec::new();
         for stereo in molecule.stereo_bonds().iter() {
             let stereo_bond = stereo.id();
             if stereo.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
@@ -481,11 +484,20 @@ impl StereoResolver {
                     .meet(&projected)
                     .ok_or(StereoProjectError::BondAssertion { bond })?,
             };
-            let mut update = BondUpdate::default();
-            update
+            let new = BondConstraintForm::CisTransStereo(assertion);
+            let old = attributes
                 .constraints
-                .set(BondConstraintForm::CisTransStereo(assertion));
-            edits.update_bond(BondHandle::Id(bond), attributes, &update);
+                .get(BondConstraintKey::CisTransStereo);
+            if old.is_none_or(|old| !old.normalized_eq(&new)) {
+                bond_constraints.push((BondHandle::Id(bond), old.cloned(), Some(new)));
+            }
+        }
+        let mut edits = Edits::new();
+        if !atom_constraints.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::TetrahedralStereo, atom_constraints);
+        }
+        if !bond_constraints.is_empty() {
+            edits.modify_bond_constraints(BondConstraintKey::CisTransStereo, bond_constraints);
         }
         if molecule.has_stereo_atoms() {
             edits.remove_stereo_atoms(
@@ -1552,6 +1564,31 @@ mod tests {
             :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h1#T1" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        Edits::from_iter([
+            Edit::ModifyAtomConstraints {
+                key: AtomConstraintKey::TetrahedralStereo,
+                changes: vec![(
+                    AtomHandle::Id(AtomId(0)),
+                    None,
+                    Some(AtomConstraintForm::TetrahedralStereo(
+                        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+                    )),
+                )],
+            },
+            Edit::RemoveStereoAtoms {
+                removes: vec![(
+                    StereoAtomHandle::Id(StereoAtomId(0)),
+                    AtomHandle::Id(AtomId(0)),
+                    vec![
+                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                        (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                )],
+            },
+        ]),
     )]
     #[case::cis_trans(
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"]
@@ -1559,15 +1596,42 @@ mod tests {
             :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"]
             :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]}"#),
+        Edits::from_iter([
+            Edit::ModifyBondConstraints {
+                key: BondConstraintKey::CisTransStereo,
+                changes: vec![(
+                    BondHandle::Id(BondId(0)),
+                    None,
+                    Some(BondConstraintForm::CisTransStereo(
+                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                    )),
+                )],
+            },
+            Edit::RemoveStereoBonds {
+                removes: vec![(
+                    StereoBondHandle::Id(StereoBondId(0)),
+                    BondHandle::Id(BondId(0)),
+                    vec![
+                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                        (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                )],
+            },
+        ]),
     )]
     fn test_stereo_resolver_plan_project(
         stereo_model: StereoModel,
         #[case] molecule: Molecule,
         #[case] expected: Molecule,
+        #[case] expected_edits: Edits,
     ) {
         let edits = StereoResolver::new(&stereo_model)
             .plan_project(&molecule)
             .unwrap();
+        assert_eq!(edits, expected_edits);
         let molecule = molecule.apply(edits).unwrap();
         assert_eq!(molecule, expected);
     }
