@@ -56,6 +56,7 @@ mod stereo;
 #[case(Edit::ModifyMulticenterBondCharges { changes: vec![] })]
 #[case(Edit::ModifyMulticenterBondUnpairedElectrons { changes: vec![] })]
 #[case(Edit::ModifyNoncovalentBondKinds { changes: vec![] })]
+#[case(Edit::ModifyStereoAtomConfigurations { changes: vec![] })]
 fn test_molecule_apply_field_batches_identity(#[case] edit: Edit) {
     let source = Molecule::new();
     assert_eq!(

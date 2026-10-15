@@ -206,6 +206,31 @@ fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationForm> {
     Ok(StereoConfigurationForm::kinded(kind, coset))
 }
 
+pub(super) fn read_edn_stereo_configuration(
+    edn: &Edn<'_>,
+) -> Result<StereoConfigurationForm, DeError> {
+    let Edn::Str(value) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "complete stereo configuration string",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    stereo_configuration
+        .parse(value.as_ref())
+        .map_err(|error| DeError::subgrammar("stereo configuration", error))
+}
+
+pub(super) fn render_stereo_configuration(configuration: &StereoConfigurationForm) -> Edn<'static> {
+    Edn::Str(Cow::Owned(
+        StereoAtomDsl(StereoAtomForm {
+            configuration: configuration.clone(),
+            ..Default::default()
+        })
+        .to_string(),
+    ))
+}
+
 /// Partial-modify variant of `stereo_configuration`: the coset is optional (omitted =
 /// `Undetermined`, "coset unchanged"). So `*` alone, `<kind>`, or `<kind><coset>`; the kind is
 /// mandatory once anything past `*` appears.
@@ -1249,7 +1274,7 @@ fn fmt_stereo_lit_set(f: &mut fmt::Formatter<'_>, set: &BTreeSet<u32>) -> fmt::R
 /// A permutation as a vector of disjoint cycles (`[[0 1 2] [3 4]]`; identity `[]`).
 /// The degree is not encoded — fixed points drop out — so the reader supplies it
 /// from the stereo kind.
-fn render_edn_permutation(permutation: Permutation) -> Edn<'static> {
+pub(super) fn render_permutation(permutation: Permutation) -> Edn<'static> {
     let cycles: Vec<Edn<'static>> = permutation
         .cycles()
         .into_iter()
@@ -1266,7 +1291,7 @@ fn render_edn_permutation(permutation: Permutation) -> Edn<'static> {
     Edn::Vector(cycles.into())
 }
 
-fn read_edn_permutation(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
+pub(super) fn read_edn_permutation(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
     let Edn::Vector(cycles_edn) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "vector of cycles",
@@ -1621,7 +1646,7 @@ fn render_edn_ligand_symmetry(ls: &LigandSymmetryForm) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
     m.insert(
         Edn::keyword("permutation"),
-        render_edn_permutation(ls.permutation.permutation.0),
+        render_permutation(ls.permutation.permutation.0),
     );
     if ls.permutation.orientation == Orientation::Improper {
         m.insert(Edn::keyword("orientation"), Edn::keyword("improper"));
@@ -1676,7 +1701,7 @@ fn render_edn_fluxionality(f: &FluxionalityForm) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("permutation"),
-        render_edn_permutation(f.permutation.0),
+        render_permutation(f.permutation.0),
     );
     if f.active != BooleanForm::Lit(true) {
         m.insert(Edn::keyword("active"), BooleanDsl(f.active).to_edn());
@@ -1720,8 +1745,8 @@ macro_rules! stereo_constraint_dsl {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub struct $dsl(pub StereoKind, pub $constraint);
 
-        impl ToEdn for $dsl {
-            fn to_edn(&self) -> Edn<'static> {
+        impl $dsl {
+            pub(super) fn render_predicate(&self) -> Edn<'static> {
                 let (key, value) = match &self.1 {
                     $constraint::LigandSymmetry(ls) => {
                         ("ligand-symmetry", render_edn_ligand_symmetry(ls))
@@ -1732,31 +1757,17 @@ macro_rules! stereo_constraint_dsl {
                         ("stereogenicity", StereogenicityDsl(g.clone()).to_edn())
                     }
                 };
-                Edn::Vector(vec![render_edn_stereo_kind(self.0), single_key_map(key, value)].into())
+                single_key_map(key, value)
             }
-        }
 
-        impl<'de> FromEdn<'de> for $dsl {
-            fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-                let Edn::Vector(v) = edn else {
-                    return Err(DeError::TypeMismatch {
-                        expected: "stereo constraint [kind {key value}]",
-                        got: edn.kind(),
-                        path: vec![$context.into()],
-                    });
-                };
-                if v.len() != 2 {
-                    return Err(DeError::Custom(format!(
-                        "{} must be [kind {{key value}}], got {}-element vector",
-                        $context,
-                        v.len()
-                    )));
-                }
-                let kind = read_edn_stereo_kind(&v[0])?;
-                let Edn::Map(m) = &v[1] else {
+            pub(super) fn read_edn_predicate(
+                edn: &Edn<'_>,
+                kind: StereoKind,
+            ) -> Result<Self, DeError> {
+                let Edn::Map(m) = edn else {
                     return Err(DeError::TypeMismatch {
                         expected: "single-key constraint map",
-                        got: v[1].kind(),
+                        got: edn.kind(),
                         path: vec![$context.into()],
                     });
                 };
@@ -1793,6 +1804,33 @@ macro_rules! stereo_constraint_dsl {
                     }
                 };
                 Ok($dsl(kind, constraint))
+            }
+        }
+
+        impl ToEdn for $dsl {
+            fn to_edn(&self) -> Edn<'static> {
+                Edn::Vector(vec![render_edn_stereo_kind(self.0), self.render_predicate()].into())
+            }
+        }
+
+        impl<'de> FromEdn<'de> for $dsl {
+            fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+                let Edn::Vector(v) = edn else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "stereo constraint [kind {key value}]",
+                        got: edn.kind(),
+                        path: vec![$context.into()],
+                    });
+                };
+                if v.len() != 2 {
+                    return Err(DeError::Custom(format!(
+                        "{} must be [kind {{key value}}], got {}-element vector",
+                        $context,
+                        v.len()
+                    )));
+                }
+                let kind = read_edn_stereo_kind(&v[0])?;
+                Self::read_edn_predicate(&v[1], kind)
             }
         }
 

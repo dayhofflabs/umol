@@ -524,6 +524,14 @@ pub enum Edit {
         old: Vec<(AtomHandle, StereoLigandKind)>,
         new: Vec<(AtomHandle, StereoLigandKind)>,
     },
+    /// Ordered changes to stereo atom configurations.
+    ModifyStereoAtomConfigurations {
+        changes: Vec<(
+            StereoAtomHandle,
+            StereoConfigurationForm,
+            StereoConfigurationForm,
+        )>,
+    },
     ModifyStereoAtomField {
         id: StereoAtomHandle,
         change: StereoAtomFieldChange,
@@ -644,6 +652,19 @@ pub enum Edit {
         id: NoncovalentBondHandle,
         old: Option<NoncovalentBondConstraintForm>,
         new: Option<NoncovalentBondConstraintForm>,
+    },
+    /// Ordered constraint changes sharing one kind context and exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. The kind supplies
+    /// DSL context without an additional host-kind check. None omits the whole batch on export.
+    ModifyStereoAtomConstraints {
+        kind: Option<StereoKind>,
+        key: StereoAtomConstraintKey,
+        changes: Vec<(
+            StereoAtomHandle,
+            Option<StereoAtomConstraintForm>,
+            Option<StereoAtomConstraintForm>,
+        )>,
     },
     ModifyStereoAtomConstraint {
         id: StereoAtomHandle,
@@ -1279,6 +1300,38 @@ impl Edits {
         )>,
     ) {
         self.push(Edit::ModifyNoncovalentBondConstraints { key, changes });
+    }
+
+    /// Append ordered stereo atom configuration changes without checking the host.
+    ///
+    /// Rows, including an empty batch and repeated handles, are retained in order.
+    pub fn modify_stereo_atom_configurations(
+        &mut self,
+        changes: Vec<(
+            StereoAtomHandle,
+            StereoConfigurationForm,
+            StereoConfigurationForm,
+        )>,
+    ) {
+        self.push(Edit::ModifyStereoAtomConfigurations { changes });
+    }
+
+    /// Append stereo atom constraint changes under one kind context and exact key.
+    ///
+    /// Construction retains all rows. Application checks handles, old values, and operand
+    /// keys without checking the supplied kind against the host. A missing kind retains
+    /// raw payloads in Rust but omits the whole batch during DSL export.
+    pub fn modify_stereo_atom_constraints(
+        &mut self,
+        kind: Option<StereoKind>,
+        key: StereoAtomConstraintKey,
+        changes: Vec<(
+            StereoAtomHandle,
+            Option<StereoAtomConstraintForm>,
+            Option<StereoAtomConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyStereoAtomConstraints { kind, key, changes });
     }
 
     /// Project an atom update into checked host-relative edits.
@@ -2847,6 +2900,14 @@ pub enum Undo {
         id: NoncovalentBondId,
         change: NoncovalentBondFieldChange,
     },
+    /// Inverse configuration changes, replayed in reverse order.
+    ModifyStereoAtomConfigurations {
+        changes: Vec<(
+            StereoAtomId,
+            StereoConfigurationForm,
+            StereoConfigurationForm,
+        )>,
+    },
     ModifyStereoAtomField {
         id: StereoAtomId,
         change: StereoAtomFieldChange,
@@ -2914,6 +2975,11 @@ pub enum Undo {
         id: NoncovalentBondId,
         key: NoncovalentBondConstraintKey,
         constraint: Option<NoncovalentBondConstraintForm>,
+    },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreStereoAtomConstraints {
+        key: StereoAtomConstraintKey,
+        constraints: Vec<(StereoAtomId, Option<StereoAtomConstraintForm>)>,
     },
     RestoreStereoAtomConstraint {
         id: StereoAtomId,

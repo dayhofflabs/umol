@@ -5,6 +5,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, FromEdn, ToEdn};
+use umol_perm::Orientation;
 
 use super::aromatic::{AromaticSystemConstraintDsl, AromaticSystemDsl, AromaticSystemUpdateDsl};
 use super::atom::{AtomConstraintDsl, AtomDsl, AtomUpdateDsl};
@@ -22,6 +23,8 @@ use super::noncovalent::{
 };
 use super::num::NumDsl;
 use super::stereo::{
+    read_edn_permutation, read_edn_stereo_configuration, read_edn_stereo_kind,
+    render_edn_stereo_kind, render_permutation, render_stereo_configuration,
     StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondConstraintDsl,
     StereoBondDsl, StereoBondUpdateDsl,
 };
@@ -31,9 +34,10 @@ use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
     AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
     AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
-    DativeBondConstraintKey, MoleculeConstraint, MulticenterBondConstraintForm,
+    DativeBondConstraintKey, LigandPermutation, MoleculeConstraint, MulticenterBondConstraintForm,
     MulticenterBondConstraintKey, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
-    RelationalConstraint, RingScope, StereoAtomConstraintForm, StereoBondConstraintForm,
+    OrientedLigandPermutation, RelationalConstraint, RingScope, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoBondConstraintForm, StereoLigandPair,
 };
 use crate::ir::dative::DativeBondUpdate;
 use crate::ir::edit::{
@@ -47,7 +51,7 @@ use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::entity::Entity;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId,
+    StereoAtomId, StereoBondId, StereoLigandPosition,
 };
 use crate::ir::ligand::StereoLigandKind;
 use crate::ir::multicenter::MulticenterBondUpdate;
@@ -56,6 +60,7 @@ use crate::ir::num::NumForm;
 use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use crate::ir::stereo::{
     StereoAtomUpdate, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
+    StereoKind,
 };
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
@@ -466,6 +471,22 @@ enum EditInput {
         id: StereoAtomHandle,
         old: Vec<StereoLigandInput>,
         new: Vec<StereoLigandInput>,
+    },
+    StereoAtomModifyConfigurations {
+        changes: Vec<(
+            StereoAtomHandle,
+            StereoConfigurationForm,
+            StereoConfigurationForm,
+        )>,
+    },
+    StereoAtomModifyConstraints {
+        kind: StereoKind,
+        key: StereoAtomConstraintKey,
+        changes: Vec<(
+            StereoAtomHandle,
+            Option<StereoAtomConstraintForm>,
+            Option<StereoAtomConstraintForm>,
+        )>,
     },
     StereoAtomModify {
         id: StereoAtomHandle,
@@ -1277,6 +1298,78 @@ impl ToEdn for EditInput {
                     render_stereo_ligands(new),
                 ),
             ),
+            Self::StereoAtomModifyConfigurations { changes } => edit_map(
+                "stereo-atom",
+                "modify-configuration",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                render_stereo_configuration(old),
+                                render_stereo_configuration(new),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::StereoAtomModifyConstraints { kind, key, changes } => {
+                let key = match key {
+                    StereoAtomConstraintKey::Stereogenicity => Edn::keyword("stereogenicity"),
+                    StereoAtomConstraintKey::Topicity(pair) => {
+                        let pair = Edn::Vector(
+                            vec![
+                                Edn::Int(pair.first().0 as i64),
+                                Edn::Int(pair.second().0 as i64),
+                            ]
+                            .into(),
+                        );
+                        single_key_map("topicity", single_key_map("pair", pair))
+                    }
+                    StereoAtomConstraintKey::Fluxionality(permutation) => single_key_map(
+                        "fluxionality",
+                        single_key_map("permutation", render_permutation(permutation.0)),
+                    ),
+                    StereoAtomConstraintKey::LigandSymmetry(permutation) => {
+                        let mut fields = EdnMap::with_capacity(2);
+                        fields.insert(
+                            Edn::keyword("permutation"),
+                            render_permutation(permutation.permutation.0),
+                        );
+                        if permutation.orientation == Orientation::Improper {
+                            fields.insert(Edn::keyword("orientation"), Edn::keyword("improper"));
+                        }
+                        single_key_map("ligand-symmetry", Edn::Map(fields))
+                    }
+                };
+                let render_value = |value: &Option<StereoAtomConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        StereoAtomConstraintDsl(*kind, value.clone()).render_predicate()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(3);
+                fields.insert(Edn::keyword("kind"), render_edn_stereo_kind(*kind));
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("stereo-atom", "modify-constraints", Edn::Map(fields))
+            }
             Self::StereoAtomModify { id, expect, update } => edit_map(
                 "stereo-atom",
                 "modify",
@@ -1543,6 +1636,12 @@ impl EditInput {
             }
             Self::StereoAtomReplaceLigands { id, old, new } => {
                 edits.push(Edit::ReplaceStereoAtomLigands { id, old, new });
+            }
+            Self::StereoAtomModifyConfigurations { changes } => {
+                edits.modify_stereo_atom_configurations(changes)
+            }
+            Self::StereoAtomModifyConstraints { kind, key, changes } => {
+                edits.modify_stereo_atom_constraints(Some(kind), key, changes)
             }
             Self::StereoAtomModify { id, expect, update } => {
                 append_stereo_atom_modify(edits, id, expect, update)?;
@@ -1950,6 +2049,21 @@ impl EditInput {
                     new: new.clone(),
                 }]
             }
+            Edit::ModifyStereoAtomConfigurations { changes } => {
+                vec![Self::StereoAtomModifyConfigurations {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyStereoAtomConstraints { kind: None, .. } => Vec::new(),
+            Edit::ModifyStereoAtomConstraints {
+                kind: Some(kind),
+                key,
+                changes,
+            } => vec![Self::StereoAtomModifyConstraints {
+                kind: *kind,
+                key: *key,
+                changes: changes.clone(),
+            }],
             Edit::ModifyStereoAtomField { id, change } => {
                 let (expect, update) = stereo_atom_field_updates(change);
                 vec![Self::StereoAtomModify {
@@ -3303,6 +3417,125 @@ fn parse_noncovalent_bond_replacement(
 fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "stereo-atom edit")?;
     match op {
+        "modify-configuration" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "stereo-atom :modify-configuration expects a vector".into(),
+                ));
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_stereo_atom_change(row)?;
+                    Ok((
+                        handle,
+                        read_edn_stereo_configuration(old)?,
+                        read_edn_stereo_configuration(new)?,
+                    ))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::StereoAtomModifyConfigurations { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "stereo-atom constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "stereo-atom constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let kind: Edn<'_> = helper.required("kind")?;
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let kind = read_edn_stereo_kind(&kind)?;
+            let key = match &key {
+                Edn::Keyword(keyword) if keyword.name() == "stereogenicity" => {
+                    StereoAtomConstraintKey::Stereogenicity
+                }
+                Edn::Map(_) => {
+                    let (name, value) = parse_single_key_map(&key, "stereo-atom constraint key")?;
+                    let fields = expect_map(value, "stereo-atom constraint key parameters")?;
+                    if fields
+                        .iter()
+                        .any(|(key, _)| !matches!(key, Edn::Keyword(_)))
+                    {
+                        return Err(DeError::Custom(
+                            "stereo-atom constraint key expects keyword fields".into(),
+                        ));
+                    }
+                    let mut helper = EdnMapHelper::new(fields);
+                    let key = match name {
+                        "topicity" => {
+                            let [a, b]: [u32; 2] = helper.required("pair")?;
+                            StereoAtomConstraintKey::Topicity(StereoLigandPair::new(
+                                StereoLigandPosition(a),
+                                StereoLigandPosition(b),
+                            ))
+                        }
+                        "fluxionality" | "ligand-symmetry" => {
+                            let value: Edn<'_> = helper.required("permutation")?;
+                            let permutation =
+                                LigandPermutation(read_edn_permutation(&value, kind.degree())?);
+                            if name == "fluxionality" {
+                                StereoAtomConstraintKey::Fluxionality(permutation)
+                            } else {
+                                let orientation: Option<Edn<'_>> =
+                                    helper.optional("orientation")?;
+                                let orientation = match orientation {
+                                    None => Orientation::Proper,
+                                    Some(Edn::Keyword(keyword)) if keyword.name() == "proper" => {
+                                        Orientation::Proper
+                                    }
+                                    Some(Edn::Keyword(keyword)) if keyword.name() == "improper" => {
+                                        Orientation::Improper
+                                    }
+                                    _ => {
+                                        return Err(DeError::Custom(
+                                            "expected :proper or :improper orientation".into(),
+                                        ))
+                                    }
+                                };
+                                StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                                    permutation,
+                                    orientation,
+                                })
+                            }
+                        }
+                        _ => {
+                            return Err(DeError::Custom(format!(
+                                "unknown stereo-atom constraint key :{name}"
+                            )))
+                        }
+                    };
+                    helper.finalize()?;
+                    key
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected stereo-atom constraint key".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "stereo-atom :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => StereoAtomConstraintDsl::read_edn_predicate(value, kind)
+                    .map(|form| Some(form.1)),
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_stereo_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::StereoAtomModifyConstraints { kind, key, changes })
+        }
         "add" => {
             let (site, ligands, attributes) = parse_stereo_atom_addition(payload)?;
             Ok(EditInput::StereoAtomAdd {
@@ -6293,12 +6526,47 @@ fn read_edn_noncovalent_bond_change<'a>(
     Ok((NoncovalentBondHandle::from_edn(handle)?, old, new))
 }
 
+fn read_edn_stereo_atom_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(StereoAtomHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "stereo-atom batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "stereo-atom batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "stereo-atom batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "stereo-atom batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["stereo-atom batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["stereo-atom batch row".into()],
+        })?;
+    Ok((StereoAtomHandle::from_edn(handle)?, old, new))
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
     use umol_edn::{read_string, EdnError};
+    use umol_perm::Permutation;
 
     use super::*;
     use crate::ir::aromatic::AromaticSystemForm;
@@ -6314,7 +6582,7 @@ mod tests {
     use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::AddBond;
     use crate::ir::electrons::ElectronCountsForm;
-    use crate::ir::molecule::Molecule;
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
@@ -6322,6 +6590,10 @@ mod tests {
     use crate::ir::num::NumForm;
     use crate::ir::stereo::{
         StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, Stereogenicity,
+    };
+    use crate::ir::{
+        FluxionalityForm, LigandSymmetryForm, StereoCoset, StereoTerm, Topicity, TopicityForm,
+        TopicityRelationForm, TransactionError,
     };
     use crate::mol_dsl;
 
@@ -7558,6 +7830,8 @@ mod tests {
     #[case::bond_removal(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None })]
     #[case::bond_contradiction(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) })]
     #[case::bond_empty(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: None, new: None })]
+    #[case::atom_batch_empty(Edit::ModifyStereoAtomConstraints { kind: None, key: StereoAtomConstraintKey::Fluxionality(LigandPermutation(umol_perm::Permutation::identity(6))), changes: vec![] })]
+    #[case::atom_batch_payload(Edit::ModifyStereoAtomConstraints { kind: None, key: StereoAtomConstraintKey::Stereogenicity, changes: vec![(StereoAtomHandle::Id(StereoAtomId(0)), None, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))), (StereoAtomHandle::New(0), Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), None)] })]
     fn test_edits_dsl_from_ir_kindless(#[case] edit: Edit) {
         let defaults = MoleculeDefaults::new();
         let omitted = Edits::from_iter([edit.clone()]);
@@ -7870,6 +8144,8 @@ mod tests {
     #[case(Edit::ModifyNoncovalentBondKinds { changes: vec![(NoncovalentBondHandle::New(0), NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic))] })]
     #[case(Edit::ModifyNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, changes: vec![] })]
     #[case(Edit::ModifyNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, changes: vec![(NoncovalentBondHandle::New(0), None, Some(NoncovalentBondConstraintForm::undetermined(NoncovalentBondConstraintKey::Intramolecular))), (NoncovalentBondHandle::New(0), Some(NoncovalentBondConstraintForm::undetermined(NoncovalentBondConstraintKey::Intramolecular)), None)] })]
+    #[case(Edit::ModifyStereoAtomConfigurations { changes: vec![] })]
+    #[case(Edit::ModifyStereoAtomConfigurations { changes: vec![(StereoAtomHandle::New(0), StereoConfigurationForm::Undetermined, StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1]))), (StereoAtomHandle::New(0), StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])), StereoConfigurationForm::kinded(StereoKind::Octahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))] })]
     fn test_edits_dsl_batches_roundtrip(#[case] edit: Edit) {
         let expected = Edits::from_iter([edit]);
         let defaults = MoleculeDefaults::new();
@@ -7928,7 +8204,259 @@ mod tests {
     #[case(r##"{:noncovalent-bond {:modify-constraints {:key :intramolecular :changes [] "extra" 1}}}"##, DeError::Custom("noncovalent-bond constraint batch expects keyword fields".into()))]
     #[case(r##"{:noncovalent-bond {:modify-constraints {:key :valence :changes []}}}"##, DeError::Custom("expected noncovalent-bond constraint key :intramolecular".into()))]
     #[case(r##"{:noncovalent-bond {:modify-kind [[0 {:expect "Hbd#I!" :update "*"}]]}}"##, DeError::Custom("unexpected fields in noncovalent-bond kind value".into()))]
+    #[case(r#"{:stereo-atom {:modify-configuration [[0 {:expect "*" :update :ccw}]]}}"#, DeError::TypeMismatch { expected: "complete stereo configuration string", got: "keyword", path: vec![] })]
+    #[case(r#"{:stereo-atom {:modify-configuration [[0 {:expect "*" :update "Th0" :extra 1}]]}}"#, DeError::Custom("stereo-atom batch row requires exactly :expect and :update".into()))]
+    #[case("{:stereo-atom {:modify-constraints {:key :stereogenicity :changes []}}}", DeError::MissingField { key: "kind".into(), path: vec![] })]
+    #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key :stereogenicity :changes [] :degree 4}}}", DeError::UnknownField { key: "degree".into(), path: vec![] })]
+    #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key :fluxionality :changes []}}}", DeError::Custom("expected stereo-atom constraint key".into()))]
+    #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:topicity {:pair [0 1] :degree 4}} :changes []}}}", DeError::UnknownField { key: "degree".into(), path: vec![] })]
+    #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:ligand-symmetry {:permutation [] :orientation :unknown}} :changes []}}}", DeError::Custom("expected :proper or :improper orientation".into()))]
     fn test_edit_input_batches_error(#[case] input: &str, #[case] error: DeError) {
         assert_eq!(EditInput::from_edn_str(input), Err(EdnError::De(error)));
+    }
+    #[rstest]
+    #[case::stereogenicity(
+        ":stereogenicity",
+        "{:stereogenicity {:relation :stereogenic}}",
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        ))
+    )]
+    #[case::topicity("{:topicity {:pair [0 2]}}", "{:topicity {:pair [0 2] :relation :homotopic}}", StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
+    #[case::fluxionality("{:fluxionality {:permutation [[0 1]]}}", "{:fluxionality {:permutation [[0 1]] :active false}}", StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }))]
+    #[case::symmetry("{:ligand-symmetry {:permutation [[0 1]] :orientation :improper}}", "{:ligand-symmetry {:permutation [[0 1]] :orientation :improper}}", StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper }, invariant: BooleanForm::Lit(true) }))]
+    fn test_edits_dsl_stereo_atom_constraints(
+        #[case] key: &str,
+        #[case] operand: &str,
+        #[case] constraint: StereoAtomConstraintForm,
+    ) {
+        let defaults = MoleculeDefaults::new();
+        let text = format!("[{{:stereo-atom {{:modify-constraints {{:kind :tetrahedral :key {key} :changes [[0 {{:expect nil :update {operand}}}] [{{:new 0}} {{:expect {operand} :update nil}}]]}}}}}}]");
+        let expected = Edits::from_iter([Edit::ModifyStereoAtomConstraints {
+            kind: Some(StereoKind::Tetrahedral),
+            key: constraint.key(),
+            changes: vec![
+                (
+                    StereoAtomHandle::Id(StereoAtomId(0)),
+                    None,
+                    Some(constraint.clone()),
+                ),
+                (StereoAtomHandle::New(0), Some(constraint), None),
+            ],
+        }]);
+        let dsl = EditsDsl::from_edn_str(&text).unwrap();
+        assert_eq!(dsl.into_ir(&defaults), expected);
+        let rendered = EditsDsl::from_ir(&expected, &defaults).to_edn();
+        assert_eq!(rendered, text.parse::<Edn>().unwrap());
+        assert_eq!(
+            EditsDsl::from_edn(&rendered).unwrap().into_ir(&defaults),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral, ":tetrahedral")]
+    #[case::cis_trans(StereoKind::CisTrans, ":cis-trans")]
+    #[case::axial(StereoKind::Axial, ":axial")]
+    #[case::square_planar(StereoKind::SquarePlanar, ":square-planar")]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, ":trigonal-bipyramidal")]
+    #[case::octahedral(StereoKind::Octahedral, ":octahedral")]
+    fn test_edits_dsl_stereo_atom_constraints_identity(
+        #[case] kind: StereoKind,
+        #[case] kind_text: &str,
+        #[values(false, true)] empty: bool,
+    ) {
+        let keys = [
+            (":stereogenicity", StereoAtomConstraintKey::Stereogenicity),
+            (
+                "{:topicity {:pair [0 1]}}",
+                StereoAtomConstraintKey::Topicity(StereoLigandPair::new(
+                    StereoLigandPosition(0),
+                    StereoLigandPosition(1),
+                )),
+            ),
+            (
+                "{:fluxionality {:permutation []}}",
+                StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(
+                    kind.degree(),
+                ))),
+            ),
+            (
+                "{:ligand-symmetry {:permutation []}}",
+                StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                    permutation: LigandPermutation(Permutation::identity(kind.degree())),
+                    orientation: Orientation::Proper,
+                }),
+            ),
+        ];
+        let defaults = MoleculeDefaults::new();
+        for (key_text, key) in keys {
+            let changes = if empty {
+                vec![]
+            } else {
+                vec![(StereoAtomHandle::Id(StereoAtomId(0)), None, None)]
+            };
+            let expected = Edits::from_iter([Edit::ModifyStereoAtomConstraints {
+                kind: Some(kind),
+                key,
+                changes,
+            }]);
+            let rows = if empty {
+                "[]"
+            } else {
+                "[[0 {:expect nil :update nil}]]"
+            };
+            let text = format!("[{{:stereo-atom {{:modify-constraints {{:kind {kind_text} :key {key_text} :changes {rows}}}}}}}]");
+            assert_eq!(
+                EditsDsl::from_edn_str(&text).unwrap().into_ir(&defaults),
+                expected
+            );
+            let rendered = EditsDsl::from_ir(&expected, &defaults).to_edn();
+            assert_eq!(rendered, text.parse::<Edn>().unwrap());
+            assert_eq!(
+                EditsDsl::from_edn(&rendered).unwrap().into_ir(&defaults),
+                expected
+            );
+        }
+    }
+
+    #[rstest]
+    #[case::tetrahedral("Th0", StereoKind::Tetrahedral)]
+    #[case::cis_trans("Ct0", StereoKind::CisTrans)]
+    #[case::axial("Ax0", StereoKind::Axial)]
+    #[case::square_planar("Sp0", StereoKind::SquarePlanar)]
+    #[case::trigonal_bipyramidal("Tb0", StereoKind::TrigonalBipyramidal)]
+    #[case::octahedral("Oh0", StereoKind::Octahedral)]
+    fn test_edits_dsl_stereo_atom_configurations(#[case] head: &str, #[case] kind: StereoKind) {
+        let text = format!(
+            r#"[{{:stereo-atom {{:modify-configuration [[0 {{:expect "*" :update "{head}"}}]]}}}}]"#
+        );
+        let expected = Edits::from_iter([Edit::ModifyStereoAtomConfigurations {
+            changes: vec![(
+                StereoAtomHandle::Id(StereoAtomId(0)),
+                StereoConfigurationForm::Undetermined,
+                StereoConfigurationForm::kinded(kind, 0u32),
+            )],
+        }]);
+        let defaults = MoleculeDefaults::new();
+        assert_eq!(
+            EditsDsl::from_edn_str(&text).unwrap().into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            EditsDsl::from_ir(&expected, &defaults).to_edn(),
+            text.parse::<Edn>().unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case::missing_coset("Th")]
+    #[case::constraint_tail("Th0#g/")]
+    #[case::trailing("Th0 Ct0")]
+    fn test_edits_dsl_stereo_atom_configurations_error(#[case] head: &str) {
+        let text = format!(
+            r#"[{{:stereo-atom {{:modify-configuration [[0 {{:expect "*" :update "{head}"}}]]}}}}]"#
+        );
+        assert!(matches!(
+            EditsDsl::from_edn_str(&text),
+            Err(EdnError::De(DeError::Subgrammar {
+                grammar: "stereo configuration",
+                ..
+            }))
+        ));
+    }
+
+    #[rstest]
+    #[case::proper("{:ligand-symmetry {:permutation [] :orientation :proper}}", StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }))]
+    #[case::sorted_pair(
+        "{:topicity {:pair [2 0]}}",
+        StereoAtomConstraintKey::Topicity(StereoLigandPair::new(
+            StereoLigandPosition(0),
+            StereoLigandPosition(2)
+        ))
+    )]
+    fn test_edits_dsl_stereo_atom_keys(
+        #[case] key: &str,
+        #[case] expected: StereoAtomConstraintKey,
+    ) {
+        let text = format!("[{{:stereo-atom {{:modify-constraints {{:kind :tetrahedral :key {key} :changes []}}}}}}]");
+        assert_eq!(
+            EditsDsl::from_edn_str(&text)
+                .unwrap()
+                .into_ir(&MoleculeDefaults::new()),
+            Edits::from_iter([Edit::ModifyStereoAtomConstraints {
+                kind: Some(StereoKind::Tetrahedral),
+                key: expected,
+                changes: vec![]
+            }])
+        );
+    }
+
+    #[rstest]
+    fn test_edits_dsl_stereo_atom_constraints_error() {
+        let text = "[{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:fluxionality {:permutation [[0 1]]}} :changes [[0 {:expect nil :update {:fluxionality {:permutation [[0 2]]}}}]]}}}]";
+        let defaults = MoleculeDefaults::new();
+        let edits = EditsDsl::from_edn_str(text).unwrap().into_ir(&defaults);
+        assert_eq!(
+            EditsDsl::from_ir(&edits, &defaults).to_edn(),
+            text.parse::<Edn>().unwrap()
+        );
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default()],
+            stereo_atoms: vec![(AtomId(0), vec![], StereoAtomForm::default())],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule.apply(edits),
+            Err(TransactionError::OldStateMismatch.into())
+        );
+    }
+    #[rstest]
+    fn test_edits_dsl_stereo_atom_constraints_sequence() {
+        let first = Edit::ModifyStereoAtomConstraints {
+            kind: Some(StereoKind::Tetrahedral),
+            key: StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+            changes: vec![],
+        };
+        let second = Edit::ModifyStereoAtomConstraints {
+            kind: Some(StereoKind::SquarePlanar),
+            key: StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+            changes: vec![],
+        };
+        let configuration = Edit::ModifyStereoAtomConfigurations {
+            changes: vec![(
+                StereoAtomHandle::Id(StereoAtomId(0)),
+                StereoConfigurationForm::Undetermined,
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+            )],
+        };
+        let omitted = Edit::ModifyStereoAtomConstraints {
+            kind: None,
+            key: StereoAtomConstraintKey::Stereogenicity,
+            changes: vec![(
+                StereoAtomHandle::Id(StereoAtomId(0)),
+                Some(StereoAtomConstraintForm::Stereogenicity(
+                    StereogenicityForm::lit_set([]),
+                )),
+                None,
+            )],
+        };
+        let edits = Edits::from_iter([
+            omitted.clone(),
+            first.clone(),
+            configuration.clone(),
+            omitted,
+            second.clone(),
+        ]);
+        let defaults = MoleculeDefaults::new();
+        let expected = Edits::from_iter([first, configuration, second]);
+        let rendered = EditsDsl::from_ir(&edits, &defaults);
+        assert_eq!(rendered.clone().into_ir(&defaults), expected);
+        assert_eq!(
+            EditsDsl::from_edn_str(&rendered.to_string())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
     }
 }

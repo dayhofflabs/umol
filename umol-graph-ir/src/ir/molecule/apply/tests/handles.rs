@@ -21,7 +21,9 @@ use crate::ir::{
     DativeBondConstraintForm, DativeBondConstraintKey, DativeBondHandle, DativeBondId, Molecule,
     MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondHandle,
     MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
-    NoncovalentBondHandle, NoncovalentBondId, RollbackMethod, TransactionError,
+    NoncovalentBondHandle, NoncovalentBondId, RollbackMethod, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoAtomForm, StereoAtomHandle, StereoAtomId,
+    StereoConfigurationForm, StereoKind, TransactionError,
 };
 
 #[rstest]
@@ -775,5 +777,111 @@ fn test_molecule_apply_noncovalent_bond_batches_removed(
             Err(error.clone().into())
         );
         assert_eq!(molecule, source);
+    }
+}
+
+#[rstest]
+fn test_molecule_apply_stereo_atom_batches_removed(
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); 3],
+        stereo_atoms: vec![
+            (AtomId(0), vec![], StereoAtomForm::default()),
+            (AtomId(1), vec![], StereoAtomForm::default()),
+        ],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let (removed, site) = if created {
+        (
+            prefix.add_stereo_atom(AtomHandle::Id(AtomId(2)), vec![], StereoAtomForm::default()),
+            AtomHandle::Id(AtomId(2)),
+        )
+    } else {
+        (
+            StereoAtomHandle::Id(StereoAtomId(0)),
+            AtomHandle::Id(AtomId(0)),
+        )
+    };
+    prefix.remove_stereo_atoms(vec![(
+        removed.clone(),
+        site,
+        vec![],
+        StereoAtomForm::default(),
+    )]);
+    let key = StereoAtomConstraintKey::Stereogenicity;
+    let form = StereoAtomConstraintForm::undetermined(key);
+    let configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32);
+    let batch = if constraint {
+        Edit::ModifyStereoAtomConstraints {
+            kind: None,
+            key,
+            changes: vec![
+                (
+                    StereoAtomHandle::Id(StereoAtomId(1)),
+                    None,
+                    Some(form.clone()),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyStereoAtomConfigurations {
+            changes: vec![
+                (
+                    StereoAtomHandle::Id(StereoAtomId(1)),
+                    StereoConfigurationForm::Undetermined,
+                    configuration.clone(),
+                ),
+                (
+                    removed,
+                    StereoConfigurationForm::Undetermined,
+                    configuration.clone(),
+                ),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::StereoAtom,
+        index: 0,
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.stereo_atoms.remove(0);
+    }
+    if !journaled {
+        let attributes = &mut expected.stereo_atoms[usize::from(created)].2;
+        if constraint {
+            attributes.constraints = vec![form].into();
+        } else {
+            attributes.configuration = configuration;
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut restored = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            restored.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(restored, source);
     }
 }

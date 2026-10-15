@@ -2128,7 +2128,7 @@ Undetermined update remain distinct after their vacuous constraints are omitted.
 Use an available supplied current-form context during lowering; standalone
 serialization does not invent or infer a kind from a molecule.
 
-For a kindless constraint-only edit or batch row, omit the entire constraint
+For a kindless constraint-only edit or constraint batch, omit the entire constraint
 operation, including both its expectation and update. Do not encode just its new
 value as absent, which would request removal. Preserve unrelated configuration
 and other edits and the order of retained operations. Raw Rust/Python value
@@ -2142,8 +2142,38 @@ them. Apply the same omission before those failure paths. Keep the existing
 kind-scoped constraint grammar; do not add a separate raw encoding or require
 fallible mutation. This does not weaken the kind requirement of molecule-level
 stereo constraint leaves.
-The shared LigandSymmetry and Fluxionality batch-key syntax remains a separate
-unresolved design point in S2; full permutation-image encoding remains rejected.
+
+### Stereo constraint batches — decision, 2026-10-15
+
+A stereo constraint batch is scoped by the entity kind, StereoKind, and constraint
+key together. StereoKind supplies the entity subtype, so a tetrahedral stereo-atom
+batch has the same role as an atom, bond, or non-stereo overlay constraint batch.
+The constraints inherit that context; they gain no independent intrinsic kind.
+
+Carry one Option<StereoKind> beside the shared key. Each ordered row contains only
+the entity handle and optional expected/replacement constraints. Different kind
+contexts require separate batches, including kinds with the same degree. This
+supersedes the proposed per-row kind context in S2g3/S2h. Construction retains
+the supplied rows and their order; it does not regroup or split them automatically.
+
+Some(kind) supplies the context for the shared key and every operand. None retains
+the agreed raw kindless case: Rust/Python construction and conversion preserve its
+payload, while DSL export omits the entire vacuous batch. Raw application keeps
+the existing handle, key, and old-value checks, without adding kind-presence or
+host-kind-match rejection. Undo restores accepted raw values by concrete ID and
+key; it does not need to reinterpret them under a kind.
+
+The DSL carries :kind once at batch level. Existing cycle notation obtains its
+degree from that kind, including for an empty batch. Each non-nil operand remains
+a complete constraint predicate map, including its key parameters. The same
+kind scopes all four constraint keys. A known-kind empty batch retains its kind,
+key, and empty changes vector through serialization. The concrete Rust/Python
+interfaces and DSL grammar are specified in S2 below.
+
+Full permutation-image encoding remains rejected. A separate degree field and
+omission of known-kind empty batches are also rejected; the batch's entity context
+already supplies the information needed to serialize its key. S2g1/S2g2's completed
+form, update, and single-entry decisions remain in force.
 
 ## Python getter contract review — 2026-10-14
 
@@ -3542,8 +3572,8 @@ in `scratch/181-s1/`.
 The stereo subitems follow the [kindless stereo constraint decision](#kindless-stereo-constraints--decision-2026-10-14).
 S2g1 implements form semantics and readings for both stereo entity kinds; S2g2
 implements their update lowering and existing serialization paths. S2g3 and S2h
-then add the atom and bond batches. The remaining shared stereo-key syntax must
-be settled before S2g3; it does not block S2g1 or S2g2.
+then add the atom and bond batches under the
+[kind-scoped batch decision](#stereo-constraint-batches--decision-2026-10-15).
 
 **Interfaces:** use the study's typed vectors and direct
 application/replay loops. Put each new variant beside the corresponding entity's
@@ -3567,8 +3597,8 @@ The Edits method moves the vector into one Edit via push. It neither combines
 with preceding edits nor examines/reorders rows. An empty vector remains an
 empty batch. Construction does not access a molecule or check old values.
 
-For each entity E, add these constraint declarations (the concrete names/types
-are listed in each item):
+For each non-stereo entity E, add these constraint declarations (the concrete
+names/types are listed in each item):
 
 ```rust
 // Edit:
@@ -3581,9 +3611,27 @@ pub fn modify_e_constraints(
 );
 ```
 
-Stereo constraint Edit/method rows instead have
-`(H, Option<StereoKind>, Option<C>, Option<C>)`, retaining geometry context per
-row. Their Undo rows have the same `(I, Option<C>)` shape as the other entities.
+Stereo constraint batches carry the kind once beside the shared key:
+
+```rust
+// Edit:
+ModifyEConstraints {
+    kind: Option<StereoKind>,
+    key: K,
+    changes: Vec<(H, Option<C>, Option<C>)>,
+},
+// Edits:
+pub fn modify_e_constraints(
+    &mut self, kind: Option<StereoKind>, key: K,
+    changes: Vec<(H, Option<C>, Option<C>)>,
+);
+```
+
+Their Undo variants retain `RestoreEConstraints { key: K,
+constraints: Vec<(I, Option<C>)> }`, restoring raw values without a kind field.
+All rows share the supplied kind context and key; separate contexts require
+separate batches. Construction, raw application, and Python conversion retain
+kindless payloads. No kind-presence or host-kind-match check is added.
 Every present old/new constraint must have the batch key; application rejects a
 mismatch with TransactionError::OldStateMismatch before writing that row.
 `(None, None)` retains the single-entry no-op behavior after handle resolution. Keys include
@@ -3594,8 +3642,10 @@ the same key. No new error enum or batch-entry error wrapper is introduced.
 A field constructor has `Edit.Variant(changes: list[tuple[int | New, F, F]])`;
 its method is `edits.method(changes) -> None`. Constraint constructors have
 `Edit.ModifyEConstraints(key: K, changes: list[tuple[int | New, C | None,
-C | None]])`; the method takes the same key and changes arguments. Stereo rows
-insert `StereoKind | None` after the handle. K and C are the existing Python
+C | None]])`; the method takes the same key and changes arguments. Stereo
+constructors instead take `Edit.ModifyEConstraints(kind: StereoKind | None,
+key: K, changes: list[tuple[int | New, C | None, C | None]])`, with the same
+`edits.method(kind, key, changes) -> None` arguments. K and C are the existing Python
 constraint-key/form classes; F is the existing form class, without new scalar
 coercions. Rust binding arguments use Vec of tuples, HandleLike, and Py<F>/Py<C>
 for form objects, following existing Edit field constructors. Reuse each key's
@@ -3605,14 +3655,15 @@ of Python Edit values retains the existing Python Edit conversion lifecycle.
 Edits methods reject consumed receivers through the existing exception. No new
 consumed state or view-invalidation mechanism is introduced for row values.
 
-The Edit variant's changes property returns a tuple of row tuples. Reuse the
-existing key, form, and constraint classes and their getter behavior. Later
+The Edit variant's changes property returns a tuple of row tuples. Stereo
+constraint variants expose kind and key separately from the three-value rows.
+Reuse the existing key, form, and constraint classes and their getter behavior. Later
 mutation of constructor input lists or mutable input values does not alter the
 Edit. Shared getter immutability and Rust/Python payload-name alignment belong
 to S11c and do not gate any S2 batch subitem.
 
-**Native DSL — stereo constraint key syntax unresolved:** use singular entity
-keys for all 19 field-batch operations and :modify-constraints on each of the
+**Native DSL:** use singular entity keys for all 19 field-batch operations and
+:modify-constraints on each of the
 eight entity kinds. Each table gives the exact field verb. Existing :modify,
 addition, removal, and replacement syntax stays unchanged. For example:
 
@@ -3627,8 +3678,36 @@ complete configuration head (`"*"`, `"Th*"`, `"Th0"`, etc.), with no constraint
 tail or omitted-coset update shorthand. A constraint batch is `{:atom {:modify-constraints {:key <key> :changes
 [[handle {:expect <old-constraint-or-nil> :update <new-constraint-or-nil>}]]}}}`,
 with the appropriate singular entity key. Values use the existing entity constraint
-DSL. Retained stereo rows carry `:kind <kind>` in the expect/update map for both
-constraint operands. Omit kindless constraint-only rows and both their operands
+DSL. Stereo constraint batches carry a required `:kind <kind>` beside :key and
+:changes, supplying context for the key and both operands of every row. Each
+non-nil operand is the existing complete constraint predicate map; the kind is
+supplied by the batch instead of repeated in a `[kind predicate-map]` wrapper:
+
+```clojure
+[{:stereo-atom
+  {:modify-constraints
+   {:kind :tetrahedral
+    :key {:fluxionality {:permutation [[0 1]]}}
+    :changes
+    [[0 {:expect nil
+         :update {:fluxionality {:permutation [[0 1]]
+                                :active false}}}]]}}}]
+```
+
+The operands retain their key parameters, matching the complete Rust constraint
+values. :expect nil requires absence; :update nil requests removal. A known-kind
+empty batch remains explicit:
+
+```clojure
+[{:stereo-atom
+  {:modify-constraints
+   {:kind :tetrahedral
+    :key {:fluxionality {:permutation [[0 1]]}}
+    :changes []}}}]
+```
+
+Stereo-bond batches use the same grammar under :stereo-bond. Omit an entire raw
+constraint batch whose kind is None, including all expectations and updates,
 under the vacuity decision above. No kind is inferred from the molecule.
 
 The key encoding is explicit even for empty batches. Unit keys use their existing
@@ -3638,12 +3717,15 @@ constraint keyword (for example :valence, :aromatic, :electron-count,
 - RingMembership(All): `{:ring-membership {}}`;
   RingMembership(Size(n)): `{:ring-membership {:size n}}`.
 - Topicity: `{:topicity {:pair [i j]}}`.
+- Fluxionality: `{:fluxionality {:permutation [[i j] ...]}}`.
+- LigandSymmetry: `{:ligand-symmetry {:permutation [[i j] ...]
+  :orientation :improper}}`; omitted orientation means :proper, which is also
+  accepted explicitly.
 
-**Rejected — 2026-10-14:** full permutation-image encoding for stereo constraint
-keys was not approved and is rejected. LigandSymmetry and Fluxionality key syntax,
-including context for empty batches, remains to be settled. Kindless-row omission
-is settled by the vacuity decision above. No replacement key encoding is selected.
-The existing uniform infallible update-helper interfaces are retained.
+Permutations use the existing vector of disjoint cycles; identity is []. The
+batch kind supplies their degree. The kind-scoped grammar applies equally to
+populated and empty batches. It adds no degree field or full permutation-image
+encoding. Existing uniform infallible update-helper interfaces are retained.
 
 Reject malformed key encodings at deserialization. Key/value agreement remains
 an application precondition, just as independently supplied old/new values do.
@@ -3652,8 +3734,8 @@ Extend EditsDsl's existing trait boundary and per-entity EditInput organization.
 Provide tree readers and tree rendering for the new forms, with
 read_edn_/render_ naming where free functions are needed. Do not add a
 public batch DSL type or a generic parser that obscures the per-entity grammar.
-Apart from omission of vacuous kindless stereo-constraint rows, valid batches
-preserve their variant, key, retained row order, empty rows, and stereo kind
+Apart from omission of vacuous kindless stereo-constraint batches, valid batches
+preserve their variant, key, row order, empty batches, and stereo kind
 context through DSL conversion. Rust/Python value conversion preserves the raw
 batch payload. The study's expansion into individual edits is not a production
 conversion. No Delta variants are added.
@@ -4151,14 +4233,14 @@ workspace compilation with all targets, formatting, and git diff --check passed.
 Full workspace tests remain at the combined stage gate. Evidence is in
 scratch/181-s2g2/.
 
-#### S2g3 — Stereo atom field and constraint batches
+#### S2g3 — Stereo atom field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/stereo, dsl/edit; Python edit;
 their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
 [dep: S1a, S1b, S2g2]
 
-**Design prerequisite:** settle the shared stereo-key syntax recorded in S2.
+Implement the shared kind-scoped stereo-key syntax settled in S2.
 
 **Concrete interfaces:** H = StereoAtomHandle; I = StereoAtomId.
 DSL entity key: :stereo-atom.
@@ -4173,38 +4255,66 @@ K = StereoAtomConstraintKey, C = StereoAtomConstraintForm.
 
 Add Configuration batches with Vec<(StereoAtomHandle, StereoConfigurationForm,
 StereoConfigurationForm)> and corresponding StereoAtomId inverse vectors.
-Add StereoAtomConstraintKey batches whose entries retain StereoAtomHandle,
-Option<StereoKind>, and optional StereoAtomConstraintForm old/new values. Undo
-retains the resolved ID and accepted previous constraint value.
+Add StereoAtomConstraintKey batches with one Option<StereoKind> beside the key
+and Vec<(StereoAtomHandle, Option<StereoAtomConstraintForm>,
+Option<StereoAtomConstraintForm>)> rows. Edits::modify_stereo_atom_constraints
+takes kind, key, changes in that order; Python exposes the same header and row
+shape. Undo retains the key, resolved IDs, and accepted previous constraint values.
 
 Wire Edits construction, both application paths, stereo-atom mutable-view writes,
-replay, and DSL/Python conversion. Keep geometry context per entry: one shared
-constraint key does not imply a shared kind. Preserve existing configuration
-comparison and restoration semantics, without adding coset normalization/checks.
+replay, and DSL/Python conversion. Scope each constraint batch by its kind and key
+together; different kind contexts use separate batches. Preserve existing
+configuration comparison and restoration semantics, without adding coset normalization/checks.
 Site and ligand mutation remain separate existing operations.
 
-Extend S2g2's serialization omission to constraint batch rows: a row with no
-kind contributes neither an expectation nor an update. Preserve retained row
-order and configuration batches; do not infer context from a molecule or turn
+Extend S2g2's serialization omission to whole constraint batches: a batch with no
+kind contributes neither expectations nor updates. Preserve known-kind batches,
+including empty ones, and the order of rows and retained operations. Preserve
+configuration batches; do not infer context from a molecule or turn
 omission into removal. Raw batch construction, Python value conversion,
 application, and undo keep the corresponding single-entry contracts.
 
 In dsl/stereo, reuse stereo_configuration and fmt_stereo_configuration to expose
-crate-private read_edn_stereo_configuration, read_stereo_configuration, and
-render_stereo_configuration for the two edit grammars. The readers require the
-complete configuration head and reject trailing constraint text. These are
-boundary functions for EditsDsl, not a new public configuration type. The shared
-stereo-key grammar remains unresolved as recorded in S2. Settle it before
-implementing the constraint readers; the atom/bond batch readers use that grammar
-with their corresponding key type.
+crate-private read_edn_stereo_configuration and render_stereo_configuration for
+the two edit grammars. EditsDsl uses tree parsing; no separate streaming reader is
+needed. The reader requires the complete configuration head and rejects trailing
+constraint text. These are boundary functions for EditsDsl, not a new public
+configuration type. Implement
+S2's constraint grammar using the batch kind to read cycle permutations in the
+shared key and complete constraint operands. The atom/bond batch readers use that
+grammar with their corresponding key type. No separate degree encoding is needed.
 
 **Checks:** shared S2 cases for configuration and stereo-atom constraint keys;
-include different kinds within a keyed batch, per-entry DSL kind context,
-configuration changes followed by rejection, and retained site/ligand order.
-Add mixed kinded/kindless and entirely kindless constraint batches, including
-contradictory omitted payloads. Assert exact serialized omission and retained
-order under the settled key grammar, raw Rust/Python payload preservation, and
-that export neither panics nor introduces a constraint removal.
+include separate batches for different kind contexts, including kinds of equal
+degree, configuration changes followed by rejection, and retained site/ligand
+order. Cover all four keys and known-kind empty batches, including identity
+permutations whose degree comes entirely from the kind. Add edit sequences
+containing both kinded and kindless batches, and sequences containing only
+kindless batches, including contradictory omitted payloads. Assert exact retained
+batch roundtrips on the existing lossless domain, whole-batch omission and retained
+operation order, raw Rust/Python
+kind/key/row preservation, and that export neither panics nor introduces a removal.
+Extend sequence-equivalence and restoration properties to the shared kind context;
+retain the existing application policy for raw kindless and mismatched-kind inputs.
+
+**Implemented — 2026-10-15.** Configuration and kind-scoped constraint batches
+are wired through Rust, both application paths, undo, DSL, and Python. The batch
+header carries kind and key; rows retain only handles and old/new values.
+Configuration operands use complete strings. Known-kind empty batches retain
+their keys, including identity permutations; kindless batches are omitted in full.
+Raw application retains the existing kindless and mismatched-kind policy.
+
+**Verification — 2026-10-15.** Passed 11,009 graph-IR unit cases (three existing
+ignored cases), 77 stereo-related properties, and 571 Python edit, stereo, and
+transaction cases after rebuilding with Python 3.13. Coverage includes ordered
+single-entry equivalence and correspondence, initial/new/removed handles,
+first/middle/last failures, destructive prefixes, journal and clone rollback,
+accepted-old-value restoration, all four constraint keys and their parameters,
+site/ligand order, whole-batch omission, and Python tuple rows and input independence.
+Strict affected-crate Clippy, workspace all-target compilation, nightly formatting,
+and git diff --check passed. Edit remains 104 bytes and Undo 88 bytes on this target.
+Full workspace tests remain at the combined stage gate. Evidence is in
+scratch/181-s2g3/.
 
 #### S2h — Stereo bond field and constraint batches
 
@@ -4225,25 +4335,34 @@ K = StereoBondConstraintKey, C = StereoBondConstraintForm.
 
 Add Configuration batches with Vec<(StereoBondHandle, StereoConfigurationForm,
 StereoConfigurationForm)> and corresponding StereoBondId inverse vectors.
-Add StereoBondConstraintKey batches whose entries retain StereoBondHandle,
-Option<StereoKind>, and optional StereoBondConstraintForm old/new values. Undo
-retains the resolved ID and accepted previous constraint value.
+Add StereoBondConstraintKey batches with one Option<StereoKind> beside the key
+and Vec<(StereoBondHandle, Option<StereoBondConstraintForm>,
+Option<StereoBondConstraintForm>)> rows. Edits::modify_stereo_bond_constraints
+takes kind, key, changes in that order; Python exposes the same header and row
+shape. Undo retains the key, resolved IDs, and accepted previous constraint values.
 
 Wire Edits construction, both application paths, stereo-bond mutable-view writes,
-replay, and DSL/Python conversion. Retain kind context per constraint entry and
-the existing configuration semantics. Do not narrow the representation to
+replay, and DSL/Python conversion. Share kind context and key across each
+constraint batch, with different contexts in separate batches. Retain the
+existing configuration semantics. Do not narrow the representation to
 coset-only changes or change the separate site/ligand replacement operations.
 
 Reuse the form, reading, lowering, and single-entry serialization semantics from
-S2g1/S2g2. Apply S2g3's whole-row omission rule to stereo-bond constraint batch
-serialization, preserving raw construction/conversion and application/undo
+S2g1/S2g2. Apply S2g3's whole-batch omission rule to kindless stereo-bond constraint
+serialization and preserve known-kind empty batches. Reuse the shared kind-scoped
+key/operand grammar, preserving raw construction/conversion and application/undo
 contracts. Do not add a separate bond-specific kind policy.
 
 **Checks:** shared S2 cases for configuration and stereo-bond constraint keys;
-include new and removed handles, per-entry geometry context, sequential
+include new and removed handles, shared batch kind context, sequential
 configuration changes, failure after earlier batches, and retained site/ligand order.
-Cover mixed kinded/kindless and entirely kindless batches, exact omission without
-removal, retained order, raw Rust/Python payload preservation, and panic-free export.
+Cover separate batches for different kind contexts, all four keys, and known-kind
+empty batches, including identity permutations. Cover sequences of kinded and
+kindless batches and wholly kindless sequences, exact whole-batch omission without
+removal, retained order, raw Rust/Python kind/key/row preservation, and panic-free
+export. Extend sequence-equivalence and restoration properties to the shared kind
+context, retaining the raw application policy and exact retained batch roundtrips
+on the existing lossless domain.
 
 **S2 gate:** all eight entity kinds have the same applicable semantics, all
 workspace consumers compile and pass their relevant tests, and the new variants
@@ -4882,10 +5001,9 @@ independently, S5a → S5b, S6a/S6b/S6c, and S7a → S7b → S7c.
 S11c follows S2a–S2h, S5a, S6c, and S7b, before final S12 verification;
 its getter and naming changes do not block the batching work.
 S1a/S1b and S2a–S2f are independent within their stages. The stereo sequence is
-S2g1 → S2g2 → S2g3 → S2h; S2g3 also requires the shared stereo-key syntax to be
-settled. S2g1/S2g2 can proceed independently of S2a–S2f. S2i follows S2a–S2h,
-and S2j follows S2i. S5 needs no boxing, batching, or molecule
+S2g1 → S2g2 → S2g3 → S2h; S2g3 implements the settled shared kind-scoped stereo
+grammar reused by S2h. S2g1/S2g2 can proceed independently of S2a–S2f. S2i follows
+S2a–S2h, and S2j follows S2i. S5 needs no boxing, batching, or molecule
 lifecycle change and is not deferred. S0 assigns lifecycle/recovery; S10–S12
 assign operation, Python, and final-measurement work. S8/S9 material has moved
-to S0; later labels are retained. Their dependencies are listed per item. The
-migration interface review retains the unresolved shared stereo-key syntax.
+to S0; later labels are retained. Their dependencies are listed per item.

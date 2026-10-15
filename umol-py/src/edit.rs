@@ -34,7 +34,9 @@ use crate::constraint::dative::{DativeBondConstraintForm, DativeBondConstraintKe
 use crate::constraint::molecule::Constraint;
 use crate::constraint::multicenter::{MulticenterBondConstraintForm, MulticenterBondConstraintKey};
 use crate::constraint::noncovalent::{NoncovalentBondConstraintForm, NoncovalentBondConstraintKey};
-use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
+use crate::constraint::stereo::{
+    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
+};
 use crate::convert::into_py_variant;
 use crate::dative::{DativeBondForm, DativeBondUpdate};
 use crate::defaults::MoleculeDefaults;
@@ -52,8 +54,8 @@ use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, Noncovale
 use crate::num::NumForm;
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
-    StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoKind,
-    StereoLigandKind,
+    StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
+    StereoKind, StereoLigandKind,
 };
 
 /// A same-kind creation ordinal in an edit sequence.
@@ -477,6 +479,12 @@ type NoncovalentBondConstraintChange = (
     Option<Py<NoncovalentBondConstraintForm>>,
 );
 
+type StereoAtomConstraintChange = (
+    HandleLike,
+    Option<Py<StereoAtomConstraintForm>>,
+    Option<Py<StereoAtomConstraintForm>>,
+);
+
 struct TupleItems<T>(Vec<T>);
 
 impl<'a, 'py, T> FromPyObject<'a, 'py> for TupleItems<T>
@@ -691,6 +699,13 @@ pub enum Edit {
         old: Vec<StereoLigandInput>,
         new: Vec<StereoLigandInput>,
     },
+    ModifyStereoAtomConfigurations {
+        changes: TupleItems<(
+            HandleLike,
+            Py<StereoConfigurationForm>,
+            Py<StereoConfigurationForm>,
+        )>,
+    },
     ModifyStereoAtomField {
         id: HandleLike,
         change: Py<StereoAtomFieldChange>,
@@ -766,6 +781,12 @@ pub enum Edit {
         id: HandleLike,
         old: Option<Py<NoncovalentBondConstraintForm>>,
         new: Option<Py<NoncovalentBondConstraintForm>>,
+    },
+    #[pyo3(constructor = (kind, key, changes))]
+    ModifyStereoAtomConstraints {
+        kind: Option<StereoKind>,
+        key: Py<StereoAtomConstraintKey>,
+        changes: TupleItems<StereoAtomConstraintChange>,
     },
     ModifyStereoAtomConstraint {
         id: HandleLike,
@@ -888,6 +909,9 @@ impl Edit {
             Self::ReplaceStereoAtomLigands { .. } => {
                 ("ReplaceStereoAtomLigands", &["id", "old", "new"])
             }
+            Self::ModifyStereoAtomConfigurations { .. } => {
+                ("ModifyStereoAtomConfigurations", &["changes"])
+            }
             Self::ModifyStereoAtomField { .. } => ("ModifyStereoAtomField", &["id", "change"]),
             Self::AddStereoBond { .. } => ("AddStereoBond", &["site", "ligands", "attributes"]),
             Self::RemoveStereoBonds { .. } => ("RemoveStereoBonds", &["removes"]),
@@ -922,6 +946,9 @@ impl Edit {
             }
             Self::ModifyNoncovalentBondConstraint { .. } => {
                 ("ModifyNoncovalentBondConstraint", &["id", "old", "new"])
+            }
+            Self::ModifyStereoAtomConstraints { .. } => {
+                ("ModifyStereoAtomConstraints", &["kind", "key", "changes"])
             }
             Self::ModifyStereoAtomConstraint { .. } => {
                 ("ModifyStereoAtomConstraint", &["id", "kind", "old", "new"])
@@ -1508,6 +1535,28 @@ impl Edit {
                         .collect(),
                 }
             }
+            GraphIrEdit::ModifyStereoAtomConfigurations { changes } => {
+                Self::ModifyStereoAtomConfigurations {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_stereo_atom_handle(id),
+                                    into_py_variant(
+                                        py,
+                                        StereoConfigurationForm::from_rust(py, old)?,
+                                    )?,
+                                    into_py_variant(
+                                        py,
+                                        StereoConfigurationForm::from_rust(py, new)?,
+                                    )?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
             GraphIrEdit::ModifyStereoAtomField { id, change } => Self::ModifyStereoAtomField {
                 id: HandleLike::from_stereo_atom_handle(id),
                 change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
@@ -1848,6 +1897,38 @@ impl Edit {
                             )
                         })
                         .transpose()?,
+                }
+            }
+            GraphIrEdit::ModifyStereoAtomConstraints { kind, key, changes } => {
+                Self::ModifyStereoAtomConstraints {
+                    kind: kind.map(StereoKind::from_rust),
+                    key: into_py_variant(py, StereoAtomConstraintKey::from_rust(py, key)?)?,
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_stereo_atom_handle(id),
+                                    old.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                StereoAtomConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                    new.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                StereoAtomConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
                 }
             }
             GraphIrEdit::ModifyStereoAtomConstraint { id, kind, old, new } => {
@@ -2358,6 +2439,21 @@ impl Edit {
                         .collect(),
                 }
             }
+            Self::ModifyStereoAtomConfigurations { changes } => {
+                GraphIrEdit::ModifyStereoAtomConfigurations {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_stereo_atom_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             Self::ModifyStereoAtomField { id, change } => GraphIrEdit::ModifyStereoAtomField {
                 id: id.to_stereo_atom_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -2561,6 +2657,25 @@ impl Edit {
                     new: new
                         .as_ref()
                         .map(|value| value.bind(py).borrow().to_rust(py)),
+                }
+            }
+            Self::ModifyStereoAtomConstraints { kind, key, changes } => {
+                GraphIrEdit::ModifyStereoAtomConstraints {
+                    kind: kind.map(StereoKind::to_rust),
+                    key: key.bind(py).borrow().to_rust(py),
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_stereo_atom_handle(),
+                                old.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                                new.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                            )
+                        })
+                        .collect(),
                 }
             }
             Self::ModifyStereoAtomConstraint { id, kind, old, new } => {
@@ -3677,6 +3792,59 @@ impl Edits {
                 .map(|(id, old, new)| {
                     (
                         id.to_noncovalent_bond_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_stereo_atom_configurations(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<StereoConfigurationForm>,
+            Py<StereoConfigurationForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_stereo_atom_configurations(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_stereo_atom_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    #[pyo3(signature = (kind, key, changes))]
+    fn modify_stereo_atom_constraints(
+        &mut self,
+        py: Python<'_>,
+        kind: Option<StereoKind>,
+        key: Py<StereoAtomConstraintKey>,
+        changes: Vec<StereoAtomConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_stereo_atom_constraints(
+            kind.map(StereoKind::to_rust),
+            key.bind(py).borrow().to_rust(py),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_stereo_atom_handle(),
                         old.as_ref()
                             .map(|value| value.bind(py).borrow().to_rust(py)),
                         new.as_ref()

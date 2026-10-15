@@ -13,6 +13,16 @@ from umol import (
     AtomFieldChange,
     AtomUpdate,
     BooleanForm,
+    FluxionalityForm,
+    LigandPermutation,
+    LigandSymmetryForm,
+    OrientedLigandPermutation,
+    Orientation,
+    Permutation,
+    StereoLigandPair,
+    Topicity,
+    TopicityForm,
+    TopicityRelationForm,
     BondConstraintForm,
     BondConstraintKey,
     BondForm,
@@ -55,6 +65,7 @@ from umol import (
     RingMembershipForm,
     UnpairedElectronsForm,
     StereoAtomConstraintForm,
+    StereoAtomConstraintKey,
     StereoAtomForm,
     StereoAtomFieldChange,
     StereoAtomUpdate,
@@ -1265,6 +1276,7 @@ def test_edits_bond_constraint_batches_error(key, old, new):
         (Edit.ModifyMulticenterBondCharges, "modify_multicenter_bond_charges", "charge", MulticenterBondForm, "[1,2]", NumForm.Lit(1), NumForm.LitSet({1, 2}), "multicenter_bonds", ([2, 0, 1],)),
         (Edit.ModifyMulticenterBondUnpairedElectrons, "modify_multicenter_bond_unpaired_electrons", "unpaired_electrons", MulticenterBondForm, "[1,2]", UnpairedElectronsForm(0, 1), UnpairedElectronsForm(1, 2), "multicenter_bonds", ([2, 0, 1],)),
         (Edit.ModifyNoncovalentBondKinds, "modify_noncovalent_bond_kinds", "kind", NoncovalentBondForm, "Hbd", NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond), NoncovalentBondKindForm.Undetermined(), "noncovalent_bonds", ((2, 0),)),
+        (Edit.ModifyStereoAtomConfigurations, "modify_stereo_atom_configurations", "configuration", StereoAtomForm, "Th0", StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)), StereoConfigurationForm.Kinded(StereoKind.SquarePlanar, StereoCoset.LitSet({0, 2})), "stereo_atoms", (0, [])),
     ],
 )
 @pytest.mark.parametrize("count", [0, 1, 2])
@@ -1367,6 +1379,7 @@ def test_edits_relation_constraint_batches(variant, method, add_method, key, fir
         ("modify_aromatic_system_electrons", "add_aromatic_system", "electrons", ElectronCountsForm.Lit([1, 2]), ElectronCountsForm.Lit([]), AromaticSystemForm, "[1,2]", "aromatic_systems", ([2, 0, 1],), ([5, 3, 4],)),
         ("modify_multicenter_bond_electrons", "add_multicenter_bond", "electrons", ElectronCountsForm.Lit([1, 2]), ElectronCountsForm.Lit([]), MulticenterBondForm, "[1,2]", "multicenter_bonds", ([2, 0, 1],), ([5, 3, 4],)),
         ("modify_noncovalent_bond_kinds", "add_noncovalent_bond", "kind", NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond), NoncovalentBondKindForm.Undetermined(), NoncovalentBondForm, "Hbd", "noncovalent_bonds", ((2, 0),), ((5, 3),)),
+        ("modify_stereo_atom_configurations", "add_stereo_atom", "configuration", StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)), StereoConfigurationForm.Undetermined(), StereoAtomForm, "Th0", "stereo_atoms", (0, []), (3, [])),
     ],
 )
 def test_edits_relation_field_batches_new(method, add_method, field, old, new, form_type, text, collection, participants, created_participants):
@@ -1384,3 +1397,57 @@ def test_edits_relation_field_batches_new(method, add_method, field, old, new, f
     with pytest.raises(TransactionError):
         source.apply(rejected)
     assert source == Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})
+
+
+@pytest.mark.parametrize("constraint", [
+    StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral)),
+    StereoAtomConstraintForm.Topicity(TopicityForm(StereoLigandPair(0, 2), TopicityRelationForm.Lit(Topicity.Homotopic))),
+    StereoAtomConstraintForm.Fluxionality(FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False)),
+    StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Improper), True)),
+])
+@pytest.mark.parametrize("kind", [None, StereoKind.Tetrahedral])
+@pytest.mark.parametrize("empty", [False, True])
+def test_edits_stereo_atom_constraint_batches(constraint, kind, empty):
+    key = constraint.key
+    rows = [] if empty else [(0, None, constraint), (New(0), None, constraint), (0, constraint, None), (0, None, None)]
+    expected_rows = tuple(rows)
+    edit = Edit.ModifyStereoAtomConstraints(kind, key, rows)
+    edits = Edits()
+    edits.add_stereo_atom(1, [], StereoAtomForm.parse("*"))
+    edits.modify_stereo_atom_constraints(kind, key, rows)
+    rows.clear()
+    assert edits[1] == edit
+    assert edit.kind == kind
+    assert edit.key == key
+    assert edit.changes == expected_rows
+    assert isinstance(edit.changes, tuple)
+    assert all(isinstance(row, tuple) for row in edit.changes)
+    with pytest.raises(AttributeError):
+        edit.changes = ()
+    with pytest.raises(AttributeError):
+        edit.kind = None
+    with pytest.raises(AttributeError):
+        edit.key = StereoAtomConstraintKey.Stereogenicity()
+    assert list(Edits.parse(edits.render())) == (list(edits) if kind is not None else [edits[0]])
+    assert repr(edit).startswith("Edit.ModifyStereoAtomConstraints(kind=")
+    atoms = [AtomForm.parse("C")] * 2
+    source = Molecule.from_entries(atoms, stereo_atoms=[(0, [], StereoAtomForm.parse("Sp0"))])
+    added = StereoAtomForm.parse("*")
+    if not empty:
+        added.constraints.set(constraint)
+    assert source.apply(edits) == Molecule.from_entries(atoms, stereo_atoms=[(0, [], StereoAtomForm.parse("Sp0")), (1, [], added)])
+    assert source == Molecule.from_entries(atoms, stereo_atoms=[(0, [], StereoAtomForm.parse("Sp0"))])
+    with pytest.raises(ConsumedError):
+        edits.modify_stereo_atom_constraints(kind, key, [])
+
+
+def test_edits_stereo_atom_constraints_kindless():
+    value = StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.LitSet(set()))
+    omitted = Edit.ModifyStereoAtomConstraints(None, StereoAtomConstraintKey.Stereogenicity(), [(0, value, None)])
+    configuration = Edit.ModifyStereoAtomConfigurations([(0, StereoConfigurationForm.Undetermined(), StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)))])
+    first = Edit.ModifyStereoAtomConstraints(StereoKind.Tetrahedral, StereoAtomConstraintKey.Fluxionality(LigandPermutation(Permutation([0, 1, 2, 3]))), [])
+    second = Edit.ModifyStereoAtomConstraints(StereoKind.SquarePlanar, first.key, [])
+    edits = Edits([omitted, configuration, first, omitted, second])
+    assert list(Edits.parse(edits.render())) == [configuration, first, second]
+    assert list(Edits.parse(Edits([omitted]).render())) == []
+    assert Edits([omitted])[0] == omitted
