@@ -4558,7 +4558,7 @@ source diff, settings and verification logs are retained in scratch/181-s3b/.
 
 ### S4 — Verification and decision record
 
-#### S4a — Measure the production representations and wiring
+#### S4a — Measure the production representations and wiring (done)
 
 **Modules:** existing editor/resolver benchmarks; this discussion record.
 **Verification/documentation, green.** [dep: S3a, S3b]
@@ -4579,9 +4579,170 @@ repeating them for every entity kind. Record any regression and its practical
 tradeoff before marking this work complete. Preserve durable findings here before
 removing scratch artifacts.
 
+**Production measurements — 2026-10-15.** Measured 0b4407563 (completed S3b)
+against the saved S0a, pre-S1 and completed-S1 executables, and a reconstruction
+of the pre-S3 graph crate at f6933a09d using the same S2-complete dependencies.
+The pre-S3 comparison isolates the production planner changes; the original
+comparison includes the intervening implementation and transaction-interface
+changes. Historical batching experiments have different source revisions and
+plan contents and are not interchangeable production baselines.
+
+Normal release executables supplied timings; separate allocator and counter
+executables supplied memory and representation measurements. Rust 1.96.0,
+aarch64-apple-darwin; three serial trials per executable, reversing/rotating their
+order. Each trial reports the median of 20 sample means of 32 operations.
+Preparation and final result destruction are excluded; chemistry planning,
+application, publication, replaced-receiver disposal and recovery are included.
+Prepared-transaction measurements exclude input and Edit construction. Trial
+ranges below are descriptive, not statistical significance tests. No aggregate
+score or assumed workload frequencies are used.
+
+The unchanged S1 harness covers whole resolution/projection, Kekulizer,
+Aromatizer, Delocalizer, scalar edits, tracked edits and failures. Added probes
+cover individual isotope, bond, multicenter-bond, aromaticity and stereo
+operations, late composite projection failure, and directly prepared charge
+batches. Individual resolvers and transformers execute their complete plans
+without journals. Composite operations compare consuming execution, clone/install
+and native Journal execution. Prepared transactions separately compare Clone and
+Journal, including cancellation, removals and boxed aromatic-system additions,
+with unique/shared storage and plain/tracked execution. All harness correctness
+and recovery checks passed before measurement; counter and plain allocator
+columns agree exactly. No production source or test was changed for this study.
+
+**Whole-operation results.** The following use 16 active groups, unique storage
+and the public mutating operation with Journal recovery. Resolve and Project
+have 176 atoms. Times are medians of the three trial medians in microseconds.
+
+| Operation | Original S0a | Before S1 | Completed S1 | Before S3 | Production |
+| --- | --- | --- | --- | --- | --- |
+| Resolve | 614.150 | 602.717 | 485.770 | 481.190 | 475.362 |
+| Project | 121.227 | 117.146 | 85.618 | 85.220 | 70.995 |
+
+The isolated S1 comparison improves these cases by 19.4% and 26.9%. Production
+is 22.6% and 41.4% below the original. S3 alone improves projection by 16.7%;
+the 1.2% resolution decrease has overlapping trial ranges and does not establish
+a material speedup. Consuming resolution is 458.340 → 458.798 µs and
+clone/install is 471.728 → 470.018 µs. Their projection counterparts improve
+77.930 → 66.253 µs and 87.640 → 76.290 µs. Sparse projection also benefits;
+the extra resolved carbons undergo natural-isotope elision and are not untouched
+background storage.
+
+A fresh three-run comparison of the saved original S3 Criterion executables
+reproduces the earlier resolution gains. It uses the original bench profile,
+30 samples, one-second warmup and two-second measurement per case:
+
+| Original fixture / storage | Before S3, µs | Completed S3a, µs | Production, µs |
+| --- | --- | --- | --- |
+| sparse8 / unique | 9.305 | 8.528 | 8.468 |
+| sparse8 / shared | 9.693 | 8.785 | 8.822 |
+| dense88 / unique | 228.551 | 211.938 | 212.343 |
+| dense88 / shared | 230.423 | 212.093 | 212.002 |
+
+Production is 7.1–9.0% below pre-S3 here, with separated trial ranges in all four
+cases. S3a and production ranges overlap in every case. S3b has not erased the
+earlier gains; those gains do not generalize to the larger whole-resolution
+fixture above. Fixture, harness boundaries and build profile differ; their
+individual contributions have not been isolated.
+
+**Allocation and representation.** For the dense Journal cases, before S3 →
+production:
+
+| Measurement | Resolve | Project |
+| --- | --- | --- |
+| Allocation/reallocation calls | 7,682 → 7,749 | 693 → 589 |
+| Total requested bytes | 2,530,882 → 2,108,738 | 278,386 → 142,578 |
+| Peak extra live requested bytes | 890,106 → 838,778 | 94,110 → 51,198 |
+| Edit records / accepted Undo records | 1,088 → 55 | 387 → 8 |
+| Sum of outer Edit capacities | 1,568 → 100 | 576 → 12 |
+| Maximum journal capacity | 2,048 → 64 | 512 → 8 |
+| Outer journal buffer bytes | 180,224 → 5,632 | 45,056 → 704 |
+| Production typed Edit rows / capacity / buffer bytes | 1,056 / 1,552 / 99,584 | 384 / 544 / 35,328 |
+| Production typed Undo rows / capacity / buffer bytes | 1,056 / 1,056 / 53,504 | 384 / 384 / 15,360 |
+
+Peak extra is measured above operation entry, excluding allocator/stack overhead;
+it is not RSS. Outer Edit capacities are summed across submitted phase plans,
+not simultaneous live storage. Typed buffers and boxes exclude their nested
+allocations, which the allocator totals include. Resolve retains 4,736 bytes of
+selected Edit boxes and the same Undo box bytes; Project retains 984 Undo box
+bytes. Resolution's smaller outer journal therefore produces a 5.8% peak-extra
+reduction, alongside 67 more allocations. Projection's peak-extra reduction is
+45.6%. The earlier experimental 40-record resolution plan is not the production
+55-record plan: production preserves per-system addition/discharge order, and
+the older experiment had different constituent counts. The smaller experimental
+record count is not a production target by itself.
+
+**Individual operations and recovery choices.** Dense, unique consuming
+pre-S3 → production timings:
+
+| Operation | Before, µs | Production, µs | Change |
+| --- | --- | --- | --- |
+| Isotope resolve | 10.835 | 6.674 | −38.4% |
+| Isotope project | 10.297 | 6.544 | −36.5% |
+| Bonds resolve | 15.852 | 10.304 | −35.0% |
+| Multicenter bonds resolve | 2.283 | 1.889 | −17.3% |
+| Aromaticity resolve | 147.579 | 147.175 | −0.3%, overlapping ranges |
+| Aromaticity project | 35.001 | 27.828 | −20.5% |
+| Stereo resolve | 181.221 | 170.255 | −6.1% |
+| Stereo project | 23.883 | 22.382 | −6.3% |
+
+Prepared 64-charge edits on 96 atoms, unique/plain/commit, improve
+2.153 → 1.109 µs under Journal when emitted as one typed batch; allocations
+fall from five/10,912 requested bytes to two/2,912 bytes. Clone improves
+3.200 → 2.880 µs with unchanged allocation counts. One charge on 96 atoms instead
+costs 475.3 → 510.4 ns under Journal (+35.1 ns, +7.4%, separated ranges), with
+one/352 requested bytes becoming two/392. Explicit single-entry edits remain
+useful. Recovery selection also remains operation-dependent: tracked cancellation
+after eight removals on 96 atoms takes 63.366 µs with Clone versus 105.906 µs
+with Journal for unique storage; shared storage is 60.678 versus 104.059 µs.
+Batching field changes does not eliminate structural correspondence/recovery costs.
+
+**Regressions and unresolved disposition.** These costs are retained in the
+comparison, rather than offset against unrelated gains:
+
+| Case / comparison | Increase | Evidence |
+| --- | --- | --- |
+| One multicenter system, unique consuming, pre-S3 → production | 326.2 → 386.1 ns; +59.9 ns, +18.4% | Separated ranges; allocations 3 → 5, requested bytes 498 → 1,010, peak extra 422 → 934 |
+| One-atom resolution contradiction, shared Journal, pre-S3 → production | 1,434.2 → 1,510.4 ns; +76.2 ns, +5.3% | Separated ranges; allocations 18 → 23, requested bytes 4,366 → 5,094 |
+| Early projection rejection, unique Journal, pre-S3 → production | 286.5 → 316.4 ns; +29.9 ns, +10.4% | Separated ranges; unchanged five allocations / 156 requested bytes / 86 peak-extra bytes |
+| Dense Kekulizer, unique mutating, pre-S3 → production | 207.732 → 211.376 µs; +3.645 µs, +1.8% | Separated ranges; transformer control outside changed planner emission |
+| Prepared 64 scalar charges, unique/plain Journal cancellation, completed S1 → production | +134.7 ns, +6.5% | Separated ranges; tracked counterpart +118.6 ns, +5.3% |
+| Eight removals, shared/plain Clone commit, completed S1 → production | +1.870 µs, +3.3% | Separated ranges; tracked counterpart +1.588 µs, +2.7% |
+
+The multicenter planner creates two single-row field vectors. Its count accessor
+is a constant-time stored length; with one bond, each field can produce at most
+one change. Emitting the existing scalar Edit before allocating those vectors
+can remove these two allocations while retaining the same selection and checking
+logic. Journal execution would also use scalar Undo entries. Inspecting Vec
+length only after collection would leave the planning allocations in place.
+The same principle applies where another planner already knows a per-field or
+per-key bound of one; a single aromatic system is not such a bound for its atom
+and bond assertions. Detecting one actual change among many possible targets
+requires a separate accumulation choice. No singleton optimization has yet been
+implemented or timed, and these measured increases do not establish its eventual
+time benefit.
+
+Small field/undo vectors also explain additional allocation work in the
+one-atom contradiction path. The early projection rejection precedes the changed
+planners; its timing increase has no identified additional semantic work or
+allocation explanation. Unchanged transformer/structural controls also show
+increases, some with separated ranges. They are not classified as measurement
+error or justified by semantics. The complete per-case comparisons remain in
+scratch/181-s4a/, including the cases omitted from these representative tables.
+
+**Decision — 2026-10-15.** Do not pursue the proposed singleton special cases:
+their reach is too narrow for the current work. Retain the implemented S3 plans
+and proceed to S5. The measured regressions and their attribution limits remain
+part of this comparison; no singleton implementation or new investigation is
+scheduled.
+
+Timing sources, isolated counter changes, saved executables, hashes,
+raw trials, allocator/counter tables and fresh Criterion samples are retained in
+scratch/181-s4a/. The prior S3 code gate remains the applicable implementation
+verification; full workspace/Python/MSRV checks remain at S12b.
+
 ### S5 — Store and borrow the Rust chemistry model in Python
 
-#### S5a — ChemistryModel storage, interfaces, and operation callers
+#### S5a — ChemistryModel storage, interfaces, and operation callers (done)
 
 **Modules:** umol-py model, molecule, reaction, and their existing tests.
 **Internal Rust signature changes, red→green within the subitem; Python call
@@ -4658,7 +4819,33 @@ versus explicitly supplied defaults according to each operation's actual default
 including the different SMILES valence model. Follow the Python build skill before
 compiling and rebuild the extension before Python integration tests.
 
-#### S5b — Verify production construction/use costs and document the contract
+**Implemented — 2026-10-15.** ChemistryModel stores the complete Rust model.
+Construction borrows the four Python components and converts them once;
+from_rust moves the model, and to_rust returns a reference. default retains the
+Rust model's borrowed static registry. The four getters retain their existing
+types and independent-value behavior. Equality and repr preserve their Python
+results; default repr recognition compares Rust values directly. Automatic
+owned argument extraction is disabled.
+
+The audited caller inventory remains six Molecule methods and two Reaction
+methods. All eight borrow supplied models through PyRef for the synchronous call;
+omitted models use local Rust defaults, retaining the separate SMILES valence
+default. No helper API, model lifetime change, molecule lifecycle change or
+component-wrapper redesign was introduced.
+
+**Verification — 2026-10-15.** With Python 3.13.16 activated, the umol-py Rust
+library suite passed 1,640 tests with two existing ignores. Strict umol-py
+all-target Clippy passed. After maturin develop rebuilt the extension with its
+pyproject features, the model, molecule, reaction, resolve, SMILES and SMILES-export
+Python suites passed 566 tests with two existing skips. Coverage includes custom
+registries/tables, reusable constructor inputs, getter values/types, equality,
+repr, frozen properties, repeated supplied-model use, all eight call boundaries,
+operation-specific defaults, and existing errors and source/view lifecycle
+assertions. Changed-file nightly formatting and git diff --check passed.
+Production cost comparisons are recorded in S5b; the combined workspace/MSRV gate
+remains at S12b.
+
+#### S5b — Verify production construction/use costs and document the contract (done)
 
 **Modules:** Python model/operation integration checks, Python API guide, this
 record; isolated measurement harnesses. **Verification/documentation, green.**
@@ -4680,6 +4867,106 @@ Record final results here. **S5 gate:** unchanged Python model behavior, no impl
 per-call model copy, green affected Rust/Python tests, and production costs checked
 against the bounded study. Broader workspace/MSRV verification remains a final
 combined-plan gate, not a per-subitem repetition.
+
+**Verified — 2026-10-15.** Production f2cde955f was compared with the preceding
+bindings from 0b4407563 using the same current Rust core. The isolated builds differ
+only in model.rs, molecule.rs and reaction.rs. This separates the binding change
+from the core changes since Study 1. The original study's conversion fixtures,
+Python construction inputs, getter boundary and construction-plus-one/ten-use
+boundary were retained. A second route copies the input with Molecule.copy, then
+calls Molecule.resolve, including its Solution wrapping. Both routes produce equal complete
+determined molecules; reconstructed component values, repr and source preservation
+also agree. The source audit confirms borrowed supplied models at all eight callers.
+
+Release measurements used Rust 1.96.0, aarch64-apple-darwin and Python 3.13.16.
+Three serial trials alternated binary order. Each retained Study 1's five warmups,
+15 sample means and repetition counts. Timing binaries had no counting allocator;
+Rust allocation counts and Python tracemalloc peaks were collected separately.
+Reported times are medians of trial medians, not an inferred workload distribution.
+
+The actual Python-method workflow, in µs; each cell is **pre-S5a / production**:
+
+| Model | Construction | Construction + 1 use | Construction + 10 uses | Reuse, one call |
+| --- | ---: | ---: | ---: | ---: |
+| Explicit default | 117.33 / 0.18 | 367.34 / 2.58 | 2548.82 / 22.56 | 241.37 / 2.20 |
+| Registry, 35 carbon patterns | 1177.35 / 1220.60 | 1196.83 / 1230.96 | 1329.47 / 1246.13 | 16.47 / 2.19 |
+| Table, 8 elements | 7.14 / 7.14 | 10.23 / 9.47 | 35.54 / 24.27 | 2.72 / 1.62 |
+| Table, 64 elements | 220.27 / 221.12 | 232.42 / 222.94 | 320.10 / 239.31 | 9.59 / 1.62 |
+| Table, 118 elements | 707.10 / 711.13 | 729.06 / 710.74 | 879.79 / 723.48 | 16.35 / 1.62 |
+
+Omitting the model measured 2.56 / 2.48 µs, with overlapping trial ranges and
+identical allocation counts. This is not evidence for an omitted-model speedup.
+The explicit-model argument boundary now allocates nothing for all seven
+conversion fixtures, including owned custom registries/tables; its bare borrowed
+access measured about 0.005 µs. The old boundary took 1.03–235.00 µs and allocated
+43–2,813 times. These bare figures exclude outer Python dispatch and resolution.
+
+At the original study boundary, production construction plus one/ten uses measured
+2.37/20.47 µs for the default, 1227.60/1242.06 for the registry, 9.21/22.93 for the
+8-element table, 221.39/236.94 for the 64-element table and 711.08/726.49 for the
+118-element table. The recorded stored-model prototype measured 2.68/23.86,
+1205.25/1225.83, 9.35/25.09, 220.86/239.72 and 710.91/728.80 respectively.
+The production result reproduces the study's removal of recurring model copies;
+these historical timing differences also include changes to the Rust core and
+measurement context and are not attributed solely to S5.
+
+**Construction attribution.** The separate-build registry result is a measured
+regression: +43.25 µs (+3.7%) for construction and +34.13 µs (+2.9%) for one use.
+The three construction trial ranges did not overlap: 1175.81–1184.23 µs before,
+1219.12–1224.23 µs after. A focused check placed both actual wrapper implementations
+in the same executable and alternated them within each sample. Shared registry
+construction took 1159.78 µs, and ValenceModel construction 7.08 µs. The final
+ChemistryModel constructor took 6.658 / 6.611 µs; the complete construction workflow
+took 1173.336 / 1173.408 µs, with overlapping trial ranges. Thus the 43 µs difference
+does not reproduce as additional work in the changed constructor. The precise
+cause of the separate-build difference is not established. Both observations are
+retained; this does not establish a universal one-use improvement or justify
+compiler-tuning changes.
+
+The borrowed-Rust-input comparison also retained two slower rows: cloning a
+64-entry registry model into the production wrapper took 11.24 versus 10.49 µs
+(+7.1%), and the 256-entry case 51.26 versus 50.13 µs (+2.3%). These rows explicitly
+clone the supplied Rust model to preserve Study 1's borrowed-input boundary.
+Production from_rust instead accepts and moves an owned model; the clone is not
+performed by that conversion. This distinction does not erase the measured costs
+for a caller that needs to retain its Rust input.
+
+Rust allocations for actual construction plus one use:
+
+| Model | Allocation calls, before / after | Requested KiB, before / after | Peak extra KiB, before / after |
+| --- | ---: | ---: | ---: |
+| Explicit default | 4237 / 16 | 1332.72 / 4.22 | 1328.35 / 4.00 |
+| Table, 118 elements | 3187 / 2435 | 391.84 / 357.96 | 50.45 / 33.13 |
+
+Repeated explicit-default resolution alone fell from 2,828 to 15 allocation calls.
+Custom construction remains substantial; it is not paid again on each operation.
+All four component getters together still require one extra allocation and 160
+extra requested bytes in production. For the small table this measured 0.799 /
+0.866 µs (+0.067 µs, +8.3%); default getters measured 117.01 / 118.00 µs. They
+remain independent component values, not borrowed model access. Default repr
+improved from 142.78 to 27.76 µs; all measured custom repr cases also improved.
+
+Peak extra traced Python memory increased by 176 bytes in every construction-plus-
+one/ten-use fixture, reproducing the prototype's increment. At the original study
+boundary the values were 616 / 792 bytes for one use and 728 / 904 for ten. At the
+actual method boundary they were 744 / 920 and 920 / 1096 for the default, and
+792 / 968 and 968 / 1144 for custom models. Rust allocation counters and tracemalloc
+cover different heaps; neither reports RSS.
+
+The Python API guide now states model ownership, synchronous operation borrowing,
+operation-specific omitted defaults, and copying during custom construction and
+component extraction. No production implementation or public interface changed
+in S5b. The production Rust library suite passed 1,640 tests with two existing
+ignores; the six affected Python suites passed 566 tests with two existing skips.
+The isolated conversion/workflow checks passed in both builds and all measurement
+modes; the focused paired construction check passed in all three trials.
+The full documentation diff and git diff --check passed. **S5 gate passed.**
+The workspace/MSRV gate remains at S12b.
+
+Reproduction sources, revision/toolchain and executable manifests, raw timing and
+allocation logs, Python peaks, historical joins, trial ranges, paired construction
+results and validation logs are in scratch/181-s5b. Its README defines the distinct
+measurement boundaries; summary.csv and summary.md retain every measured row.
 
 ### S6 — Python batch copying and owned inverse conversion
 

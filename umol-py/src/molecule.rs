@@ -255,18 +255,22 @@ impl Molecule {
     fn from_smiles(
         source: &str,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -275,7 +279,7 @@ impl Molecule {
             ResolveConfig::to_rust,
         );
 
-        ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
+        ingest_smiles_with(source, &io_config, chemistry_model, &resolve_config)
             .map(Self::from_rust)
             .map_err(smiles_input_error)
     }
@@ -287,18 +291,22 @@ impl Molecule {
     fn to_smiles(
         &self,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<String> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -310,7 +318,7 @@ impl Molecule {
         export_smiles_with(
             self.to_rust()?,
             &io_config,
-            &chemistry_model,
+            chemistry_model,
             &resolve_config,
         )
         .map_err(smiles_output_error)
@@ -463,14 +471,20 @@ impl Molecule {
     fn resolve(
         &mut self,
         py: Python<'_>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Solution> {
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
-        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
             .resolve(self.take()?)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
@@ -492,14 +506,20 @@ impl Molecule {
     fn resolve_with_report(
         &mut self,
         py: Python<'_>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<(Solution, Option<ResolveReport>)> {
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
-        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
             .resolve_with_report(self.take()?)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
@@ -530,15 +550,21 @@ impl Molecule {
     #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
     fn resolve_into(
         &mut self,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Solution> {
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
         self.advance_counter()?;
-        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
             .resolve_into(self.to_rust_mut()?)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
@@ -557,15 +583,21 @@ impl Molecule {
     #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
     fn resolve_into_with_report(
         &mut self,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<(Solution, Option<ResolveReport>)> {
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
         self.advance_counter()?;
-        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
             .resolve_into_with_report(self.to_rust_mut()?)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
@@ -1243,7 +1275,7 @@ mod tests {
     #[case::defaults(None, None, None)]
     #[case::explicit(
         Some(SmilesIoConfig::from_rust(&IoSmilesIoConfig::opensmiles())),
-        Some(ChemistryModel::from_rust(&GraphChemistryModel {
+        Some(ChemistryModel::from_rust(GraphChemistryModel {
             valence: GraphValenceModel::smiles(),
             ..GraphChemistryModel::default()
         })),
@@ -1254,13 +1286,21 @@ mod tests {
         #[case] chemistry_model: Option<ChemistryModel>,
         #[case] resolve_config: Option<ResolveConfig>,
     ) {
-        assert_eq!(
-            Molecule::from_smiles("C", io_config, chemistry_model, resolve_config)
+        Python::attach(|py| {
+            let chemistry_model = chemistry_model.map(|model| Py::new(py, model).unwrap());
+            assert_eq!(
+                Molecule::from_smiles(
+                    "C",
+                    io_config,
+                    chemistry_model.as_ref().map(|model| model.borrow(py)),
+                    resolve_config,
+                )
                 .unwrap()
                 .to_rust()
                 .unwrap(),
-            &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#)
-        );
+                &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#)
+            );
+        });
     }
 
     #[rstest]
@@ -2126,15 +2166,16 @@ mod tests {
     fn test_molecule_resolve_with_report() {
         Python::attach(|py| {
             let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
-            let model = ChemistryModel::from_rust(&GraphChemistryModel {
+            let model = ChemistryModel::from_rust(GraphChemistryModel {
                 valence: GraphValenceModel::smiles(),
                 ..GraphChemistryModel::default()
             });
 
+            let model = Py::new(py, model).unwrap();
             let (solution, report) = molecule
                 .resolve_with_report(
                     py,
-                    Some(model),
+                    Some(model.borrow(py)),
                     Some(ResolveConfig::from_rust(GraphResolveConfig {
                         isotope: GraphIsotopePolicy::Natural,
                         ..Default::default()
@@ -2164,14 +2205,17 @@ mod tests {
     fn test_molecule_resolve_with_report_underdetermined() {
         Python::attach(|py| {
             let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
-            let model = ChemistryModel::from_rust(&GraphChemistryModel {
+            let model = ChemistryModel::from_rust(GraphChemistryModel {
                 valence: GraphValenceModel::counts(Cow::Borrowed(
                     GraphValenceTable::default_table(),
                 )),
                 ..GraphChemistryModel::default()
             });
 
-            let (solution, report) = molecule.resolve_with_report(py, Some(model), None).unwrap();
+            let model = Py::new(py, model).unwrap();
+            let (solution, report) = molecule
+                .resolve_with_report(py, Some(model.borrow(py)), None)
+                .unwrap();
 
             let Solution::Underdetermined {} = solution else {
                 panic!("expected Underdetermined");
@@ -2204,12 +2248,15 @@ mod tests {
     fn test_molecule_resolve_with_report_contradiction() {
         Python::attach(|py| {
             let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
-            let model = ChemistryModel::from_rust(&GraphChemistryModel {
+            let model = ChemistryModel::from_rust(GraphChemistryModel {
                 valence: GraphValenceModel::smiles(),
                 ..GraphChemistryModel::default()
             });
 
-            let (solution, report) = molecule.resolve_with_report(py, Some(model), None).unwrap();
+            let model = Py::new(py, model).unwrap();
+            let (solution, report) = molecule
+                .resolve_with_report(py, Some(model.borrow(py)), None)
+                .unwrap();
 
             let Solution::Contradictory { contradiction } = solution else {
                 panic!("expected Contradictory");

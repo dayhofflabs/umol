@@ -1294,17 +1294,34 @@ def test_chemistry_model_default():
     assert model.aromaticity == AromaticityModel.daylight()
     assert model.stereo == StereoModel.default()
     assert model == ChemistryModel.default()
-
-
-def test_chemistry_model_new():
-    valence = ValenceModel.counts(
-        ValenceTable(
-            entries={
-                Element("C"): ValenceEntry(target_covalences=[4]),
-                Element("O"): ValenceEntry(target_covalences=[2]),
-            }
-        )
+    assert model == ChemistryModel(
+        connectivity=model.connectivity,
+        valence=model.valence,
+        aromaticity=model.aromaticity,
+        stereo=model.stereo,
     )
+
+
+@pytest.mark.parametrize(
+    "valence",
+    [
+        ValenceModel.counts(
+            ValenceTable(
+                entries={
+                    Element("C"): ValenceEntry(target_covalences=[4]),
+                    Element("O"): ValenceEntry(target_covalences=[2]),
+                }
+            )
+        ),
+        ValenceModel.atom_typing(
+            AtomTypeRegistry.from_atoms(
+                [AtomForm.parse("C#c0#v4"), AtomForm.parse("O#c0#v2")]
+            )
+        ),
+    ],
+    ids=["counts", "atom_typing"],
+)
+def test_chemistry_model_new(valence):
     aromaticity = AromaticityModel(
         scope=ElementScope.AllowList([Element("C")]),
         rule=AromaticityRule.Clar(),
@@ -1330,6 +1347,16 @@ def test_chemistry_model_new():
     assert model.aromaticity is not aromaticity
     assert model.stereo == stereo
     assert model.stereo is not stereo
+    assert type(model.connectivity) is ConnectivityModel
+    assert type(model.valence) is ValenceModel
+    assert type(model.aromaticity) is AromaticityModel
+    assert type(model.stereo) is StereoModel
+    assert model == ChemistryModel(
+        connectivity=connectivity,
+        valence=valence,
+        aromaticity=aromaticity,
+        stereo=stereo,
+    )
 
 
 def test_chemistry_model_new_error():

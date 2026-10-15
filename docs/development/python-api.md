@@ -132,6 +132,17 @@ this role, but being data-like does not establish immutability. Preserve a Rust 
 public fields and mutating operations unless a Python-specific conflict requires adaptation. Do not
 create mutable counterparts for immutable leaf values merely for symmetry.
 
+Each Python ChemistryModel owns a complete Rust ChemistryModel. Construction converts the supplied
+connectivity, valence, aromaticity, and stereo components once; custom registries and tables may be
+copied at that boundary. ChemistryModel.default() preserves the Rust default's borrowed static
+registry. Operations borrow the retained model for the synchronous call, without consuming the
+Python object or rebuilding its registry or table. Omitting the model selects the operation's Rust
+default, which can differ from ChemistryModel.default().
+
+The four component properties return independent values of their existing Python types. Reading a
+component may copy its registry, table, or other owned data. Reusing the ChemistryModel directly
+avoids that extraction and reconstruction cost; rebuilding it from its properties does not.
+
 ### Mutable owned object
 
 A mutable owned object has independent identity and state. Assignments and mutating methods change

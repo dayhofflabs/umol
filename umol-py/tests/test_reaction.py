@@ -1152,6 +1152,13 @@ def test_reaction_from_reaction_smiles_ownership():
         chemistry_model=chemistry_model,
         resolve_config=resolve_config,
     )
+    assert Reaction.from_reaction_smiles(
+        source,
+        io_config=io_config,
+        chemistry_model=chemistry_model,
+        resolve_config=resolve_config,
+    ) == reaction
+    assert chemistry_model.valence == ValenceModel.smiles()
 
     del source, io_config, chemistry_model, resolve_config
 

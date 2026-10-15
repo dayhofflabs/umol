@@ -640,7 +640,10 @@ def test_molecule_from_smiles_isotope_default():
     ],
 )
 @pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
-def test_molecule_resolve_isotope(method, consuming, with_report, isotope):
+@pytest.mark.parametrize("chemistry_model", [None, ChemistryModel.default()])
+def test_molecule_resolve_isotope(
+    method, consuming, with_report, isotope, chemistry_model
+):
     source = Molecule.parse('{:atoms ["C#c0#h4"]}')
     alias = source
     original = source.copy()
@@ -655,7 +658,11 @@ def test_molecule_resolve_isotope(method, consuming, with_report, isotope):
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
     )
-    result = getattr(source, method)(resolve_config=config)
+    result = getattr(source, method)(
+        chemistry_model=chemistry_model, resolve_config=config
+    )
+    if chemistry_model is not None:
+        assert chemistry_model == ChemistryModel.default()
     if with_report:
         result, report = result
         assert report.unresolved.items() == []

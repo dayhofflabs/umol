@@ -345,18 +345,22 @@ impl Reaction {
         py: Python<'_>,
         source: &str,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -365,7 +369,7 @@ impl Reaction {
             ResolveConfig::to_rust,
         );
         let reaction =
-            ingest_reaction_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
+            ingest_reaction_smiles_with(source, &io_config, chemistry_model, &resolve_config)
                 .map_err(reaction_smiles_input_error)?;
         let (lhs, deltas) = reaction.into_parts();
         let reaction = GraphIrReaction::try_new(lhs, deltas).map_err(reaction_integrity_error)?;
@@ -382,18 +386,22 @@ impl Reaction {
         &self,
         py: Python<'_>,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<String> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -405,7 +413,7 @@ impl Reaction {
         export_reaction_smiles_with(
             &self.to_rust(py)?,
             &io_config,
-            &chemistry_model,
+            chemistry_model,
             &resolve_config,
         )
         .map_err(reaction_smiles_output_error)
