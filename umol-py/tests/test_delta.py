@@ -1606,6 +1606,96 @@ def test_deltas_sequence():
         hash(deltas)
 
 
+@pytest.mark.parametrize(
+    "entries",
+    [
+        [],
+        [
+            Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
+            Delta.Bond(BondDelta.Add(id=2, atoms=(5, 1), attributes=BondForm(1))),
+            Delta.DativeBond(DativeBondDelta.Add(
+                id=1, donors=[4, 2], acceptor=3, attributes=DativeBondForm(1),
+            )),
+            Delta.AromaticSystem(AromaticSystemDelta.Add(
+                id=2, atoms=[4, 2], attributes=AromaticSystemForm([1, 1]),
+            )),
+            Delta.MulticenterBond(MulticenterBondDelta.Add(
+                id=3, atoms=[4, 2], attributes=MulticenterBondForm([1, 1]),
+            )),
+            Delta.NoncovalentBond(NoncovalentBondDelta.Add(
+                id=4, atoms=(5, 2),
+                attributes=NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
+            )),
+            Delta.StereoAtom(StereoAtomDelta.Add(
+                id=5, site=3, ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                attributes=StereoAtomForm(StereoConfigurationForm.Kinded(
+                    StereoKind.Tetrahedral, StereoCoset.Lit(0),
+                )),
+            )),
+            Delta.StereoBond(StereoBondDelta.Add(
+                id=5, site=3, ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                attributes=StereoBondForm(StereoConfigurationForm.Kinded(
+                    StereoKind.CisTrans, StereoCoset.Lit(0),
+                )),
+            )),
+        ],
+        [
+            Delta.Atom(AtomDelta.ModifyField(
+                id=3, change=AtomFieldChange.Charge(
+                    old=NumForm.Lit(0), new=NumForm.LitSet({-1, 1}),
+                ),
+            )),
+            Delta.Constraint(ConstraintDelta.Add(
+                constraint=Constraint.Atom(3, AtomConstraintForm.Valence(NumForm.Lit(4))),
+            )),
+            Delta.Constraint(ConstraintDelta.Remove(
+                constraint=Constraint.Molecule(MoleculeConstraint.Connected(None)),
+            )),
+            Delta.StereoAtom(StereoAtomDelta.ModifyConstraint(
+                id=5, kind=None, old=None,
+                new=StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.LitSet(set())),
+            )),
+        ],
+    ],
+    ids=["empty", "entities", "changes"],
+)
+def test_deltas_copy(entries):
+    entries = entries + entries[:1]
+    source = Deltas(entries)
+    iterator = iter(source)
+
+    copied = source.copy()
+
+    assert copied is not source
+    assert copied == source == Deltas(entries)
+    nitrogen = Delta.Atom(AtomDelta.Add(id=6, attributes=AtomForm(Element("N"))))
+    oxygen = Delta.Atom(AtomDelta.Add(id=7, attributes=AtomForm(Element("O"))))
+    copied.append(nitrogen)
+    source.append(oxygen)
+    assert list(copied) == entries + [nitrogen]
+    assert list(source) == entries + [oxygen]
+    assert list(iterator) == entries
+
+
+def test_deltas_copy_payload():
+    entry = Delta.DativeBond(DativeBondDelta.Add(
+        id=1, donors=[4, 2], acceptor=3, attributes=DativeBondForm(1),
+    ))
+    source = Deltas([entry])
+    copied = source.copy()
+    original = source[0]._0
+    duplicate = copied[0]._0
+
+    assert duplicate is not original
+    assert duplicate.attributes is not original.attributes
+    with pytest.raises(TypeError):
+        duplicate.attributes.order = 2
+    writable = duplicate.attributes.copy()
+    writable.order = 2
+    assert writable.order == NumForm.Lit(2)
+    assert source == copied == Deltas([entry])
+
+
 def test_deltas_append():
     source = Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C"))))
     deltas = Deltas()

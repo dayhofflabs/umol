@@ -1775,6 +1775,14 @@ impl Deltas {
         ))
     }
 
+    /// Return an independent container, preserving entry order, duplicates, and payloads.
+    ///
+    /// The source and its iterators remain usable. No normalization or applicability
+    /// checks are performed.
+    fn copy(&self) -> Self {
+        Self::from_rust(self.to_rust().clone())
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {

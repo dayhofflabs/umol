@@ -462,6 +462,11 @@ implementation must still let callers retain the source and the result.
 
 ## 4. Benchmarks before and after changes
 
+For remaining implementation work, the
+[measurement policy](#measurement-policy-for-remaining-work) agreed on 2026-10-15
+limits the scope below. Completed studies remain evidence; this section does not
+require repeating their full coverage at each subitem or at closeout.
+
 Record a baseline before implementation and compare the changed APIs for:
 
 - resolution and projection;
@@ -2309,6 +2314,40 @@ used in each earlier review. The review failed to distinguish that broader gette
 contract from the batch implementation; its correction is assigned to S11c.
 
 ## Implementation plan
+
+### Measurement policy for remaining work
+
+**Decision, 2026-10-15:** measurements serve decisions about adding or retaining
+a change and identify performance problems that need resolution. Before running
+a comparison, state the decision it informs and what evidence would settle it.
+Repeating a study merely to confirm an already established reduction is not a
+completion requirement. Additional evidence must justify its time and effort.
+
+Correctness, ownership, and error checks remain required. Measurements must use
+controlled comparisons with equivalent semantics, appropriate preparation and
+destruction boundaries, and separate timing and allocation instrumentation.
+Report absolute and relative costs and uncertainty honestly; fewer measurements
+do not justify dismissing regressions or claiming an unmeasured improvement.
+
+Choose the depth and timing of measurement from the actual change, existing
+evidence, uncertainty about its cost, and consequences of accepting a poor
+tradeoff. Repeated allocations or additional work can justify benchmarks before
+acceptance; an observed regression is not a prerequisite. Removing a known copy
+without introducing other work may need less evidence. Allocation counts alone
+do not settle a tradeoff between allocation and computation.
+
+S6b, S6c, and S7c start with bounded allocation checks on representative existing
+cases. Consolidate routine whole-operation timing in S12a, but measure earlier
+when an expected cost or unresolved tradeoff needs an answer before proceeding.
+Reuse existing machinery and evidence; full prototype studies, larger fixture
+matrices, and historical investigations need a purpose relevant to the decision.
+
+Expand an investigation when expected costs, observed regressions, or unresolved
+implementation questions warrant it. Stop when the evidence supports retaining,
+modifying, or rejecting the change, or identifies a concrete problem to resolve.
+Judge the value of further evidence against the cost of obtaining it. This policy
+governs all open subitems and supersedes broader repeat-measurement requirements
+in the earlier study descriptions.
 
 ### S0 — Molecule, editor, and transaction migration
 
@@ -5054,7 +5093,13 @@ In particular, Study 3's Python Molecule.apply consumed its receiver; the curren
 method clones it and preserves the source. Subtracting standalone copying from
 copy-plus-apply allocation counts gives exactly four additional allocations and
 188 additional requested bytes compared with Study 3, for both copying routes
-and all three sizes.
+and all three sizes. A separate current-code allocation comparison of consuming
+application versus cloning and applying while retaining the source isolates
+three calls / 148 bytes to source preservation. The remaining call / 40 bytes
+matches the intervening change from inline Constraints to Arc<Constraints> in
+new molecule construction. This allocation accounting does not partition the
+historical timing difference. The controlled S6a comparison is reconstruction
+versus direct copy with identical current application semantics.
 
 **Verification:** 26 focused Rust tests and 279 Python edit tests passed after
 rebuilding the extension under Python 3.13. Strict Clippy passed for all umol-py
@@ -5062,7 +5107,7 @@ targets. Formatting and git diff --check passed. The broader S6 gate remains
 after S6c. Sources, manifests, raw logs, trial ranges, historical joins, and
 validation logs are retained in scratch/181-s6a.
 
-#### S6b — Explicit Deltas copy
+#### S6b — Explicit Deltas copy (done)
 
 **Modules:** umol-py delta and its Rust/Python tests. **Additive, green.**
 [dep: S0a; independent of S6a]
@@ -5080,8 +5125,33 @@ iteration retain their independent-entry semantics. No entry-view types are adde
 
 **Checks:** exact copies for empty and populated batches, all entity kinds and
 constraint deltas, independent appends, unchanged source iterators, and payload
-independence. Re-run the Study 3 Deltas direct-copy comparison through Python
-dispatch. Document copy alongside construction and append.
+independence. Use a representative populated Study 3 case to compare allocations
+through Python dispatch against the existing reconstruction route, confirming
+that the production method avoids entry reconstruction. Reuse the existing
+measurement machinery; further allocation or timing checks follow the measurement
+policy when the implementation raises a cost concern. Document copy alongside
+construction and append.
+
+**Implemented (2026-10-15):** Deltas.copy directly clones GraphIrDeltas through
+to_rust/from_rust. This is the only new public method. The Python API guide
+documents exact preservation and independent append-only containers.
+
+Python checks cover empty and populated collections, all eight entity kinds,
+field and constraint deltas, duplicate entries, kindless stereo payloads,
+independent appends, retained source iteration, and independent read-only entry
+payloads with writable explicit copies. All 117 Python delta tests and 265 Rust
+delta tests passed after rebuilding under Python 3.13. Strict Clippy passed for
+all umol-py targets; formatting and git diff --check passed.
+
+The bounded allocation check reused Study 3's 32 atom additions with owned
+element variables and compared actual Python Deltas(source) against source.copy().
+Inputs were outside counting and result destruction was included; complete Rust
+values agreed and the source remained unchanged. Reconstruction made 133 Rust
+allocation/reallocation calls requesting 19,616 bytes; direct copy made 65
+requesting 10,080 bytes. These counts exclude the Python heap and RSS. The result
+supports retaining direct copy, with no additional processing beyond Rust Clone.
+The source, manifest, raw allocation result, and validation logs are retained in
+scratch/181-s6b. S6c remains open before the S6 gate.
 
 #### S6c — Move owned inverse results into Python forms
 
@@ -5128,17 +5198,21 @@ Rust inverse. No normalization or integrity checks are introduced.
 **Checks:** exact inverse values and unchanged inputs for every entity kind and
 variant; retained read-only form behavior; exact borrowed-entry conversions and
 independence after source/container mutation. Exercise both entity inverse and
-aggregate Delta inverse. Repeat the measured AtomDelta Add/Remove cases and add
-allocation comparisons for overlay forms with owned lists, covering both direct
-entity and aggregate inverse paths against S0a. Confirm removal of the second
-whole-form copy in both paths without claiming every nested allocation disappears.
+aggregate Delta inverse. Start allocation comparisons with the existing AtomDelta
+Add/Remove cases and one overlay form with an owned list, through both direct
+entity and aggregate inverse paths. Compare the changed conversion against the
+previous conversion under the same contract. Confirm removal of the second
+whole-form copy without claiming every nested allocation disappears. Extend the
+measurements if the implementation introduces work or leaves a cost tradeoff
+unresolved; the measurement policy governs that judgment.
 
 **S6 gate:** focused Rust/Python suites pass after rebuilding with the repository
 Python environment; the Python API guide records explicit copy semantics and
-unchanged inverse behavior. Record production timing/allocation results beside
-Study 3, distinguishing measured improvements from unmeasured payloads. Run the
-full workspace and MSRV checks only at the combined final gate. S6 is scheduled
-work, not deferred; no production implementation is performed by adding this plan.
+unchanged inverse behavior. Record the bounded allocation checks and whether
+they support retaining the copying changes or identify a problem to resolve.
+Resolve cost concerns when needed and distinguish measured results from
+unmeasured payloads; consolidate routine whole-operation timing at S12a.
+Run the full workspace and MSRV checks only at the combined final gate.
 
 ### S7 — Borrow stored form operands in Python operations
 
@@ -5218,14 +5292,17 @@ valence-set and charge-sum fixtures. Keep checks independent of the macro bodies
 **Modules:** affected Python operation tests, Study 4 measurements, and this
 record. **Verification/documentation, green.** [dep: S7a, S7b]
 
-Repeat Study 4's existing-storage comparisons through the production Python
-methods. Include complete dispatch and result conversion/destruction, with timing
-and allocation counting separate. Verify removal of preliminary operand clones
-for the 17 wrappers; do not require normalization or result creation to become
-allocation-free. Retain small/default cases alongside populated forms, and report
-regressions rather than asserting a universal speedup.
+Inspect the borrowed operation wiring for all 17 wrappers. Use bounded allocation
+checks through production Python methods on representative existing Study 4
+cases, including a small/default case and populated form/constraint cases.
+Include dispatch and result conversion/destruction. Confirm removal of the
+preliminary operand copies without requiring normalization or result creation
+to become allocation-free. Extend coverage or add timing when expected costs or
+findings warrant it under the measurement policy; a full wrapper-by-method
+benchmark matrix is not a completion requirement.
 
-Record the final measurements and scope here. No enum-backed leaf or individual
+Record whether the checks support retaining the changes or expose a problem,
+and limit conclusions to the measured cases. No enum-backed leaf or individual
 constraint representation migration, speculative binding framework, equality fix,
 or additional production benchmark framework is included. **S7 gate:** focused
 Rust/Python tests pass, public contracts are unchanged, and measured allocation
@@ -5276,8 +5353,10 @@ already implemented; do not restore extraction copies.
 
 **Checks:** complete determined results, underdetermination, contradictions,
 planning errors, optional report equivalence, late projection rejection,
-ingest/export fixtures, and unique/shared inputs. Count copies at call boundaries
-rather than inferring their number from API names.
+ingest/export fixtures, and unique/shared inputs. Establish copies at call
+boundaries from the implementation rather than inferring their number from API
+names. Use measurements when expected costs or remaining uncertainty warrant
+them; consolidate routine whole-operation timing at S12a.
 
 #### S10b — Dropped
 
@@ -5423,28 +5502,35 @@ workspace gate. S2a–S2h do not wait for this work.
 **Modules:** existing graph-IR/graph benchmarks, isolated Python measurements,
 this record. **Verification, green.** [dep: S0–S7, S10–S11]
 
-Complete section 4 coverage after production changes: resolution, projection,
-all three transformers, and reaction application with retained independent
-products. Compare against S0a baselines and fixtures; no repeated boxing-layout search.
-Include sparse/extensive edits, small/larger molecules, unique/shared storage,
-bounded failures, and plain/tracked execution. Include structural additions,
-removals/cascades and participant-list changes where the earlier charge-only
-comparison was insufficient. Most cases have no molecule-level constraints.
+Make one consolidated timing comparison to decide whether the completed changes
+should be retained or require correction. Select a fixed, small set of existing
+fixtures before running, recording the decision each comparison informs. Use
+relevant resolution, projection, transformer, reaction, and actual Python paths;
+reuse completed evidence where it already settles the question. Select cases
+that expose the changed work, including structural edits where charge-only cases
+would miss it. Do not repeat the full section 4 matrix or the prototype studies.
 
-Measure whole-operation time, allocation traffic, peak extra memory, Undo count/
-capacity/payload sizes, and separate correspondence storage. Count clone/installation,
-publication checks, rollback/discard, and result destruction consistently. Include
-actual Python calls. For composite operations and prepared transactions,
-no-recovery execution is an overhead reference rather than a recovery-equivalent
-competitor. Compare Clone/Journal only at those boundaries; individual resolvers
-and transformers use their implemented complete-plan paths. Reaction application
-keeps its source/product contract; do not insert a recovery journal into product
-construction simply to create a comparison.
+Use S0a baselines where contracts remain equivalent. Where ownership or recovery
+semantics changed, compare equivalent alternatives on the current implementation
+or explicitly identify the added semantic work. Historical timings alone cannot
+attribute a regression to a later change. Keep input preparation, publication,
+recovery, retained independent products, and destruction boundaries consistent.
+Check complete results and recovery guarantees before interpreting timings.
 
-**Checks:** identical successful results and agreed recovery guarantees before
-interpreting timings. Record which workloads favor which selector without an
-automatic policy. Do not infer leaf-form or Reaction binding redesigns from these
-measurements; those remain assigned to 231.
+Use the bounded allocation checks from S6/S7 and existing operation measurements
+to explain results. Additional allocation, peak-memory, journal, correspondence,
+or phase measurements follow concrete concerns about expected costs, observed
+regressions, or unresolved implementation choices; collecting every metric is
+not a gate.
+Follow the measurement policy's stopping rule once that question is answered.
+
+For composite operations and prepared transactions, compare Clone/Journal under
+the same recovery contract; no-recovery execution is only an overhead reference.
+Individual resolvers and transformers retain their complete-plan paths. Record
+the retain/change decision and any concrete problems requiring resolution, with
+absolute and relative costs and measurement limits. Do not infer an automatic
+recovery policy or leaf-form/Reaction binding redesign; those binding changes
+remain assigned to 231.
 
 #### S12b — Final integration and closeout
 

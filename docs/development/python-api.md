@@ -121,6 +121,10 @@ It preserves entry order, duplicates, handles, payloads, and creation ordinals w
 applicability against a molecule. Appending to or consuming either batch leaves the other usable;
 copying leaves existing source iterators valid. A consumed source raises ConsumedError.
 
+Deltas.copy() clones the complete Rust collection into an independent owner, preserving order,
+duplicates, ids, and payloads without normalization or applicability checks. Both containers and
+existing source iterators remain usable; appending to either leaves the other unchanged.
+
 ### Immutable owned value
 
 An immutable owned value represents data rather than a mutable identity. Its public fields cannot
