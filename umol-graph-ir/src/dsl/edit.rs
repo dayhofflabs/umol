@@ -26,12 +26,12 @@ use super::stereo::{
     StereoBondDsl, StereoBondUpdateDsl,
 };
 use crate::ir::aromatic::AromaticSystemUpdate;
-use crate::ir::atom::AtomUpdate;
+use crate::ir::atom::{AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
-    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
-    DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
+    AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintKey, BondConstraintForm,
+    Constraint, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
+    NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
     StereoBondConstraintForm,
 };
 use crate::ir::dative::DativeBondUpdate;
@@ -50,6 +50,7 @@ use crate::ir::id::{
 use crate::ir::ligand::StereoLigandKind;
 use crate::ir::multicenter::MulticenterBondUpdate;
 use crate::ir::noncovalent::NoncovalentBondUpdate;
+use crate::ir::num::NumForm;
 use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use crate::ir::stereo::{
     StereoAtomUpdate, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
@@ -247,6 +248,32 @@ impl IntoIr<Edits> for EditsDsl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EditInput {
+    AtomModifyElements {
+        changes: Vec<(AtomHandle, ElementForm, ElementForm)>,
+    },
+    AtomModifyIsotopeMasses {
+        changes: Vec<(AtomHandle, IsotopeMassForm, IsotopeMassForm)>,
+    },
+    AtomModifyCharges {
+        changes: Vec<(AtomHandle, NumForm, NumForm)>,
+    },
+    AtomModifyImplicitHydrogens {
+        changes: Vec<(AtomHandle, NumForm, NumForm)>,
+    },
+    AtomModifyLonePairs {
+        changes: Vec<(AtomHandle, NumForm, NumForm)>,
+    },
+    AtomModifyUnpairedElectrons {
+        changes: Vec<(AtomHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    },
+    AtomModifyConstraints {
+        key: AtomConstraintKey,
+        changes: Vec<(
+            AtomHandle,
+            Option<AtomConstraintForm>,
+            Option<AtomConstraintForm>,
+        )>,
+    },
     AtomAdd(AtomDsl),
     AtomRemove(AtomHandle),
     AtomModify {
@@ -408,6 +435,171 @@ impl<'de> FromEdn<'de> for EditInput {
 impl ToEdn for EditInput {
     fn to_edn(&self) -> Edn<'static> {
         match self {
+            Self::AtomModifyElements { changes } => edit_map(
+                "atom",
+                "modify-element",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                AtomUpdateDsl(AtomUpdate {
+                                    element: Some(old.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                                AtomUpdateDsl(AtomUpdate {
+                                    element: Some(new.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AtomModifyIsotopeMasses { changes } => edit_map(
+                "atom",
+                "modify-isotope-mass",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                AtomUpdateDsl(AtomUpdate {
+                                    isotope_mass: Some(old.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                                AtomUpdateDsl(AtomUpdate {
+                                    isotope_mass: Some(new.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AtomModifyCharges { changes } => edit_map(
+                "atom",
+                "modify-charge",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AtomModifyImplicitHydrogens { changes } => edit_map(
+                "atom",
+                "modify-implicit-hydrogens",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AtomModifyLonePairs { changes } => edit_map(
+                "atom",
+                "modify-lone-pairs",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AtomModifyUnpairedElectrons { changes } => edit_map(
+                "atom",
+                "modify-unpaired-electrons",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                render_unpaired_electrons(old),
+                                render_unpaired_electrons(new),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AtomModifyConstraints { key, changes } => {
+                let key = match key {
+                    AtomConstraintKey::Valence => Edn::keyword("valence"),
+                    AtomConstraintKey::DonatedPairs => Edn::keyword("donated-pairs"),
+                    AtomConstraintKey::AcceptedPairs => Edn::keyword("accepted-pairs"),
+                    AtomConstraintKey::AromaticValence => Edn::keyword("aromatic-valence"),
+                    AtomConstraintKey::MulticenterValence => Edn::keyword("multicenter-valence"),
+                    AtomConstraintKey::TetrahedralStereo => Edn::keyword("tetrahedral-stereo"),
+                    AtomConstraintKey::Degree => Edn::keyword("degree"),
+                    AtomConstraintKey::TotalDegree => Edn::keyword("total-degree"),
+                    AtomConstraintKey::TotalValence => Edn::keyword("total-valence"),
+                    AtomConstraintKey::RingDegree => Edn::keyword("ring-degree"),
+                    AtomConstraintKey::RingValence => Edn::keyword("ring-valence"),
+                    AtomConstraintKey::TotalHydrogens => Edn::keyword("total-hydrogens"),
+                    AtomConstraintKey::RingMembership(scope) => {
+                        let mut fields = EdnMap::new();
+                        if let RingScope::Size(size) = scope {
+                            fields.insert(Edn::keyword("size"), size.to_edn());
+                        }
+                        single_key_map("ring-membership", Edn::Map(fields))
+                    }
+                };
+                let render_value = |value: &Option<AtomConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        AtomConstraintDsl::from_ir(value, &()).to_edn()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(2);
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("atom", "modify-constraints", Edn::Map(fields))
+            }
             Self::AtomAdd(attributes) => edit_map("atom", "add", attributes.to_edn()),
             Self::AtomRemove(id) => edit_map("atom", "remove", id.to_edn()),
             Self::AtomModify { id, expect, update } => edit_map(
@@ -708,6 +900,25 @@ impl ToEdn for EditInput {
 impl EditInput {
     fn append_to(self, edits: &mut Edits, defaults: &MoleculeDefaults) -> Result<(), DeError> {
         match self {
+            Self::AtomModifyElements { changes } => {
+                edits.push(Edit::ModifyAtomElements { changes })
+            }
+            Self::AtomModifyIsotopeMasses { changes } => {
+                edits.push(Edit::ModifyAtomIsotopeMasses { changes })
+            }
+            Self::AtomModifyCharges { changes } => edits.push(Edit::ModifyAtomCharges { changes }),
+            Self::AtomModifyImplicitHydrogens { changes } => {
+                edits.push(Edit::ModifyAtomImplicitHydrogens { changes })
+            }
+            Self::AtomModifyLonePairs { changes } => {
+                edits.push(Edit::ModifyAtomLonePairs { changes })
+            }
+            Self::AtomModifyUnpairedElectrons { changes } => {
+                edits.push(Edit::ModifyAtomUnpairedElectrons { changes })
+            }
+            Self::AtomModifyConstraints { key, changes } => {
+                edits.modify_atom_constraints(key, changes)
+            }
             Self::AtomAdd(attributes) => {
                 edits.add_atom(attributes.into_ir(&defaults.atom));
             }
@@ -862,6 +1073,32 @@ impl EditInput {
 
     fn from_edit(edit: &Edit, defaults: &MoleculeDefaults) -> Result<Vec<Self>, DeError> {
         let inputs = match edit {
+            Edit::ModifyAtomElements { changes } => vec![Self::AtomModifyElements {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyAtomIsotopeMasses { changes } => vec![Self::AtomModifyIsotopeMasses {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyAtomCharges { changes } => vec![Self::AtomModifyCharges {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyAtomImplicitHydrogens { changes } => {
+                vec![Self::AtomModifyImplicitHydrogens {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyAtomLonePairs { changes } => vec![Self::AtomModifyLonePairs {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyAtomUnpairedElectrons { changes } => {
+                vec![Self::AtomModifyUnpairedElectrons {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyAtomConstraints { key, changes } => vec![Self::AtomModifyConstraints {
+                key: *key,
+                changes: changes.clone(),
+            }],
             Edit::AddAtoms { atoms } => atoms
                 .iter()
                 .map(|attributes| Self::AtomAdd(AtomDsl::from_ir(attributes, &defaults.atom)))
@@ -1214,6 +1451,207 @@ impl EditInput {
 fn parse_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "atom edit")?;
     match op {
+        "modify-element" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "atom :modify-element expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<ElementForm, DeError> {
+                let mut update = AtomUpdateDsl::from_edn(value)?.0;
+                let form = update
+                    .element
+                    .take()
+                    .ok_or_else(|| DeError::Custom("expected an atom element value".into()))?;
+                if update != AtomUpdate::default() {
+                    return Err(DeError::Custom(
+                        "unexpected fields in atom element value".into(),
+                    ));
+                }
+                Ok(form)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyElements { changes })
+        }
+        "modify-isotope-mass" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "atom :modify-isotope-mass expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<IsotopeMassForm, DeError> {
+                let mut update = AtomUpdateDsl::from_edn(value)?.0;
+                let form = update
+                    .isotope_mass
+                    .take()
+                    .ok_or_else(|| DeError::Custom("expected an atom isotope_mass value".into()))?;
+                if update != AtomUpdate::default() {
+                    return Err(DeError::Custom(
+                        "unexpected fields in atom isotope_mass value".into(),
+                    ));
+                }
+                Ok(form)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyIsotopeMasses { changes })
+        }
+        "modify-charge" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "atom :modify-charge expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyCharges { changes })
+        }
+        "modify-implicit-hydrogens" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "atom :modify-implicit-hydrogens expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyImplicitHydrogens { changes })
+        }
+        "modify-lone-pairs" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "atom :modify-lone-pairs expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyLonePairs { changes })
+        }
+        "modify-unpaired-electrons" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "atom :modify-unpaired-electrons expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<UnpairedElectronsForm, DeError> {
+                parse_unpaired_electrons(value)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyUnpairedElectrons { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "atom constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "atom constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let key = match &key {
+                Edn::Keyword(keyword) => match keyword.name() {
+                    "valence" => AtomConstraintKey::Valence,
+                    "donated-pairs" => AtomConstraintKey::DonatedPairs,
+                    "accepted-pairs" => AtomConstraintKey::AcceptedPairs,
+                    "aromatic-valence" => AtomConstraintKey::AromaticValence,
+                    "multicenter-valence" => AtomConstraintKey::MulticenterValence,
+                    "tetrahedral-stereo" => AtomConstraintKey::TetrahedralStereo,
+                    "degree" => AtomConstraintKey::Degree,
+                    "total-degree" => AtomConstraintKey::TotalDegree,
+                    "total-valence" => AtomConstraintKey::TotalValence,
+                    "ring-degree" => AtomConstraintKey::RingDegree,
+                    "ring-valence" => AtomConstraintKey::RingValence,
+                    "total-hydrogens" => AtomConstraintKey::TotalHydrogens,
+                    other => {
+                        return Err(DeError::Custom(format!(
+                            "unknown atom constraint key :{other}"
+                        )))
+                    }
+                },
+                Edn::Map(_) => {
+                    let (name, scope) = parse_single_key_map(&key, "atom constraint key")?;
+                    if name != "ring-membership" {
+                        return Err(DeError::Custom(format!(
+                            "unknown parameterized atom constraint key :{name}"
+                        )));
+                    }
+                    let scope = expect_map(scope, "ring scope")?;
+                    if scope.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                        return Err(DeError::Custom("ring scope expects keyword fields".into()));
+                    }
+                    let mut helper = EdnMapHelper::new(scope);
+                    let scope = helper
+                        .optional::<u8>("size")?
+                        .map_or(RingScope::All, RingScope::Size);
+                    helper.finalize()?;
+                    AtomConstraintKey::RingMembership(scope)
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected an atom constraint keyword or ring-membership map".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "atom :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => AtomConstraintDsl::from_edn(value).map(|form| Some(form.into_ir(&()))),
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_atom_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AtomModifyConstraints { key, changes })
+        }
         "add" => Ok(EditInput::AtomAdd(AtomDsl::from_edn(payload)?)),
         "remove" => Ok(EditInput::AtomRemove(AtomHandle::from_edn(payload)?)),
         "modify" => {
@@ -4597,6 +5035,41 @@ fn render_atom_ids(atoms: &[AtomId], handles: &ConstraintHandles) -> Edn<'static
             .into(),
     )
 }
+
+fn read_edn_atom_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(AtomHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "atom batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "atom batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "atom batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "atom batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["atom batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["atom batch row".into()],
+        })?;
+    Ok((AtomHandle::from_edn(handle)?, old, new))
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -5974,5 +6447,126 @@ mod tests {
             ConstraintEditDsl::from_edn_str(input),
             Err(EdnError::De(expected))
         );
+    }
+    #[rstest]
+    #[case::element(r##"[{:atom {:modify-element [[0 {:expect "C" :update "N"}] [{:new 0} {:expect "N" :update "C"}]]}}]"##, Edit::ModifyAtomElements { changes: vec![(AtomHandle::Id(AtomId(0)), ElementForm::Lit(Element::C), ElementForm::Lit(Element::N)), (AtomHandle::New(0), ElementForm::Lit(Element::N), ElementForm::Lit(Element::C))] })]
+    #[case::isotope(r##"[{:atom {:modify-isotope-mass [[0 {:expect "#i12" :update "#i13"}] [{:new 0} {:expect "#i13" :update "#i12"}]]}}]"##, Edit::ModifyAtomIsotopeMasses { changes: vec![(AtomHandle::Id(AtomId(0)), IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(13)), (AtomHandle::New(0), IsotopeMassForm::Lit(13), IsotopeMassForm::Lit(12))] })]
+    #[case::charge(r##"[{:atom {:modify-charge [[0 {:expect 0 :update 1}] [{:new 0} {:expect 1 :update 0}]]}}]"##, Edit::ModifyAtomCharges { changes: vec![(AtomHandle::Id(AtomId(0)), NumForm::Lit(0), NumForm::Lit(1)), (AtomHandle::New(0), NumForm::Lit(1), NumForm::Lit(0))] })]
+    #[case::hydrogen(r##"[{:atom {:modify-implicit-hydrogens [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}]"##, Edit::ModifyAtomImplicitHydrogens { changes: vec![(AtomHandle::Id(AtomId(0)), NumForm::Lit(1), NumForm::Lit(2)), (AtomHandle::New(0), NumForm::Lit(2), NumForm::Lit(1))] })]
+    #[case::lone_pair(r##"[{:atom {:modify-lone-pairs [[0 {:expect 0 :update 1}] [{:new 0} {:expect 1 :update 0}]]}}]"##, Edit::ModifyAtomLonePairs { changes: vec![(AtomHandle::Id(AtomId(0)), NumForm::Lit(0), NumForm::Lit(1)), (AtomHandle::New(0), NumForm::Lit(1), NumForm::Lit(0))] })]
+    #[case::unpaired(r##"[{:atom {:modify-unpaired-electrons [[0 {:expect {:count 0 :multiplicity 1} :update {:count 1 :multiplicity 2}}] [{:new 0} {:expect {:count 1 :multiplicity 2} :update {:count 0 :multiplicity 1}}]]}}]"##, Edit::ModifyAtomUnpairedElectrons { changes: vec![(AtomHandle::Id(AtomId(0)), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }), (AtomHandle::New(0), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, UnpairedElectronsForm::closed_shell())] })]
+    #[case::constraints(r#"[{:atom {:modify-constraints {:key :valence :changes [[0 {:expect nil :update {:valence 3}}] [0 {:expect {:valence 3} :update nil}]]}}}]"#,
+        Edit::ModifyAtomConstraints { key: AtomConstraintKey::Valence, changes: vec![
+            (AtomHandle::Id(AtomId(0)), None, Some(AtomConstraintForm::valence(3))),
+            (AtomHandle::Id(AtomId(0)), Some(AtomConstraintForm::valence(3)), None),
+        ] })]
+    fn test_edits_dsl_atom_batches(#[case] input: &str, #[case] edit: Edit) {
+        let expected = Edits::from_iter([edit]);
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&expected, &defaults);
+        assert_eq!(dsl.to_edn(), read_string(input).unwrap());
+        assert_eq!(
+            EditsDsl::from_edn_str(input).unwrap().into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            EditsDsl::from_edn(&read_string(input).unwrap())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            EditsDsl::from_edn_str(&dsl.to_string())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case(AtomConstraintKey::Valence)]
+    #[case(AtomConstraintKey::DonatedPairs)]
+    #[case(AtomConstraintKey::AcceptedPairs)]
+    #[case(AtomConstraintKey::AromaticValence)]
+    #[case(AtomConstraintKey::MulticenterValence)]
+    #[case(AtomConstraintKey::TetrahedralStereo)]
+    #[case(AtomConstraintKey::Degree)]
+    #[case(AtomConstraintKey::TotalDegree)]
+    #[case(AtomConstraintKey::TotalValence)]
+    #[case(AtomConstraintKey::RingDegree)]
+    #[case(AtomConstraintKey::RingValence)]
+    #[case(AtomConstraintKey::TotalHydrogens)]
+    #[case(AtomConstraintKey::RingMembership(RingScope::All))]
+    #[case(AtomConstraintKey::RingMembership(RingScope::Size(5)))]
+    fn test_edits_dsl_atom_constraint_batches(
+        #[case] key: AtomConstraintKey,
+        #[values(false, true)] empty: bool,
+    ) {
+        let form = AtomConstraintForm::undetermined(key);
+        let changes = if empty {
+            vec![]
+        } else {
+            vec![
+                (AtomHandle::New(0), Some(form.clone()), None),
+                (AtomHandle::New(0), None, Some(form)),
+            ]
+        };
+        let expected = Edits::from_iter([Edit::ModifyAtomConstraints { key, changes }]);
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&expected, &defaults);
+        assert_eq!(
+            EditsDsl::from_edn(&dsl.to_edn())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            EditsDsl::from_edn_str(&dsl.to_string())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case(Edit::ModifyAtomElements { changes: vec![] })]
+    #[case(Edit::ModifyAtomIsotopeMasses { changes: vec![] })]
+    #[case(Edit::ModifyAtomCharges { changes: vec![] })]
+    #[case(Edit::ModifyAtomImplicitHydrogens { changes: vec![] })]
+    #[case(Edit::ModifyAtomLonePairs { changes: vec![] })]
+    #[case(Edit::ModifyAtomUnpairedElectrons { changes: vec![] })]
+    #[case(Edit::ModifyAtomElements { changes: vec![(AtomHandle::Id(AtomId(0)), ElementForm::Undetermined, ElementForm::var_in("e", [Element::C, Element::N]))] })]
+    #[case(Edit::ModifyAtomIsotopeMasses { changes: vec![(AtomHandle::Id(AtomId(0)), IsotopeMassForm::Undetermined, IsotopeMassForm::var_in("m", [12, 13]))] })]
+    #[case(Edit::ModifyAtomCharges { changes: vec![(AtomHandle::Id(AtomId(0)), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
+    fn test_edits_dsl_atom_batches_roundtrip(#[case] edit: Edit) {
+        let expected = Edits::from_iter([edit]);
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&expected, &defaults);
+        assert_eq!(
+            EditsDsl::from_edn(&dsl.to_edn())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            EditsDsl::from_edn_str(&dsl.to_string())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case(r##"{:atom {:modify-charge [0]}}"##, DeError::Custom("atom batch row expects [handle {:expect old :update new}]".into()))]
+    #[case(r##"{:atom {:modify-charge [[0]]}}"##, DeError::Custom("atom batch row expects two elements".into()))]
+    #[case(r##"{:atom {:modify-charge [[0 {:expect 0}]]}}"##, DeError::Custom("atom batch row requires exactly :expect and :update".into()))]
+    #[case(r##"{:atom {:modify-charge [[0 {:expect 0 :update 1 :extra 2}]]}}"##, DeError::Custom("atom batch row requires exactly :expect and :update".into()))]
+    #[case(r##"{:atom {:modify-element [[0 {:expect "C#h1" :update "N"}]]}}"##, DeError::Custom("unexpected fields in atom element value".into()))]
+    #[case(r##"{:atom {:modify-isotope-mass [[0 {:expect "C#i12" :update "#i13"}]]}}"##, DeError::Custom("unexpected fields in atom isotope_mass value".into()))]
+    #[case(r##"{:atom {:modify-constraints {:key :aromatic :changes []}}}"##, DeError::Custom("unknown atom constraint key :aromatic".into()))]
+    #[case(r##"{:atom {:modify-constraints {:key {:ring-membership {"size" 5}} :changes []}}}"##, DeError::Custom("ring scope expects keyword fields".into()))]
+    #[case(r##"{:atom {:modify-constraints {:key :valence :changes [] "extra" 1}}}"##, DeError::Custom("atom constraint batch expects keyword fields".into()))]
+    fn test_edit_input_atom_batches_error(#[case] input: &str, #[case] error: DeError) {
+        assert_eq!(EditInput::from_edn_str(input), Err(EdnError::De(error)));
     }
 }

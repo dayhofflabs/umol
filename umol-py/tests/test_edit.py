@@ -6,6 +6,7 @@ from umol import (
     AromaticSystemUpdate,
     AtomForm,
     AtomConstraintForm,
+    AtomConstraintKey,
     AtomConstraintsForm,
     AtomFieldChange,
     AtomUpdate,
@@ -21,6 +22,9 @@ from umol import (
     Edit,
     Edits,
     ElectronCountsForm,
+    Element,
+    ElementForm,
+    IsotopeMassForm,
     Entity,
     InvalidatedViewError,
     Molecule,
@@ -36,6 +40,8 @@ from umol import (
     NoncovalentBondKindForm,
     NoncovalentBondUpdate,
     ParseError,
+    RingScope,
+    UnpairedElectronsForm,
     StereoAtomForm,
     StereoAtomFieldChange,
     StereoAtomUpdate,
@@ -956,3 +962,124 @@ def test_edits_parse_error():
         match="^EDN parse: trailing content at byte 4$",
     ):
         Edits.parse("not edn")
+
+
+@pytest.mark.parametrize(
+    "variant,method,field,old,new",
+    [
+        (Edit.ModifyAtomElements, "modify_atom_elements", "element",
+         ElementForm.Lit(Element("C")), ElementForm.Lit(Element("N"))),
+        (Edit.ModifyAtomIsotopeMasses, "modify_atom_isotope_masses", "isotope_mass",
+         IsotopeMassForm.Lit(12), IsotopeMassForm.Lit(13)),
+        (Edit.ModifyAtomCharges, "modify_atom_charges", "charge",
+         NumForm.Lit(0), NumForm.LitSet({-1, 1})),
+        (Edit.ModifyAtomImplicitHydrogens, "modify_atom_implicit_hydrogens", "implicit_hydrogens",
+         NumForm.Lit(1), NumForm.Lit(2)),
+        (Edit.ModifyAtomLonePairs, "modify_atom_lone_pairs", "lone_pairs",
+         NumForm.Lit(0), NumForm.Lit(1)),
+        (Edit.ModifyAtomUnpairedElectrons, "modify_atom_unpaired_electrons", "unpaired_electrons",
+         UnpairedElectronsForm(0, 1), UnpairedElectronsForm(1, 2)),
+    ],
+)
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_edits_atom_batches(variant, method, field, old, new, count):
+    rows = [(0, old, new), (0, new, old)][:count]
+    edit = variant(changes=rows)
+    expected_rows = tuple(rows)
+    rows.clear()
+    assert edit.changes == expected_rows
+    assert isinstance(edit.changes, tuple)
+    assert all(isinstance(row, tuple) for row in edit.changes)
+    with pytest.raises(AttributeError):
+        edit.changes = ()
+    edits = Edits()
+    getattr(edits, method)(list(expected_rows))
+    assert list(edits) == [edit]
+    assert list(Edits.parse(edits.render())) == [edit]
+    assert repr(edit).startswith("Edit." + variant.__name__ + "(changes=")
+    atom = AtomForm.parse("C")
+    setattr(atom, field, old)
+    source = Molecule.from_entries([atom])
+    result = source.apply(edits)
+    expected_atom = AtomForm.parse("C")
+    setattr(expected_atom, field, new if count == 1 else old)
+    assert result == Molecule.from_entries([expected_atom])
+    assert source == Molecule.from_entries([atom])
+    with pytest.raises(ConsumedError):
+        getattr(edits, method)([])
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        AtomConstraintKey.Valence(), AtomConstraintKey.DonatedPairs(),
+        AtomConstraintKey.AcceptedPairs(), AtomConstraintKey.AromaticValence(),
+        AtomConstraintKey.MulticenterValence(), AtomConstraintKey.TetrahedralStereo(),
+        AtomConstraintKey.Degree(), AtomConstraintKey.TotalDegree(),
+        AtomConstraintKey.TotalValence(), AtomConstraintKey.RingDegree(),
+        AtomConstraintKey.RingValence(), AtomConstraintKey.TotalHydrogens(),
+        AtomConstraintKey.RingMembership(RingScope.All()),
+        AtomConstraintKey.RingMembership(RingScope.Size(5)),
+    ],
+)
+@pytest.mark.parametrize("empty", [False, True])
+def test_edits_atom_constraint_keys(key, empty):
+    rows = [] if empty else [(0, None, None)]
+    edit = Edit.ModifyAtomConstraints(key, rows)
+    edits = Edits()
+    edits.modify_atom_constraints(key, rows)
+    rows.clear()
+    assert list(edits) == [edit]
+    assert edit.key == key
+    assert edit.changes == (() if empty else ((0, None, None),))
+    assert list(Edits.parse(edits.render())) == [edit]
+    source = Molecule.from_entries([AtomForm.parse("C")])
+    assert source.apply(edits) == source
+    with pytest.raises(ConsumedError):
+        edits.modify_atom_constraints(key, [])
+
+
+def test_edits_atom_constraint_batches():
+    first = AtomConstraintForm.Valence(NumForm.Lit(3))
+    second = AtomConstraintForm.Valence(NumForm.LitSet({3, 4}))
+    rows = [(0, None, first), (New(0), None, second), (0, first, second)]
+    edit = Edit.ModifyAtomConstraints(AtomConstraintKey.Valence(), rows)
+    edits = Edits()
+    edits.add_atom(AtomForm.parse("N"))
+    edits.modify_atom_constraints(AtomConstraintKey.Valence(), rows)
+    rows.clear()
+    assert edits[1] == edit
+    assert list(Edits.parse(edits.render())) == list(edits)
+    source = Molecule.from_entries([AtomForm.parse("C")])
+    result = source.apply(edits)
+    carbon = AtomForm.parse("C")
+    nitrogen = AtomForm.parse("N")
+    carbon.constraints.set(second)
+    nitrogen.constraints.set(second)
+    assert result == Molecule.from_entries([carbon, nitrogen])
+
+
+def test_edits_atom_batches_new():
+    edits = Edits()
+    created = edits.add_atom(AtomForm.parse("N"))
+    edits.modify_atom_charges([(0, NumForm.Undetermined(), NumForm.Lit(1)),
+                               (created, NumForm.Undetermined(), NumForm.Lit(-1))])
+    edits.modify_atom_lone_pairs([(created, NumForm.Undetermined(), NumForm.Lit(1))])
+    source = Molecule.from_entries([AtomForm.parse("C")])
+    carbon = AtomForm.parse("C")
+    nitrogen = AtomForm.parse("N")
+    carbon.charge = 1
+    nitrogen.charge = -1
+    nitrogen.lone_pairs = 1
+    assert source.apply(edits) == Molecule.from_entries([carbon, nitrogen])
+
+
+@pytest.mark.parametrize("method", ["modify_atom_charges", "modify_atom_lone_pairs"])
+def test_edits_atom_batches_error(method):
+    edits = Edits()
+    getattr(edits, method)([(0, NumForm.Undetermined(), NumForm.Lit(1)),
+                            (0, NumForm.Undetermined(), NumForm.Lit(2))])
+    source = Molecule.from_entries([AtomForm.parse("C")])
+    with pytest.raises(TransactionError):
+        source.apply(edits)
+    assert source == Molecule.from_entries([AtomForm.parse("C")])

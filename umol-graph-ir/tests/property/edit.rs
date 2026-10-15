@@ -10,6 +10,304 @@ use umol_graph_ir::ir::{
 use crate::strategies::{molecule_entries_strategy, *};
 
 proptest! {
+
+    /// Field batches agree with ordered singles and the independently updated atom table;
+    /// rollback restores the original raw forms after repeated writes to arbitrary targets.
+    #[test]
+    fn test_molecule_apply_atom_batches_elements(
+        atoms in prop::collection::vec(atom_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, atom_form_strategy()), 0..16),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: atoms.clone(), ..Default::default() });
+        let mut expected_atoms = atoms;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected_atoms[index].element.clone();
+            let new = form.element;
+            expected_atoms[index].element = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomField { id, change: AtomFieldChange::Element { old, new } });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() });
+        let mut batch = Edits::new();
+        batch.modify_atom_elements(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// Field batches agree with ordered singles and the independently updated atom table;
+    /// rollback restores the original raw forms after repeated writes to arbitrary targets.
+    #[test]
+    fn test_molecule_apply_atom_batches_isotope_masses(
+        atoms in prop::collection::vec(atom_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, atom_form_strategy()), 0..16),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: atoms.clone(), ..Default::default() });
+        let mut expected_atoms = atoms;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected_atoms[index].isotope_mass.clone();
+            let new = form.isotope_mass;
+            expected_atoms[index].isotope_mass = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomField { id, change: AtomFieldChange::IsotopeMass { old, new } });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() });
+        let mut batch = Edits::new();
+        batch.modify_atom_isotope_masses(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// Field batches agree with ordered singles and the independently updated atom table;
+    /// rollback restores the original raw forms after repeated writes to arbitrary targets.
+    #[test]
+    fn test_molecule_apply_atom_batches_charges(
+        atoms in prop::collection::vec(atom_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, atom_form_strategy()), 0..16),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: atoms.clone(), ..Default::default() });
+        let mut expected_atoms = atoms;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected_atoms[index].charge.clone();
+            let new = form.charge;
+            expected_atoms[index].charge = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomField { id, change: AtomFieldChange::Charge { old, new } });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() });
+        let mut batch = Edits::new();
+        batch.modify_atom_charges(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// Field batches agree with ordered singles and the independently updated atom table;
+    /// rollback restores the original raw forms after repeated writes to arbitrary targets.
+    #[test]
+    fn test_molecule_apply_atom_batches_implicit_hydrogens(
+        atoms in prop::collection::vec(atom_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, atom_form_strategy()), 0..16),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: atoms.clone(), ..Default::default() });
+        let mut expected_atoms = atoms;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected_atoms[index].implicit_hydrogens.clone();
+            let new = form.implicit_hydrogens;
+            expected_atoms[index].implicit_hydrogens = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomField { id, change: AtomFieldChange::ImplicitHydrogens { old, new } });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() });
+        let mut batch = Edits::new();
+        batch.modify_atom_implicit_hydrogens(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// Field batches agree with ordered singles and the independently updated atom table;
+    /// rollback restores the original raw forms after repeated writes to arbitrary targets.
+    #[test]
+    fn test_molecule_apply_atom_batches_lone_pairs(
+        atoms in prop::collection::vec(atom_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, atom_form_strategy()), 0..16),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: atoms.clone(), ..Default::default() });
+        let mut expected_atoms = atoms;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected_atoms[index].lone_pairs.clone();
+            let new = form.lone_pairs;
+            expected_atoms[index].lone_pairs = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomField { id, change: AtomFieldChange::LonePairs { old, new } });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() });
+        let mut batch = Edits::new();
+        batch.modify_atom_lone_pairs(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// Field batches agree with ordered singles and the independently updated atom table;
+    /// rollback restores the original raw forms after repeated writes to arbitrary targets.
+    #[test]
+    fn test_molecule_apply_atom_batches_unpaired_electrons(
+        atoms in prop::collection::vec(atom_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, atom_form_strategy()), 0..16),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: atoms.clone(), ..Default::default() });
+        let mut expected_atoms = atoms;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected_atoms[index].unpaired_electrons.clone();
+            let new = form.unpaired_electrons;
+            expected_atoms[index].unpaired_electrons = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomField { id, change: AtomFieldChange::UnpairedElectrons { old, new } });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() });
+        let mut batch = Edits::new();
+        batch.modify_atom_unpaired_electrons(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// Rejection inside a field batch restores its prefix and the preceding journal entries;
+    /// destructive editor application retains exactly the independently computed prefix.
+    #[test]
+    fn test_molecule_apply_atom_batches_failure(
+        values in prop::collection::vec((-3i64..=3, 0usize..3), 0..16),
+        split in 0usize..16,
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::default(); 3], ..Default::default() });
+        let mut prefix = Edits::new();
+        prefix.modify_atom_lone_pairs(vec![(AtomHandle::Id(AtomId(0)), NumForm::Undetermined, NumForm::Lit(1))]);
+        let split = split.min(values.len());
+        let mut expected_atoms = vec![AtomForm::default(); 3];
+        expected_atoms[0].lone_pairs = NumForm::Lit(1);
+        let mut rows = Vec::new();
+        for (new, index) in &values[..split] {
+            let old = expected_atoms[*index].charge.clone();
+            expected_atoms[*index].charge = NumForm::Lit(*new);
+            rows.push((AtomHandle::Id(AtomId::from(*index)), old, NumForm::Lit(*new)));
+        }
+        rows.push((AtomHandle::Id(AtomId(3)), NumForm::Undetermined, NumForm::Lit(1)));
+        for (new, index) in &values[split..] {
+            rows.push((AtomHandle::Id(AtomId::from(*index)), NumForm::Undetermined, NumForm::Lit(*new)));
+        }
+        let mut batch = Edits::new();
+        batch.modify_atom_charges(rows);
+        let error = MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 3, count: 3 });
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut molecule = source.clone();
+            prop_assert_eq!(molecule.transact([prefix.clone(), batch.clone()], recovery), Err(error.clone()));
+            prop_assert_eq!(molecule, source.clone());
+        }
+        let mut editor = source.edit();
+        editor.apply(prefix).unwrap();
+        prop_assert_eq!(editor.apply(batch), Err(error));
+        prop_assert_eq!(editor.finish().unwrap(), Molecule::from_entries(MoleculeEntries { atoms: expected_atoms, ..Default::default() }));
+    }
+
+    /// Optional constraint batches agree with ordered single-key edits and preserve the raw
+    /// source on rollback, including repeated add, replace, remove, and absent-to-absent rows.
+    #[test]
+    fn test_molecule_apply_atom_constraint_batches(
+        updates in prop::collection::vec((0usize..3, prop::option::of(-2i64..=6)), 0..20),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::default(); 3], ..Default::default() });
+        let mut values = vec![None; 3];
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, value) in updates {
+            let old = values[index].clone();
+            let new = value.map(AtomConstraintForm::valence);
+            values[index] = new.clone();
+            let id = AtomHandle::Id(AtomId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAtomConstraint { id, old, new });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: values.into_iter().map(|value| AtomForm { constraints: value.into_iter().collect(), ..Default::default() }).collect(),
+            ..Default::default()
+        });
+        let mut batch = Edits::new();
+        batch.modify_atom_constraints(AtomConstraintKey::Valence, rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
     /// Consecutive bulk additions reconstruct the supplied complete entries for any
     /// batch split. The constructor supplies the independent publication result.
     #[test]

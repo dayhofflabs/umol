@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyTuple;
 use umol_graph_ir::dsl::EditsDsl as GraphIrEditsDsl;
 use umol_graph_ir::ir::{
     AddAromaticSystem as GraphIrAddAromaticSystem, AddBond as GraphIrAddBond,
@@ -24,10 +25,10 @@ use umol_graph_ir::ir::{
 };
 
 use crate::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
-use crate::atom::{AtomForm, AtomUpdate};
+use crate::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::bond::{BondForm, BondUpdate};
 use crate::constraint::aromatic::AromaticSystemConstraintForm;
-use crate::constraint::atom::AtomConstraintForm;
+use crate::constraint::atom::{AtomConstraintForm, AtomConstraintKey};
 use crate::constraint::bond::BondConstraintForm;
 use crate::constraint::dative::DativeBondConstraintForm;
 use crate::constraint::molecule::Constraint;
@@ -47,6 +48,8 @@ use crate::error::{parse_error, ConsumedError, InvalidatedViewError};
 use crate::metadata::Entity;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
+use crate::num::NumForm;
+use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoKind,
     StereoLigandKind,
@@ -437,6 +440,38 @@ impl<'py> IntoPyObject<'py> for &ReadonlyStereoBondRemovals {
     }
 }
 
+type AtomConstraintChange = (
+    HandleLike,
+    Option<Py<AtomConstraintForm>>,
+    Option<Py<AtomConstraintForm>>,
+);
+
+struct TupleItems<T>(Vec<T>);
+
+impl<'a, 'py, T> FromPyObject<'a, 'py> for TupleItems<T>
+where
+    Vec<T>: FromPyObject<'a, 'py, Error = PyErr>,
+{
+    type Error = PyErr;
+
+    fn extract(object: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        object.extract().map(Self)
+    }
+}
+
+impl<'a, 'py, T> IntoPyObject<'py> for &'a TupleItems<T>
+where
+    &'a T: IntoPyObject<'py>,
+{
+    type Target = PyTuple;
+    type Output = Bound<'py, PyTuple>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        PyTuple::new(py, &self.0)
+    }
+}
+
 /// One immutable host-specific molecule edit.
 #[pyclass(frozen)]
 #[allow(
@@ -453,6 +488,32 @@ pub enum Edit {
     RemoveTopology {
         atoms: Vec<HandleLike>,
         bonds: Vec<HandleLike>,
+    },
+    ModifyAtomElements {
+        changes: TupleItems<(HandleLike, Py<ElementForm>, Py<ElementForm>)>,
+    },
+    ModifyAtomIsotopeMasses {
+        changes: TupleItems<(HandleLike, Py<IsotopeMassForm>, Py<IsotopeMassForm>)>,
+    },
+    ModifyAtomCharges {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyAtomImplicitHydrogens {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyAtomLonePairs {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyAtomUnpairedElectrons {
+        changes: TupleItems<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
+    },
+    ModifyAtomConstraints {
+        key: Py<AtomConstraintKey>,
+        changes: TupleItems<AtomConstraintChange>,
     },
     ModifyAtomField {
         id: HandleLike,
@@ -650,6 +711,17 @@ impl Edit {
             Self::AddAtoms { .. } => ("AddAtoms", &["atoms"]),
             Self::AddBonds { .. } => ("AddBonds", &["bonds"]),
             Self::RemoveTopology { .. } => ("RemoveTopology", &["atoms", "bonds"]),
+            Self::ModifyAtomElements { .. } => ("ModifyAtomElements", &["changes"]),
+            Self::ModifyAtomIsotopeMasses { .. } => ("ModifyAtomIsotopeMasses", &["changes"]),
+            Self::ModifyAtomCharges { .. } => ("ModifyAtomCharges", &["changes"]),
+            Self::ModifyAtomImplicitHydrogens { .. } => {
+                ("ModifyAtomImplicitHydrogens", &["changes"])
+            }
+            Self::ModifyAtomLonePairs { .. } => ("ModifyAtomLonePairs", &["changes"]),
+            Self::ModifyAtomUnpairedElectrons { .. } => {
+                ("ModifyAtomUnpairedElectrons", &["changes"])
+            }
+            Self::ModifyAtomConstraints { .. } => ("ModifyAtomConstraints", &["key", "changes"]),
             Self::ModifyAtomField { .. } => ("ModifyAtomField", &["id", "change"]),
             Self::ModifyBondField { .. } => ("ModifyBondField", &["id", "change"]),
             Self::AddDativeBond { .. } => ("AddDativeBond", &["donors", "acceptor", "attributes"]),
@@ -756,6 +828,129 @@ impl Edit {
             GraphIrEdit::RemoveTopology { atoms, bonds } => Self::RemoveTopology {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
                 bonds: bonds.iter().map(HandleLike::from_bond_handle).collect(),
+            },
+            GraphIrEdit::ModifyAtomElements { changes } => Self::ModifyAtomElements {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_atom_handle(id),
+                                into_py_variant(py, ElementForm::from_rust(old))?,
+                                into_py_variant(py, ElementForm::from_rust(new))?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
+            GraphIrEdit::ModifyAtomIsotopeMasses { changes } => Self::ModifyAtomIsotopeMasses {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_atom_handle(id),
+                                into_py_variant(py, IsotopeMassForm::from_rust(old))?,
+                                into_py_variant(py, IsotopeMassForm::from_rust(new))?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
+            GraphIrEdit::ModifyAtomCharges { changes } => Self::ModifyAtomCharges {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_atom_handle(id),
+                                into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
+            GraphIrEdit::ModifyAtomImplicitHydrogens { changes } => {
+                Self::ModifyAtomImplicitHydrogens {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_atom_handle(id),
+                                    into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                    into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyAtomLonePairs { changes } => Self::ModifyAtomLonePairs {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_atom_handle(id),
+                                into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
+            GraphIrEdit::ModifyAtomUnpairedElectrons { changes } => {
+                Self::ModifyAtomUnpairedElectrons {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_atom_handle(id),
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, old)?,
+                                    )?,
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, new)?,
+                                    )?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyAtomConstraints { key, changes } => Self::ModifyAtomConstraints {
+                key: into_py_variant(py, AtomConstraintKey::from_rust(py, key)?)?,
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_atom_handle(id),
+                                old.as_ref()
+                                    .map(|value| {
+                                        into_py_variant(
+                                            py,
+                                            AtomConstraintForm::from_rust(py, value)?,
+                                        )
+                                    })
+                                    .transpose()?,
+                                new.as_ref()
+                                    .map(|value| {
+                                        into_py_variant(
+                                            py,
+                                            AtomConstraintForm::from_rust(py, value)?,
+                                        )
+                                    })
+                                    .transpose()?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
             },
             GraphIrEdit::ModifyAtomField { id, change } => Self::ModifyAtomField {
                 id: HandleLike::from_atom_handle(id),
@@ -1232,6 +1427,104 @@ impl Edit {
             Self::RemoveTopology { atoms, bonds } => GraphIrEdit::RemoveTopology {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 bonds: bonds.iter().map(HandleLike::to_bond_handle).collect(),
+            },
+            Self::ModifyAtomElements { changes } => GraphIrEdit::ModifyAtomElements {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_atom_handle(),
+                            old.bind(py).borrow().to_rust(),
+                            new.bind(py).borrow().to_rust(),
+                        )
+                    })
+                    .collect(),
+            },
+            Self::ModifyAtomIsotopeMasses { changes } => GraphIrEdit::ModifyAtomIsotopeMasses {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_atom_handle(),
+                            old.bind(py).borrow().to_rust(),
+                            new.bind(py).borrow().to_rust(),
+                        )
+                    })
+                    .collect(),
+            },
+            Self::ModifyAtomCharges { changes } => GraphIrEdit::ModifyAtomCharges {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_atom_handle(),
+                            old.bind(py).borrow().to_rust(py),
+                            new.bind(py).borrow().to_rust(py),
+                        )
+                    })
+                    .collect(),
+            },
+            Self::ModifyAtomImplicitHydrogens { changes } => {
+                GraphIrEdit::ModifyAtomImplicitHydrogens {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_atom_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Self::ModifyAtomLonePairs { changes } => GraphIrEdit::ModifyAtomLonePairs {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_atom_handle(),
+                            old.bind(py).borrow().to_rust(py),
+                            new.bind(py).borrow().to_rust(py),
+                        )
+                    })
+                    .collect(),
+            },
+            Self::ModifyAtomUnpairedElectrons { changes } => {
+                GraphIrEdit::ModifyAtomUnpairedElectrons {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_atom_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Self::ModifyAtomConstraints { key, changes } => GraphIrEdit::ModifyAtomConstraints {
+                key: key.bind(py).borrow().to_rust(py),
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_atom_handle(),
+                            old.as_ref()
+                                .map(|value| value.bind(py).borrow().to_rust(py)),
+                            new.as_ref()
+                                .map(|value| value.bind(py).borrow().to_rust(py)),
+                        )
+                    })
+                    .collect(),
             },
             Self::ModifyAtomField { id, change } => GraphIrEdit::ModifyAtomField {
                 id: id.to_atom_handle(),
@@ -2130,6 +2423,161 @@ impl Edits {
     ) -> PyResult<()> {
         let edits = self.to_rust_mut()?;
         edits.remove_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
+        Ok(())
+    }
+
+    fn modify_atom_elements(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<ElementForm>, Py<ElementForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_elements(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.bind(py).borrow().to_rust(),
+                        new.bind(py).borrow().to_rust(),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_atom_isotope_masses(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<IsotopeMassForm>, Py<IsotopeMassForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_isotope_masses(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.bind(py).borrow().to_rust(),
+                        new.bind(py).borrow().to_rust(),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_atom_charges(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_charges(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_atom_implicit_hydrogens(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_implicit_hydrogens(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_atom_lone_pairs(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_lone_pairs(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_atom_unpaired_electrons(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_unpaired_electrons(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_atom_constraints(
+        &mut self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+        changes: Vec<AtomConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_atom_constraints(
+            key.bind(py).borrow().to_rust(py),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_atom_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
         Ok(())
     }
 

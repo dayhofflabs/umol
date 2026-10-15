@@ -312,6 +312,18 @@ pub struct AddStereoBond {
 ///
 /// Edits have no normal form. Sorting or deduplicating a sequence would invalidate the `New(n)`
 /// references that depend on its order.
+///
+/// Atom field and constraint batches apply their rows in order, including repeated handles.
+/// Each row checks its handle and accepted old value before writing; constraint operands must
+/// also match the batch key. Journaled failure restores completed rows before earlier edits
+/// are rolled back. Journal-free failure retains completed rows.
+///
+/// # Semantic properties
+///
+/// A valid atom batch has the same result and entity correspondence as its ordered single-entry
+/// edits. Empty batches leave the molecule unchanged. Undo replays rows in reverse order using
+/// the submitted, normalized-equal old values; when those equal the original raw values, rollback
+/// restores the exact representation as well as normalized equality.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
     // Atoms / bonds
@@ -328,6 +340,30 @@ pub enum Edit {
     ModifyAtomField {
         id: AtomHandle,
         change: AtomFieldChange,
+    },
+    /// Ordered changes to atom element values.
+    ModifyAtomElements {
+        changes: Vec<(AtomHandle, ElementForm, ElementForm)>,
+    },
+    /// Ordered changes to atom isotope mass values.
+    ModifyAtomIsotopeMasses {
+        changes: Vec<(AtomHandle, IsotopeMassForm, IsotopeMassForm)>,
+    },
+    /// Ordered changes to atom charge values.
+    ModifyAtomCharges {
+        changes: Vec<(AtomHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to atom implicit hydrogens values.
+    ModifyAtomImplicitHydrogens {
+        changes: Vec<(AtomHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to atom lone pairs values.
+    ModifyAtomLonePairs {
+        changes: Vec<(AtomHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to atom unpaired electrons values.
+    ModifyAtomUnpairedElectrons {
+        changes: Vec<(AtomHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
     },
     ModifyBondField {
         id: BondHandle,
@@ -453,6 +489,17 @@ pub enum Edit {
 
     // Entity-inline constraints — keyed (one per `key()`), so a single modify
     // (old → new) covers add (old None), remove (new None), and replace.
+    /// Ordered constraint changes sharing one exact key.
+    ///
+    /// Application checks every present operand's key before writing that row.
+    ModifyAtomConstraints {
+        key: AtomConstraintKey,
+        changes: Vec<(
+            AtomHandle,
+            Option<AtomConstraintForm>,
+            Option<AtomConstraintForm>,
+        )>,
+    },
     ModifyAtomConstraint {
         id: AtomHandle,
         old: Option<AtomConstraintForm>,
@@ -855,6 +902,70 @@ impl IntoIterator for Edits {
 }
 
 impl Edits {
+    /// Append an ordered batch of atom element changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_atom_elements(&mut self, changes: Vec<(AtomHandle, ElementForm, ElementForm)>) {
+        self.push(Edit::ModifyAtomElements { changes });
+    }
+
+    /// Append an ordered batch of atom isotope mass changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_atom_isotope_masses(
+        &mut self,
+        changes: Vec<(AtomHandle, IsotopeMassForm, IsotopeMassForm)>,
+    ) {
+        self.push(Edit::ModifyAtomIsotopeMasses { changes });
+    }
+
+    /// Append an ordered batch of atom charge changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_atom_charges(&mut self, changes: Vec<(AtomHandle, NumForm, NumForm)>) {
+        self.push(Edit::ModifyAtomCharges { changes });
+    }
+
+    /// Append an ordered batch of atom implicit hydrogens changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_atom_implicit_hydrogens(&mut self, changes: Vec<(AtomHandle, NumForm, NumForm)>) {
+        self.push(Edit::ModifyAtomImplicitHydrogens { changes });
+    }
+
+    /// Append an ordered batch of atom lone pairs changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_atom_lone_pairs(&mut self, changes: Vec<(AtomHandle, NumForm, NumForm)>) {
+        self.push(Edit::ModifyAtomLonePairs { changes });
+    }
+
+    /// Append an ordered batch of atom unpaired electrons changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_atom_unpaired_electrons(
+        &mut self,
+        changes: Vec<(AtomHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    ) {
+        self.push(Edit::ModifyAtomUnpairedElectrons { changes });
+    }
+
+    /// Append ordered atom constraint changes under one exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. Construction
+    /// preserves all rows, including an empty batch and repeated handles.
+    pub fn modify_atom_constraints(
+        &mut self,
+        key: AtomConstraintKey,
+        changes: Vec<(
+            AtomHandle,
+            Option<AtomConstraintForm>,
+            Option<AtomConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyAtomConstraints { key, changes });
+    }
+
     /// Project an atom update into checked host-relative edits.
     pub fn update_atom(&mut self, id: AtomHandle, current: &AtomForm, update: &AtomUpdate) {
         if let Some(new) = &update.element {
@@ -2309,6 +2420,30 @@ pub enum Undo {
         id: AtomId,
         change: AtomFieldChange,
     },
+    /// Ordered changes to atom element values.
+    ModifyAtomElements {
+        changes: Vec<(AtomId, ElementForm, ElementForm)>,
+    },
+    /// Ordered changes to atom isotope mass values.
+    ModifyAtomIsotopeMasses {
+        changes: Vec<(AtomId, IsotopeMassForm, IsotopeMassForm)>,
+    },
+    /// Ordered changes to atom charge values.
+    ModifyAtomCharges {
+        changes: Vec<(AtomId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to atom implicit hydrogens values.
+    ModifyAtomImplicitHydrogens {
+        changes: Vec<(AtomId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to atom lone pairs values.
+    ModifyAtomLonePairs {
+        changes: Vec<(AtomId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to atom unpaired electrons values.
+    ModifyAtomUnpairedElectrons {
+        changes: Vec<(AtomId, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    },
     ModifyBondField {
         id: BondId,
         change: BondFieldChange,
@@ -2336,6 +2471,11 @@ pub enum Undo {
     ModifyStereoBondField {
         id: StereoBondId,
         change: StereoBondFieldChange,
+    },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreAtomConstraints {
+        key: AtomConstraintKey,
+        constraints: Vec<(AtomId, Option<AtomConstraintForm>)>,
     },
     RestoreAtomConstraint {
         id: AtomId,

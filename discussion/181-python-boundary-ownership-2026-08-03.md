@@ -2145,6 +2145,139 @@ stereo constraint leaves.
 The shared LigandSymmetry and Fluxionality batch-key syntax remains a separate
 unresolved design point in S2; full permutation-image encoding remains rejected.
 
+## Python getter contract review — 2026-10-14
+
+This review records existing Python getter behavior. The naming and immutable
+observation changes are assigned to the separate S11c implementation item. They
+are not prerequisites for S2a or the other batch subitems.
+
+**Decision:** the concrete getter changes listed in S11c are approved. Retain the existing variants
+and constructors. Added Python payload names are limited to names already
+established by the corresponding public Rust fields or accessors; unnamed tuple
+fields retain positional access. Every payload must be accessible on Python 3.9
+without structural pattern matching. Pattern matching remains an optional
+convenience on newer Python versions. S11c implements this alignment; designing
+names for unnamed Rust payloads is excluded. S2 reuses the existing Python forms
+and their getter behavior without this migration.
+
+Reviewed source: fa093b068cc25668661a232cdfaa353a5b0af166. Python sources were
+unchanged; the unfinished S2a changes in graph-IR edit, application, and DSL modules
+were excluded. Source inspection covered explicit properties, generated enum
+properties, nested return values, and the mutation paths described below. Python
+3.13.16 probes used the installed extension and agreed with the source traces; the
+binary has no embedded revision stamp, so its exact source revision is not asserted.
+This is a getter/mutation review, not a full operation, lifecycle, or parity audit.
+
+### Required behavior and working mutation paths
+
+The guide permits both immutable values and writable accessors. It does not require
+every property to be immutable. A property result must either reject mutation or
+make supported writes affect the backing object. A detached mutable result that
+accepts ineffective writes violates that rule. The absence of a setter on the
+outer property does not establish recursive immutability.
+
+| Access | Current intended role and supported writes |
+| --- | --- |
+| An entity field such as AtomForm.charge or AtomView.charge | Returns a leaf value; the field setter replaces it with another complete form. AtomView writes to its molecule. The returned leaf is not a live mutable field accessor. |
+| The constraints property of each entity form or entity view, for all eight kinds | Returns a live constraint view. Its setters and set/pop/update methods write to the backing entity. |
+| Atom/Bond/DativeBond constraint ring_size_count | Returns a live indexed accessor; assignment and deletion update the backing constraints. |
+| Molecule's eight entity collections | Returns live accessors; item assignment replaces entity attributes, and returned entity views support attribute assignment. |
+| Entity forms retained by Edit or Delta | Field and constraint writes reject with TypeError; copy explicitly returns an independent writable form. |
+| Molecule.constraints and logical Constraint.And/Or children | Returns read-only ConstraintsView accessors. Nested leaf payloads inherit the leaf issues below. |
+| Reaction.lhs/deltas and Solution.Determined.molecule | Returns retained mutable objects; changes are visible on subsequent access. Frozen Python field slots do not make these payloads recursively immutable. |
+
+The same field-replacement mechanism handles literals, sets, ranges, and expressions.
+For example, these operations were executed successfully on AtomForm, and the
+corresponding assignments through Molecule.atoms[0] changed the molecule:
+
+```python
+atom.charge = NumForm.LitSet({-1, 0})
+atom.charge = NumForm.LitSet(set(atom.charge._0) | {1})
+atom.charge = NumForm.ArithExpr(
+    ArithExpr.Sum([ArithExpr.Var("q"), ArithExpr.Lit(1)])
+)
+atom.constraints.valence = NumForm.LitSet({3, 5})
+```
+
+Numeric setters accept int or NumForm, not a bare Python set. Leaf variants have
+no supported in-place mutation operation: their payload slots reject assignment.
+Where supplied, normalize/meet/join return new values. AtomUpdate is also a value;
+Edits.update_atom applies such an update using the supplied current AtomForm.
+
+### Confirmed getter deviations
+
+**Detached mutable collections.** Rust collections exposed through generated or
+explicit Python getters become lists, sets, or dictionaries. Mutating the returned
+collection succeeds while the originating value stays unchanged. The strongest
+defense is storage isolation: these paths do protect the original value. That does
+not satisfy the guide's requirement that immutable observations reject mutation.
+Independent review confirmed this distinction.
+
+| Family | Affected property inventory |
+| --- | --- |
+| Leaf forms: 19 getter sites | ElementForm.LitSet/NotSet and Var restrictions; IsotopeMassForm.LitSet and Var restrictions; NumForm.LitSet; ArithExpr.Sum/Product; PredExpr.Mem/And/Or; ElectronCountsForm.Lit; StereoTerm.Var/LitSet; StereoCoset.LitSet; TopicityRelationForm.LitSet/NotSet; StereogenicityForm.LitSet/NotSet. |
+| RelationalConstraint/MoleculeConstraint: 14 getter sites | Ten relational participant/predicate arrays and vectors; ChargeSum, BondOrderSum, Connected, and UnpairedElectronCoupling participant lists. |
+| Edit: 25 properties across 19 variants | Atom/bond addition rows, topology removal lists, relation participants, removal rows, and old/new participant lists. Nested donor/atom/ligand lists also remain mutable copies. Retained entity forms themselves correctly reject writes. |
+| Entity Delta: 10 participant properties | Add/Remove donors for dative bonds, atoms for aromatic systems and multicenter bonds, and ligands for stereo atoms and bonds. |
+| Mapping and compaction values | Correspondence.matched_pairs/left_unmatched/right_unmatched, Remapping.images, Compaction.removed. Their molecule-level wrappers inherit these nested observations. |
+| Models and reports | ValenceEntry.target_covalences/aromatic_valences/fallback_aromatic_valences; StereoModel.kind_models; ElementScope.AllowList.elements; ResolveReport.tie_breaks. |
+| Fingerprint values | HashedFeatureSet.ids, CountedHashedFeatureSet.entries, StructuralFeatureSet.keys, SignedHashedFeatureSet.entries, RoleTaggedHashedFeatureSet.ids. |
+| Entity topology views | DativeBondView.donors; StereoAtomView.ligands and StereoBondView.ligands. Other inspected entity atom_ids properties return tuples. |
+
+These counts identify direct getter sites, not every nested path to them. Field
+changes, individual constraints, entity attributes, and read-only Edit/Delta
+payloads also expose the affected leaves. S11c specifies the collection return
+types and the exact boundary of this correction. Reaching a leaf through another
+getter does not authorize changing that getter's ownership or mutation contract.
+
+**Detached mutable constraint containers.** All eight entity Update.constraints
+getters clone into writable ConstraintsForm objects. For example,
+`child = update.constraints; child.valence = 4` changes child but leaves update
+unchanged. This is confirmed by source and execution, and independently challenged.
+It needs an immutable observation consistent with the Update's value role; treating
+the copy as writable is not justified by the current guide. Ordinary entity
+constraints getters are different: those already write through correctly.
+
+**Detached mutable aggregate children.** ReactionLayout.lhs/rhs clone into writable
+MoleculeLayout objects, and ReactionMetadata.lhs clones into writable
+MoleculeMetadata. Their mutators succeed without updating the parent. Comments and
+tests describing snapshots explain the implementation but do not justify these
+property semantics under the guide. These mutable aggregate ownership questions
+are excluded from S11c; this finding is not a prerequisite for that item.
+
+The inspected scalar/value-only properties, read-only ring member/connection
+accessors, and MoleculeLayout.positions tuple do not show these collection defects.
+Mutable ring models and independently owned ring connections have explicit setters.
+Explicit copy/asdict operations and value-producing projection methods are not
+classified as defective merely because their results are mutable.
+
+### Coverage and review limits
+
+The source inventory covered all Python binding modules, including generated
+properties. Runtime probes exercised all 19 leaf and 14 constraint collection
+sites and representative aggregate and live mutation paths. Separate reviewers
+covered leaf/constraint values and other aggregates; an independent challenger
+checked the findings. Complete inventories, source locations, probe bodies and
+results are in [leaf getter review](../scratch/181-s2a/leaf-getter-review.md),
+[aggregate getter review](../scratch/181-s2a/aggregate-getter-review.md), and
+[entity mutation probes](../scratch/181-s2a/entity-getter-probes.txt). The
+[independent challenge](../scratch/181-s2a/getter-challenge.md) distinguishes
+source-confirmed findings from individually executed cases.
+
+Two adjacent read-method families were identified by source inspection only:
+AtomTypeRegistry.patterns_for_element/patterns_for_element_and_charge and
+AtomCompletions.get/items copy borrowed forms into writable objects. Their methods'
+contracts need separate reconciliation; they are not included in the property
+counts. This review does not approve the distinct RingView.id mutation contract,
+nor does it establish performance, full invalidation behavior, or general parity.
+
+The existing test_edit.py test at lines 233–237 explicitly allows clearing a
+returned atom list and checks only that the stored Edit is unchanged. This is a
+concrete test/review blind spot: storage protection was tested instead of rejection
+of mutation through immutable observations. It does not establish the reasoning
+used in each earlier review. The review failed to distinguish that broader getter
+contract from the batch implementation; its correction is assigned to S11c.
+
 ## Implementation plan
 
 ### S0 — Molecule, editor, and transaction migration
@@ -3472,11 +3605,11 @@ of Python Edit values retains the existing Python Edit conversion lifecycle.
 Edits methods reject consumed receivers through the existing exception. No new
 consumed state or view-invalidation mechanism is introduced for row values.
 
-The Edit variant's changes property returns a tuple of row tuples. Constraint-batch
-keys and the forms and constraints in each row are immutable observations,
-including their nested collections. Later mutation of constructor input lists or
-mutable input values does not alter the Edit. This follows the Python API guide's
-property contract.
+The Edit variant's changes property returns a tuple of row tuples. Reuse the
+existing key, form, and constraint classes and their getter behavior. Later
+mutation of constructor input lists or mutable input values does not alter the
+Edit. Shared getter immutability and Rust/Python payload-name alignment belong
+to S11c and do not gate any S2 batch subitem.
 
 **Native DSL — stereo constraint key syntax unresolved:** use singular entity
 keys for all 19 field-batch operations and :modify-constraints on each of the
@@ -3564,14 +3697,18 @@ sequence on valid inputs; empty and single-entry batches; mixed initial/new
 handles; repeated sequential changes to one entity; missing/stale handles and
 old-value mismatch at first/middle/last entries; constraint add/remove/modify and
 key mismatch; rollback after preceding successful edits; tracked correspondence;
-no panics from manipulated undo payloads. Include DSL/Python construction and conversion checks with each entity,
-preserving typed batches rather than expanding them into individual edits.
-Python checks also cover independence from constructor inputs and rejection of
-mutation through changes, key, row values, and their nested collections.
+no panics from manipulated undo payloads. Include DSL/Python construction and
+conversion checks with each entity, preserving typed batches rather than expanding
+them into individual edits. Python checks also cover independence from constructor
+inputs, the tuple-of-tuples shape of changes, and exact key and row values.
+Shared getter mutation-rejection checks belong to S11c.
 Property tests exercise sequence equivalence and restoration independently of
 the batching implementation. Invalid histories need not produce correct values.
+Application unit tests live in molecule/apply/tests, grouped by operation with
+method/variant ordering within each module. Extend these logical groups rather
+than creating test modules for implementation subitems.
 
-#### S2a — Atom field and constraint batches
+#### S2a — Atom field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -3608,6 +3745,20 @@ Keep existing single-atom variants and methods unchanged.
 include several independent fields on the same atom, repeated writes to one field,
 and atoms created earlier in the same Edits sequence. Check exact values, restored
 state, unchanged correspondence, and boundary conversions.
+
+**Implementation and verification — 2026-10-14.** All six field batches and the
+keyed atom constraint batch are implemented in Edit, Undo, Edits, both application
+paths, DSL conversion, and Python. Direct loops preserve row order, repeated
+handles, prefix recovery, accepted-old-value replay, and correspondence. Python
+changes exposes tuple rows using the existing form and constraint classes.
+
+Passed 10,268 graph-IR unit cases (three existing ignored cases), 36 edit
+properties, and 505 Python edit/transaction/delta cases after rebuilding the
+extension. Application tests were reorganized into logical files under
+molecule/apply/tests; all 431 cases were retained and passed after the move.
+Affected-crate strict Clippy, workspace all-target compilation, nightly formatting,
+and git diff --check passed. Workspace tests remain at the plan gate; production
+performance comparisons remain in S4a. Logs are in scratch/181-s2a.
 
 #### S2b — Bond field and constraint batches
 
@@ -4403,7 +4554,7 @@ transform keeps consuming and transform_iter keeps its per-result clone.
 transform_into's in-place application without a transaction is implemented in
 [236](236-operation-ownership-copy-costs-2026-10-09.md) (S4d, S4e).
 
-### S11 — Python molecule storage and guarantees
+### S11 — Python storage and API guarantees
 
 #### S11a — Remove consumed Molecule storage
 
@@ -4450,6 +4601,83 @@ remaining Edits, editor, and RingViews lifecycle guarantees. Justify Python
 defaults and copying against the selected Rust operations. Preserve current-state
 documentation rather than narrating the migration. Value-trait ownership and the general operation
 ownership rules are documented through [236](236-operation-ownership-copy-costs-2026-10-09.md)'s S6a.
+
+#### S11c — Align Rust-named Python payloads and immutable observations
+
+**Modules:** umol-py value types and getters, their conversion callers and tests,
+and binding documentation. **Breaking getter/name changes, red→green with caller
+migration in this item.** [dep: S2a–S2h, S5a, S6c, S7b]
+
+**Settled scope:** this is a bounded binding correction, not an instruction to
+redesign or certify the entire Python object graph. The changes below are already
+authorized. Their implementation must not restart the nomenclature, immutability,
+or ownership discussion, or become a prerequisite for earlier subitems.
+
+**Names:** use the named fields in the corresponding Rust enum declarations:
+
+| Python payload | Required names |
+| --- | --- |
+| All 31 RelationalConstraint variants | The exact fields of the matching Rust variant in ir/constraint/relational.rs, including bond/atoms, system/atoms, predicate/predicates, dative/parallel, and stereo_atom/stereo_bond as declared there. |
+| MoleculeConstraint.ChargeSum | atoms, sum |
+| MoleculeConstraint.BondOrderSum | bonds, sum |
+| MoleculeConstraint.Connected | atoms |
+| StereoConfigurationUpdate.Kinded | kind, coset |
+
+Already named fields, including MoleculeConstraint.UnpairedElectronCoupling,
+keep their Rust names. Align getters, constructor keywords, repr, and matching
+fields for the listed variants, retaining positional construction. Genuine Rust
+tuple payloads keep _0/_1/_2. Do not add value/members/terms/factors or other names
+without an existing Rust counterpart; do not rename Rust to manufacture one.
+Every payload remains accessible on Python 3.9 through properties, without match.
+
+**Getter results:** the collection properties in the review's "Confirmed getter
+deviations" table have these concrete replacements. The table's named families
+are the scope boundary, not an invitation to trace every reachable object.
+
+| Current observation | Required result |
+| --- | --- |
+| Set payloads in ElementForm, IsotopeMassForm, NumForm, PredExpr, StereoTerm, StereoCoset, TopicityRelationForm, and StereogenicityForm | frozenset, including sets inside optional restrictions. |
+| Sequence payloads in ArithExpr, PredExpr, and ElectronCountsForm | tuple; child forms retain their existing classes and value semantics. |
+| RelationalConstraint and MoleculeConstraint participant/predicate sequences | tuple; preserve None where present and the existing child constraint classes. |
+| Edit and Delta collection properties, including S2 batch rows | tuple for outer sequences, rows, and nested donor/atom/ligand sequences. Retain the existing read-only entity payloads. |
+| Correspondence.matched_pairs/left_unmatched/right_unmatched, Remapping.images, Compaction.removed | tuple, with tuple pair entries. |
+| ValenceEntry.target_covalences/aromatic_valences/fallback_aromatic_valences, ElementScope.AllowList.elements, ResolveReport.tie_breaks | tuple. |
+| StereoModel.kind_models | types.MappingProxyType over the getter's independently owned dictionary; preserve the existing model value classes. |
+| HashedFeatureSet.ids, CountedHashedFeatureSet.entries, StructuralFeatureSet.keys, SignedHashedFeatureSet.entries, RoleTaggedHashedFeatureSet.ids | tuple; retain tuple records and immutable bytes keys. |
+| DativeBondView.donors, StereoAtomView.ligands, StereoBondView.ligands | tuple; leave the views' setters and owner relationships unchanged. |
+
+Preserve contents, sequence order, duplicates, optionality, and existing copying
+semantics. Constructors continue accepting their current list/set/dict inputs
+and accept the corresponding immutable getter results. These are output-container
+changes, not new domain types, new mutable leaf operations, or new public wrapper
+classes. Fixing a shared leaf getter once also fixes access through fields,
+constraints, and edits; it does not require redesigning those enclosing types.
+
+For the eight entity Update.constraints getters, return the existing corresponding
+ConstraintsView retaining the Update owner. Extend its internal storage choice;
+reads borrow that Update's constraints, and all writes, including indexed ring
+count writes, raise TypeError. No new public constraint type is introduced.
+Ordinary ConstraintsForm construction remains writable. Existing entity forms
+and their live constraint views retain their current mutation behavior.
+
+**Explicit exclusions:** ReactionLayout.lhs/rhs, ReactionMetadata.lhs, Reaction
+ownership, Solution.Determined.molecule, RingView.id, registry/completion read
+methods, and explicit copy/conversion/operation-result methods. Their audit
+findings do not extend this item. Do not freeze Molecule, ordinary entity forms,
+live writable views, Edits/Deltas containers, or independently mutable owners.
+Do not replace their setters with immutable-value reconstruction. Do not add
+public frozen/mutable type pairs, new lifetime protocols, or a general wrapper
+framework. Further API-wide review is not a completion requirement.
+
+**Checks:** exact values and Rust roundtrips; the named properties above; access
+without match; exact tuple/frozenset/mapping-proxy result types; rejected container
+writes and Update.constraints mutations; constructor-input independence and
+construction from getter results; unchanged live mutation and explicit copies.
+Use each listed getter family and the existing nested paths to it. Successful
+completion means these changes and checks, not a claim that every Python object
+is transitively immutable. Migrate affected callers and tests in this item and
+run focused Rust/Python suites with a rebuilt extension. S12b remains the full
+workspace gate. S2a–S2h do not wait for this work.
 
 ### S12 — Whole-operation comparison and final verification
 
@@ -4508,6 +4736,8 @@ then start the Reaction ownership work already scheduled in 231.
 S0b → S0c2 and S0b → S0d; S0e → S0e1 → S0e2 → S0f → S0g;
 then S1a/S1b → S2a–S2h → S3a/S3b → S4a;
 independently, S5a → S5b, S6a/S6b/S6c, and S7a → S7b → S7c.
+S11c follows S2a–S2h, S5a, S6c, and S7b, before final S12 verification;
+its getter and naming changes do not block the batching work.
 S1a/S1b and S2a–S2f are independent within their stages. The stereo sequence is
 S2g1 → S2g2 → S2g3 → S2h; S2g3 also requires the shared stereo-key syntax to be
 settled. S2g1/S2g2 can proceed independently of S2a–S2f. S2i follows S2a–S2h,

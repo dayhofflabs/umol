@@ -159,26 +159,16 @@ Structural changes use MoleculeEditor or prepared transaction batches. Ordinary 
 entity-level constraints are assigned through the molecule's entity views. Molecule-level
 constraints are read-only on the molecule; changing them requires editing and publication.
 
-MoleculeEditor.apply mutates the editor, consumes Edits and returns None; tracked_apply returns
-only the batch correspondence. Application failure retains completed edits and leaves the editor
-available. An unavailable editor is rejected before Edits transfer; failed transfer leaves an
-available editor unchanged. Finish consumes the editor on both success and integrity failure.
-
-Molecule.edit returns an independent editor from a copy of the source. Molecule.apply and
-tracked_apply consume Edits and apply them to a copy, returning a checked Molecule after finish,
-with the correspondence in the tracked case. The source, its aliases, and its views remain valid
-and unchanged on success or failure. An unavailable molecule is rejected before Edits transfer;
-a transferred batch stays consumed if application or publication fails. The copies share Rust
-copy-on-write storage until mutation. Molecule.copy explicitly returns an independent value.
+Molecule.edit consumes its receiver. MoleculeEditor.apply consumes the editor and Edits and returns
+a new transient editor; tracked_apply also returns the batch correspondence. Molecule.apply and
+tracked_apply include finish and return a checked Molecule, with the correspondence in the tracked
+case. Both owning types are consumed before the Edits contents are transferred. An unavailable
+batch therefore still leaves the receiver consumed. Molecule.copy explicitly retains an
+independent value.
 
 Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
 They restore it on application or integrity failure; tracked_transact returns the whole
-transaction's correspondence. Both take keyword-only rollback_method, defaulting to
-RollbackMethod.Journal; RollbackMethod.Clone is also selectable. Journal records undo while
-editing the receiver; Clone edits a working copy. The Rust methods require an explicit selector.
-Python's Journal default makes the recovery policy optional at the call site, with storage
-scaling with edits; callers can select Clone for its different copying and execution costs.
-Python exposes these prepared-batch operations without a scoped
+transaction's correspondence. Python exposes these prepared-batch operations without a scoped
 Transaction handle or editor probe. This avoids retaining Rust borrows across Python calls.
 
 The iterable is fully extracted before any batch is consumed. Batches are then consumed in order,
