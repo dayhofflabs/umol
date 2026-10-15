@@ -6,6 +6,7 @@ from umol import (
     Constraint,
     ConstraintDelta,
     ConstraintEdit,
+    ContradictionError,
     Edits,
     Element,
     InvalidatedViewError,
@@ -81,6 +82,98 @@ def test_constraints_mutation():
     assert list(constraints) == [entry, entry]
     constraints.clear()
     assert list(constraints) == []
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        (
+            [
+                Constraint.Molecule(
+                    MoleculeConstraint.ChargeSum([3, 1, 3], NumForm.LitSet({0}))
+                ),
+                Constraint.Molecule(
+                    MoleculeConstraint.ChargeSum([1, 3], NumForm.Lit(0))
+                ),
+            ],
+            [Constraint.Molecule(MoleculeConstraint.ChargeSum([1, 3], NumForm.Lit(0)))],
+        ),
+    ],
+)
+def test_constraints_normalize(entries, expected):
+    source = Constraints(entries)
+    normalized = source.normalize()
+    assert normalized == Constraints(expected)
+    assert source.normalized_eq(normalized) is True
+    assert normalized.normalized_eq(source) is True
+    assert source != normalized
+    normalized.clear()
+    assert normalized == Constraints([])
+    assert source == Constraints(entries)
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        [],
+        [
+            Constraint.Molecule(
+                MoleculeConstraint.ChargeSum(list(range(16)), NumForm.Lit(0))
+            )
+        ],
+    ],
+    ids=["empty", "charge-sum"],
+)
+def test_constraints_normalize_identity(entries):
+    source = Constraints(entries)
+    equal = Constraints(entries)
+    assert source.normalized_eq(equal) is True
+    normalized = source.normalize()
+    assert normalized == source
+    normalized.append(Constraint.Molecule(MoleculeConstraint.Connected(None)))
+    assert normalized == Constraints(
+        entries + [Constraint.Molecule(MoleculeConstraint.Connected(None))]
+    )
+    assert source == Constraints(entries)
+    assert equal == Constraints(entries)
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        [],
+        [
+            Constraint.Molecule(
+                MoleculeConstraint.ChargeSum(list(range(16)), NumForm.Lit(1))
+            )
+        ],
+    ],
+    ids=["empty", "different-sum"],
+)
+def test_constraints_normalized_eq(other):
+    entries = [
+        Constraint.Molecule(
+            MoleculeConstraint.ChargeSum(list(range(16)), NumForm.Lit(0))
+        )
+    ]
+    source = Constraints(entries)
+    different = Constraints(other)
+    assert source.normalized_eq(different) is False
+    assert different.normalized_eq(source) is False
+    assert source == Constraints(entries)
+    assert different == Constraints(other)
+
+
+def test_constraints_normalize_error():
+    entries = [
+        Constraint.Molecule(
+            MoleculeConstraint.ChargeSum([3, 1, 3], NumForm.LitSet(set()))
+        )
+    ]
+    source = Constraints(entries)
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        source.normalize()
+    assert source == Constraints(entries)
 
 
 def test_constraints_view_composition():

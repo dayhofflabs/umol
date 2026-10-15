@@ -930,11 +930,9 @@ macro_rules! stereo_constraints {
         }
 
         impl_py_lattice!(
+            borrowed,
             $constraints,
             $rust_constraints,
-            |value: &$constraints, _py: Python<'_>| -> PyResult<$rust_constraints> {
-                Ok(value.to_rust().clone())
-            },
             |_py: Python<'_>, value: $rust_constraints| -> PyResult<$constraints> {
                 Ok($constraints(value))
             }

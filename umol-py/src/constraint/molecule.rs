@@ -1049,11 +1049,9 @@ impl Constraints {
 }
 
 impl_py_normalize!(
+    borrowed,
     Constraints,
     GraphIrConstraints,
-    |value: &Constraints, _py: Python<'_>| -> PyResult<GraphIrConstraints> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrConstraints| -> PyResult<Constraints> {
         Ok(Constraints::from_rust(value))
     }

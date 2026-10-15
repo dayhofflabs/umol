@@ -5330,7 +5330,7 @@ Strict Clippy passed for all umol-py targets. Changed Rust files were formatted
 with nightly rustfmt; git diff --check passed. S7c checks allocations after S7b;
 the combined workspace/MSRV gate remains at S12b.
 
-#### S7b — Entity constraint containers and molecule Constraints
+#### S7b — Entity constraint containers and molecule Constraints (done)
 
 **Modules:** umol-py constraint atom, bond, dative, aromatic, multicenter,
 noncovalent, stereo, molecule, and their tests. **Internal migration, green;
@@ -5353,6 +5353,20 @@ existing conversion paths. This item changes no constraint mutation or view API.
 distinct equal and unequal operands, exact results, existing absence/errors,
 source preservation, and independent returned containers. Include the Study 4
 valence-set and charge-sum fixtures. Keep checks independent of the macro bodies.
+
+**Implemented (2026-10-15):** all eight entity constraint containers use the
+borrowed lattice macro arm. Constraints uses the borrowed normalization arm.
+normalize retains its source clone; results remain independent mutable containers.
+Individual constraints, leaf forms, mutation APIs, and views are unchanged.
+
+All 1,711 Rust binding tests passed (two existing ignored tests). After rebuilding
+under Python 3.13, all 48 lattice cases and 1,128 focused constraint, entity,
+edit, and delta cases passed. Coverage includes empty/populated containers,
+equal/unequal operands, exact results, contradictory meets, normalization errors,
+source preservation, result independence, and the Study 4 valence-set and
+charge-sum fixtures. Strict Clippy passed for all umol-py targets; changed Rust
+files were formatted with nightly rustfmt and git diff --check passed.
+Allocation verification remains the next subitem, S7c.
 
 #### S7c — Verify production copy elimination
 

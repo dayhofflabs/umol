@@ -1021,11 +1021,9 @@ impl AtomConstraintsForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     AtomConstraintsForm,
     GraphIrAtomConstraintsForm,
-    |value: &AtomConstraintsForm, _py: Python<'_>| -> PyResult<GraphIrAtomConstraintsForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrAtomConstraintsForm| -> PyResult<AtomConstraintsForm> {
         Ok(AtomConstraintsForm(value))
     }

@@ -405,11 +405,9 @@ impl NoncovalentBondConstraintsForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     NoncovalentBondConstraintsForm,
     GraphIrNoncovalentBondConstraintsForm,
-    |value: &NoncovalentBondConstraintsForm,
-     _py: Python<'_>|
-     -> PyResult<GraphIrNoncovalentBondConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrNoncovalentBondConstraintsForm|
      -> PyResult<NoncovalentBondConstraintsForm> { Ok(NoncovalentBondConstraintsForm(value)) }

@@ -461,11 +461,9 @@ impl DativeBondConstraintsForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     DativeBondConstraintsForm,
     GraphIrDativeBondConstraintsForm,
-    |value: &DativeBondConstraintsForm,
-     _py: Python<'_>|
-     -> PyResult<GraphIrDativeBondConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrDativeBondConstraintsForm|
      -> PyResult<DativeBondConstraintsForm> { Ok(DativeBondConstraintsForm(value)) }

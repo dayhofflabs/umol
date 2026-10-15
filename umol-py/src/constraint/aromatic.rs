@@ -423,11 +423,9 @@ impl AromaticSystemConstraintsForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     AromaticSystemConstraintsForm,
     GraphIrAromaticSystemConstraintsForm,
-    |value: &AromaticSystemConstraintsForm,
-     _py: Python<'_>|
-     -> PyResult<GraphIrAromaticSystemConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrAromaticSystemConstraintsForm|
      -> PyResult<AromaticSystemConstraintsForm> { Ok(AromaticSystemConstraintsForm(value)) }

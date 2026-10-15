@@ -469,11 +469,9 @@ impl BondConstraintsForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     BondConstraintsForm,
     GraphIrBondConstraintsForm,
-    |value: &BondConstraintsForm, _py: Python<'_>| -> PyResult<GraphIrBondConstraintsForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrBondConstraintsForm| -> PyResult<BondConstraintsForm> {
         Ok(BondConstraintsForm(value))
     }

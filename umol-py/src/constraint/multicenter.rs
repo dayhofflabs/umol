@@ -427,11 +427,9 @@ impl MulticenterBondConstraintsForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     MulticenterBondConstraintsForm,
     GraphIrMulticenterBondConstraintsForm,
-    |value: &MulticenterBondConstraintsForm,
-     _py: Python<'_>|
-     -> PyResult<GraphIrMulticenterBondConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrMulticenterBondConstraintsForm|
      -> PyResult<MulticenterBondConstraintsForm> { Ok(MulticenterBondConstraintsForm(value)) }
