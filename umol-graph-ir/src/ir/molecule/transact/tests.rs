@@ -16,10 +16,11 @@ use crate::ir::constraint::{
 };
 use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{
-    AddBond, AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle,
-    BondFieldChange, BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit,
-    Edits, EntityHandle, MulticenterBondFieldChange, MulticenterBondHandle,
-    NoncovalentBondFieldChange, NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle,
+    AddAromaticSystem, AddBond, AddMulticenterBond, AddStereoAtom, AddStereoBond,
+    AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange,
+    BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits, EntityHandle,
+    MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
+    NoncovalentBondHandle, RemovedTopology, StereoAtomFieldChange, StereoAtomHandle,
     StereoBondFieldChange, StereoBondHandle, Undo,
 };
 use crate::ir::entity::{Entity, EntityKind};
@@ -780,22 +781,22 @@ fn test_transaction_apply_remove_topology(diatomic: MoleculeEditor) {
             let TransactionStorage::Journal(journal) = &*transaction.storage else {
                 panic!("expected Journal recovery");
             };
-            let [Undo::RestoreRemovedTopology {
+            let [Undo::RestoreRemovedTopology(removed)] = journal.as_slice() else {
+                panic!("RemoveTopology should produce one topology-restore undo")
+            };
+            let RemovedTopology {
                 atoms,
                 bonds,
                 overlays,
-                compaction,
                 ..
-            }] = journal.as_slice()
-            else {
-                panic!("RemoveTopology should produce one topology-restore undo")
-            };
+            } = removed.as_ref();
             assert!(atoms.is_empty());
             assert_eq!(
                 bonds.iter().map(|b| b.id).collect::<Vec<_>>(),
                 vec![BondId(0)]
             );
             assert!(overlays.dative_bonds.is_empty());
+            let compaction = journal[0].id_compaction().unwrap();
             assert_eq!(compaction.compact_bond(BondId(0)), None);
 
             Ok(())
@@ -1032,7 +1033,7 @@ fn test_transaction_apply_add_molecule_constraint(empty: MoleculeEditor) {
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddMoleculeConstraint {
-                    constraint: c.clone().into(),
+                    constraint: Box::new(c.clone().into()),
                 }]))
                 .unwrap();
             assert_eq!(transaction.molecule.constraints_mut().as_slice(), &[c]);
@@ -1054,7 +1055,7 @@ fn test_transaction_apply_remove_molecule_constraint(mut empty: MoleculeEditor) 
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                    constraint: c.clone().into(),
+                    constraint: Box::new(c.clone().into()),
                 }]))
                 .unwrap();
             assert!(transaction.molecule.constraints_mut().as_slice().is_empty());
@@ -1076,11 +1077,13 @@ fn test_transaction_apply_remove_molecule_constraint_absent_error(mut empty: Mol
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                    constraint: Constraint::Molecule(MoleculeConstraint::ChargeSum {
-                        atoms: None,
-                        sum: NumForm::Lit(0),
-                    })
-                    .into(),
+                    constraint: Box::new(
+                        Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                            atoms: None,
+                            sum: NumForm::Lit(0),
+                        })
+                        .into(),
+                    ),
                 }]))
                 .unwrap_err();
             assert_eq!(
@@ -1342,10 +1345,13 @@ fn test_transaction_apply_molecule_constraint_compaction(mut batched_overlays: M
 #[case::forward(
     0,
     Edits::from_iter([Edit::AddMoleculeConstraint {
-        constraint: ConstraintEdit::new(
-            Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
-            |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
-        ).unwrap(),
+        constraint: Box::new(
+            ConstraintEdit::new(
+                Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
+                |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
+            )
+            .unwrap(),
+        ),
     }]),
     MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 0, count: 0 }),
 )]
@@ -1357,10 +1363,13 @@ fn test_transaction_apply_molecule_constraint_compaction(mut batched_overlays: M
             bonds: Vec::new(),
         },
         Edit::AddMoleculeConstraint {
-            constraint: ConstraintEdit::new(
-                Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
-                |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
-            ).unwrap(),
+            constraint: Box::new(
+                ConstraintEdit::new(
+                    Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
+                    |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
+                )
+                .unwrap(),
+            ),
         },
     ]),
     MoleculeApplyError::Transaction(TransactionError::HandleRemoved { kind: EntityKind::Atom, index: 0 }),
@@ -1554,13 +1563,18 @@ fn test_transaction_apply_add_stereo_atom(stereo_atom_skeleton: MoleculeEditor) 
         RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
-                .apply(Edits::from_iter([Edit::AddStereoAtom {
-                    site: AtomHandle::Id(AtomId(0)),
-                    ligands: (1u32..=4)
-                        .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
-                        .collect(),
-                    attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                }]))
+                .apply(Edits::from_iter([Edit::AddStereoAtom(Box::new(
+                    AddStereoAtom {
+                        site: AtomHandle::Id(AtomId(0)),
+                        ligands: (1u32..=4)
+                            .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
+                            .collect(),
+                        attributes: StereoAtomForm::new(
+                            StereoKind::Tetrahedral,
+                            StereoCoset::Lit(1),
+                        ),
+                    },
+                ))]))
                 .unwrap();
             assert_eq!(transaction.molecule.stereo_atoms().count(), 1);
             transaction.rollback();
@@ -1693,22 +1707,24 @@ fn test_transaction_apply_add_stereo_bond(stereo_bond_skeleton: MoleculeEditor) 
         RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
-                .apply(Edits::from_iter([Edit::AddStereoBond {
-                    site: BondHandle::Id(BondId(1)),
-                    ligands: vec![
-                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                        (
-                            AtomHandle::Id(AtomId(1)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
-                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                        (
-                            AtomHandle::Id(AtomId(2)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
-                    ],
-                    attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                }]))
+                .apply(Edits::from_iter([Edit::AddStereoBond(Box::new(
+                    AddStereoBond {
+                        site: BondHandle::Id(BondId(1)),
+                        ligands: vec![
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                            (
+                                AtomHandle::Id(AtomId(1)),
+                                StereoLigandKind::ImplicitHydrogen,
+                            ),
+                            (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                            (
+                                AtomHandle::Id(AtomId(2)),
+                                StereoLigandKind::ImplicitHydrogen,
+                            ),
+                        ],
+                        attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    },
+                ))]))
                 .unwrap();
             assert_eq!(transaction.molecule.stereo_bonds().count(), 1);
             transaction.rollback();
@@ -3102,10 +3118,12 @@ fn test_transaction_apply_add_aromatic_system(diatomic: MoleculeEditor) {
         RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
-                .apply(Edits::from_iter([Edit::AddAromaticSystem {
-                    atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    attributes: AromaticSystemForm::default(),
-                }]))
+                .apply(Edits::from_iter([Edit::AddAromaticSystem(Box::new(
+                    AddAromaticSystem {
+                        atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        attributes: AromaticSystemForm::default(),
+                    },
+                ))]))
                 .unwrap();
             let TransactionStorage::Journal(journal) = &*transaction.storage else {
                 panic!("expected Journal recovery");
@@ -3130,10 +3148,12 @@ fn test_transaction_apply_add_multicenter_bond(diatomic: MoleculeEditor) {
         RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
-                .apply(Edits::from_iter([Edit::AddMulticenterBond {
-                    atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    attributes: MulticenterBondForm::default(),
-                }]))
+                .apply(Edits::from_iter([Edit::AddMulticenterBond(Box::new(
+                    AddMulticenterBond {
+                        atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        attributes: MulticenterBondForm::default(),
+                    },
+                ))]))
                 .unwrap();
             let TransactionStorage::Journal(journal) = &*transaction.storage else {
                 panic!("expected Journal recovery");
@@ -3340,11 +3360,13 @@ fn test_transaction_apply_remove_aromatic_system_rollback(
     molecule
         .transact(
             [Edits::from_iter([Edit::AddMoleculeConstraint {
-                constraint: Constraint::AromaticSystem(
-                    constrained,
-                    AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
-                )
-                .into(),
+                constraint: Box::new(
+                    Constraint::AromaticSystem(
+                        constrained,
+                        AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
+                    )
+                    .into(),
+                ),
             }])],
             RollbackMethod::Journal,
         )
@@ -3945,7 +3967,7 @@ fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEdi
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                    constraint: repeated.clone().into(),
+                    constraint: Box::new(repeated.clone().into()),
                 }]))
                 .unwrap();
             assert_eq!(transaction.molecule.constraints().as_slice(), &[middle]);

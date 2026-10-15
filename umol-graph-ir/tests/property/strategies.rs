@@ -4359,7 +4359,7 @@ fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(Molecule
     cases.push((
         transaction_all_entities_molecule(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: constraint.clone().into(),
+            constraint: Box::new(constraint.clone().into()),
         }]),
     ));
     cases.push((
@@ -4368,7 +4368,7 @@ fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(Molecule
             constraint.clone(),
         ])),
         Edits::from_iter([Edit::RemoveMoleculeConstraint {
-            constraint: constraint.into(),
+            constraint: Box::new(constraint.into()),
         }]),
     ));
     cases
@@ -4775,20 +4775,24 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (Molecule,
                 // removing a referenced overlay exercises constraint drop/remap + its rollback restore.
                 for i in (0..2).filter(|&i| con_ar[i]) {
                     edits.push(Edit::AddMoleculeConstraint {
-                        constraint: Constraint::AromaticSystem(
-                            AromaticSystemId(i as u32),
-                            AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
-                        )
-                        .into(),
+                        constraint: Box::new(
+                            Constraint::AromaticSystem(
+                                AromaticSystemId(i as u32),
+                                AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
+                            )
+                            .into(),
+                        ),
                     });
                 }
                 for i in (0..2).filter(|&i| con_mc[i]) {
                     edits.push(Edit::AddMoleculeConstraint {
-                        constraint: Constraint::MulticenterBond(
-                            MulticenterBondId(i as u32),
-                            MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(4)),
-                        )
-                        .into(),
+                        constraint: Box::new(
+                            Constraint::MulticenterBond(
+                                MulticenterBondId(i as u32),
+                                MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(4)),
+                            )
+                            .into(),
+                        ),
                     });
                 }
                 let dative: Vec<_> = (0..2)

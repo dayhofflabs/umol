@@ -1,9 +1,10 @@
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomHandle, AtomId, BondId, DativeBondId, Edits, EntityKind, Molecule,
-    MoleculeApplyError, MulticenterBondId, NoncovalentBondId, RollbackMethod, StereoAtomId,
-    StereoBondId, TrackedTransaction, Transaction, TransactionError,
+    AddAromaticSystem, AddMulticenterBond, AddStereoAtom, AddStereoBond, AromaticSystemId,
+    AtomHandle, AtomId, BondId, DativeBondId, Edits, EntityKind, Molecule, MoleculeApplyError,
+    MulticenterBondId, NoncovalentBondId, RollbackMethod, StereoAtomId, StereoBondId,
+    TrackedTransaction, Transaction, TransactionError,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -174,18 +175,18 @@ proptest! {
                 EntityKind::AromaticSystem => {
                     counts[3] += 1;
                     direct.add_aromatic_system(Vec::new(), AromaticSystemForm::default());
-                    entries.push(Edit::AddAromaticSystem {
+                    entries.push(Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                         atoms: Vec::new(),
                         attributes: AromaticSystemForm::default(),
-                    });
+                    })));
                 }
                 EntityKind::MulticenterBond => {
                     counts[4] += 1;
                     direct.add_multicenter_bond(Vec::new(), MulticenterBondForm::default());
-                    entries.push(Edit::AddMulticenterBond {
+                    entries.push(Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                         atoms: Vec::new(),
                         attributes: MulticenterBondForm::default(),
-                    });
+                    })));
                 }
                 EntityKind::NoncovalentBond => {
                     counts[5] += 1;
@@ -205,14 +206,14 @@ proptest! {
                         Vec::new(),
                         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                     );
-                    entries.push(Edit::AddStereoAtom {
+                    entries.push(Edit::AddStereoAtom(Box::new(AddStereoAtom {
                         site: AtomHandle::Id(AtomId(0)),
                         ligands: Vec::new(),
                         attributes: StereoAtomForm::new(
                             StereoKind::Tetrahedral,
                             StereoCoset::Lit(0),
                         ),
-                    });
+                    })));
                 }
                 EntityKind::StereoBond => {
                     counts[7] += 1;
@@ -221,11 +222,11 @@ proptest! {
                         Vec::new(),
                         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
                     );
-                    entries.push(Edit::AddStereoBond {
+                    entries.push(Edit::AddStereoBond(Box::new(AddStereoBond {
                         site: BondHandle::Id(BondId(0)),
                         ligands: Vec::new(),
                         attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                    });
+                    })));
                 }
             }
         }

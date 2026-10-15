@@ -267,6 +267,36 @@ pub struct AddBond {
     pub attributes: BondForm,
 }
 
+/// Aromatic-system addition whose handles are resolved when its [`Edit`] is applied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddAromaticSystem {
+    pub atoms: Vec<AtomHandle>,
+    pub attributes: AromaticSystemForm,
+}
+
+/// Multicenter-bond addition whose handles are resolved when its [`Edit`] is applied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddMulticenterBond {
+    pub atoms: Vec<AtomHandle>,
+    pub attributes: MulticenterBondForm,
+}
+
+/// Stereo-atom addition whose handles are resolved when its [`Edit`] is applied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddStereoAtom {
+    pub site: AtomHandle,
+    pub ligands: Vec<(AtomHandle, StereoLigandKind)>,
+    pub attributes: StereoAtomForm,
+}
+
+/// Stereo-bond addition whose handles are resolved when its [`Edit`] is applied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddStereoBond {
+    pub site: BondHandle,
+    pub ligands: Vec<(AtomHandle, StereoLigandKind)>,
+    pub attributes: StereoBondForm,
+}
+
 /// One requested molecule mutation.
 ///
 /// An edit is an imperative instruction, not an algebraic value. It refers to entities in the
@@ -334,10 +364,7 @@ pub enum Edit {
     },
 
     // Aromatic systems
-    AddAromaticSystem {
-        atoms: Vec<AtomHandle>,
-        attributes: AromaticSystemForm,
-    },
+    AddAromaticSystem(Box<AddAromaticSystem>),
     RemoveAromaticSystems {
         removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)>,
     },
@@ -352,10 +379,7 @@ pub enum Edit {
     },
 
     // Multicenter bonds
-    AddMulticenterBond {
-        atoms: Vec<AtomHandle>,
-        attributes: MulticenterBondForm,
-    },
+    AddMulticenterBond(Box<AddMulticenterBond>),
     RemoveMulticenterBonds {
         removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondForm)>,
     },
@@ -390,11 +414,7 @@ pub enum Edit {
     // Stereo elements. `ligands` carry their atom as an `AtomHandle` (Id or
     // same-batch New) plus the ligand kind; `site` is the atom/bond the
     // element is sited on.
-    AddStereoAtom {
-        site: AtomHandle,
-        ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        attributes: StereoAtomForm,
-    },
+    AddStereoAtom(Box<AddStereoAtom>),
     RemoveStereoAtoms {
         removes: Vec<StereoAtomRemoval>,
     },
@@ -412,11 +432,7 @@ pub enum Edit {
         id: StereoAtomHandle,
         change: StereoAtomFieldChange,
     },
-    AddStereoBond {
-        site: BondHandle,
-        ligands: Vec<(AtomHandle, StereoLigandKind)>,
-        attributes: StereoBondForm,
-    },
+    AddStereoBond(Box<AddStereoBond>),
     RemoveStereoBonds {
         removes: Vec<StereoBondRemoval>,
     },
@@ -485,10 +501,10 @@ pub enum Edit {
     // Molecule-list constraints — a true multiset, so add/remove by value
     // (remove takes the last matching entry; its position is captured for undo).
     AddMoleculeConstraint {
-        constraint: ConstraintEdit,
+        constraint: Box<ConstraintEdit>,
     },
     RemoveMoleculeConstraint {
-        constraint: ConstraintEdit,
+        constraint: Box<ConstraintEdit>,
     },
 }
 
@@ -546,11 +562,11 @@ impl Edits {
             Edit::AddAtoms { atoms } => self.created_atoms += atoms.len(),
             Edit::AddBonds { bonds } => self.created_bonds += bonds.len(),
             Edit::AddDativeBond { .. } => self.created_dative_bonds += 1,
-            Edit::AddAromaticSystem { .. } => self.created_aromatic_systems += 1,
-            Edit::AddMulticenterBond { .. } => self.created_multicenter_bonds += 1,
+            Edit::AddAromaticSystem(_) => self.created_aromatic_systems += 1,
+            Edit::AddMulticenterBond(_) => self.created_multicenter_bonds += 1,
             Edit::AddNoncovalentBond { .. } => self.created_noncovalent_bonds += 1,
-            Edit::AddStereoAtom { .. } => self.created_stereo_atoms += 1,
-            Edit::AddStereoBond { .. } => self.created_stereo_bonds += 1,
+            Edit::AddStereoAtom(_) => self.created_stereo_atoms += 1,
+            Edit::AddStereoBond(_) => self.created_stereo_bonds += 1,
             _ => {}
         }
         self.edits.push(edit);
@@ -631,7 +647,10 @@ impl Edits {
         attributes: AromaticSystemForm,
     ) -> AromaticSystemHandle {
         let handle = AromaticSystemHandle::New(self.created_aromatic_systems);
-        self.push(Edit::AddAromaticSystem { atoms, attributes });
+        self.push(Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
+            atoms,
+            attributes,
+        })));
         handle
     }
 
@@ -651,7 +670,10 @@ impl Edits {
         attributes: MulticenterBondForm,
     ) -> MulticenterBondHandle {
         let handle = MulticenterBondHandle::New(self.created_multicenter_bonds);
-        self.push(Edit::AddMulticenterBond { atoms, attributes });
+        self.push(Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
+            atoms,
+            attributes,
+        })));
         handle
     }
 
@@ -692,11 +714,11 @@ impl Edits {
         attributes: StereoAtomForm,
     ) -> StereoAtomHandle {
         let handle = StereoAtomHandle::New(self.created_stereo_atoms);
-        self.push(Edit::AddStereoAtom {
+        self.push(Edit::AddStereoAtom(Box::new(AddStereoAtom {
             site,
             ligands,
             attributes,
-        });
+        })));
         handle
     }
 
@@ -723,11 +745,11 @@ impl Edits {
         attributes: StereoBondForm,
     ) -> StereoBondHandle {
         let handle = StereoBondHandle::New(self.created_stereo_bonds);
-        self.push(Edit::AddStereoBond {
+        self.push(Edit::AddStereoBond(Box::new(AddStereoBond {
             site,
             ligands,
             attributes,
-        });
+        })));
         handle
     }
 
@@ -801,11 +823,15 @@ impl Edits {
     }
 
     pub fn add_molecule_constraint(&mut self, constraint: ConstraintEdit) {
-        self.push(Edit::AddMoleculeConstraint { constraint });
+        self.push(Edit::AddMoleculeConstraint {
+            constraint: Box::new(constraint),
+        });
     }
 
     pub fn remove_molecule_constraint(&mut self, constraint: ConstraintEdit) {
-        self.push(Edit::RemoveMoleculeConstraint { constraint });
+        self.push(Edit::RemoveMoleculeConstraint {
+            constraint: Box::new(constraint),
+        });
     }
 }
 
@@ -2141,6 +2167,79 @@ impl CascadedConstraints {
     }
 }
 
+/// Topology, overlays, and constraints captured by a topology removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedTopology {
+    pub atoms: Vec<RemovedAtom>,
+    pub bonds: Vec<RemovedBond>,
+    pub overlays: RemovedOverlays,
+    pub compaction: MoleculeCompaction,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
+/// Dative bonds and constraints captured by a bulk removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedDativeBonds {
+    pub removed: Vec<RemovedDativeBond>,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
+/// Aromatic systems and constraints captured by a bulk removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedAromaticSystems {
+    pub removed: Vec<RemovedAromaticSystem>,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
+/// Multicenter bonds and constraints captured by a bulk removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedMulticenterBonds {
+    pub removed: Vec<RemovedMulticenterBond>,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
+/// Noncovalent bonds and constraints captured by a bulk removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedNoncovalentBonds {
+    pub removed: Vec<RemovedNoncovalentBond>,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
+/// Stereo atoms and constraints captured by a bulk removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedStereoAtoms {
+    pub removed: Vec<RemovedStereoAtom>,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
+/// Stereo bonds and constraints captured by a bulk removal.
+///
+/// Correct restoration requires matching operation history; see [`Undo`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedStereoBonds {
+    pub removed: Vec<RemovedStereoBond>,
+    pub undo_compaction: UndoCompaction,
+    pub cascade: CascadedConstraints,
+}
+
 /// The information needed to reverse one applied [`Edit`], captured as it was applied.
 ///
 /// Checked application resolves symbolic handles and observes concrete allocations, compactions,
@@ -2151,27 +2250,15 @@ impl CascadedConstraints {
 ///
 /// Entity-constraint entries retain the accepted old optional value and its key.
 /// Added molecule constraints record their insertion position.
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undo {
     RemoveAddedTopology {
         atoms: Vec<AddedAtom>,
         bonds: Vec<AddedBond>,
     },
-    RestoreRemovedTopology {
-        atoms: Vec<RemovedAtom>,
-        bonds: Vec<RemovedBond>,
-        overlays: RemovedOverlays,
-        compaction: MoleculeCompaction,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RestoreRemovedTopology(Box<RemovedTopology>),
     RemoveAddedDativeBond(AddedDativeBond),
-    RestoreRemovedDativeBonds {
-        removed: Vec<RemovedDativeBond>,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RestoreRemovedDativeBonds(Box<RemovedDativeBonds>),
     RestoreDativeBondDonors {
         id: DativeBondId,
         donors: Vec<AtomId>,
@@ -2180,42 +2267,26 @@ pub enum Undo {
         id: DativeBondId,
         acceptor: AtomId,
     },
-    RemoveAddedAromaticSystem(AddedAromaticSystem),
-    RestoreRemovedAromaticSystems {
-        removed: Vec<RemovedAromaticSystem>,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RemoveAddedAromaticSystem(Box<AddedAromaticSystem>),
+    RestoreRemovedAromaticSystems(Box<RemovedAromaticSystems>),
     RestoreAromaticSystemAtoms {
         id: AromaticSystemId,
         atoms: Vec<AtomId>,
     },
-    RemoveAddedMulticenterBond(AddedMulticenterBond),
-    RestoreRemovedMulticenterBonds {
-        removed: Vec<RemovedMulticenterBond>,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RemoveAddedMulticenterBond(Box<AddedMulticenterBond>),
+    RestoreRemovedMulticenterBonds(Box<RemovedMulticenterBonds>),
     RestoreMulticenterBondAtoms {
         id: MulticenterBondId,
         atoms: Vec<AtomId>,
     },
     RemoveAddedNoncovalentBond(AddedNoncovalentBond),
-    RestoreRemovedNoncovalentBonds {
-        removed: Vec<RemovedNoncovalentBond>,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RestoreRemovedNoncovalentBonds(Box<RemovedNoncovalentBonds>),
     RestoreNoncovalentBondAtoms {
         id: NoncovalentBondId,
         atoms: [AtomId; 2],
     },
-    RemoveAddedStereoAtom(AddedStereoAtom),
-    RestoreRemovedStereoAtoms {
-        removed: Vec<RemovedStereoAtom>,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RemoveAddedStereoAtom(Box<AddedStereoAtom>),
+    RestoreRemovedStereoAtoms(Box<RemovedStereoAtoms>),
     RestoreStereoAtomSite {
         id: StereoAtomId,
         site: AtomId,
@@ -2224,12 +2295,8 @@ pub enum Undo {
         id: StereoAtomId,
         ligands: Vec<StereoLigand>,
     },
-    RemoveAddedStereoBond(AddedStereoBond),
-    RestoreRemovedStereoBonds {
-        removed: Vec<RemovedStereoBond>,
-        undo_compaction: UndoCompaction,
-        cascade: CascadedConstraints,
-    },
+    RemoveAddedStereoBond(Box<AddedStereoBond>),
+    RestoreRemovedStereoBonds(Box<RemovedStereoBonds>),
     RestoreStereoBondSite {
         id: StereoBondId,
         site: BondId,
@@ -2319,7 +2386,7 @@ pub enum Undo {
 impl Undo {
     pub fn id_compaction(&self) -> Option<&MoleculeCompaction> {
         match self {
-            Self::RestoreRemovedTopology { compaction, .. } => Some(compaction),
+            Self::RestoreRemovedTopology(removed) => Some(&removed.compaction),
             _ => None,
         }
     }
@@ -2505,28 +2572,28 @@ mod tests {
                         attributes: bond,
                     }],
                 },
-                Edit::AddAromaticSystem {
+                Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                     atoms: vec![AtomHandle::New(0)],
                     attributes: aromatic,
-                },
-                Edit::AddMulticenterBond {
+                })),
+                Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                     atoms: vec![AtomHandle::New(0)],
                     attributes: multicenter,
-                },
+                })),
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
                     attributes: noncovalent,
                 },
-                Edit::AddStereoAtom {
+                Edit::AddStereoAtom(Box::new(AddStereoAtom {
                     site: AtomHandle::New(0),
                     ligands: vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
                     attributes: stereo_atom,
-                },
-                Edit::AddStereoBond {
+                })),
+                Edit::AddStereoBond(Box::new(AddStereoBond {
                     site: BondHandle::New(0),
                     ligands: vec![(AtomHandle::New(0), StereoLigandKind::Atom)],
                     attributes: stereo_bond,
-                },
+                })),
             ],
         );
     }
@@ -2701,22 +2768,22 @@ mod tests {
                     acceptor: AtomHandle::Id(AtomId(2)),
                     attributes: DativeBondForm::default(),
                 },
-                Edit::AddAromaticSystem {
+                Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
                     attributes: AromaticSystemForm::default(),
-                },
-                Edit::AddAromaticSystem {
+                })),
+                Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
                     attributes: AromaticSystemForm::default(),
-                },
-                Edit::AddMulticenterBond {
+                })),
+                Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                     atoms: vec![AtomHandle::Id(AtomId(0))],
                     attributes: MulticenterBondForm::default(),
-                },
-                Edit::AddMulticenterBond {
+                })),
+                Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
                     attributes: MulticenterBondForm::default(),
-                },
+                })),
                 Edit::AddNoncovalentBond {
                     atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     attributes: NoncovalentBondForm::default(),
@@ -2725,26 +2792,26 @@ mod tests {
                     atoms: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
                     attributes: NoncovalentBondForm::default(),
                 },
-                Edit::AddStereoAtom {
+                Edit::AddStereoAtom(Box::new(AddStereoAtom {
                     site: AtomHandle::Id(AtomId(0)),
                     ligands: Vec::new(),
                     attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                },
-                Edit::AddStereoAtom {
+                })),
+                Edit::AddStereoAtom(Box::new(AddStereoAtom {
                     site: AtomHandle::Id(AtomId(1)),
                     ligands: Vec::new(),
                     attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                },
-                Edit::AddStereoBond {
+                })),
+                Edit::AddStereoBond(Box::new(AddStereoBond {
                     site: BondHandle::Id(BondId(0)),
                     ligands: Vec::new(),
                     attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                },
-                Edit::AddStereoBond {
+                })),
+                Edit::AddStereoBond(Box::new(AddStereoBond {
                     site: BondHandle::Id(BondId(1)),
                     ligands: Vec::new(),
                     attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                },
+                })),
             ],
         );
     }
@@ -2875,10 +2942,10 @@ mod tests {
             edits.as_slice(),
             [
                 Edit::AddMoleculeConstraint {
-                    constraint: constraint.clone().into(),
+                    constraint: Box::new(constraint.clone().into()),
                 },
                 Edit::RemoveMoleculeConstraint {
-                    constraint: constraint.into(),
+                    constraint: Box::new(constraint.into()),
                 },
             ],
         );
@@ -2935,28 +3002,28 @@ mod tests {
                 acceptor: AtomHandle::Id(AtomId(0)),
                 attributes: DativeBondForm::default(),
             },
-            Edit::AddAromaticSystem {
+            Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                 atoms: Vec::new(),
                 attributes: AromaticSystemForm::default(),
-            },
-            Edit::AddMulticenterBond {
+            })),
+            Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                 atoms: Vec::new(),
                 attributes: MulticenterBondForm::default(),
-            },
+            })),
             Edit::AddNoncovalentBond {
                 atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                 attributes: NoncovalentBondForm::default(),
             },
-            Edit::AddStereoAtom {
+            Edit::AddStereoAtom(Box::new(AddStereoAtom {
                 site: AtomHandle::Id(AtomId(0)),
                 ligands: Vec::new(),
                 attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            },
-            Edit::AddStereoBond {
+            })),
+            Edit::AddStereoBond(Box::new(AddStereoBond {
                 site: BondHandle::Id(BondId(0)),
                 ligands: Vec::new(),
                 attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-            },
+            })),
         ];
         let mut edits: Edits = entries.clone().into_iter().collect();
 
@@ -3019,8 +3086,9 @@ mod tests {
                 bonds: Vec::new(),
             },
             Edit::AddMoleculeConstraint {
-                constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })
-                    .into(),
+                constraint: Box::new(
+                    Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+                ),
             },
         ];
         let edits: Edits = entries.clone().into_iter().collect();

@@ -533,8 +533,8 @@ impl StereoResolver {
 mod tests {
     use rstest::{fixture, rstest};
     use umol_graph_ir::ir::{
-        AtomId, BondId, Edits, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
-        StereoCoset, StereoKind, StereoLigandKind,
+        AddStereoAtom, AddStereoBond, AtomId, BondId, Edits, StereoAtomForm, StereoAtomId,
+        StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigandKind,
     };
     use umol_graph_ir::mol_dsl_concrete;
     use umol_io::smiles::SmilesIoConfig;
@@ -610,7 +610,7 @@ mod tests {
     #[case::tetrahedral(
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
                              :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoAtom {
+        Edits::from_iter([Edit::AddStereoAtom(Box::new(AddStereoAtom {
             site: AtomHandle::Id(AtomId(1)),
             ligands: vec![
                 (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
@@ -619,7 +619,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
             ],
             attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        }, Edit::ModifyAtomConstraint {
+        })), Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(1)),
             old: Some(AtomConstraintForm::TetrahedralStereo(
                 TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
@@ -630,7 +630,7 @@ mod tests {
     #[case::cis_trans(
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoBond {
+        Edits::from_iter([Edit::AddStereoBond(Box::new(AddStereoBond {
             site: BondHandle::Id(BondId(1)),
             ligands: vec![
                 (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
@@ -639,7 +639,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
             ],
             attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        }, Edit::ModifyBondConstraint {
+        })), Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(1)),
             old: Some(BondConstraintForm::CisTransStereo(
                 CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
@@ -650,7 +650,7 @@ mod tests {
     #[case::cyclooctene_asserted(
         mol_dsl_concrete!(r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoBond {
+        Edits::from_iter([Edit::AddStereoBond(Box::new(AddStereoBond {
             site: BondHandle::Id(BondId(2)),
             ligands: vec![
                 (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
@@ -659,7 +659,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
             ],
             attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        }, Edit::ModifyBondConstraint {
+        })), Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(2)),
             old: Some(BondConstraintForm::CisTransStereo(
                 CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
@@ -705,7 +705,7 @@ mod tests {
         0,
         mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoBond {
+        Edits::from_iter([Edit::AddStereoBond(Box::new(AddStereoBond {
             site: BondHandle::Id(BondId(1)),
             ligands: vec![
                 (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
@@ -714,7 +714,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
             ],
             attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        }, Edit::ModifyBondConstraint {
+        })), Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(1)),
             old: Some(BondConstraintForm::CisTransStereo(
                 CisTransStereoForm::Stereo(StereoCoset::Lit(1)),

@@ -3100,7 +3100,7 @@ binding cases remain ignored. Strict Clippy passed for all targets of graph-IR,
 graph and Python with the property features. The extension was rebuilt in the
 Python 3.13 environment. Nightly formatting checks and git diff --check passed.
 Logs are in `scratch/181-s0g/`; no new timing comparison was run for this selector
-plumbing. S1a is next.
+plumbing.
 
 **Compilation and test boundaries:** S0b, S0c2, S0e1, S0e2, S0f and S0g include their
 binding/caller changes in the same subitem. Each ends with affected libraries,
@@ -3120,7 +3120,7 @@ Full workspace and MSRV verification remain at the final combined gate.
 
 ### S1 — Box the selected large payloads
 
-#### S1a — Undo: 88-byte layout
+#### S1a — Undo: 88-byte layout (completed)
 
 **Modules:** graph-IR edit vocabulary, application/undo replay, transaction
 correspondence handling and affected consumers.
@@ -3195,7 +3195,73 @@ values, and no panics from manipulated history. Correct restoration is required
 for genuine histories under the existing normalized equality/frame contract.
 Confirm 88 bytes on the measured 64-bit target; do not promise a portable ABI size.
 
-#### S1b — Edit: 104-byte layout
+**Implementation — 2026-10-14.** Added and exported the seven specified public
+removal carriers, boxed the eleven selected Undo variants, and migrated all
+production/test constructors and matches. Replay moves the stored payload out
+of its box; id_compaction borrows the forward compaction. No new constructors,
+validation, cloning, correspondence work, or recovery behavior was introduced.
+Undo has no Python or DSL representation to migrate. Edit remains unchanged.
+
+The measured aarch64 layout is **Undo 752 → 88 bytes**, with Edit still 256 bytes.
+Existing addition/removal replay cases now also restore from cloned histories;
+the compaction accessor is exercised through a real topology-removal journal.
+Graph-IR all-target compilation with proptest, 1,320 molecule unit cases,
+28 edit properties, three compaction properties, strict all-target Clippy,
+nightly formatting, and git diff --check passed. Manipulated-history cases retain
+their no-panic contract and genuine-history assertions remain unchanged.
+
+**Cost comparison.** Saved before/after release binaries use identical workloads,
+entry points, dependency versions and measurement boundaries. Seven synthetic
+workloads cover sparse/dense field edits, 1/8 topology removals and 1/8 aromatic
+system additions, each with unique/shared storage, plain/tracked execution and
+commit/cancellation. These 56 cases are separate probes, not frequency weights.
+Six trials rotate before/after/before, with both before labels invoking the same
+binary. Each trial uses 20 sample means of 32 calls; the table pools both before
+labels and compares medians across trials. Input/Edits preparation and final
+molecule destruction are excluded; application, publication, mapping, journal
+disposal and rollback are included. All builds and tests finished before timing.
+
+| Operation / atoms / ownership / tracking / outcome | Before, µs | Boxed, µs | Change |
+| --- | ---: | ---: | ---: |
+| 1 charge edit / 8 / unique / plain / commit | 0.228 | 0.211 | −7.31% |
+| 1 charge edit / 96 / unique / plain / commit | 0.499 | 0.503 | +0.64% |
+| 64 charge edits / 96 / unique / plain / commit | 4.574 | 2.438 | −46.71% |
+| 8 topology removals / 96 / unique / plain / rollback | 108.261 | 108.420 | +0.15% |
+| 8 topology removals / 96 / unique / tracked / rollback | 109.413 | 123.172 | +12.57% |
+| 1 topology removal / 96 / shared / tracked / rollback | 13.046 | 14.915 | +14.33% |
+| 1 aromatic-system addition / 96 / shared / tracked / rollback | 0.662 | 0.720 | +8.76% |
+
+Allocation probes are separate instrumented builds. For 64 charge edits on unique
+96-atom input, plain commit's peak extra requested heap falls from 48,128 to
+5,632 bytes, with five allocations in both versions. Eight topology removals add
+eight allocations (396 → 404 for plain commit); their peak barely changes
+(35,908 → 35,860 bytes). Eight aromatic-system additions likewise add eight
+allocations (101 → 109), while peak extra heap falls from 7,628 to 3,212 bytes.
+These figures exclude allocator overhead, stack and RSS.
+
+**Measured trade-off.** Tracked topology cancellation rises 12.29–14.33%
+across unique/shared and 1/8-removal cases, or 1.79–13.76 µs. Before and after
+trial ranges do not overlap in those cases; unchanged-control median differences
+there are −0.72% to +0.82%. The increase is not dismissed as measurement noise.
+The source audit found no added checks, clones, mapping work or repeated replay;
+allocation changes match one box per affected undo. This establishes the new
+allocation work, but does not explain the disproportionate tracked-only timing
+increase. The additional 57.95 ns for the single shared aromatic addition's
+tracked cancellation also remains a recorded regression. No compiler attributes
+or speculative tuning changes were added. The memory benefit is established;
+acceptance of these new costs is not inferred from the earlier S0 decision.
+Evidence, source snapshots, binary hashes and the complete per-case timing and
+allocation results are in `scratch/181-s1a/`.
+
+**Decision — 2026-10-14.** Retain the compact Undo representation, accepting the
+measured rollback costs for its storage and dense-edit benefits. Retain journaling
+as an explicitly selectable recovery method alongside cloning. Complete S1b and
+compare the combined layouts against the fixed pre-S1 baseline, including whole
+operations and both recovery methods; preserve the S1a results separately. This
+does not authorize further compiler tuning or leave a deferred rollback
+investigation.
+
+#### S1b — Edit: 104-byte layout (completed)
 
 **Modules:** graph-IR edit vocabulary, application, DSL, Python edits and producers.
 **Breaking Rust payload shape, red→green within the subitem.** [dep: S0d, S0g]
@@ -3250,6 +3316,93 @@ Handle resolution and final integrity checks remain application responsibilities
 cases for the six variants; cloning and consuming conversion preserve payloads.
 Confirm 104 bytes on the measured target. **S1 gate:** both layouts coexist,
 affected callers pass, and the selected representation has no extra semantic work.
+
+**Implementation and verification — 2026-10-14.** Added and exported the four
+specified addition carriers, boxed the six selected Edit payloads, and migrated
+construction, application, DSL, Python conversion, and test/property consumers.
+Owned application moves each payload out of its box; borrowed conversions retain
+their existing copying policy. No constructor checks, public methods, Python
+variant fields, DSL syntax, or transaction behavior changed. The measured
+aarch64 layouts are Edit **256 → 104 bytes** and Undo **752 → 88 bytes**.
+
+Workspace all-target compilation with graph-IR/graph property features passed.
+Verification passed 10,075 graph-IR unit cases, 28 edit properties, three
+compaction properties, 1,603 graph operation cases, 1,640 Rust binding cases,
+and 342 Python edit/transaction cases after rebuilding the extension with
+Python 3.13. The five existing ignored Rust cases remain ignored. Strict
+all-target Clippy for the three affected crates, nightly formatting checks, and
+git diff --check passed. Existing property laws, generators' domains, expected
+errors, and roundtrip assertions are preserved. No workspace-wide test run was
+repeated at this subitem. Evidence is in `scratch/181-s1/`.
+
+**Combined S1 comparison.** The baseline is the committed pre-S1 tree at
+a1c4b62bc906555dced2245d0aaac092c234fc89; the candidate includes both boxed layouts.
+Both use identical harness sources and dependency versions. The whole-operation
+study reuses the earlier recovery fixtures at one active group, one active group
+plus 256 extra atoms, and 16 active groups, together with its edit/failure cases.
+Consuming, clone/install, and native mutating routes are measured separately.
+Native mutation journals resolution/projection and transactions; transformer
+mutation applies complete plans without journals. No fixture-frequency weighting
+or aggregate score is inferred.
+
+Four trials rotate before/after/before, with the two before labels using the same
+binary. Each process reports 20 sample means of 32 calls. Summaries compare eight
+baseline trial medians with four candidate medians and retain unchanged-control
+differences and trial ranges. All builds and checks finished before serial timing.
+Whole operations include internal edit construction and disposal. Separate edit
+probes preserve S1a's application-only boundary and now select Clone or Journal
+explicitly; that harness change is identical on both sides of this comparison.
+Allocation probes use separate instrumented builds.
+
+Selected unique-input medians in microseconds; dense resolution/projection use
+176 atoms and the transaction probes use 96 unless noted:
+
+| Operation / route | Pre-S1, µs | S1, µs | Change |
+| --- | ---: | ---: | ---: |
+| Dense resolution / consuming | 475.900 | 460.298 | −3.28% |
+| Dense resolution / clone-install | 487.505 | 475.309 | −2.50% |
+| Dense resolution / journal | 599.950 | 480.972 | −19.83% |
+| Dense projection / consuming | 80.764 | 77.375 | −4.20% |
+| Dense projection / clone-install | 100.026 | 87.740 | −12.28% |
+| Dense projection / journal | 117.336 | 85.256 | −27.34% |
+| 64 charge edits / plain Journal commit | 4.351 | 2.091 | −51.94% |
+| 64 charge edits / plain Clone commit | 3.318 | 3.167 | −4.54% |
+| Eight topology removals / tracked Journal cancellation | 108.775 | 107.436 | −1.23% |
+| Eight topology removals / tracked Clone cancellation | 63.193 | 63.419 | +0.36% |
+
+Dense journaled resolution's peak extra requested heap falls from 1,710.32 to
+869.24 KiB; projection falls from 460.94 to 91.90 KiB. Consuming projection falls
+from 81.42 to 43.42 KiB and clone/install projection from 137.28 to 99.28 KiB.
+Dense resolution's consuming and clone/install peaks are unchanged, although
+their allocation traffic decreases. Journaled resolution makes 64 additional
+allocations, matching the 32 selected Edit and 32 selected Undo additions;
+journaled projection makes three additional allocations. These figures exclude
+allocator bookkeeping, stack and RSS.
+
+**Remaining costs and limits.** Sparse shared resolution with 256 extra atoms
+through clone/install rises from 113.306 to 116.035 µs (+2.41%, +2.729 µs), with
+overlapping trial ranges. Early projection rejection through native mutation rises
+from 285.1 to 311.5 ns (+9.26%, +26.4 ns), with disjoint trial ranges. One-charge
+Clone transactions on eight atoms show increases of 16–33 ns across several
+ownership/tracking/outcome combinations, up to +9.31%; several have disjoint trial
+ranges. These increases remain part of the result. No further tuning was attempted.
+
+Tracked topology cancellation in the combined Journal matrix is within −1.23%
+to −0.29% of baseline across the four 1/8-removal and unique/shared cases. The
+earlier S1a-only 12–14% increase remains recorded above. The current comparison
+does not explain that earlier behavior or isolate S1b's contribution across the
+changed harnesses; it establishes the complete S1 build's cost in this paired
+study. No compiler attributes or speculative code rearrangements were added.
+
+**Assessment:** retain the selected compact layouts. Their storage benefits and
+complete-operation gains are demonstrated, with the remaining increases explicitly
+reported above. Retain both recovery methods: in the current unique-input probes,
+Journal is faster for 64 charge edits, while Clone is faster for eight tracked
+topology removals followed by cancellation. Neither is selected universally.
+The comparison is complete; no further performance investigation is scheduled.
+All 186 whole-operation rows and 56 rows per recovery method, allocation results,
+source/binary hashes, correctness logs and reproduction instructions are retained
+in `scratch/181-s1/`.
 
 ### S2 — Field/key batches and corresponding undos
 

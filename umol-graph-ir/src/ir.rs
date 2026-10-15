@@ -70,16 +70,19 @@ pub use delta::{
     StereoBondDelta,
 };
 pub use edit::{
-    AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
+    AddAromaticSystem, AddBond, AddMulticenterBond, AddStereoAtom, AddStereoBond,
+    AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
     AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
     CascadedConstraints, ConstraintEdit, ConstraintEditError, DativeBondFieldChange,
     DativeBondHandle, Edit, Edits, EntityHandle, ModifiedConstraint, MulticenterBondFieldChange,
     MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
-    RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedConstraint, RemovedDativeBond,
-    RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom,
-    RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval,
-    StereoBondFieldChange, StereoBondHandle, StereoBondRemoval, Undo,
+    RemovedAromaticSystem, RemovedAromaticSystems, RemovedAtom, RemovedBond, RemovedConstraint,
+    RemovedDativeBond, RemovedDativeBonds, RemovedMulticenterBond, RemovedMulticenterBonds,
+    RemovedNoncovalentBond, RemovedNoncovalentBonds, RemovedOverlays, RemovedStereoAtom,
+    RemovedStereoAtoms, RemovedStereoBond, RemovedStereoBonds, RemovedTopology,
+    StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval, StereoBondFieldChange,
+    StereoBondHandle, StereoBondRemoval, Undo,
 };
 pub use electrons::ElectronCountsForm;
 pub use entity::{Entity, EntityKind};

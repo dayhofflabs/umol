@@ -36,11 +36,11 @@ use crate::ir::constraint::{
 };
 use crate::ir::dative::DativeBondUpdate;
 use crate::ir::edit::{
-    AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange,
-    BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits, EntityHandle,
-    MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
-    NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange,
-    StereoBondHandle,
+    AddAromaticSystem, AddMulticenterBond, AddStereoAtom, AddStereoBond, AromaticSystemFieldChange,
+    AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle, ConstraintEdit,
+    DativeBondFieldChange, DativeBondHandle, Edit, Edits, EntityHandle, MulticenterBondFieldChange,
+    MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
+    StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle,
 };
 use crate::ir::entity::Entity;
 use crate::ir::id::{
@@ -967,10 +967,13 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddAromaticSystem { atoms, attributes } => vec![Self::AromaticSystemAdd {
-                atoms: atoms.clone(),
-                attributes: AromaticSystemDsl::from_ir(attributes, &defaults.aromatic_system),
-            }],
+            Edit::AddAromaticSystem(addition) => {
+                let AddAromaticSystem { atoms, attributes } = addition.as_ref();
+                vec![Self::AromaticSystemAdd {
+                    atoms: atoms.clone(),
+                    attributes: AromaticSystemDsl::from_ir(attributes, &defaults.aromatic_system),
+                }]
+            }
             Edit::RemoveAromaticSystems { removes } => vec![Self::AromaticSystemsRemove(
                 removes
                     .iter()
@@ -1006,10 +1009,13 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddMulticenterBond { atoms, attributes } => vec![Self::MulticenterBondAdd {
-                atoms: atoms.clone(),
-                attributes: MulticenterBondDsl::from_ir(attributes, &defaults.multicenter_bond),
-            }],
+            Edit::AddMulticenterBond(addition) => {
+                let AddMulticenterBond { atoms, attributes } = addition.as_ref();
+                vec![Self::MulticenterBondAdd {
+                    atoms: atoms.clone(),
+                    attributes: MulticenterBondDsl::from_ir(attributes, &defaults.multicenter_bond),
+                }]
+            }
             Edit::RemoveMulticenterBonds { removes } => vec![Self::MulticenterBondsRemove(
                 removes
                     .iter()
@@ -1084,15 +1090,18 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddStereoAtom {
-                site,
-                ligands,
-                attributes,
-            } => vec![Self::StereoAtomAdd {
-                site: site.clone(),
-                ligands: ligands.clone(),
-                attributes: StereoAtomDsl::from_ir(attributes, &defaults.stereo_atom),
-            }],
+            Edit::AddStereoAtom(addition) => {
+                let AddStereoAtom {
+                    site,
+                    ligands,
+                    attributes,
+                } = addition.as_ref();
+                vec![Self::StereoAtomAdd {
+                    site: site.clone(),
+                    ligands: ligands.clone(),
+                    attributes: StereoAtomDsl::from_ir(attributes, &defaults.stereo_atom),
+                }]
+            }
             Edit::RemoveStereoAtoms { removes } => vec![Self::StereoAtomsRemove(
                 removes
                     .iter()
@@ -1136,15 +1145,18 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddStereoBond {
-                site,
-                ligands,
-                attributes,
-            } => vec![Self::StereoBondAdd {
-                site: site.clone(),
-                ligands: ligands.clone(),
-                attributes: StereoBondDsl::from_ir(attributes, &defaults.stereo_bond),
-            }],
+            Edit::AddStereoBond(addition) => {
+                let AddStereoBond {
+                    site,
+                    ligands,
+                    attributes,
+                } = addition.as_ref();
+                vec![Self::StereoBondAdd {
+                    site: site.clone(),
+                    ligands: ligands.clone(),
+                    attributes: StereoBondDsl::from_ir(attributes, &defaults.stereo_bond),
+                }]
+            }
             Edit::RemoveStereoBonds { removes } => vec![Self::StereoBondsRemove(
                 removes
                     .iter()
@@ -1189,10 +1201,10 @@ impl EditInput {
                 }]
             }
             Edit::AddMoleculeConstraint { constraint } => {
-                vec![Self::ConstraintAdd(constraint.clone())]
+                vec![Self::ConstraintAdd((**constraint).clone())]
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
-                vec![Self::ConstraintRemove(constraint.clone())]
+                vec![Self::ConstraintRemove((**constraint).clone())]
             }
         };
         Ok(inputs)
@@ -5107,21 +5119,27 @@ mod tests {
         "{:constraint {:add {:connected {}}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            constraint: Box::new(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            ),
         }]),
     )]
     #[case::constraint_remove(
         "{:constraint {:remove {:connected {}}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::RemoveMoleculeConstraint {
-            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            constraint: Box::new(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            ),
         }]),
     )]
     #[case::constraint_positional(
         "{:constraint {:add {:atom [2 {:valence 4}]}}}",
         MoleculeDefaults::new(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4_i64)).into(),
+            constraint: Box::new(
+                Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4_i64)).into(),
+            ),
         }]),
     )]
     fn test_edit_input_append_to(
@@ -5201,7 +5219,9 @@ mod tests {
     )]
     #[case::constraint_add(
         Edit::AddMoleculeConstraint {
-            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            constraint: Box::new(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
+            ),
         },
         MoleculeDefaults::new(),
         "{:constraint {:add {:connected {}}}}",
@@ -5278,10 +5298,10 @@ mod tests {
     )]
     #[case::aromatic_add(
         r#"{:aromatic-system {:add {:atoms [0 {:new 0} 2] :attrs "[1,1,1]"}}}"#,
-        Edit::AddAromaticSystem {
+        Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
             attributes: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
-        },
+        })),
     )]
     #[case::aromatic_remove(
         r#"{:aromatic-systems {:remove [{:id 0 :atoms [0 {:new 0}] :attrs "[1,1]"} {:id {:new 0} :atoms [{:new 1} 2] :attrs "[2,2]"}]}}"#,
@@ -5340,10 +5360,10 @@ mod tests {
     )]
     #[case::multicenter_add(
         r#"{:multicenter-bond {:add {:atoms [0 {:new 0} 2] :attrs "[1,1,0]"}}}"#,
-        Edit::AddMulticenterBond {
+        Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
             attributes: MulticenterBondForm::from_electrons(vec![1, 1, 0]),
-        },
+        })),
     )]
     #[case::multicenter_remove(
         r#"{:multicenter-bonds {:remove [{:id 0 :atoms [0 {:new 0}] :attrs "[1,1]"} {:id {:new 0} :atoms [{:new 1} 2] :attrs "[2,0]"}]}}"#,
@@ -5450,7 +5470,7 @@ mod tests {
     )]
     #[case::stereo_atom_add(
         r#"{:stereo-atom {:add {:site {:new 0} :ligands [0 [:h {:new 1}] [:lp 2] {:new 3}] :attrs :ccw}}}"#,
-        Edit::AddStereoAtom {
+        Edit::AddStereoAtom(Box::new(AddStereoAtom {
             site: AtomHandle::New(0),
             ligands: vec![
                 (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
@@ -5459,7 +5479,7 @@ mod tests {
                 (AtomHandle::New(3), StereoLigandKind::Atom),
             ],
             attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-        },
+        })),
     )]
     #[case::stereo_atom_remove(
         r#"{:stereo-atoms {:remove [{:id 0 :site 1 :ligands [2 [:h 3] [:lp {:new 0}] 4] :attrs :cw} {:id {:new 1} :site {:new 2} :ligands [5 6 7 8] :attrs :ccw}]}}"#,
@@ -5544,7 +5564,7 @@ mod tests {
     )]
     #[case::stereo_bond_add(
         r#"{:stereo-bond {:add {:site {:new 0} :ligands [0 [:h {:new 1}] [:lp 2] {:new 3}] :attrs :z}}}"#,
-        Edit::AddStereoBond {
+        Edit::AddStereoBond(Box::new(AddStereoBond {
             site: BondHandle::New(0),
             ligands: vec![
                 (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
@@ -5553,7 +5573,7 @@ mod tests {
                 (AtomHandle::New(3), StereoLigandKind::Atom),
             ],
             attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
-        },
+        })),
     )]
     #[case::stereo_bond_remove(
         r#"{:stereo-bonds {:remove [{:id 0 :site 1 :ligands [2 3 4 5] :attrs :e} {:id {:new 1} :site {:new 2} :ligands [[:h 6] 7 [:lp {:new 0}] 8] :attrs :z}]}}"#,
@@ -5663,10 +5683,10 @@ mod tests {
     #[rstest]
     #[case::aromatic_add(
         r#"{:aromatic-system {:add {:atoms [0 1] :attrs "[1,1]"}}}"#,
-        Edit::AddAromaticSystem {
+        Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
             attributes: AromaticSystemForm::from_electrons(vec![1, 1]).into_concrete(),
-        },
+        })),
     )]
     #[case::aromatic_remove(
         r#"{:aromatic-systems {:remove [{:id 0 :atoms [0 1] :attrs "[1,1]"}]}}"#,
@@ -5680,10 +5700,10 @@ mod tests {
     )]
     #[case::multicenter_add(
         r#"{:multicenter-bond {:add {:atoms [0 1] :attrs "[1,1]"}}}"#,
-        Edit::AddMulticenterBond {
+        Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
             attributes: MulticenterBondForm::from_electrons(vec![1, 1]).into_concrete(),
-        },
+        })),
     )]
     #[case::multicenter_remove(
         r#"{:multicenter-bonds {:remove [{:id 0 :atoms [0 1] :attrs "[1,1]"}]}}"#,

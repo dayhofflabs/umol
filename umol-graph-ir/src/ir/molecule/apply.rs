@@ -14,15 +14,17 @@ use crate::ir::constraint::Constraint;
 use crate::ir::correspondence::MoleculeCorrespondence;
 use crate::ir::dative::DativeBondEntry;
 use crate::ir::edit::{
-    AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
+    AddAromaticSystem, AddBond, AddMulticenterBond, AddStereoAtom, AddStereoBond,
+    AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
     AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
     CascadedConstraints, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit,
     MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
-    NoncovalentBondHandle, RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedConstraint,
-    RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays,
-    RemovedStereoAtom, RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle,
-    StereoBondFieldChange, StereoBondHandle, Undo,
+    NoncovalentBondHandle, RemovedAromaticSystem, RemovedAromaticSystems, RemovedAtom, RemovedBond,
+    RemovedConstraint, RemovedDativeBond, RemovedDativeBonds, RemovedMulticenterBond,
+    RemovedMulticenterBonds, RemovedNoncovalentBond, RemovedNoncovalentBonds, RemovedOverlays,
+    RemovedStereoAtom, RemovedStereoAtoms, RemovedStereoBond, RemovedStereoBonds, RemovedTopology,
+    StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle, Undo,
 };
 use crate::ir::entity::EntityKind;
 use crate::ir::id::{
@@ -679,7 +681,8 @@ impl Molecule {
                 }
                 Ok(())
             }
-            Edit::AddAromaticSystem { atoms, attributes } => {
+            Edit::AddAromaticSystem(addition) => {
+                let AddAromaticSystem { atoms, attributes } = *addition;
                 let resolved: Vec<AtomId> = atoms
                     .into_iter()
                     .map(|r| state.atom(r))
@@ -767,7 +770,8 @@ impl Molecule {
                 }
                 Ok(())
             }
-            Edit::AddMulticenterBond { atoms, attributes } => {
+            Edit::AddMulticenterBond(addition) => {
+                let AddMulticenterBond { atoms, attributes } = *addition;
                 let resolved: Vec<AtomId> = atoms
                     .into_iter()
                     .map(|r| state.atom(r))
@@ -923,11 +927,12 @@ impl Molecule {
                 }
                 Ok(())
             }
-            Edit::AddStereoAtom {
-                site,
-                ligands,
-                attributes,
-            } => {
+            Edit::AddStereoAtom(addition) => {
+                let AddStereoAtom {
+                    site,
+                    ligands,
+                    attributes,
+                } = *addition;
                 let site = state.atom(site)?;
                 let ligands = state.stereo_ligands(ligands)?;
                 let id = self.add_stereo_atom(site, &ligands, attributes);
@@ -1009,11 +1014,12 @@ impl Molecule {
                 }
                 Ok(())
             }
-            Edit::AddStereoBond {
-                site,
-                ligands,
-                attributes,
-            } => {
+            Edit::AddStereoBond(addition) => {
+                let AddStereoBond {
+                    site,
+                    ligands,
+                    attributes,
+                } = *addition;
                 let site = state.bond(site)?;
                 let ligands = state.stereo_ligands(ligands)?;
                 let id = self.add_stereo_bond(site, &ligands, attributes);
@@ -1299,12 +1305,12 @@ impl Molecule {
                 Ok(())
             }
             Edit::AddMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
+                let constraint = state.resolve_constraint(*constraint)?;
                 self.push_constraint(constraint);
                 Ok(())
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
+                let constraint = state.resolve_constraint(*constraint)?;
                 let positions = self
                     .constraints()
                     .as_slice()
@@ -1413,14 +1419,14 @@ impl Molecule {
                 let cascade = self.tracked_compact_constraints(&compaction);
                 state.compact(&compaction);
                 let undo_compaction = compaction.undo_compaction();
-                Ok(Undo::RestoreRemovedTopology {
+                Ok(Undo::RestoreRemovedTopology(Box::new(RemovedTopology {
                     atoms: removed_atoms,
                     bonds: removed_bonds,
                     overlays,
                     compaction,
                     undo_compaction,
                     cascade,
-                })
+                })))
             }
             Edit::ModifyAtomField { id, change } => {
                 let id = state.atom(id)?;
@@ -1562,11 +1568,13 @@ impl Molecule {
                 );
                 let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                Ok(Undo::RestoreRemovedDativeBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
+                Ok(Undo::RestoreRemovedDativeBonds(Box::new(
+                    RemovedDativeBonds {
+                        removed,
+                        undo_compaction: forward.undo_compaction(),
+                        cascade,
+                    },
+                )))
             }
             Edit::ReplaceDativeBondDonors { id, old, new } => {
                 let id = state.dative_bond(id)?;
@@ -1615,7 +1623,8 @@ impl Molecule {
                     change: change.inverse(),
                 })
             }
-            Edit::AddAromaticSystem { atoms, attributes } => {
+            Edit::AddAromaticSystem(addition) => {
+                let AddAromaticSystem { atoms, attributes } = *addition;
                 let resolved: Vec<AtomId> = atoms
                     .into_iter()
                     .map(|r| state.atom(r))
@@ -1623,11 +1632,13 @@ impl Molecule {
                 let id = self.add_aromatic_system(&resolved, attributes);
                 state.push_aromatic_system(id);
                 let view = self.aromatic_system(id);
-                Ok(Undo::RemoveAddedAromaticSystem(AddedAromaticSystem {
-                    id,
-                    atoms: view.atom_ids().collect(),
-                    attributes: view.attributes().clone(),
-                }))
+                Ok(Undo::RemoveAddedAromaticSystem(Box::new(
+                    AddedAromaticSystem {
+                        id,
+                        atoms: view.atom_ids().collect(),
+                        attributes: view.attributes().clone(),
+                    },
+                )))
             }
             Edit::RemoveAromaticSystems { removes } => {
                 let mut ids = Vec::with_capacity(removes.len());
@@ -1671,11 +1682,13 @@ impl Molecule {
                 );
                 let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                Ok(Undo::RestoreRemovedAromaticSystems {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
+                Ok(Undo::RestoreRemovedAromaticSystems(Box::new(
+                    RemovedAromaticSystems {
+                        removed,
+                        undo_compaction: forward.undo_compaction(),
+                        cascade,
+                    },
+                )))
             }
             Edit::ReplaceAromaticSystemAtoms { id, old, new } => {
                 let id = state.aromatic_system(id)?;
@@ -1724,7 +1737,8 @@ impl Molecule {
                     change: change.inverse(),
                 })
             }
-            Edit::AddMulticenterBond { atoms, attributes } => {
+            Edit::AddMulticenterBond(addition) => {
+                let AddMulticenterBond { atoms, attributes } = *addition;
                 let resolved: Vec<AtomId> = atoms
                     .into_iter()
                     .map(|r| state.atom(r))
@@ -1732,11 +1746,13 @@ impl Molecule {
                 let id = self.add_multicenter_bond(&resolved, attributes);
                 state.push_multicenter_bond(id);
                 let view = self.multicenter_bond(id);
-                Ok(Undo::RemoveAddedMulticenterBond(AddedMulticenterBond {
-                    id,
-                    atoms: view.atom_ids().collect(),
-                    attributes: view.attributes().clone(),
-                }))
+                Ok(Undo::RemoveAddedMulticenterBond(Box::new(
+                    AddedMulticenterBond {
+                        id,
+                        atoms: view.atom_ids().collect(),
+                        attributes: view.attributes().clone(),
+                    },
+                )))
             }
             Edit::RemoveMulticenterBonds { removes } => {
                 let mut ids = Vec::with_capacity(removes.len());
@@ -1780,11 +1796,13 @@ impl Molecule {
                 );
                 let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                Ok(Undo::RestoreRemovedMulticenterBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
+                Ok(Undo::RestoreRemovedMulticenterBonds(Box::new(
+                    RemovedMulticenterBonds {
+                        removed,
+                        undo_compaction: forward.undo_compaction(),
+                        cascade,
+                    },
+                )))
             }
             Edit::ReplaceMulticenterBondAtoms { id, old, new } => {
                 let id = state.multicenter_bond(id)?;
@@ -1886,11 +1904,13 @@ impl Molecule {
                 );
                 let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                Ok(Undo::RestoreRemovedNoncovalentBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
+                Ok(Undo::RestoreRemovedNoncovalentBonds(Box::new(
+                    RemovedNoncovalentBonds {
+                        removed,
+                        undo_compaction: forward.undo_compaction(),
+                        cascade,
+                    },
+                )))
             }
             Edit::ReplaceNoncovalentBondAtoms { id, old, new } => {
                 let id = state.noncovalent_bond(id)?;
@@ -1921,22 +1941,23 @@ impl Molecule {
                     change: change.inverse(),
                 })
             }
-            Edit::AddStereoAtom {
-                site,
-                ligands,
-                attributes,
-            } => {
+            Edit::AddStereoAtom(addition) => {
+                let AddStereoAtom {
+                    site,
+                    ligands,
+                    attributes,
+                } = *addition;
                 let site = state.atom(site)?;
                 let ligands = state.stereo_ligands(ligands)?;
                 let id = self.add_stereo_atom(site, &ligands, attributes);
                 state.push_stereo_atom(id);
                 let view = self.stereo_atom(id);
-                Ok(Undo::RemoveAddedStereoAtom(AddedStereoAtom {
+                Ok(Undo::RemoveAddedStereoAtom(Box::new(AddedStereoAtom {
                     id,
                     site,
                     ligands,
                     attributes: view.attributes().clone(),
-                }))
+                })))
             }
             Edit::RemoveStereoAtoms { removes } => {
                 let mut ids = Vec::with_capacity(removes.len());
@@ -1983,11 +2004,13 @@ impl Molecule {
                 );
                 let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                Ok(Undo::RestoreRemovedStereoAtoms {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
+                Ok(Undo::RestoreRemovedStereoAtoms(Box::new(
+                    RemovedStereoAtoms {
+                        removed,
+                        undo_compaction: forward.undo_compaction(),
+                        cascade,
+                    },
+                )))
             }
             Edit::ReplaceStereoAtomSite { id, old, new } => {
                 let id = state.stereo_atom(id)?;
@@ -2030,22 +2053,23 @@ impl Molecule {
                     change: change.inverse(),
                 })
             }
-            Edit::AddStereoBond {
-                site,
-                ligands,
-                attributes,
-            } => {
+            Edit::AddStereoBond(addition) => {
+                let AddStereoBond {
+                    site,
+                    ligands,
+                    attributes,
+                } = *addition;
                 let site = state.bond(site)?;
                 let ligands = state.stereo_ligands(ligands)?;
                 let id = self.add_stereo_bond(site, &ligands, attributes);
                 state.push_stereo_bond(id);
                 let view = self.stereo_bond(id);
-                Ok(Undo::RemoveAddedStereoBond(AddedStereoBond {
+                Ok(Undo::RemoveAddedStereoBond(Box::new(AddedStereoBond {
                     id,
                     site,
                     ligands,
                     attributes: view.attributes().clone(),
-                }))
+                })))
             }
             Edit::RemoveStereoBonds { removes } => {
                 let mut ids = Vec::with_capacity(removes.len());
@@ -2093,11 +2117,13 @@ impl Molecule {
                 );
                 let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                Ok(Undo::RestoreRemovedStereoBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
+                Ok(Undo::RestoreRemovedStereoBonds(Box::new(
+                    RemovedStereoBonds {
+                        removed,
+                        undo_compaction: forward.undo_compaction(),
+                        cascade,
+                    },
+                )))
             }
             Edit::ReplaceStereoBondSite { id, old, new } => {
                 let id = state.stereo_bond(id)?;
@@ -2375,13 +2401,13 @@ impl Molecule {
                 })
             }
             Edit::AddMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
+                let constraint = state.resolve_constraint(*constraint)?;
                 let position = self.constraints().len();
                 self.push_constraint(constraint);
                 Ok(Undo::RemoveAddedMoleculeConstraint { position })
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
+                let constraint = state.resolve_constraint(*constraint)?;
                 let positions = self
                     .constraints()
                     .as_slice()
@@ -2426,14 +2452,15 @@ impl Molecule {
                     .collect::<Vec<_>>();
                 self.remove_topology(&atoms, &bonds);
             }
-            Undo::RestoreRemovedTopology {
-                atoms,
-                bonds,
-                overlays,
-                undo_compaction,
-                cascade,
-                ..
-            } => {
+            Undo::RestoreRemovedTopology(removed) => {
+                let RemovedTopology {
+                    atoms,
+                    bonds,
+                    overlays,
+                    undo_compaction,
+                    cascade,
+                    ..
+                } = *removed;
                 let compaction = undo_compaction.forward();
                 self.restore_topology(compaction.graph(), atoms, bonds);
                 self.restore_dative_bond_topology_ids(compaction.graph());
@@ -2497,11 +2524,12 @@ impl Molecule {
                     self.remove_dative_bonds(&[added.id]);
                 }
             }
-            Undo::RestoreRemovedDativeBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
+            Undo::RestoreRemovedDativeBonds(removed) => {
+                let RemovedDativeBonds {
+                    removed,
+                    undo_compaction,
+                    cascade,
+                } = *removed;
                 self.restore_dative_bonds(
                     undo_compaction.forward().dative_bonds(),
                     removed
@@ -2526,11 +2554,12 @@ impl Molecule {
                     self.remove_aromatic_systems(&[added.id]);
                 }
             }
-            Undo::RestoreRemovedAromaticSystems {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
+            Undo::RestoreRemovedAromaticSystems(removed) => {
+                let RemovedAromaticSystems {
+                    removed,
+                    undo_compaction,
+                    cascade,
+                } = *removed;
                 self.restore_aromatic_systems(
                     undo_compaction.forward().aromatic_systems(),
                     removed
@@ -2550,11 +2579,12 @@ impl Molecule {
                     self.remove_multicenter_bonds(&[added.id]);
                 }
             }
-            Undo::RestoreRemovedMulticenterBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
+            Undo::RestoreRemovedMulticenterBonds(removed) => {
+                let RemovedMulticenterBonds {
+                    removed,
+                    undo_compaction,
+                    cascade,
+                } = *removed;
                 self.restore_multicenter_bonds(
                     undo_compaction.forward().multicenter_bonds(),
                     removed
@@ -2574,11 +2604,12 @@ impl Molecule {
                     self.remove_noncovalent_bonds(&[added.id]);
                 }
             }
-            Undo::RestoreRemovedNoncovalentBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
+            Undo::RestoreRemovedNoncovalentBonds(removed) => {
+                let RemovedNoncovalentBonds {
+                    removed,
+                    undo_compaction,
+                    cascade,
+                } = *removed;
                 self.restore_noncovalent_bonds(
                     undo_compaction.forward().noncovalent_bonds(),
                     removed
@@ -2598,11 +2629,12 @@ impl Molecule {
                     self.remove_stereo_atoms(&[added.id]);
                 }
             }
-            Undo::RestoreRemovedStereoAtoms {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
+            Undo::RestoreRemovedStereoAtoms(removed) => {
+                let RemovedStereoAtoms {
+                    removed,
+                    undo_compaction,
+                    cascade,
+                } = *removed;
                 self.restore_stereo_atoms(
                     undo_compaction.forward().stereo_atoms(),
                     removed
@@ -2627,11 +2659,12 @@ impl Molecule {
                     self.remove_stereo_bonds(&[added.id]);
                 }
             }
-            Undo::RestoreRemovedStereoBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
+            Undo::RestoreRemovedStereoBonds(removed) => {
+                let RemovedStereoBonds {
+                    removed,
+                    undo_compaction,
+                    cascade,
+                } = *removed;
                 self.restore_stereo_bonds(
                     undo_compaction.forward().stereo_bonds(),
                     removed
@@ -3255,23 +3288,23 @@ mod tests {
                 acceptor: AtomHandle::New(0),
                 attributes: DativeBondForm::from_order(1),
             },
-            Edit::AddAromaticSystem {
+            Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                 atoms: vec![
                     AtomHandle::New(0),
                     AtomHandle::Id(AtomId(1)),
                     AtomHandle::Id(AtomId(0)),
                 ],
                 attributes: AromaticSystemForm::from_electrons(vec![2, 1, 1]),
-            },
-            Edit::AddMulticenterBond {
+            })),
+            Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                 atoms: vec![AtomHandle::New(1), AtomHandle::New(0)],
                 attributes: MulticenterBondForm::from_electrons(vec![1, 2]),
-            },
+            })),
             Edit::AddNoncovalentBond {
                 atoms: [AtomHandle::New(1), AtomHandle::Id(AtomId(0))],
                 attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             },
-            Edit::AddStereoAtom {
+            Edit::AddStereoAtom(Box::new(AddStereoAtom {
                 site: AtomHandle::Id(AtomId(0)),
                 ligands: vec![
                     (AtomHandle::New(1), StereoLigandKind::Atom),
@@ -3283,8 +3316,8 @@ mod tests {
                     (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                 ],
                 attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-            },
-            Edit::AddStereoBond {
+            })),
+            Edit::AddStereoBond(Box::new(AddStereoBond {
                 site: BondHandle::New(0),
                 ligands: vec![
                     (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
@@ -3296,7 +3329,7 @@ mod tests {
                     (AtomHandle::New(0), StereoLigandKind::ImplicitHydrogen),
                 ],
                 attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-            },
+            })),
         ];
         let mut undos = Vec::new();
         for edit in edits {
@@ -3441,16 +3474,16 @@ mod tests {
                         acceptor: AtomId(2),
                         attributes: DativeBondForm::from_order(1)
                     }),
-                    Undo::RemoveAddedAromaticSystem(AddedAromaticSystem {
+                    Undo::RemoveAddedAromaticSystem(Box::new(AddedAromaticSystem {
                         id: AromaticSystemId(0),
                         atoms: vec![AtomId(2), AtomId(1), AtomId(0)],
                         attributes: AromaticSystemForm::from_electrons(vec![2, 1, 1])
-                    }),
-                    Undo::RemoveAddedMulticenterBond(AddedMulticenterBond {
+                    })),
+                    Undo::RemoveAddedMulticenterBond(Box::new(AddedMulticenterBond {
                         id: MulticenterBondId(0),
                         atoms: vec![AtomId(3), AtomId(2)],
                         attributes: MulticenterBondForm::from_electrons(vec![1, 2])
-                    }),
+                    })),
                     Undo::RemoveAddedNoncovalentBond(AddedNoncovalentBond {
                         id: NoncovalentBondId(0),
                         atoms: [AtomId(3), AtomId(0)],
@@ -3458,20 +3491,25 @@ mod tests {
                             NoncovalentBondKind::HydrogenBond
                         )
                     }),
-                    Undo::RemoveAddedStereoAtom(AddedStereoAtom {
+                    Undo::RemoveAddedStereoAtom(Box::new(AddedStereoAtom {
                         id: StereoAtomId(0),
                         site: AtomId(0),
                         ligands: stereo_atom_ligands,
                         attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32)
-                    }),
-                    Undo::RemoveAddedStereoBond(AddedStereoBond {
+                    })),
+                    Undo::RemoveAddedStereoBond(Box::new(AddedStereoBond {
                         id: StereoBondId(0),
                         site: BondId(1),
                         ligands: stereo_bond_ligands,
                         attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32)
-                    }),
+                    })),
                 ]
             );
+            let mut restored = molecule.clone();
+            for undo in undos.iter().rev().cloned() {
+                restored.apply_undo(undo);
+            }
+            assert_eq!(restored, initial);
             for undo in undos.into_iter().rev() {
                 molecule.apply_undo(undo);
             }
@@ -3745,11 +3783,11 @@ mod tests {
         );
         if journaled {
             let undo = undo.unwrap();
-            let Undo::RestoreRemovedTopology { cascade, .. } = &undo else {
+            let Undo::RestoreRemovedTopology(removed) = &undo else {
                 panic!("expected topology restoration");
             };
             assert_eq!(
-                cascade,
+                &removed.cascade,
                 &CascadedConstraints {
                     removed: vec![
                         RemovedConstraint {
@@ -3768,6 +3806,9 @@ mod tests {
                     }],
                 }
             );
+            let mut restored = molecule.clone();
+            restored.apply_undo(undo.clone());
+            assert_eq!(restored, before_removal);
             molecule.apply_undo(undo);
             assert_eq!(molecule, before_removal);
         }
@@ -4019,12 +4060,12 @@ mod tests {
         if journaled {
             let undo = undo.unwrap();
             let cascade = match &undo {
-                Undo::RestoreRemovedDativeBonds { cascade, .. }
-                | Undo::RestoreRemovedAromaticSystems { cascade, .. }
-                | Undo::RestoreRemovedMulticenterBonds { cascade, .. }
-                | Undo::RestoreRemovedNoncovalentBonds { cascade, .. }
-                | Undo::RestoreRemovedStereoAtoms { cascade, .. }
-                | Undo::RestoreRemovedStereoBonds { cascade, .. } => cascade,
+                Undo::RestoreRemovedDativeBonds(removed) => &removed.cascade,
+                Undo::RestoreRemovedAromaticSystems(removed) => &removed.cascade,
+                Undo::RestoreRemovedMulticenterBonds(removed) => &removed.cascade,
+                Undo::RestoreRemovedNoncovalentBonds(removed) => &removed.cascade,
+                Undo::RestoreRemovedStereoAtoms(removed) => &removed.cascade,
+                Undo::RestoreRemovedStereoBonds(removed) => &removed.cascade,
                 _ => panic!("expected overlay restoration"),
             };
             assert_eq!(
@@ -4047,6 +4088,9 @@ mod tests {
                     }],
                 }
             );
+            let mut restored = molecule.clone();
+            restored.apply_undo(undo.clone());
+            assert_eq!(restored, initial);
             molecule.apply_undo(undo);
             assert_eq!(molecule, initial);
         }
@@ -5351,7 +5395,7 @@ mod tests {
         let mut molecule = initial.clone();
         let mut state = ApplicationState::new(&molecule);
         let edit = Edit::AddMoleculeConstraint {
-            constraint: repeated.clone().into(),
+            constraint: Box::new(repeated.clone().into()),
         };
         let undo = if journaled {
             let undo = molecule.apply_edit_with_undo(edit, &mut state).unwrap();
@@ -5390,7 +5434,7 @@ mod tests {
         let mut molecule = initial.clone();
         let mut state = ApplicationState::new(&molecule);
         let edit = Edit::RemoveMoleculeConstraint {
-            constraint: removed.clone().into(),
+            constraint: Box::new(removed.clone().into()),
         };
         let undo = if journaled {
             let undo = molecule.apply_edit_with_undo(edit, &mut state).unwrap();
@@ -5425,19 +5469,31 @@ mod tests {
 
     #[rstest]
     #[case::missing(Edit::RemoveMoleculeConstraint {
-        constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::degree(2)).into(),
+        constraint: Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::degree(2)).into()),
     }, TransactionError::MissingEntry)]
     #[case::add_nested(Edit::AddMoleculeConstraint {
-        constraint: Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
-            Constraint::Or(vec![Constraint::Bond(BondId(2), BondConstraintForm::aromatic(true))]),
-        ]).into(),
+        constraint: Box::new(
+            Constraint::And(vec![
+                Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
+                Constraint::Or(vec![Constraint::Bond(
+                    BondId(2),
+                    BondConstraintForm::aromatic(true),
+                )]),
+            ])
+            .into(),
+        ),
     }, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
     #[case::remove_nested(Edit::RemoveMoleculeConstraint {
-        constraint: Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
-            Constraint::Or(vec![Constraint::Bond(BondId(2), BondConstraintForm::aromatic(true))]),
-        ]).into(),
+        constraint: Box::new(
+            Constraint::And(vec![
+                Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
+                Constraint::Or(vec![Constraint::Bond(
+                    BondId(2),
+                    BondConstraintForm::aromatic(true),
+                )]),
+            ])
+            .into(),
+        ),
     }, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
     fn test_molecule_apply_edit_molecule_constraint_error(
         mut removal_entries: MoleculeEntries,
@@ -5470,7 +5526,7 @@ mod tests {
         let added = molecule
             .apply_edit_with_undo(
                 Edit::AddMoleculeConstraint {
-                    constraint: repeated.clone().into(),
+                    constraint: Box::new(repeated.clone().into()),
                 },
                 &mut state,
             )
@@ -5492,7 +5548,7 @@ mod tests {
         let constraint = molecule
             .apply_edit_with_undo(
                 Edit::RemoveMoleculeConstraint {
-                    constraint: repeated.into(),
+                    constraint: Box::new(repeated.into()),
                 },
                 &mut state,
             )
@@ -5544,24 +5600,24 @@ mod tests {
                 acceptor: AtomHandle::Id(AtomId(3)),
                 attributes: DativeBondForm::from_order(1),
             },
-            Edit::AddAromaticSystem {
+            Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                 atoms: vec![AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
                 attributes: AromaticSystemForm::from_electrons(vec![1, 2]),
-            },
-            Edit::AddMulticenterBond {
+            })),
+            Edit::AddMulticenterBond(Box::new(AddMulticenterBond {
                 atoms: vec![AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
                 attributes: MulticenterBondForm::from_electrons(vec![1, 2]),
-            },
+            })),
             Edit::AddNoncovalentBond {
                 atoms: [AtomHandle::Id(AtomId(2)), AtomHandle::New(0)],
                 attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             },
-            Edit::AddStereoAtom {
+            Edit::AddStereoAtom(Box::new(AddStereoAtom {
                 site: AtomHandle::New(0),
                 ligands: vec![(AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom)],
                 attributes: StereoAtomForm::default(),
-            },
-            Edit::AddStereoBond {
+            })),
+            Edit::AddStereoBond(Box::new(AddStereoBond {
                 site: BondHandle::New(0),
                 ligands: vec![
                     (
@@ -5573,13 +5629,15 @@ mod tests {
                     (AtomHandle::New(0), StereoLigandKind::LonePair),
                 ],
                 attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-            },
+            })),
             Edit::AddMoleculeConstraint {
-                constraint: ConstraintEdit::new(
-                    Constraint::Atom(AtomId(4), AtomConstraintForm::degree(1)),
-                    |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
-                )
-                .unwrap(),
+                constraint: Box::new(
+                    ConstraintEdit::new(
+                        Constraint::Atom(AtomId(4), AtomConstraintForm::degree(1)),
+                        |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
+                    )
+                    .unwrap(),
+                ),
             },
         ] {
             journal.push(
@@ -5651,11 +5709,11 @@ mod tests {
         bonds: vec![AddedBond { id: BondId(0), endpoints: [AtomId(0), AtomId(1)], attributes: BondForm::default() }],
     })]
     #[case::dative_bond(Undo::RemoveAddedDativeBond(AddedDativeBond { id: DativeBondId(0), donors: vec![], acceptor: AtomId(0), attributes: DativeBondForm::default() }))]
-    #[case::aromatic_system(Undo::RemoveAddedAromaticSystem(AddedAromaticSystem { id: AromaticSystemId(0), atoms: vec![], attributes: AromaticSystemForm::default() }))]
-    #[case::multicenter_bond(Undo::RemoveAddedMulticenterBond(AddedMulticenterBond { id: MulticenterBondId(0), atoms: vec![], attributes: MulticenterBondForm::default() }))]
+    #[case::aromatic_system(Undo::RemoveAddedAromaticSystem(Box::new(AddedAromaticSystem { id: AromaticSystemId(0), atoms: vec![], attributes: AromaticSystemForm::default() })))]
+    #[case::multicenter_bond(Undo::RemoveAddedMulticenterBond(Box::new(AddedMulticenterBond { id: MulticenterBondId(0), atoms: vec![], attributes: MulticenterBondForm::default() })))]
     #[case::noncovalent_bond(Undo::RemoveAddedNoncovalentBond(AddedNoncovalentBond { id: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)], attributes: NoncovalentBondForm::default() }))]
-    #[case::stereo_atom(Undo::RemoveAddedStereoAtom(AddedStereoAtom { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], attributes: StereoAtomForm::default() }))]
-    #[case::stereo_bond(Undo::RemoveAddedStereoBond(AddedStereoBond { id: StereoBondId(0), site: BondId(0), ligands: vec![], attributes: StereoBondForm::default() }))]
+    #[case::stereo_atom(Undo::RemoveAddedStereoAtom(Box::new(AddedStereoAtom { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], attributes: StereoAtomForm::default() })))]
+    #[case::stereo_bond(Undo::RemoveAddedStereoBond(Box::new(AddedStereoBond { id: StereoBondId(0), site: BondId(0), ligands: vec![], attributes: StereoBondForm::default() })))]
     fn test_molecule_apply_undo_added_entry_manipulated(#[case] undo: Undo) {
         Molecule::default().apply_undo(undo);
     }

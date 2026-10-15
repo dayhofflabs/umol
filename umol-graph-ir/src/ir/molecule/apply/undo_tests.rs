@@ -14,8 +14,9 @@ use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{
     AddedAtom, AromaticSystemFieldChange, AtomFieldChange, AtomHandle, BondFieldChange,
     CascadedConstraints, DativeBondFieldChange, Edit, Edits, MulticenterBondFieldChange,
-    NoncovalentBondFieldChange, RemovedAromaticSystem, RemovedAtom, RemovedConstraint,
-    RemovedOverlays, StereoAtomFieldChange, StereoBondFieldChange, Undo,
+    NoncovalentBondFieldChange, RemovedAromaticSystem, RemovedAromaticSystems, RemovedAtom,
+    RemovedConstraint, RemovedOverlays, RemovedTopology, StereoAtomFieldChange,
+    StereoBondFieldChange, Undo,
 };
 use crate::ir::entity::EntityKind;
 use crate::ir::id::{
@@ -265,15 +266,17 @@ fn test_molecule_apply_undo_added_topology_duplicate(mut one_atom: Molecule) {
 
 #[rstest]
 fn test_molecule_apply_undo_reconstruction_entry(mut empty: Molecule) {
-    empty.apply_undo(Undo::RestoreRemovedAromaticSystems {
-        removed: vec![RemovedAromaticSystem {
-            id: AromaticSystemId(1),
-            atoms: Vec::new(),
-            attributes: AromaticSystemForm::default(),
-        }],
-        undo_compaction: MoleculeCompaction::empty().undo_compaction(),
-        cascade: CascadedConstraints::default(),
-    });
+    empty.apply_undo(Undo::RestoreRemovedAromaticSystems(Box::new(
+        RemovedAromaticSystems {
+            removed: vec![RemovedAromaticSystem {
+                id: AromaticSystemId(1),
+                atoms: Vec::new(),
+                attributes: AromaticSystemForm::default(),
+            }],
+            undo_compaction: MoleculeCompaction::empty().undo_compaction(),
+            cascade: CascadedConstraints::default(),
+        },
+    )));
 }
 
 #[rstest]
@@ -299,20 +302,20 @@ fn test_molecule_apply_undo_compaction_counts(mut one_atom: Molecule, #[case] co
         Compaction::identity(counts[6]),
         Compaction::identity(counts[7]),
     );
-    one_atom.apply_undo(Undo::RestoreRemovedTopology {
+    one_atom.apply_undo(Undo::RestoreRemovedTopology(Box::new(RemovedTopology {
         atoms: Vec::new(),
         bonds: Vec::new(),
         overlays: RemovedOverlays::default(),
         undo_compaction: compaction.undo_compaction(),
         compaction,
         cascade: CascadedConstraints::default(),
-    });
+    })));
 }
 
 #[rstest]
 fn test_molecule_apply_undo_compaction_dimension(mut one_atom: Molecule) {
     let compaction = MoleculeCompaction::empty();
-    one_atom.apply_undo(Undo::RestoreRemovedTopology {
+    one_atom.apply_undo(Undo::RestoreRemovedTopology(Box::new(RemovedTopology {
         atoms: vec![RemovedAtom {
             id: AtomId(0),
             attributes: AtomForm::from_element(Element::N),
@@ -322,7 +325,7 @@ fn test_molecule_apply_undo_compaction_dimension(mut one_atom: Molecule) {
         undo_compaction: compaction.undo_compaction(),
         compaction,
         cascade: CascadedConstraints::default(),
-    });
+    })));
 }
 
 #[rstest]

@@ -1218,7 +1218,8 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, BondId, Edit, Edits, NumForm, RingConfig, UnpairedElectronsForm,
+        AddAromaticSystem, AromaticSystemId, BondId, Edit, Edits, NumForm, RingConfig,
+        UnpairedElectronsForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1346,12 +1347,12 @@ mod tests {
             )
             .plan_resolve(&benzene),
             Ok(Solution::Determined(Edits::from_iter([
-                Edit::AddAromaticSystem {
+                Edit::AddAromaticSystem(Box::new(AddAromaticSystem {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
                     attributes: AromaticSystemForm::from_electrons(vec![1; 6])
                         .with_charge(0)
                         .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
-                },
+                })),
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: Some(AtomConstraintForm::AromaticValence(
