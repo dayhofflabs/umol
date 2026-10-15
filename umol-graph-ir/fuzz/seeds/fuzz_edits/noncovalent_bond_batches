@@ -1,0 +1,4 @@
+[
+ {:noncovalent-bond {:modify-kind [[0 {:expect "Hbd" :update "*"}] [{:new 0} {:expect "*" :update "Hbd"}]]}}
+ {:noncovalent-bond {:modify-constraints {:key :intramolecular :changes [[0 {:expect nil :update {:intramolecular true}}] [0 {:expect {:intramolecular true} :update nil}]]}}}
+]

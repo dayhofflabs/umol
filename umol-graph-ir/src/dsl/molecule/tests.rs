@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -40,36 +41,6 @@ fn populated_molecule_dsl() -> MoleculeDsl {
     }"#
     .parse()
     .unwrap()
-}
-
-/// Every `fuzz_molecule` seed must parse (tree and streaming) — guards the seed corpus against
-/// rot as the molecule DSL evolves.
-#[rstest]
-fn test_fuzz_molecule_seeds_valid() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_molecule");
-    let mut count = 0;
-    let mut failures: Vec<String> = Vec::new();
-    for entry in fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let data = fs::read_to_string(&path).unwrap();
-        if let Err(e) = MoleculeDsl::from_edn_str(&data) {
-            failures.push(format!("{name}: stream: {e:?}"));
-        }
-        let tree = read_string(&data)
-            .ok()
-            .and_then(|edn| MoleculeDsl::from_edn(&edn).ok());
-        if tree.is_none() {
-            failures.push(format!("{name}: tree parse failed"));
-        }
-        count += 1;
-    }
-    assert!(
-        failures.is_empty(),
-        "invalid seeds:\n{}",
-        failures.join("\n")
-    );
-    assert_eq!(count, 28);
 }
 
 #[rstest]
@@ -305,6 +276,15 @@ fn test_molecule_dsl_edn_roundtrip_with_keywords_and_aliases() {
 fn test_molecule_dsl_from_edn_str_from_edn_parity(#[case] source: &str) {
     let via_str = MoleculeDsl::from_edn_str(source).unwrap();
     let tree = read_string(source).unwrap();
+    let via_tree = MoleculeDsl::from_edn(&tree).unwrap();
+    assert_eq!(via_str, via_tree);
+}
+
+#[rstest]
+fn test_molecule_dsl_from_edn_str_seeds(#[files("fuzz/seeds/fuzz_molecule/*")] path: PathBuf) {
+    let source = fs::read_to_string(path).unwrap();
+    let via_str = MoleculeDsl::from_edn_str(&source).unwrap();
+    let tree = read_string(&source).unwrap();
     let via_tree = MoleculeDsl::from_edn(&tree).unwrap();
     assert_eq!(via_str, via_tree);
 }

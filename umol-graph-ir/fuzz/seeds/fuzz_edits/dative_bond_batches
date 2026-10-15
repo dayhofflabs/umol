@@ -1,0 +1,4 @@
+[
+ {:dative-bond {:modify-order [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}
+ {:dative-bond {:modify-constraints {:key :aromatic :changes [[0 {:expect nil :update {:aromatic true}}] [0 {:expect {:aromatic true} :update nil}]]}}}
+]

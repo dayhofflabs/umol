@@ -1,0 +1,4 @@
+[{:dative-bond {:replace-donors [0 {:expect [2 1] :update [1 {:new 0}]}]}}
+ {:aromatic-system {:replace-atoms [0 {:expect [3 1 2] :update [2 3 {:new 0}]}]}}
+ {:stereo-atom {:replace-ligands [0 {:expect [2 [:h 0] [:lp 0] {:new 1}] :update [{:new 1} [:h 0] [:lp 0] 2]}]}}
+ {:stereo-bond {:replace-site [0 {:expect 1 :update {:new 0}}]}}]

@@ -4394,7 +4394,7 @@ and existing and batched DSL export; raw mutation remains infallible.
 The S2g1 time/allocation comparison against S0a must be recorded and reviewed,
 with any regression's cause and disposition stated before this gate closes.
 
-#### S2i — Edits DSL fuzz target
+#### S2i — Edits DSL fuzz target (done)
 
 **Modules:** umol-graph-ir fuzz and scripts/run-fuzz.sh. **Additive, green.**
 [dep: S2a–S2h]
@@ -4407,17 +4407,40 @@ raw payloads. EditsDsl has one parser, the tree path behind from_edn_str, so the
 is no streaming parity to check. Register it in the fuzz Cargo.toml and the
 GRAPH_IR_TARGETS list in scripts/run-fuzz.sh before S2j removes fuzz_constraints.
 
-#### S2j — Remove fuzz_constraints
+**Implemented — 2026-10-15.** fuzz_edits parses arbitrary UTF-8 input, converts
+accepted EditsDsl values to Edits, renders them through EditsDsl, and requires the
+output to parse. Twelve tracked seeds cover field/key batches for all eight entity
+kinds, shared stereo kinds and keys, known-kind empty batches, topology edits,
+relation replacements, and molecule constraints. Seed tests require successful
+parsing and exact Edits roundtrips. The graph-IR fuzz runner now supplies each
+target's tracked seeds alongside its writable corpus.
+
+#### S2j — Remove fuzz_constraints (done)
 
 **Modules:** umol-graph-ir fuzz and scripts/run-fuzz.sh. **Removal, green.**
 [dep: S2i]
 
 fuzz_constraints parses ConstraintDsl and ConstraintsDsl through the tree path
-only; fuzz_molecule already reaches both constraint parsers and checks their
-streaming and tree paths against each other. Remove the target, its Cargo.toml
+only; fuzz_molecule already reaches these constraints through both molecule
+parsing paths and checks streaming/tree agreement. Remove the target, its Cargo.toml
 entry, its corpus and artifacts, and its entry in scripts/run-fuzz.sh. Carry its
 seeds over to fuzz_molecule, each wrapped in a molecule that places the
 constraint where it occurs.
+
+**Implemented — 2026-10-15.** Removed the target, registration, seed-validity test,
+and local corpus/artifact directories. All 62 tracked constraint seeds moved into
+fuzz_molecule with the reference context required by their constraints; the
+original constraint payloads are unchanged. The molecule seed test now checks
+successful parsing and exact streaming/tree agreement for all 90 tracked inputs.
+
+**S2i/S2j verification — 2026-10-15.** Instrumented fuzz runs with 30-second
+budgets passed: fuzz_edits executed 335,687 inputs and fuzz_molecule 325,847,
+each finishing in 31 seconds. The 105 focused seed-test cases passed, as did
+strict Clippy for the edits fuzz target and the graph-IR library/tests with
+proptest enabled. Changed Rust files pass nightly formatting checks; the runner
+passes bash syntax checking, target/seed registration checks, and git diff --check.
+The workspace/Python gate recorded under S2h was not repeated for these harness
+and seed changes. Evidence is in scratch/181-s2ij/.
 
 ### S3 — Resolver and projector emission
 

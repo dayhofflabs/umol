@@ -1,0 +1,1 @@
+{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,0,1]"}] :constraints [{:multicenter-bond-contains-all [0 [0 1]]}]}

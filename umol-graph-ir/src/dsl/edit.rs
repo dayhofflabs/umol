@@ -6824,6 +6824,9 @@ fn read_edn_stereo_bond_change<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
@@ -6858,6 +6861,18 @@ mod tests {
         TopicityForm, TopicityRelationForm, TransactionError,
     };
     use crate::mol_dsl;
+
+    #[rstest]
+    fn test_edits_dsl_from_edn_str_seeds(#[files("fuzz/seeds/fuzz_edits/*")] path: PathBuf) {
+        let source = fs::read_to_string(path).unwrap();
+        let defaults = MoleculeDefaults::new();
+        let edits = EditsDsl::from_edn_str(&source).unwrap().into_ir(&defaults);
+        let rendered = EditsDsl::from_ir(&edits, &defaults).to_string();
+        let reparsed = EditsDsl::from_edn_str(&rendered)
+            .unwrap()
+            .into_ir(&defaults);
+        assert_eq!(reparsed, edits);
+    }
 
     #[rstest]
     #[case::empty("[]", MoleculeDefaults::new(), Edits::new())]
