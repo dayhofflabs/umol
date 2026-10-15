@@ -584,10 +584,10 @@ def _counts_strict_model():
 
 
 @pytest.mark.parametrize(
-    ("method", "consuming"),
+    ("method", "copying"),
     [("resolve_with_report", True), ("resolve_into_with_report", False)],
 )
-def test_molecule_resolve_with_report(method, consuming):
+def test_molecule_resolve_with_report(method, copying):
     molecule = Molecule.parse('{:atoms ["C#c0"]}')
 
     solution, report = getattr(molecule, method)(
@@ -601,15 +601,14 @@ def test_molecule_resolve_with_report(method, consuming):
 
     assert isinstance(solution, Solution.Determined)
     expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
-    if consuming:
+    if copying:
         assert solution.molecule == expected
     else:
         assert solution.molecule is None
         assert molecule == expected
     assert report.tie_breaks == [0]
-    if consuming:
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            repr(molecule)
+    if copying:
+        assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
 def test_molecule_resolve_with_report_underdetermined():
@@ -625,8 +624,7 @@ def test_molecule_resolve_with_report_underdetermined():
         AtomForm.parse("C#c0#h3#n0#u#s2#v0#a!"),
         AtomForm.parse("C#c0#h4#n0#u0#s#v0#a!"),
     ]
-    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-        repr(molecule)
+    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
 def test_molecule_resolve_with_report_contradiction():
@@ -637,8 +635,7 @@ def test_molecule_resolve_with_report_contradiction():
     assert isinstance(solution, Solution.Contradictory)
     assert str(solution.contradiction) == "no matching valence state"
     assert report is None
-    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-        repr(molecule)
+    assert molecule == Molecule.parse('{:atoms ["C#c0#h5"]}')
 
 
 def test_molecule_resolve_with_report_default_model():
@@ -1413,41 +1410,6 @@ def test_molecule_apply_identity(method):
     assert result == Molecule.parse('{:atoms ["C#c1"]}')
 
 
-@pytest.mark.parametrize("method", ["resolve", "resolve_with_report"])
-def test_molecule_consumption(method):
-    molecule = Molecule.parse('{:atoms ["C"]}')
-    alias = molecule
-    copied = molecule.copy()
-    getattr(molecule, method)()
-
-    for access in (
-        lambda: repr(alias), lambda: str(alias), lambda: alias.render(),
-        lambda: alias.to_smiles(),
-        lambda: alias.copy(), lambda: alias == copied, lambda: copied == alias,
-        lambda: alias == alias, lambda: alias.edit(),
-        lambda: alias.apply(Edits()), lambda: alias.tracked_apply(Edits()),
-        lambda: alias.transact([]), lambda: alias.tracked_transact([]),
-        lambda: alias.combine(copied), lambda: copied.combine(alias),
-        lambda: Molecule.combine_all([copied, alias]),
-        lambda: alias.combine_from(copied), lambda: copied.combine_from(alias),
-        lambda: alias.split(), lambda: alias.tracked_split(),
-        lambda: alias.canonicalize(), lambda: alias.tracked_canonicalize(),
-        lambda: alias.canonical_eq(copied), lambda: copied.canonical_eq(alias),
-        lambda: alias.resolve(), lambda: alias.pattern_fingerprint(),
-        lambda: alias.substructure_matches(copied),
-        lambda: copied.substructure_matches(alias),
-        lambda: alias.constraints,
-    ):
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            access()
-    for name in (
-        "atoms", "bonds", "dative_bonds", "aromatic_systems", "multicenter_bonds",
-        "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
-    ):
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            getattr(alias, name)
-
-
 @pytest.mark.parametrize("method", ["apply", "tracked_apply"])
 @pytest.mark.parametrize(("kind", "error", "message"), [
     ("application", TransactionError, "atom handle 7"),
@@ -1498,19 +1460,6 @@ def test_molecule_apply_consumed_edits(method, editor):
     else:
         assert receiver == Molecule.parse('{:atoms ["C"]}')
     assert view.id == 0
-
-
-@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
-def test_molecule_apply_consumed(method):
-    molecule = Molecule.from_smiles("C")
-    molecule.resolve()
-    edits = Edits()
-    edits.add_atom(AtomForm.parse("N"))
-    expected = list(edits)
-
-    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-        getattr(molecule, method)(edits)
-    assert list(edits) == expected
 
 
 def test_molecule_tracked_apply():

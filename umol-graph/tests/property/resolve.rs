@@ -58,9 +58,9 @@ use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
     AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
     BooleanForm, CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm,
-    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, StereoAtomForm,
-    StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
-    TryIntoIr, UnpairedElectronsForm,
+    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, RollbackMethod,
+    StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_io::ctfile::parser::parse_mol_to_ir;
@@ -277,7 +277,7 @@ proptest! {
         let composite = Resolver::new(&model);
         prop_assert_eq!(composite.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
         let mut borrowed = molecule.clone();
-        prop_assert_eq!(composite.resolve_into(&mut borrowed), Ok(Solution::Determined(())));
+        prop_assert_eq!(composite.resolve_into(&mut borrowed, RollbackMethod::Journal), Ok(Solution::Determined(())));
         prop_assert_eq!(borrowed, expected.clone());
         prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
@@ -598,7 +598,7 @@ proptest! {
         }, ..Default::default()};
         let resolver = Resolver::new(&model);
         prop_assert_eq!(resolver.resolve(input.clone()), Ok(Solution::Determined(original.clone())));
-        prop_assert_eq!(resolver.resolve_into(&mut input), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.resolve_into(&mut input, RollbackMethod::Journal), Ok(Solution::Determined(())));
         prop_assert_eq!(input, original);
     }
 
@@ -652,7 +652,7 @@ proptest! {
                 };
                 let resolver = Resolver::new(&model);
                 let mut molecule = input.clone();
-                prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
+                prop_assert_eq!(resolver.resolve_into(&mut molecule, RollbackMethod::Journal), Ok(Solution::Determined(())));
                 prop_assert_eq!(&molecule, &source);
             }
         }

@@ -204,18 +204,23 @@ InvalidStructureError.
 
 ### Resolution
 
-Molecule.resolve consumes its receiver and returns Solution. Only Determined contains a molecule;
-Underdetermined is payload-free and Contradictory contains its diagnostic. Execution errors raise
-RuntimeError. Every outcome leaves the original Python object consumed.
+Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
+molecule; Underdetermined is payload-free and Contradictory contains its diagnostic. Planning errors
+raise RuntimeError. Every outcome preserves the source and its existing views.
 
 Molecule.resolve_into mutates the receiver only on Determined, whose molecule field is None.
 Underdetermined, Contradictory, and execution errors restore the receiver under Rust's transaction
 contract. Existing views are invalidated when execution starts, even if the molecule is restored.
+Its keyword-only rollback_method selects RollbackMethod.Clone (the default) or
+RollbackMethod.Journal with the same recovery guarantee. The selector covers all phases in one
+transaction.
 
 Molecule.resolve_with_report and resolve_into_with_report return `(solution, report)`. The report
 is present on Determined and Underdetermined, and None on Contradictory. Solution itself has no
 report field. Returning a separate report preserves one Python Solution variant hierarchy for
 the Rust methods' different payload types. Ordinary resolution does not construct a report.
+resolve_with_report preserves the source and its views; resolve_into_with_report follows
+resolve_into's mutation, invalidation, and rollback selection contract.
 
 ### Operation-issued iterator
 

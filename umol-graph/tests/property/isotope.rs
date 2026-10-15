@@ -11,7 +11,7 @@ use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, IsotopeResolver, ResolveConfig, Resolver};
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
-    UnpairedElectronsForm,
+    RollbackMethod, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -57,7 +57,7 @@ proptest! {
                 for isotope in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
                     let resolver = Resolver::with_config(&model, ResolveConfig { isotope, ..Default::default() });
                     let mut molecule = source.clone();
-                    let result = resolver.resolve_into(&mut molecule).unwrap();
+                    let result = resolver.resolve_into(&mut molecule, RollbackMethod::Journal).unwrap();
                     if isotope == IsotopePolicy::Strict && omitted {
                         prop_assert_eq!(&result, &Solution::Underdetermined(()));
                         prop_assert_eq!(&molecule, &source);
@@ -66,7 +66,7 @@ proptest! {
                         prop_assert_eq!(&molecule, &expected);
                     }
                     let once = molecule.clone();
-                    prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(result));
+                    prop_assert_eq!(resolver.resolve_into(&mut molecule, RollbackMethod::Journal), Ok(result));
                     prop_assert_eq!(molecule, once);
                 }
             }

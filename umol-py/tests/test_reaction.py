@@ -17,7 +17,6 @@ from umol import (
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
     ContradictionError,
-    ConsumedError,
     Edits,
     Delta,
     Deltas,
@@ -340,25 +339,21 @@ def test_reaction_lhs_edit(method):
     assert product == Molecule.parse('{:atoms ["C#c1"]}')
 
 
-def test_reaction_lhs_consumption():
-    reaction = Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
+@pytest.mark.parametrize("method", ["resolve", "resolve_with_report"])
+def test_reaction_lhs_resolve(method):
+    reaction = Reaction(lhs=Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}'))
     lhs = reaction.lhs
+    view = lhs.atoms[0]
     expected = lhs.copy()
-    lhs.resolve()
+    result = getattr(lhs, method)()
+    solution = result[0] if method == "resolve_with_report" else result
 
     assert reaction.lhs is lhs
-    for access in (
-        lambda: repr(reaction),
-        lambda: reaction.render(),
-        lambda: reaction == reaction,
-        lambda: reaction.apply(Molecule()),
-        lambda: Reaction(lhs=lhs),
-    ):
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            access()
-
-    reaction.lhs = expected
     assert reaction == Reaction(lhs=expected)
+    assert solution.molecule == expected
+    solution.molecule.atoms[0].charge = 1
+    assert reaction == Reaction(lhs=expected)
+    assert view.charge == NumForm.Lit(0)
 
 
 def test_reaction_component_replacement():

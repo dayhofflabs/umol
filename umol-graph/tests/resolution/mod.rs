@@ -20,7 +20,7 @@ use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph::ops::valence::{ResolveReport, ValenceTable};
 use umol_graph::ops::validate::ConnectivityModel;
 use umol_graph_ir::dsl::{AtomDefaults, AtomDsl, MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
-use umol_graph_ir::ir::{FromIr, IntoIr, Molecule};
+use umol_graph_ir::ir::{FromIr, IntoIr, Molecule, RollbackMethod};
 use umol_utils::solution::Solution;
 
 #[derive(FromEdn)]
@@ -78,10 +78,10 @@ fn resolve_test(
         },
     );
     let mut molecule = source.clone();
-    let result = resolver.resolve_into_with_report(&mut molecule);
+    let result = resolver.resolve_into_with_report(&mut molecule, RollbackMethod::Journal);
     let mut without_report = source.clone();
     assert_eq!(
-        resolver.resolve_into(&mut without_report),
+        resolver.resolve_into(&mut without_report, RollbackMethod::Journal),
         result.clone().map(|solution| solution.map(|_| ()))
     );
     assert_eq!(without_report, molecule);

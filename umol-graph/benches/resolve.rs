@@ -36,7 +36,7 @@ use umol_graph::ops::valence::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm, AtomId,
-    ElementForm, Molecule, NumForm, Reframe, TryIntoIr, UnpairedElectronsForm,
+    ElementForm, Molecule, NumForm, Reframe, RollbackMethod, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, mol_dsl};
 use umol_io::smiles::Smiles;
@@ -101,7 +101,9 @@ fn bench_resolve(c: &mut Criterion) {
         let mut checked = molecule.clone();
         assert!(
             matches!(
-                resolver.resolve_into(&mut checked).unwrap(),
+                resolver
+                    .resolve_into(&mut checked, RollbackMethod::Journal)
+                    .unwrap(),
                 Solution::Determined(_)
             ),
             "{name}"
@@ -109,7 +111,11 @@ fn bench_resolve(c: &mut Criterion) {
         group.bench_function(name, |b| {
             b.iter_batched_ref(
                 || molecule.clone(),
-                |molecule| resolver.resolve_into(black_box(molecule)).unwrap(),
+                |molecule| {
+                    resolver
+                        .resolve_into(black_box(molecule), RollbackMethod::Journal)
+                        .unwrap()
+                },
                 BatchSize::SmallInput,
             );
         });
@@ -154,7 +160,9 @@ fn bench_valence(c: &mut Criterion) {
         }
         let mut checked = molecule.clone();
         assert!(matches!(
-            resolver.resolve_into(&mut checked).unwrap(),
+            resolver
+                .resolve_into(&mut checked, RollbackMethod::Journal)
+                .unwrap(),
             Solution::Determined(_)
         ));
         group.bench_function(BenchmarkId::new("counts_admit", name), |b| {
@@ -174,7 +182,11 @@ fn bench_valence(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("typing_resolve", name), |b| {
             b.iter_batched_ref(
                 || molecule.clone(),
-                |molecule| resolver.resolve_into(black_box(molecule)).unwrap(),
+                |molecule| {
+                    resolver
+                        .resolve_into(black_box(molecule), RollbackMethod::Journal)
+                        .unwrap()
+                },
                 BatchSize::SmallInput,
             );
         });
@@ -523,7 +535,11 @@ fn bench_project(c: &mut Criterion) {
                 let source = ingest_smiles(input).unwrap();
                 let mut checked = source.clone();
                 assert_eq!(
-                    resolver.project_into(&mut checked, ProjectFlags::all()),
+                    resolver.project_into(
+                        &mut checked,
+                        ProjectFlags::all(),
+                        RollbackMethod::Journal
+                    ),
                     Ok(Solution::Determined(()))
                 );
                 assert!(
@@ -541,7 +557,11 @@ fn bench_project(c: &mut Criterion) {
                             || source.clone(),
                             |molecule| {
                                 resolver
-                                    .project_into(black_box(molecule), ProjectFlags::all())
+                                    .project_into(
+                                        black_box(molecule),
+                                        ProjectFlags::all(),
+                                        RollbackMethod::Journal,
+                                    )
                                     .unwrap()
                             },
                             BatchSize::SmallInput,
@@ -574,12 +594,14 @@ fn bench_resolve_project_ownership(c: &mut Criterion) {
         let projected = ingest_smiles(smiles).unwrap();
         let mut checked = raw.clone();
         assert!(matches!(
-            resolver.resolve_into(&mut checked).unwrap(),
+            resolver
+                .resolve_into(&mut checked, RollbackMethod::Journal)
+                .unwrap(),
             Solution::Determined(_)
         ));
         let mut checked = projected.clone();
         assert_eq!(
-            resolver.project_into(&mut checked, ProjectFlags::all()),
+            resolver.project_into(&mut checked, ProjectFlags::all(), RollbackMethod::Journal),
             Ok(Solution::Determined(()))
         );
         for (ownership, unique) in [("unique", true), ("shared", false)] {
@@ -595,7 +617,13 @@ fn bench_resolve_project_ownership(c: &mut Criterion) {
                                 raw.clone()
                             }
                         },
-                        |molecule| black_box(resolver.resolve_into(molecule).unwrap()),
+                        |molecule| {
+                            black_box(
+                                resolver
+                                    .resolve_into(molecule, RollbackMethod::Journal)
+                                    .unwrap(),
+                            )
+                        },
                         BatchSize::SmallInput,
                     );
                 },
@@ -614,7 +642,11 @@ fn bench_resolve_project_ownership(c: &mut Criterion) {
                         |molecule| {
                             black_box(
                                 resolver
-                                    .project_into(molecule, ProjectFlags::all())
+                                    .project_into(
+                                        molecule,
+                                        ProjectFlags::all(),
+                                        RollbackMethod::Journal,
+                                    )
                                     .unwrap(),
                             )
                         },

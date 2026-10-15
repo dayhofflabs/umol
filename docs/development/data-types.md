@@ -910,6 +910,9 @@ copy or journal. Only a determined result returns a molecule; underdetermination
 and planning errors drop it. Resolver::resolve_into and project_into borrow mutably and use a
 transaction: only a determined result retains changes. Every other outcome restores the molecule
 under the transaction's equivalence. Intermediate probe and final finish/commit check integrity.
+All three composite in-place methods take an explicit RollbackMethod as their last argument,
+after ProjectFlags where present. One transaction uses that method across all phases; Clone
+uses one working copy and Journal retains undo data. Neither path adds per-phase recovery scopes.
 
 Resolver::resolve_with_report and resolve_into_with_report collect the report explicitly. They
 return it with determined or underdetermined outcomes; contradictions carry only their diagnostic.

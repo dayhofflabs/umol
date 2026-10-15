@@ -12,7 +12,6 @@ from umol import (
     AtomTypeRegistry,
     ChemistryModel,
     ElementScope,
-    ConsumedError,
     Edits,
     InvalidatedViewError,
     NumForm,
@@ -21,6 +20,7 @@ from umol import (
     MoleculeDefaults,
     ResolveConfig,
     ResolveReport,
+    RollbackMethod,
     Solution,
     StereoFailurePolicy,
     StereoResolveConfig,
@@ -631,18 +631,22 @@ def test_molecule_from_smiles_isotope_default():
 
 
 @pytest.mark.parametrize(
-    ("method", "consuming", "with_report"),
+    ("method", "copying", "with_report", "rollback_method"),
     [
-        ("resolve", True, False),
-        ("resolve_with_report", True, True),
-        ("resolve_into", False, False),
-        ("resolve_into_with_report", False, True),
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, None),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
     ],
 )
 @pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
 @pytest.mark.parametrize("chemistry_model", [None, ChemistryModel.default()])
 def test_molecule_resolve_isotope(
-    method, consuming, with_report, isotope, chemistry_model
+    method, copying, with_report, rollback_method, isotope, chemistry_model
 ):
     source = Molecule.parse('{:atoms ["C#c0#h4"]}')
     alias = source
@@ -658,8 +662,9 @@ def test_molecule_resolve_isotope(
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
     )
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
     result = getattr(source, method)(
-        chemistry_model=chemistry_model, resolve_config=config
+        chemistry_model=chemistry_model, resolve_config=config, **kwargs
     )
     if chemistry_model is not None:
         assert chemistry_model == ChemistryModel.default()
@@ -670,12 +675,12 @@ def test_molecule_resolve_isotope(
     assert not hasattr(result, "report")
     if isotope == IsotopePolicy.Strict:
         assert result == Solution.Underdetermined()
-        if not consuming:
+        if not copying:
             assert alias == original
     else:
         expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
         assert isinstance(result, Solution.Determined)
-        if consuming:
+        if copying:
             assert result.molecule == expected
             assert result.molecule.edit().finish() == expected
             assert result.molecule == expected
@@ -685,61 +690,85 @@ def test_molecule_resolve_isotope(
             assert alias == expected
             assert source.edit().finish() == expected
             assert source == expected
-    if consuming:
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            repr(alias)
+    assert source.atoms[0].id == 0
+    if copying:
+        assert alias == original
+        assert len(atoms) == 1
+        assert atom.id == 0
+        assert atom.charge == NumForm.Lit(0)
+        assert len(constraints) == 0
+        assert next(atom_iter).id == 0
+        assert len(molecule_constraints) == 0
+        with pytest.raises(StopIteration):
+            next(constraint_iter)
     else:
-        assert source.atoms[0].id == 0
-    for access in (
-        lambda: len(atoms), lambda: atom.id, lambda: atom.charge,
-        lambda: len(constraints), lambda: next(atom_iter),
-        lambda: len(molecule_constraints), lambda: next(constraint_iter),
-    ):
-        with pytest.raises(InvalidatedViewError):
-            access()
+        for access in (
+            lambda: len(atoms),
+            lambda: atom.id,
+            lambda: atom.charge,
+            lambda: len(constraints),
+            lambda: next(atom_iter),
+            lambda: len(molecule_constraints),
+            lambda: next(constraint_iter),
+        ):
+            with pytest.raises(InvalidatedViewError):
+                access()
     assert original == Molecule.parse('{:atoms ["C#c0#h4"]}')
 
 
 @pytest.mark.parametrize(
-    ("method", "consuming", "with_report"),
+    ("method", "copying", "with_report", "rollback_method"),
     [
-        ("resolve", True, False),
-        ("resolve_with_report", True, True),
-        ("resolve_into", False, False),
-        ("resolve_into_with_report", False, True),
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, None),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
     ],
 )
-def test_molecule_resolve_identity(method, consuming, with_report):
-    source = Molecule.from_smiles("C")
+def test_molecule_resolve_identity(method, copying, with_report, rollback_method):
+    source = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
     original = source.copy()
     atom = source.atoms[0]
-    result = getattr(source, method)()
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
+    result = getattr(source, method)(**kwargs)
     if with_report:
         result, report = result
         assert report.unresolved.items() == []
         assert report.tie_breaks == []
     assert not hasattr(result, "report")
-    if consuming:
+    assert source == original
+    if copying:
         assert result.molecule == original
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            repr(source)
+        assert result.molecule is not source
+        result.molecule.atoms[0].charge = 1
+        assert atom.charge == NumForm.Lit(0)
+        atom.charge = -1
+        assert result.molecule.atoms[0].charge == NumForm.Lit(1)
+        assert source.atoms[0].charge == NumForm.Lit(-1)
     else:
         assert result == Solution.Determined()
-        assert source == original
-    with pytest.raises(InvalidatedViewError):
-        atom.charge = 1
+        with pytest.raises(InvalidatedViewError):
+            atom.charge = 1
 
 
 @pytest.mark.parametrize(
-    ("method", "consuming", "with_report"),
+    ("method", "copying", "with_report", "rollback_method"),
     [
-        ("resolve", True, False),
-        ("resolve_with_report", True, True),
-        ("resolve_into", False, False),
-        ("resolve_into_with_report", False, True),
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, None),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
     ],
 )
-def test_molecule_resolve_contradiction(method, consuming, with_report):
+def test_molecule_resolve_contradiction(method, copying, with_report, rollback_method):
     source = Molecule.parse('{:atoms ["C#c0#h5"]}')
     original = source.copy()
     atom = source.atoms[0]
@@ -755,31 +784,40 @@ def test_molecule_resolve_contradiction(method, consuming, with_report):
         aromaticity=default.aromaticity,
         stereo=default.stereo,
     )
-    result = getattr(source, method)(chemistry_model=model, resolve_config=config)
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
+    result = getattr(source, method)(
+        chemistry_model=model, resolve_config=config, **kwargs
+    )
     if with_report:
         result, report = result
         assert report is None
     assert isinstance(result, Solution.Contradictory)
     assert str(result.contradiction) == "no matching valence state"
     assert not hasattr(result, "report")
-    if consuming:
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            repr(source)
+    assert source == original
+    assert source.atoms[0].implicit_hydrogens == NumForm.Lit(5)
+    if copying:
+        assert atom.id == 0
+        assert atom.implicit_hydrogens == NumForm.Lit(5)
     else:
-        assert source == original
-        assert source.atoms[0].implicit_hydrogens == NumForm.Lit(5)
-    with pytest.raises(InvalidatedViewError):
-        atom.id
+        with pytest.raises(InvalidatedViewError):
+            atom.id
 
 
 @pytest.mark.parametrize(
-    ("method", "consuming"),
+    ("method", "copying", "rollback_method"),
     [
-        ("resolve", True), ("resolve_with_report", True),
-        ("resolve_into", False), ("resolve_into_with_report", False),
+        ("resolve", True, None),
+        ("resolve_with_report", True, None),
+        ("resolve_into", False, None),
+        ("resolve_into", False, RollbackMethod.Clone),
+        ("resolve_into", False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, None),
+        ("resolve_into_with_report", False, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, RollbackMethod.Journal),
     ],
 )
-def test_molecule_resolve_error(method, consuming):
+def test_molecule_resolve_error(method, copying, rollback_method):
     source = Molecule.parse(
         '{:atoms ["C#v2#a2" "C#v2#a2" "C#v2#a2" '
         '"C#v2#a2" "C#v2#a2" "C#v2#a2"] '
@@ -791,9 +829,13 @@ def test_molecule_resolve_error(method, consuming):
     default = ChemistryModel.default()
     model = ChemistryModel(
         connectivity=default.connectivity,
-        valence=ValenceModel.atom_typing(AtomTypeRegistry.from_atoms([
-            AtomForm.parse("C#c0#h0#n0#u0#s#v2#a2"),
-        ])),
+        valence=ValenceModel.atom_typing(
+            AtomTypeRegistry.from_atoms(
+                [
+                    AtomForm.parse("C#c0#h0#n0#u0#s#v2#a2"),
+                ]
+            )
+        ),
         aromaticity=AromaticityModel(
             scope=ElementScope.Any(),
             rule=AromaticityRule.Hmo(stabilization_threshold=0.5),
@@ -805,23 +847,24 @@ def test_molecule_resolve_error(method, consuming):
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
     )
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
     with pytest.raises(
         RuntimeError,
         match="^hmo: missing parameters: no Van-Catledge parameters for C with 2 pi-electrons$",
     ):
-        getattr(source, method)(chemistry_model=model, resolve_config=config)
-    if consuming:
-        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-            repr(source)
+        getattr(source, method)(chemistry_model=model, resolve_config=config, **kwargs)
+    assert source == original
+    assert source.atoms[0].id == 0
+    if copying:
+        assert atom.id == 0
     else:
-        assert source == original
-        assert source.atoms[0].id == 0
-    with pytest.raises(InvalidatedViewError):
-        atom.id
+        with pytest.raises(InvalidatedViewError):
+            atom.id
 
 
 @pytest.mark.parametrize(
-    "method", ["resolve", "resolve_with_report", "resolve_into", "resolve_into_with_report"],
+    "method",
+    ["resolve", "resolve_with_report", "resolve_into", "resolve_into_with_report"],
 )
 @pytest.mark.parametrize("argument", ["chemistry_model", "resolve_config"])
 def test_molecule_resolve_arguments(method, argument):
@@ -834,14 +877,17 @@ def test_molecule_resolve_arguments(method, argument):
     assert atom.id == 0
 
 
-@pytest.mark.parametrize(
-    "method", ["resolve", "resolve_with_report", "resolve_into", "resolve_into_with_report"],
-)
-def test_molecule_resolve_consumed(method):
+@pytest.mark.parametrize("method", ["resolve_into", "resolve_into_with_report"])
+def test_molecule_resolve_into_arguments(method):
     source = Molecule.from_smiles("C")
-    source.resolve()
-    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-        getattr(source, method)()
+    original = source.copy()
+    atom = source.atoms[0]
+    with pytest.raises(TypeError):
+        getattr(source, method)(rollback_method=object())
+    with pytest.raises(TypeError):
+        getattr(source, method)(RollbackMethod.Journal)
+    assert source == original
+    assert atom.id == 0
 
 
 @pytest.mark.parametrize(
@@ -893,3 +939,4 @@ def test_solution_molecule(method):
     assert same.molecule.atoms[0].charge == NumForm.Lit(1)
     assert published.atoms[0].charge == NumForm.Lit(-1)
     assert copied == original
+    assert source == original

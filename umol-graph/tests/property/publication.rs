@@ -32,7 +32,7 @@ use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomForm,
     AtomId, BondConstraintForm, BondForm, BondId, BooleanForm, ElectronCountsForm, Lattice,
-    Molecule, MoleculeEntries, Normalize, NumForm,
+    Molecule, MoleculeEntries, Normalize, NumForm, RollbackMethod,
 };
 use umol_utils::solution::Solution;
 
@@ -336,7 +336,10 @@ proptest! {
     }
 
     #[test]
-    fn test_resolver_resolve_publication(source in publication_molecule()) {
+    fn test_resolver_resolve_publication(
+        source in publication_molecule(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
+    ) {
         let model = ChemistryModel {
             valence: ValenceModel::smiles(),
             ..ChemistryModel::default()
@@ -346,7 +349,7 @@ proptest! {
         });
         let mut borrowed = source.clone();
         let consumed = resolver.resolve(source.clone());
-        let in_place = resolver.resolve_into(&mut borrowed);
+        let in_place = resolver.resolve_into(&mut borrowed, rollback_method);
         match consumed {
             Ok(Solution::Determined(published)) => {
                 prop_assert_eq!(in_place, Ok(Solution::Determined(())));

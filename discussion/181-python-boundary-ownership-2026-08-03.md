@@ -5368,7 +5368,7 @@ charge-sum fixtures. Strict Clippy passed for all umol-py targets; changed Rust
 files were formatted with nightly rustfmt and git diff --check passed.
 Allocation verification remains the next subitem, S7c.
 
-#### S7c — Verify production copy elimination
+#### S7c — Verify production copy elimination (done)
 
 **Modules:** affected Python operation tests, Study 4 measurements, and this
 record. **Verification/documentation, green.** [dep: S7a, S7b]
@@ -5388,7 +5388,46 @@ constraint representation migration, speculative binding framework, equality fix
 or additional production benchmark framework is included. **S7 gate:** focused
 Rust/Python tests pass, public contracts are unchanged, and measured allocation
 changes match the intended removal. Workspace/MSRV checks remain at the combined
-final gate. S7 is scheduled work, not deferred.
+final gate.
+
+**Verified (2026-10-15):** all 17 wrappers use the borrowed macro arms through
+their reference-returning to_rust methods. The seven borrowed operations contain
+no preliminary operand clone; normalize retains its clone before consuming Rust
+normalization. Result conversion still takes ownership of the Rust result.
+Public signatures, errors, source preservation, and result mutability are unchanged.
+
+The bounded release comparison used production Python methods at 8fae2599b
+(before S7) and 89e1a5bb1 (after S7a/S7b), with the same dependency sources,
+Rust 1.96.0, and Python 3.13.16 on Darwin arm64. Five fixtures produced twelve
+operation measurements per variant. Binary calls used distinct structurally equal
+operands. Five warmups preceded each counted call; fixture creation was excluded,
+while dispatch, result conversion, and destruction were included. Cells report
+Rust allocation/reallocation calls / requested bytes; Python heap and RSS are
+excluded. No timing measurements were made.
+
+| Fixture / operation | Before | After |
+| --- | ---: | ---: |
+| Default AtomForm / normalized_eq | 0 / 0 | 0 / 0 |
+| Default AtomForm / normalize | 0 / 0 | 0 / 0 |
+| AtomForm, charge set of 16 / is_ground | 4 / 432 | 0 / 0 |
+| AtomForm, charge set of 16 / normalized_eq | 8 / 864 | 0 / 0 |
+| AtomForm, charge set of 16 / meet | 25 / 2432 | 17 / 1568 |
+| AtomForm, charge set of 16 / normalize | 5 / 456 | 5 / 456 |
+| AromaticSystemForm, six electron counts / normalized_eq | 2 / 96 | 0 / 0 |
+| AromaticSystemForm, six electron counts / meet | 3 / 144 | 1 / 48 |
+| AtomConstraintsForm, valence set of 16 / normalized_eq | 8 / 864 | 0 / 0 |
+| AtomConstraintsForm, valence set of 16 / meet | 25 / 2432 | 17 / 1568 |
+| Constraints, charge sum over 16 atoms / normalized_eq | 4 / 240 | 0 / 0 |
+| Constraints, charge sum over 16 atoms / normalize | 3 / 176 | 3 / 176 |
+
+These results support retaining S7: the measured borrowed operations remove
+exactly the preliminary copies, and normalization and default controls retain
+their allocation counts. They do not establish timing improvements or make
+normalization/result creation allocation-free. The five exact-result and
+source-preservation checks passed for both variants. Together with the focused
+S7a/S7b Rust/Python suites and unchanged public contracts, **the S7 gate passed**.
+Sources, pinned revisions, raw logs, and joined results are in scratch/181-s7c.
+Whole-operation timing remains at S12a and workspace/MSRV checks at S12b.
 
 ### S10 — Resolution, projection, transformations, and owned consumers
 
@@ -5409,7 +5448,7 @@ sites, and the corresponding guide paragraphs. Owned ingestion/parsing and
 projected export intermediates keep calling the consuming methods without an
 extra clone.
 
-#### S10a — Composite resolver and ingestion/export
+#### S10a — Composite resolver and ingestion/export (done)
 
 **Modules:** graph resolve, Python resolve bindings, consumers and tests.
 **Breaking _into selector, red→green within the subitem.** [dep: S0c2, S0g]
@@ -5438,6 +5477,34 @@ ingest/export fixtures, and unique/shared inputs. Establish copies at call
 boundaries from the implementation rather than inferring their number from API
 names. Use measurements when expected costs or remaining uncertainty warrant
 them; consolidate routine whole-operation timing at S12a.
+
+**Completed — 2026-10-15.** Resolver resolve_into, resolve_into_with_report, and
+project_into now take RollbackMethod last and forward it through their existing
+single transaction. Consuming signatures, phase order, diagnostics, optional
+report construction, and internal plan assertions are unchanged. Rust callers
+and benchmark cases explicitly retain Journal where they previously used it.
+Python resolve and resolve_with_report borrow the source and consume one clone;
+both _into methods expose keyword-only rollback_method with Clone as the default.
+ChemistryModel remains borrowed. Copying preserves aliases and nested views on
+every outcome; in-place execution invalidates them even after rollback or a no-op.
+
+The copy audit found no additional ingestion/parsing copy: newly raised molecules
+still move into consuming resolution. Export retains its existing source copy
+and moves that intermediate into projection. Clone recovery uses one transaction
+working copy; Journal adds none. No per-phase recovery scopes were added.
+Molecule.take has no production callers and remains test-only until S11a removes
+the optional storage and its consumed-state checks.
+
+Verification passed: graph library tests, both recovery methods over determined,
+underdetermined, contradictory, and planning-error cases, unique/shared execution,
+report equivalence, and late projection rejection; 179 property tests and 683
+resolution conformance cases; 1,711 Python-binding Rust tests (two ignored);
+538 affected Python tests (two existing skips); strict Clippy for both crates,
+including feature-gated tests and benchmark targets. Resolution-triggered
+consumption tests now check preservation or were removed where their only subject
+was the unreachable consumed state. RingViews consumption and mutable-operation
+invalidation coverage remain. Whole-operation timing stays at S12a; the workspace
+and MSRV gate stays at S12b.
 
 #### S10b — Dropped
 

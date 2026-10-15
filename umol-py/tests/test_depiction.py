@@ -12,7 +12,6 @@ if not hasattr(_native_module, "Depiction"):
 from umol import (  # noqa: E402
     BondDelta,
     BondFieldChange,
-    ConsumedError,
     ContradictionError,
     Delta,
     DepictConfig,
@@ -408,19 +407,6 @@ def test_molecule_depict_layout_tetrahedral_error():
         match="^tetrahedral geometry cannot establish a display wedge for stereo atom 0$",
     ):
         molecule.depict_layout(collinear)
-
-
-@pytest.mark.parametrize("method", ["layout", "verify_layout", "depict_layout"])
-def test_molecule_consumption(method):
-    molecule = Molecule.parse('{:atoms ["C"]}')
-    layout = MoleculeLayout([(0.0, 0.0)])
-    molecule.resolve()
-
-    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
-        if method == "layout":
-            molecule.layout()
-        else:
-            getattr(molecule, method)(layout)
 
 
 def test_reaction_layout_new():

@@ -61,7 +61,7 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AromaticValenceForm, AtomId};
+    use umol_graph_ir::ir::{AromaticValenceForm, AtomId, RollbackMethod};
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ir;
 
@@ -100,7 +100,9 @@ mod tests {
             },
             ..ChemistryModel::default()
         };
-        Resolver::new(&model).resolve_into(&mut molecule).unwrap();
+        Resolver::new(&model)
+            .resolve_into(&mut molecule, RollbackMethod::Journal)
+            .unwrap();
         assert_eq!(molecule.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(

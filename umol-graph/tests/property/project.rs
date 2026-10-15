@@ -40,8 +40,8 @@ use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
     BondConstraintForm, BondForm, BondId, BooleanForm, Canonicalize, CanonicalizeContext,
     CisTransStereoForm, ElectronCountsForm, ElementForm, IsotopeMassForm, Molecule,
-    MoleculeEntries, NumForm, Reframe, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
+    MoleculeEntries, NumForm, Reframe, RollbackMethod, StereoAtomForm, StereoBondForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
 use umol_io::ctfile::parser::parse_mol_to_ir;
@@ -330,7 +330,11 @@ fn test_resolver_project_into_phase_error(#[case] smiles: &str) {
     let model = ChemistryModel::default();
 
     assert_eq!(
-        Resolver::new(&model).project_into(&mut molecule, ProjectFlags::all()),
+        Resolver::new(&model).project_into(
+            &mut molecule,
+            ProjectFlags::all(),
+            RollbackMethod::Journal
+        ),
         Err(ProjectError::Isotope(
             IsotopeProjectError::NonGroundIsotope { atom: AtomId(0) }
         ))
@@ -343,6 +347,7 @@ proptest! {
     fn test_resolver_project_composition(
         chain in 1usize..12, clockwise in any::<bool>(), typing in any::<bool>(),
         saturated in any::<bool>(), natural in any::<bool>(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let chirality = if clockwise { "@@" } else { "@" };
         let input = format!("[13CH3][C{chirality}H](F)/C=C/c1ccccc1.C[S{chirality}](=O){}", "C".repeat(chain));
@@ -375,7 +380,7 @@ proptest! {
             }
             prop_assert_eq!(resolver.project(original.clone(), flags), Ok(Solution::Determined(expected.clone())));
             let mut projected = original.clone();
-            prop_assert_eq!(resolver.project_into(&mut projected, flags), Ok(Solution::Determined(())));
+            prop_assert_eq!(resolver.project_into(&mut projected, flags, rollback_method), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &expected);
             let retained = projected.atoms().iter().map(|atom| atom.implicit_hydrogens().clone()).collect::<Vec<_>>();
             prop_assert_eq!(&retained, &hydrogens);
@@ -422,7 +427,7 @@ proptest! {
             CisTransStereoForm::Stereo(StereoCoset::Lit(u32::from(trans)))));
         let expected = editor.finish().unwrap();
         let resolver = Resolver::with_config(&model, config);
-        prop_assert_eq!(resolver.project_into(&mut molecule, ProjectFlags::all()), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.project_into(&mut molecule, ProjectFlags::all(), RollbackMethod::Journal), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
         let Solution::Determined(restored) = resolver.resolve(molecule).unwrap() else {
             return Err(TestCaseError::fail("projected molecule did not resolve"));
@@ -635,7 +640,7 @@ proptest! {
         let io = SmilesIoConfig::opensmiles();
         let mut source = parse_mol_to_ir(&input).unwrap();
         let raised = source.clone();
-        let result = Resolver::with_config(&model, config).resolve_into(&mut source).unwrap();
+        let result = Resolver::with_config(&model, config).resolve_into(&mut source, RollbackMethod::Journal).unwrap();
         if state == 3 {
             prop_assert_eq!(result, Solution::Underdetermined(()));
             prop_assert_eq!(source, raised);

@@ -1846,7 +1846,7 @@ mod tests {
         assert_eq!(resolver.resolve(molecule.clone()), Ok(expected.clone()));
         let mut composite = molecule;
         assert_eq!(
-            resolver.resolve_into(&mut composite),
+            resolver.resolve_into(&mut composite, RollbackMethod::Journal),
             Ok(expected_into.map_contradiction(ResolveContradiction::Aromaticity))
         );
         assert_eq!(composite, expected_molecule);
