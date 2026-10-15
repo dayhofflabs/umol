@@ -13,10 +13,11 @@ use crate::edit::Edits;
 use crate::error::{molecule_apply_error, molecule_integrity_error, ConsumedError};
 use crate::molecule::Molecule;
 
-/// Recovery method for prepared-batch molecule transactions.
+/// Recovery method for molecule transactions and in-place resolution.
 ///
 /// Clone edits a working copy; Journal records undo while editing the receiver.
-/// Both restore the receiver on application or integrity failure.
+/// Rejection or failure restores the receiver under normalized equality, preserving
+/// participant order.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RollbackMethod {
@@ -50,6 +51,9 @@ impl MoleculeEditor {
 #[pymethods]
 impl MoleculeEditor {
     /// Consume the editor and publish its molecule after checking integrity.
+    ///
+    /// Raises InvalidStructureError if publication fails. The editor remains consumed
+    /// on either outcome; later access through any alias raises ConsumedError.
     fn finish(&mut self) -> PyResult<Molecule> {
         self.inner
             .take()

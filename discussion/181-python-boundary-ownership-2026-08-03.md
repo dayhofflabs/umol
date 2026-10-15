@@ -5569,7 +5569,7 @@ skips); strict Clippy with all targets and features; formatting and diff checks.
 The user-facing documentation consistency pass remains S11b, whole-operation
 timing remains S12a, and the workspace/MSRV gate remains S12b.
 
-#### S11b — Python guarantees and user-facing migration
+#### S11b — Python guarantees and user-facing migration (done)
 
 **Modules:** Python API guide, binding docs/examples, Python integration tests,
 and affected Rust data-type/nomenclature guides. **Documentation/tests, green.**
@@ -5582,6 +5582,22 @@ remaining Edits, editor, and RingViews lifecycle guarantees. Justify Python
 defaults and copying against the selected Rust operations. Preserve current-state
 documentation rather than narrating the migration. Value-trait ownership and the general operation
 ownership rules are documented through [236](236-operation-ownership-copy-costs-2026-10-09.md)'s S6a.
+
+**Completed — 2026-10-15.** The Python API guide now distinguishes reusable
+Molecule operations, mutable editor application, terminal finish, and consumed
+Edits. It documents results, failure behavior, explicit batch copying, nested-view
+invalidation, RingViews consumption, and the Journal prepared-batch versus Clone
+resolution defaults with their rationale. Stale Molecule/editor consumption claims
+and the claim that Deltas is consumed were removed. A complete editing example
+shows source preservation and reuse through Edits.copy. Binding docstrings and the
+data-type guide agree; the relevant nomenclature entries already matched the
+implemented Rust contracts.
+
+Verification passed: rebuilt extension, 987 focused Python lifecycle/API tests,
+the guide's editing example, updated runtime docstrings, formatting, and diff
+checks. Two new Python cases exercise failed editor publication after ordinary
+and tracked application, checking terminal editor consumption, consumed batches,
+and preserved source and nested views. Production behavior is unchanged.
 
 #### S11c — Align Rust-named Python payloads and immutable observations
 

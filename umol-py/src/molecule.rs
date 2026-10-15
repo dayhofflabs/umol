@@ -366,7 +366,8 @@ impl Molecule {
     ///
     /// The input iterable is collected before any batch is consumed.
     /// Each batch has its own handle namespace. Once execution starts, existing views are
-    /// invalidated, including on failure. Application and integrity failures restore the molecule.
+    /// invalidated, including on failure or a no-op. Application and integrity failures restore
+    /// the molecule under normalized equality, preserving participant order.
     /// If a batch cannot be consumed, earlier batches remain consumed and the molecule is unchanged.
     /// RollbackMethod.Journal is the default; RollbackMethod.Clone edits a working copy.
     #[pyo3(signature = (batches, *, rollback_method=RollbackMethod::Journal))]

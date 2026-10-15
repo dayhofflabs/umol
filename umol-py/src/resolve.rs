@@ -904,8 +904,8 @@ impl ResolveContradiction {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub enum Solution {
-    /// Resolution completed. Consuming resolution returns a molecule; in-place resolution
-    /// returns None. The molecule getter retains the same Python object on every access.
+    /// Resolution completed. molecule is the resolved copy for resolve and resolve_with_report,
+    /// and None for the in-place methods. Repeated reads retain the same Python object.
     #[pyo3(constructor = (*, molecule=None))]
     Determined { molecule: Option<Py<Molecule>> },
     /// Resolution could not determine the molecule completely.

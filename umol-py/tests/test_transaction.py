@@ -187,6 +187,32 @@ def test_molecule_editor_finish():
     assert molecule == expected
 
 
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_editor_finish_error(method):
+    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    bond = molecule.bonds[0]
+    constraints = bond.constraints
+    editor = molecule.edit()
+    alias = editor
+    edits = Edits()
+    edits.add_bond(0, 1, BondForm(1))
+    getattr(editor, method)(edits)
+
+    with pytest.raises(
+        InvalidStructureError,
+        match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
+    ):
+        editor.finish()
+    with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$"):
+        alias.finish()
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        len(edits)
+
+    assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    assert bond.order == NumForm.Lit(1)
+    assert list(constraints) == []
+
+
 @pytest.mark.parametrize("method", ["finish", "apply", "tracked_apply"])
 def test_molecule_editor_consumed(method):
     molecule = Molecule.parse('{:atoms ["C"]}')

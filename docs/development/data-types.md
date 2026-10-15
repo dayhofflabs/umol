@@ -844,6 +844,10 @@ Molecule entity views expose mutable attributes and entity-level constraints. St
 use MoleculeEditor or Transaction. Molecule::edit moves the molecule into an editor without cloning.
 Direct editor mutations and edit batches can be interleaved; neither records undo.
 
+Python Molecule.edit, apply, and tracked_apply preserve the source by cloning it before invoking
+the consuming Rust operation. The editor still mutates on application and is consumed by finish.
+The [Python API guide](python-api.md#editor) specifies batch ownership, errors, and view lifecycles.
+
 | Operation | Successful result | Failure |
 | --- | --- | --- |
 | MoleculeEditor::apply | Mutably borrows the editor, consumes Edits, and returns unit after checking each edit's preconditions | Retains the completed prefix for inspection and further changes, without rollback |

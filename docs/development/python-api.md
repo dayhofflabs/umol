@@ -26,14 +26,19 @@ wrappers. Converting a consuming Rust operation into a reusable copy-producing P
 a lifecycle change. Neither defensive cloning nor a universal ban on copying decides its contract.
 Do not change the Rust API solely to legitimize a wrapper convenience.
 
-Python cannot transfer ownership. A consuming Rust operation on a value with copy-on-write storage,
-such as Molecule, is bound by cloning the Rust value and consuming the clone: edit, apply,
-tracked_apply, resolve, resolve_with_report, project, and transform. The Python source and its
-views stay valid on every outcome. The clone increments reference counts, and the operation copies
-only the tables it writes, which is the copy a Rust caller pays when it keeps its value and clones
-it explicitly. A method named into_… states consumption in its name and is never bound with clone
-semantics. Consumption is preserved where a clone copies the whole value, as for Edits and Deltas;
-callers copy them explicitly.
+Python aliases do not follow Rust's move rules. Molecule remains reusable: edit, apply,
+tracked_apply, resolve, resolve_with_report, canonicalize, tracked_canonicalize, and combine
+clone the Rust receiver and pass that clone to the consuming Rust operation. The Python source,
+its aliases, and its views remain unchanged on every outcome. The initial clone shares topology,
+entity tables, and constraints; shared payloads are copied when the operation modifies or takes
+ownership of them. This is the same ownership choice as a Rust caller explicitly cloning its
+input to keep it available. Python does not expose project or Transformer methods.
+
+Edits retains consumption on transfer: implicitly cloning a complete batch would copy its entries
+and payloads, so callers request Edits.copy() when they need reuse. MoleculeEditor.finish consumes
+the editor on success or failure. An into_… conversion retains its consuming lifecycle;
+RingViews.into_ring_set consumes the views while leaving the molecule usable. Deltas has no
+consuming Python operation; its explicit copy and value-producing operations preserve the source.
 
 Consumption leaves all aliases of the Python owner in a consumed state and invalidates its
 outstanding views and iterators, including nested accessors. Access raises one of two shared
@@ -94,12 +99,18 @@ Read-only access rejects mutation; mutable access updates backing storage. Expli
 produces an independent owned value. Consumption invalidates dependent accessors as specified
 above. The location and its behavior under structural mutation must be defined for the owning type.
 
-For molecule access, each view retains the owner and its accessor counter. Consuming the owner,
-or starting transact, tracked_transact, resolve_into, resolve_into_with_report, or combine_from,
+For molecule access, each view retains the owner and its accessor counter. Starting transact,
+tracked_transact, resolve_into, resolve_into_with_report, or combine_from
 invalidates all existing views and iterators, including nested accessors. The counter advances
 immediately before execution, including for a no-op or a call that rolls back. No list of views is
 maintained. Ordinary attribute and entity-constraint assignments leave accessors valid and their
 changes visible. Fresh accessors read the current molecule; independent copies remain usable.
+Argument extraction or borrowing failure before execution leaves the counter unchanged.
+
+RingViews retains its molecule and any borrowed RingSet. into_ring_set moves owned ring data or
+copies borrowed ring data into an independent RingSet without repeating perception. It consumes
+the RingViews, whose later access raises ConsumedError; its dependent ring, atom, bond, and
+iterator accessors raise InvalidatedViewError. The molecule and any source RingSet remain usable.
 
 This is a reusable pattern, not a requirement to give every type an owned-or-accessor representation.
 Owned-only values and accessor-only views remain appropriate. Where one Python class legitimately
@@ -183,17 +194,53 @@ Structural changes use MoleculeEditor or prepared transaction batches. Ordinary 
 entity-level constraints are assigned through the molecule's entity views. Molecule-level
 constraints are read-only on the molecule; changing them requires editing and publication.
 
-Molecule.edit consumes its receiver. MoleculeEditor.apply consumes the editor and Edits and returns
-a new transient editor; tracked_apply also returns the batch correspondence. Molecule.apply and
-tracked_apply include finish and return a checked Molecule, with the correspondence in the tracked
-case. Both owning types are consumed before the Edits contents are transferred. An unavailable
-batch therefore still leaves the receiver consumed. Molecule.copy explicitly retains an
-independent value.
+| Python operation | Result | Receiver and batch ownership |
+| --- | --- | --- |
+| Molecule.edit | MoleculeEditor | Edits an independent copy; source and views remain usable |
+| Molecule.apply | Molecule | Consumes Edits and publishes a changed copy; source and views remain unchanged |
+| Molecule.tracked_apply | (Molecule, MoleculeCorrespondence) | Same ownership as apply |
+| MoleculeEditor.apply | None | Mutates the editor and consumes Edits |
+| MoleculeEditor.tracked_apply | MoleculeCorrespondence | Same ownership as editor apply; maps only this batch's input to its result |
+| MoleculeEditor.finish | Molecule | Consumes the editor on success or failure; checks representation integrity |
+
+Editor application checks edit preconditions but does not check final molecule integrity or record
+undo. Failure raises TransactionError and retains the completed prefix for further editing; it
+returns no correspondence. finish raises InvalidStructureError if publication fails, leaving every
+alias of the editor consumed. These are the Rust editor's mutation and publication contracts.
+Molecule.apply and tracked_apply include finish; either kind of failure discards the working copy
+and leaves the source unchanged.
+
+A batch stays consumed after transfer, even when application or publication fails. An unavailable
+batch leaves the molecule or editor unchanged. A consumed editor rejects application before taking
+the batch. Use Edits.copy() to apply a prepared batch more than once:
+
+```python
+from umol import AtomForm, Edits, Element, Molecule
+
+source = Molecule.from_entries([AtomForm(Element("C"))])
+edits = Edits()
+edits.add_atom(AtomForm(Element("N")))
+product = source.apply(edits.copy())
+
+editor = source.edit()
+editor.apply(edits)
+assert editor.finish() == product
+assert source == Molecule.from_entries([AtomForm(Element("C"))])
+```
 
 Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
-They restore it on application or integrity failure; tracked_transact returns the whole
-transaction's correspondence. Python exposes these prepared-batch operations without a scoped
-Transaction handle or editor probe. This avoids retaining Rust borrows across Python calls.
+transact returns None; tracked_transact returns the whole transaction's correspondence. On
+application or integrity failure they restore the receiver under Rust's Molecule::normalized_eq,
+preserving participant order. Python exposes these prepared-batch operations without scoped
+Transaction or TrackedTransaction handles, editor probe, or edit_into callbacks, avoiding Rust
+borrows retained across Python calls.
+
+Both methods accept keyword-only rollback_method, defaulting to RollbackMethod.Journal;
+RollbackMethod.Clone remains selectable. Rust requires the selector explicitly. Journal records
+undo for the applied changes, while Clone edits one working copy and installs it only on success.
+Journal is the prepared-batch default because its recovery storage follows the changes rather
+than a whole working molecule. The choice changes storage and execution cost, not recovery or
+correspondence guarantees.
 
 The iterable is fully extracted before any batch is consumed. Batches are then consumed in order,
 before molecule execution. If a later batch cannot be transferred, earlier batches remain consumed
@@ -209,11 +256,14 @@ molecule; Underdetermined is payload-free and Contradictory contains its diagnos
 raise RuntimeError. Every outcome preserves the source and its existing views.
 
 Molecule.resolve_into mutates the receiver only on Determined, whose molecule field is None.
-Underdetermined, Contradictory, and execution errors restore the receiver under Rust's transaction
-contract. Existing views are invalidated when execution starts, even if the molecule is restored.
+Underdetermined, Contradictory, and planning errors restore the receiver under Rust's
+Molecule::normalized_eq, preserving participant order. Existing views are invalidated when
+execution starts, even if the molecule is restored.
 Its keyword-only rollback_method selects RollbackMethod.Clone (the default) or
 RollbackMethod.Journal with the same recovery guarantee. The selector covers all phases in one
-transaction.
+transaction. Rust requires the selector explicitly; Python defaults to Clone here because one
+working copy avoids recording undo across the resolution pipeline. Neither default promises the
+cheaper choice for every workload; callers can select either method.
 
 Molecule.resolve_with_report and resolve_into_with_report return `(solution, report)`. The report
 is present on Determined and Underdetermined, and None on Contradictory. Solution itself has no
