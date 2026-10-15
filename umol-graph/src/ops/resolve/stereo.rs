@@ -1492,13 +1492,13 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_project(
         stereo_model: StereoModel,
-        #[case] mut molecule: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: Molecule,
     ) {
         let edits = StereoResolver::new(&stereo_model)
             .plan_project(&molecule)
             .unwrap();
-        molecule.transact([edits]).unwrap();
+        let molecule = molecule.apply(edits).unwrap();
         assert_eq!(molecule, expected);
     }
 

@@ -2053,14 +2053,14 @@ mod tests {
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}"#),
     )]
     fn test_aromaticity_resolver_plan_project(
-        #[case] mut molecule: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: Molecule,
     ) {
         let model = AromaticityModel::daylight();
         let edits = AromaticityResolver::new(&model)
             .plan_project(&molecule)
             .unwrap();
-        molecule.transact([edits]).unwrap();
+        let molecule = molecule.apply(edits).unwrap();
         assert_eq!(molecule, expected);
     }
 

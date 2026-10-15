@@ -18,6 +18,7 @@ from umol import (
     NoncovalentBondForm,
     NoncovalentBondKind,
     NumForm,
+    RollbackMethod,
     StereoAtomForm,
     StereoBondForm,
     StereoConfigurationForm,
@@ -26,6 +27,17 @@ from umol import (
     TetrahedralConfiguration,
     TransactionError,
 )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param({}, id="default"),
+        pytest.param({"rollback_method": RollbackMethod.Journal}, id="journal"),
+        pytest.param({"rollback_method": RollbackMethod.Clone}, id="clone"),
+    ],
+)
+def rollback_kwargs(request):
+    return request.param
 
 
 def rich_molecule():
@@ -246,7 +258,7 @@ def test_molecule_editor_apply_consumed(method):
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
 @pytest.mark.parametrize("container", [list, tuple, iter], ids=["list", "tuple", "iterator"])
-def test_molecule_transact(method, container):
+def test_molecule_transact(method, container, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C"]}')
     batches = []
     for element in ("N", "O"):
@@ -258,7 +270,7 @@ def test_molecule_transact(method, container):
     iterator = iter(batches[0])
     saved_edit = next(iterator)
 
-    result = getattr(molecule, method)(container(batches))
+    result = getattr(molecule, method)(container(batches), **rollback_kwargs)
 
     assert molecule == Molecule.parse(
         '{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [0 2 "1"]]}'
@@ -278,7 +290,7 @@ def test_molecule_transact(method, container):
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
 @pytest.mark.parametrize("failure", ["consumed", "alias"])
-def test_molecule_transact_consumption_error(method, failure):
+def test_molecule_transact_consumption_error(method, failure, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C"]}')
     view = molecule.atoms[0]
     first = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("N")])])
@@ -286,12 +298,12 @@ def test_molecule_transact_consumption_error(method, failure):
     iterator = iter(first)
     if failure == "consumed":
         second = Edits()
-        Molecule().transact([second])
+        Molecule().transact([second], **rollback_kwargs)
     else:
         second = first
 
     with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
-        getattr(molecule, method)([first, second, untouched])
+        getattr(molecule, method)([first, second, untouched], **rollback_kwargs)
 
     assert molecule == Molecule.parse('{:atoms ["C"]}')
     assert view.id == 0
@@ -304,14 +316,22 @@ def test_molecule_transact_consumption_error(method, failure):
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_argument_error(method):
+@pytest.mark.parametrize("failure", ["batch", "rollback_method", "positional"])
+def test_molecule_transact_argument_error(method, failure, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C"]}')
     view = molecule.atoms[0]
     edit = Edit.AddAtoms(atoms=[AtomForm.parse("N")])
     first = Edits([edit])
 
     with pytest.raises(TypeError):
-        getattr(molecule, method)(iter([first, None]))
+        if failure == "batch":
+            getattr(molecule, method)(iter([first, None]), **rollback_kwargs)
+        elif failure == "rollback_method":
+            getattr(molecule, method)(
+                [first], **(rollback_kwargs | {"rollback_method": None}),
+            )
+        else:
+            getattr(molecule, method)([first], RollbackMethod.Journal, **rollback_kwargs)
 
     assert list(first) == [edit]
     assert view.id == 0
@@ -320,7 +340,7 @@ def test_molecule_transact_argument_error(method):
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
 @pytest.mark.parametrize("fail", [False, True], ids=["complete", "iteration_error"])
-def test_molecule_transact_generator(method, fail):
+def test_molecule_transact_generator(method, fail, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C"]}')
     view = molecule.atoms[0]
     edit = Edit.AddAtoms(atoms=[AtomForm.parse("N")])
@@ -336,12 +356,12 @@ def test_molecule_transact_generator(method, fail):
 
     if fail:
         with pytest.raises(ValueError, match="^batch preparation failed$"):
-            getattr(molecule, method)(batches())
+            getattr(molecule, method)(batches(), **rollback_kwargs)
         assert list(first) == [edit]
         assert view.id == 0
         assert molecule == Molecule.parse('{:atoms ["C"]}')
     else:
-        getattr(molecule, method)(batches())
+        getattr(molecule, method)(batches(), **rollback_kwargs)
         assert molecule == Molecule.parse('{:atoms ["C" "N" "O"]}')
         with pytest.raises(ConsumedError):
             len(first)
@@ -350,7 +370,7 @@ def test_molecule_transact_generator(method, fail):
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_fields(method):
+def test_molecule_transact_fields(method, rollback_kwargs):
     molecule = Molecule.from_entries([AtomForm(Element("C"), charge=0)])
     view = molecule.atoms[0]
     constraints = view.constraints
@@ -362,7 +382,7 @@ def test_molecule_transact_fields(method):
         id=0, change=AtomFieldChange.Charge(old=NumForm.Lit(1), new=NumForm.Lit(2)),
     )])
 
-    result = getattr(molecule, method)([first, second])
+    result = getattr(molecule, method)([first, second], **rollback_kwargs)
 
     assert molecule == Molecule.from_entries([AtomForm(Element("C"), charge=2)])
     assert molecule.atoms[0].charge == NumForm.Lit(2)
@@ -374,7 +394,7 @@ def test_molecule_transact_fields(method):
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_error(method):
+def test_molecule_transact_error(method, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C"]}')
     view = molecule.atoms[0]
     first = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("N")])])
@@ -384,7 +404,7 @@ def test_molecule_transact_error(method):
     third = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("O")])])
 
     with pytest.raises(TransactionError, match="^atom handle 7 is out of range for 2 entries$"):
-        getattr(molecule, method)([first, second, third])
+        getattr(molecule, method)([first, second, third], **rollback_kwargs)
 
     assert molecule == Molecule.parse('{:atoms ["C"]}')
     assert molecule.atoms[0].id == 0
@@ -396,13 +416,13 @@ def test_molecule_transact_error(method):
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_integrity(method):
+def test_molecule_transact_integrity(method, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
     first = Edits()
     first.add_bond(0, 1, BondForm(2))
     second = Edits([Edit.RemoveTopology(atoms=[], bonds=[0])])
 
-    result = getattr(molecule, method)([first, second])
+    result = getattr(molecule, method)([first, second], **rollback_kwargs)
 
     assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "2"]]}')
     if method == "tracked_transact":
@@ -411,7 +431,7 @@ def test_molecule_transact_integrity(method):
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_integrity_error(method):
+def test_molecule_transact_integrity_error(method, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
     view = molecule.bonds[0]
     edits = Edits()
@@ -421,7 +441,7 @@ def test_molecule_transact_integrity_error(method):
         InvalidStructureError,
         match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
     ):
-        getattr(molecule, method)([edits])
+        getattr(molecule, method)([edits], **rollback_kwargs)
 
     assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
     assert molecule.bonds[0].id == 0
@@ -431,14 +451,14 @@ def test_molecule_transact_integrity_error(method):
         len(edits)
 
 
-def test_molecule_tracked_transact_compaction():
+def test_molecule_tracked_transact_compaction(rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
     first = Edits([Edit.RemoveTopology(atoms=[0], bonds=[])])
     second = Edits()
     atom = second.add_atom(AtomForm.parse("F"))
     second.add_bond(1, atom, BondForm(1))
 
-    correspondence = molecule.tracked_transact([first, second])
+    correspondence = molecule.tracked_transact([first, second], **rollback_kwargs)
 
     assert molecule == Molecule.parse(
         '{:atoms ["N" "O" "F"] :bonds [[0 1 "1"] [1 2 "1"]]}'
@@ -454,16 +474,16 @@ def test_molecule_apply_replace(replacement_case):
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_replace(replacement_case, method):
+def test_molecule_transact_replace(replacement_case, method, rollback_kwargs):
     molecule, expected, edit = replacement_case
 
-    getattr(molecule, method)([Edits([edit])])
+    getattr(molecule, method)([Edits([edit])], **rollback_kwargs)
 
     assert molecule == expected
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
-def test_molecule_transact_replace_error(replacement_case, method):
+def test_molecule_transact_replace_error(replacement_case, method, rollback_kwargs):
     molecule, _, edit = replacement_case
     original = Molecule.parse(str(molecule))
     first = Edits([edit])
@@ -472,13 +492,13 @@ def test_molecule_transact_replace_error(replacement_case, method):
     with pytest.raises(
         TransactionError, match="^precondition failed: old state does not match current$",
     ):
-        getattr(molecule, method)([first, second])
+        getattr(molecule, method)([first, second], **rollback_kwargs)
 
     assert molecule == original
 
 
 @pytest.mark.parametrize("rollback", [False, True], ids=["commit", "rollback"])
-def test_molecule_transact_replace_new_handles(rollback):
+def test_molecule_transact_replace_new_handles(rollback, rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C" "N"]}')
     edits = Edits()
     atom = edits.add_atom(AtomForm.parse("O"))
@@ -494,10 +514,13 @@ def test_molecule_transact_replace_new_handles(rollback):
         with pytest.raises(
             TransactionError, match="^atom handle 7 is out of range for 3 entries$",
         ):
-            molecule.transact([edits, Edits([Edit.RemoveTopology(atoms=[7], bonds=[])])])
+            molecule.transact(
+                [edits, Edits([Edit.RemoveTopology(atoms=[7], bonds=[])])],
+                **rollback_kwargs,
+            )
         assert molecule == Molecule.parse('{:atoms ["C" "N"]}')
     else:
-        molecule.transact([edits])
+        molecule.transact([edits], **rollback_kwargs)
         assert molecule == expected
 
 

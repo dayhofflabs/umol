@@ -173,7 +173,12 @@ copy-on-write storage until mutation. Molecule.copy explicitly returns an indepe
 
 Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
 They restore it on application or integrity failure; tracked_transact returns the whole
-transaction's correspondence. Python exposes these prepared-batch operations without a scoped
+transaction's correspondence. Both take keyword-only rollback_method, defaulting to
+RollbackMethod.Journal; RollbackMethod.Clone is also selectable. Journal records undo while
+editing the receiver; Clone edits a working copy. The Rust methods require an explicit selector.
+Python's Journal default makes the recovery policy optional at the call site, with storage
+scaling with edits; callers can select Clone for its different copying and execution costs.
+Python exposes these prepared-batch operations without a scoped
 Transaction handle or editor probe. This avoids retaining Rust borrows across Python calls.
 
 The iterable is fully extracted before any batch is consumed. Batches are then consumed in order,

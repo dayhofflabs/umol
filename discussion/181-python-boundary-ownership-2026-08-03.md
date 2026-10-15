@@ -2020,7 +2020,8 @@ enum TransactionStorage {
 }
 ```
 
-The current ownership split, subject to the S0e2/S0f cost gate, is as follows.
+The retained ownership split is as follows; the S0e2/S0f costs and decision to
+proceed are recorded below.
 Both run entry points own a private TransactionGuard retaining the receiver's
 mutable borrow, TransactionStorage and TransactionStatus. Tracked run also owns
 the accumulated correspondence in an Option, borrowed by its small callback
@@ -2534,7 +2535,7 @@ Clippy with proptest and warnings denied, nightly formatting and git diff --chec
 Logs are in `scratch/181-s0e1/`. Cost comparisons remain in S0e2 and workspace
 checks remain at the stage gate.
 
-#### S0e2 — Ordinary transactions without correspondence (cost gate reopened)
+#### S0e2 — Ordinary transactions without correspondence (done)
 
 **Modules:** graph-IR transaction implementation and callers, molecule
 conveniences, transaction/property tests, development guides, and bounded recovery
@@ -2654,7 +2655,7 @@ bytes. Structural tracking retains S0e's additional allocation and 28 requested
 bytes relative to the original. No mapping history or Undo-based reconstruction
 is introduced to remove those tracked costs.
 
-#### S0f — Clone and Journal transaction recovery (cost gate reopened)
+#### S0f — Clone and Journal transaction recovery (done)
 
 **Modules:** graph-IR Transaction and TrackedTransaction recovery, both run
 entry points' Rust callers, and tests.
@@ -3035,7 +3036,14 @@ properties, strict all-target graph-IR Clippy, nightly graph-IR formatting and
 git diff --check. Sources, patch, binary hashes, allocation comparison, raw timing
 series and uncertainty estimates are in `scratch/181-transaction-direct-loops/`.
 
-#### S0g — Prepared-batch transaction entry points
+**Decision to proceed — 2026-10-14.** Retain the direct-loop implementation and
+continue with S0g despite the recorded regressions. S0e2 and S0f are complete for
+this plan; further transaction tuning no longer blocks the remaining work.
+This is acceptance of the known cost for proceeding, not a finding that the
+performance differences were eliminated or explained. The original baseline
+and all measurements remain available.
+
+#### S0g — Prepared-batch transaction entry points (done)
 
 **Modules:** graph-IR Molecule transact/tracked_transact; Python molecule,
 rollback-selector binding/exports, callers, and tests.
@@ -3061,7 +3069,7 @@ Python Transaction or TrackedTransaction handles/callbacks are not introduced.
 | Caller | Required change |
 | --- | --- |
 | Python `src/molecule.rs` transact/tracked_transact | Accept the keyword-only RollbackMethod selector and forward it, default Journal; retain current extraction, sequential Edits transfer and counter timing |
-| graph-IR editor/reaction benchmarks and molecule/transaction/property tests; graph resolver tests | Supply the explicit selector. Keep baseline journal rows on Journal; add Clone comparison cases without relabeling old results. |
+| graph-IR editor/reaction benchmarks and molecule/transaction/property tests; graph stale-plan rollback tests | Supply the explicit selector. Keep baseline journal rows on Journal; add Clone comparison cases without relabeling old results. |
 
 Update Python RollbackMethod exports with its binding and both method signatures.
 Extend prepared-batch Python tests for explicit Clone/Journal; calls omitting the
@@ -3073,6 +3081,26 @@ first documentation update.
 arbitrary iterables, repeated/consumed batch inputs, independent batch namespaces,
 source restoration, and unchanged view invalidation timing. Update the operation
 docs with the selected Python default and exact receiver/input guarantees.
+
+**Completed — 2026-10-14.** Both Rust conveniences now require RollbackMethod.
+Python exports the selector and accepts keyword-only rollback_method with Journal
+as its default. Batch extraction, sequential consumption, counter timing and
+plain/tracked results are unchanged. Callers and guides are updated; benchmark
+Journal rows retain their names and Clone comparison rows are added. Existing
+prepared-batch cases exercise both recovery methods, including correspondence,
+application and integrity failures, and Python argument/consumption failures.
+Six successful-plan applications in graph tests use consuming application;
+transactions remain in the three stale-plan tests that explicitly check rollback.
+
+**S0 verification passed:** workspace all-target compilation with graph-IR and
+graph property features; 1,320 molecule unit cases, 28 edit properties, three
+compaction properties, 1,603 graph operation cases, 11 isotope properties,
+1,640 Rust binding cases, and 1,096 Python lifecycle/API cases. Two existing Rust
+binding cases remain ignored. Strict Clippy passed for all targets of graph-IR,
+graph and Python with the property features. The extension was rebuilt in the
+Python 3.13 environment. Nightly formatting checks and git diff --check passed.
+Logs are in `scratch/181-s0g/`; no new timing comparison was run for this selector
+plumbing. S1a is next.
 
 **Compilation and test boundaries:** S0b, S0c2, S0e1, S0e2, S0f and S0g include their
 binding/caller changes in the same subitem. Each ends with affected libraries,

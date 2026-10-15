@@ -139,7 +139,7 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomId, Edit, Edits, MoleculeApplyError, MulticenterBondFieldChange,
-        MulticenterBondId, MulticenterValenceForm, TransactionError,
+        MulticenterBondId, MulticenterValenceForm, RollbackMethod, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -284,7 +284,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            molecule.transact([edits]),
+            molecule.transact([edits], RollbackMethod::Journal),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

@@ -8,9 +8,9 @@ use umol_graph_ir::ir::{
     AtomHandle, AtomId, BondForm, BondHandle, BondId, DativeBondForm, DativeBondHandle,
     DativeBondId, Edit, Edits, EntityKind, FrameTransport, Molecule, MoleculeEntries,
     MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, NoncovalentBondForm,
-    NoncovalentBondHandle, NoncovalentBondId, NumForm, StereoAtomForm, StereoAtomHandle,
-    StereoAtomId, StereoBondForm, StereoBondHandle, StereoBondId, StereoKind, StereoLigand,
-    StereoLigandKind,
+    NoncovalentBondHandle, NoncovalentBondId, NumForm, RollbackMethod, StereoAtomForm,
+    StereoAtomHandle, StereoAtomId, StereoBondForm, StereoBondHandle, StereoBondId, StereoKind,
+    StereoLigand, StereoLigandKind,
 };
 use umol_perm::Permutation;
 
@@ -109,16 +109,21 @@ fn bench_editor(c: &mut Criterion) {
                     BatchSize::SmallInput,
                 );
             });
-            group.bench_function(id("transact"), |b| {
-                b.iter_batched(
-                    || (input(), changes(edits)),
-                    |(mut molecule, changes)| {
-                        molecule.transact([changes]).unwrap();
-                        black_box(molecule)
-                    },
-                    BatchSize::SmallInput,
-                );
-            });
+            for (operation, rollback_method) in [
+                ("transact", RollbackMethod::Journal),
+                ("transact_clone", RollbackMethod::Clone),
+            ] {
+                group.bench_function(id(operation), |b| {
+                    b.iter_batched(
+                        || (input(), changes(edits)),
+                        |(mut molecule, changes)| {
+                            molecule.transact([changes], rollback_method).unwrap();
+                            black_box(molecule)
+                        },
+                        BatchSize::SmallInput,
+                    );
+                });
+            }
         }
     }
     group.finish();

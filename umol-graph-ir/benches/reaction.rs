@@ -12,8 +12,8 @@ use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, BondForm, Constraint, ConstraintSpan, Delta,
     Deltas, Edits, ElectronCountsForm, EntitySpan, Molecule, MoleculeCorrespondence,
-    MoleculeEntries, Reaction, ReactionSpan, ReactionSpanEntries, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig,
+    MoleculeEntries, Reaction, ReactionSpan, ReactionSpanEntries, RollbackMethod,
+    SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
@@ -303,21 +303,26 @@ fn benchmark_mutation(c: &mut Criterion) {
                 )
             },
         );
-        group.bench_function(
-            BenchmarkId::new("tracked_transact/path_three_edits", size),
-            |b| {
+        for (operation, rollback_method) in [
+            ("tracked_transact/path_three_edits", RollbackMethod::Journal),
+            (
+                "tracked_transact_clone/path_three_edits",
+                RollbackMethod::Clone,
+            ),
+        ] {
+            group.bench_function(BenchmarkId::new(operation, size), |b| {
                 b.iter_batched(
                     || (molecule.clone(), edits.clone()),
                     |(mut molecule, edits)| {
                         let result = molecule
-                            .tracked_transact([edits])
+                            .tracked_transact([edits], rollback_method)
                             .expect("benchmark edit batch succeeds");
                         black_box((molecule, result))
                     },
                     BatchSize::SmallInput,
                 )
-            },
-        );
+            });
+        }
         group.bench_function(BenchmarkId::new("combine/path_pair", size), |b| {
             b.iter_batched(
                 || molecule.clone(),

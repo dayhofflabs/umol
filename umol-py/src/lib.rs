@@ -132,7 +132,7 @@ use crate::{
         TetrahedralStereo, TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
-    transaction::MoleculeEditor,
+    transaction::{MoleculeEditor, RollbackMethod},
 };
 
 #[cfg(feature = "graph")]
@@ -271,6 +271,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?;
         module.add_class::<Molecule>()?;
         module.add_class::<MoleculeEditor>()?;
+        module.add_class::<RollbackMethod>()?;
         module.add_class::<MoleculeDefaults>()?;
         module.add_class::<ReactionDefaults>()?;
         module.add_class::<AtomTypeRegistry>()?;

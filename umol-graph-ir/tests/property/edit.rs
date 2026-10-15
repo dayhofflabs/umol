@@ -338,7 +338,7 @@ proptest! {
     ) {
         let expected = trace.expected();
         let mut molecule = trace.base();
-        molecule.transact([trace.edits()]).unwrap();
+        molecule.transact([trace.edits()], RollbackMethod::Journal).unwrap();
         prop_assert_eq!(molecule, expected);
     }
 
@@ -351,7 +351,7 @@ proptest! {
         let mut molecule = trace.base();
         let before = molecule.clone();
         prop_assert_eq!(
-            molecule.transact([trace.edits()]).unwrap_err(),
+            molecule.transact([trace.edits()], RollbackMethod::Journal).unwrap_err(),
             MoleculeApplyError::Transaction(trace.expected_removed_error())
         );
         prop_assert_eq!(molecule, before);
@@ -578,12 +578,12 @@ proptest! {
             Some(MoleculeApplyError::Transaction(batch.expected_error()))
         );
         prop_assert_eq!(
-            tracked.tracked_transact([batch.edits()]).unwrap_err(),
+            tracked.tracked_transact([batch.edits()], RollbackMethod::Journal).unwrap_err(),
             MoleculeApplyError::Transaction(batch.expected_error())
         );
         prop_assert_eq!(tracked, before.clone());
         prop_assert_eq!(
-            molecule.transact([batch.edits()]).unwrap_err(),
+            molecule.transact([batch.edits()], RollbackMethod::Journal).unwrap_err(),
             MoleculeApplyError::Transaction(batch.expected_error())
         );
         prop_assert_eq!(molecule, before);
@@ -671,7 +671,7 @@ proptest! {
         };
         let mut molecule = base.clone();
 
-        let error = molecule.transact([edits]).unwrap_err();
+        let error = molecule.transact([edits], RollbackMethod::Journal).unwrap_err();
         prop_assert_eq!(error, MoleculeApplyError::Transaction(expected));
         prop_assert_eq!(molecule, base);
     }
@@ -815,7 +815,7 @@ proptest! {
     #[test]
     fn test_molecule_apply_into((base, edits) in transaction_edits_strategy()) {
         let mut expected = base.clone();
-        expected.transact([edits.clone()]).unwrap();
+        expected.transact([edits.clone()], RollbackMethod::Journal).unwrap();
         let mut molecule = base;
         prop_assert_eq!(molecule.apply_into(edits), Ok(()));
         prop_assert_eq!(molecule, expected);
@@ -828,7 +828,7 @@ proptest! {
         (base, first, second) in consecutive_transaction_strategy(),
     ) {
         let mut expected = base.clone();
-        expected.transact([first.clone(), second.clone()]).unwrap();
+        expected.transact([first.clone(), second.clone()], RollbackMethod::Journal).unwrap();
         let mut molecule = base.clone();
         let result = molecule.edit_into(|editor| -> Result<_, MoleculeApplyError> {
             editor.apply(first.clone())?;
@@ -868,7 +868,7 @@ proptest! {
     #[test]
     fn test_molecule_editor_apply((base, edits) in transaction_edits_strategy()) {
         let mut checked = base.clone();
-        checked.transact([edits.clone()]).unwrap();
+        checked.transact([edits.clone()], RollbackMethod::Journal).unwrap();
         let mut applied = base.edit();
         applied.apply(edits).unwrap();
         prop_assert_eq!(applied.finish().unwrap(), checked);
@@ -879,7 +879,7 @@ proptest! {
     #[test]
     fn test_molecule_editor_apply_partial((base, mut edits) in transaction_edits_strategy()) {
         let mut expected = base.clone();
-        expected.transact([edits.clone()]).unwrap();
+        expected.transact([edits.clone()], RollbackMethod::Journal).unwrap();
         let count = base.atoms().count();
         edits.remove_atom(AtomHandle::Id(AtomId(count as u32)));
         for tracked in [false, true] {
@@ -969,11 +969,11 @@ proptest! {
         rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let mut separate = base.clone();
-        let first = separate.tracked_transact([first_edits.clone()]).unwrap();
+        let first = separate.tracked_transact([first_edits.clone()], RollbackMethod::Journal).unwrap();
         let first_result = separate.clone();
         let mut applied = separate.clone().edit();
         let applied_witness = applied.tracked_apply(second_edits.clone()).unwrap();
-        let second = separate.tracked_transact([second_edits.clone()]).unwrap();
+        let second = separate.tracked_transact([second_edits.clone()], RollbackMethod::Journal).unwrap();
         prop_assert_eq!(applied_witness, second.clone());
         prop_assert_eq!(applied.finish().unwrap(), separate.clone());
         prop_assert_eq!(
@@ -991,7 +991,7 @@ proptest! {
         prop_assert_eq!(together, separate.clone());
         let mut plain = base.clone();
         plain
-            .transact([first_edits.clone(), second_edits.clone()])
+            .transact([first_edits.clone(), second_edits.clone()], RollbackMethod::Journal)
             .unwrap();
         prop_assert_eq!(plain, separate);
 
@@ -1028,12 +1028,12 @@ proptest! {
         }
         let raw: Vec<_> = edits.iter().cloned().collect();
         let mut single = base.clone();
-        let expected = single.tracked_transact([edits]).unwrap();
+        let expected = single.tracked_transact([edits], rollback_method).unwrap();
         let mut separate = base.clone();
-        let mut composed = separate.tracked_transact([]).unwrap();
+        let mut composed = separate.tracked_transact([], RollbackMethod::Journal).unwrap();
         for chunk in raw.chunks(batch_size) {
             let next = separate
-                .tracked_transact([Edits::from_iter(chunk.iter().cloned())])
+                .tracked_transact([Edits::from_iter(chunk.iter().cloned())], RollbackMethod::Journal)
                 .unwrap();
             composed = composed.compose(&next).unwrap();
         }
@@ -1207,7 +1207,10 @@ fn test_molecule_apply_error(source: Molecule) {
         Err(MoleculeApplyError::Transaction(expected.clone()))
     );
     let mut molecule = source.clone();
-    assert_eq!(molecule.transact([edits]), Err(expected.into()));
+    assert_eq!(
+        molecule.transact([edits], RollbackMethod::Journal),
+        Err(expected.into())
+    );
     assert_eq!(molecule, source);
 }
 

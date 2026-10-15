@@ -5254,7 +5254,10 @@ fn test_molecule_extract(#[from(rich_molecule)] molecule: Molecule) {
 }
 
 #[rstest]
-fn test_molecule_tracked_transact(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+fn test_molecule_tracked_transact(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+) {
     let source = Molecule::from_entries(entries);
     let mut editor = source.edit();
     editor.add_atom(AtomForm::from_element(Element::F));
@@ -5280,8 +5283,10 @@ fn test_molecule_tracked_transact(#[from(equiv_molecule_entries)] entries: Molec
         Correspondence::new(vec![], 1, 0).unwrap(),
         Correspondence::new(vec![], 1, 0).unwrap(),
     );
-    plain.transact([edits.clone()]).unwrap();
-    let witness = molecule.tracked_transact([edits.clone()]).unwrap();
+    plain.transact([edits.clone()], rollback_method).unwrap();
+    let witness = molecule
+        .tracked_transact([edits.clone()], rollback_method)
+        .unwrap();
     assert_eq!(witness, expected_witness);
     assert_eq!(molecule, expected);
     assert_eq!(molecule, plain);
@@ -5289,7 +5294,7 @@ fn test_molecule_tracked_transact(#[from(equiv_molecule_entries)] entries: Molec
     let mut restored = before.clone();
     Transaction::run(
         &mut restored,
-        RollbackMethod::Journal,
+        rollback_method,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             assert_eq!(transaction.probe()?, &expected);
@@ -5302,7 +5307,10 @@ fn test_molecule_tracked_transact(#[from(equiv_molecule_entries)] entries: Molec
 }
 
 #[rstest]
-fn test_molecule_tracked_transact_error(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+fn test_molecule_tracked_transact_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+) {
     let source = Molecule::from_entries(entries);
     let mut editor = source.edit();
     editor.add_atom(AtomForm::from_element(Element::F));
@@ -5325,10 +5333,13 @@ fn test_molecule_tracked_transact_error(#[from(equiv_molecule_entries)] entries:
         Some(expected.clone().into())
     );
     assert_eq!(
-        plain.transact([edits.clone()]),
+        plain.transact([edits.clone()], rollback_method),
         Err(expected.clone().into())
     );
-    assert_eq!(molecule.tracked_transact([edits]), Err(expected.into()));
+    assert_eq!(
+        molecule.tracked_transact([edits], rollback_method),
+        Err(expected.into())
+    );
     assert_eq!(plain, before);
     assert_eq!(molecule, before);
 }

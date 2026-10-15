@@ -133,8 +133,7 @@ proptest! {
             let result = resolver.resolve_into(&mut resolved).unwrap();
             match resolver.plan_resolve(&source) {
                 Solution::Determined(edits) => {
-                    let mut expected = source.clone();
-                    expected.transact([edits]).unwrap();
+                    let expected = source.clone().apply(edits).unwrap();
                     prop_assert_eq!(&resolved, &expected);
                     prop_assert_eq!(&result, &Solution::Determined(()));
                 }

@@ -864,13 +864,13 @@ publication errors convert through MoleculeApplyError into the callback's error 
 
 Molecule::transact accepts prepared batches, applies each, and commits once through Transaction.
 Molecule::tracked_transact uses TrackedTransaction and returns the whole operation's correspondence.
-Both conveniences use Journal recovery. Both run methods take an explicit RollbackMethod
-(Clone or Journal), support planning later batches from probe results and return the callback's
+Both conveniences take an explicit RollbackMethod (Clone or Journal). Both run methods take the
+same selector, support planning later batches from probe results and return the callback's
 value. Clone installs the working molecule only after acceptance; Journal retains edits to the
 receiver. Recovery selection is independent of correspondence tracking. Commit succeeds only as
 a request: the callback must return Ok to retain changes. The restoration contract and cancellation behavior are specified [above](#provenance-and-contextual-validity).
-Python exposes the prepared-batch methods with the same outcomes; scoped callback handles are
-Rust-only.
+Python exposes the prepared-batch methods with the same outcomes and a keyword-only
+rollback_method defaulting to Journal; scoped callback handles are Rust-only.
 
 MoleculeApplyError::Transaction carries edit-precondition or aborted-transaction failures;
 MoleculeApplyError::Integrity carries publication failures. The editor's apply returns only the

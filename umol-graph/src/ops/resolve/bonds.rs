@@ -96,7 +96,7 @@ impl BondsResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        BondFieldChange, BondId, Edit, Edits, MoleculeApplyError, TransactionError,
+        BondFieldChange, BondId, Edit, Edits, MoleculeApplyError, RollbackMethod, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -175,7 +175,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            molecule.transact([edits]),
+            molecule.transact([edits], RollbackMethod::Journal),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

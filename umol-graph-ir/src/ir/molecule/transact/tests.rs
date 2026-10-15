@@ -3338,13 +3338,16 @@ fn test_transaction_apply_remove_aromatic_system_rollback(
     );
     let mut molecule = b.finish().unwrap();
     molecule
-        .transact([Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::AromaticSystem(
-                constrained,
-                AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
-            )
-            .into(),
-        }])])
+        .transact(
+            [Edits::from_iter([Edit::AddMoleculeConstraint {
+                constraint: Constraint::AromaticSystem(
+                    constrained,
+                    AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
+                )
+                .into(),
+            }])],
+            RollbackMethod::Journal,
+        )
         .unwrap();
     let before = molecule.clone();
     let result = Transaction::run(

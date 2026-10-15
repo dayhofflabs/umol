@@ -178,6 +178,7 @@ PUBLIC_EXPORTS = frozenset(
     RingView
     RingViews
     RoleTaggedHashedFeatureSet
+    RollbackMethod
     SignedHashedFeatureSet
     SimpleCycleEnumerationAlgorithm
     SmilesIoConfig
@@ -383,8 +384,8 @@ def test_deferred_member(owner, name):
         (umol.Molecule.edit, "(self, /)"),
         (umol.Molecule.apply, "(self, /, edits)"),
         (umol.Molecule.tracked_apply, "(self, /, edits)"),
-        (umol.Molecule.transact, "(self, /, batches)"),
-        (umol.Molecule.tracked_transact, "(self, /, batches)"),
+        (umol.Molecule.transact, "(self, /, batches, *, rollback_method=Ellipsis)"),
+        (umol.Molecule.tracked_transact, "(self, /, batches, *, rollback_method=Ellipsis)"),
         (umol.Molecule.combine, "(self, /, other)"),
         (umol.Molecule.combine_from, "(self, /, other)"),
         (umol.Molecule.combine_all, "(molecules)"),

@@ -1765,8 +1765,9 @@ to one another.
 
 Molecule::transact applies prepared batches and commits once through Transaction. Its tracked
 counterpart uses TrackedTransaction and returns the whole transaction's entity correspondence.
-Both conveniences use Journal recovery. Python exposes these prepared-batch operations; scoped
-callback handles are Rust-only. Recovery storage is private; Undo remains a public data type.
+Both conveniences require an explicit RollbackMethod. Python exposes these prepared-batch
+operations with keyword-only rollback_method defaulting to Journal; scoped callback handles
+are Rust-only. Recovery storage is private; Undo remains a public data type.
 
 **Not:** a detached journal container; *patch algebra*, which is the entity-level `apply`/`diff` pair.
 **In code:** `Transaction`, `TrackedTransaction`, `RollbackMethod`, `TransactionError`; both handles expose run,

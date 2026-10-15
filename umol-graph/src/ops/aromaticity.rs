@@ -583,6 +583,8 @@ pub(super) fn aromatic_valence_inconsistency(
 
 #[cfg(test)]
 mod tests {
+    use std::mem;
+
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
@@ -986,7 +988,7 @@ mod tests {
                         perception.plan_aromatic_system(molecule, atoms, form)
                     })
                     .collect();
-                molecule.transact([edits]).unwrap();
+                *molecule = mem::take(molecule).apply(edits).unwrap();
                 Solution::Determined(())
             }
             Solution::Underdetermined(_) => Solution::Underdetermined(()),
@@ -1335,7 +1337,7 @@ mod tests {
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     fn test_aromaticity_perceiver_plan_aromatic_system_contributions(
-        #[case] mut molecule: Molecule,
+        #[case] molecule: Molecule,
         #[case] aromatic_system_charge: i64,
         #[case] electrons: Vec<i64>,
         #[case] atom_charges: Vec<i64>,
@@ -1361,7 +1363,7 @@ mod tests {
             .into_iter()
             .flat_map(|(atoms, form)| any_hueckel().plan_aromatic_system(&molecule, atoms, form))
             .collect();
-        molecule.transact([edits]).unwrap();
+        let molecule = molecule.apply(edits).unwrap();
 
         let aromatic_system = molecule.aromatic_system(AromaticSystemId(0));
         assert_eq!(
@@ -1421,7 +1423,7 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,0]"}]}"#),
     )]
     fn test_aromaticity_perceiver_plan_aromatic_system(
-        #[case] mut molecule: Molecule,
+        #[case] molecule: Molecule,
         #[case] aromatic_systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
         #[case] expected: Molecule,
     ) {
@@ -1430,7 +1432,7 @@ mod tests {
             .into_iter()
             .flat_map(|(atoms, form)| perception.plan_aromatic_system(&molecule, atoms, form))
             .collect();
-        molecule.transact([edits]).unwrap();
+        let molecule = molecule.apply(edits).unwrap();
         assert_eq!(molecule, expected);
     }
 

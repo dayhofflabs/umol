@@ -10,8 +10,8 @@ use umol_chem::element::Element;
 use umol_graph_core::{Compaction, GraphCompaction};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomForm, AtomHandle, AtomId, BondHandle, BondId, DativeBondId, Edits,
-    MoleculeCompaction, MoleculeCorrespondence, MulticenterBondId, NoncovalentBondId, StereoAtomId,
-    StereoBondId,
+    MoleculeCompaction, MoleculeCorrespondence, MulticenterBondId, NoncovalentBondId,
+    RollbackMethod, StereoAtomId, StereoBondId,
 };
 
 use crate::strategies::{molecule_dense_renumbering_strategy, molecule_with_removals_strategy};
@@ -128,7 +128,7 @@ proptest! {
         let mut last = Edits::new();
         last.remove_atom(AtomHandle::Id(AtomId(0)));
         let mut expected = molecule.clone();
-        let complete = expected.tracked_transact([first.clone(), addition.clone(), last.clone()]).unwrap();
+        let complete = expected.tracked_transact([first.clone(), addition.clone(), last.clone()], RollbackMethod::Journal).unwrap();
 
         let mut editor = molecule.edit();
         let first = editor.tracked_apply(first).unwrap();

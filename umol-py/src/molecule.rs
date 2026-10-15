@@ -54,7 +54,7 @@ use crate::stereo::{
     StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand,
 };
 use crate::substructure::SubstructureSearchConfig;
-use crate::transaction::MoleculeEditor;
+use crate::transaction::{MoleculeEditor, RollbackMethod};
 
 /// A molecule: the owned graph-IR root.
 ///
@@ -365,7 +365,14 @@ impl Molecule {
     /// Each batch has its own handle namespace. Once execution starts, existing views are
     /// invalidated, including on failure. Application and integrity failures restore the molecule.
     /// If a batch cannot be consumed, earlier batches remain consumed and the molecule is unchanged.
-    fn transact(slf: Py<Self>, py: Python<'_>, batches: &Bound<'_, PyAny>) -> PyResult<()> {
+    /// RollbackMethod.Journal is the default; RollbackMethod.Clone edits a working copy.
+    #[pyo3(signature = (batches, *, rollback_method=RollbackMethod::Journal))]
+    fn transact(
+        slf: Py<Self>,
+        py: Python<'_>,
+        batches: &Bound<'_, PyAny>,
+        rollback_method: RollbackMethod,
+    ) -> PyResult<()> {
         let batches = batches
             .try_iter()?
             .map(|item| -> PyResult<Py<Edits>> { Ok(item?.cast_into::<Edits>()?.unbind()) })
@@ -378,17 +385,20 @@ impl Molecule {
         molecule.advance_counter()?;
         molecule
             .to_rust_mut()?
-            .transact(batches)
+            .transact(batches, rollback_method.to_rust())
             .map_err(molecule_apply_error)
     }
 
     /// Apply prepared batches and return the transaction-entry to result correspondence.
     ///
     /// Batches are consumed and existing views are invalidated as in transact.
+    /// RollbackMethod.Journal is the default; RollbackMethod.Clone edits a working copy.
+    #[pyo3(signature = (batches, *, rollback_method=RollbackMethod::Journal))]
     fn tracked_transact(
         slf: Py<Self>,
         py: Python<'_>,
         batches: &Bound<'_, PyAny>,
+        rollback_method: RollbackMethod,
     ) -> PyResult<MoleculeCorrespondence> {
         let batches = batches
             .try_iter()?
@@ -402,7 +412,7 @@ impl Molecule {
         molecule.advance_counter()?;
         molecule
             .to_rust_mut()?
-            .tracked_transact(batches)
+            .tracked_transact(batches, rollback_method.to_rust())
             .map(MoleculeCorrespondence::from_rust)
             .map_err(molecule_apply_error)
     }
@@ -1454,7 +1464,10 @@ mod tests {
     #[rstest]
     #[case::untracked(false)]
     #[case::tracked(true)]
-    fn test_molecule_transact_borrow_error(#[case] tracked: bool) {
+    fn test_molecule_transact_borrow_error(
+        #[case] tracked: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         Python::attach(|py| {
             let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
             let molecule = Py::new(py, Molecule::from_rust(initial.clone())).unwrap();
@@ -1463,9 +1476,20 @@ mod tests {
             let batches = PyList::new(py, [edits.clone_ref(py)]).unwrap();
 
             let result = if tracked {
-                Molecule::tracked_transact(molecule.clone_ref(py), py, batches.as_any()).map(drop)
+                Molecule::tracked_transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
+                .map(drop)
             } else {
-                Molecule::transact(molecule.clone_ref(py), py, batches.as_any())
+                Molecule::transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
             };
 
             let error = result.unwrap_err();
@@ -1487,7 +1511,10 @@ mod tests {
     #[rstest]
     #[case::untracked(false)]
     #[case::tracked(true)]
-    fn test_molecule_transact_batch_borrow_error(#[case] tracked: bool) {
+    fn test_molecule_transact_batch_borrow_error(
+        #[case] tracked: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         Python::attach(|py| {
             let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
             let molecule = Py::new(py, Molecule::from_rust(initial.clone())).unwrap();
@@ -1506,9 +1533,20 @@ mod tests {
             .unwrap();
 
             let result = if tracked {
-                Molecule::tracked_transact(molecule.clone_ref(py), py, batches.as_any()).map(drop)
+                Molecule::tracked_transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
+                .map(drop)
             } else {
-                Molecule::transact(molecule.clone_ref(py), py, batches.as_any())
+                Molecule::transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
             };
 
             let error = result.unwrap_err();

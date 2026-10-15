@@ -1,16 +1,37 @@
-//! Python ownership wrapper for the molecule editor.
+//! Molecule editor ownership and transaction recovery selection.
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MoleculeEditor as GraphIrMoleculeEditor,
-    MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
+    MulticenterBondId, NoncovalentBondId, RollbackMethod as GraphIrRollbackMethod, StereoAtomId,
+    StereoBondId,
 };
 
 use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
 use crate::error::{molecule_apply_error, molecule_integrity_error, ConsumedError};
 use crate::molecule::Molecule;
+
+/// Recovery method for prepared-batch molecule transactions.
+///
+/// Clone edits a working copy; Journal records undo while editing the receiver.
+/// Both restore the receiver on application or integrity failure.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RollbackMethod {
+    Clone,
+    Journal,
+}
+
+impl RollbackMethod {
+    pub(crate) fn to_rust(self) -> GraphIrRollbackMethod {
+        match self {
+            Self::Clone => GraphIrRollbackMethod::Clone,
+            Self::Journal => GraphIrRollbackMethod::Journal,
+        }
+    }
+}
 
 /// An owning molecule editor, consumed by publication.
 #[pyclass]
@@ -155,6 +176,16 @@ mod tests {
 
     use super::*;
     use crate::error::InvalidStructureError;
+
+    #[rstest]
+    #[case(RollbackMethod::Clone, GraphIrRollbackMethod::Clone)]
+    #[case(RollbackMethod::Journal, GraphIrRollbackMethod::Journal)]
+    fn test_rollback_method_to_rust(
+        #[case] method: RollbackMethod,
+        #[case] expected: GraphIrRollbackMethod,
+    ) {
+        assert_eq!(method.to_rust(), expected);
+    }
 
     #[fixture]
     fn carbon_editor() -> MoleculeEditor {

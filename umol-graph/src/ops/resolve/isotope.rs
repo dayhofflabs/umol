@@ -219,7 +219,8 @@ impl IsotopeResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AtomFieldChange, AtomForm, Edit, MoleculeApplyError, MoleculeEntries, TransactionError,
+        AtomFieldChange, AtomForm, Edit, MoleculeApplyError, MoleculeEntries, RollbackMethod,
+        TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -326,7 +327,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            molecule.transact([edits]),
+            molecule.transact([edits], RollbackMethod::Journal),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))
