@@ -36,6 +36,7 @@ use crate::constraint::multicenter::{MulticenterBondConstraintForm, MulticenterB
 use crate::constraint::noncovalent::{NoncovalentBondConstraintForm, NoncovalentBondConstraintKey};
 use crate::constraint::stereo::{
     StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
+    StereoBondConstraintKey,
 };
 use crate::convert::into_py_variant;
 use crate::dative::{DativeBondForm, DativeBondUpdate};
@@ -485,6 +486,12 @@ type StereoAtomConstraintChange = (
     Option<Py<StereoAtomConstraintForm>>,
 );
 
+type StereoBondConstraintChange = (
+    HandleLike,
+    Option<Py<StereoBondConstraintForm>>,
+    Option<Py<StereoBondConstraintForm>>,
+);
+
 struct TupleItems<T>(Vec<T>);
 
 impl<'a, 'py, T> FromPyObject<'a, 'py> for TupleItems<T>
@@ -728,6 +735,13 @@ pub enum Edit {
         old: Vec<StereoLigandInput>,
         new: Vec<StereoLigandInput>,
     },
+    ModifyStereoBondConfigurations {
+        changes: TupleItems<(
+            HandleLike,
+            Py<StereoConfigurationForm>,
+            Py<StereoConfigurationForm>,
+        )>,
+    },
     ModifyStereoBondField {
         id: HandleLike,
         change: Py<StereoBondFieldChange>,
@@ -793,6 +807,12 @@ pub enum Edit {
         kind: Option<StereoKind>,
         old: Option<Py<StereoAtomConstraintForm>>,
         new: Option<Py<StereoAtomConstraintForm>>,
+    },
+    #[pyo3(constructor = (kind, key, changes))]
+    ModifyStereoBondConstraints {
+        kind: Option<StereoKind>,
+        key: Py<StereoBondConstraintKey>,
+        changes: TupleItems<StereoBondConstraintChange>,
     },
     ModifyStereoBondConstraint {
         id: HandleLike,
@@ -919,6 +939,9 @@ impl Edit {
             Self::ReplaceStereoBondLigands { .. } => {
                 ("ReplaceStereoBondLigands", &["id", "old", "new"])
             }
+            Self::ModifyStereoBondConfigurations { .. } => {
+                ("ModifyStereoBondConfigurations", &["changes"])
+            }
             Self::ModifyStereoBondField { .. } => ("ModifyStereoBondField", &["id", "change"]),
             Self::ModifyAtomConstraint { .. } => ("ModifyAtomConstraint", &["id", "old", "new"]),
             Self::ModifyBondConstraints { .. } => ("ModifyBondConstraints", &["key", "changes"]),
@@ -952,6 +975,9 @@ impl Edit {
             }
             Self::ModifyStereoAtomConstraint { .. } => {
                 ("ModifyStereoAtomConstraint", &["id", "kind", "old", "new"])
+            }
+            Self::ModifyStereoBondConstraints { .. } => {
+                ("ModifyStereoBondConstraints", &["kind", "key", "changes"])
             }
             Self::ModifyStereoBondConstraint { .. } => {
                 ("ModifyStereoBondConstraint", &["id", "kind", "old", "new"])
@@ -1632,6 +1658,28 @@ impl Edit {
                         .collect(),
                 }
             }
+            GraphIrEdit::ModifyStereoBondConfigurations { changes } => {
+                Self::ModifyStereoBondConfigurations {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_stereo_bond_handle(id),
+                                    into_py_variant(
+                                        py,
+                                        StereoConfigurationForm::from_rust(py, old)?,
+                                    )?,
+                                    into_py_variant(
+                                        py,
+                                        StereoConfigurationForm::from_rust(py, new)?,
+                                    )?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
             GraphIrEdit::ModifyStereoBondField { id, change } => Self::ModifyStereoBondField {
                 id: HandleLike::from_stereo_bond_handle(id),
                 change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
@@ -1947,6 +1995,38 @@ impl Edit {
                             into_py_variant(py, StereoAtomConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
+                }
+            }
+            GraphIrEdit::ModifyStereoBondConstraints { kind, key, changes } => {
+                Self::ModifyStereoBondConstraints {
+                    kind: kind.map(StereoKind::from_rust),
+                    key: into_py_variant(py, StereoBondConstraintKey::from_rust(py, key)?)?,
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_stereo_bond_handle(id),
+                                    old.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                StereoBondConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                    new.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                StereoBondConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
                 }
             }
             GraphIrEdit::ModifyStereoBondConstraint { id, kind, old, new } => {
@@ -2505,6 +2585,21 @@ impl Edit {
                         .collect(),
                 }
             }
+            Self::ModifyStereoBondConfigurations { changes } => {
+                GraphIrEdit::ModifyStereoBondConfigurations {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_stereo_bond_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             Self::ModifyStereoBondField { id, change } => GraphIrEdit::ModifyStereoBondField {
                 id: id.to_stereo_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -2688,6 +2783,25 @@ impl Edit {
                     new: new
                         .as_ref()
                         .map(|value| value.bind(py).borrow().to_rust(py)),
+                }
+            }
+            Self::ModifyStereoBondConstraints { kind, key, changes } => {
+                GraphIrEdit::ModifyStereoBondConstraints {
+                    kind: kind.map(StereoKind::to_rust),
+                    key: key.bind(py).borrow().to_rust(py),
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_stereo_bond_handle(),
+                                old.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                                new.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                            )
+                        })
+                        .collect(),
                 }
             }
             Self::ModifyStereoBondConstraint { id, kind, old, new } => {
@@ -3845,6 +3959,59 @@ impl Edits {
                 .map(|(id, old, new)| {
                     (
                         id.to_stereo_atom_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_stereo_bond_configurations(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<StereoConfigurationForm>,
+            Py<StereoConfigurationForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_stereo_bond_configurations(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_stereo_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    #[pyo3(signature = (kind, key, changes))]
+    fn modify_stereo_bond_constraints(
+        &mut self,
+        py: Python<'_>,
+        kind: Option<StereoKind>,
+        key: Py<StereoBondConstraintKey>,
+        changes: Vec<StereoBondConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_stereo_bond_constraints(
+            kind.map(StereoKind::to_rust),
+            key.bind(py).borrow().to_rust(py),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_stereo_bond_handle(),
                         old.as_ref()
                             .map(|value| value.bind(py).borrow().to_rust(py)),
                         new.as_ref()

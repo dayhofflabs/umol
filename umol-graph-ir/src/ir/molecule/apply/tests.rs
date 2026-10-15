@@ -100,6 +100,17 @@ fn removal_entries() -> MoleculeEntries {
     }
 }
 
+#[fixture]
+fn stereo_bond_entries(mut removal_entries: MoleculeEntries) -> MoleculeEntries {
+    removal_entries
+        .bonds
+        .push((AtomId(0), AtomId(2), BondForm::from_order(1)));
+    for (_, _, attributes) in &mut removal_entries.stereo_bonds {
+        *attributes = StereoBondForm::default();
+    }
+    removal_entries
+}
+
 mod additions;
 mod entity_constraints;
 mod fields;

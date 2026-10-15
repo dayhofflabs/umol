@@ -1304,6 +1304,18 @@ impl Molecule {
                 view.replace_ligands(&new);
                 Ok(())
             }
+            Edit::ModifyStereoBondConfigurations { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.stereo_bond(handle)?;
+                    let mut view = self.stereo_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.configuration.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.configuration = new;
+                }
+                Ok(())
+            }
             Edit::ModifyStereoBondField { id, change } => {
                 let id = state.stereo_bond(id)?;
                 let mut view = self.stereo_bond_mut(id);
@@ -1680,6 +1692,37 @@ impl Molecule {
                     Some(constraint) => constraints.set(constraint),
                     None => {
                         constraints.remove(key);
+                    }
+                }
+                Ok(())
+            }
+            Edit::ModifyStereoBondConstraints {
+                kind: _,
+                key,
+                changes,
+            } => {
+                for (handle, old, new) in changes {
+                    let id = state.stereo_bond(handle)?;
+                    if old.as_ref().is_some_and(|value| value.key() != key)
+                        || new.as_ref().is_some_and(|value| value.key() != key)
+                    {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    if old.is_none() && new.is_none() {
+                        continue;
+                    }
+                    let mut view = self.stereo_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match (constraints.get(key), old.as_ref()) {
+                        (None, None) => {}
+                        (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                        _ => return Err(TransactionError::OldStateMismatch),
+                    }
+                    match new {
+                        Some(value) => constraints.set(value),
+                        None => {
+                            constraints.remove(key);
+                        }
                     }
                 }
                 Ok(())
@@ -2994,6 +3037,30 @@ impl Molecule {
                 view.replace_ligands(&new);
                 Ok(Undo::RestoreStereoBondLigands { id, ligands })
             }
+            Edit::ModifyStereoBondConfigurations { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.stereo_bond(handle).and_then(|id| {
+                        let mut view = self.stereo_bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.configuration.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.configuration = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.stereo_bond_mut(id).attributes_mut().configuration = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyStereoBondConfigurations { changes: inverse })
+            }
             Edit::ModifyStereoBondField { id, change } => {
                 let id = state.stereo_bond(id)?;
                 let mut view = self.stereo_bond_mut(id);
@@ -3573,6 +3640,61 @@ impl Molecule {
                     constraint: old,
                 })
             }
+            Edit::ModifyStereoBondConstraints {
+                kind: _,
+                key,
+                changes,
+            } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = (|| {
+                        let id = state.stereo_bond(handle)?;
+                        if old.as_ref().is_some_and(|value| value.key() != key)
+                            || new.as_ref().is_some_and(|value| value.key() != key)
+                        {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        if old.is_none() && new.is_none() {
+                            return Ok(None);
+                        }
+                        let mut view = self.stereo_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match (constraints.get(key), old.as_ref()) {
+                            (None, None) => {}
+                            (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                            _ => return Err(TransactionError::OldStateMismatch),
+                        }
+                        match new {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                        Ok(Some(id))
+                    })();
+                    match result {
+                        Ok(Some(id)) => inverse.push((id, old)),
+                        Ok(None) => {}
+                        Err(error) => {
+                            for (id, old) in inverse.into_iter().rev() {
+                                let mut view = self.stereo_bond_mut(id);
+                                let constraints = &mut view.attributes_mut().constraints;
+                                match old {
+                                    Some(value) => constraints.set(value),
+                                    None => {
+                                        constraints.remove(key);
+                                    }
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::RestoreStereoBondConstraints {
+                    key,
+                    constraints: inverse,
+                })
+            }
             Edit::ModifyStereoBondConstraint {
                 id,
                 kind: _,
@@ -4130,6 +4252,13 @@ impl Molecule {
                     }
                 }
             }
+            Undo::ModifyStereoBondConfigurations { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.stereo_bonds().count() {
+                        self.stereo_bond_mut(id).attributes_mut().configuration = new;
+                    }
+                }
+            }
             Undo::ModifyStereoBondField { id, change } => {
                 if id.index() < self.stereo_bonds().count() {
                     let mut view = self.stereo_bond_mut(id);
@@ -4347,6 +4476,20 @@ impl Molecule {
                         Some(constraint) => constraints.set(constraint),
                         None => {
                             constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreStereoBondConstraints { key, constraints } => {
+                for (id, constraint) in constraints.into_iter().rev() {
+                    if id.index() < self.stereo_bonds().count() {
+                        let mut view = self.stereo_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match constraint {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
                         }
                     }
                 }

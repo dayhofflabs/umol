@@ -439,6 +439,8 @@ fn test_molecule_apply_undo_field_manipulated(#[case] undo: Undo) {
 #[case(Undo::RestoreNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, constraints: vec![(NoncovalentBondId(7), Some(NoncovalentBondConstraintForm::undetermined(NoncovalentBondConstraintKey::Intramolecular)))] })]
 #[case(Undo::ModifyStereoAtomConfigurations { changes: vec![(StereoAtomId(7), StereoConfigurationForm::Undetermined, StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32))] })]
 #[case(Undo::RestoreStereoAtomConstraints { key: StereoAtomConstraintKey::Stereogenicity, constraints: vec![(StereoAtomId(7), None)] })]
+#[case(Undo::ModifyStereoBondConfigurations { changes: vec![(StereoBondId(7), StereoConfigurationForm::Undetermined, StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32))] })]
+#[case(Undo::RestoreStereoBondConstraints { key: StereoBondConstraintKey::Stereogenicity, constraints: vec![(StereoBondId(7), None)] })]
 fn test_molecule_apply_undo_batches(#[case] undo: Undo) {
     let mut molecule = Molecule::new();
     molecule.apply_undo(undo);

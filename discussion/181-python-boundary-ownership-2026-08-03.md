@@ -4316,7 +4316,7 @@ and git diff --check passed. Edit remains 104 bytes and Undo 88 bytes on this ta
 Full workspace tests remain at the combined stage gate. Evidence is in
 scratch/181-s2g3/.
 
-#### S2h — Stereo bond field and constraint batches
+#### S2h — Stereo bond field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -4363,6 +4363,25 @@ removal, retained order, raw Rust/Python kind/key/row preservation, and panic-fr
 export. Extend sequence-equivalence and restoration properties to the shared kind
 context, retaining the raw application policy and exact retained batch roundtrips
 on the existing lossless domain.
+
+**Implemented — 2026-10-15.** Stereo-bond configuration and kind-scoped constraint
+batches are wired through Rust construction, direct and journaled application,
+undo, DSL, and Python. Configuration rows retain complete forms; constraint rows
+share one kind and exact key. Kindless constraint batches are omitted wholly on
+export, while known-kind empty batches retain their keys. Raw application retains
+the existing kindless and mismatched-kind policy. Tests cover ordered single-entry
+equivalence, new and removed handles, failure prefixes, both rollback methods,
+accepted-old-value restoration, correspondence, and preservation of the four-ligand
+endpoint frame. Python retains the shared header and tuple-row contract.
+
+**Verification — 2026-10-15.** The combined S2a–S2h gate passed: 23,187 workspace
+tests (nine existing ignored cases); explicit stereo, lattice, and constraint-reading
+property selections (79, 117, and four cases, with overlap); 683 graph and 12,883 IO
+conformance cases; and 2,663 Python tests (two existing skips) after rebuilding with
+Python 3.13. Strict workspace all-target Clippy, including the graph-IR property
+target, the full nightly formatting check, and git diff --check passed. Edit remains
+104 bytes and Undo 88 bytes on this target. The S2g1 timing/allocation findings and
+their disposition remain recorded in that subitem. Evidence is in scratch/181-s2h/.
 
 **S2 gate:** all eight entity kinds have the same applicable semantics, all
 workspace consumers compile and pass their relevant tests, and the new variants

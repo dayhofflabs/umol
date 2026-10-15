@@ -2,6 +2,7 @@ use rstest::*;
 use umol_graph_core::Compaction;
 
 use super::super::{ApplicationState, HandleTable};
+use super::stereo_bond_entries;
 use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
@@ -23,7 +24,9 @@ use crate::ir::{
     MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
     NoncovalentBondHandle, NoncovalentBondId, RollbackMethod, StereoAtomConstraintForm,
     StereoAtomConstraintKey, StereoAtomForm, StereoAtomHandle, StereoAtomId,
-    StereoConfigurationForm, StereoKind, TransactionError,
+    StereoBondConstraintForm, StereoBondConstraintKey, StereoBondForm, StereoBondHandle,
+    StereoBondId, StereoConfigurationForm, StereoKind, StereoLigand, StereoLigandKind,
+    TransactionError,
 };
 
 #[rstest]
@@ -868,6 +871,127 @@ fn test_molecule_apply_stereo_atom_batches_removed(
     }
     if !journaled {
         let attributes = &mut expected.stereo_atoms[usize::from(created)].2;
+        if constraint {
+            attributes.constraints = vec![form].into();
+        } else {
+            attributes.configuration = configuration;
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut restored = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            restored.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(restored, source);
+    }
+}
+
+#[rstest]
+fn test_molecule_apply_stereo_bond_batches_removed(
+    stereo_bond_entries: MoleculeEntries,
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = stereo_bond_entries;
+    let ligands = vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+    ];
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let (removed, site) = if created {
+        (
+            prefix.add_stereo_bond(
+                BondHandle::Id(BondId(2)),
+                ligands
+                    .iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                StereoBondForm::default(),
+            ),
+            BondHandle::Id(BondId(2)),
+        )
+    } else {
+        (
+            StereoBondHandle::Id(StereoBondId(0)),
+            BondHandle::Id(BondId(0)),
+        )
+    };
+    let ligands = if created {
+        ligands
+    } else {
+        entries.stereo_bonds[0].1.clone()
+    };
+    prefix.remove_stereo_bonds(vec![(
+        removed.clone(),
+        site,
+        ligands
+            .iter()
+            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+            .collect(),
+        StereoBondForm::default(),
+    )]);
+    let key = StereoBondConstraintKey::Stereogenicity;
+    let form = StereoBondConstraintForm::undetermined(key);
+    let configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32);
+    let batch = if constraint {
+        Edit::ModifyStereoBondConstraints {
+            kind: None,
+            key,
+            changes: vec![
+                (
+                    StereoBondHandle::Id(StereoBondId(1)),
+                    None,
+                    Some(form.clone()),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyStereoBondConfigurations {
+            changes: vec![
+                (
+                    StereoBondHandle::Id(StereoBondId(1)),
+                    StereoConfigurationForm::Undetermined,
+                    configuration.clone(),
+                ),
+                (
+                    removed,
+                    StereoConfigurationForm::Undetermined,
+                    configuration.clone(),
+                ),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::StereoBond,
+        index: 0,
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.stereo_bonds.remove(0);
+    }
+    if !journaled {
+        let attributes = &mut expected.stereo_bonds[usize::from(created)].2;
         if constraint {
             attributes.constraints = vec![form].into();
         } else {
