@@ -99,6 +99,27 @@ canonically equal values, invariance under valid remapping, canonicalization
 errors, and receiver preservation. The result may collide and is not a persistent
 identifier. This explicit query does not add Python `__hash__` to mutable objects.
 
+## Delta conversion Cow arguments — 2026-10-15
+
+**Investigation target:** assess the runtime and maintenance costs of the Cow
+arguments introduced in [181 S6c](181-python-boundary-ownership-2026-08-03.md#s6c--move-owned-inverse-results-into-python-forms-done).
+The eight entity Delta converters and aggregate Delta converter use Cow only in
+crate-private from_rust arguments. It is not exposed in the public Rust or Python
+API or retained in returned objects.
+
+The bounded allocation checks showed fewer allocations for the measured inverse
+cases and unchanged lookup allocation counts. They do not establish the runtime
+cost of ownership dispatch or argument movement, or justify the duplicated
+Add/Remove conversion branches by themselves.
+
+After 181, assess whether this implementation should be retained, simplified, or
+replaced. Cover owned inverse results and borrowed indexing/iteration under the
+same source-preservation and independent read-only result contracts. Reuse 181's
+S12a evidence before adding measurements; extend only where needed to resolve a
+concrete cost or design question. Keep common undetermined and literal payloads
+distinct from rarer set/expression cases. This records an investigation, not a
+decision to generalize Cow or replace it throughout the bindings.
+
 ## Type-role review consolidated from 192 — 2026-10-08
 
 [192](192-python-api-type-roles-2026-08-09.md) is superseded by this review.

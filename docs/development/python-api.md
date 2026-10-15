@@ -125,6 +125,10 @@ Deltas.copy() clones the complete Rust collection into an independent owner, pre
 duplicates, ids, and payloads without normalization or applicability checks. Both containers and
 existing source iterators remain usable; appending to either leaves the other unchanged.
 
+Delta.inverse() and each entity delta's inverse() return an independent immutable inverse,
+leaving the source usable. Retained entity forms remain read-only. Inversion preserves the Rust
+operation: it does not normalize payloads or check applicability against a molecule.
+
 ### Immutable owned value
 
 An immutable owned value represents data rather than a mutable identity. Its public fields cannot

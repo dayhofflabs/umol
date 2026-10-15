@@ -198,7 +198,7 @@ def test_entity_delta_readonly_contract(
     copy_update,
     constraint,
 ):
-    expected = str(source)
+    expected = make_entity_delta(source)
     entity_delta = make_entity_delta(source)
     attributes = entity_delta.attributes
 
@@ -210,7 +210,7 @@ def test_entity_delta_readonly_contract(
         source.readonly = True
 
     setattr(source, field, source_update)
-    assert str(attributes) == expected
+    assert make_entity_delta(attributes) == expected
 
     with pytest.raises(TypeError):
         setattr(attributes, field, copy_update)
@@ -234,9 +234,24 @@ def test_entity_delta_readonly_contract(
     inverse = entity_delta.inverse()
     assert inverse is not entity_delta
     assert inverse.attributes.readonly is True
-    assert inverse.inverse() == entity_delta
+    assert inverse.attributes is not attributes
+    assert make_entity_delta(inverse.attributes) == expected
+    with pytest.raises(TypeError):
+        setattr(inverse.attributes, field, copy_update)
+    roundtrip = inverse.inverse()
+    assert roundtrip == entity_delta
+    assert roundtrip.attributes.readonly is True
+    assert entity_delta == expected
 
     wrapped = wrap_delta(entity_delta)
+    aggregate_inverse = wrapped.inverse()
+    assert aggregate_inverse == wrap_delta(inverse)
+    assert aggregate_inverse._0.attributes.readonly is True
+    assert aggregate_inverse._0.attributes is not attributes
+    with pytest.raises(TypeError):
+        aggregate_inverse._0.attributes.constraints.set(constraint)
+    assert aggregate_inverse.inverse() == wrapped
+    assert wrapped == wrap_delta(expected)
     deltas = Deltas([wrapped])
     deltas.append(wrapped)
     deltas.append(wrapped)

@@ -1,5 +1,7 @@
 //! Python bindings for resolved molecule deltas and their field-change payloads.
 
+use std::borrow::Cow;
+
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
@@ -505,39 +507,52 @@ impl AtomDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl AtomDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrAtomDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: Cow<'_, GraphIrAtomDelta>) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrAtomDelta::Add { id, attributes } => Self::Add {
+            Cow::Owned(GraphIrAtomDelta::Add { id, attributes }) => Self::Add {
                 id: id.0,
                 attributes: Readonly::<AtomForm>::from_rust(py, attributes)?,
             },
-            GraphIrAtomDelta::Remove { id, attributes } => Self::Remove {
+            Cow::Owned(GraphIrAtomDelta::Remove { id, attributes }) => Self::Remove {
                 id: id.0,
                 attributes: Readonly::<AtomForm>::from_rust(py, attributes)?,
             },
-            GraphIrAtomDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, AtomFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrAtomDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, AtomConstraintForm::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, AtomConstraintForm::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
+            delta => match delta.as_ref() {
+                GraphIrAtomDelta::Add { id, attributes } => Self::Add {
+                    id: id.0,
+                    attributes: Readonly::<AtomForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrAtomDelta::Remove { id, attributes } => Self::Remove {
+                    id: id.0,
+                    attributes: Readonly::<AtomForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrAtomDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(py, AtomFieldChange::from_rust(py, change)?)?,
+                },
+                GraphIrAtomDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                    id: id.0,
+                    old: old
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(py, AtomConstraintForm::from_rust(py, constraint)?)
+                        })
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(py, AtomConstraintForm::from_rust(py, constraint)?)
+                        })
+                        .transpose()?,
+                },
             },
         })
     }
@@ -611,49 +626,72 @@ impl BondDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl BondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: Cow<'_, GraphIrBondDelta>) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrBondDelta::Add {
+            Cow::Owned(GraphIrBondDelta::Add {
                 id,
                 atoms,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 attributes: Readonly::<BondForm>::from_rust(py, attributes)?,
             },
-            GraphIrBondDelta::Remove {
+            Cow::Owned(GraphIrBondDelta::Remove {
                 id,
                 atoms,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 attributes: Readonly::<BondForm>::from_rust(py, attributes)?,
             },
-            GraphIrBondDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
+            delta => match delta.as_ref() {
+                GraphIrBondDelta::Add {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Add {
+                    id: id.0,
+                    atoms: (atoms[0].0, atoms[1].0),
+                    attributes: Readonly::<BondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrBondDelta::Remove {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    atoms: (atoms[0].0, atoms[1].0),
+                    attributes: Readonly::<BondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrBondDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
+                },
+                GraphIrBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                    id: id.0,
+                    old: old
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)
+                        })
+                        .transpose()?,
+                    new: new
+                        .as_ref()
+                        .map(|constraint| {
+                            into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)
+                        })
+                        .transpose()?,
+                },
             },
         })
     }
@@ -739,53 +777,91 @@ impl DativeBondDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl DativeBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrDativeBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        delta: Cow<'_, GraphIrDativeBondDelta>,
+    ) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrDativeBondDelta::Add {
+            Cow::Owned(GraphIrDativeBondDelta::Add {
                 id,
                 donors,
                 acceptor,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
-                donors: donors.iter().map(|atom| atom.0).collect(),
+                donors: donors.into_iter().map(|atom| atom.0).collect(),
                 acceptor: acceptor.0,
                 attributes: Readonly::<DativeBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrDativeBondDelta::Remove {
+            Cow::Owned(GraphIrDativeBondDelta::Remove {
                 id,
                 donors,
                 acceptor,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
-                donors: donors.iter().map(|atom| atom.0).collect(),
+                donors: donors.into_iter().map(|atom| atom.0).collect(),
                 acceptor: acceptor.0,
                 attributes: Readonly::<DativeBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrDativeBondDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrDativeBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
-                id: id.0,
-                old: old
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, DativeBondConstraintForm::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
-                new: new
-                    .as_ref()
-                    .map(|constraint| {
-                        into_py_variant(py, DativeBondConstraintForm::from_rust(py, constraint)?)
-                    })
-                    .transpose()?,
+            delta => match delta.as_ref() {
+                GraphIrDativeBondDelta::Add {
+                    id,
+                    donors,
+                    acceptor,
+                    attributes,
+                } => Self::Add {
+                    id: id.0,
+                    donors: donors.iter().map(|atom| atom.0).collect(),
+                    acceptor: acceptor.0,
+                    attributes: Readonly::<DativeBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrDativeBondDelta::Remove {
+                    id,
+                    donors,
+                    acceptor,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    donors: donors.iter().map(|atom| atom.0).collect(),
+                    acceptor: acceptor.0,
+                    attributes: Readonly::<DativeBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrDativeBondDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
+                },
+                GraphIrDativeBondDelta::ModifyConstraint { id, old, new } => {
+                    Self::ModifyConstraint {
+                        id: id.0,
+                        old: old
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    DativeBondConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                        new: new
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    DativeBondConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                    }
+                }
             },
         })
     }
@@ -878,58 +954,84 @@ impl AromaticSystemDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl AromaticSystemDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrAromaticSystemDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        delta: Cow<'_, GraphIrAromaticSystemDelta>,
+    ) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrAromaticSystemDelta::Add {
+            Cow::Owned(GraphIrAromaticSystemDelta::Add {
                 id,
                 atoms,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
-                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                atoms: atoms.into_iter().map(|atom| atom.0).collect(),
                 attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes)?,
             },
-            GraphIrAromaticSystemDelta::Remove {
+            Cow::Owned(GraphIrAromaticSystemDelta::Remove {
                 id,
                 atoms,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
-                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                atoms: atoms.into_iter().map(|atom| atom.0).collect(),
                 attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes)?,
             },
-            GraphIrAromaticSystemDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrAromaticSystemDelta::ModifyConstraint { id, old, new } => {
-                Self::ModifyConstraint {
+            delta => match delta.as_ref() {
+                GraphIrAromaticSystemDelta::Add {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Add {
                     id: id.0,
-                    old: old
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                AromaticSystemConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
-                    new: new
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                AromaticSystemConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                    attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrAromaticSystemDelta::Remove {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                    attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrAromaticSystemDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
+                },
+                GraphIrAromaticSystemDelta::ModifyConstraint { id, old, new } => {
+                    Self::ModifyConstraint {
+                        id: id.0,
+                        old: old
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    AromaticSystemConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                        new: new
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    AromaticSystemConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                    }
                 }
-            }
+            },
         })
     }
 
@@ -1019,58 +1121,87 @@ impl MulticenterBondDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl MulticenterBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrMulticenterBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        delta: Cow<'_, GraphIrMulticenterBondDelta>,
+    ) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrMulticenterBondDelta::Add {
+            Cow::Owned(GraphIrMulticenterBondDelta::Add {
                 id,
                 atoms,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
-                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                atoms: atoms.into_iter().map(|atom| atom.0).collect(),
                 attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrMulticenterBondDelta::Remove {
+            Cow::Owned(GraphIrMulticenterBondDelta::Remove {
                 id,
                 atoms,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
-                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                atoms: atoms.into_iter().map(|atom| atom.0).collect(),
                 attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrMulticenterBondDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, MulticenterBondFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrMulticenterBondDelta::ModifyConstraint { id, old, new } => {
-                Self::ModifyConstraint {
+            delta => match delta.as_ref() {
+                GraphIrMulticenterBondDelta::Add {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Add {
                     id: id.0,
-                    old: old
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                MulticenterBondConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
-                    new: new
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                MulticenterBondConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                    attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrMulticenterBondDelta::Remove {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                    attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrMulticenterBondDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(
+                        py,
+                        MulticenterBondFieldChange::from_rust(py, change)?,
+                    )?,
+                },
+                GraphIrMulticenterBondDelta::ModifyConstraint { id, old, new } => {
+                    Self::ModifyConstraint {
+                        id: id.0,
+                        old: old
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    MulticenterBondConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                        new: new
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    MulticenterBondConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                    }
                 }
-            }
+            },
         })
     }
 
@@ -1160,58 +1291,87 @@ impl NoncovalentBondDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl NoncovalentBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrNoncovalentBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        delta: Cow<'_, GraphIrNoncovalentBondDelta>,
+    ) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrNoncovalentBondDelta::Add {
+            Cow::Owned(GraphIrNoncovalentBondDelta::Add {
                 id,
                 atoms,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrNoncovalentBondDelta::Remove {
+            Cow::Owned(GraphIrNoncovalentBondDelta::Remove {
                 id,
                 atoms,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
                 attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrNoncovalentBondDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, NoncovalentBondFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrNoncovalentBondDelta::ModifyConstraint { id, old, new } => {
-                Self::ModifyConstraint {
+            delta => match delta.as_ref() {
+                GraphIrNoncovalentBondDelta::Add {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Add {
                     id: id.0,
-                    old: old
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                NoncovalentBondConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
-                    new: new
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                NoncovalentBondConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
+                    atoms: (atoms[0].0, atoms[1].0),
+                    attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrNoncovalentBondDelta::Remove {
+                    id,
+                    atoms,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    atoms: (atoms[0].0, atoms[1].0),
+                    attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrNoncovalentBondDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(
+                        py,
+                        NoncovalentBondFieldChange::from_rust(py, change)?,
+                    )?,
+                },
+                GraphIrNoncovalentBondDelta::ModifyConstraint { id, old, new } => {
+                    Self::ModifyConstraint {
+                        id: id.0,
+                        old: old
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    NoncovalentBondConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                        new: new
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    NoncovalentBondConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                    }
                 }
-            }
+            },
         })
     }
 
@@ -1299,71 +1459,101 @@ impl StereoAtomDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl StereoAtomDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrStereoAtomDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        delta: Cow<'_, GraphIrStereoAtomDelta>,
+    ) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrStereoAtomDelta::Add {
+            Cow::Owned(GraphIrStereoAtomDelta::Add {
                 id,
                 site,
                 ligands,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
                 site: site.0,
-                ligands: ligands
-                    .iter()
-                    .copied()
-                    .map(StereoLigand::from_rust)
-                    .collect(),
+                ligands: ligands.into_iter().map(StereoLigand::from_rust).collect(),
                 attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes)?,
             },
-            GraphIrStereoAtomDelta::Remove {
+            Cow::Owned(GraphIrStereoAtomDelta::Remove {
                 id,
                 site,
                 ligands,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
                 site: site.0,
-                ligands: ligands
-                    .iter()
-                    .copied()
-                    .map(StereoLigand::from_rust)
-                    .collect(),
+                ligands: ligands.into_iter().map(StereoLigand::from_rust).collect(),
                 attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes)?,
             },
-            GraphIrStereoAtomDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrStereoAtomDelta::ModifyConstraint { id, kind, old, new } => {
-                Self::ModifyConstraint {
+            delta => match delta.as_ref() {
+                GraphIrStereoAtomDelta::Add {
+                    id,
+                    site,
+                    ligands,
+                    attributes,
+                } => Self::Add {
                     id: id.0,
-                    kind: kind.map(StereoKind::from_rust),
-                    old: old
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                StereoAtomConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
-                    new: new
-                        .as_ref()
-                        .map(|constraint| {
-                            into_py_variant(
-                                py,
-                                StereoAtomConstraintForm::from_rust(py, constraint)?,
-                            )
-                        })
-                        .transpose()?,
+                    site: site.0,
+                    ligands: ligands
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
+                    attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrStereoAtomDelta::Remove {
+                    id,
+                    site,
+                    ligands,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    site: site.0,
+                    ligands: ligands
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
+                    attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrStereoAtomDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
+                },
+                GraphIrStereoAtomDelta::ModifyConstraint { id, kind, old, new } => {
+                    Self::ModifyConstraint {
+                        id: id.0,
+                        kind: kind.map(StereoKind::from_rust),
+                        old: old
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    StereoAtomConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                        new: new
+                            .as_ref()
+                            .map(|constraint| {
+                                into_py_variant(
+                                    py,
+                                    StereoAtomConstraintForm::from_rust(py, constraint)?,
+                                )
+                            })
+                            .transpose()?,
+                    }
                 }
-            }
+            },
         })
     }
 
@@ -1453,63 +1643,98 @@ impl StereoBondDelta {
         entity_delta_repr(slf.bind(py).as_any(), "StereoBondDelta", variant, fields)
     }
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py).inverse()))?,
+        )
     }
 }
 
 impl StereoBondDelta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrStereoBondDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        delta: Cow<'_, GraphIrStereoBondDelta>,
+    ) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrStereoBondDelta::Add {
+            Cow::Owned(GraphIrStereoBondDelta::Add {
                 id,
                 site,
                 ligands,
                 attributes,
-            } => Self::Add {
+            }) => Self::Add {
                 id: id.0,
                 site: site.0,
-                ligands: ligands
-                    .iter()
-                    .copied()
-                    .map(StereoLigand::from_rust)
-                    .collect(),
+                ligands: ligands.into_iter().map(StereoLigand::from_rust).collect(),
                 attributes: Readonly::<StereoBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrStereoBondDelta::Remove {
+            Cow::Owned(GraphIrStereoBondDelta::Remove {
                 id,
                 site,
                 ligands,
                 attributes,
-            } => Self::Remove {
+            }) => Self::Remove {
                 id: id.0,
                 site: site.0,
-                ligands: ligands
-                    .iter()
-                    .copied()
-                    .map(StereoLigand::from_rust)
-                    .collect(),
+                ligands: ligands.into_iter().map(StereoLigand::from_rust).collect(),
                 attributes: Readonly::<StereoBondForm>::from_rust(py, attributes)?,
             },
-            GraphIrStereoBondDelta::ModifyField { id, change } => Self::ModifyField {
-                id: id.0,
-                change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
-            },
-            GraphIrStereoBondDelta::ModifyConstraint { id, kind, old, new } => {
-                Self::ModifyConstraint {
+            delta => match delta.as_ref() {
+                GraphIrStereoBondDelta::Add {
+                    id,
+                    site,
+                    ligands,
+                    attributes,
+                } => Self::Add {
                     id: id.0,
-                    kind: kind.map(StereoKind::from_rust),
-                    old: old
-                        .as_ref()
-                        .map(|c| into_py_variant(py, StereoBondConstraintForm::from_rust(py, c)?))
-                        .transpose()?,
-                    new: new
-                        .as_ref()
-                        .map(|c| into_py_variant(py, StereoBondConstraintForm::from_rust(py, c)?))
-                        .transpose()?,
+                    site: site.0,
+                    ligands: ligands
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
+                    attributes: Readonly::<StereoBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrStereoBondDelta::Remove {
+                    id,
+                    site,
+                    ligands,
+                    attributes,
+                } => Self::Remove {
+                    id: id.0,
+                    site: site.0,
+                    ligands: ligands
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
+                    attributes: Readonly::<StereoBondForm>::from_rust(py, attributes.clone())?,
+                },
+                GraphIrStereoBondDelta::ModifyField { id, change } => Self::ModifyField {
+                    id: id.0,
+                    change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
+                },
+                GraphIrStereoBondDelta::ModifyConstraint { id, kind, old, new } => {
+                    Self::ModifyConstraint {
+                        id: id.0,
+                        kind: kind.map(StereoKind::from_rust),
+                        old: old
+                            .as_ref()
+                            .map(|c| {
+                                into_py_variant(py, StereoBondConstraintForm::from_rust(py, c)?)
+                            })
+                            .transpose()?,
+                        new: new
+                            .as_ref()
+                            .map(|c| {
+                                into_py_variant(py, StereoBondConstraintForm::from_rust(py, c)?)
+                            })
+                            .transpose()?,
+                    }
                 }
-            }
+            },
         })
     }
+
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondDelta {
         match self {
             Self::Add {
@@ -1643,43 +1868,91 @@ impl Delta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py)?.inverse())?)
+        into_py_variant(
+            py,
+            Self::from_rust(py, Cow::Owned(self.to_rust(py)?.inverse()))?,
+        )
     }
 }
 
 impl Delta {
-    pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrDelta) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, delta: Cow<'_, GraphIrDelta>) -> PyResult<Self> {
         Ok(match delta {
-            GraphIrDelta::Atom(delta) => {
-                Self::Atom(into_py_variant(py, AtomDelta::from_rust(py, delta)?)?)
-            }
-            GraphIrDelta::Bond(delta) => {
-                Self::Bond(into_py_variant(py, BondDelta::from_rust(py, delta)?)?)
-            }
-            GraphIrDelta::DativeBond(delta) => {
-                Self::DativeBond(into_py_variant(py, DativeBondDelta::from_rust(py, delta)?)?)
-            }
-            GraphIrDelta::AromaticSystem(delta) => Self::AromaticSystem(into_py_variant(
-                py,
-                AromaticSystemDelta::from_rust(py, delta)?,
-            )?),
-            GraphIrDelta::MulticenterBond(delta) => Self::MulticenterBond(into_py_variant(
-                py,
-                MulticenterBondDelta::from_rust(py, delta)?,
-            )?),
-            GraphIrDelta::NoncovalentBond(delta) => Self::NoncovalentBond(into_py_variant(
-                py,
-                NoncovalentBondDelta::from_rust(py, delta)?,
-            )?),
-            GraphIrDelta::StereoAtom(delta) => {
-                Self::StereoAtom(into_py_variant(py, StereoAtomDelta::from_rust(py, delta)?)?)
-            }
-            GraphIrDelta::StereoBond(delta) => {
-                Self::StereoBond(into_py_variant(py, StereoBondDelta::from_rust(py, delta)?)?)
-            }
-            GraphIrDelta::Constraint(delta) => {
-                Self::Constraint(into_py_variant(py, ConstraintDelta::from_rust(py, delta)?)?)
-            }
+            Cow::Owned(delta) => match delta {
+                GraphIrDelta::Atom(delta) => Self::Atom(into_py_variant(
+                    py,
+                    AtomDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::Bond(delta) => Self::Bond(into_py_variant(
+                    py,
+                    BondDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::DativeBond(delta) => Self::DativeBond(into_py_variant(
+                    py,
+                    DativeBondDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::AromaticSystem(delta) => Self::AromaticSystem(into_py_variant(
+                    py,
+                    AromaticSystemDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::MulticenterBond(delta) => Self::MulticenterBond(into_py_variant(
+                    py,
+                    MulticenterBondDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::NoncovalentBond(delta) => Self::NoncovalentBond(into_py_variant(
+                    py,
+                    NoncovalentBondDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::StereoAtom(delta) => Self::StereoAtom(into_py_variant(
+                    py,
+                    StereoAtomDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::StereoBond(delta) => Self::StereoBond(into_py_variant(
+                    py,
+                    StereoBondDelta::from_rust(py, Cow::Owned(delta))?,
+                )?),
+                GraphIrDelta::Constraint(delta) => Self::Constraint(into_py_variant(
+                    py,
+                    ConstraintDelta::from_rust(py, &delta)?,
+                )?),
+            },
+            Cow::Borrowed(delta) => match delta {
+                GraphIrDelta::Atom(delta) => Self::Atom(into_py_variant(
+                    py,
+                    AtomDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::Bond(delta) => Self::Bond(into_py_variant(
+                    py,
+                    BondDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::DativeBond(delta) => Self::DativeBond(into_py_variant(
+                    py,
+                    DativeBondDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::AromaticSystem(delta) => Self::AromaticSystem(into_py_variant(
+                    py,
+                    AromaticSystemDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::MulticenterBond(delta) => Self::MulticenterBond(into_py_variant(
+                    py,
+                    MulticenterBondDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::NoncovalentBond(delta) => Self::NoncovalentBond(into_py_variant(
+                    py,
+                    NoncovalentBondDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::StereoAtom(delta) => Self::StereoAtom(into_py_variant(
+                    py,
+                    StereoAtomDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::StereoBond(delta) => Self::StereoBond(into_py_variant(
+                    py,
+                    StereoBondDelta::from_rust(py, Cow::Borrowed(delta))?,
+                )?),
+                GraphIrDelta::Constraint(delta) => {
+                    Self::Constraint(into_py_variant(py, ConstraintDelta::from_rust(py, delta)?)?)
+                }
+            },
         })
     }
 
@@ -1749,7 +2022,7 @@ impl DeltaIter {
         let owner = self.owner.try_borrow(py)?;
         let entry = into_py_variant(
             py,
-            Delta::from_rust(py, &owner.0.as_slice()[self.position])?,
+            Delta::from_rust(py, Cow::Borrowed(&owner.0.as_slice()[self.position]))?,
         )?;
         self.position += 1;
         Ok(Some(entry))
@@ -1786,7 +2059,7 @@ impl Deltas {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, Delta::from_rust(py, entry)?)?;
+            let value = into_py_variant(py, Delta::from_rust(py, Cow::Borrowed(entry))?)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!("Deltas([{}])", parts.join(", ")))
@@ -1804,7 +2077,7 @@ impl Deltas {
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Delta> {
         let index = resolve_delta_index(self.0.len(), index)?;
-        Delta::from_rust(py, &self.0.as_slice()[index])
+        Delta::from_rust(py, Cow::Borrowed(&self.0.as_slice()[index]))
     }
 
     /// Lazily copy entries present now; later appends are excluded.
@@ -2720,9 +2993,17 @@ mod tests {
         old: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(3))),
         new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
     })]
-    fn test_atom_delta_roundtrip(#[case] delta: GraphIrAtomDelta) {
+    fn test_atom_delta_roundtrip(
+        #[case] delta: GraphIrAtomDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
-            assert_eq!(AtomDelta::from_rust(py, &delta).unwrap().to_rust(py), delta);
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
+            assert_eq!(AtomDelta::from_rust(py, input).unwrap().to_rust(py), delta);
         });
     }
 
@@ -2755,8 +3036,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = AtomDelta::from_rust(py, &lhs).unwrap();
-            let rhs = AtomDelta::from_rust(py, &rhs).unwrap();
+            let lhs = AtomDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = AtomDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -2796,7 +3077,9 @@ mod tests {
     )]
     fn test_atom_delta_repr(#[case] delta: GraphIrAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
-            let delta = into_py_variant(py, AtomDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta =
+                into_py_variant(py, AtomDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap())
+                    .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -2843,14 +3126,24 @@ mod tests {
     })]
     fn test_atom_delta_inverse(#[case] delta: GraphIrAtomDelta) {
         Python::attach(|py| {
-            let binding = AtomDelta::from_rust(py, &delta).unwrap();
+            let binding = AtomDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::Atom(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -2887,9 +3180,17 @@ mod tests {
         old: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(false))),
         new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
-    fn test_bond_delta_roundtrip(#[case] delta: GraphIrBondDelta) {
+    fn test_bond_delta_roundtrip(
+        #[case] delta: GraphIrBondDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
-            assert_eq!(BondDelta::from_rust(py, &delta).unwrap().to_rust(py), delta);
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
+            assert_eq!(BondDelta::from_rust(py, input).unwrap().to_rust(py), delta);
         });
     }
 
@@ -2926,8 +3227,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = BondDelta::from_rust(py, &lhs).unwrap();
-            let rhs = BondDelta::from_rust(py, &rhs).unwrap();
+            let lhs = BondDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = BondDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -2969,7 +3270,9 @@ mod tests {
     )]
     fn test_bond_delta_repr(#[case] delta: GraphIrBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
-            let delta = into_py_variant(py, BondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta =
+                into_py_variant(py, BondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap())
+                    .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -3018,14 +3321,24 @@ mod tests {
     })]
     fn test_bond_delta_inverse(#[case] delta: GraphIrBondDelta) {
         Python::attach(|py| {
-            let binding = BondDelta::from_rust(py, &delta).unwrap();
+            let binding = BondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::Bond(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -3064,10 +3377,18 @@ mod tests {
         old: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(false))),
         new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
     })]
-    fn test_dative_bond_delta_roundtrip(#[case] delta: GraphIrDativeBondDelta) {
+    fn test_dative_bond_delta_roundtrip(
+        #[case] delta: GraphIrDativeBondDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
             assert_eq!(
-                DativeBondDelta::from_rust(py, &delta).unwrap().to_rust(py),
+                DativeBondDelta::from_rust(py, input).unwrap().to_rust(py),
                 delta
             );
         });
@@ -3110,8 +3431,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = DativeBondDelta::from_rust(py, &lhs).unwrap();
-            let rhs = DativeBondDelta::from_rust(py, &rhs).unwrap();
+            let lhs = DativeBondDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = DativeBondDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -3155,8 +3476,11 @@ mod tests {
     )]
     fn test_dative_bond_delta_repr(#[case] delta: GraphIrDativeBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
-            let delta =
-                into_py_variant(py, DativeBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta = into_py_variant(
+                py,
+                DativeBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -3207,14 +3531,24 @@ mod tests {
     })]
     fn test_dative_bond_delta_inverse(#[case] delta: GraphIrDativeBondDelta) {
         Python::attach(|py| {
-            let binding = DativeBondDelta::from_rust(py, &delta).unwrap();
+            let binding = DativeBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::DativeBond(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -3251,10 +3585,18 @@ mod tests {
         old: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(5))),
         new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
-    fn test_aromatic_system_delta_roundtrip(#[case] delta: GraphIrAromaticSystemDelta) {
+    fn test_aromatic_system_delta_roundtrip(
+        #[case] delta: GraphIrAromaticSystemDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
             assert_eq!(
-                AromaticSystemDelta::from_rust(py, &delta)
+                AromaticSystemDelta::from_rust(py, input)
                     .unwrap()
                     .to_rust(py),
                 delta
@@ -3295,8 +3637,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = AromaticSystemDelta::from_rust(py, &lhs).unwrap();
-            let rhs = AromaticSystemDelta::from_rust(py, &rhs).unwrap();
+            let lhs = AromaticSystemDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = AromaticSystemDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -3341,8 +3683,11 @@ mod tests {
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
-            let delta =
-                into_py_variant(py, AromaticSystemDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta = into_py_variant(
+                py,
+                AromaticSystemDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -3391,14 +3736,24 @@ mod tests {
     })]
     fn test_aromatic_system_delta_inverse(#[case] delta: GraphIrAromaticSystemDelta) {
         Python::attach(|py| {
-            let binding = AromaticSystemDelta::from_rust(py, &delta).unwrap();
+            let binding = AromaticSystemDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::AromaticSystem(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -3435,10 +3790,18 @@ mod tests {
         old: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(5))),
         new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
     })]
-    fn test_multicenter_bond_delta_roundtrip(#[case] delta: GraphIrMulticenterBondDelta) {
+    fn test_multicenter_bond_delta_roundtrip(
+        #[case] delta: GraphIrMulticenterBondDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
             assert_eq!(
-                MulticenterBondDelta::from_rust(py, &delta)
+                MulticenterBondDelta::from_rust(py, input)
                     .unwrap()
                     .to_rust(py),
                 delta
@@ -3479,8 +3842,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = MulticenterBondDelta::from_rust(py, &lhs).unwrap();
-            let rhs = MulticenterBondDelta::from_rust(py, &rhs).unwrap();
+            let lhs = MulticenterBondDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = MulticenterBondDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -3525,8 +3888,11 @@ mod tests {
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
-            let delta =
-                into_py_variant(py, MulticenterBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta = into_py_variant(
+                py,
+                MulticenterBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -3575,14 +3941,24 @@ mod tests {
     })]
     fn test_multicenter_bond_delta_inverse(#[case] delta: GraphIrMulticenterBondDelta) {
         Python::attach(|py| {
-            let binding = MulticenterBondDelta::from_rust(py, &delta).unwrap();
+            let binding = MulticenterBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::MulticenterBond(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -3619,10 +3995,18 @@ mod tests {
         old: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(false))),
         new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
     })]
-    fn test_noncovalent_bond_delta_roundtrip(#[case] delta: GraphIrNoncovalentBondDelta) {
+    fn test_noncovalent_bond_delta_roundtrip(
+        #[case] delta: GraphIrNoncovalentBondDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
             assert_eq!(
-                NoncovalentBondDelta::from_rust(py, &delta)
+                NoncovalentBondDelta::from_rust(py, input)
                     .unwrap()
                     .to_rust(py),
                 delta
@@ -3663,8 +4047,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = NoncovalentBondDelta::from_rust(py, &lhs).unwrap();
-            let rhs = NoncovalentBondDelta::from_rust(py, &rhs).unwrap();
+            let lhs = NoncovalentBondDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = NoncovalentBondDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -3709,8 +4093,11 @@ mod tests {
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
-            let delta =
-                into_py_variant(py, NoncovalentBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta = into_py_variant(
+                py,
+                NoncovalentBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -3759,14 +4146,24 @@ mod tests {
     })]
     fn test_noncovalent_bond_delta_inverse(#[case] delta: GraphIrNoncovalentBondDelta) {
         Python::attach(|py| {
-            let binding = NoncovalentBondDelta::from_rust(py, &delta).unwrap();
+            let binding = NoncovalentBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::NoncovalentBond(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -3827,10 +4224,18 @@ mod tests {
             GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    fn test_stereo_atom_delta_roundtrip(#[case] delta: GraphIrStereoAtomDelta) {
+    fn test_stereo_atom_delta_roundtrip(
+        #[case] delta: GraphIrStereoAtomDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
             assert_eq!(
-                StereoAtomDelta::from_rust(py, &delta).unwrap().to_rust(py),
+                StereoAtomDelta::from_rust(py, input).unwrap().to_rust(py),
                 delta
             );
         });
@@ -3928,8 +4333,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = StereoAtomDelta::from_rust(py, &lhs).unwrap();
-            let rhs = StereoAtomDelta::from_rust(py, &rhs).unwrap();
+            let lhs = StereoAtomDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = StereoAtomDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -3991,8 +4396,11 @@ mod tests {
     )]
     fn test_stereo_atom_delta_repr(#[case] delta: GraphIrStereoAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
-            let delta =
-                into_py_variant(py, StereoAtomDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta = into_py_variant(
+                py,
+                StereoAtomDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -4063,14 +4471,24 @@ mod tests {
     })]
     fn test_stereo_atom_delta_inverse(#[case] delta: GraphIrStereoAtomDelta) {
         Python::attach(|py| {
-            let binding = StereoAtomDelta::from_rust(py, &delta).unwrap();
+            let binding = StereoAtomDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::StereoAtom(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
     #[rstest]
@@ -4130,10 +4548,18 @@ mod tests {
             GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    fn test_stereo_bond_delta_roundtrip(#[case] delta: GraphIrStereoBondDelta) {
+    fn test_stereo_bond_delta_roundtrip(
+        #[case] delta: GraphIrStereoBondDelta,
+        #[values(false, true)] owned: bool,
+    ) {
         Python::attach(|py| {
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
             assert_eq!(
-                StereoBondDelta::from_rust(py, &delta).unwrap().to_rust(py),
+                StereoBondDelta::from_rust(py, input).unwrap().to_rust(py),
                 delta
             );
         });
@@ -4231,8 +4657,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = StereoBondDelta::from_rust(py, &lhs).unwrap();
-            let rhs = StereoBondDelta::from_rust(py, &rhs).unwrap();
+            let lhs = StereoBondDelta::from_rust(py, Cow::Borrowed(&lhs)).unwrap();
+            let rhs = StereoBondDelta::from_rust(py, Cow::Borrowed(&rhs)).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -4294,8 +4720,11 @@ mod tests {
     )]
     fn test_stereo_bond_delta_repr(#[case] delta: GraphIrStereoBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
-            let delta =
-                into_py_variant(py, StereoBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            let delta = into_py_variant(
+                py,
+                StereoBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 delta
                     .bind(py)
@@ -4366,14 +4795,24 @@ mod tests {
     })]
     fn test_stereo_bond_delta_inverse(#[case] delta: GraphIrStereoBondDelta) {
         Python::attach(|py| {
-            let binding = StereoBondDelta::from_rust(py, &delta).unwrap();
+            let binding = StereoBondDelta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+
+            let aggregate = GraphIrDelta::StereoBond(delta);
+            let binding = Delta::from_rust(py, Cow::Borrowed(&aggregate)).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
+                aggregate.clone().inverse()
+            );
+            assert_eq!(binding.to_rust(py).unwrap(), aggregate);
         });
     }
 
@@ -4545,9 +4984,14 @@ mod tests {
     #[case::constraint(GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
         GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
     )))]
-    fn test_delta_roundtrip(#[case] delta: GraphIrDelta) {
+    fn test_delta_roundtrip(#[case] delta: GraphIrDelta, #[values(false, true)] owned: bool) {
         Python::attach(|py| {
-            let binding = Delta::from_rust(py, &delta).unwrap();
+            let input = if owned {
+                Cow::Owned(delta.clone())
+            } else {
+                Cow::Borrowed(&delta)
+            };
+            let binding = Delta::from_rust(py, input).unwrap();
             assert_eq!(binding.to_rust(py).unwrap(), delta);
         });
     }
@@ -4592,8 +5036,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let left = Delta::from_rust(py, &left).unwrap();
-            let right = Delta::from_rust(py, &right).unwrap();
+            let left = Delta::from_rust(py, Cow::Borrowed(&left)).unwrap();
+            let right = Delta::from_rust(py, Cow::Borrowed(&right)).unwrap();
             assert_eq!(left.__eq__(&right, py).unwrap(), expected);
         });
     }
@@ -4630,7 +5074,8 @@ mod tests {
     )]
     fn test_delta_repr(#[case] delta: GraphIrDelta, #[case] expected: &str) {
         Python::attach(|py| {
-            let binding = into_py_variant(py, Delta::from_rust(py, &delta).unwrap()).unwrap();
+            let binding =
+                into_py_variant(py, Delta::from_rust(py, Cow::Borrowed(&delta)).unwrap()).unwrap();
             assert_eq!(
                 binding
                     .bind(py)
@@ -4698,12 +5143,13 @@ mod tests {
     )))]
     fn test_delta_inverse(#[case] delta: GraphIrDelta) {
         Python::attach(|py| {
-            let binding = Delta::from_rust(py, &delta).unwrap();
+            let binding = Delta::from_rust(py, Cow::Borrowed(&delta)).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py).unwrap(),
                 delta.clone().inverse()
             );
+            assert_eq!(binding.to_rust(py).unwrap(), delta);
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py).unwrap(), delta);
         });
@@ -4775,7 +5221,10 @@ mod tests {
         Python::attach(|py| {
             let python_entries = entries
                 .iter()
-                .map(|entry| into_py_variant(py, Delta::from_rust(py, entry).unwrap()).unwrap())
+                .map(|entry| {
+                    into_py_variant(py, Delta::from_rust(py, Cow::Borrowed(entry)).unwrap())
+                        .unwrap()
+                })
                 .collect();
             let expected: GraphIrDeltas = entries.into_iter().collect();
             assert_eq!(
@@ -4856,7 +5305,9 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            let value = into_py_variant(py, Delta::from_rust(py, &appended).unwrap()).unwrap();
+            let value =
+                into_py_variant(py, Delta::from_rust(py, Cow::Borrowed(&appended)).unwrap())
+                    .unwrap();
 
             deltas.append(py, value).unwrap();
 

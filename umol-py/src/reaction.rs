@@ -766,6 +766,7 @@ impl ReactionProductsIter {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::iter;
 
     use pyo3::exceptions::{PyStopIteration, PyTypeError, PyValueError};
@@ -1198,10 +1199,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
                         attributes: GraphIrAtomForm::from_element(ChemElement::N),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -1856,10 +1857,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
                         attributes: GraphIrAtomForm::from_element(ChemElement::O),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -1925,10 +1926,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
                         attributes: GraphIrAtomForm::from_element(ChemElement::N),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -3006,10 +3007,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
                         attributes: GraphIrAtomForm::from_element(ChemElement::O),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )

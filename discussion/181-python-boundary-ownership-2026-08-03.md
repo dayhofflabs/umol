@@ -5103,8 +5103,8 @@ versus direct copy with identical current application semantics.
 
 **Verification:** 26 focused Rust tests and 279 Python edit tests passed after
 rebuilding the extension under Python 3.13. Strict Clippy passed for all umol-py
-targets. Formatting and git diff --check passed. The broader S6 gate remains
-after S6c. Sources, manifests, raw logs, trial ranges, historical joins, and
+targets. Formatting and git diff --check passed. The broader S6 gate is recorded
+under S6c. Sources, manifests, raw logs, trial ranges, historical joins, and
 validation logs are retained in scratch/181-s6a.
 
 #### S6b — Explicit Deltas copy (done)
@@ -5151,27 +5151,27 @@ allocation/reallocation calls requesting 19,616 bytes; direct copy made 65
 requesting 10,080 bytes. These counts exclude the Python heap and RSS. The result
 supports retaining direct copy, with no additional processing beyond Rust Clone.
 The source, manifest, raw allocation result, and validation logs are retained in
-scratch/181-s6b. S6c remains open before the S6 gate.
+scratch/181-s6b. The S6 gate is recorded under S6c.
 
-#### S6c — Move owned inverse results into Python forms
+#### S6c — Move owned inverse results into Python forms (done)
 
 **Modules:** umol-py entity, delta, and affected conversion callers/tests.
 **Internal conversion signature changes, red→green within the subitem; Python
 inverse signatures and semantics unchanged.** [dep: S0a; independent of S6a/S6b]
 
-Use ownership at the existing conversion boundary rather than adding a second
-inverse implementation or a parallel conversion family:
+Preserve owned and borrowed inputs at the existing conversion boundary rather
+than adding a second inverse implementation or a parallel conversion family:
 
 ```rust
 // Readonly<T>: accept the owned Rust form instead of borrowing and cloning it.
 pub(crate) fn from_rust(py: Python<'_>, value: T::RustForm) -> PyResult<Self>;
 
-// Each of the eight entity Delta wrappers: accept its owned Rust delta.
+// Each of the eight entity Delta wrappers: preserve input ownership.
 // AtomDelta shown; use the corresponding types for the other seven kinds.
-pub(crate) fn from_rust(py: Python<'_>, delta: GraphIrAtomDelta) -> PyResult<Self>;
+pub(crate) fn from_rust(py: Python<'_>, delta: Cow<'_, GraphIrAtomDelta>) -> PyResult<Self>;
 
-// Aggregate Delta: move entity payloads into the corresponding converters.
-pub(crate) fn from_rust(py: Python<'_>, delta: GraphIrDelta) -> PyResult<Self>;
+// Aggregate Delta: pass the same ownership mode to the entity converter.
+pub(crate) fn from_rust(py: Python<'_>, delta: Cow<'_, GraphIrDelta>) -> PyResult<Self>;
 
 // Existing Python method remains unchanged.
 fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>>;
@@ -5180,20 +5180,32 @@ fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>>;
 Cover AtomDelta, BondDelta, DativeBondDelta, AromaticSystemDelta,
 MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta, and
 aggregate Delta.
-Continue calling Rust inverse. Match its owned result by value and move Add/Remove
-forms into the existing read-only Python form representation; move owned atom,
-ligand, and site lists through their existing conversions as applicable.
+Continue calling Rust inverse. Pass its result as Cow::Owned, match owned
+Add/Remove variants by value, and move their forms into the existing read-only
+Python representation. Move owned atom and ligand lists through their existing
+conversions; preserve fixed endpoint arrays and site ids.
 Do not borrow the owned inverse merely to clone its complete form again.
 
 Aggregate Delta.inverse passes its owned Rust result through the outer converter,
 which dispatches entity payloads by value without an intervening clone.
-Migrate genuinely borrowed producers, including indexing and iteration, to make
-their required clone explicit before this boundary.
+Indexing, iteration, and repr pass Cow::Borrowed. Borrowed Add/Remove conversion
+copies the form and participant data needed for an independent Python result;
+field-change and constraint variants continue to use their existing borrowed
+converters directly. Cow is an internal conversion argument, not a Python type
+or retained wrapper state.
+
 Migrate all Readonly from_rust callers, including Edit conversion, in the same
 subitem. Their required independent copies stay in place; no supplied Python form
 is consumed. Keep existing field-change and constraint conversion semantics; this
 bounded item does not claim to eliminate their nested conversion copies or change
 Rust inverse. No normalization or integrity checks are introduced.
+
+The initially specified owned-only signatures were rejected during implementation:
+cloning a borrowed delta before conversion adds a complete temporary copy before
+the leaf converters copy its fields or constraints again. The Cow argument avoids
+that regression without extending this item into leaf-form conversion. The local
+Add/Remove branches distinguish moving from copying; field and constraint
+conversion remains shared.
 
 **Checks:** exact inverse values and unchanged inputs for every entity kind and
 variant; retained read-only form behavior; exact borrowed-entry conversions and
@@ -5213,6 +5225,45 @@ they support retaining the copying changes or identify a problem to resolve.
 Resolve cost concerns when needed and distinguish measured results from
 unmeasured payloads; consolidate routine whole-operation timing at S12a.
 Run the full workspace and MSRV checks only at the combined final gate.
+
+**Implemented (2026-10-15):** the eight entity Delta converters and aggregate
+Delta converter accept Cow inputs. Owned inverse Add/Remove forms and participant
+lists move into the existing Python representations; borrowed entry conversion
+keeps only the copies needed by those representations. Readonly accepts an owned
+form, and Edit conversion makes its required form clones explicit. Public Python
+names, signatures, source preservation, and read-only behavior are unchanged.
+
+Exact Rust checks cover both conversion ownership modes, each entity kind and
+variant, direct and aggregate inverses, and unchanged sources. Python checks
+cover independent read-only inverse forms, mutation rejection, writable explicit
+copies, and existing batch lookup/iteration behavior. All 1,699 Rust binding tests
+passed (two existing ignored tests); all 396 focused Python edit/delta tests
+passed after rebuilding under Python 3.13. Strict Clippy passed for all umol-py
+targets. Changed Rust files were formatted with nightly rustfmt; git diff --check
+passed. **S6 gate passed.** Workspace/MSRV verification remains at S12b.
+
+The bounded release allocation comparison used the existing 256-byte atom
+variable case, a three-donor dative addition with a 256-byte order variable, and
+four lookup cases selected to check the temporary-copy concern. Both Add and
+Remove inverses ran through direct entity and aggregate Python methods; their
+counts agreed. Fixture construction was outside counting; result destruction was
+included. Cells below are Rust allocation/reallocation calls / requested bytes;
+Python heap allocation and RSS are excluded.
+
+| Operation | Previous | Rejected owned-only input | Retained Cow input |
+| --- | ---: | ---: | ---: |
+| Atom Add/Remove inverse, either route | 4 / 624 | 2 / 312 | 2 / 312 |
+| Dative Add/Remove inverse, either route | 6 / 600 | 3 / 300 | 3 / 300 |
+| Literal charge field lookup | 0 / 0 | 0 / 0 | 0 / 0 |
+| Set-valued charge field lookup | 2 / 208 | 6 / 464 | 2 / 208 |
+| Set-valued entity constraint lookup | 1 / 104 | 3 / 232 | 1 / 104 |
+| Molecule-level atom constraint lookup | 2 / 128 | 4 / 256 | 2 / 128 |
+
+These results support retaining the revised conversion: it removes the measured
+second form/list copies while preserving the baseline lookup allocation counts.
+They do not establish timing changes or savings for every form variant. Routine
+whole-operation timing remains at S12a. Sources, raw results, allocation summary,
+and validation logs are retained in scratch/181-s6c.
 
 ### S7 — Borrow stored form operands in Python operations
 

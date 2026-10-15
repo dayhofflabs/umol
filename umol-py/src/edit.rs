@@ -999,7 +999,7 @@ impl Edit {
             GraphIrEdit::AddAtoms { atoms } => Self::AddAtoms {
                 atoms: atoms
                     .iter()
-                    .map(|atom| Readonly::<AtomForm>::from_rust(py, atom))
+                    .map(|atom| Readonly::<AtomForm>::from_rust(py, atom.clone()))
                     .collect::<PyResult<_>>()?,
             },
             GraphIrEdit::AddBonds { bonds } => Self::AddBonds {
@@ -1011,7 +1011,7 @@ impl Edit {
                                 HandleLike::from_atom_handle(&bond.endpoints[0]),
                                 HandleLike::from_atom_handle(&bond.endpoints[1]),
                             ),
-                            Readonly::<BondForm>::from_rust(py, &bond.attributes)?,
+                            Readonly::<BondForm>::from_rust(py, bond.attributes.clone())?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -1208,7 +1208,7 @@ impl Edit {
             } => Self::AddDativeBond {
                 donors: donors.iter().map(HandleLike::from_atom_handle).collect(),
                 acceptor: HandleLike::from_atom_handle(acceptor),
-                attributes: Readonly::<DativeBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<DativeBondForm>::from_rust(py, attributes.clone())?,
             },
             GraphIrEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
                 removes: removes
@@ -1218,7 +1218,7 @@ impl Edit {
                             HandleLike::from_dative_bond_handle(id),
                             donors.iter().map(HandleLike::from_atom_handle).collect(),
                             HandleLike::from_atom_handle(acceptor),
-                            Readonly::<DativeBondForm>::from_rust(py, attributes)?,
+                            Readonly::<DativeBondForm>::from_rust(py, attributes.clone())?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -1259,7 +1259,7 @@ impl Edit {
                 let GraphIrAddAromaticSystem { atoms, attributes } = addition.as_ref();
                 Self::AddAromaticSystem {
                     atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                    attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes)?,
+                    attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes.clone())?,
                 }
             }
             GraphIrEdit::RemoveAromaticSystems { removes } => Self::RemoveAromaticSystems {
@@ -1269,7 +1269,7 @@ impl Edit {
                         Ok((
                             HandleLike::from_aromatic_system_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Readonly::<AromaticSystemForm>::from_rust(py, attributes)?,
+                            Readonly::<AromaticSystemForm>::from_rust(py, attributes.clone())?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -1345,7 +1345,7 @@ impl Edit {
                 let GraphIrAddMulticenterBond { atoms, attributes } = addition.as_ref();
                 Self::AddMulticenterBond {
                     atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                    attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes)?,
+                    attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes.clone())?,
                 }
             }
             GraphIrEdit::RemoveMulticenterBonds { removes } => Self::RemoveMulticenterBonds {
@@ -1355,7 +1355,7 @@ impl Edit {
                         Ok((
                             HandleLike::from_multicenter_bond_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Readonly::<MulticenterBondForm>::from_rust(py, attributes)?,
+                            Readonly::<MulticenterBondForm>::from_rust(py, attributes.clone())?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -1435,7 +1435,7 @@ impl Edit {
                     HandleLike::from_atom_handle(&atoms[0]),
                     HandleLike::from_atom_handle(&atoms[1]),
                 ),
-                attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes.clone())?,
             },
             GraphIrEdit::RemoveNoncovalentBonds { removes } => Self::RemoveNoncovalentBonds {
                 removes: removes
@@ -1447,7 +1447,7 @@ impl Edit {
                                 HandleLike::from_atom_handle(&atoms[0]),
                                 HandleLike::from_atom_handle(&atoms[1]),
                             ),
-                            Readonly::<NoncovalentBondForm>::from_rust(py, attributes)?,
+                            Readonly::<NoncovalentBondForm>::from_rust(py, attributes.clone())?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -1507,7 +1507,7 @@ impl Edit {
                             )
                         })
                         .collect(),
-                    attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes)?,
+                    attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes.clone())?,
                 }
             }
             GraphIrEdit::RemoveStereoAtoms { removes } => Self::RemoveStereoAtoms {
@@ -1527,7 +1527,7 @@ impl Edit {
                                         )
                                     })
                                     .collect(),
-                                Readonly::<StereoAtomForm>::from_rust(py, attributes)?,
+                                Readonly::<StereoAtomForm>::from_rust(py, attributes.clone())?,
                             ))
                         })
                         .collect::<PyResult<_>>()?,
@@ -1604,7 +1604,7 @@ impl Edit {
                             )
                         })
                         .collect(),
-                    attributes: Readonly::<StereoBondForm>::from_rust(py, attributes)?,
+                    attributes: Readonly::<StereoBondForm>::from_rust(py, attributes.clone())?,
                 }
             }
             GraphIrEdit::RemoveStereoBonds { removes } => Self::RemoveStereoBonds {
@@ -1624,7 +1624,7 @@ impl Edit {
                                         )
                                     })
                                     .collect(),
-                                Readonly::<StereoBondForm>::from_rust(py, attributes)?,
+                                Readonly::<StereoBondForm>::from_rust(py, attributes.clone())?,
                             ))
                         })
                         .collect::<PyResult<_>>()?,
