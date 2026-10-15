@@ -1,4 +1,7 @@
 //! Stereo DSL serialization properties.
+//!
+//! Lossless generated forms retain exact roundtrips. Raw normalizable entities use
+//! normalized_eq, while standalone kindless updates omit constraints explicitly.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -22,6 +25,32 @@ proptest! {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
         })?;
         prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_stereo_atom_dsl_roundtrip_raw(form in raw_stereo_atom_form_strategy()) {
+        if form.clone().normalize().is_ok() {
+            let dsl = StereoAtomDsl(form.clone());
+            let text: StereoAtomDsl = dsl.to_string().parse().unwrap();
+            let tree = StereoAtomDsl::from_edn(&dsl.to_edn()).unwrap();
+            let stream = StereoAtomDsl::from_edn_str(&dsl.to_edn().to_string()).unwrap();
+            prop_assert!(text.0.normalized_eq(&form));
+            prop_assert!(tree.0.normalized_eq(&form));
+            prop_assert!(stream.0.normalized_eq(&form));
+        }
+    }
+
+    #[test]
+    fn test_stereo_atom_update_dsl_roundtrip_kindless(
+        payload in raw_stereo_atom_form_strategy(),
+        clear in any::<bool>(),
+    ) {
+        let configuration = if clear { StereoConfigurationUpdate::Undetermined } else { StereoConfigurationUpdate::Unchanged };
+        let dsl = StereoAtomUpdateDsl(StereoAtomUpdate { configuration: configuration.clone(), constraints: payload.constraints });
+        let expected = StereoAtomUpdateDsl(StereoAtomUpdate { configuration, ..Default::default() });
+        prop_assert_eq!(dsl.to_string(), if clear { "*" } else { "" });
+        prop_assert_eq!(dsl.to_string().parse::<StereoAtomUpdateDsl>().unwrap(), expected.clone());
+        prop_assert_eq!(StereoAtomUpdateDsl::from_edn(&dsl.to_edn()).unwrap(), expected);
     }
 
     #[test]
@@ -68,6 +97,32 @@ proptest! {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
         })?;
         prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_stereo_bond_dsl_roundtrip_raw(form in raw_stereo_bond_form_strategy()) {
+        if form.clone().normalize().is_ok() {
+            let dsl = StereoBondDsl(form.clone());
+            let text: StereoBondDsl = dsl.to_string().parse().unwrap();
+            let tree = StereoBondDsl::from_edn(&dsl.to_edn()).unwrap();
+            let stream = StereoBondDsl::from_edn_str(&dsl.to_edn().to_string()).unwrap();
+            prop_assert!(text.0.normalized_eq(&form));
+            prop_assert!(tree.0.normalized_eq(&form));
+            prop_assert!(stream.0.normalized_eq(&form));
+        }
+    }
+
+    #[test]
+    fn test_stereo_bond_update_dsl_roundtrip_kindless(
+        payload in raw_stereo_bond_form_strategy(),
+        clear in any::<bool>(),
+    ) {
+        let configuration = if clear { StereoConfigurationUpdate::Undetermined } else { StereoConfigurationUpdate::Unchanged };
+        let dsl = StereoBondUpdateDsl(StereoBondUpdate { configuration: configuration.clone(), constraints: payload.constraints });
+        let expected = StereoBondUpdateDsl(StereoBondUpdate { configuration, ..Default::default() });
+        prop_assert_eq!(dsl.to_string(), if clear { "*" } else { "" });
+        prop_assert_eq!(dsl.to_string().parse::<StereoBondUpdateDsl>().unwrap(), expected.clone());
+        prop_assert_eq!(StereoBondUpdateDsl::from_edn(&dsl.to_edn()).unwrap(), expected);
     }
 
     #[test]

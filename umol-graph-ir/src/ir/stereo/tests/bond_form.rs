@@ -289,6 +289,21 @@ fn test_stereo_bond_form_frame_transport_domain(
     StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() },
     StereoBondForm::new(StereoKind::CisTrans, 1_u32),
 )]
+#[case::kindless_payload(
+    StereoBondForm::default(),
+    StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+    StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+)]
+#[case::clear_kind_with_payload(
+    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+    StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))) },
+    StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+)]
+#[case::assign_kind_with_payload(
+    StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+    StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() },
+    StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+)]
 fn test_stereo_bond_form_update(
     #[case] bond: StereoBondForm,
     #[case] update: StereoBondUpdate,
@@ -308,12 +323,22 @@ fn test_stereo_bond_form_update_identity(#[case] bond: StereoBondForm) {
 #[case::configuration_and_constraint(
     StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
     StereoBondForm::default(),
-    StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
+    StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() },
 )]
 #[case::constraint_context(
     StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
     StereoBondForm::new(StereoKind::CisTrans, 1_u32),
     StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
+)]
+#[case::kindless_payload(
+    StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+    StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+    StereoBondUpdate::default(),
+)]
+#[case::assign_kind_removes_latent_payload(
+    StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
+    StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Undetermined) }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
 )]
 fn test_stereo_bond_form_difference_to(
     #[case] bond: StereoBondForm,

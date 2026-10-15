@@ -54,9 +54,11 @@ from umol import (
     RingScope,
     RingMembershipForm,
     UnpairedElectronsForm,
+    StereoAtomConstraintForm,
     StereoAtomForm,
     StereoAtomFieldChange,
     StereoAtomUpdate,
+    StereoBondConstraintForm,
     StereoBondForm,
     StereoBondFieldChange,
     StereoBondUpdate,
@@ -65,6 +67,8 @@ from umol import (
     StereoCoset,
     StereoKind,
     StereoLigandKind,
+    Stereogenicity,
+    StereogenicityForm,
     TransactionError,
     NumForm,
 )
@@ -949,6 +953,52 @@ def test_edits_parse_render():
 
     assert Edits.parse(rendered) == edits
     assert Edits.parse(rendered).render() == rendered
+
+
+@pytest.mark.parametrize(
+    ("variant", "constraint_type"),
+    [
+        (Edit.ModifyStereoAtomConstraint, StereoAtomConstraintForm),
+        (Edit.ModifyStereoBondConstraint, StereoBondConstraintForm),
+    ],
+)
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (None, StereogenicityForm.Lit(Stereogenicity.Stereogenic)),
+        (StereogenicityForm.LitSet(set()), StereogenicityForm.Lit(Stereogenicity.Symmetric)),
+        (StereogenicityForm.Lit(Stereogenicity.Stereogenic), None),
+    ],
+)
+def test_edits_render_kindless_stereo(variant, constraint_type, old, new):
+    edit = variant(
+        id=0,
+        kind=None,
+        old=None if old is None else constraint_type.Stereogenicity(old),
+        new=None if new is None else constraint_type.Stereogenicity(new),
+    )
+    edits = Edits([edit])
+    assert edits.render() == "[]"
+    assert list(edits) == [edit]
+
+    before = Edit.ModifyAtomField(
+        id=0,
+        change=AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(1)),
+    )
+    configuration = Edit.ModifyStereoAtomField(
+        id=0,
+        change=StereoAtomFieldChange.Configuration(
+            old=StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+            new=StereoConfigurationForm.Undetermined(),
+        ),
+    )
+    after = Edit.ModifyAtomField(
+        id=0,
+        change=AtomFieldChange.Charge(old=NumForm.Lit(1), new=NumForm.Lit(2)),
+    )
+    surrounding = Edits([before, edit, configuration, after])
+    assert list(Edits.parse(surrounding.render())) == [before, configuration, after]
+    assert list(surrounding) == [before, edit, configuration, after]
 
 
 def test_edits_parse_render_defaults():

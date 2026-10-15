@@ -4077,7 +4077,7 @@ No frequency-weighted aggregate or cross-machine performance claim is made.
 Full timings, historical comparisons, allocations, repeat results, preserved
 binaries, and commands are in [the measurement record](../scratch/181-s2g1/record.md).
 
-#### S2g2 — Stereo updates, lowering, and single-entry serialization
+#### S2g2 — Stereo updates, lowering, and single-entry serialization (done)
 
 **Modules:** graph-IR ir/stereo, ir/edit, dsl/stereo, dsl/edit and their molecule
 serialization consumers; Python stereo/edit; affected unit and property tests.
@@ -4124,6 +4124,32 @@ payloads, known-kind/undetermined-coset forms, kind assignment, and kind clearin
 Compare the immediate semantic results; these laws do not require raw equality or preservation of latent
 payload for a subsequent kind assignment. Preserve the exact stored old-value
 preconditions in the generated lowering cases.
+
+**Implemented 2026-10-15.** Both difference_to methods omit constraint differences
+when the target is kindless. Update lowering uses the resulting configuration's
+kind, omits kindless contributions, and retains stored old constraints in the
+remaining edits. Raw form updates and Rust/Python value conversions remain
+infallible and retain their payloads. Standalone update serialization now omits
+kindless constraints; EditsDsl omits the whole kindless constraint operation,
+including its expectation, while retaining configuration edits and operation
+order. The public signatures are unchanged.
+
+The serialization properties also exposed an existing discrepancy: direct
+StereoAtomDsl/StereoBondDsl from_edn_str rejected their emitted keyword forms,
+although tree and molecule parsing accepted them. The approved correction shares
+the existing molecule stereo readers with the direct entry points. Keyword
+roundtrips and trailing-input rejection are covered explicitly.
+
+Verification passed: focused Rust stereo tests (3,204 cases), edit DSL tests
+(273 cases; overlapping with the stereo selection), 75 stereo property tests,
+and 550 focused Python tests after rebuilding under Python 3.13. Generated tests
+cover raw difference/update equivalence, lowering through direct and journaled
+application, and exact stored preconditions. Serialization tests cover raw
+kindless contradictions, all four constraint keys, unchanged versus cleared
+configuration, and molecule/Python exports. Strict affected-crate Clippy,
+workspace compilation with all targets, formatting, and git diff --check passed.
+Full workspace tests remain at the combined stage gate. Evidence is in
+scratch/181-s2g2/.
 
 #### S2g3 — Stereo atom field and constraint batches
 

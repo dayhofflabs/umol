@@ -9,11 +9,15 @@ use super::*;
 use crate::dsl::config::NumDefault;
 use crate::ir::atom::AtomForm;
 use crate::ir::boolean::BooleanForm;
-use crate::ir::constraint::{BondConstraintForm, Constraint, MoleculeConstraint};
+use crate::ir::constraint::{
+    BondConstraintForm, Constraint, MoleculeConstraint, StereoAtomConstraintForm,
+    StereoBondConstraintForm, StereogenicityForm,
+};
 use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::molecule::MoleculeIntegrityError;
 use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
+use crate::ir::stereo::{StereoConfigurationForm, Stereogenicity};
 use crate::mol_dsl;
 
 #[fixture]
@@ -319,6 +323,48 @@ fn test_molecule_dsl_stereo_edn_roundtrip(#[case] source: &str) {
     let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
     let reparsed = MoleculeDsl::from_edn(&dsl.to_edn()).unwrap();
     assert_eq!(reparsed, dsl);
+}
+
+#[rstest]
+#[case::literal(StereogenicityForm::Lit(Stereogenicity::Stereogenic))]
+#[case::contradiction(StereogenicityForm::lit_set([]))]
+fn test_molecule_dsl_to_edn_kindless_stereo(
+    populated_molecule_dsl: MoleculeDsl,
+    #[case] payload: StereogenicityForm,
+) {
+    let (mut bare, _) = populated_molecule_dsl.into_parts();
+    bare.stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::Undetermined;
+    bare.stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::Undetermined;
+    let mut raw = bare.clone();
+    raw.stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .constraints = StereoAtomConstraintForm::Stereogenicity(payload.clone()).into();
+    raw.stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .constraints = StereoBondConstraintForm::Stereogenicity(payload).into();
+    let defaults = MoleculeDefaults::new();
+    let dsl = MoleculeDsl::from_ir(&raw, &defaults);
+    assert_eq!(
+        dsl.to_edn(),
+        MoleculeDsl::from_ir(&bare, &defaults).to_edn()
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn(&dsl.to_edn())
+            .unwrap()
+            .into_ir(&defaults),
+        bare
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&dsl.to_string())
+            .unwrap()
+            .into_ir(&defaults),
+        bare
+    );
+    assert_eq!(dsl.into_ir(&defaults), raw);
 }
 
 #[rustfmt::skip]

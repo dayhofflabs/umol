@@ -240,6 +240,41 @@ def test_stereo_bond_update_parse_error():
         StereoBondUpdate.parse("*#g/")
 
 
+@pytest.mark.parametrize(
+    ("form_type", "update_type", "container_type", "constraint_type"),
+    [
+        (StereoAtomForm, StereoAtomUpdate, StereoAtomConstraintsForm, StereoAtomConstraintForm),
+        (StereoBondForm, StereoBondUpdate, StereoBondConstraintsForm, StereoBondConstraintForm),
+    ],
+)
+@pytest.mark.parametrize(
+    "payload",
+    [StereogenicityForm.Lit(Stereogenicity.Stereogenic), StereogenicityForm.LitSet(set())],
+)
+@pytest.mark.parametrize(
+    ("configuration", "head"),
+    [
+        (StereoConfigurationUpdate.Unchanged(), ""),
+        (StereoConfigurationUpdate.Undetermined(), "*"),
+    ],
+)
+def test_stereo_update_str_kindless(
+    form_type, update_type, container_type, constraint_type, payload, configuration, head
+):
+    constraints = container_type([constraint_type.Stereogenicity(payload)])
+    update = update_type(configuration=configuration, constraints=constraints)
+    form = form_type(StereoConfigurationForm.Undetermined(), constraints=constraints)
+
+    assert str(update) == head
+    assert repr(update) == f"{update_type.__name__}.parse('{head}')"
+    assert update_type.parse(str(update)) == update_type(configuration=configuration)
+    assert update.constraints == constraints
+    assert str(form) == "*"
+    assert repr(form) == f"{form_type.__name__}.parse('*')"
+    assert form.constraints.stereogenicity() == payload
+
+
+
 def test_permutation_image_degree():
     p = Permutation([1, 0, 2, 3])
     assert p.image() == [1, 0, 2, 3]
@@ -572,6 +607,53 @@ def test_stereoatomviews_setitem():
     assert view.coset == StereoCoset.Lit(1)
     # site topology preserved
     assert view.site_id == 0
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [StereogenicityForm.Lit(Stereogenicity.Stereogenic), StereogenicityForm.LitSet(set())],
+)
+def test_molecule_render_kindless_stereo(payload):
+    atom_constraints = StereoAtomConstraintsForm(
+        [StereoAtomConstraintForm.Stereogenicity(payload)]
+    )
+    bond_constraints = StereoBondConstraintsForm(
+        [StereoBondConstraintForm.Stereogenicity(payload)]
+    )
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(6)],
+        bonds=[
+            (a, b, BondForm(1))
+            for a, b in [(0, 1), (0, 2), (0, 3), (0, 4), (1, 4), (1, 5)]
+        ],
+        stereo_atoms=[
+            (
+                0,
+                [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)],
+                StereoAtomForm(
+                    StereoConfigurationForm.Undetermined(), constraints=atom_constraints
+                ),
+            )
+        ],
+        stereo_bonds=[
+            (
+                0,
+                [StereoLigand(i, StereoLigandKind.Atom) for i in range(2, 6)],
+                StereoBondForm(
+                    StereoConfigurationForm.Undetermined(), constraints=bond_constraints
+                ),
+            )
+        ],
+    )
+    expected = molecule.copy()
+    expected.stereo_atoms[0] = StereoAtomForm(StereoConfigurationForm.Undetermined())
+    expected.stereo_bonds[0] = StereoBondForm(StereoConfigurationForm.Undetermined())
+
+    assert molecule.render() == expected.render()
+    assert str(molecule) == expected.render()
+    assert Molecule.parse(molecule.render()) == expected
+    assert molecule.stereo_atoms[0].constraints.stereogenicity() == payload
+    assert molecule.stereo_bonds[0].constraints.stereogenicity() == payload
 
 
 def test_molecule_repr_stereo():

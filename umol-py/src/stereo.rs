@@ -760,6 +760,9 @@ impl StereoConfigurationUpdate {
 }
 
 /// Attribute updates for a stereo atom.
+///
+/// Raw constraints are retained. String export omits constraints unless the update
+/// supplies a kind, while preserving Unchanged versus Undetermined configuration.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct StereoAtomUpdate(GraphIrStereoAtomUpdate);
@@ -829,6 +832,9 @@ impl StereoAtomUpdate {
 }
 
 /// Attribute updates for a stereo bond.
+///
+/// Raw constraints are retained. String export omits constraints unless the update
+/// supplies a kind, while preserving Unchanged versus Undetermined configuration.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct StereoBondUpdate(GraphIrStereoBondUpdate);

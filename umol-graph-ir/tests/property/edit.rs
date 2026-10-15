@@ -1,3 +1,6 @@
+#[path = "edit/stereo.rs"]
+mod stereo;
+
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{

@@ -2678,6 +2678,7 @@ impl Edits {
         Ok(Self::from_rust(edits))
     }
 
+    /// Render edits, omitting whole stereo constraint operations with no kind context.
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> PyResult<String> {
         let edits = self.to_rust()?;

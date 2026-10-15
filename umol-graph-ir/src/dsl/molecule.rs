@@ -37,9 +37,7 @@ use super::refs::{
     parse_stereo_ligand, read_atom_ref, read_bond_ref, read_stereo_ligand, AtomRef, BondRef,
     StereoLigandRef,
 };
-use super::stereo::{
-    expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
-};
+use super::stereo::{read_stereo_atom, read_stereo_bond, StereoAtomDsl, StereoBondDsl};
 use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
@@ -460,38 +458,6 @@ pub(super) fn read_noncovalent_bond_entry(
     })
 }
 
-fn read_stereo_atom_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoAtomDsl, EdnError> {
-    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
-        let kw = de.read_keyword_name()?;
-        let expanded = expand_stereo_atom_keyword(kw.as_ref())
-            .ok_or_else(|| DeError::Custom(format!("unknown stereo atom keyword :{kw}")))?;
-        expanded
-            .parse::<StereoAtomDsl>()
-            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
-    } else {
-        de.read_string()?
-            .as_ref()
-            .parse::<StereoAtomDsl>()
-            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
-    }
-}
-
-fn read_stereo_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoBondDsl, EdnError> {
-    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
-        let kw = de.read_keyword_name()?;
-        let expanded = expand_stereo_bond_keyword(kw.as_ref())
-            .ok_or_else(|| DeError::Custom(format!("unknown stereo bond keyword :{kw}")))?;
-        expanded
-            .parse::<StereoBondDsl>()
-            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
-    } else {
-        de.read_string()?
-            .as_ref()
-            .parse::<StereoBondDsl>()
-            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
-    }
-}
-
 pub(super) fn read_stereo_atom_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<StereoAtomEntryInput, EdnError> {
@@ -504,7 +470,7 @@ pub(super) fn read_stereo_atom_entry(
             "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "site" => site = Some(read_atom_ref(de)?),
             "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
-            "attrs" => stereo = Some(read_stereo_atom_dsl(de)?),
+            "attrs" => stereo = Some(read_stereo_atom(de)?),
             _ => de.read_skip_value()?,
         }
         Ok(())
@@ -529,7 +495,7 @@ pub(super) fn read_stereo_bond_entry(
             "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "site" => site = Some(read_bond_ref(de)?),
             "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
-            "attrs" => stereo = Some(read_stereo_bond_dsl(de)?),
+            "attrs" => stereo = Some(read_stereo_bond(de)?),
             _ => de.read_skip_value()?,
         }
         Ok(())

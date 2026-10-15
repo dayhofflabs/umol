@@ -390,6 +390,21 @@ fn test_stereo_atom_form_reframe_by_roundtrip() {
     StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() },
     StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
 )]
+#[case::kindless_payload(
+    StereoAtomForm::default(),
+    StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+    StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+)]
+#[case::clear_kind_with_payload(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))) },
+    StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+)]
+#[case::assign_kind_with_payload(
+    StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() },
+    StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+)]
 fn test_stereo_atom_form_update(
     #[case] atom: StereoAtomForm,
     #[case] update: StereoAtomUpdate,
@@ -409,12 +424,22 @@ fn test_stereo_atom_form_update_identity(#[case] atom: StereoAtomForm) {
 #[case::configuration_and_constraint(
     StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
     StereoAtomForm::default(),
-    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
+    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() },
 )]
 #[case::constraint_context(
     StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
     StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
     StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
+)]
+#[case::kindless_payload(
+    StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+    StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+    StereoAtomUpdate::default(),
+)]
+#[case::assign_kind_removes_latent_payload(
+    StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), ..Default::default() },
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Undetermined) }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
 )]
 fn test_stereo_atom_form_difference_to(
     #[case] atom: StereoAtomForm,

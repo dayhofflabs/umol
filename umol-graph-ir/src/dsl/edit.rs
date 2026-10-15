@@ -56,7 +56,6 @@ use crate::ir::num::NumForm;
 use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use crate::ir::stereo::{
     StereoAtomUpdate, StereoBondUpdate, StereoConfigurationForm, StereoConfigurationUpdate,
-    StereoKind,
 };
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
@@ -170,6 +169,10 @@ type StereoBondRemovalInput = (
 /// [`MoleculeDefaults`]; partial `:expect` and `:update` values are not defaulted.
 /// `:replace-*` edits carry old and new atom, donor, acceptor, site, or ligand values in
 /// `[handle {:expect old :update new}]`.
+///
+/// Conversion from Edits omits entire stereo constraint edits with no kind context,
+/// including their expectations. It preserves the order of retained edits and does
+/// not infer context from a molecule. Entity payloads follow their DSL omission rules.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EditsDsl {
     inputs: Vec<EditInput>,
@@ -1955,8 +1958,52 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::ModifyStereoAtomConstraint { id, kind, old, new } => {
-                let (expect, update) = stereo_atom_constraint_updates(*kind, old, new)?;
+            Edit::ModifyStereoAtomConstraint { kind: None, .. } => Vec::new(),
+            Edit::ModifyStereoAtomConstraint {
+                id,
+                kind: Some(kind),
+                old,
+                new,
+            } => {
+                let key_matches = match (old, new) {
+                    (Some(old), Some(new)) => old.key() == new.key(),
+                    (Some(_), None) | (None, Some(_)) => true,
+                    (None, None) => false,
+                };
+                if !key_matches {
+                    return Err(DeError::Custom(
+                        "stereo-atom constraint edit must address one constraint key".to_string(),
+                    ));
+                }
+                let mut expect = StereoAtomUpdate {
+                    configuration: StereoConfigurationUpdate::Kinded {
+                        kind: *kind,
+                        coset: None,
+                    },
+                    ..Default::default()
+                };
+                let mut update = StereoAtomUpdate {
+                    configuration: StereoConfigurationUpdate::Kinded {
+                        kind: *kind,
+                        coset: None,
+                    },
+                    ..Default::default()
+                };
+                match (old, new) {
+                    (Some(old), Some(new)) => {
+                        expect.constraints.set(old.clone());
+                        update.constraints.set(new.clone());
+                    }
+                    (Some(old), None) => {
+                        expect.constraints.set(old.clone());
+                        update.constraints.set(old.as_undetermined());
+                    }
+                    (None, Some(new)) => {
+                        expect.constraints.set(new.as_undetermined());
+                        update.constraints.set(new.clone());
+                    }
+                    (None, None) => unreachable!(),
+                }
                 vec![Self::StereoAtomModify {
                     id: id.clone(),
                     expect,
@@ -2010,8 +2057,52 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::ModifyStereoBondConstraint { id, kind, old, new } => {
-                let (expect, update) = stereo_bond_constraint_updates(*kind, old, new)?;
+            Edit::ModifyStereoBondConstraint { kind: None, .. } => Vec::new(),
+            Edit::ModifyStereoBondConstraint {
+                id,
+                kind: Some(kind),
+                old,
+                new,
+            } => {
+                let key_matches = match (old, new) {
+                    (Some(old), Some(new)) => old.key() == new.key(),
+                    (Some(_), None) | (None, Some(_)) => true,
+                    (None, None) => false,
+                };
+                if !key_matches {
+                    return Err(DeError::Custom(
+                        "stereo-bond constraint edit must address one constraint key".to_string(),
+                    ));
+                }
+                let mut expect = StereoBondUpdate {
+                    configuration: StereoConfigurationUpdate::Kinded {
+                        kind: *kind,
+                        coset: None,
+                    },
+                    ..Default::default()
+                };
+                let mut update = StereoBondUpdate {
+                    configuration: StereoConfigurationUpdate::Kinded {
+                        kind: *kind,
+                        coset: None,
+                    },
+                    ..Default::default()
+                };
+                match (old, new) {
+                    (Some(old), Some(new)) => {
+                        expect.constraints.set(old.clone());
+                        update.constraints.set(new.clone());
+                    }
+                    (Some(old), None) => {
+                        expect.constraints.set(old.clone());
+                        update.constraints.set(old.as_undetermined());
+                    }
+                    (None, Some(new)) => {
+                        expect.constraints.set(new.as_undetermined());
+                        update.constraints.set(new.clone());
+                    }
+                    (None, None) => unreachable!(),
+                }
                 vec![Self::StereoBondModify {
                     id: id.clone(),
                     expect,
@@ -4879,98 +4970,6 @@ fn noncovalent_bond_constraint_updates(
     Ok((expect, update))
 }
 
-fn stereo_atom_constraint_updates(
-    kind: Option<StereoKind>,
-    old: &Option<StereoAtomConstraintForm>,
-    new: &Option<StereoAtomConstraintForm>,
-) -> Result<(StereoAtomUpdate, StereoAtomUpdate), DeError> {
-    let Some(kind) = kind else {
-        return Err(DeError::Custom(
-            "stereo-atom constraint edit requires a stereo kind".to_string(),
-        ));
-    };
-    let key_matches = match (old, new) {
-        (Some(old), Some(new)) => old.key() == new.key(),
-        (Some(_), None) | (None, Some(_)) => true,
-        (None, None) => false,
-    };
-    if !key_matches {
-        return Err(DeError::Custom(
-            "stereo-atom constraint edit must address one constraint key".to_string(),
-        ));
-    }
-    let mut expect = StereoAtomUpdate {
-        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
-        ..Default::default()
-    };
-    let mut update = StereoAtomUpdate {
-        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
-        ..Default::default()
-    };
-    match (old, new) {
-        (Some(old), Some(new)) => {
-            expect.constraints.set(old.clone());
-            update.constraints.set(new.clone());
-        }
-        (Some(old), None) => {
-            expect.constraints.set(old.clone());
-            update.constraints.set(old.as_undetermined());
-        }
-        (None, Some(new)) => {
-            expect.constraints.set(new.as_undetermined());
-            update.constraints.set(new.clone());
-        }
-        (None, None) => unreachable!(),
-    }
-    Ok((expect, update))
-}
-
-fn stereo_bond_constraint_updates(
-    kind: Option<StereoKind>,
-    old: &Option<StereoBondConstraintForm>,
-    new: &Option<StereoBondConstraintForm>,
-) -> Result<(StereoBondUpdate, StereoBondUpdate), DeError> {
-    let Some(kind) = kind else {
-        return Err(DeError::Custom(
-            "stereo-bond constraint edit requires a stereo kind".to_string(),
-        ));
-    };
-    let key_matches = match (old, new) {
-        (Some(old), Some(new)) => old.key() == new.key(),
-        (Some(_), None) | (None, Some(_)) => true,
-        (None, None) => false,
-    };
-    if !key_matches {
-        return Err(DeError::Custom(
-            "stereo-bond constraint edit must address one constraint key".to_string(),
-        ));
-    }
-    let mut expect = StereoBondUpdate {
-        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
-        ..Default::default()
-    };
-    let mut update = StereoBondUpdate {
-        configuration: StereoConfigurationUpdate::Kinded { kind, coset: None },
-        ..Default::default()
-    };
-    match (old, new) {
-        (Some(old), Some(new)) => {
-            expect.constraints.set(old.clone());
-            update.constraints.set(new.clone());
-        }
-        (Some(old), None) => {
-            expect.constraints.set(old.clone());
-            update.constraints.set(old.as_undetermined());
-        }
-        (None, Some(new)) => {
-            expect.constraints.set(new.as_undetermined());
-            update.constraints.set(new.clone());
-        }
-        (None, None) => unreachable!(),
-    }
-    Ok((expect, update))
-}
-
 fn render_expect_update(
     handle: Edn<'static>,
     expect: Edn<'static>,
@@ -7551,35 +7550,59 @@ mod tests {
     }
 
     #[rstest]
-    #[case::stereo_atom(
-        Edit::ModifyStereoAtomConstraint {
+    #[case::atom_addition(Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(0)), kind: None, old: None, new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) })]
+    #[case::atom_removal(Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(0)), kind: None, old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None })]
+    #[case::atom_contradiction(Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(0)), kind: None, old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) })]
+    #[case::atom_empty(Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(0)), kind: None, old: None, new: None })]
+    #[case::bond_addition(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: None, new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) })]
+    #[case::bond_removal(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None })]
+    #[case::bond_contradiction(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) })]
+    #[case::bond_empty(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: None, new: None })]
+    fn test_edits_dsl_from_ir_kindless(#[case] edit: Edit) {
+        let defaults = MoleculeDefaults::new();
+        let omitted = Edits::from_iter([edit.clone()]);
+        let dsl = EditsDsl::from_ir(&omitted, &defaults);
+        assert_eq!(dsl.to_string(), "[]");
+        assert_eq!(dsl.to_edn(), Edn::Vector(vec![].into()));
+        assert_eq!(dsl.into_ir(&defaults), Edits::new());
+
+        let before = Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::Lit(1),
+            },
+        };
+        let configuration = Edit::ModifyStereoAtomField {
             id: StereoAtomHandle::Id(StereoAtomId(0)),
-            kind: None,
-            old: None,
-            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                Stereogenicity::Stereogenic,
-            ))),
-        },
-        DeError::Custom("stereo-atom constraint edit requires a stereo kind".to_string()),
-    )]
-    #[case::stereo_bond(
-        Edit::ModifyStereoBondConstraint {
-            id: StereoBondHandle::Id(StereoBondId(0)),
-            kind: None,
-            old: None,
-            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                Stereogenicity::Stereogenic,
-            ))),
-        },
-        DeError::Custom("stereo-bond constraint edit requires a stereo kind".to_string()),
-    )]
-    fn test_edit_input_from_edit_requires_stereo_kind(
-        #[case] edit: Edit,
-        #[case] expected: DeError,
-    ) {
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+                new: StereoConfigurationForm::Undetermined,
+            },
+        };
+        let after = Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
+            },
+        };
+        let edits = Edits::from_iter([before.clone(), edit, configuration.clone(), after.clone()]);
+        let expected = Edits::from_iter([before, configuration, after]);
+        let dsl = EditsDsl::from_ir(&edits, &defaults);
+        assert_eq!(dsl.clone().into_ir(&defaults), expected);
         assert_eq!(
-            EditInput::from_edit(&edit, &MoleculeDefaults::new()),
-            Err(expected)
+            EditsDsl::from_edn(&dsl.to_edn())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            dsl.to_string()
+                .parse::<EditsDsl>()
+                .unwrap()
+                .into_ir(&defaults),
+            expected
         );
     }
 

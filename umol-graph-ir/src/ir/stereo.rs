@@ -1548,7 +1548,7 @@ pub struct StereoBondUpdate {
 }
 
 impl StereoAtomForm {
-    /// Apply an attribute update.
+    /// Apply a raw attribute update, retaining constraints even when the result is kindless.
     pub fn update(&self, update: &StereoAtomUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
@@ -1559,20 +1559,30 @@ impl StereoAtomForm {
     }
 
     /// Derive the minimal normalized attribute update carrying `self` to `other`.
+    ///
+    /// Constraint differences are omitted when the target is kindless.
+    ///
+    /// # Semantic properties
+    ///
+    /// For normalizable source and target forms,
+    /// `self.update(&self.difference_to(other)).normalized_eq(other)` holds.
+    /// This does not preserve latent kindless payload for a later kind assignment.
     pub fn difference_to(&self, other: &Self) -> StereoAtomUpdate {
         let mut constraints = StereoAtomConstraintsForm::new();
-        for new in other.constraints.iter() {
-            if self
-                .constraints
-                .get(new.key())
-                .is_none_or(|old| !old.normalized_eq(new))
-            {
-                constraints.set(new.clone());
+        if other.configuration.kind().is_some() {
+            for new in other.constraints.iter() {
+                if self
+                    .constraints
+                    .get(new.key())
+                    .is_none_or(|old| !old.normalized_eq(new))
+                {
+                    constraints.set(new.clone());
+                }
             }
-        }
-        for old in self.constraints.iter() {
-            if other.constraints.get(old.key()).is_none() {
-                constraints.set(old.as_undetermined());
+            for old in self.constraints.iter() {
+                if other.constraints.get(old.key()).is_none() {
+                    constraints.set(old.as_undetermined());
+                }
             }
         }
         let configuration = if self.configuration.normalized_eq(&other.configuration) {
@@ -1599,7 +1609,7 @@ impl StereoAtomForm {
 }
 
 impl StereoBondForm {
-    /// Apply an attribute update.
+    /// Apply a raw attribute update, retaining constraints even when the result is kindless.
     pub fn update(&self, update: &StereoBondUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
@@ -1610,20 +1620,30 @@ impl StereoBondForm {
     }
 
     /// Derive the minimal normalized attribute update carrying `self` to `other`.
+    ///
+    /// Constraint differences are omitted when the target is kindless.
+    ///
+    /// # Semantic properties
+    ///
+    /// For normalizable source and target forms,
+    /// `self.update(&self.difference_to(other)).normalized_eq(other)` holds.
+    /// This does not preserve latent kindless payload for a later kind assignment.
     pub fn difference_to(&self, other: &Self) -> StereoBondUpdate {
         let mut constraints = StereoBondConstraintsForm::new();
-        for new in other.constraints.iter() {
-            if self
-                .constraints
-                .get(new.key())
-                .is_none_or(|old| !old.normalized_eq(new))
-            {
-                constraints.set(new.clone());
+        if other.configuration.kind().is_some() {
+            for new in other.constraints.iter() {
+                if self
+                    .constraints
+                    .get(new.key())
+                    .is_none_or(|old| !old.normalized_eq(new))
+                {
+                    constraints.set(new.clone());
+                }
             }
-        }
-        for old in self.constraints.iter() {
-            if other.constraints.get(old.key()).is_none() {
-                constraints.set(old.as_undetermined());
+            for old in self.constraints.iter() {
+                if other.constraints.get(old.key()).is_none() {
+                    constraints.set(old.as_undetermined());
+                }
             }
         }
         let configuration = if self.configuration.normalized_eq(&other.configuration) {

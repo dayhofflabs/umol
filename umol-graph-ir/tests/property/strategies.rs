@@ -1534,6 +1534,40 @@ raw_stereo_form_strategy!(
     Just(StereoKind::CisTrans)
 );
 
+/// Raw updates include context-free constraints and explicit kind assignment or clearing.
+pub(crate) fn raw_stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomUpdate> {
+    (raw_stereo_atom_form_strategy(), any::<bool>()).prop_map(|(form, explicit)| StereoAtomUpdate {
+        configuration: match form.configuration {
+            StereoConfigurationForm::Undetermined if explicit => {
+                StereoConfigurationUpdate::Undetermined
+            }
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Unchanged,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind,
+                coset: explicit.then_some(coset),
+            },
+        },
+        constraints: form.constraints,
+    })
+}
+
+/// Raw updates include context-free constraints and explicit kind assignment or clearing.
+pub(crate) fn raw_stereo_bond_update_strategy() -> impl Strategy<Value = StereoBondUpdate> {
+    (raw_stereo_bond_form_strategy(), any::<bool>()).prop_map(|(form, explicit)| StereoBondUpdate {
+        configuration: match form.configuration {
+            StereoConfigurationForm::Undetermined if explicit => {
+                StereoConfigurationUpdate::Undetermined
+            }
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Unchanged,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind,
+                coset: explicit.then_some(coset),
+            },
+        },
+        constraints: form.constraints,
+    })
+}
+
 pub(crate) fn stereo_bond_update_constraints_strategy(
     kind: StereoKind,
 ) -> impl Strategy<Value = StereoBondConstraintsForm> {

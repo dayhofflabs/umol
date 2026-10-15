@@ -17,7 +17,7 @@ use winnow::Parser;
 
 use super::boolean::{boolean, fmt_boolean, BooleanDsl};
 use super::config::{StereoAtomDefaults, StereoBondDefaults};
-use super::edn_utils::single_key_map;
+use super::edn_utils::{eof_err, single_key_map};
 use super::error::{PResult, ParseError};
 use super::num::variable_name;
 use crate::ir::boolean::BooleanForm;
@@ -35,7 +35,10 @@ use crate::ir::stereo::{
 };
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
 
-/// Surface DSL wrapper for `StereoAtomForm`
+/// Surface DSL wrapper for StereoAtomForm.
+///
+/// Kindless constraints are omitted by Display and ToEdn. Their roundtrip preserves
+/// normalized_eq, not the raw payload or its effect on a later kind assignment.
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoAtomDsl(pub StereoAtomForm);
@@ -102,7 +105,28 @@ impl<'de> FromEdn<'de> for StereoAtomDsl {
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        EdnStreamDeserializer::new(input).read_subgrammar_all("stereo atom")
+        let mut de = EdnStreamDeserializer::new(input);
+        let value = read_stereo_atom(&mut de)?;
+        de.expect_eof()?;
+        Ok(value)
+    }
+}
+
+pub(super) fn read_stereo_atom(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoAtomDsl, EdnError> {
+    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
+        let kw = de.read_keyword_name()?;
+        let expanded = expand_stereo_atom_keyword(kw.as_ref())
+            .ok_or_else(|| DeError::Custom(format!("unknown stereo atom keyword :{kw}")))?;
+        expanded
+            .parse::<StereoAtomDsl>()
+            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
+    } else {
+        de.read_string()?
+            .as_ref()
+            .parse::<StereoAtomDsl>()
+            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
     }
 }
 
@@ -228,7 +252,10 @@ fn stereo_atom_tail(
     }))
 }
 
-/// Surface DSL wrapper for `StereoBondForm`
+/// Surface DSL wrapper for StereoBondForm.
+///
+/// Kindless constraints are omitted by Display and ToEdn. Their roundtrip preserves
+/// normalized_eq, not the raw payload or its effect on a later kind assignment.
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoBondDsl(pub StereoBondForm);
@@ -295,7 +322,28 @@ impl<'de> FromEdn<'de> for StereoBondDsl {
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        EdnStreamDeserializer::new(input).read_subgrammar_all("stereo bond")
+        let mut de = EdnStreamDeserializer::new(input);
+        let value = read_stereo_bond(&mut de)?;
+        de.expect_eof()?;
+        Ok(value)
+    }
+}
+
+pub(super) fn read_stereo_bond(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoBondDsl, EdnError> {
+    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
+        let kw = de.read_keyword_name()?;
+        let expanded = expand_stereo_bond_keyword(kw.as_ref())
+            .ok_or_else(|| DeError::Custom(format!("unknown stereo bond keyword :{kw}")))?;
+        expanded
+            .parse::<StereoBondDsl>()
+            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
+    } else {
+        de.read_string()?
+            .as_ref()
+            .parse::<StereoBondDsl>()
+            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
     }
 }
 
@@ -845,7 +893,11 @@ pub fn parse_stereo_bond_update(input: &str) -> Result<StereoBondUpdateDsl, Pars
     stereo_bond_update.parse(input).map_err(|e| e.into_inner())
 }
 
-/// Surface DSL wrapper around a [`StereoAtomUpdate`].
+/// Surface DSL wrapper around a StereoAtomUpdate.
+///
+/// Display and ToEdn omit constraints unless the update supplies a kind. Unchanged
+/// and Undetermined configuration heads remain distinct. Source-dependent constraint
+/// changes require lowering against a source before export to preserve their effect.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoAtomUpdateDsl(pub StereoAtomUpdate);
@@ -916,8 +968,6 @@ impl Display for StereoAtomUpdateDsl {
             for constraint in self.0.constraints.iter() {
                 fmt_stereo_atom_constraint(f, constraint, kind)?;
             }
-        } else if !self.0.constraints.is_empty() {
-            return Err(fmt::Error);
         }
         Ok(())
     }
@@ -989,7 +1039,11 @@ fn stereo_atom_update(i: &mut &str) -> PResult<StereoAtomUpdateDsl> {
     }))
 }
 
-/// Surface DSL wrapper around a [`StereoBondUpdate`].
+/// Surface DSL wrapper around a StereoBondUpdate.
+///
+/// Display and ToEdn omit constraints unless the update supplies a kind. Unchanged
+/// and Undetermined configuration heads remain distinct. Source-dependent constraint
+/// changes require lowering against a source before export to preserve their effect.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoBondUpdateDsl(pub StereoBondUpdate);
@@ -1060,8 +1114,6 @@ impl Display for StereoBondUpdateDsl {
             for constraint in self.0.constraints.iter() {
                 fmt_stereo_bond_constraint(f, constraint, kind)?;
             }
-        } else if !self.0.constraints.is_empty() {
-            return Err(fmt::Error);
         }
         Ok(())
     }
@@ -1968,6 +2020,9 @@ stereo_site_dsl! {
 
 #[cfg(test)]
 mod tests {
+    mod atom;
+    mod bond;
+
     use std::fs;
 
     use pretty_assertions::assert_eq;
@@ -2004,195 +2059,6 @@ mod tests {
             failures.is_empty(),
             "invalid stereo seeds:\n{}",
             failures.join("\n")
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::tetrahedral_ccw("Th0", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))))]
-    #[case::tetrahedral_cw("Th1", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))))]
-    #[case::open("Th*", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)))]
-    #[case::square_planar("Sp2", StereoAtomDsl(StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(2))))]
-    #[case::octahedral("Oh6", StereoAtomDsl(StereoAtomForm::new(StereoKind::Octahedral, StereoCoset::Lit(6))))]
-    #[case::undetermined("*", StereoAtomDsl(StereoAtomForm::default()))]
-    #[case::no_canonicalization("Th~1", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))))]
-    fn test_parse_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomDsl) {
-        assert_eq!(parse_stereo_atom(input).unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::not_stereo("Th!", ParseError::Syntax)]
-    #[case::trailing_after_coset("Th1x", ParseError::TrailingInput("x".to_string()))]
-    #[case::unknown_predicate("Th1#x", ParseError::UnknownStereoPredicate("#x".to_string()))]
-    #[case::duplicate("Th1#g/#g=", ParseError::DuplicateStereoPredicate("#g".to_string()))]
-    #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
-    #[case::overlapping_ligand_permutation("Th1#p(0,1)(1,2)", ParseError::InvalidValue("cycle point 1 occurs more than once".to_string()))]
-    #[case::repeated_ligand_position("Th1#f(0,1,0)", ParseError::InvalidValue("cycle point 0 occurs more than once".to_string()))]
-    #[case::ligand_position_out_of_range("Th1#p(0,4)", ParseError::InvalidValue("cycle point 4 at cycle 0, position 1 is outside 0..4".to_string()))]
-    fn test_parse_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_stereo_atom(input).unwrap_err(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::empty("", StereoAtomUpdateDsl::default())]
-    #[case::undetermined("*", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute("Th1", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
-    #[case::relative("Th", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
-    #[case::explicit_open("Th*", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Undetermined) }, ..Default::default() }))]
-    fn test_parse_stereo_atom_update(#[case] input: &str, #[case] expected: StereoAtomUpdateDsl) {
-        assert_eq!(parse_stereo_atom_update(input).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined_kind_with_constraint("*#o(0,1)=", ParseError::TrailingInput("#o(0,1)=".to_string()))]
-    fn test_parse_stereo_atom_update_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_stereo_atom_update(input).unwrap_err(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined_kind_with_constraint(
-        "*#o(0,1)=",
-        ParseError::TrailingInput("#o(0,1)=".to_string())
-    )]
-    fn test_stereo_atom_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(input.parse::<StereoAtomUpdate>().unwrap_err(), expected);
-    }
-
-    #[rstest]
-    #[case::empty("")]
-    #[case::undetermined("*")]
-    #[case::absolute("Th1")]
-    #[case::relative("Th")]
-    #[case::explicit_open("Th*")]
-    #[case::topicity_removal("Th#o(0,1)*")]
-    #[case::topicity_change("Th#o(0,1)/")]
-    #[case::ligand_symmetry_removal("Th#p(0,1)*")]
-    #[case::ligand_symmetry("Th#p(0,1)")]
-    fn test_stereo_atom_update_dsl_display_roundtrip(#[case] input: &str) {
-        let dsl = parse_stereo_atom_update(input).unwrap();
-        assert_eq!(dsl.to_string(), input);
-        assert_eq!(parse_stereo_atom_update(&dsl.to_string()).unwrap(), dsl);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::empty("", StereoBondUpdateDsl::default())]
-    #[case::undetermined("*", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute("Ct1", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
-    #[case::relative("Ct", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
-    #[case::explicit_open("Ct*", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Undetermined) }, ..Default::default() }))]
-    fn test_parse_stereo_bond_update(#[case] input: &str, #[case] expected: StereoBondUpdateDsl) {
-        assert_eq!(parse_stereo_bond_update(input).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined_kind_with_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
-    fn test_parse_stereo_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_stereo_bond_update(input).unwrap_err(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined_kind_with_constraint(
-        "*#g/",
-        ParseError::TrailingInput("#g/".to_string())
-    )]
-    fn test_stereo_bond_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(input.parse::<StereoBondUpdate>().unwrap_err(), expected);
-    }
-
-    #[rstest]
-    #[case::empty("")]
-    #[case::undetermined("*")]
-    #[case::absolute("Ct1")]
-    #[case::relative("Ct")]
-    #[case::explicit_open("Ct*")]
-    #[case::topicity_removal("Ct#o(0,1)*")]
-    #[case::stereogenicity_change("Ct#g/")]
-    fn test_stereo_bond_update_dsl_display_roundtrip(#[case] input: &str) {
-        let dsl = parse_stereo_bond_update(input).unwrap();
-        assert_eq!(dsl.to_string(), input);
-        assert_eq!(parse_stereo_bond_update(&dsl.to_string()).unwrap(), dsl);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::tetrahedral_ccw(StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))), "Th0")]
-    #[case::open(StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)), "Th*")]
-    #[case::square_planar(StereoAtomDsl(StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(2))), "Sp2")]
-    #[case::octahedral(StereoAtomDsl(StereoAtomForm::new(StereoKind::Octahedral, StereoCoset::Lit(6))), "Oh6")]
-    fn test_stereo_atom_dsl_to_string(#[case] form: StereoAtomDsl, #[case] expected: &str) {
-        assert_eq!(form.to_string(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::fluxionality("Th1#f(0,1,2)")]
-    #[case::ligand_symmetry_involution("Th1#p~")]
-    #[case::ligand_symmetry_not_present("Th1#p~!")]
-    #[case::ligand_symmetry_explicit("Th1#p(0,1,2)")]
-    #[case::topicity("Th1#o(0,1)=")]
-    #[case::topicity_negated("Th1#o(0,1)!'")]
-    #[case::topicity_lit_set("Th1#o(0,1){=,'}")]
-    #[case::topicity_not_set("Th1#o(0,1)!{=,'}")]
-    #[case::stereogenicity("Th1#g/")]
-    #[case::stereogenicity_lit_set("Th1#g{=,/}")]
-    #[case::multiple("Th1#f(0,1,2)#o(0,1)=#g/")]
-    fn test_stereo_atom_inline_render_identity(#[case] s: &str) {
-        assert_eq!(parse_stereo_atom(s).unwrap().to_string(), s);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::topicity_open("Th1#o(0,1)*", "Th1")]
-    #[case::stereogenicity_open("Th1#g*", "Th1")]
-    fn test_stereo_atom_inline_render(#[case] input: &str, #[case] canonical: &str) {
-        assert_eq!(parse_stereo_atom(input).unwrap().to_string(), canonical);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::fluxionality("Th1#f(0,1,2)",
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanForm::Lit(true) }))]
-    #[case::ligand_symmetry("Th1#p(0,1,2)",
-        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
-            invariant: BooleanForm::Lit(true) }))]
-    #[case::ligand_symmetry_absent("Th1#p(0,1,2)!",
-        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
-            invariant: BooleanForm::Lit(false) }))]
-    #[case::fluxionality_absent("Th1#f(0,1,2)!",
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanForm::Lit(false) }))]
-    #[case::topicity_negated("Th1#o(0,1)!'",
-        StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
-    #[case::topicity_lit_set("Th1#o(0,1){=,'}",
-        StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
-    #[case::topicity_not_set("Th1#o(0,1)!{=,'}",
-        StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
-    #[case::topicity_open("Th1#o(0,1)*",
-        StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }))]
-    #[case::stereogenicity("Th1#g/",
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))]
-    fn test_stereo_atom_predicate(#[case] input: &str, #[case] expected: StereoAtomConstraintForm) {
-        let dsl = parse_stereo_atom(input).unwrap();
-        assert_eq!(dsl.0.constraints.iter().cloned().collect::<Vec<_>>(), vec![expected]);
-    }
-
-    #[rstest]
-    fn test_stereo_atom_predicate_involution() {
-        let dsl = parse_stereo_atom("Th1#p~").unwrap();
-        let expected = StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: LigandPermutation(StereoKind::Tetrahedral.involution()),
-                orientation: Orientation::Improper,
-            },
-            invariant: BooleanForm::Lit(true),
-        });
-        assert_eq!(
-            dsl.0.constraints.iter().cloned().collect::<Vec<_>>(),
-            vec![expected],
         );
     }
 
@@ -2235,128 +2101,6 @@ mod tests {
             read_edn_permutation(&read_string(input).unwrap(), 4),
             Err(expected),
         );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::string("\"Th1\"", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))))]
-    #[case::keyword_ccw(":ccw", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))))]
-    #[case::keyword_cw(":cw", StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))))]
-    #[case::string_square_planar("\"Sp2\"", StereoAtomDsl(StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(2))))]
-    fn test_stereo_atom_dsl_from_edn(#[case] input: &str, #[case] expected: StereoAtomDsl) {
-        assert_eq!(StereoAtomDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::unknown_keyword(":xyz", DeError::Custom("unknown stereo atom keyword :xyz".to_string()))]
-    #[case::wrong_type("5", DeError::TypeMismatch { expected: "string or stereo atom keyword", got: "int", path: Vec::new() })]
-    fn test_stereo_atom_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
-        assert_eq!(StereoAtomDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::canonical_ccw(StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))), ":ccw")]
-    #[case::canonical_cw(StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))), ":cw")]
-    #[case::open_string(StereoAtomDsl(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)), "\"Th*\"")]
-    #[case::non_tetrahedral_string(StereoAtomDsl(StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(1))), "\"Sp1\"")]
-    fn test_stereo_atom_dsl_to_edn(#[case] form: StereoAtomDsl, #[case] expected: &str) {
-        assert_eq!(form.to_edn(), read_string(expected).unwrap());
-    }
-
-    #[rstest]
-    fn test_stereo_atom_dsl_into_ir() {
-        let form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
-        assert_eq!(
-            StereoAtomDsl(form.clone()).into_ir(&StereoAtomDefaults::default()),
-            form
-        );
-        assert_eq!(
-            StereoAtomDsl::from_ir(&form, &StereoAtomDefaults::default()),
-            StereoAtomDsl(form)
-        );
-    }
-
-    #[rstest]
-    #[case::ccw("ccw", Some("Th0"))]
-    #[case::cw("cw", Some("Th1"))]
-    #[case::unknown("xyz", None)]
-    fn test_expand_stereo_atom_keyword(#[case] name: &str, #[case] expected: Option<&str>) {
-        assert_eq!(expand_stereo_atom_keyword(name), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::cis_trans_z("Ct0", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0))))]
-    #[case::cis_trans_e("Ct1", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))))]
-    #[case::open("Ct*", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined)))]
-    #[case::undetermined("*", StereoBondDsl(StereoBondForm::default()))]
-    #[case::no_canonicalization("Ct~1", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))))]
-    fn test_parse_stereo_bond(#[case] input: &str, #[case] expected: StereoBondDsl) {
-        assert_eq!(parse_stereo_bond(input).unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::not_stereo("Ct!", ParseError::Syntax)]
-    #[case::trailing_after_coset("Ct1x", ParseError::TrailingInput("x".to_string()))]
-    #[case::unknown_predicate("Ct1#x", ParseError::UnknownStereoPredicate("#x".to_string()))]
-    #[case::duplicate("Ct1#g/#g=", ParseError::DuplicateStereoPredicate("#g".to_string()))]
-    #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
-    fn test_parse_stereo_bond_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_stereo_bond(input).unwrap_err(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::cis_trans_z(StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0))), "Ct0")]
-    #[case::open(StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined)), "Ct*")]
-    fn test_stereo_bond_dsl_to_string(#[case] form: StereoBondDsl, #[case] expected: &str) {
-        assert_eq!(form.to_string(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::fluxionality_involution("Ct1#f~")]
-    #[case::topicity("Ct1#o(0,1)=")]
-    #[case::stereogenicity("Ct1#g/")]
-    fn test_stereo_bond_inline_render_identity(#[case] s: &str) {
-        assert_eq!(parse_stereo_bond(s).unwrap().to_string(), s);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::string("\"Ct1\"", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))))]
-    #[case::keyword_z(":z", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0))))]
-    #[case::keyword_e(":e", StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))))]
-    fn test_stereo_bond_dsl_from_edn(#[case] input: &str, #[case] expected: StereoBondDsl) {
-        assert_eq!(StereoBondDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::unknown_keyword(":xyz", DeError::Custom("unknown stereo bond keyword :xyz".to_string()))]
-    #[case::wrong_type("5", DeError::TypeMismatch { expected: "string or stereo bond keyword", got: "int", path: Vec::new() })]
-    fn test_stereo_bond_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
-        assert_eq!(StereoBondDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::canonical_z(StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0))), ":z")]
-    #[case::canonical_e(StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))), ":e")]
-    #[case::open_string(StereoBondDsl(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined)), "\"Ct*\"")]
-    fn test_stereo_bond_dsl_to_edn(#[case] form: StereoBondDsl, #[case] expected: &str) {
-        assert_eq!(form.to_edn(), read_string(expected).unwrap());
-    }
-
-    #[rstest]
-    #[case::z("z", Some("Ct0"))]
-    #[case::e("e", Some("Ct1"))]
-    #[case::unknown("xyz", None)]
-    fn test_expand_stereo_bond_keyword(#[case] name: &str, #[case] expected: Option<&str>) {
-        assert_eq!(expand_stereo_bond_keyword(name), expected);
     }
 
     #[rstest]
