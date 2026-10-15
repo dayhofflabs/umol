@@ -197,13 +197,12 @@ mod tests {
     #[rstest]
     fn test_molecule_editor_finish(mut carbon_editor: MoleculeEditor) {
         let mut molecule = carbon_editor.finish().unwrap();
-        assert_eq!(molecule.to_rust().unwrap(), &mol_dsl!(r#"{:atoms ["C"]}"#));
+        assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["C"]}"#));
         *molecule
             .to_rust_mut()
-            .unwrap()
             .atom_mut(GraphIrAtomId(0))
             .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::N);
-        assert_eq!(molecule.to_rust().unwrap(), &mol_dsl!(r#"{:atoms ["N"]}"#));
+        assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["N"]}"#));
         Python::attach(|py| {
             let error = carbon_editor.finish().unwrap_err();
             assert!(error.is_instance_of::<ConsumedError>(py));
@@ -314,7 +313,7 @@ mod tests {
 
             carbon_editor.apply(py, edits.clone_ref(py)).unwrap();
             assert_eq!(
-                carbon_editor.finish().unwrap().to_rust().unwrap(),
+                carbon_editor.finish().unwrap().to_rust(),
                 &mol_dsl!(r#"{:atoms ["C" "N"]}"#)
             );
             assert!(edits

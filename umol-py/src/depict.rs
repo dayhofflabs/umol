@@ -198,7 +198,7 @@ impl Molecule {
         let config = IoDepictConfig {
             layout_algorithm: algorithm.to_rust(),
         };
-        self.to_rust()?
+        self.to_rust()
             .layout_with(&config)
             .map(MoleculeLayout::from_rust)
             .map_err(generated_molecule_error)
@@ -208,7 +208,7 @@ impl Molecule {
     ///
     /// Raises `RuntimeError` if layout or tetrahedral depiction fails.
     fn depict(&self) -> PyResult<Depiction> {
-        self.to_rust()?
+        self.to_rust()
             .depict()
             .map(Depiction::from_rust)
             .map_err(generated_molecule_error)
@@ -219,7 +219,7 @@ impl Molecule {
     /// Raises `RuntimeError` if layout or tetrahedral depiction fails.
     fn depict_with(&self, config: DepictConfig) -> PyResult<Depiction> {
         let config = config.to_rust();
-        self.to_rust()?
+        self.to_rust()
             .depict_with(&config)
             .map(Depiction::from_rust)
             .map_err(generated_molecule_error)
@@ -231,7 +231,7 @@ impl Molecule {
     /// a frame mismatch, a definite cis/trans bond drawn in the other configuration or with a
     /// ligand on its axis, or a tetrahedral centre admitting no wedge.
     fn verify_layout(&self, layout: &MoleculeLayout) -> PyResult<()> {
-        self.to_rust()?
+        self.to_rust()
             .verify_layout(layout.to_rust())
             .map_err(supplied_molecule_error)
     }
@@ -240,7 +240,7 @@ impl Molecule {
     ///
     /// Raises `ValueError` as `verify_layout` does.
     fn depict_layout(&self, layout: &MoleculeLayout) -> PyResult<Depiction> {
-        self.to_rust()?
+        self.to_rust()
             .depict_layout(layout.to_rust())
             .map(Depiction::from_rust)
             .map_err(supplied_molecule_error)
@@ -424,7 +424,7 @@ mod tests {
     #[rstest]
     fn test_depiction_render_svg() {
         let molecule = Molecule::from_rust(GraphIrMolecule::new());
-        let rust = molecule.to_rust().unwrap().depict().unwrap();
+        let rust = molecule.to_rust().depict().unwrap();
         let expected = rust.render_svg();
         let depiction = Depiction::from_rust(rust);
 
@@ -521,7 +521,7 @@ mod tests {
     #[rstest]
     fn test_molecule_layout() {
         let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#));
-        let expected = molecule.to_rust().unwrap().layout().unwrap();
+        let expected = molecule.to_rust().layout().unwrap();
 
         let layout = molecule
             .layout(MoleculeLayoutAlgorithm::CoordGen())
@@ -533,7 +533,7 @@ mod tests {
     #[rstest]
     fn test_molecule_depict() {
         let molecule = Molecule::from_rust(GraphIrMolecule::new());
-        let expected = molecule.to_rust().unwrap().depict().unwrap().render_svg();
+        let expected = molecule.to_rust().depict().unwrap().render_svg();
 
         let depiction = molecule.depict().unwrap();
 
@@ -552,7 +552,6 @@ mod tests {
         let config = DepictConfig::default();
         let expected = molecule
             .to_rust()
-            .unwrap()
             .depict_with(&config.to_rust())
             .unwrap()
             .render_svg();
@@ -594,7 +593,7 @@ mod tests {
         let generated = molecule
             .layout(MoleculeLayoutAlgorithm::CoordGen())
             .unwrap();
-        let expected = molecule.to_rust().unwrap().depict().unwrap().render_svg();
+        let expected = molecule.to_rust().depict().unwrap().render_svg();
 
         let depiction = molecule.depict_layout(&generated).unwrap();
 

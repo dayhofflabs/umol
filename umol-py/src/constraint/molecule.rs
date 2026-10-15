@@ -165,7 +165,7 @@ impl Constraint {
                 let owner = owner.try_borrow(py)?;
                 owner.check_access(*counter, "Constraint")?;
                 let mut value = owner
-                    .to_rust()?
+                    .to_rust()
                     .constraints()
                     .as_slice()
                     .get(*position)
@@ -1070,7 +1070,7 @@ enum ConstraintsStorage {
 
 impl ConstraintsView {
     pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<Self> {
-        let counter = owner.try_borrow(py)?.view_counter()?;
+        let counter = owner.try_borrow(py)?.view_counter();
         Ok(Self {
             storage: ConstraintsStorage::Molecule { owner, counter },
         })
@@ -1085,7 +1085,7 @@ impl ConstraintsView {
             ConstraintsStorage::Molecule { owner, counter } => {
                 let owner = owner.try_borrow(py)?;
                 owner.check_access(*counter, "ConstraintsView")?;
-                f(owner.to_rust()?.constraints().as_slice())
+                f(owner.to_rust().constraints().as_slice())
             }
             ConstraintsStorage::Children(parent) => {
                 parent.try_borrow(py)?.read(py, |value| match value {

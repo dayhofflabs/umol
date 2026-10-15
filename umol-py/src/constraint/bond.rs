@@ -590,7 +590,7 @@ impl BondConstraintsView {
         let molecule = owner.try_borrow(py)?;
         molecule.check_access(*counter, stringify!(BondConstraintsView))?;
         let entity = molecule
-            .to_rust()?
+            .to_rust()
             .bonds()
             .get(*id)
             .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
@@ -622,7 +622,7 @@ impl BondConstraintsView {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
                 let view = molecule
-                    .to_rust()?
+                    .to_rust()
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
@@ -645,10 +645,10 @@ impl BondConstraintsView {
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
-                if !molecule.to_rust()?.bonds().contains(*id) {
+                if !molecule.to_rust().bonds().contains(*id) {
                     return Err(PyIndexError::new_err("bond id out of range"));
                 }
-                let mut view = molecule.to_rust_mut()?.bond_mut(*id);
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 cs.set(constraint);
                 Ok(())
@@ -672,10 +672,10 @@ impl BondConstraintsView {
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
-                if !molecule.to_rust()?.bonds().contains(*id) {
+                if !molecule.to_rust().bonds().contains(*id) {
                     return Err(PyIndexError::new_err("bond id out of range"));
                 }
-                let mut view = molecule.to_rust_mut()?.bond_mut(*id);
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
@@ -869,10 +869,10 @@ impl BondConstraintsView {
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
-                if !molecule.to_rust()?.bonds().contains(*id) {
+                if !molecule.to_rust().bonds().contains(*id) {
                     return Err(PyIndexError::new_err("bond id out of range"));
                 }
-                let mut view = molecule.to_rust_mut()?.bond_mut(*id);
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 resolved.apply(cs);
                 Ok(())
@@ -1073,7 +1073,7 @@ impl BondRingSizeCounts {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
                 let view = molecule
-                    .to_rust()?
+                    .to_rust()
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
@@ -1095,7 +1095,7 @@ impl BondRingSizeCounts {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
                 f(&mut molecule
-                    .to_rust_mut()?
+                    .to_rust_mut()
                     .bond_mut(*id)
                     .attributes_mut()
                     .constraints);

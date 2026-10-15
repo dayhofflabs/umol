@@ -1023,7 +1023,7 @@ macro_rules! stereo_constraints {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!($view))?;
                 let entity = molecule
-                    .to_rust()?
+                    .to_rust()
                     .$namespace()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err($id_error))?;
@@ -1049,7 +1049,7 @@ macro_rules! stereo_constraints {
                         let molecule = owner.try_borrow(py)?;
                         molecule.check_access(*counter, stringify!($view))?;
                         let view = molecule
-                            .to_rust()?
+                            .to_rust()
                             .$namespace()
                             .get(*id)
                             .ok_or_else(|| PyIndexError::new_err($id_error))?;
@@ -1167,10 +1167,10 @@ macro_rules! stereo_constraints {
                     $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
                         molecule.check_access(*counter, stringify!($view))?;
-                        if !molecule.to_rust()?.$namespace().contains(*id) {
+                        if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
-                        let mut view = molecule.to_rust_mut()?.$entity_mut(*id);
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
                         let cs = &mut view.attributes_mut().constraints;
                         cs.set(constraint);
                         Ok(())
@@ -1195,10 +1195,10 @@ macro_rules! stereo_constraints {
                     $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
                         molecule.check_access(*counter, stringify!($view))?;
-                        if !molecule.to_rust()?.$namespace().contains(*id) {
+                        if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
-                        let mut view = molecule.to_rust_mut()?.$entity_mut(*id);
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
                         let cs = &mut view.attributes_mut().constraints;
                         cs.remove(rust_key)
                     }
@@ -1218,10 +1218,10 @@ macro_rules! stereo_constraints {
                     $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
                         molecule.check_access(*counter, stringify!($view))?;
-                        if !molecule.to_rust()?.$namespace().contains(*id) {
+                        if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
-                        let mut view = molecule.to_rust_mut()?.$entity_mut(*id);
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
                         let cs = &mut view.attributes_mut().constraints;
                         cs.remove(rust_key)
                     }
@@ -1249,10 +1249,10 @@ macro_rules! stereo_constraints {
                     $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
                         molecule.check_access(*counter, stringify!($view))?;
-                        if !molecule.to_rust()?.$namespace().contains(*id) {
+                        if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
-                        let mut view = molecule.to_rust_mut()?.$entity_mut(*id);
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
                         let cs = &mut view.attributes_mut().constraints;
                         resolved.apply(cs);
                         Ok(())

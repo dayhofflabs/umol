@@ -237,7 +237,7 @@ impl Reaction {
         deltas: Option<Py<Deltas>>,
     ) -> PyResult<Self> {
         let reaction = GraphIrReaction::try_new(
-            lhs.map(|value| -> PyResult<_> { Ok(value.try_borrow(py)?.to_rust()?.clone()) })
+            lhs.map(|value| -> PyResult<_> { Ok(value.try_borrow(py)?.to_rust().clone()) })
                 .transpose()?
                 .unwrap_or_default(),
             deltas
@@ -316,8 +316,8 @@ impl Reaction {
         rhs: Py<Molecule>,
         atom_correspondence: &PyCorrespondence,
     ) -> PyResult<Self> {
-        let lhs = lhs.try_borrow(py)?.to_rust()?.clone();
-        let rhs = rhs.try_borrow(py)?.to_rust()?.clone();
+        let lhs = lhs.try_borrow(py)?.to_rust().clone();
+        let rhs = rhs.try_borrow(py)?.to_rust().clone();
         let atom_correspondence = atom_correspondence.to_rust::<AtomId>();
 
         let reaction =
@@ -430,7 +430,7 @@ impl Reaction {
     fn set_lhs(slf: Py<Self>, py: Python<'_>, value: Py<Molecule>) -> PyResult<()> {
         let resolved = Py::new(
             py,
-            Molecule::from_rust(value.try_borrow(py)?.to_rust()?.clone()),
+            Molecule::from_rust(value.try_borrow(py)?.to_rust().clone()),
         )?;
         slf.borrow_mut(py).lhs = resolved;
         Ok(())
@@ -503,7 +503,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust()?.clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let config = config.unwrap_or_default().to_rust();
         let application = reaction
             .apply(&host, config)
@@ -523,7 +523,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<TrackedReactionApplicationIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust()?.clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let applications = reaction
             .tracked_apply(&host, config.unwrap_or_default().to_rust())
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
@@ -541,7 +541,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationToReactionIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust()?.clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let applications = reaction
             .apply_to_reaction(&host, config.unwrap_or_default().to_rust())
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
@@ -562,7 +562,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationToReactionSpanIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust()?.clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let applications = reaction
             .apply_to_reaction_span(&host, config.unwrap_or_default().to_rust())
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
@@ -613,7 +613,7 @@ impl Reaction {
     /// Snapshot and validate the current Python-owned components as a Rust reaction.
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrReaction> {
         GraphIrReaction::try_new(
-            self.lhs.try_borrow(py)?.to_rust()?.clone(),
+            self.lhs.try_borrow(py)?.to_rust().clone(),
             self.deltas.bind(py).borrow().to_rust().clone(),
         )
         .map_err(reaction_integrity_error)
@@ -1188,13 +1188,13 @@ mod tests {
             )
             .unwrap();
             let expected = GraphIrReaction::new(
-                lhs.bind(py).borrow().to_rust().unwrap().clone(),
+                lhs.bind(py).borrow().to_rust().clone(),
                 deltas.bind(py).borrow().to_rust().clone(),
             );
 
             let reaction =
                 Reaction::new(py, Some(lhs.clone_ref(py)), Some(deltas.clone_ref(py))).unwrap();
-            *lhs.bind(py).borrow_mut().to_rust_mut().unwrap() = GraphIrMolecule::new();
+            *lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
             let delta = into_py_variant(
                 py,
                 Delta::from_rust(
@@ -1634,8 +1634,8 @@ mod tests {
             .unwrap();
 
             assert_eq!(reaction.to_rust(py).unwrap(), expected);
-            assert_eq!(*lhs.bind(py).borrow().to_rust().unwrap(), lhs_before);
-            assert_eq!(*rhs.bind(py).borrow().to_rust().unwrap(), rhs_before);
+            assert_eq!(*lhs.bind(py).borrow().to_rust(), lhs_before);
+            assert_eq!(*rhs.bind(py).borrow().to_rust(), rhs_before);
             assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
         });
     }
@@ -1797,13 +1797,13 @@ mod tests {
             .unwrap();
             let expected = reaction.to_rust(py).unwrap();
 
-            *lhs.bind(py).borrow_mut().to_rust_mut().unwrap() = GraphIrMolecule::new();
-            *rhs.bind(py).borrow_mut().to_rust_mut().unwrap() = GraphIrMolecule::new();
+            *lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
+            *rhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
 
             assert_eq!(reaction.to_rust(py).unwrap(), expected);
             assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
 
-            *reaction.lhs.bind(py).borrow_mut().to_rust_mut().unwrap() =
+            *reaction.lhs.bind(py).borrow_mut().to_rust_mut() =
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
@@ -1848,7 +1848,7 @@ mod tests {
             let first_deltas = reaction.bind(py).borrow().deltas(py);
             let second_deltas = reaction.bind(py).borrow().deltas(py);
 
-            *first_lhs.bind(py).borrow_mut().to_rust_mut().unwrap() =
+            *first_lhs.bind(py).borrow_mut().to_rust_mut() =
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
@@ -1915,13 +1915,13 @@ mod tests {
             )
             .unwrap();
             let expected = GraphIrReaction::new(
-                lhs.bind(py).borrow().to_rust().unwrap().clone(),
+                lhs.bind(py).borrow().to_rust().clone(),
                 deltas.bind(py).borrow().to_rust().clone(),
             );
 
             Reaction::set_lhs(reaction.clone_ref(py), py, lhs.clone_ref(py)).unwrap();
             Reaction::set_deltas(reaction.clone_ref(py), py, deltas.clone_ref(py)).unwrap();
-            *lhs.bind(py).borrow_mut().to_rust_mut().unwrap() = GraphIrMolecule::new();
+            *lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
             let delta = into_py_variant(
                 py,
                 Delta::from_rust(
@@ -2271,7 +2271,7 @@ mod tests {
             assert_ne!(composites[0].deltas.as_ptr(), composites[1].deltas.as_ptr());
 
             for composite in &mut composites {
-                *composite.lhs.bind(py).borrow_mut().to_rust_mut().unwrap() =
+                *composite.lhs.bind(py).borrow_mut().to_rust_mut() =
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                         ..Default::default()
@@ -2319,16 +2319,13 @@ mod tests {
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             assert_eq!(reaction.to_rust(py).unwrap(), expected_reaction);
-            assert_eq!(host.bind(py).borrow().to_rust().unwrap(), &expected_host);
+            assert_eq!(host.bind(py).borrow().to_rust(), &expected_host);
 
             let first = application.borrow_mut(py).__next__().unwrap().unwrap();
             let second = application.borrow_mut(py).__next__().unwrap().unwrap();
             assert!(application.borrow_mut(py).__next__().unwrap().is_none());
             assert_eq!(
-                [
-                    first.to_rust().unwrap().clone(),
-                    second.to_rust().unwrap().clone()
-                ],
+                [first.to_rust().clone(), second.to_rust().clone()],
                 [
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
@@ -2357,13 +2354,13 @@ mod tests {
             let host = Py::new(py, Molecule::from_rust(expected_host)).unwrap();
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
-            *reaction.lhs.bind(py).borrow_mut().to_rust_mut().unwrap() =
+            *reaction.lhs.bind(py).borrow_mut().to_rust_mut() =
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::N)],
                     ..Default::default()
                 });
             reaction.deltas = Py::new(py, Deltas::from_rust(GraphIrDeltas::default())).unwrap();
-            *host.bind(py).borrow_mut().to_rust_mut().unwrap() =
+            *host.bind(py).borrow_mut().to_rust_mut() =
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
@@ -2374,7 +2371,7 @@ mod tests {
                     .borrow_mut(py)
                     .__next__()
                     .unwrap()
-                    .map(|product| product.to_rust().unwrap().clone())
+                    .map(|product| product.to_rust().clone())
             })
             .collect();
             assert_eq!(
@@ -2450,7 +2447,7 @@ mod tests {
                     .borrow_mut(py)
                     .__next__()
                     .unwrap()
-                    .map(|product| product.to_rust().unwrap().clone())
+                    .map(|product| product.to_rust().clone())
             })
             .collect();
             assert_eq!(
@@ -2998,7 +2995,7 @@ mod tests {
             )
             .unwrap();
 
-            *reaction.lhs.bind(py).borrow_mut().to_rust_mut().unwrap() =
+            *reaction.lhs.bind(py).borrow_mut().to_rust_mut() =
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(1)],
                     ..Default::default()
@@ -3220,10 +3217,7 @@ mod tests {
         let first = application.__next__().unwrap().unwrap();
         let second = application.__next__().unwrap().unwrap();
         assert_eq!(
-            [
-                first.to_rust().unwrap().clone(),
-                second.to_rust().unwrap().clone()
-            ],
+            [first.to_rust().clone(), second.to_rust().clone()],
             [
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
@@ -3244,16 +3238,15 @@ mod tests {
         assert!(application.__next__().unwrap().is_none());
         assert!(application.__next__().unwrap().is_none());
 
-        let expected_first = first.to_rust().unwrap();
-        let expected_second = second.to_rust().unwrap();
-        let mut detached = Molecule::from_rust(first.to_rust().unwrap().clone());
+        let expected_first = first.to_rust();
+        let expected_second = second.to_rust();
+        let mut detached = Molecule::from_rust(first.to_rust().clone());
         *detached
             .to_rust_mut()
-            .unwrap()
             .atom_mut(GraphIrAtomId(0))
             .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::F);
-        assert_eq!(first.to_rust().unwrap(), expected_first);
-        assert_eq!(second.to_rust().unwrap(), expected_second);
+        assert_eq!(first.to_rust(), expected_first);
+        assert_eq!(second.to_rust(), expected_second);
     }
 
     #[rstest]
@@ -3402,7 +3395,7 @@ mod tests {
         assert_eq!(
             first
                 .iter()
-                .map(|molecule| molecule.to_rust().unwrap().clone())
+                .map(|molecule| molecule.to_rust().clone())
                 .collect::<Vec<_>>(),
             vec![
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -3422,7 +3415,7 @@ mod tests {
         assert_eq!(
             second
                 .iter()
-                .map(|molecule| molecule.to_rust().unwrap().clone())
+                .map(|molecule| molecule.to_rust().clone())
                 .collect::<Vec<_>>(),
             vec![
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -3444,12 +3437,11 @@ mod tests {
 
         *first[0]
             .to_rust_mut()
-            .unwrap()
             .atom_mut(GraphIrAtomId(0))
             .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(host, expected_host);
         assert_eq!(
-            second[0].to_rust().unwrap(),
+            second[0].to_rust(),
             &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                 ..Default::default()

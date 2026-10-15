@@ -928,13 +928,8 @@ impl Solution {
                     .as_ref()
                     .map(|molecule| molecule.try_borrow(py))
                     .transpose()?;
-                left.as_ref()
-                    .map(|molecule| molecule.to_rust())
-                    .transpose()?
-                    == right
-                        .as_ref()
-                        .map(|molecule| molecule.to_rust())
-                        .transpose()?
+                left.as_ref().map(|molecule| molecule.to_rust())
+                    == right.as_ref().map(|molecule| molecule.to_rust())
             }
             (Self::Underdetermined {}, Self::Underdetermined {}) => true,
             (
@@ -954,7 +949,7 @@ impl Solution {
             Self::Determined { molecule } => format!(
                 "Solution.Determined(molecule={})",
                 match molecule {
-                    Some(molecule) => molecule.try_borrow(py)?.__repr__()?,
+                    Some(molecule) => molecule.try_borrow(py)?.__repr__(),
                     None => String::from("None"),
                 },
             ),

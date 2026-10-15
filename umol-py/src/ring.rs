@@ -581,7 +581,7 @@ impl RingViews {
         rings: GraphIrRingSet,
         molecule: Py<Molecule>,
     ) -> PyResult<Self> {
-        let counter = molecule.try_borrow(py)?.view_counter()?;
+        let counter = molecule.try_borrow(py)?.view_counter();
         Ok(Self {
             molecule,
             counter,
@@ -610,7 +610,7 @@ impl RingViews {
             .ok_or_else(|| ConsumedError::new_err("RingViews has been consumed"))?;
         let molecule = self.molecule.try_borrow(py)?;
         molecule.check_access(self.counter, accessor)?;
-        let molecule = molecule.to_rust()?;
+        let molecule = molecule.to_rust();
         match storage {
             RingStorage::Owned(rings) => f(rings, molecule),
             RingStorage::Borrowed(owner) => f(&owner.try_borrow(py)?.0, molecule),
@@ -624,7 +624,7 @@ impl RingViews {
     /// Topology and ids must agree for meaningful readings; this is not validated.
     #[staticmethod]
     fn from_ring_set(py: Python<'_>, rings: Py<RingSet>, molecule: Py<Molecule>) -> PyResult<Self> {
-        let counter = molecule.try_borrow(py)?.view_counter()?;
+        let counter = molecule.try_borrow(py)?.view_counter();
         Ok(Self {
             molecule,
             counter,

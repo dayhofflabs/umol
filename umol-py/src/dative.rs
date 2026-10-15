@@ -290,7 +290,7 @@ impl DativeBondView {
     fn acceptor(&self, py: Python<'_>) -> PyResult<u32> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
-        Ok(self.dative_bond(molecule.to_rust()?)?.acceptor_id().0)
+        Ok(self.dative_bond(molecule.to_rust())?.acceptor_id().0)
     }
 
     /// The donor atom indices (read-only).
@@ -299,7 +299,7 @@ impl DativeBondView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
         Ok(self
-            .dative_bond(molecule.to_rust()?)?
+            .dative_bond(molecule.to_rust())?
             .donor_ids()
             .map(|donor| donor.0)
             .collect())
@@ -312,7 +312,7 @@ impl DativeBondView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
         let atom_ids: Vec<u32> = self
-            .dative_bond(molecule.to_rust()?)?
+            .dative_bond(molecule.to_rust())?
             .atom_ids()
             .map(|atom| atom.0)
             .collect();
@@ -331,7 +331,7 @@ impl DativeBondView {
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
         NumForm::from_rust(
             py,
-            &self.dative_bond(molecule.to_rust()?)?.attributes().order,
+            &self.dative_bond(molecule.to_rust())?.attributes().order,
         )
     }
 
@@ -341,7 +341,7 @@ impl DativeBondView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
         molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .dative_bond_mut(self.id)
             .attributes_mut()
             .order = value;
@@ -371,7 +371,7 @@ impl DativeBondView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
         molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .dative_bond_mut(self.id)
             .attributes_mut()
             .constraints = value;
@@ -383,7 +383,7 @@ impl DativeBondView {
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
-        let bond = self.dative_bond(molecule.to_rust()?)?.attributes();
+        let bond = self.dative_bond(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item(
@@ -431,7 +431,7 @@ impl DativeBondViews {
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
-        Ok(molecule.to_rust()?.dative_bonds().count())
+        Ok(molecule.to_rust().dative_bonds().count())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -439,14 +439,14 @@ impl DativeBondViews {
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
         Ok(format!(
             "DativeBondViews(len={})",
-            molecule.to_rust()?.dative_bonds().count()
+            molecule.to_rust().dative_bonds().count()
         ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<DativeBondView> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
-        let id = resolve_dative_bond_index(molecule.to_rust()?, index)?;
+        let id = resolve_dative_bond_index(molecule.to_rust(), index)?;
         Ok(DativeBondView {
             owner: self.owner.clone_ref(py),
             counter: self.counter,
@@ -463,8 +463,8 @@ impl DativeBondViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
-        let id = resolve_dative_bond_index(molecule.to_rust()?, index)?;
-        *molecule.to_rust_mut()?.dative_bond_mut(id).attributes_mut() = bond.to_rust().clone();
+        let id = resolve_dative_bond_index(molecule.to_rust(), index)?;
+        *molecule.to_rust_mut().dative_bond_mut(id).attributes_mut() = bond.to_rust().clone();
         Ok(())
     }
 
@@ -479,7 +479,7 @@ impl DativeBondViews {
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
         let donor_ids: Vec<GraphIrAtomId> = donors.into_iter().map(GraphIrAtomId).collect();
         Ok(molecule
-            .to_rust()?
+            .to_rust()
             .dative_bonds()
             .of_id(GraphIrAtomId(acceptor), &donor_ids)
             .map(|id| DativeBondView {
@@ -494,7 +494,7 @@ impl DativeBondViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
         Ok(molecule
-            .to_rust()?
+            .to_rust()
             .dative_bonds()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| DativeBondView {
@@ -508,7 +508,7 @@ impl DativeBondViews {
     fn __iter__(&self, py: Python<'_>) -> PyResult<DativeBondViewIter> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondViews))?;
-        let ids = molecule.to_rust()?.dative_bonds().ids().collect::<Vec<_>>();
+        let ids = molecule.to_rust().dative_bonds().ids().collect::<Vec<_>>();
         Ok(DativeBondViewIter {
             owner: self.owner.clone_ref(py),
             counter: self.counter,
@@ -520,7 +520,7 @@ impl DativeBondViews {
 impl DativeBondViews {
     /// Build the dative-bond-views handle for `owner` (the `.dative_bonds` accessor).
     pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<DativeBondViews> {
-        let counter = owner.try_borrow(py)?.view_counter()?;
+        let counter = owner.try_borrow(py)?.view_counter();
         Ok(DativeBondViews { owner, counter })
     }
 }

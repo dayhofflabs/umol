@@ -1415,13 +1415,14 @@ the full measurements. These tables preserve the findings independently of scrat
 
 ## 5. Python consumed-object errors
 
-ConsumedError currently applies to Molecule, MoleculeEditor, Edits, and RingViews.
+ConsumedError applies to MoleculeEditor, Edits, and RingViews. Before the ownership
+changes it also applied to Molecule.
 
-Python Molecule will hold GraphIrMolecule directly, without Option. Migrate its
-current consuming methods—edit, apply, tracked_apply, resolve, and
-resolve_with_report—to the proposed source-preserving operations. Remove
-Molecule::take, molecule-consumed errors, and the fallibility of internal accessors
-whose only failure is a consumed molecule. No empty placeholder is installed.
+Python Molecule holds GraphIrMolecule directly, without Option. Its edit, apply,
+tracked_apply, resolve, and resolve_with_report methods preserve the source and
+its views. Molecule::take, molecule-consumed errors, and the fallibility of internal
+accessors whose only failure was a consumed molecule have been removed.
+No empty placeholder is installed.
 The destructive Rust editor entry point is not required on the Python surface.
 
 Edits retains consumption on transfer and gains an explicit copy method.
@@ -5520,7 +5521,7 @@ transform_into's in-place application without a transaction is implemented in
 
 ### S11 — Python storage and API guarantees
 
-#### S11a — Remove consumed Molecule storage
+#### S11a — Remove consumed Molecule storage (done)
 
 **Modules:** umol-py molecule, all molecule consumers/views, error tests and exports.
 **Internal breaking conversion signatures, red→green within the subitem.**
@@ -5551,6 +5552,22 @@ views after copying, invalidation before whole-molecule mutation including rollb
 no-op, extraction failure before execution, ordinary setter visibility, and
 existing invalid-access exceptions. Exercise nested views, not just entity roots.
 Retain RingViews consumption and dependent-accessor invalidation checks.
+
+**Completed — 2026-10-15.** Molecule stores GraphIrMolecule directly. Its internal
+read, mutable-access, and counter methods are infallible; check_access checks only
+the captured counter. All binding consumers and Rust tests use these signatures.
+Methods whose only error was consumed-Molecule access now return their values
+directly. Borrow failures, operation errors, and mutation invalidation remain.
+ConsumedError remains exported for Edits, terminal editor finish, and RingViews;
+their storage and lifecycle checks are unchanged. The two test groups that
+manufactured a consumed Molecule were removed; source-preservation, nested-view,
+rollback/no-op, argument-extraction, live-setter, and RingViews checks remain.
+
+Verification passed: 1,759 Python-binding Rust tests with all features (two
+existing ignored tests); rebuilt extension and all 2,767 Python tests (two existing
+skips); strict Clippy with all targets and features; formatting and diff checks.
+The user-facing documentation consistency pass remains S11b, whole-operation
+timing remains S12a, and the workspace/MSRV gate remains S12b.
 
 #### S11b — Python guarantees and user-facing migration
 

@@ -340,7 +340,7 @@ impl AromaticSystemView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         let atom_ids: Vec<u32> = self
-            .aromatic_system(molecule.to_rust()?)?
+            .aromatic_system(molecule.to_rust())?
             .atom_ids()
             .map(|atom| atom.0)
             .collect();
@@ -360,7 +360,7 @@ impl AromaticSystemView {
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         Ok(ElectronCountsForm::from_rust(
             &self
-                .aromatic_system(molecule.to_rust()?)?
+                .aromatic_system(molecule.to_rust())?
                 .attributes()
                 .electrons,
         ))
@@ -371,11 +371,11 @@ impl AromaticSystemView {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
-        if !molecule.to_rust()?.aromatic_systems().contains(self.id) {
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
         molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes_mut()
             .electrons = value;
@@ -389,7 +389,7 @@ impl AromaticSystemView {
         NumForm::from_rust(
             py,
             &self
-                .aromatic_system(molecule.to_rust()?)?
+                .aromatic_system(molecule.to_rust())?
                 .attributes()
                 .charge,
         )
@@ -400,11 +400,11 @@ impl AromaticSystemView {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
-        if !molecule.to_rust()?.aromatic_systems().contains(self.id) {
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
         molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes_mut()
             .charge = value;
@@ -418,7 +418,7 @@ impl AromaticSystemView {
         UnpairedElectronsForm::from_rust(
             py,
             &self
-                .aromatic_system(molecule.to_rust()?)?
+                .aromatic_system(molecule.to_rust())?
                 .attributes()
                 .unpaired_electrons,
         )
@@ -433,11 +433,11 @@ impl AromaticSystemView {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
-        if !molecule.to_rust()?.aromatic_systems().contains(self.id) {
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
         molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes_mut()
             .unpaired_electrons = value;
@@ -470,11 +470,11 @@ impl AromaticSystemView {
         let value = value.to_rust(py)?;
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
-        if !molecule.to_rust()?.aromatic_systems().contains(self.id) {
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
         molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes_mut()
             .constraints = value;
@@ -486,7 +486,7 @@ impl AromaticSystemView {
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
-        let system = self.aromatic_system(molecule.to_rust()?)?.attributes();
+        let system = self.aromatic_system(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item(
             "electrons",
@@ -542,7 +542,7 @@ impl AromaticSystemViews {
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
-        Ok(molecule.to_rust()?.aromatic_systems().count())
+        Ok(molecule.to_rust().aromatic_systems().count())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -550,14 +550,14 @@ impl AromaticSystemViews {
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
         Ok(format!(
             "AromaticSystemViews(len={})",
-            molecule.to_rust()?.aromatic_systems().count()
+            molecule.to_rust().aromatic_systems().count()
         ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AromaticSystemView> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
-        let id = resolve_aromatic_system_index(molecule.to_rust()?, index)?;
+        let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
         Ok(AromaticSystemView {
             owner: self.owner.clone_ref(py),
             counter: self.counter,
@@ -574,10 +574,10 @@ impl AromaticSystemViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
-        let id = resolve_aromatic_system_index(molecule.to_rust()?, index)?;
+        let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
         let system = system.to_rust().clone();
         *molecule
-            .to_rust_mut()?
+            .to_rust_mut()
             .aromatic_system_mut(id)
             .attributes_mut() = system;
         Ok(())
@@ -588,7 +588,7 @@ impl AromaticSystemViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
         Ok(molecule
-            .to_rust()?
+            .to_rust()
             .aromatic_systems()
             .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| AromaticSystemView {
@@ -603,7 +603,7 @@ impl AromaticSystemViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
         Ok(molecule
-            .to_rust()?
+            .to_rust()
             .aromatic_systems()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| AromaticSystemView {
@@ -618,7 +618,7 @@ impl AromaticSystemViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
         let ids = molecule
-            .to_rust()?
+            .to_rust()
             .aromatic_systems()
             .ids()
             .collect::<Vec<_>>();
@@ -633,7 +633,7 @@ impl AromaticSystemViews {
 impl AromaticSystemViews {
     /// Build the aromatic-system-views handle for `owner` (the `.aromatic_systems` accessor).
     pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<AromaticSystemViews> {
-        let counter = owner.try_borrow(py)?.view_counter()?;
+        let counter = owner.try_borrow(py)?.view_counter();
         Ok(AromaticSystemViews { owner, counter })
     }
 }
