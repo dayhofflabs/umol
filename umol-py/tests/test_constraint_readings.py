@@ -51,7 +51,9 @@ from umol import (
     StereoBondConstraintForm,
     StereoBondConstraintsForm,
     StereoBondForm,
+    StereoConfigurationForm,
     StereoCoset,
+    StereoKind,
     StereoLigand,
     StereoLigandKind,
     StereoLigandPair,
@@ -419,10 +421,12 @@ def test_entity_constraints_view_derived_frame(source, namespace, expected, meth
 
 
 @pytest.mark.parametrize(
-    "namespace,container_type,constraint_type",
+    "namespace,container_type,constraint_type,form_type,kind",
     [
-        ("stereo_atoms", StereoAtomConstraintsForm, StereoAtomConstraintForm),
-        ("stereo_bonds", StereoBondConstraintsForm, StereoBondConstraintForm),
+        ("stereo_atoms", StereoAtomConstraintsForm, StereoAtomConstraintForm,
+         StereoAtomForm, StereoKind.Tetrahedral),
+        ("stereo_bonds", StereoBondConstraintsForm, StereoBondConstraintForm,
+         StereoBondForm, StereoKind.CisTrans),
     ],
 )
 @pytest.mark.parametrize(
@@ -443,24 +447,54 @@ def test_entity_constraints_view_derived_frame(source, namespace, expected, meth
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.LitSet({Topicity.Homotopic})),
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Lit(Topicity.Homotopic)),
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Undetermined())),
+        ("Stereogenicity",
+         StereogenicityForm.LitSet({Stereogenicity.Stereogenic}),
+         StereogenicityForm.Lit(Stereogenicity.Stereogenic),
+         StereogenicityForm.Undetermined()),
+        ("Topicity",
+         TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.LitSet(set())),
+         None,
+         TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Undetermined())),
+        ("Stereogenicity", StereogenicityForm.LitSet(set()), None,
+         StereogenicityForm.Undetermined()),
     ],
 )
+@pytest.mark.parametrize("backing", ["molecule", "value"])
+@pytest.mark.parametrize("configuration", ["literal", "open_coset", "kindless"])
 def test_stereo_constraints_view_asserted(
-    molecule, namespace, container_type, constraint_type, variant, raw, expected, top,
+    molecule, namespace, container_type, constraint_type, form_type, kind,
+    variant, raw, expected, top, backing, configuration,
 ):
     raw = getattr(constraint_type, variant)(raw)
-    expected = getattr(constraint_type, variant)(expected)
+    expected = getattr(constraint_type, variant)(expected) if expected is not None else None
     top = getattr(constraint_type, variant)(top)
     constraints = container_type([raw])
-    entity = getattr(molecule, namespace)[0]
+    entity = (getattr(molecule, namespace)[0] if backing == "molecule" else
+              form_type(StereoConfigurationForm.Undetermined()))
+    entity.configuration = (
+        StereoConfigurationForm.Undetermined() if configuration == "kindless" else
+        StereoConfigurationForm.Kinded(kind, StereoCoset.Undetermined()
+                                      if configuration == "open_coset" else StereoCoset.Lit(0))
+    )
     entity.constraints = constraints
     view = entity.constraints
     assert constraints.asserted(raw.key) == expected
     assert constraints.asserted_complete(raw.key) == expected
-    for method in ("asserted", "asserted_complete", "evidenced", "evidenced_complete"):
-        assert getattr(view, method)(raw.key) == expected
-    assert view.derived(raw.key) == top
-    assert view.derived_complete(raw.key) == top
+    reading = top if configuration == "kindless" else expected
+    for method in ("asserted", "asserted_complete"):
+        assert getattr(view, method)(raw.key) == reading
+    if backing == "molecule":
+        for method in ("evidenced", "evidenced_complete"):
+            assert getattr(view, method)(raw.key) == reading
+        assert view.derived(raw.key) == top
+        assert view.derived_complete(raw.key) == top
+        assert view.satisfies(constraints) == (configuration != "kindless" and expected is not None)
+        assert view.is_compatible(constraints) == (expected is not None)
+    assert view.get(raw.key) == raw
+    entity.configuration = StereoConfigurationForm.Kinded(kind, StereoCoset.Undetermined())
+    assert view.asserted(raw.key) == expected
+    entity.configuration = StereoConfigurationForm.Undetermined()
+    assert view.asserted(raw.key) == top
     assert view.get(raw.key) == raw
 
 

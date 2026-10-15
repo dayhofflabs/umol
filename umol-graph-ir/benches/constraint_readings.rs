@@ -147,12 +147,9 @@ macro_rules! stereo_readings {
                 StereogenicityForm::Undetermined,
             ));
             let expected = match name {
-                "literal_assertion" | "kindless_assertion" | "singleton_assertion" => {
-                    Some($constraint::Stereogenicity(StereogenicityForm::Lit(
-                        Stereogenicity::Stereogenic,
-                    )))
-                }
-                "kindless_bottom" => None,
+                "literal_assertion" | "singleton_assertion" => Some($constraint::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+                )),
                 _ => top.clone(),
             };
             let reading = molecule.$entity($id).constraints();

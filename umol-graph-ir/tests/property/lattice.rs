@@ -560,6 +560,42 @@ proptest! {
         assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
+    #[test]
+    fn test_stereo_atom_form_lattice_laws_raw(
+        a in raw_stereo_atom_form_strategy(),
+        b in raw_stereo_atom_form_strategy(),
+        c in raw_stereo_atom_form_strategy(),
+    ) {
+        if let (Ok(na), Ok(nb), Ok(nc)) = (a.clone().normalize(), b.clone().normalize(), c.normalize()) {
+            assert_lattice_laws(&na, &nb, &nc)?;
+            assert_normalized_lattice_laws(&na, &nb, &nc)?;
+            prop_assert_eq!(a.normalized_eq(&b), na == nb);
+            prop_assert_eq!(a.is_undetermined(), na.is_undetermined());
+            prop_assert_eq!(a.meet(&b).map(Normalize::normalize), na.meet(&nb).map(Ok));
+            prop_assert_eq!(a.join(&b).map(Normalize::normalize), na.join(&nb).map(Ok));
+            prop_assert_eq!(a.matches(&b), na.matches(&nb));
+            prop_assert_eq!(a.is_compatible(&b), na.is_compatible(&nb));
+        }
+    }
+
+    #[test]
+    fn test_stereo_bond_form_lattice_laws_raw(
+        a in raw_stereo_bond_form_strategy(),
+        b in raw_stereo_bond_form_strategy(),
+        c in raw_stereo_bond_form_strategy(),
+    ) {
+        if let (Ok(na), Ok(nb), Ok(nc)) = (a.clone().normalize(), b.clone().normalize(), c.normalize()) {
+            assert_lattice_laws(&na, &nb, &nc)?;
+            assert_normalized_lattice_laws(&na, &nb, &nc)?;
+            prop_assert_eq!(a.normalized_eq(&b), na == nb);
+            prop_assert_eq!(a.is_undetermined(), na.is_undetermined());
+            prop_assert_eq!(a.meet(&b).map(Normalize::normalize), na.meet(&nb).map(Ok));
+            prop_assert_eq!(a.join(&b).map(Normalize::normalize), na.join(&nb).map(Ok));
+            prop_assert_eq!(a.matches(&b), na.matches(&nb));
+            prop_assert_eq!(a.is_compatible(&b), na.is_compatible(&nb));
+        }
+    }
+
     // Concreteness decomposes lattice groundness: ground iff concrete with a
     // ground constraint channel.
     #[test]

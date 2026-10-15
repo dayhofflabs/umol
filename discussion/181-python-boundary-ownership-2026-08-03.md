@@ -3968,7 +3968,7 @@ strict Clippy, workspace all-target compilation, nightly formatting, and
 git diff --check passed. Workspace tests remain at the plan gate; performance
 comparisons remain in S4a. Logs are in scratch/181-s2c-f.
 
-#### S2g1 — Stereo form semantics and constraint readings
+#### S2g1 — Stereo form semantics and constraint readings (done)
 
 **Modules:** graph-IR ir/stereo, ir/view/stereo, ir/view/constraints; Python
 stereo and constraint/stereo; their unit and property tests.
@@ -4013,6 +4013,69 @@ whose payload would contradict if interpreted independently.
 time and allocation differences. Inspect added cloning, repeated normalization,
 or lost allocation-free paths before accepting a regression on unchanged
 semantics. Keep common and unusual cases separate in the results.
+
+**Implemented — 2026-10-15.** Both stereo forms now implement kind-aware
+normalization and lattice operations. Kindless constraints are discarded before
+normalization inspects their contents, cannot enter a meet through a kindless
+operand, and are absent from a join whose kind is undetermined. Raw storage,
+equality, hashing, mutation, and standalone constraint-container semantics remain
+unchanged. Rust entity readings and both Python view backings apply the owning
+kind; derived readings retain their existing behavior. No public signatures or
+general-purpose derives changed. Updates, lowering, and serialization remain
+S2g2's work.
+
+Exact cases cover all four constraint keys, contradictory payloads, known kinds
+with open cosets, both meet orders, joins losing kind, and raw retention. Generated
+raw-form properties compare operations and readings before and after normalization
+and retain the normalized lattice laws. Python tests also change the owning kind
+through an already-issued view and check that the stored payload survives.
+The existing form and stereo-reading tests moved into logical test submodules;
+their cases and assertions were retained.
+
+Verification passed: 3,154 focused Rust unit cases; the stereo, lattice, and
+constraint-reading property selections (67, 117, and 4 tests, respectively, with
+overlap between selections); and 326 Python cases after rebuilding under Python
+3.13. The final join shortcut also passed the 99 form unit cases and the lattice
+selection. Affected-crate strict Clippy, workspace all-target compilation,
+affected-crate nightly formatting, and git diff --check passed. Workspace tests
+remain at the combined stage gate.
+
+**Performance — 2026-10-15.** Repeated all 144 S0a stereo cases against a fresh
+pre-change build of f9274c220, preserving S0a's fixtures, boundaries, and settings.
+Historical S0a comparisons are retained separately. Four alternating executions
+of 14 selected cases check the remaining common-case costs. Each table cell is
+atom / bond median in ns from the full comparison:
+
+| Case and operation | Before S2g1 | Final |
+| --- | --- | --- |
+| Common: known kind/literal coset, empty constraints, asserted | 6.01 / 6.00 | 6.30 / 6.25 |
+| Common: known kind/literal coset, empty constraints, evidenced | 10.42 / 10.45 | 10.88 / 10.76 |
+| Common: known kind/literal coset, empty constraints, meet | 100.23 / 100.27 | 102.87 / 100.93 |
+| Common: known kind/undetermined coset, empty constraints, join | 102.17 / 102.12 | 98.54 / 97.50 |
+| Common: literal assertion, normalized_eq | 5.64 / 5.70 | 5.67 / 5.72 |
+| Common: kindless, empty constraints, matches | 136.67 / 135.58 | 1.81 / 1.85 |
+| Rare: known kind, singleton-set assertion, asserted | 108.49 / 107.61 | 110.24 / 110.23 |
+| Changed semantics: kindless literal assertion, meet | 233.32 / 234.33 | 6.45 / 6.39 |
+| Changed semantics: kindless bottom assertion, asserted | 67.19 / 66.59 | 4.11 / 4.11 |
+
+The alternating repeats measured common empty assertion reads at +4.5–4.9%
+(+0.27–0.29 ns), evidence reads at +2.6–3.2% (+0.27–0.33 ns), and empty-constraint
+meets at +0.9–2.0% (+0.86–2.01 ns). These are retained costs, not zero-cost claims.
+The semantic change requires distinguishing kindless owners and operands.
+Readings use one owner lookup; lattice operations with kinds on both operands add
+no cloning or repeated normalization. Raw equality again precedes kind checks in
+normalized_eq. Joining an empty constraint channel now bypasses the container join, removing the initial
+102 → 106 ns regression; repeated final joins were 97.49–97.58 ns, 4.5–4.7% below
+the adjacent baseline. No inlining attributes were added.
+
+No measured allocation count or byte total increased. Kindless empty matches
+changed from 4 calls / 54 B to zero; kindless literal meet/join from 7 / 131 B to
+zero; kindless literal matches from 2 / 48 B to zero; and kindless bottom assertion/
+evidence reads from 2 / 27 B to zero. Other counts and bytes were unchanged.
+Kindless payload rows have changed results and are not same-result optimizations.
+No frequency-weighted aggregate or cross-machine performance claim is made.
+Full timings, historical comparisons, allocations, repeat results, preserved
+binaries, and commands are in [the measurement record](../scratch/181-s2g1/record.md).
 
 #### S2g2 — Stereo updates, lowering, and single-entry serialization
 

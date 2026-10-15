@@ -451,10 +451,23 @@ impl<'a> BondConstraintsView<'a> {
 /// (`iter`/`is_empty`/`len`) is included, and kind-specific getters follow in
 /// per-kind impl blocks.
 macro_rules! constraints_view {
+    (@asserted $view:ident, $key:ident, $method:ident, $form:ty, $stored:path) => {
+        $stored($view.molecule, $view.id).$method($key)
+    };
+    (@asserted $view:ident, $key:ident, $method:ident, $form:ty, $stored:path, $entity:ident) => {{
+        let attributes = $view.molecule.$entity($view.id).attributes();
+        if attributes.configuration.kind().is_none() {
+            Some(<$form>::undetermined($key))
+        } else {
+            attributes.constraints.$method($key)
+        }
+    }};
     ($view:ident, $entity:literal, $id:ty, $form:ty, $key:ty, $container:ty,
-     $asserted:path, $derived:path) => {
+     $asserted:path, $derived:path $(, kind: $entity_view:ident)?) => {
         #[doc = concat!("Constraint reading of one ", $entity, ": the asserted side under")]
         #[doc = "the container's read API, and both sides under the keyed accessors."]
+        /// Keyed readings use the owning entity's semantics. Typed getters and iteration
+        /// expose raw storage. A kindless stereo entity has vacuous own assertions.
         #[derive(Clone, Copy, Debug)]
         pub struct $view<'a> {
             molecule: &'a Molecule,
@@ -468,13 +481,13 @@ macro_rules! constraints_view {
 
             /// The normalized own assertion: absence is top; contradiction is `None`.
             pub fn asserted(&self, key: $key) -> Option<$form> {
-                $asserted(self.molecule, self.id).asserted(key)
+                constraints_view!(@asserted self, key, asserted, $form, $asserted $(, $entity_view)?)
             }
 
             /// Close the normalized own assertion under the container's closure rule.
             /// Reads no relations; bottom remains bottom.
             pub fn asserted_complete(&self, key: $key) -> Option<$form> {
-                $asserted(self.molecule, self.id).asserted_complete(key)
+                constraints_view!(@asserted self, key, asserted_complete, $form, $asserted $(, $entity_view)?)
             }
 
             /// The derived side of `key`, obtained by projection from present
@@ -593,7 +606,8 @@ constraints_view!(
     StereoAtomConstraintKey,
     StereoAtomConstraintsForm,
     stereo_atom_asserted_constraints,
-    stereo_atom_derived_constraint
+    stereo_atom_derived_constraint,
+    kind: stereo_atom
 );
 
 constraints_view!(
@@ -604,7 +618,8 @@ constraints_view!(
     StereoBondConstraintKey,
     StereoBondConstraintsForm,
     stereo_bond_asserted_constraints,
-    stereo_bond_derived_constraint
+    stereo_bond_derived_constraint,
+    kind: stereo_bond
 );
 
 // The stored containers' typed read API, inherited per entity kind with its
@@ -708,6 +723,9 @@ impl<'a> StereoBondConstraintsView<'a> {
 
 #[cfg(test)]
 mod tests {
+    mod stereo_atom;
+    mod stereo_bond;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
@@ -2447,330 +2465,5 @@ mod tests {
             view.iter().collect::<Vec<_>>(),
             constraints.iter().collect::<Vec<_>>()
         );
-    }
-
-    #[rstest]
-    #[case::present(
-        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Stereogenic,
-        ))),
-        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Stereogenic,
-        )))
-    )]
-    #[case::absent(
-        None,
-        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined))
-    )]
-    fn test_stereo_atom_constraints_view_asserted_complete(
-        #[case] set: Option<StereoAtomConstraintForm>,
-        #[case] expected: Option<StereoAtomConstraintForm>,
-    ) {
-        let mut form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
-        if let Some(constraint) = set {
-            form.constraints.set(constraint);
-        }
-        let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 5],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(0), AtomId(4), BondForm::from_order(1)),
-            ],
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                form,
-            )],
-            ..Default::default()
-        });
-        assert_eq!(
-            molecule
-                .stereo_atom(StereoAtomId(0))
-                .constraints()
-                .asserted_complete(StereoAtomConstraintKey::Stereogenicity),
-            expected
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_atom_constraints_view_asserted() {
-        let mut form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
-        form.constraints
-            .set(StereoAtomConstraintForm::Stereogenicity(
-                StereogenicityForm::Lit(Stereogenicity::Stereogenic),
-            ));
-        let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 5],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(0), AtomId(4), BondForm::from_order(1)),
-            ],
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                form,
-            )],
-            ..Default::default()
-        });
-        let view = molecule.stereo_atom(StereoAtomId(0)).constraints();
-        assert_eq!(
-            view.asserted(StereoAtomConstraintKey::Stereogenicity),
-            Some(StereoAtomConstraintForm::Stereogenicity(
-                StereogenicityForm::Lit(Stereogenicity::Stereogenic),
-            ))
-        );
-        // No projection is defined for stereo constraint kinds.
-        assert_eq!(
-            view.derived(StereoAtomConstraintKey::Stereogenicity),
-            Some(StereoAtomConstraintForm::Stereogenicity(
-                StereogenicityForm::Undetermined
-            ))
-        );
-        assert_eq!(
-            view.derived_complete(StereoAtomConstraintKey::Stereogenicity),
-            Some(StereoAtomConstraintForm::Stereogenicity(
-                StereogenicityForm::Undetermined
-            ))
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored(
-        vec![
-            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
-            StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }),
-            StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
-        ],
-        BooleanForm::Lit(true),
-        BooleanForm::Lit(false),
-        TopicityRelationForm::Lit(Topicity::Homotopic),
-        StereogenicityForm::Lit(Stereogenicity::Stereogenic),
-    )]
-    #[case::absent(
-        vec![],
-        BooleanForm::Undetermined,
-        BooleanForm::Undetermined,
-        TopicityRelationForm::Undetermined,
-        StereogenicityForm::Undetermined,
-    )]
-    fn test_stereo_atom_constraints_view_container_methods(
-        #[case] constraints: Vec<StereoAtomConstraintForm>,
-        #[case] ligand_symmetry: BooleanForm,
-        #[case] fluxionality: BooleanForm,
-        #[case] topicity: TopicityRelationForm,
-        #[case] stereogenicity: StereogenicityForm,
-    ) {
-        let mut form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
-        form.constraints = StereoAtomConstraintsForm::from(constraints.clone());
-        let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 5],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(0), AtomId(4), BondForm::from_order(1)),
-            ],
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                form,
-            )],
-            ..Default::default()
-        });
-        let view = molecule.stereo_atom(StereoAtomId(0)).constraints();
-        let permutation = LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]));
-        assert_eq!(
-            view.ligand_symmetry(OrientedLigandPermutation {
-                permutation,
-                orientation: Orientation::Proper,
-            }),
-            &ligand_symmetry
-        );
-        assert_eq!(view.fluxionality(permutation), &fluxionality);
-        assert_eq!(
-            view.topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
-            &topicity
-        );
-        assert_eq!(view.stereogenicity(), &stereogenicity);
-        assert_eq!(view.len(), constraints.len());
-        assert_eq!(view.is_empty(), constraints.is_empty());
-        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
-    }
-
-    #[rstest]
-    #[case::present(
-        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Stereogenic,
-        ))),
-        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Stereogenic,
-        )))
-    )]
-    #[case::absent(
-        None,
-        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined))
-    )]
-    fn test_stereo_bond_constraints_view_asserted_complete(
-        #[case] set: Option<StereoBondConstraintForm>,
-        #[case] expected: Option<StereoBondConstraintForm>,
-    ) {
-        let mut form = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1));
-        if let Some(constraint) = set {
-            form.constraints.set(constraint);
-        }
-        let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(1), AtomId(2), BondForm::from_order(2)),
-                (AtomId(2), AtomId(3), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(1),
-                vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-                ],
-                form,
-            )],
-            ..Default::default()
-        });
-        assert_eq!(
-            molecule
-                .stereo_bond(StereoBondId(0))
-                .constraints()
-                .asserted_complete(StereoBondConstraintKey::Stereogenicity),
-            expected
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_bond_constraints_view_derived() {
-        // No projection is defined for stereo constraint kinds.
-        let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(1), AtomId(2), BondForm::from_order(2)),
-                (AtomId(2), AtomId(3), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(1),
-                vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-                ],
-                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-            )],
-            ..Default::default()
-        });
-        let view = molecule.stereo_bond(StereoBondId(0)).constraints();
-        assert_eq!(
-            view.derived(StereoBondConstraintKey::Stereogenicity),
-            Some(StereoBondConstraintForm::Stereogenicity(
-                StereogenicityForm::Undetermined
-            ))
-        );
-        assert_eq!(
-            view.derived_complete(StereoBondConstraintKey::Stereogenicity),
-            Some(StereoBondConstraintForm::Stereogenicity(
-                StereogenicityForm::Undetermined
-            ))
-        );
-        assert!(view.is_empty());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored(
-        vec![
-            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
-            StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }),
-            StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
-            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
-        ],
-        BooleanForm::Lit(true),
-        BooleanForm::Lit(false),
-        TopicityRelationForm::Lit(Topicity::Homotopic),
-        StereogenicityForm::Lit(Stereogenicity::Stereogenic),
-    )]
-    #[case::absent(
-        vec![],
-        BooleanForm::Undetermined,
-        BooleanForm::Undetermined,
-        TopicityRelationForm::Undetermined,
-        StereogenicityForm::Undetermined,
-    )]
-    fn test_stereo_bond_constraints_view_container_methods(
-        #[case] constraints: Vec<StereoBondConstraintForm>,
-        #[case] ligand_symmetry: BooleanForm,
-        #[case] fluxionality: BooleanForm,
-        #[case] topicity: TopicityRelationForm,
-        #[case] stereogenicity: StereogenicityForm,
-    ) {
-        let mut form = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1));
-        form.constraints = StereoBondConstraintsForm::from(constraints.clone());
-        let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(1), AtomId(2), BondForm::from_order(2)),
-                (AtomId(2), AtomId(3), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(1),
-                vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-                ],
-                form,
-            )],
-            ..Default::default()
-        });
-        let view = molecule.stereo_bond(StereoBondId(0)).constraints();
-        let permutation = LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]));
-        assert_eq!(
-            view.ligand_symmetry(OrientedLigandPermutation {
-                permutation,
-                orientation: Orientation::Proper,
-            }),
-            &ligand_symmetry
-        );
-        assert_eq!(view.fluxionality(permutation), &fluxionality);
-        assert_eq!(
-            view.topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
-            &topicity
-        );
-        assert_eq!(view.stereogenicity(), &stereogenicity);
-        assert_eq!(view.len(), constraints.len());
-        assert_eq!(view.is_empty(), constraints.is_empty());
-        assert_eq!(view.iter().collect::<Vec<_>>(), constraints.iter().collect::<Vec<_>>());
     }
 }

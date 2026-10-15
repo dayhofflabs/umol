@@ -1475,6 +1475,65 @@ pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondFor
         })
 }
 
+/// Raw forms with optional kind and independently stored constraints, including bottom
+/// payloads. Neither the constraints nor the owning form are normalized by this strategy.
+macro_rules! raw_stereo_form_strategy {
+    ($name:ident, $form:ident, $constraint:ident, $constraint_strategy:ident, $kinds:expr) => {
+        pub(crate) fn $name() -> BoxedStrategy<$form> {
+            $kinds
+                .prop_flat_map(|kind| {
+                    (
+                        prop::option::of(stereo_coset_for_kind(kind)),
+                        prop::collection::vec(
+                            prop_oneof![
+                                $constraint_strategy(kind),
+                                (
+                                    ligand_pair_strategy(kind.degree()),
+                                    prop_oneof![
+                                        raw_topicity_relation_strategy(),
+                                        Just(TopicityRelationForm::lit_set([])),
+                                    ]
+                                )
+                                    .prop_map(|(pair, relation)| {
+                                        $constraint::Topicity(TopicityForm { pair, relation })
+                                    }),
+                                prop_oneof![
+                                    raw_stereogenicity_relation_strategy(),
+                                    Just(StereogenicityForm::lit_set([])),
+                                ]
+                                .prop_map($constraint::Stereogenicity),
+                            ],
+                            0..=4,
+                        ),
+                    )
+                        .prop_map(move |(coset, constraints)| $form {
+                            configuration: coset
+                                .map_or(StereoConfigurationForm::Undetermined, |coset| {
+                                    StereoConfigurationForm::kinded(kind, coset)
+                                }),
+                            constraints: constraints.into(),
+                        })
+                })
+                .boxed()
+        }
+    };
+}
+
+raw_stereo_form_strategy!(
+    raw_stereo_atom_form_strategy,
+    StereoAtomForm,
+    StereoAtomConstraintForm,
+    stereo_atom_constraint_strategy,
+    stereo_atom_kind_strategy()
+);
+raw_stereo_form_strategy!(
+    raw_stereo_bond_form_strategy,
+    StereoBondForm,
+    StereoBondConstraintForm,
+    stereo_bond_constraint_strategy,
+    Just(StereoKind::CisTrans)
+);
+
 pub(crate) fn stereo_bond_update_constraints_strategy(
     kind: StereoKind,
 ) -> impl Strategy<Value = StereoBondConstraintsForm> {

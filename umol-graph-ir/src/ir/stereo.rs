@@ -18,7 +18,6 @@ use umol_graph_core::{
     Compaction, EdgeId, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence,
     GraphRemapping, IdRange, NodeId, ParticipantPosition, RelationId,
 };
-use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
 
 use super::constraint::{
@@ -1211,10 +1210,109 @@ macro_rules! stereo_element {
         $name:ident, $constraints:ident, $constraint:ident, $allows_action:expr
     ) => {
         $(#[doc = $doc])+
-        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
+        ///
+        /// Constraints derive their meaning from the configuration's kind. With an
+        /// undetermined configuration they remain in raw storage but are semantically
+        /// vacuous. A known kind with an undetermined coset retains its constraints.
+        /// Raw equality, hashing, and mutation observe the stored payload.
+        ///
+        /// # Semantic properties
+        ///
+        /// Normalization discards kindless constraints before interpreting their contents.
+        /// Lattice operations and normalized equality ignore that payload, including
+        /// contradictions within it. Meeting with a kinded form cannot activate it;
+        /// joining to an undetermined kind discards the result's constraints.
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name {
             pub configuration: StereoConfigurationForm,
             pub constraints: $constraints,
+        }
+
+        impl Normalize for $name {
+            fn normalize(self) -> Result<Self, Contradiction> {
+                if self.configuration.is_undetermined() {
+                    return Ok(Self::default());
+                }
+                Ok(Self {
+                    configuration: self.configuration.normalize()?,
+                    constraints: self.constraints.normalize()?,
+                })
+            }
+
+            fn normalized_eq(&self, other: &Self) -> bool {
+                if self == other {
+                    return true;
+                }
+                if self.configuration.is_undetermined() {
+                    return other.configuration.is_undetermined();
+                }
+                if other.configuration.is_undetermined() {
+                    return false;
+                }
+                self.clone().normalize() == other.clone().normalize()
+            }
+        }
+
+        impl Lattice for $name {
+            fn is_undetermined(&self) -> bool {
+                self.configuration.is_undetermined()
+            }
+
+            fn is_ground(&self) -> bool {
+                self.configuration.is_ground() && self.constraints.is_ground()
+            }
+
+            fn meet(&self, other: &Self) -> Option<Self> {
+                if self.configuration.is_undetermined() {
+                    if other.configuration.is_undetermined() {
+                        return Some(Self::default());
+                    }
+                    return other.clone().normalize().ok();
+                }
+                if other.configuration.is_undetermined() {
+                    return self.clone().normalize().ok();
+                }
+                Some(Self {
+                    configuration: self.configuration.meet(&other.configuration)?,
+                    constraints: self.constraints.meet(&other.constraints)?,
+                })
+            }
+
+            fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
+                let configuration = self.configuration.join(&other.configuration)?;
+                let constraints = if configuration.is_undetermined()
+                    || self.constraints.is_empty()
+                    || other.constraints.is_empty()
+                {
+                    $constraints::new()
+                } else {
+                    self.constraints.join(&other.constraints)?
+                };
+                Ok(Self { configuration, constraints })
+            }
+
+            fn matches(&self, target: &Self) -> bool {
+                if self.configuration.is_undetermined() {
+                    return target.is_compatible(target);
+                }
+                self.configuration.matches(&target.configuration)
+                    && self.constraints.matches(&target.constraints)
+            }
+
+            fn is_compatible(&self, other: &Self) -> bool {
+                if !self.configuration.is_compatible(&other.configuration) {
+                    return false;
+                }
+                match (
+                    self.configuration.is_undetermined(),
+                    other.configuration.is_undetermined(),
+                ) {
+                    (true, true) => true,
+                    (true, false) => other.constraints.is_compatible(&other.constraints),
+                    (false, true) => self.constraints.is_compatible(&self.constraints),
+                    (false, false) => self.constraints.is_compatible(&other.constraints),
+                }
+            }
         }
 
         impl $name {
@@ -2417,6 +2515,9 @@ pub(crate) fn coset_apply_permutation(
 
 #[cfg(test)]
 mod tests {
+    mod atom_form;
+    mod bond_form;
+
     use std::collections::BTreeSet;
     use std::ptr;
 
@@ -5002,300 +5103,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_form_new() {
-        let stereo_atom = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
-        assert_eq!(
-            stereo_atom.configuration,
-            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
-        );
-        assert_eq!(stereo_atom.constraints, StereoAtomConstraintsForm::new());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stereogenicity(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-    )]
-    fn test_stereo_atom_form_with_methods(
-        #[case] atom: StereoAtomForm,
-        #[case] constraint: StereoAtomConstraintForm,
-        #[case] expected: StereoAtomForm,
-    ) {
-        assert_eq!(atom.clone().with_constraint(constraint.clone()), expected);
-        assert_eq!(atom.with_constraints([constraint]), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
-    #[case::ground(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), true)]
-    fn test_stereo_atom_form_is_ground(#[case] atom: StereoAtomForm, #[case] expected: bool) {
-        assert_eq!(atom.is_ground(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::open_coset(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
-    #[case::ground(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]
-    fn test_stereo_atom_form_into_concrete(#[case] atom: StereoAtomForm) {
-        assert_eq!(atom.clone().into_concrete(), atom);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::absolute(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() },
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-    )]
-    #[case::relative(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() },
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-    )]
-    #[case::undetermined(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() },
-        StereoAtomForm::default(),
-    )]
-    #[case::explicit_open(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Undetermined) }, ..Default::default() },
-        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
-    )]
-    #[case::constraint_set(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-    )]
-    #[case::constraint_remove(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-        StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() },
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-    )]
-    fn test_stereo_atom_form_update(
-        #[case] atom: StereoAtomForm,
-        #[case] update: StereoAtomUpdate,
-        #[case] expected: StereoAtomForm,
-    ) {
-        assert_eq!(atom.update(&update), expected);
-    }
-
-    #[rstest]
-    #[case::empty(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32))]
-    fn test_stereo_atom_form_update_identity(#[case] atom: StereoAtomForm) {
-        assert_eq!(atom.update(&StereoAtomUpdate::default()), atom);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::configuration_and_constraint(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-        StereoAtomForm::default(),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
-    )]
-    #[case::constraint_context(
-        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
-    )]
-    fn test_stereo_atom_form_difference_to(
-        #[case] atom: StereoAtomForm,
-        #[case] other: StereoAtomForm,
-        #[case] expected: StereoAtomUpdate,
-    ) {
-        assert_eq!(atom.difference_to(&other), expected);
-    }
-
-    #[rstest]
-    #[case::same(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32))]
-    fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomForm) {
-        assert_eq!(atom.difference_to(&atom), StereoAtomUpdate::default());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stereogenicity(
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-    )]
-    fn test_stereo_bond_form_with_methods(
-        #[case] bond: StereoBondForm,
-        #[case] constraint: StereoBondConstraintForm,
-        #[case] expected: StereoBondForm,
-    ) {
-        assert_eq!(bond.clone().with_constraint(constraint.clone()), expected);
-        assert_eq!(bond.with_constraints([constraint]), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::absolute(
-        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() },
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-    )]
-    #[case::relative(
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() },
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-    )]
-    #[case::undetermined(
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() },
-        StereoBondForm::default(),
-    )]
-    #[case::explicit_open(
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Undetermined) }, ..Default::default() },
-        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
-    )]
-    #[case::constraint_set(
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-    )]
-    #[case::constraint_remove(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-        StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), ..Default::default() },
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-    )]
-    fn test_stereo_bond_form_update(
-        #[case] bond: StereoBondForm,
-        #[case] update: StereoBondUpdate,
-        #[case] expected: StereoBondForm,
-    ) {
-        assert_eq!(bond.update(&update), expected);
-    }
-
-    #[rstest]
-    #[case::empty(StereoBondForm::new(StereoKind::CisTrans, 1_u32))]
-    fn test_stereo_bond_form_update_identity(#[case] bond: StereoBondForm) {
-        assert_eq!(bond.update(&StereoBondUpdate::default()), bond);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::configuration_and_constraint(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-        StereoBondForm::default(),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
-    )]
-    #[case::constraint_context(
-        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
-        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
-        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
-    )]
-    fn test_stereo_bond_form_difference_to(
-        #[case] bond: StereoBondForm,
-        #[case] other: StereoBondForm,
-        #[case] expected: StereoBondUpdate,
-    ) {
-        assert_eq!(bond.difference_to(&other), expected);
-    }
-
-    #[rstest]
-    #[case::same(StereoBondForm::new(StereoKind::CisTrans, 1_u32))]
-    fn test_stereo_bond_form_difference_to_identity(#[case] bond: StereoBondForm) {
-        assert_eq!(bond.difference_to(&bond), StereoBondUpdate::default());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::same_kind_narrows(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
-        Some(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)))]
-    #[case::different_kind(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
-        StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Undetermined), None)]
-    #[case::config_conflict(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32), StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), None)]
-    fn test_stereo_atom_form_meet(
-        #[case] a: StereoAtomForm,
-        #[case] b: StereoAtomForm,
-        #[case] expected: Option<StereoAtomForm>,
-    ) {
-        assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::same_coset(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]
-    #[case::distinct_cosets_widen(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), StereoAtomForm::new(StereoKind::Tetrahedral, 2u32), StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([1, 2])))]
-    fn test_stereo_atom_form_join(#[case] a: StereoAtomForm, #[case] b: StereoAtomForm, #[case] expected: StereoAtomForm) {
-        assert_eq!(a.join(&b), Ok(expected));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::same_kind_match(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), true)]
-    #[case::different_kind(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), StereoAtomForm::new(StereoKind::SquarePlanar, 1u32), false)]
-    fn test_stereo_atom_form_matches(
-        #[case] pattern: StereoAtomForm,
-        #[case] target: StereoAtomForm,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::folds_coset(
-        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([1])),
-        Ok(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)),
-    )]
-    #[case::empty_coset_litset_contradiction(
-        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set(Vec::<u32>::new())),
-        Err(Contradiction),
-    )]
-    fn test_stereo_atom_form_normalize(
-        #[case] input: StereoAtomForm,
-        #[case] expected: Result<StereoAtomForm, Contradiction>,
-    ) {
-        assert_eq!(input.normalize(), expected);
-    }
-
-    #[rstest]
-    fn test_stereo_bond_form_new() {
-        let stereo_bond = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined);
-        assert_eq!(
-            stereo_bond.configuration,
-            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
-        );
-        assert_eq!(stereo_bond.constraints, StereoBondConstraintsForm::new())
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::same_kind_narrows(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined), StereoBondForm::new(StereoKind::CisTrans, 1u32),
-        Some(StereoBondForm::new(StereoKind::CisTrans, 1u32)))]
-    #[case::config_conflict(StereoBondForm::new(StereoKind::CisTrans, 0u32), StereoBondForm::new(StereoKind::CisTrans, 1u32), None)]
-    fn test_stereo_bond_form_meet(
-        #[case] a: StereoBondForm,
-        #[case] b: StereoBondForm,
-        #[case] expected: Option<StereoBondForm>,
-    ) {
-        assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::folds_coset(
-        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([1])),
-        Ok(StereoBondForm::new(StereoKind::CisTrans, 1u32)),
-    )]
-    #[case::empty_coset_litset_contradiction(
-        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set(Vec::<u32>::new())),
-        Err(Contradiction),
-    )]
-    fn test_stereo_bond_form_normalize(
-        #[case] input: StereoBondForm,
-        #[case] expected: Result<StereoBondForm, Contradiction>,
-    ) {
-        assert_eq!(input.normalize(), expected);
-    }
-
-    #[rstest]
     #[case::identity(StereoKind::Tetrahedral, 0, Permutation::identity(4), 0)]
     #[case::involution(StereoKind::Tetrahedral, 0, StereoKind::Tetrahedral.involution(), 1)]
     #[case::involution_back(StereoKind::Tetrahedral, 1, StereoKind::Tetrahedral.involution(), 0)]
@@ -5430,25 +5237,6 @@ mod tests {
             .reframe_by(&action),
             expected,
         );
-    }
-
-    #[rstest]
-    fn test_stereo_atom_form_reframe_by_constraints() {
-        let action = Permutation::from_image(&[1, 0, 2, 3]);
-        let input = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
-            StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-                active: BooleanForm::Lit(true),
-            }),
-        );
-        let expected = StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
-            StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])),
-                active: BooleanForm::Lit(true),
-            }),
-        );
-
-        assert_eq!(input.reframe_by(&action), Some(expected),);
     }
 
     #[rstest]
@@ -5626,79 +5414,6 @@ mod tests {
         #[case] expected: StereoConfigurationForm,
     ) {
         assert_eq!(base.update(&other), expected);
-    }
-
-    #[rstest]
-    #[case::apply(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32), StereoKind::Tetrahedral.involution(), StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]
-    fn test_stereo_atom_form_apply(
-        #[case] input: StereoAtomForm,
-        #[case] permutation: Permutation,
-        #[case] expected: StereoAtomForm,
-    ) {
-        assert_eq!(input.apply(permutation), Some(expected));
-    }
-
-    #[rstest]
-    #[case::tetrahedral(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
-    )]
-    fn test_stereo_atom_form_swap(#[case] input: StereoAtomForm, #[case] expected: StereoAtomForm) {
-        assert_eq!(input.swap(), Some(expected));
-    }
-
-    #[rstest]
-    #[case::chiral(
-        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-        StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
-    )]
-    fn test_stereo_atom_form_mirror(
-        #[case] input: StereoAtomForm,
-        #[case] expected: StereoAtomForm,
-    ) {
-        assert_eq!(input.mirror(), Some(expected));
-    }
-
-    #[rstest]
-    #[case::cis_trans(
-        StereoBondForm::new(StereoKind::CisTrans, 0u32),
-        StereoBondForm::new(StereoKind::CisTrans, 1u32)
-    )]
-    fn test_stereo_bond_form_swap(#[case] input: StereoBondForm, #[case] expected: StereoBondForm) {
-        assert_eq!(input.swap(), Some(expected));
-    }
-
-    #[rstest]
-    #[case::identity(
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        0,
-    )]
-    #[case::transposition(
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        1,
-    )]
-    #[case::even_cycle(
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        0,
-    )]
-    #[case::virtual_explicit_swap(
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
-        [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
-        1,
-    )]
-    fn test_stereo_atom_form_reframe_by(
-        #[case] before: [StereoLigand; 4],
-        #[case] after: [StereoLigand; 4],
-        #[case] expected_coset: u32,
-    ) {
-        let permutation = Permutation::between(&before, &after).expect("case has a unique frame");
-        assert_eq!(
-            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32).reframe_by(&permutation),
-            Some(StereoAtomForm::new(StereoKind::Tetrahedral, expected_coset)),
-        );
     }
 
     /// A `Modified` span holds two configurations against one ligand frame, so one action carries
@@ -6147,83 +5862,5 @@ mod tests {
             StereoBondForm::new(StereoKind::CisTrans, 0u32),
         )]);
         assert!(!stored.framed_eq(&other_coset));
-    }
-
-    /// A form's constructors are permissive, so a coset index outside its kind's coset space is
-    /// representable until molecule publication checks it. The frame action is the first operation
-    /// that requires the index to be in range, so it declines there.
-    #[rstest]
-    #[case::atom_coset_out_of_range(StereoKind::Tetrahedral, 2u32)]
-    #[case::atom_coset_far_out_of_range(StereoKind::SquarePlanar, 40u32)]
-    fn test_stereo_atom_form_reframe_by_error(#[case] kind: StereoKind, #[case] coset: u32) {
-        let form = StereoAtomForm::new(kind, coset);
-        assert_eq!(form.clone().reframe_by(&Permutation::identity(4)), None);
-    }
-
-    #[rstest]
-    #[case::degree(
-        StereoBondForm::new(StereoKind::CisTrans, 0u32),
-        Permutation::identity(3)
-    )]
-    #[case::kinded_outside_parent(
-        StereoBondForm::new(StereoKind::CisTrans, 0u32),
-        Permutation::from_image(&[1, 2, 0, 3]),
-    )]
-    #[case::kindless_outside_parent(
-        StereoBondForm::default(),
-        Permutation::from_image(&[1, 2, 0, 3]),
-    )]
-    fn test_stereo_bond_form_frame_transport_domain(
-        #[case] form: StereoBondForm,
-        #[case] permutation: Permutation,
-    ) {
-        assert_eq!(form.reframe_by(&permutation), None,);
-    }
-
-    #[rstest]
-    fn test_stereo_atom_form_reframe_by_roundtrip() {
-        let before = [
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-        ];
-        let after = [
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-        ];
-        let permutation = Permutation::between(&before, &after).expect("a unique frame change");
-        let atom = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
-        assert_eq!(
-            atom.clone()
-                .reframe_by(&permutation)
-                .and_then(|reframed| reframed.reframe_by(&permutation.inverse())),
-            Some(atom),
-        );
-    }
-
-    /// A within-endpoint swap is an action of the cis/trans parent group and exchanges the two
-    /// cosets.
-    #[rstest]
-    fn test_stereo_bond_form_reframe_by() {
-        let before = [
-            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-        ];
-        let after = [
-            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-        ];
-        let permutation = Permutation::between(&before, &after).expect("a unique frame change");
-        assert_eq!(
-            StereoBondForm::new(StereoKind::CisTrans, 0u32).reframe_by(&permutation),
-            Some(StereoBondForm::new(StereoKind::CisTrans, 1u32)),
-        );
     }
 }

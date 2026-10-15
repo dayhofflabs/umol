@@ -378,6 +378,44 @@ def test_stereoatom_form_new():
     assert len(atom.constraints) == 0
 
 
+@pytest.mark.parametrize(
+    "form_type,container_type,constraint_type,kind",
+    [
+        (StereoAtomForm, StereoAtomConstraintsForm, StereoAtomConstraintForm, StereoKind.Tetrahedral),
+        (StereoBondForm, StereoBondConstraintsForm, StereoBondConstraintForm, StereoKind.CisTrans),
+    ],
+)
+@pytest.mark.parametrize("payload", [
+    StereogenicityForm.Lit(Stereogenicity.Symmetric), StereogenicityForm.LitSet(set()),
+])
+@pytest.mark.parametrize("coset", [StereoCoset.Lit(0), StereoCoset.Undetermined()])
+def test_stereo_form_meet_constraints(form_type, container_type, constraint_type, kind, payload, coset):
+    raw = constraint_type.Stereogenicity(payload)
+    form = form_type(StereoConfigurationForm.Undetermined(), constraints=container_type([raw]))
+    top = form_type(StereoConfigurationForm.Undetermined())
+    kinded = form_type(
+        StereoConfigurationForm.Kinded(kind, coset),
+        constraints=container_type([
+            constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Stereogenic))
+        ]),
+    )
+    assert form.asdict() != top.asdict()
+    assert form.normalize().asdict() == top.asdict()
+    assert form.normalized_eq(top)
+    assert top.normalized_eq(form)
+    assert form.is_undetermined()
+    assert not form.is_ground()
+    assert form.meet(kinded).asdict() == kinded.asdict()
+    assert kinded.meet(form).asdict() == kinded.asdict()
+    assert form.join(kinded).asdict() == top.asdict()
+    assert kinded.join(form).asdict() == top.asdict()
+    assert form.matches(kinded)
+    assert not kinded.matches(form)
+    assert form.is_compatible(kinded)
+    assert kinded.is_compatible(form)
+    assert form.constraints.get(raw.key) == raw
+
+
 @pytest.mark.parametrize("dsl", ["Th0", "Th*", "Sp2"])
 def test_stereoatom_form_parse_roundtrip(dsl):
     atom = StereoAtomForm.parse(dsl)
