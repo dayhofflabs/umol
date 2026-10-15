@@ -2878,6 +2878,7 @@ impl EditIter {
 /// Passing the batch to an operation that consumes Edits moves its contents.
 /// Subsequent access raises ConsumedError; its iterators raise InvalidatedViewError.
 /// Entries already returned by indexing or iteration are independent values.
+/// copy() retains an independent batch for later use.
 #[pyclass]
 #[derive(Debug)]
 pub struct Edits {
@@ -2905,6 +2906,14 @@ impl Edits {
             .map_err(parse_error)?
             .into_ir(defaults.to_rust());
         Ok(Self::from_rust(edits))
+    }
+
+    /// Return an independent batch, preserving entry order, handles, and payloads.
+    ///
+    /// The source and its iterators remain usable. No applicability checks or
+    /// normalization are performed. Raises ConsumedError if the source was consumed.
+    fn copy(&self) -> PyResult<Self> {
+        Ok(Self::from_rust(self.to_rust()?.clone()))
     }
 
     /// Render edits, omitting whole stereo constraint operations with no kind context.
@@ -4536,6 +4545,36 @@ mod tests {
 
     #[rstest]
     #[case::empty(GraphIrEdits::new())]
+    #[case::entries(GraphIrEdits::from_iter([
+        GraphIrEdit::AddAtoms { atoms: vec![GraphIrAtomForm::default(); 2] },
+        GraphIrEdit::AddBonds { bonds: vec![GraphIrAddBond {
+            endpoints: [GraphIrAtomHandle::New(0), GraphIrAtomHandle::Id(GraphIrAtomId(3))],
+            attributes: GraphIrBondForm::default(),
+        }] },
+        GraphIrEdit::RemoveTopology { atoms: vec![GraphIrAtomHandle::New(1)], bonds: vec![] },
+        GraphIrEdit::ModifyAtomField {
+            id: GraphIrAtomHandle::New(0),
+            change: GraphIrAtomFieldChange::Charge { old: GraphIrNumForm::Lit(0), new: GraphIrNumForm::Lit(1) },
+        },
+        GraphIrEdit::ModifyAtomField {
+            id: GraphIrAtomHandle::New(0),
+            change: GraphIrAtomFieldChange::Charge { old: GraphIrNumForm::Lit(0), new: GraphIrNumForm::Lit(1) },
+        },
+    ]))]
+    fn test_edits_copy(#[case] expected: GraphIrEdits) {
+        Python::attach(|_| {
+            let mut source = Edits::from_rust(expected.clone());
+            let mut copied = source.copy().unwrap();
+
+            assert_eq!(copied.to_rust().unwrap(), &expected);
+            assert_eq!(source.take().unwrap(), expected);
+            assert_eq!(copied.to_rust().unwrap(), &expected);
+            assert_eq!(copied.take().unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::empty(GraphIrEdits::new())]
     #[case::atom(GraphIrEdits::from_iter([GraphIrEdit::AddAtoms {
         atoms: vec![GraphIrAtomForm::default()],
     }]))]
@@ -4547,6 +4586,7 @@ mod tests {
             for error in [
                 edits.to_rust().unwrap_err(),
                 edits.to_rust_mut().unwrap_err(),
+                edits.copy().unwrap_err(),
                 edits.take().unwrap_err(),
             ] {
                 assert!(error.is_instance_of::<ConsumedError>(py));

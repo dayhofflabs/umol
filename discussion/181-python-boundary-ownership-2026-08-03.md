@@ -4970,7 +4970,7 @@ measurement boundaries; summary.csv and summary.md retain every measured row.
 
 ### S6 — Python batch copying and owned inverse conversion
 
-#### S6a — Explicit Edits copy
+#### S6a — Explicit Edits copy (done)
 
 **Modules:** umol-py edit and its Rust/Python tests. **Additive, green.**
 [dep: S0a; independent of S1–S5]
@@ -4995,6 +4995,72 @@ batch without consuming the other, retained source iteration, and consumed-sourc
 failure. Compare application of independently copied batches on equal starting
 molecules. Re-run Study 3 direct-copy and copy-plus-apply measurements using the
 production method, recording the enum layout used.
+
+**Implemented (2026-10-15):** Edits.copy clones the retained Rust batch through
+to_rust/from_rust. It preserves all eight creation counters as well as the exact
+entries. The Python API guide documents independent ownership, source iterator
+validity, and the existing consumed-source error. No Rust API, application
+semantics, or entry conversion changed.
+
+Rust checks compare complete batches, including mixed Id/New handles, duplicate
+edits, removals, and consumption. Python checks cover empty/populated batches,
+all eight entity kinds in additions, fields and constraints, typed batches,
+kindless stereo constraint payloads, independent appends and creation ordinals,
+retained iterators, both consumption orders, and equal application results.
+
+**Production measurements:** the current reconstruction route, Edits(source),
+and production source.copy() use the same release build and enum layout. The
+Study 3 scalar field/addition/constraint entry shapes and sizes are retained;
+typed batching is not substituted for the measured sequences. Inputs are outside
+timing; output destruction is included. Each value below is the median of three
+process medians, with alternating route order within each process. The timing
+binary has no counting allocator; allocation measurements use a separate build.
+
+| Entries | Count | Reconstruction, µs | Direct copy, µs |
+| --- | ---: | ---: | ---: |
+| Field | 1 | 0.506 | 0.135 |
+| Field | 32 | 7.745 | 0.458 |
+| Field | 256 | 58.489 | 2.601 |
+| Addition | 1 | 0.573 | 0.206 |
+| Addition | 32 | 9.678 | 2.681 |
+| Addition | 256 | 83.258 | 25.728 |
+| Constraint | 1 | 0.467 | 0.136 |
+| Constraint | 32 | 6.508 | 0.446 |
+| Constraint | 256 | 48.451 | 2.638 |
+
+For 256 field or constraint entries, direct copy uses one Rust allocation and
+26,624 requested bytes; reconstruction uses eight and 54,880. For 256 additions,
+the corresponding values are 769 / 105,216 and 1,544 / 171,104. Direct-copy
+allocation counts match Study 3 at every size. Edit is now 104 bytes, compared
+with 256 in Study 3; Edits is 88 and AtomForm is 192. The smaller Edit reduces
+direct-copy requested bytes by 152 per entry. These counters exclude the Python
+heap, allocator overhead, and RSS.
+
+Copy-plus-apply includes preparing a new empty Python molecule and invoking its
+actual apply method. Complete results are checked against Rust application.
+
+| Additions | Reconstruction + apply, µs | Direct copy + apply, µs | Study 3 direct copy + apply, µs |
+| --- | ---: | ---: | ---: |
+| 1 | 1.451 | 1.003 | 0.884 |
+| 32 | 12.212 | 5.183 | 4.427 |
+| 256 | 93.367 | 36.266 | 34.411 |
+
+Direct copying is faster than reconstruction in every current pair, but the
+whole copy-plus-apply workflow is slower than the historical prototype by
+0.118 / 0.756 / 1.855 µs (13.4% / 17.1% / 5.4%). Standalone direct copying is
+faster than the prototype in all nine cases. Historical timings differ in core
+code, enum layout and instrumentation, so they do not isolate the S6a change.
+In particular, Study 3's Python Molecule.apply consumed its receiver; the current
+method clones it and preserves the source. Subtracting standalone copying from
+copy-plus-apply allocation counts gives exactly four additional allocations and
+188 additional requested bytes compared with Study 3, for both copying routes
+and all three sizes.
+
+**Verification:** 26 focused Rust tests and 279 Python edit tests passed after
+rebuilding the extension under Python 3.13. Strict Clippy passed for all umol-py
+targets. Formatting and git diff --check passed. The broader S6 gate remains
+after S6c. Sources, manifests, raw logs, trial ranges, historical joins, and
+validation logs are retained in scratch/181-s6a.
 
 #### S6b — Explicit Deltas copy
 

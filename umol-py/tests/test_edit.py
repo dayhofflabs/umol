@@ -328,6 +328,111 @@ def test_edits():
     assert list(edits) == [first, first, second]
 
 
+@pytest.mark.parametrize("entries", [
+    [],
+    [
+        Edit.AddAtoms(atoms=[AtomForm.parse("C"), AtomForm.parse("N")]),
+        Edit.AddBonds(bonds=[((New(0), 3), BondForm(1))]),
+        Edit.AddDativeBond(donors=[New(1), 3], acceptor=New(0), attributes=DativeBondForm(1)),
+        Edit.AddAromaticSystem(atoms=[New(0), 3], attributes=AromaticSystemForm([1, 1])),
+        Edit.AddMulticenterBond(atoms=[New(1), 3], attributes=MulticenterBondForm([1, 1])),
+        Edit.AddNoncovalentBond(atoms=(New(0), 3), attributes=NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)),
+        Edit.AddStereoAtom(site=New(0), ligands=[(3, StereoLigandKind.Atom)], attributes=StereoAtomForm.parse("Th0")),
+        Edit.AddStereoBond(site=New(0), ligands=[(3, StereoLigandKind.Atom)], attributes=StereoBondForm.parse("Ct0")),
+    ],
+    [
+        Edit.ModifyAtomField(id=New(2), change=AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.LitSet({-1, 1}))),
+        Edit.ModifyBondField(id=3, change=BondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))),
+        Edit.ModifyDativeBondField(id=New(1), change=DativeBondFieldChange.Order(old=NumForm.Lit(1), new=NumForm.Lit(2))),
+        Edit.ModifyAromaticSystemField(id=3, change=AromaticSystemFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(-1))),
+        Edit.ModifyMulticenterBondField(id=New(1), change=MulticenterBondFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(1))),
+        Edit.ModifyNoncovalentBondField(id=3, change=NoncovalentBondFieldChange.Kind(old=NoncovalentBondKindForm.Undetermined(), new=NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic))),
+        Edit.ModifyStereoAtomField(id=New(1), change=StereoAtomFieldChange.Configuration(old=StereoAtomForm.parse("Th0").configuration, new=StereoAtomForm.parse("Th1").configuration)),
+        Edit.ModifyStereoBondField(id=3, change=StereoBondFieldChange.Configuration(old=StereoBondForm.parse("Ct0").configuration, new=StereoBondForm.parse("Ct1").configuration)),
+        Edit.ModifyAtomCharges([(New(2), NumForm.Lit(0), NumForm.Lit(1)), (New(2), NumForm.Lit(1), NumForm.Lit(0))]),
+    ],
+    [
+        Edit.ModifyAtomConstraint(id=New(2), old=None, new=AtomConstraintForm.Valence(NumForm.LitSet({3, 4}))),
+        Edit.ModifyBondConstraint(id=3, old=None, new=BondConstraintForm.Aromatic(BooleanForm.Lit(False))),
+        Edit.ModifyDativeBondConstraint(id=New(1), old=None, new=DativeBondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), 0))),
+        Edit.ModifyAromaticSystemConstraint(id=3, old=None, new=AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))),
+        Edit.ModifyMulticenterBondConstraint(id=New(1), old=None, new=MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(2))),
+        Edit.ModifyNoncovalentBondConstraint(id=3, old=None, new=NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(False))),
+        Edit.ModifyStereoAtomConstraints(None, StereoAtomConstraintKey.Stereogenicity(), [(New(1), None, StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.LitSet(set())))]),
+        Edit.ModifyStereoBondConstraints(None, StereoBondConstraintKey.Stereogenicity(), [(3, None, StereoBondConstraintForm.Stereogenicity(StereogenicityForm.LitSet(set())))]),
+        Edit.AddMoleculeConstraint(constraint=ConstraintEdit(Constraint.Molecule(MoleculeConstraint.Connected(None)))),
+    ],
+], ids=["empty", "additions", "fields", "constraints"])
+def test_edits_copy(entries):
+    entries = entries + entries[:1]
+    source = Edits(entries)
+    iterator = iter(source)
+
+    copied = source.copy()
+
+    assert copied is not source
+    assert copied == source == Edits(entries)
+    nitrogen = Edit.AddAtoms(atoms=[AtomForm.parse("N")])
+    oxygen = Edit.AddAtoms(atoms=[AtomForm.parse("O")])
+    copied.append(nitrogen)
+    source.append(oxygen)
+    assert list(copied) == entries + [nitrogen]
+    assert list(source) == entries + [oxygen]
+    assert list(iterator) == entries
+
+
+@pytest.mark.parametrize("method,args", [
+    ("add_atom", (AtomForm.parse("C"),)),
+    ("add_bond", (0, New(0), BondForm(1))),
+    ("add_dative_bond", ([0], New(0), DativeBondForm(1))),
+    ("add_aromatic_system", ([0, New(0)], AromaticSystemForm([1, 1]))),
+    ("add_multicenter_bond", ([0, New(0)], MulticenterBondForm([1, 1]))),
+    ("add_noncovalent_bond", ((0, New(0)), NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))),
+    ("add_stereo_atom", (New(0), [(0, StereoLigandKind.Atom)], StereoAtomForm.parse("Th0"))),
+    ("add_stereo_bond", (New(0), [(0, StereoLigandKind.Atom)], StereoBondForm.parse("Ct0"))),
+])
+def test_edits_copy_counters(method, args):
+    source = Edits()
+    assert getattr(source, method)(*args) == New(0)
+    copied = source.copy()
+
+    assert getattr(copied, method)(*args) == New(1)
+    assert getattr(source, method)(*args) == New(1)
+    assert source == copied
+    assert getattr(copied, method)(*args) == New(2)
+    assert list(source) == list(copied)[:2]
+
+
+@pytest.mark.parametrize("consume_source", [False, True])
+@pytest.mark.parametrize("entries,expected", [
+    ([], Molecule()),
+    ([
+        Edit.AddAtoms(atoms=[AtomForm.parse("C#c0"), AtomForm.parse("N")]),
+        Edit.AddBonds(bonds=[((New(0), New(1)), BondForm(1))]),
+        Edit.ModifyAtomCharges([(New(0), NumForm.Lit(0), NumForm.Lit(1))]),
+        Edit.ModifyAtomConstraints(AtomConstraintKey.Valence(), [(New(0), None, AtomConstraintForm.Valence(NumForm.Lit(4)))]),
+    ], Molecule.parse('{:atoms ["C#c1#v4" "N"] :bonds [[0 1 "1"]]}')),
+], ids=["empty", "entries"])
+def test_edits_copy_apply(entries, expected, consume_source):
+    source = Edits(entries)
+    source_iterator = iter(source)
+    copied = source.copy()
+    copied_iterator = iter(copied)
+    consumed, retained = (source, copied) if consume_source else (copied, source)
+    invalidated, valid = (source_iterator, copied_iterator) if consume_source else (copied_iterator, source_iterator)
+
+    first = Molecule().apply(consumed)
+
+    assert first == expected
+    assert retained == Edits(entries)
+    assert list(valid) == entries
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        consumed.copy()
+    with pytest.raises(InvalidatedViewError, match="^Edit iterator is invalid because Edits has been consumed$"):
+        next(invalidated)
+    assert Molecule().apply(retained) == first
+
+
 @pytest.mark.parametrize("count", [0, 1, 2])
 def test_edits_iter(count):
     expected = [
@@ -435,6 +540,7 @@ def test_edits_consumption_error(receiver, method):
         ("__getitem__", (0,)),
         ("__getitem__", (-1,)),
         ("__iter__", ()),
+        ("copy", ()),
         ("render", ()),
         ("append", (Edit.AddAtoms(atoms=[]),)),
         ("add_atom", (AtomForm.parse("C"),)),

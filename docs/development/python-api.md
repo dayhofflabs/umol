@@ -116,6 +116,11 @@ isolate immutable mutation data from later changes to the supplied mutable forms
 consumed state on every form. Consuming Edits invalidates its iterators; already returned entries
 remain usable.
 
+Edits.copy() explicitly clones the complete Rust batch into an independent, unconsumed owner.
+It preserves entry order, duplicates, handles, payloads, and creation ordinals without checking
+applicability against a molecule. Appending to or consuming either batch leaves the other usable;
+copying leaves existing source iterators valid. A consumed source raises ConsumedError.
+
 ### Immutable owned value
 
 An immutable owned value represents data rather than a mutable identity. Its public fields cannot
