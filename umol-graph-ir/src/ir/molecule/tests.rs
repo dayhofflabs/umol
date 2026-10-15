@@ -61,8 +61,8 @@ use super::super::stereo::{
 use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::{
     AromaticSystems, DativeBonds, Molecule, MoleculeApplyError, MoleculeEntries,
-    MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
-    Transaction, TransactionError,
+    MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, RollbackMethod, StereoAtoms,
+    StereoBonds, Transaction, TransactionError,
 };
 use crate::ir::{
     AromaticSystemEditorViewMut, AromaticSystemViewMut, AtomEditorViewMut, AtomViewMut,
@@ -5289,6 +5289,7 @@ fn test_molecule_tracked_transact(#[from(equiv_molecule_entries)] entries: Molec
     let mut restored = before.clone();
     Transaction::run(
         &mut restored,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             assert_eq!(transaction.probe()?, &expected);
@@ -5557,7 +5558,7 @@ fn test_transaction_rollback_constraints_shared_storage(
     let mut molecule = source.clone();
     let mut edits = Edits::new();
     edits.remove_atom(AtomHandle::Id(AtomId(0)));
-    let compacted = Transaction::run(&mut molecule, |mut transaction| {
+    let compacted = Transaction::run(&mut molecule, RollbackMethod::Journal, |mut transaction| {
         transaction.apply(edits)?;
         assert_eq!(
             source,
@@ -5595,6 +5596,7 @@ fn test_transaction_rollback_topology(#[from(equiv_molecule_entries)] entries: M
     );
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();
@@ -5621,6 +5623,7 @@ fn test_transaction_rollback_dative_bonds(
     )]);
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();
@@ -5646,6 +5649,7 @@ fn test_transaction_rollback_aromatic_systems(
     )]);
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();
@@ -5671,6 +5675,7 @@ fn test_transaction_rollback_multicenter_bonds(
     )]);
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();
@@ -5696,6 +5701,7 @@ fn test_transaction_rollback_noncovalent_bonds(
     )]);
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();
@@ -5725,6 +5731,7 @@ fn test_transaction_rollback_stereo_atoms(
     )]);
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();
@@ -5754,6 +5761,7 @@ fn test_transaction_rollback_stereo_bonds(
     )]);
     Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits)?;
             transaction.rollback();

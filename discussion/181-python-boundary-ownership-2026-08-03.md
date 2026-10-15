@@ -2020,11 +2020,15 @@ enum TransactionStorage {
 }
 ```
 
+The current ownership split, subject to the S0e2/S0f cost gate, is as follows.
 Both run entry points own a private TransactionGuard retaining the receiver's
-mutable borrow, TransactionStorage and TransactionStatus. TrackedTransaction::run
-additionally owns the accumulated correspondence and lends its mutable borrow to
-the tracked handle. The ordinary run owns no correspondence storage. Share
-recovery and acceptance logic privately; neither callback handle owns recovery.
+mutable borrow, TransactionStorage and TransactionStatus. Tracked run also owns
+the accumulated correspondence in an Option, borrowed by its small callback
+handle and consumed with take at commit. The run-owned guard restores unaccepted
+changes even if a handle is forgotten. Cleanup of deliberately forgotten handle
+resources is not part of the contract. Share recovery and acceptance logic
+privately; neither callback handle owns recovery. The direct-ownership and lazy
+identity experiments below failed the timing gate and were withdrawn.
 Journal applies edits to the receiver with undo recording. Clone applies edits
 without undo recording to its working copy, leaving the receiver untouched.
 
@@ -2530,7 +2534,7 @@ Clippy with proptest and warnings denied, nightly formatting and git diff --chec
 Logs are in `scratch/181-s0e1/`. Cost comparisons remain in S0e2 and workspace
 checks remain at the stage gate.
 
-#### S0e2 — Ordinary transactions without correspondence
+#### S0e2 — Ordinary transactions without correspondence (cost gate reopened)
 
 **Modules:** graph-IR transaction implementation and callers, molecule
 conveniences, transaction/property tests, development guides, and bounded recovery
@@ -2574,7 +2578,83 @@ path and check its output before timing. Report residual differences from the
 original baseline rather than assuming the split removes all overhead. Record
 the result before S0f; retain the saved measurements and harness boundaries.
 
-#### S0f — Clone and Journal transaction recovery
+Completed 2026-10-14. Transaction and its guard contain no correspondence storage.
+Only TrackedTransaction::run constructs the identity mapping, only its apply
+updates it, and its commit returns it after the shared integrity check. Both
+handles initially shared a private batch executor, forced inline into both apply
+methods. The later direct-loop revision below removes that helper and all related
+inlining attributes while retaining shared recovery logic. Transaction::tracked_commit
+is removed; Molecule::tracked_transact now
+uses the tracked handle. Composite Resolver remains on Transaction. The Rust and
+Python prepared-batch signatures and results are unchanged.
+
+Current source and guide references to tracked_commit are removed. The development
+guides describe both operation-issued handles and their distinct commit results.
+The four former tracked_commit lifecycle cases already have equivalents on
+TrackedTransaction from S0e1; those error, unwind and abort cases remain covered.
+Verification passed: 1,268 molecule unit tests, 28 feature-gated edit tests,
+all-target graph-IR Clippy with proptest and warnings denied, nightly formatting
+and git diff --check. Release benchmark builds also compile the graph consumers;
+all benchmark molecule/correspondence checks pass. Workspace checks remain at the
+stage gate.
+
+The cost comparison uses the saved original and eager S0e binaries, this split,
+and an initial split without forced inlining. It retains S0e's 15 fixtures,
+60 case/ownership/tracking combinations and measurement boundaries. All four
+versions run sequentially in four rotating orders, after builds and tests finish;
+each reported value is the median of four run medians, each from 20 means of 32
+calls. The candidate uses the same Rust toolchain and dependency lockfile as S0e.
+Sources, binaries, commands, raw spreads and allocation probes are preserved in
+`scratch/181-s0e2/`, with the original saved binaries in `scratch/181-s0e/`.
+
+Times in µs; original means the pre-S0e journal-derived implementation:
+
+| Atoms / operation / ownership / mode | Original | Eager | Split | Split vs original |
+| --- | ---: | ---: | ---: | ---: |
+| 96 / no batches / unique / plain | 0.329 | 0.498 | 0.326 | −1.2% |
+| 8 / 1 charge edit / unique / plain | 0.244 | 0.309 | 0.227 | −7.1% |
+| 96 / 1 charge edit / unique / plain | 0.533 | 0.694 | 0.523 | −1.8% |
+| 384 / 1 charge edit / unique / plain | 1.397 | 1.654 | 1.394 | −0.2% |
+| 96 / 1 charge edit / shared / plain | 1.835 | 1.935 | 1.842 | +0.4% |
+| 96 / 1 charge edit / unique / tracked | 0.712 | 0.717 | 0.718 | +0.9% |
+| 8 / structural batch / unique / tracked | 5.422 | 5.468 | 5.562 | +2.6% |
+| 384 / structural batch / unique / plain | 73.506 | 73.695 | 74.062 | +0.8% |
+| 384 / structural batch / unique / tracked | 75.358 | 74.050 | 76.134 | +1.0% |
+
+Across edit-bearing cases, the largest median increases over the original are
+2.0% plain and 2.6% tracked. Some empty tracked cases retain 6–8 ns of overhead:
+up to 11.5% for a zero-atom transaction and 5.5% for an empty batch on a shared
+8-atom chain. Larger samples can have broad spreads: the unique 384-atom,
+64-edit plain case spans 5.536–7.928 µs originally and 5.558–6.087 µs after the
+split. These bounded cases do not establish a workload-weighted or uniformly
+cost-neutral result.
+
+Performance acceptance remains open. Continuing implementation does not accept
+the measured 2.0% plain or 2.6% tracked increases as negligible. Their causes have
+not been isolated, and subsequent comparisons must retain the original baseline.
+
+Inlining removes an avoidable call in the initial split. The unique 8-atom
+tracked empty-batch median changes from 199.5 ns (195.2–203.2 across run medians)
+to 178.1 ns (175.2–182.9), versus 177.7 ns originally. The retained implementation
+shares the source loop without paying that additional call; larger timing
+differences remain mixed.
+
+All 30 plain allocation rows exactly match the original's allocation count,
+requested bytes and peak extra live heap. All 30 tracked rows match the eager
+candidate on those metrics. Callback-entry probes confirm zero ordinary mapping
+storage, while tracked chains of 8/96/384 atoms retain 120/1,528/6,136 bytes.
+After 1/8/64 scalar edits, both handles retain journal buffers of
+3,008/6,016/48,128 bytes, independently of molecule size.
+
+Tracked peak-memory costs relative to the original remain: the unique 96-atom,
+one-edit case still allocates 3 times and requests 4,536 bytes, but peaks at
+4,536 extra bytes instead of 3,424 because mapping and Undo coexist. The same
+plain case returns to 1 allocation, 3,008 requested bytes and 3,008 peak extra
+bytes. Structural tracking retains S0e's additional allocation and 28 requested
+bytes relative to the original. No mapping history or Undo-based reconstruction
+is introduced to remove those tracked costs.
+
+#### S0f — Clone and Journal transaction recovery (cost gate reopened)
 
 **Modules:** graph-IR Transaction and TrackedTransaction recovery, both run
 entry points' Rust callers, and tests.
@@ -2604,8 +2684,8 @@ waits for S10.
 
 **Guard storage:** retain the receiver borrow and status on the shared
 TransactionGuard; replace its journal field with the approved TransactionStorage
-enum above. Each handle borrows recovery state; only the tracked handle also
-borrows correspondence owned by its run. Both run methods initialize Journal
+enum above. Each handle borrows recovery state; the tracked handle also borrows
+the run's optional correspondence storage. Both run methods initialize Journal
 with an empty Vec or Clone with Some(receiver.clone()). Keep restoration owned
 by run; no empty placeholder is installed in the receiver. Application dispatch
 selects apply_edit_with_undo for Journal and apply_edit for Clone. Both feed the same
@@ -2629,6 +2709,331 @@ changes. Probe after abort observes the
 restored entry value. Extend composition, partition and plain/tracked parity
 properties across both recovery modes. Do not add recovery from allocation failure
 or internal partial-Edit panics.
+
+**Outcome — 2026-10-14.** RollbackMethod::{Clone, Journal} is exported beside
+both scoped handles. Their run methods take receiver, recovery method and callback;
+construction and tracking remain separate from recovery selection. Clone edits one
+working molecule through apply_edit without Undo, and installs it only after
+commit plus callback success. Journal keeps undo restoration. Recovery selection
+occurs once per batch, and only TrackedTransaction updates correspondence.
+
+Both methods retain the run-owned guard, abort latch, checked probe and commit,
+separate batch namespaces, callback-error/unwind restoration and forgotten-handle
+recovery. Every Rust run caller is migrated. Molecule prepared-batch conveniences
+and composite Resolver callers select Journal internally; their signatures remain
+unchanged until S0g and S10a respectively.
+
+Verification passed: 1,314 molecule unit cases, 28 feature-gated edit tests,
+643 resolver unit cases, all-target graph-IR/graph Clippy with graph-IR proptest
+and warnings denied, nightly formatting and git diff --check. Lifecycle cases
+exercise both handles and both methods; generated tests cover restoration,
+plain/tracked parity, correspondence composition and batch partitioning.
+No workspace or Python gate was run for this subitem.
+
+The cost comparison retains the original and S0e2 binaries, the initial S0f
+Journal implementation, and final Journal/Clone execution. It repeats the same
+15 fixtures and 60 cases per method, with five sequential rotating orders after
+builds/tests finish. Values are medians of five run medians, each from 20 means
+of 32 calls. The dependency lockfile matches S0e2. The candidate uses scoped
+callbacks with a runtime selector; the saved baselines use prepared-batch methods
+with the same apply/commit sequence. Both include recovery setup/disposal.
+Sources, binaries, disassembly, raw spreads, allocation probes and commands are in
+`scratch/181-s0f/`; the initial candidate and measurements are retained in its
+`initial/` directory.
+
+The initial iterator-based Journal loop introduced an out-of-line IntoIter::try_fold
+call. Direct loops remove that call from both apply methods while keeping recovery
+dispatch outside the loop. In the final comparison, the unique 96-atom, eight-edit
+case changes from 1.087 to 1.036 µs plain and 1.289 to 1.220 µs tracked; S0e2 is
+1.038 and 1.219 µs respectively. Other differences remain and are not accepted
+merely because this avoidable cost was removed.
+
+Times in µs; original means the pre-S0e journal-derived implementation:
+
+| Atoms / operation / ownership / mode | Original | S0e2 | Journal | Clone | Journal vs original |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 96 / 1 charge edit / unique / plain | 0.524 | 0.523 | 0.524 | 2.444 | +0.0% |
+| 96 / 1 charge edit / unique / tracked | 0.700 | 0.741 | 0.773 | 2.659 | +10.5% |
+| 96 / 1 charge edit / shared / plain | 1.817 | 1.822 | 1.830 | 1.778 | +0.7% |
+| 96 / 8 charge edits / unique / tracked | 1.210 | 1.219 | 1.220 | 2.824 | +0.9% |
+| 96 / 64 charge edits / unique / plain | 4.697 | 4.774 | 4.431 | 3.387 | -5.7% |
+| 8 / structural batch / unique / tracked | 5.440 | 5.473 | 5.528 | 4.239 | +1.6% |
+| 96 / structural batch / unique / plain | 21.812 | 21.994 | 21.552 | 17.962 | -1.2% |
+| 384 / 1 charge edit / unique / plain | 1.428 | 1.409 | 1.484 | 9.339 | +3.9% |
+| 384 / 64 charge edits / unique / plain | 5.524 | 6.564 | 6.108 | 12.596 | +10.6% |
+| 384 / 64 charge edits / unique / tracked | 5.869 | 6.442 | 7.127 | 12.925 | +21.4% |
+
+The large unique 384-atom, 64-edit case is unstable across runs. Its tracked
+Journal median is 21.4% above the original in this comparison, with trial medians
+ranging from 5.468 to 7.658 µs, versus 5.680–7.175 µs originally and
+5.487–8.209 µs for S0e2. The plain medians rise 10.6%, with similarly broad
+ranges. These observations are retained; they do not establish a stable slowdown
+bound or cost-neutrality.
+
+A separate entry-point check in `scratch/181-s0f/boundary/` compares original,
+S0e2, final scoped Journal and final prepared-batch Journal in four rotating
+orders. The latter uses the same Molecule convenience methods as the frozen
+baselines. Among edit-bearing cases, its largest increases over the original
+are 3.1% plain (231.1 → 238.25 ns) and 10.1% tracked (294.9 → 324.55 ns), both
+for a unique eight-atom, one-edit operation. S0e2 is 231.8 and 320.3 ns in those
+cases. The largest prepared-batch increases over S0e2 occur in different cases:
+2.9% plain for 64 edits on a shared 384-atom molecule, and 4.9% tracked for one
+edit on a shared eight-atom molecule. The unique 384-atom, 64-edit tracked medians
+are now 5.871 µs original, 5.584 µs S0e2, 5.483 µs scoped and 5.720 µs prepared.
+This check does not isolate a stable entry-point penalty or explain the changing
+large-case results. The earlier S0e2 2.0%/2.6% figures are observations from that
+comparison, not an established upper bound. Empty transactions also retain overhead:
+in the same-entry-point check, a shared zero-atom input changes from 39.1 to
+43.3 ns plain (+10.7%) and 67.8 to 85.3 ns tracked (+25.8%); S0e2 is 40.35
+and 82.0 ns respectively. Performance acceptance remains open.
+
+Journal matches S0e2's allocation count, requested bytes and peak extra heap in
+all 60 cases. Ordinary entry mapping storage remains zero; tracked chains of
+8/96/384 atoms retain 120/1,528/6,136 bytes with either recovery method.
+Retained scalar-edit Journal buffers remain 3,008/6,016/48,128 bytes for 1/8/64
+edits. Clone records no Undo; the first scalar edit detaches 1,576/18,472/73,768
+bytes for 8/96/384 atoms, with no further retained copy storage for subsequent
+scalar edits. Clone's working copy itself adds no entry heap allocation in these
+fixtures because molecule storage is shared until mutation.
+
+For a unique 96-atom molecule, a single plain edit therefore peaks at 18,472
+extra bytes with Clone versus 3,008 with Journal; at 64 edits Journal peaks at
+48,128 while Clone stays at 18,472. Shared input already requires detachment with
+Journal. The unique 96-atom structural batch uses fewer allocations with Clone
+(102 versus 114), but higher peak extra heap (65,600 versus 30,584 bytes).
+The timings and heap costs support keeping recovery selection explicit; they do
+not establish one method as uniformly preferable or accept remaining regressions.
+
+**Review correction — 2026-10-14.** S0e2 and S0f are not complete while their
+performance gate remains unresolved. S0g must not advance on the basis of passing
+correctness tests. The original pre-S0e Journal implementation remains the
+acceptance baseline for the combined change; intermediate versions are diagnostic
+comparisons, not progressively relaxed acceptance baselines.
+
+The prepared-batch methods already called Transaction::run before S0e. Changing
+the benchmark to call scoped run directly introduced no new transaction semantics
+and was unnecessary for the Journal comparison. Any resulting execution overhead
+is an implementation or measurement issue, not a semantic justification. S0f
+adds selectable Clone recovery, but Journal performs the same edits, integrity
+checks and recovery obligations as before. Independent tracked correspondence
+supports execution without Undo; it computes the same mapping, and its current
+identity construction and per-batch updates are implementation choices whose
+cost still needs justification or removal.
+
+The 4.9% tracked increase over S0e2 in the same-entry-point comparison is
+399.1 → 418.65 ns, or 19.55 ns. The 2.9% plain increase is
+11,166.65 → 11,492.85 ns, or 326.2 ns, in a different case. The cumulative
+unique eight-atom tracked increase over the original is 294.9 → 324.55 ns,
+or 29.65 ns. These remain unresolved observations; neither call-site terminology,
+unchanged allocation counts nor broad timing spreads establishes acceptability.
+
+The corrective work is to hold the entry point and measurement boundaries fixed,
+check repeatability with unchanged-binary controls, then isolate recovery dispatch,
+acceptance/destruction, and correspondence maintenance. Empty and attribute-only
+batches deserve explicit attention: their correspondence is unchanged, while
+update_correspondence currently checks all eight removal tables and invokes all
+eight right-domain extensions even when every added count is zero. Whether the
+compiler removes those operations and how much they cost must be established,
+not assumed. Changes must retain all lifecycle, error, mapping and rollback laws.
+The gate covers cumulative cost against the original, including empty operations,
+shared/unique storage, allocation traffic and peak memory. Inconclusive timing
+keeps the gate open; unexplained reproducible regressions do not authorize S0g.
+
+A fallback proposal, if the regressions cannot be removed within this transaction
+work, is to restore the pre-S0e Journal execution and correspondence construction,
+and reconcile the dependent scoped-handle/caller/test/document changes together.
+This would roll back the costly transaction changes rather than only remove S0f
+and retain unexplained S0e/S0e2 costs. Earlier lifecycle/editor work would remain.
+This paragraph records a fallback plan; no production rollback is performed here.
+
+**Cost investigation — 2026-10-14 (inlining subsequently removed).** The measured candidate removes concrete
+implementation overhead without changing transaction semantics or public symbols:
+
+- Tracked commit previously copied out its 320-byte correspondence, then wrote
+  another complete empty correspondence into the run-owned slot. This candidate
+  used an Option, consumed with take. Generated code replaced the empty-value
+  rewrite with a discriminant store; run-owned cleanup covered forgotten handles.
+- Attribute-only and empty batches previously entered the full correspondence
+  updater, including its register saves, stack frame and zero-count domain
+  updates. An inline check of the existing handle tables now skips that routine
+  when no ids changed. No extra change flag or mapping allocation is introduced.
+- Both apply and commit methods permit inlining. The former out-of-line
+  boundaries prevented specialization of the known Journal selection in the
+  prepared-batch callers. In the final timing binary, those method calls are
+  inlined. Clone and Journal still share the same public handles and lifecycle.
+
+The study retains the original prepared-batch entry points, inputs, timing
+boundaries, compiler profile and pre-S0e binary. Attribution candidates were
+measured separately; the final candidate uses eight rotating trials of original,
+unchanged control, candidate and the same unchanged control again. No builds or
+tests overlap timing. All 60 cases remain included. Selected medians, in ns:
+
+| Operation / atoms / ownership / tracking | Pre-S0e | Before these fixes | Final candidate |
+| --- | ---: | ---: | ---: |
+| Empty / 0 / unique / plain | 39.05 | 41.70 | 39.45 |
+| One attribute edit / 8 / unique / plain | 234.00 | 237.60 | 230.45 |
+| One attribute edit / 8 / unique / tracked | 295.30 | 322.90 | 286.45 |
+| One attribute edit / 8 / shared / tracked | 402.65 | 418.90 | 394.20 |
+| 64 attribute edits / 384 / shared / plain | 11,904.00 | 11,424.45 | 11,541.00 |
+| Structural / 8 / unique / plain | 5,313.50 | 5,255.60 | 5,415.00 |
+| Structural / 8 / unique / tracked | 5,480.20 | 5,484.75 | 5,550.15 |
+
+The before-fix column pools both unchanged-control labels. The small tracked
+regression is removed in this comparison. This does not establish a general
+performance bound: the largest remaining positive median is the small unique
+plain structural case, +101.5 ns (+1.91%); its tracked counterpart is +69.95 ns
+(+1.28%). These remain unresolved, not accepted as negligible. The intermediate
+wrapper-only candidate also showed a small plain attribute regression and was
+not used to claim success. Its data remains alongside the final candidate.
+
+Unchanged-binary controls establish a measurement limitation independently of
+implementation differences. In the wrapper comparison, the same control's two
+eight-run medians for the large shared plain case were 10,690.75 and 11,179.05 ns
+(+488.3 ns, +4.57%). This demonstrates that an apparent difference of that size
+can arise without a code change; it does not establish that every observed
+regression is noise. The final comparison includes trial ranges and paired
+bootstrap intervals, not a claim of equivalence from overlapping ranges.
+
+The fixes preserve the before-fix allocation traffic and peak memory in all
+60 cases. Relative to pre-S0e, tracked structural cases still allocate one extra
+28-byte temporary, and accumulated mapping storage still overlaps Undo storage.
+Those costs are not removed by the timing optimizations. The cost gate remains
+open for the residual structural difference and the cumulative resource trade-off;
+S0g has not advanced. Evidence, source snapshots, binary hashes, all intermediate
+results and the reproducible harness are in `scratch/181-transaction-cost-audit/`.
+
+Verification of that candidate: all 1,314 molecule tests and 28
+feature-gated edit properties pass, as does strict graph-IR all-targets Clippy.
+Formatting and diff checks pass. Each timing binary checks final molecule and
+correspondence results before measurement; the separate final allocation probe
+matches the earlier candidate in all 60 cases.
+
+**Direct correspondence ownership — 2026-10-14 (experiment withdrawn).** The
+approved ownership proposal puts MoleculeCorrespondence directly in the tracked
+handle and keeps recovery in the run-owned guard. Deliberate forgetting may leak
+the mapping; preventing that leak is not required. This permits consuming commit
+to move the correspondence without a borrowed Option or replacement value.
+
+The straightforward implementation adds a 344-byte handle copy before commit
+validation and a redundant 280-byte mapping copy during result propagation in
+the generated tracked run. Its stack frame grows by 304 bytes. The small unique
+tracked attribute case rises from 289.00 to 319.70 ns (+30.70 ns, +10.62%) against
+the preceding implementation. These costs add no semantic work. Explicit field
+destructuring reduces the first copy to 320 bytes but leaves the other copy;
+that experiment was discarded after assembly inspection.
+
+A second candidate keeps direct ownership and forwards the callback Result
+through run rather than extracting its value and wrapping it again. This removes
+the redundant mapping round trip in the generated code, but leaves the handle
+copy. It does not recover the tracked attribute regression and also regresses
+plain attribute cases. Selected unique-storage medians from its separate eight
+rotating trials, in ns:
+
+| Operation / atoms / tracking | Pre-S0e | Borrowed slot | Owned, result forwarded |
+| --- | ---: | ---: | ---: |
+| Empty / 0 / tracked | 68.90 | 67.70 | 73.45 |
+| Empty batch / 8 / tracked | 168.60 | 176.40 | 189.10 |
+| One attribute edit / 8 / plain | 235.40 | 227.20 | 244.75 |
+| One attribute edit / 8 / tracked | 301.10 | 286.75 | 318.30 |
+| Structural / 8 / tracked | 5,486.40 | 5,512.10 | 5,541.05 |
+
+Both timed candidates pass the unchanged 1,314 molecule unit tests, 28
+feature-gated edit properties and strict graph-IR all-targets Clippy. Allocation
+traffic and peak memory match the preceding implementation in all 60 cases.
+Both comparisons use the original pre-S0e binary and repeat the same preceding
+binary under two control labels; the small attribute regressions exceed that
+control variation. No public signatures, inlining attributes, mapping algorithms,
+workloads or compiler options change. Individual copy costs have not been timed
+separately; their presence does not establish a complete timing attribution.
+
+Both production experiments were withdrawn, restoring the preceding borrowed
+slot implementation exactly. Direct ownership is not a required implementation
+target. S0e2/S0f remain open for correspondence
+transfer costs and the existing cumulative cost questions before S0g. Sources,
+binaries, assembly, samples and allocation comparisons are preserved in
+`scratch/181-transaction-owned-map/`; the pre-S0e baseline is retained.
+
+**Lazy correspondence — 2026-10-14 (experiment withdrawn).** This candidate
+keeps the small borrowed handle and leaves identity implicit until the first
+successful structural batch or successful commit. The first structural batch
+uses its entry counts; prior attribute or participant changes preserve entity ids.
+An identity-only commit validates before constructing the result. Public
+signatures, recovery semantics, ordinary transaction code, inlining attributes,
+mapping results, compiler options and benchmark workloads remain unchanged.
+
+The resource improvement is concrete. No mapping heap is retained during
+attribute-only work, compared with 120, 1,528 and 6,136 bytes for the current
+8-, 96- and 384-atom cases. Peak extra requested heap matches pre-S0e in all
+60 successful-operation cases. Allocation traffic matches the current control;
+tracked structural cases still allocate one extra 28-byte temporary relative
+to pre-S0e. The returned identity still allocates at commit and can then overlap
+the journal; lazy construction does not eliminate the result's storage.
+
+Two separate eight-trial comparisons retain the original prepared-batch entry
+points and rotate original, current control, candidate and the same control
+again. Builds and tests finish before timing. Selected unique-storage medians,
+in ns; the current column pools both control labels:
+
+| Comparison / operation / atoms / tracking | Pre-S0e | Current | Lazy | Lazy vs current |
+| --- | ---: | ---: | ---: | ---: |
+| First / empty batch / 8 / tracked | 173.15 | 169.25 | 180.05 | +6.38% |
+| Repeat / empty batch / 8 / tracked | 169.25 | 163.65 | 177.75 | +8.62% |
+| First / one attribute edit / 8 / tracked | 305.65 | 289.75 | 310.30 | +7.09% |
+| Repeat / one attribute edit / 8 / tracked | 295.85 | 289.05 | 299.10 | +3.48% |
+
+The repeated empty-batch cost is also 8.50 ns (+5.02%) above pre-S0e. Larger
+cases remain variable: the repeated large shared plain 64-edit case is +4.80%
+against pre-S0e, while the identical current control's two medians differ by
+5.15%. These observations do not establish a general regression bound or justify
+discarding the small-case increases. The heap improvement does not settle the
+timing trade-off. No timing cost is justified by a new semantic requirement.
+
+The candidate passes 1,318 molecule unit cases, 28 feature-gated edit properties
+and strict all-target graph-IR Clippy. Additional cases cover an attribute-only
+prefix before structural changes and failed commit while identity is implicit,
+with both recovery modes. The prototype and its test/guide changes were withdrawn,
+restoring their pre-experiment contents exactly. Source snapshots, patch, binary
+hashes, allocation evidence, both timing series and assembly are retained in
+`scratch/181-transaction-lazy-map/`. S0e2/S0f remain open; S0g has not advanced.
+
+**Direct batch loops — 2026-10-14 (retained).** Remove all six inlining
+attributes: both apply methods, both commit methods, the shared apply_batch
+helper, and ApplicationState::update_correspondence. Remove apply_batch and put
+its recovery dispatch, edit loops and abort handling directly in Transaction::apply
+and TrackedTransaction::apply. Recovery storage, rollback, acceptance and commit
+validation remain shared. No public interface, semantic contract, mapping algorithm
+or test changes. The explicit loop duplication replaces reliance on forced inlining;
+the compiler remains free to inline by its own heuristics.
+
+The comparison keeps all 60 prepared-batch cases, original timing boundaries and
+pre-S0e baseline. Eight rotating trials include the preceding inlining version
+twice as an unchanged-binary control. Builds and tests finish before timing.
+Selected medians, in ns; the preceding column pools both control labels:
+
+| Operation / atoms / ownership / tracking | Pre-S0e | Preceding inlining version | Direct loops | Direct vs pre-S0e |
+| --- | ---: | ---: | ---: | ---: |
+| Empty / 0 / shared / tracked | 69.00 | 70.30 | 76.50 | +10.87% |
+| Empty / 8 / unique / tracked | 145.50 | 137.35 | 156.85 | +7.80% |
+| Empty batch / 8 / unique / plain | 98.00 | 93.70 | 106.80 | +8.98% |
+| One attribute edit / 8 / unique / plain | 237.60 | 234.70 | 237.95 | +0.15% |
+| One attribute edit / 8 / unique / tracked | 303.45 | 291.00 | 302.70 | -0.25% |
+| One attribute edit / 96 / shared / plain | 1,816.10 | 1,824.50 | 1,841.80 | +1.42% |
+| Structural / 8 / unique / tracked | 5,428.00 | 5,523.75 | 5,548.50 | +2.22% |
+
+The small tracked structural increase is 120.50 ns over pre-S0e. Empty-operation
+increases also remain part of the comparison; they are not excluded to present
+only edit-bearing costs. The measurements cover the combined attribute removal
+and loop duplication, not the individual contribution of either change.
+Allocation traffic and peak extra heap match the preceding version in all 60
+cases; the previously recorded extra structural allocation and retained mapping
+costs remain. This implements the requested removal of inlining hints without
+claiming the cumulative performance gate is satisfied. No further tuning
+variants were tried; S0e2/S0f remain open before S0g.
+
+Verification passed: 1,314 unchanged molecule unit cases, 28 feature-gated edit
+properties, strict all-target graph-IR Clippy, nightly graph-IR formatting and
+git diff --check. Sources, patch, binary hashes, allocation comparison, raw timing
+series and uncertainty estimates are in `scratch/181-transaction-direct-loops/`.
 
 #### S0g — Prepared-batch transaction entry points
 

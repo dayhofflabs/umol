@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use rstest::*;
 use umol_chem::element::Element;
 
-use super::{Transaction, TransactionError};
+use super::{RollbackMethod, Transaction, TransactionError, TransactionStorage};
 use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::{AtomForm, ElementForm};
 use crate::ir::bond::BondForm;
@@ -69,10 +69,14 @@ fn test_transaction_apply_add_atom(empty: MoleculeEditor) {
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [Undo::RemoveAddedTopology { atoms, bonds }]
                     if atoms.iter().map(|a| a.id).collect::<Vec<_>>() == vec![AtomId(0)]
                         && bonds.is_empty()
@@ -100,10 +104,14 @@ fn test_transaction_apply_add_atoms(empty: MoleculeEditor) {
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [Undo::RemoveAddedTopology { atoms, bonds }]
                     if atoms.iter().map(|a| a.id).collect::<Vec<_>>() == vec![AtomId(0), AtomId(1)]
                         && bonds.is_empty()
@@ -136,10 +144,14 @@ fn test_transaction_apply_add_bond_via_handle(empty: MoleculeEditor) {
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [
                     Undo::RemoveAddedTopology { atoms, bonds },
                     Undo::RemoveAddedTopology { atoms: bond_atoms, bonds: added_bonds },
@@ -166,6 +178,7 @@ fn test_transaction_apply_rollback(one_atom: MoleculeEditor) {
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction.apply(edits).unwrap_err();
             assert_eq!(
@@ -189,6 +202,7 @@ fn test_transaction_apply_set_atom_field(one_atom: MoleculeEditor) {
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyAtomField {
@@ -199,8 +213,11 @@ fn test_transaction_apply_set_atom_field(one_atom: MoleculeEditor) {
                     },
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::ModifyAtomField {
                     id: AtomId(0),
                     change: AtomFieldChange::Charge {
@@ -231,6 +248,7 @@ fn test_transaction_apply_set_atom_field_error(one_atom: MoleculeEditor) {
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::ModifyAtomField {
@@ -286,6 +304,7 @@ fn test_transaction_apply_handle_error(
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(transaction.apply(edits).unwrap_err(), expected);
             assert_eq!(transaction.probe().unwrap(), &before);
@@ -344,6 +363,7 @@ fn test_transaction_apply_handle_removed_error(
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(
                 transaction.apply(edits).unwrap_err(),
@@ -389,6 +409,7 @@ fn test_transaction_apply_handles_initial() {
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
 
@@ -429,6 +450,7 @@ fn test_transaction_apply_handles_created() {
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
 
@@ -474,6 +496,7 @@ fn test_transaction_apply_handles_reuse() {
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
 
@@ -623,6 +646,7 @@ fn test_transaction_apply_handles_per_kind() {
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
 
@@ -718,6 +742,7 @@ fn test_transaction_apply_add_bonds_error(
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(
                 transaction
@@ -742,6 +767,7 @@ fn test_transaction_apply_remove_topology(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveTopology {
@@ -751,13 +777,16 @@ fn test_transaction_apply_remove_topology(diatomic: MoleculeEditor) {
                 .unwrap();
 
             assert_eq!(transaction.molecule.bonds().count(), 0);
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             let [Undo::RestoreRemovedTopology {
                 atoms,
                 bonds,
                 overlays,
                 compaction,
                 ..
-            }] = transaction.journal.as_slice()
+            }] = journal.as_slice()
             else {
                 panic!("RemoveTopology should produce one topology-restore undo")
             };
@@ -792,10 +821,14 @@ fn test_transaction_apply_constraint_identity(
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(Edits::from_iter([edit])).unwrap();
 
-            assert_eq!(transaction.journal.as_slice(), &[]);
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
+            assert_eq!(journal.as_slice(), &[]);
             assert_eq!(transaction.probe().cloned(), Ok(expected));
 
             Ok(())
@@ -809,6 +842,7 @@ fn test_transaction_apply_add_atom_constraint(one_atom: MoleculeEditor) {
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([
@@ -859,6 +893,7 @@ fn test_transaction_apply_modify_atom_field_canonical(
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyAtomField {
@@ -889,6 +924,7 @@ fn test_transaction_apply_modify_atom_constraint_absent_error(one_atom: Molecule
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::ModifyAtomConstraint {
@@ -925,6 +961,7 @@ fn test_transaction_apply_set_atom_constraint(
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             if let Some(c) = old.clone() {
                 transaction
@@ -962,6 +999,7 @@ fn test_transaction_apply_set_bond_constraint(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyBondConstraint {
@@ -990,6 +1028,7 @@ fn test_transaction_apply_add_molecule_constraint(empty: MoleculeEditor) {
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddMoleculeConstraint {
@@ -1011,6 +1050,7 @@ fn test_transaction_apply_remove_molecule_constraint(mut empty: MoleculeEditor) 
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveMoleculeConstraint {
@@ -1032,6 +1072,7 @@ fn test_transaction_apply_remove_molecule_constraint_absent_error(mut empty: Mol
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::RemoveMoleculeConstraint {
@@ -1089,6 +1130,7 @@ fn test_transaction_apply_molecule_constraint_initial(batched_overlays: Molecule
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
             assert_eq!(transaction.molecule.constraints().as_slice(), &[constraint]);
@@ -1240,6 +1282,7 @@ fn test_transaction_apply_molecule_constraint_created(empty: MoleculeEditor) {
     let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
             assert_eq!(transaction.molecule.constraints().as_slice(), &[expected]);
@@ -1276,6 +1319,7 @@ fn test_transaction_apply_molecule_constraint_compaction(mut batched_overlays: M
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
             assert_eq!(
@@ -1334,6 +1378,7 @@ fn test_transaction_apply_molecule_constraint_error(
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(transaction.apply(edits), Err(expected));
             assert_eq!(transaction.probe().unwrap(), &before);
@@ -1352,6 +1397,7 @@ fn test_transaction_apply_remove_topology_atom_error(one_atom: MoleculeEditor) {
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction.apply(edits).unwrap_err();
             assert_eq!(
@@ -1378,6 +1424,7 @@ fn test_transaction_apply_remove_topology_bond_error(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction.apply(edits).unwrap_err();
             assert_eq!(
@@ -1401,6 +1448,7 @@ fn test_transaction_apply_add_dative_bond_acceptor_error(one_atom: MoleculeEdito
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::AddDativeBond {
@@ -1429,6 +1477,7 @@ fn test_transaction_apply_set_bond_field(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyBondField {
@@ -1455,6 +1504,7 @@ fn test_transaction_apply_set_bond_field_error(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::ModifyBondField {
@@ -1501,6 +1551,7 @@ fn test_transaction_apply_add_stereo_atom(stereo_atom_skeleton: MoleculeEditor) 
     let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddStereoAtom {
@@ -1531,6 +1582,7 @@ fn test_transaction_apply_remove_stereo_atom(mut stereo_atom_skeleton: MoleculeE
     let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveStereoAtoms {
@@ -1563,6 +1615,7 @@ fn test_transaction_apply_remove_stereo_atom_error(mut stereo_atom_skeleton: Mol
     let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::RemoveStereoAtoms {
@@ -1601,6 +1654,7 @@ fn test_transaction_apply_topology_removal_restores_stereo_atom(
     let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             // Removing a ligand atom cascades the stereo element away.
             transaction
@@ -1636,6 +1690,7 @@ fn test_transaction_apply_add_stereo_bond(stereo_bond_skeleton: MoleculeEditor) 
     let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddStereoBond {
@@ -1680,6 +1735,7 @@ fn test_transaction_apply_remove_stereo_bond(mut stereo_bond_skeleton: MoleculeE
     let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveStereoBonds {
@@ -1726,6 +1782,7 @@ fn test_transaction_apply_remove_stereo_bond_error(mut stereo_bond_skeleton: Mol
     let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let error = transaction
                 .apply(Edits::from_iter([Edit::RemoveStereoBonds {
@@ -1772,6 +1829,7 @@ fn test_transaction_apply_set_stereo_atom_field(mut stereo_atom_skeleton: Molecu
     let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyStereoAtomField {
@@ -1814,6 +1872,7 @@ fn test_transaction_apply_set_stereo_atom_field_error(mut stereo_atom_skeleton: 
     let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::ModifyStereoAtomField {
@@ -1858,6 +1917,7 @@ fn test_transaction_apply_set_stereo_bond_field(mut stereo_bond_skeleton: Molecu
     let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyStereoBondField {
@@ -1905,6 +1965,7 @@ fn test_transaction_apply_set_stereo_bond_field_error(mut stereo_bond_skeleton: 
     let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::ModifyStereoBondField {
@@ -1996,6 +2057,7 @@ fn test_transaction_apply_replace_dative_bond_donors(batched_overlays: MoleculeE
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceDativeBondDonors {
@@ -2004,8 +2066,11 @@ fn test_transaction_apply_replace_dative_bond_donors(batched_overlays: MoleculeE
                     new: donors.iter().copied().map(AtomHandle::Id).collect(),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreDativeBondDonors {
                     id: DativeBondId(0),
                     donors: vec![AtomId(0)],
@@ -2033,6 +2098,7 @@ fn test_transaction_apply_replace_dative_bond_acceptor(batched_overlays: Molecul
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceDativeBondAcceptor {
@@ -2041,8 +2107,11 @@ fn test_transaction_apply_replace_dative_bond_acceptor(batched_overlays: Molecul
                     new: AtomHandle::Id(AtomId(3)),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreDativeBondAcceptor {
                     id: DativeBondId(0),
                     acceptor: AtomId(1),
@@ -2069,6 +2138,7 @@ fn test_transaction_apply_replace_aromatic_system_atoms(batched_overlays: Molecu
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceAromaticSystemAtoms {
@@ -2077,8 +2147,11 @@ fn test_transaction_apply_replace_aromatic_system_atoms(batched_overlays: Molecu
                     new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreAromaticSystemAtoms {
                     id: AromaticSystemId(0),
                     atoms: vec![AtomId(0), AtomId(1)],
@@ -2106,6 +2179,7 @@ fn test_transaction_apply_replace_multicenter_bond_atoms(batched_overlays: Molec
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceMulticenterBondAtoms {
@@ -2114,8 +2188,11 @@ fn test_transaction_apply_replace_multicenter_bond_atoms(batched_overlays: Molec
                     new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreMulticenterBondAtoms {
                     id: MulticenterBondId(0),
                     atoms: vec![AtomId(0), AtomId(1)],
@@ -2143,6 +2220,7 @@ fn test_transaction_apply_replace_noncovalent_bond_atoms(batched_overlays: Molec
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceNoncovalentBondAtoms {
@@ -2151,8 +2229,11 @@ fn test_transaction_apply_replace_noncovalent_bond_atoms(batched_overlays: Molec
                     new: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreNoncovalentBondAtoms {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
@@ -2179,6 +2260,7 @@ fn test_transaction_apply_replace_stereo_atom_site(batched_overlays: MoleculeEdi
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceStereoAtomSite {
@@ -2187,8 +2269,11 @@ fn test_transaction_apply_replace_stereo_atom_site(batched_overlays: MoleculeEdi
                     new: AtomHandle::Id(AtomId(2)),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreStereoAtomSite {
                     id: StereoAtomId(0),
                     site: AtomId(0),
@@ -2218,6 +2303,7 @@ fn test_transaction_apply_replace_stereo_atom_ligands(batched_overlays: Molecule
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceStereoAtomLigands {
@@ -2232,8 +2318,11 @@ fn test_transaction_apply_replace_stereo_atom_ligands(batched_overlays: Molecule
                         .collect(),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreStereoAtomLigands {
                     id: StereoAtomId(0),
                     ligands: old,
@@ -2260,6 +2349,7 @@ fn test_transaction_apply_replace_stereo_bond_site(batched_overlays: MoleculeEdi
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceStereoBondSite {
@@ -2268,8 +2358,11 @@ fn test_transaction_apply_replace_stereo_bond_site(batched_overlays: MoleculeEdi
                     new: BondHandle::Id(BondId(1)),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreStereoBondSite {
                     id: StereoBondId(0),
                     site: BondId(0),
@@ -2300,6 +2393,7 @@ fn test_transaction_apply_replace_stereo_bond_ligands(batched_overlays: Molecule
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ReplaceStereoBondLigands {
@@ -2314,8 +2408,11 @@ fn test_transaction_apply_replace_stereo_bond_ligands(batched_overlays: Molecule
                         .collect(),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert_eq!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 &[Undo::RestoreStereoBondLigands {
                     id: StereoBondId(0),
                     ligands: old,
@@ -2390,6 +2487,7 @@ fn test_transaction_apply_replace_old_state_error(
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(
                 transaction.apply(Edits::from_iter([edit])),
@@ -2574,6 +2672,7 @@ fn test_transaction_apply_remove_overlays_error(
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(
                 transaction.apply(Edits::from_iter([edit])).unwrap_err(),
@@ -2744,6 +2843,7 @@ fn test_transaction_apply_duplicate_removal_error(
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(
                 transaction.apply(Edits::from_iter([edit])).unwrap_err(),
@@ -2827,6 +2927,7 @@ fn test_transaction_apply_handle_removed_error_cascade(
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             assert_eq!(
                 transaction.apply(edits).unwrap_err(),
@@ -2845,6 +2946,7 @@ fn test_transaction_apply_set_dative_bond_field(diatomic_with_overlays: Molecule
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyDativeBondField {
@@ -2875,6 +2977,7 @@ fn test_transaction_apply_set_aromatic_system_field(diatomic_with_overlays: Mole
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyAromaticSystemField {
@@ -2905,6 +3008,7 @@ fn test_transaction_apply_set_multicenter_bond_field(diatomic_with_overlays: Mol
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyMulticenterBondField {
@@ -2935,6 +3039,7 @@ fn test_transaction_apply_set_noncovalent_bond_field(diatomic_with_overlays: Mol
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyNoncovalentBondField {
@@ -2965,6 +3070,7 @@ fn test_transaction_apply_add_dative_bond(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddDativeBond {
@@ -2973,8 +3079,11 @@ fn test_transaction_apply_add_dative_bond(diatomic: MoleculeEditor) {
                     attributes: DativeBondForm::from_order(1),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [Undo::RemoveAddedDativeBond(added)] if added.id == DativeBondId(0)
             ));
             assert_eq!(transaction.molecule.dative_bonds().count(), 1);
@@ -2990,6 +3099,7 @@ fn test_transaction_apply_add_aromatic_system(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddAromaticSystem {
@@ -2997,8 +3107,11 @@ fn test_transaction_apply_add_aromatic_system(diatomic: MoleculeEditor) {
                     attributes: AromaticSystemForm::default(),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [Undo::RemoveAddedAromaticSystem(added)] if added.id == AromaticSystemId(0)
             ));
             assert_eq!(transaction.molecule.aromatic_systems().count(), 1);
@@ -3014,6 +3127,7 @@ fn test_transaction_apply_add_multicenter_bond(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddMulticenterBond {
@@ -3021,8 +3135,11 @@ fn test_transaction_apply_add_multicenter_bond(diatomic: MoleculeEditor) {
                     attributes: MulticenterBondForm::default(),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [Undo::RemoveAddedMulticenterBond(added)] if added.id == MulticenterBondId(0)
             ));
             assert_eq!(transaction.molecule.multicenter_bonds().count(), 1);
@@ -3038,6 +3155,7 @@ fn test_transaction_apply_add_noncovalent_bond(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::AddNoncovalentBond {
@@ -3045,8 +3163,11 @@ fn test_transaction_apply_add_noncovalent_bond(diatomic: MoleculeEditor) {
                     attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 }]))
                 .unwrap();
+            let TransactionStorage::Journal(journal) = &*transaction.storage else {
+                panic!("expected Journal recovery");
+            };
             assert!(matches!(
-                transaction.journal.as_slice(),
+                journal.as_slice(),
                 [Undo::RemoveAddedNoncovalentBond(added)] if added.id == NoncovalentBondId(0)
             ));
             assert_eq!(transaction.molecule.noncovalent_bonds().count(), 1);
@@ -3063,6 +3184,7 @@ fn test_transaction_apply_remove_dative_bond(diatomic_with_overlays: MoleculeEdi
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveDativeBonds {
@@ -3091,6 +3213,7 @@ fn test_transaction_apply_remove_dative_bond_roles_error(diatomic_with_overlays:
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::RemoveDativeBonds {
@@ -3123,6 +3246,7 @@ fn test_transaction_apply_remove_aromatic_system(diatomic_with_overlays: Molecul
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveAromaticSystems {
@@ -3157,6 +3281,7 @@ fn test_transaction_apply_remove_aromatic_systems() {
     let mut molecule = b.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveAromaticSystems {
@@ -3224,6 +3349,7 @@ fn test_transaction_apply_remove_aromatic_system_rollback(
     let before = molecule.clone();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveAromaticSystems {
@@ -3258,6 +3384,7 @@ fn test_transaction_apply_remove_multicenter_bond(diatomic_with_overlays: Molecu
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveMulticenterBonds {
@@ -3283,6 +3410,7 @@ fn test_transaction_apply_remove_noncovalent_bond(diatomic_with_overlays: Molecu
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveNoncovalentBonds {
@@ -3309,6 +3437,7 @@ fn test_transaction_apply_remove_noncovalent_bond_form_mismatch_error(
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::RemoveNoncovalentBonds {
@@ -3335,6 +3464,7 @@ fn test_transaction_apply_set_bond_constraint_value_bearing(diatomic: MoleculeEd
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyBondConstraint {
@@ -3370,6 +3500,7 @@ fn test_transaction_apply_add_bond_constraint(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyBondConstraint {
@@ -3397,6 +3528,7 @@ fn test_transaction_apply_modify_bond_constraint_absent_error(diatomic: Molecule
     let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             let err = transaction
                 .apply(Edits::from_iter([Edit::ModifyBondConstraint {
@@ -3421,6 +3553,7 @@ fn test_transaction_apply_set_dative_bond_constraint(diatomic_with_overlays: Mol
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyDativeBondConstraint {
@@ -3448,6 +3581,7 @@ fn test_transaction_apply_set_aromatic_system_constraint(diatomic_with_overlays:
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyAromaticSystemConstraint {
@@ -3479,6 +3613,7 @@ fn test_transaction_apply_set_multicenter_bond_constraint(diatomic_with_overlays
     let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::ModifyMulticenterBondConstraint {
@@ -3537,7 +3672,7 @@ fn triatomic_with_overlays() -> MoleculeEditor {
 fn test_transaction_rollback_batches(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let before = molecule.clone();
-    Transaction::run(&mut molecule, |mut transaction| {
+    Transaction::run(&mut molecule, RollbackMethod::Journal, |mut transaction| {
         transaction.apply(Edits::from_iter([Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::Charge {
@@ -3567,7 +3702,7 @@ fn test_transaction_rollback_batches(diatomic: MoleculeEditor) {
 fn test_transaction_apply_batches_error(diatomic: MoleculeEditor) {
     let mut molecule = diatomic.finish().unwrap();
     let before = molecule.clone();
-    let result = Transaction::run(&mut molecule, |mut transaction| {
+    let result = Transaction::run(&mut molecule, RollbackMethod::Journal, |mut transaction| {
         transaction.apply(Edits::from_iter([Edit::ModifyAtomField {
             id: AtomHandle::Id(AtomId(0)),
             change: AtomFieldChange::Charge {
@@ -3722,6 +3857,7 @@ fn test_transaction_rollback_entries(#[case] case: RollbackCase) {
     let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction.apply(edits).unwrap();
             transaction.rollback();
@@ -3750,6 +3886,7 @@ fn test_transaction_rollback_topology(
     let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveTopology {
@@ -3782,7 +3919,7 @@ fn test_transaction_rollback_topology(
 fn test_transaction_rollback_empty(one_atom: MoleculeEditor) {
     let mut molecule = one_atom.finish().unwrap();
     let before = molecule.clone();
-    Transaction::run(&mut molecule, |transaction| {
+    Transaction::run(&mut molecule, RollbackMethod::Journal, |transaction| {
         transaction.rollback();
         Ok::<_, MoleculeApplyError>(())
     })
@@ -3801,6 +3938,7 @@ fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEdi
     let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
+        RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
                 .apply(Edits::from_iter([Edit::RemoveMoleculeConstraint {

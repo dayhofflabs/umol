@@ -710,13 +710,14 @@ construction. A valid partial bijection is not necessarily a correspondence over
 molecules supplied to a later operation. `MoleculeCorrespondence` is likewise not bound to molecule
 instances by its ids.
 
-An **operation-issued value** may instead be provenance-bound. Transaction is a scoped handle issued
-by Transaction::run, borrowing a molecule and its private undo journal. Callers cannot replace the
-receiver or alter that journal. Commit checks representation integrity; acceptance also requires
-the callback to return Ok. Application or commit failure, or cancellation, restores transaction-entry
-state under Molecule::normalized_eq, preserving participant order. The guard belongs to run, so forgetting the
-handle cannot prevent restoration of completed edits. Recovery from allocation failure or an
-internal panic during an Edit is outside this contract.
+An **operation-issued value** may instead be provenance-bound. Transaction and TrackedTransaction
+are scoped handles issued only by their respective run methods, borrowing a molecule and private
+recovery state. Neither handle is copyable or cloneable or exposes conversion or mutable access to
+the other. Callers cannot replace the receiver or alter recovery storage. Commit checks representation
+integrity; acceptance also requires the callback to return Ok. Application or commit failure, or
+cancellation, restores transaction-entry state under Molecule::normalized_eq, preserving participant
+order. The guard belongs to run, so forgetting the handle cannot prevent restoration of completed
+edits. Recovery from allocation failure or an internal panic during an Edit is outside this contract.
 
 Undo payloads remain public. Restoration from matching history is correct under the stated
 equivalence; manipulated history must not panic but has no specified result.
@@ -851,19 +852,25 @@ Direct editor mutations and edit batches can be interleaved; neither records und
 | Molecule::apply | Consumes Molecule and Edits; applies edits and finishes | Drops the molecule |
 | Molecule::edit_into | Lends an editor over one working copy to a callback, checks integrity, installs success, and returns the callback's value | Callback error, integrity failure, or callback unwinding leaves the receiver unchanged under structural equality |
 | Molecule::apply_into | Consumes Edits, applies them to one working copy, and installs the checked result | Leaves the receiver unchanged under structural equality |
-| Transaction::apply | Consumes Edits and immediately applies it to the borrowed molecule, recording undo | Restores transaction-entry state and aborts the transaction |
-| Transaction::probe | Checks integrity and lends `&Molecule` | Leaves the transaction active |
-| Transaction::commit | Consumes the handle, checks integrity, requests acceptance by Transaction::run | Restores transaction-entry state and aborts the transaction |
+| Transaction::apply, TrackedTransaction::apply | Consumes Edits and immediately applies it to the receiver with undo recording (Journal) or a working copy without undo (Clone); only tracked application updates the accumulated correspondence | Restores transaction-entry state and aborts the transaction |
+| Transaction::probe, TrackedTransaction::probe | Checks integrity and lends `&Molecule` | Leaves the transaction active |
+| Transaction::commit | Consumes the handle, checks integrity, returns unit and requests acceptance by Transaction::run | Restores transaction-entry state and aborts the transaction |
+| TrackedTransaction::commit | Consumes the handle, checks integrity, returns MoleculeCorrespondence and requests acceptance by TrackedTransaction::run | Restores transaction-entry state and aborts the transaction |
 
 Molecule::edit_into does not abort when its callback catches an editor application error. The
 completed prefix remains available for further editing; a successful callback return installs
 that state if the final integrity check succeeds. Callback errors propagate unchanged, and
 publication errors convert through MoleculeApplyError into the callback's error type.
 
-Molecule::transact accepts prepared batches, applies each, and commits once. Transaction::run
-also supports planning later batches from probe results. Commit succeeds only as a request:
-the callback must return Ok to retain changes. The restoration contract and cancellation behavior
-are specified [above](#provenance-and-contextual-validity).
+Molecule::transact accepts prepared batches, applies each, and commits once through Transaction.
+Molecule::tracked_transact uses TrackedTransaction and returns the whole operation's correspondence.
+Both conveniences use Journal recovery. Both run methods take an explicit RollbackMethod
+(Clone or Journal), support planning later batches from probe results and return the callback's
+value. Clone installs the working molecule only after acceptance; Journal retains edits to the
+receiver. Recovery selection is independent of correspondence tracking. Commit succeeds only as
+a request: the callback must return Ok to retain changes. The restoration contract and cancellation behavior are specified [above](#provenance-and-contextual-validity).
+Python exposes the prepared-batch methods with the same outcomes; scoped callback handles are
+Rust-only.
 
 MoleculeApplyError::Transaction carries edit-precondition or aborted-transaction failures;
 MoleculeApplyError::Integrity carries publication failures. The editor's apply returns only the
@@ -886,8 +893,10 @@ borrowing the molecule, and finish checks it before transferring ownership.
 
 Discarding a batch correspondence gives the same editor state as plain apply.
 Correspondences from consecutive batches compose to the whole operation's mapping.
-Transaction accumulates that whole-transaction mapping after each successful batch,
-independently of its undo journal, and tracked_commit returns it.
+TrackedTransaction initializes an identity mapping at entry, accumulates the whole-transaction
+mapping after each successful batch independently of recovery storage, and returns it from commit.
+Transaction constructs, updates and retains no aggregate correspondence. Both paths use per-batch
+handle resolution state; neither retains batch mapping history or reconstructs mappings from Undo.
 A failed editor application retains the completed prefix and returns no correspondence;
 a failed transaction application restores its entry state and aborts.
 

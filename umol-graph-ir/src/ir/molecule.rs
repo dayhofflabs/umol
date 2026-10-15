@@ -11,7 +11,7 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
-pub use transact::{TrackedTransaction, Transaction, TransactionError};
+pub use transact::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
 use umol_graph_core::{
     Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,
     NodeId, UnionFind,

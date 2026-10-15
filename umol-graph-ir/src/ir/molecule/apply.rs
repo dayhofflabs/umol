@@ -291,6 +291,29 @@ impl ApplicationState {
 
     /// Update an input correspondence with this batch's removals and surviving additions.
     pub(crate) fn update_correspondence(&self, correspondence: &mut MoleculeCorrespondence) {
+        if self.atoms.initial.is_none()
+            && self.atoms.created.is_empty()
+            && self.bonds.initial.is_none()
+            && self.bonds.created.is_empty()
+            && self.dative_bonds.initial.is_none()
+            && self.dative_bonds.created.is_empty()
+            && self.aromatic_systems.initial.is_none()
+            && self.aromatic_systems.created.is_empty()
+            && self.multicenter_bonds.initial.is_none()
+            && self.multicenter_bonds.created.is_empty()
+            && self.noncovalent_bonds.initial.is_none()
+            && self.noncovalent_bonds.created.is_empty()
+            && self.stereo_atoms.initial.is_none()
+            && self.stereo_atoms.created.is_empty()
+            && self.stereo_bonds.initial.is_none()
+            && self.stereo_bonds.created.is_empty()
+        {
+            return;
+        }
+        self.update_changed_correspondence(correspondence);
+    }
+
+    fn update_changed_correspondence(&self, correspondence: &mut MoleculeCorrespondence) {
         if self.atoms.initial.is_some()
             || self.bonds.initial.is_some()
             || self.dative_bonds.initial.is_some()

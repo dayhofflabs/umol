@@ -2,8 +2,8 @@ use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomHandle, AtomId, BondId, DativeBondId, Edits, EntityKind, Molecule,
-    MoleculeApplyError, MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
-    TrackedTransaction, Transaction, TransactionError,
+    MoleculeApplyError, MulticenterBondId, NoncovalentBondId, RollbackMethod, StereoAtomId,
+    StereoBondId, TrackedTransaction, Transaction, TransactionError,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -631,10 +631,12 @@ proptest! {
     #[test]
     fn test_transaction_rollback(
         (base, edits) in transaction_edits_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let mut molecule = base.clone();
         Transaction::run(
             &mut molecule,
+            rollback_method,
             |mut transaction| -> Result<(), MoleculeApplyError> {
                 transaction.apply(edits)?;
                 transaction.rollback();
@@ -679,6 +681,7 @@ proptest! {
     #[test]
     fn test_transaction_apply_constraint_compaction(
         case in constraint_compaction_case_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let base = case.base();
         let mut editor = base.clone().edit();
@@ -689,6 +692,7 @@ proptest! {
         let mut molecule = base.clone();
         Transaction::run(
             &mut molecule,
+            rollback_method,
             |mut transaction| -> Result<(), MoleculeApplyError> {
                 transaction.apply(case.edits())?;
                 transaction.rollback();
@@ -705,6 +709,7 @@ proptest! {
         bond_components in partial_unpaired_electrons_update_strategy(),
         aromatic_components in partial_unpaired_electrons_update_strategy(),
         multicenter_components in partial_unpaired_electrons_update_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let atom = AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8));
         let bond = BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8));
@@ -773,6 +778,7 @@ proptest! {
         let mut molecule = base.clone();
         let applied = Transaction::run(
             &mut molecule,
+            rollback_method,
             |mut transaction| -> Result<_, MoleculeApplyError> {
                 transaction.apply(edits)?;
                 let applied = transaction.probe()?.clone();
@@ -788,10 +794,12 @@ proptest! {
     #[test]
     fn test_transaction_rollback_batches(
         (base, first_edits, second_edits) in consecutive_transaction_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let mut molecule = base.clone();
         Transaction::run(
             &mut molecule,
+            rollback_method,
             |mut transaction| -> Result<(), MoleculeApplyError> {
                 transaction.apply(first_edits)?;
                 transaction.apply(second_edits)?;
@@ -897,6 +905,7 @@ proptest! {
     #[test]
     fn test_tracked_transaction_run_error(
         (base, prefix) in transaction_edits_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let atom_count = base.atoms().count();
         let edits: Edits = prefix
@@ -915,9 +924,12 @@ proptest! {
             count: atom_count,
         });
         let mut ordinary = base.clone();
-        let plain = ordinary.transact([edits.clone()]);
+        let plain = Transaction::run(&mut ordinary, rollback_method, |mut transaction| {
+            transaction.apply(edits.clone())?;
+            transaction.commit()
+        });
         let mut tracked = base.clone();
-        let result = TrackedTransaction::run(&mut tracked, |mut transaction| {
+        let result = TrackedTransaction::run(&mut tracked, rollback_method, |mut transaction| {
             transaction.apply(edits)?;
             transaction.commit()
         });
@@ -932,12 +944,16 @@ proptest! {
     #[test]
     fn test_tracked_transaction_commit(
         (base, edits) in transaction_edits_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let expected = base.clone().tracked_apply(edits.clone()).unwrap();
         let mut ordinary = base.clone();
-        ordinary.transact([edits.clone()]).unwrap();
+        Transaction::run(&mut ordinary, rollback_method, |mut transaction| {
+            transaction.apply(edits.clone())?;
+            transaction.commit()
+        }).unwrap();
         let mut tracked = base;
-        let correspondence = TrackedTransaction::run(&mut tracked, |mut transaction| {
+        let correspondence = TrackedTransaction::run(&mut tracked, rollback_method, |mut transaction| {
             transaction.apply(edits)?;
             transaction.commit()
         }).unwrap();
@@ -950,6 +966,7 @@ proptest! {
     #[test]
     fn test_tracked_transaction_commit_composition(
         (base, first_edits, second_edits) in consecutive_transaction_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let mut separate = base.clone();
         let first = separate.tracked_transact([first_edits.clone()]).unwrap();
@@ -965,7 +982,7 @@ proptest! {
         );
 
         let mut together = base.clone();
-        let composed = TrackedTransaction::run(&mut together, |mut transaction| {
+        let composed = TrackedTransaction::run(&mut together, rollback_method, |mut transaction| {
             transaction.apply(first_edits.clone())?;
             transaction.apply(second_edits.clone())?;
             transaction.commit()
@@ -981,6 +998,7 @@ proptest! {
         let mut restored = base.clone();
         TrackedTransaction::run(
             &mut restored,
+            rollback_method,
             |mut transaction| -> Result<(), MoleculeApplyError> {
                 transaction.apply(first_edits)?;
                 transaction.apply(second_edits)?;
@@ -999,6 +1017,7 @@ proptest! {
         (base, removed) in molecule_with_atom_subset_strategy(),
         added in prop::collection::vec(atom_form_strategy(), 0..=6),
         batch_size in 1usize..=4,
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let mut edits = Edits::new();
         for id in removed.into_iter().rev() {
@@ -1019,7 +1038,7 @@ proptest! {
             composed = composed.compose(&next).unwrap();
         }
         let mut partitioned = base;
-        let actual = TrackedTransaction::run(&mut partitioned, |mut transaction| {
+        let actual = TrackedTransaction::run(&mut partitioned, rollback_method, |mut transaction| {
             for chunk in raw.chunks(batch_size) {
                 transaction.apply(Edits::from_iter(chunk.iter().cloned()))?;
             }
@@ -1035,10 +1054,12 @@ proptest! {
     #[test]
     fn test_tracked_transaction_rollback(
         (base, edits) in transaction_edits_strategy(),
+        rollback_method in prop::sample::select(vec![RollbackMethod::Clone, RollbackMethod::Journal]),
     ) {
         let mut molecule = base.clone();
         TrackedTransaction::run(
             &mut molecule,
+            rollback_method,
             |mut transaction| -> Result<(), MoleculeApplyError> {
                 transaction.apply(edits)?;
                 transaction.rollback();

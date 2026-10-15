@@ -1742,28 +1742,35 @@ transformation is directly recoverable from an append layout. `tracked_` names r
 not an audit journal or a promise to preserve an internal action history. For categorical operations,
 the returned mappings retain their categorical direction; the prefix does not imply covariance.
 
-**Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
+**Not:** a transaction, which scopes edits and recovery; a result-delivery prefix; a general marker for
 any method returning more than one value.
 **In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
-`tracked_commit`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`.
+`tracked_transact`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`.
 
 ### Transaction
 
 A **transaction** scopes one or more edit batches against a mutably borrowed molecule, with
-journal-based rollback. Transaction::run lends a handle to its callback and owns the restoration
-guard. Each apply executes immediately in a separate handle namespace. Commit checks integrity and
-requests acceptance; the callback must also return Ok. Application or commit failure aborts the
-transaction and restores its entry state. Explicit rollback, cancellation, and callback unwinding
-between completed edits also restore that state.
+an explicit RollbackMethod. Clone edits one working copy; Journal edits the receiver and records
+undo. Transaction::run and TrackedTransaction::run lend their respective handles
+to callbacks and own restoration guards. Each apply executes immediately in a separate handle
+namespace. Commit checks integrity and requests acceptance; the callback must also return Ok.
+Application or commit failure aborts the transaction and restores its entry state. Explicit
+rollback, cancellation, and callback unwinding between completed edits also restore that state.
 
-Molecule::transact applies prepared batches and commits once. Its tracked counterpart returns the
-whole transaction's entity correspondence, accumulated after each successful batch independently
-of the journal. The journal is private; Undo remains a public data type.
+Tracking is selected at entry by the handle type. Transaction constructs no aggregate
+correspondence and its commit returns unit. TrackedTransaction initializes an identity mapping,
+updates it after each successful batch independently of recovery storage, and returns it from commit.
+Both run methods return the callback's value. The handles expose no conversion or mutable access
+to one another.
+
+Molecule::transact applies prepared batches and commits once through Transaction. Its tracked
+counterpart uses TrackedTransaction and returns the whole transaction's entity correspondence.
+Both conveniences use Journal recovery. Python exposes these prepared-batch operations; scoped
+callback handles are Rust-only. Recovery storage is private; Undo remains a public data type.
 
 **Not:** a detached journal container; *patch algebra*, which is the entity-level `apply`/`diff` pair.
-**In code:** `Transaction`, `TransactionError`; Transaction::run, Transaction::apply,
-Transaction::probe, Transaction::commit, Transaction::tracked_commit, Transaction::rollback;
-Molecule::transact, Molecule::tracked_transact.
+**In code:** `Transaction`, `TrackedTransaction`, `RollbackMethod`, `TransactionError`; both handles expose run,
+apply, probe, commit and rollback; Molecule::transact, Molecule::tracked_transact.
 
 ### Transformation
 

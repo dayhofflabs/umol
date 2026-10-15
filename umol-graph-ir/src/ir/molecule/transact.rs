@@ -1,6 +1,4 @@
-//! Scoped molecule transactions with private undo-based restoration.
-
-use std::mem;
+//! Scoped molecule transactions with selectable recovery.
 
 use thiserror::Error;
 use umol_graph_core::Correspondence;
@@ -44,12 +42,26 @@ pub enum TransactionError {
     Aborted,
 }
 
-/// Scoped access to a molecule and its private undo journal.
+/// Recovery method for a scoped molecule transaction.
+///
+/// Both methods restore transaction-entry state under Molecule::normalized_eq on failure or
+/// cancellation, preserving participant order. Selection changes recovery storage and execution
+/// cost, not the transaction's acceptance or correspondence contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RollbackMethod {
+    /// Edit one working copy and install it only after commit and callback success.
+    Clone,
+    /// Edit the receiver while recording undo entries for restoration.
+    Journal,
+}
+
+/// Scoped access to a molecule with selectable recovery.
 ///
 /// Transaction::run owns the restoration guard and lends this handle to its callback.
 /// Completed changes are accepted only when commit succeeds and the callback returns Ok.
 /// Otherwise the guard restores the molecule, including when the handle is forgotten or
-/// the callback unwinds between completed edits.
+/// the callback unwinds between completed edits. Ordinary transactions do not accumulate an
+/// entity correspondence; use TrackedTransaction when that mapping is required.
 ///
 /// # Semantic properties
 ///
@@ -58,13 +70,12 @@ pub enum TransactionError {
 /// panic during an Edit is outside this contract.
 pub struct Transaction<'scope> {
     molecule: &'scope mut Molecule,
-    journal: &'scope mut Vec<Undo>,
-    correspondence: &'scope mut MoleculeCorrespondence,
+    storage: &'scope mut TransactionStorage,
     status: &'scope mut TransactionStatus,
 }
 
 impl Transaction<'_> {
-    /// Run a callback with exclusive transaction access to the molecule.
+    /// Run a callback with exclusive transaction access and the selected recovery method.
     ///
     /// A successful commit requests acceptance. The callback must also return Ok for its
     /// changes to be retained. Returning without commit restores the molecule and returns
@@ -78,35 +89,35 @@ impl Transaction<'_> {
     /// and E.
     pub fn run<T, E>(
         molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
         f: impl for<'scope> FnOnce(Transaction<'scope>) -> Result<T, E>,
     ) -> Result<T, E>
     where
         E: From<MoleculeApplyError>,
     {
-        let correspondence = MoleculeCorrespondence::new(
-            Correspondence::identity(molecule.atoms().count()),
-            Correspondence::identity(molecule.bonds().count()),
-            Correspondence::identity(molecule.dative_bonds().count()),
-            Correspondence::identity(molecule.aromatic_systems().count()),
-            Correspondence::identity(molecule.multicenter_bonds().count()),
-            Correspondence::identity(molecule.noncovalent_bonds().count()),
-            Correspondence::identity(molecule.stereo_atoms().count()),
-            Correspondence::identity(molecule.stereo_bonds().count()),
-        );
+        let storage = match rollback_method {
+            RollbackMethod::Clone => TransactionStorage::Clone(Some(molecule.clone())),
+            RollbackMethod::Journal => TransactionStorage::Journal(Vec::new()),
+        };
         let mut guard = TransactionGuard {
             molecule,
-            correspondence,
-            journal: Vec::new(),
+            storage,
             status: TransactionStatus::Active,
         };
         let value = f(Transaction {
             molecule: guard.molecule,
-            journal: &mut guard.journal,
-            correspondence: &mut guard.correspondence,
+            storage: &mut guard.storage,
             status: &mut guard.status,
         })?;
         match guard.status {
-            TransactionStatus::CommitRequested => guard.status = TransactionStatus::Accepted,
+            TransactionStatus::CommitRequested => {
+                if let TransactionStorage::Clone(working) = &mut guard.storage {
+                    if let Some(working) = working.take() {
+                        *guard.molecule = working;
+                    }
+                }
+                guard.status = TransactionStatus::Accepted;
+            }
             TransactionStatus::Aborted => {
                 return Err(MoleculeApplyError::Transaction(TransactionError::Aborted).into());
             }
@@ -117,7 +128,10 @@ impl Transaction<'_> {
         Ok(value)
     }
 
-    /// Apply a batch immediately, recording undo entries for completed edits.
+    /// Apply a batch immediately using the selected recovery method.
+    ///
+    /// Journal records undo entries while editing the receiver. Clone edits the working copy
+    /// without recording undo.
     ///
     /// Each call starts a separate handle namespace. Id handles name entities at this
     /// batch's entry; New handles name entities created within this batch. Intermediate
@@ -128,24 +142,35 @@ impl Transaction<'_> {
     /// An invalid handle, old value, or edit shape restores the whole transaction and
     /// aborts it. Later apply or commit calls return TransactionError::Aborted.
     pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
+        let mut state = ApplicationState::new(self.molecule());
         if *self.status == TransactionStatus::Aborted {
             return Err(TransactionError::Aborted.into());
         }
-        let mut state = ApplicationState::new(self.molecule);
-        for edit in edits {
-            match self.molecule.apply_edit_with_undo(edit, &mut state) {
-                Ok(Some(undo)) => self.journal.push(undo),
-                Ok(None) => {}
-                Err(error) => {
-                    while let Some(undo) = self.journal.pop() {
-                        self.molecule.apply_undo(undo);
+        match self.storage {
+            TransactionStorage::Journal(journal) => {
+                for edit in edits {
+                    match self.molecule.apply_edit_with_undo(edit, &mut state) {
+                        Ok(Some(undo)) => journal.push(undo),
+                        Ok(None) => {}
+                        Err(error) => {
+                            self.storage.rollback(self.molecule);
+                            *self.status = TransactionStatus::Aborted;
+                            return Err(error.into());
+                        }
                     }
-                    *self.status = TransactionStatus::Aborted;
-                    return Err(error.into());
                 }
             }
+            TransactionStorage::Clone(Some(working)) => {
+                for edit in edits {
+                    if let Err(error) = working.apply_edit(edit, &mut state) {
+                        self.storage.rollback(self.molecule);
+                        *self.status = TransactionStatus::Aborted;
+                        return Err(error.into());
+                    }
+                }
+            }
+            TransactionStorage::Clone(None) => return Err(TransactionError::Aborted.into()),
         }
-        state.update_correspondence(self.correspondence);
         Ok(())
     }
 
@@ -158,8 +183,9 @@ impl Transaction<'_> {
     ///
     /// Returns the same integrity errors as molecule construction, without changing state.
     pub fn probe(&self) -> Result<&Molecule, MoleculeIntegrityError> {
-        self.molecule.check_integrity()?;
-        Ok(self.molecule)
+        let molecule = self.molecule();
+        molecule.check_integrity()?;
+        Ok(molecule)
     }
 
     /// Check integrity and request acceptance of the transaction's changes.
@@ -174,10 +200,8 @@ impl Transaction<'_> {
         if *self.status == TransactionStatus::Aborted {
             return Err(TransactionError::Aborted.into());
         }
-        if let Err(error) = self.molecule.check_integrity() {
-            while let Some(undo) = self.journal.pop() {
-                self.molecule.apply_undo(undo);
-            }
+        if let Err(error) = self.molecule().check_integrity() {
+            self.storage.rollback(self.molecule);
             *self.status = TransactionStatus::Aborted;
             return Err(error.into());
         }
@@ -185,49 +209,21 @@ impl Transaction<'_> {
         Ok(())
     }
 
-    /// Request acceptance and return the transaction-entry to result correspondence.
-    ///
-    /// Entity ids are paired across all batches. Added and removed entities remain
-    /// unmatched; attribute and participant changes preserve the entity's pairing.
-    /// The correspondence is accumulated after each successful batch, independently of rollback.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same errors and restores the same state as commit.
-    ///
-    /// # Semantic properties
-    ///
-    /// Discarding the correspondence gives commit's result and final molecule state.
-    /// Regrouping the same ordered edits into batches preserves the final molecule and
-    /// correspondence, provided handles name the same entities in each batch's namespace.
-    pub fn tracked_commit(self) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
-        if *self.status == TransactionStatus::Aborted {
-            return Err(TransactionError::Aborted.into());
-        }
-        if let Err(error) = self.molecule.check_integrity() {
-            while let Some(undo) = self.journal.pop() {
-                self.molecule.apply_undo(undo);
-            }
-            *self.status = TransactionStatus::Aborted;
-            return Err(error.into());
-        }
-        *self.status = TransactionStatus::CommitRequested;
-        Ok(mem::replace(
-            self.correspondence,
-            MoleculeCorrespondence::empty(),
-        ))
-    }
-
     /// Restore transaction-entry state and consume the handle.
     ///
     /// An earlier application failure remains latched as Aborted, so the enclosing
     /// run cannot accept a callback's Ok result after that failure.
     pub fn rollback(self) {
-        while let Some(undo) = self.journal.pop() {
-            self.molecule.apply_undo(undo);
-        }
+        self.storage.rollback(self.molecule);
         if *self.status != TransactionStatus::Aborted {
             *self.status = TransactionStatus::RolledBack;
+        }
+    }
+
+    fn molecule(&self) -> &Molecule {
+        match &*self.storage {
+            TransactionStorage::Clone(Some(working)) => working,
+            TransactionStorage::Clone(None) | TransactionStorage::Journal(_) => self.molecule,
         }
     }
 }
@@ -247,10 +243,11 @@ impl Transaction<'_> {
 /// failure or an internal panic during an Edit is outside this contract.
 pub struct TrackedTransaction<'scope> {
     transaction: Transaction<'scope>,
+    correspondence: &'scope mut Option<MoleculeCorrespondence>,
 }
 
 impl TrackedTransaction<'_> {
-    /// Run a callback with exclusive tracked transaction access to the molecule.
+    /// Run a callback with exclusive tracked transaction access and the selected recovery method.
     ///
     /// A successful commit requests acceptance and returns the correspondence to the callback.
     /// The callback must return Ok for its changes to be retained. Returning without commit,
@@ -263,13 +260,27 @@ impl TrackedTransaction<'_> {
     /// was aborted, returns TransactionError::Aborted through MoleculeApplyError and E.
     pub fn run<T, E>(
         molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
         f: impl for<'scope> FnOnce(TrackedTransaction<'scope>) -> Result<T, E>,
     ) -> Result<T, E>
     where
         E: From<MoleculeApplyError>,
     {
-        Transaction::run(molecule, |transaction| {
-            f(TrackedTransaction { transaction })
+        let mut correspondence = Some(MoleculeCorrespondence::new(
+            Correspondence::identity(molecule.atoms().count()),
+            Correspondence::identity(molecule.bonds().count()),
+            Correspondence::identity(molecule.dative_bonds().count()),
+            Correspondence::identity(molecule.aromatic_systems().count()),
+            Correspondence::identity(molecule.multicenter_bonds().count()),
+            Correspondence::identity(molecule.noncovalent_bonds().count()),
+            Correspondence::identity(molecule.stereo_atoms().count()),
+            Correspondence::identity(molecule.stereo_bonds().count()),
+        ));
+        Transaction::run(molecule, rollback_method, |transaction| {
+            f(TrackedTransaction {
+                transaction,
+                correspondence: &mut correspondence,
+            })
         })
     }
 
@@ -284,7 +295,38 @@ impl TrackedTransaction<'_> {
     /// An invalid handle, old value or edit shape restores the whole transaction and aborts it.
     /// Later apply or commit calls return TransactionError::Aborted.
     pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
-        self.transaction.apply(edits)
+        let transaction = &mut self.transaction;
+        let mut state = ApplicationState::new(transaction.molecule());
+        if *transaction.status == TransactionStatus::Aborted {
+            return Err(TransactionError::Aborted.into());
+        }
+        match transaction.storage {
+            TransactionStorage::Journal(journal) => {
+                for edit in edits {
+                    match transaction.molecule.apply_edit_with_undo(edit, &mut state) {
+                        Ok(Some(undo)) => journal.push(undo),
+                        Ok(None) => {}
+                        Err(error) => {
+                            transaction.storage.rollback(transaction.molecule);
+                            *transaction.status = TransactionStatus::Aborted;
+                            return Err(error.into());
+                        }
+                    }
+                }
+            }
+            TransactionStorage::Clone(Some(working)) => {
+                for edit in edits {
+                    if let Err(error) = working.apply_edit(edit, &mut state) {
+                        transaction.storage.rollback(transaction.molecule);
+                        *transaction.status = TransactionStatus::Aborted;
+                        return Err(error.into());
+                    }
+                }
+            }
+            TransactionStorage::Clone(None) => return Err(TransactionError::Aborted.into()),
+        }
+        state.update_correspondence(self.correspondence.as_mut().expect("active correspondence"));
+        Ok(())
     }
 
     /// Borrow the molecule after checking its representation integrity.
@@ -317,7 +359,8 @@ impl TrackedTransaction<'_> {
     /// Regrouping the same ordered edits into batches preserves the final molecule and
     /// correspondence, provided handles name the same entities in each batch's namespace.
     pub fn commit(self) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
-        self.transaction.tracked_commit()
+        self.transaction.commit()?;
+        Ok(self.correspondence.take().expect("active correspondence"))
     }
 
     /// Restore transaction-entry state and consume the handle.
@@ -343,7 +386,7 @@ impl Molecule {
         &mut self,
         batches: impl IntoIterator<Item = Edits>,
     ) -> Result<(), MoleculeApplyError> {
-        Transaction::run(self, |mut transaction| {
+        Transaction::run(self, RollbackMethod::Journal, |mut transaction| {
             for edits in batches {
                 transaction.apply(edits)?;
             }
@@ -364,19 +407,18 @@ impl Molecule {
         &mut self,
         batches: impl IntoIterator<Item = Edits>,
     ) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
-        Transaction::run(self, |mut transaction| {
+        TrackedTransaction::run(self, RollbackMethod::Journal, |mut transaction| {
             for edits in batches {
                 transaction.apply(edits)?;
             }
-            transaction.tracked_commit()
+            transaction.commit()
         })
     }
 }
 
 struct TransactionGuard<'a> {
     molecule: &'a mut Molecule,
-    journal: Vec<Undo>,
-    correspondence: MoleculeCorrespondence,
+    storage: TransactionStorage,
     status: TransactionStatus,
 }
 
@@ -386,8 +428,26 @@ impl Drop for TransactionGuard<'_> {
             self.status,
             TransactionStatus::Active | TransactionStatus::CommitRequested
         ) {
-            while let Some(undo) = self.journal.pop() {
-                self.molecule.apply_undo(undo);
+            self.storage.rollback(self.molecule);
+        }
+    }
+}
+
+enum TransactionStorage {
+    Journal(Vec<Undo>),
+    Clone(Option<Molecule>),
+}
+
+impl TransactionStorage {
+    fn rollback(&mut self, molecule: &mut Molecule) {
+        match self {
+            Self::Journal(journal) => {
+                while let Some(undo) = journal.pop() {
+                    molecule.apply_undo(undo);
+                }
+            }
+            Self::Clone(working) => {
+                *working = None;
             }
         }
     }
@@ -414,7 +474,7 @@ mod lifecycle_tests {
     use umol_chem::element::Element;
     use umol_graph_core::Correspondence;
 
-    use super::{TrackedTransaction, Transaction, TransactionError};
+    use super::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
@@ -492,9 +552,13 @@ mod lifecycle_tests {
     #[rstest]
     #[case::no_commit(false)]
     #[case::commit(true)]
-    fn test_transaction_run(mut molecule: Molecule, #[case] commit: bool) {
+    fn test_transaction_run(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = Transaction::run(&mut molecule, |mut transaction| {
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             for element in [Element::N, Element::O] {
                 let mut edits = Edits::new();
                 edits.add_atom(AtomForm::from_element(element));
@@ -523,9 +587,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_transaction_run_forgotten(mut molecule: Molecule) {
+    fn test_transaction_run_forgotten(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = Transaction::run(&mut molecule, |mut transaction| {
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             for element in [Element::N, Element::O] {
                 let mut edits = Edits::new();
                 edits.add_atom(AtomForm::from_element(element));
@@ -539,23 +606,22 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    #[case::active(None)]
-    #[case::commit_requested(Some(false))]
-    #[case::tracked_commit_requested(Some(true))]
-    fn test_transaction_run_error(mut molecule: Molecule, #[case] commit: Option<bool>) {
+    #[case::active(false)]
+    #[case::commit_requested(true)]
+    fn test_transaction_run_error(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = Transaction::run(&mut molecule, |mut transaction| {
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             for element in [Element::N, Element::O] {
                 let mut edits = Edits::new();
                 edits.add_atom(AtomForm::from_element(element));
                 transaction.apply(edits)?;
             }
-            match commit {
-                Some(false) => transaction.commit()?,
-                Some(true) => {
-                    transaction.tracked_commit()?;
-                }
-                None => {}
+            if commit {
+                transaction.commit()?;
             }
             Err::<(), _>(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch,
@@ -571,26 +637,26 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    #[case::active(None)]
-    #[case::commit_requested(Some(false))]
-    #[case::tracked_commit_requested(Some(true))]
-    fn test_transaction_run_unwind(mut molecule: Molecule, #[case] commit: Option<bool>) {
+    #[case::active(false)]
+    #[case::commit_requested(true)]
+    fn test_transaction_run_unwind(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
         let result = catch_unwind(AssertUnwindSafe(|| {
             Transaction::run(
                 &mut molecule,
+                rollback_method,
                 |mut transaction| -> Result<(), MoleculeApplyError> {
                     for element in [Element::N, Element::O] {
                         let mut edits = Edits::new();
                         edits.add_atom(AtomForm::from_element(element));
                         transaction.apply(edits)?;
                     }
-                    match commit {
-                        Some(false) => transaction.commit()?,
-                        Some(true) => {
-                            transaction.tracked_commit()?;
-                        }
-                        None => {}
+                    if commit {
+                        transaction.commit()?;
                     }
                     panic!("callback failure");
                 },
@@ -604,7 +670,10 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_transaction_apply(mut molecule: Molecule) {
+    fn test_transaction_apply(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut first = Edits::new();
         let nitrogen = first.add_atom(AtomForm::from_element(Element::N));
         assert_eq!(nitrogen, AtomHandle::New(0));
@@ -613,7 +682,7 @@ mod lifecycle_tests {
         let oxygen = second.add_atom(AtomForm::from_element(Element::O));
         assert_eq!(oxygen, AtomHandle::New(0));
         second.add_bond(AtomHandle::Id(AtomId(1)), oxygen, BondForm::from_order(2));
-        Transaction::run(&mut molecule, |mut transaction| {
+        Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             transaction.apply(first)?;
             transaction.apply(second)?;
             transaction.commit()
@@ -637,22 +706,30 @@ mod lifecycle_tests {
     #[rstest]
     #[case::drop(false)]
     #[case::rollback(true)]
-    fn test_transaction_apply_error(mut molecule: Molecule, #[case] rollback: bool) {
+    fn test_transaction_apply_error(
+        mut molecule: Molecule,
+        #[case] rollback: bool,
+        #[values(0, 1)] successful_batches: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = Transaction::run(&mut molecule, |mut transaction| {
-            let mut first = Edits::new();
-            first.add_atom(AtomForm::from_element(Element::N));
-            transaction.apply(first)?;
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for _ in 0..successful_batches {
+                let mut first = Edits::new();
+                first.add_atom(AtomForm::from_element(Element::N));
+                transaction.apply(first)?;
+            }
+            let count = 1 + successful_batches;
             let mut second = Edits::new();
             second.add_atom(AtomForm::from_element(Element::O));
-            second.remove_atom(AtomHandle::Id(AtomId(2)));
+            second.remove_atom(AtomHandle::Id(AtomId(count as u32)));
             assert_eq!(
                 transaction.apply(second),
                 Err(MoleculeApplyError::Transaction(
                     TransactionError::HandleOutOfRange {
                         kind: EntityKind::Atom,
-                        index: 2,
-                        count: 2
+                        index: count,
+                        count
                     }
                 ))
             );
@@ -671,9 +748,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_transaction_probe(mut molecule: Molecule) {
+    fn test_transaction_probe(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        Transaction::run(&mut molecule, |mut transaction| {
+        Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut first = Edits::new();
             first.add_bond(
                 AtomHandle::Id(AtomId(0)),
@@ -699,17 +779,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    #[case::commit(false)]
-    #[case::tracked_commit(true)]
-    fn test_transaction_commit_error(mut molecule: Molecule, #[case] tracked: bool) {
+    fn test_transaction_commit_error(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let constructor_error = Molecule::try_from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            bonds: vec![(AtomId(0), AtomId(0), BondForm::from_order(1))],
-            ..MoleculeEntries::default()
-        })
-        .unwrap_err();
-        let result = Transaction::run(&mut molecule, |mut transaction| {
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut edits = Edits::new();
             edits.add_bond(
                 AtomHandle::Id(AtomId(0)),
@@ -717,14 +792,15 @@ mod lifecycle_tests {
                 BondForm::from_order(1),
             );
             transaction.apply(edits)?;
-            let commit = if tracked {
-                transaction.tracked_commit().map(|_| ())
-            } else {
-                transaction.commit()
-            };
+            let commit = transaction.commit();
             assert_eq!(
                 commit,
-                Err(MoleculeApplyError::Integrity(constructor_error))
+                Err(MoleculeApplyError::Integrity(
+                    MoleculeIntegrityError::DuplicateAtom {
+                        entity: Entity::Bond(BondId(0)),
+                        atom: AtomId(0),
+                    }
+                ))
             );
             Ok::<_, MoleculeApplyError>(())
         });
@@ -733,11 +809,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    #[case::commit(false)]
-    #[case::tracked_commit(true)]
-    fn test_transaction_commit_aborted(mut molecule: Molecule, #[case] tracked: bool) {
+    fn test_transaction_commit_aborted(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = Transaction::run(&mut molecule, |mut transaction| {
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut edits = Edits::new();
             edits.remove_atom(AtomHandle::Id(AtomId(1)));
             assert_eq!(
@@ -750,20 +827,19 @@ mod lifecycle_tests {
                     }
                 ))
             );
-            if tracked {
-                transaction.tracked_commit().map(|_| ())
-            } else {
-                transaction.commit()
-            }
+            transaction.commit()
         });
         assert_eq!(result, Err(TransactionError::Aborted.into()));
         assert_eq!(molecule, original);
     }
 
     #[rstest]
-    fn test_transaction_rollback(mut all_entities: Molecule) {
+    fn test_transaction_rollback(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = all_entities.clone();
-        let result = Transaction::run(&mut all_entities, |mut transaction| {
+        let result = Transaction::run(&mut all_entities, rollback_method, |mut transaction| {
             let mut first = Edits::new();
             first.remove_atom(AtomHandle::Id(AtomId(0)));
             transaction.apply(first)?;
@@ -780,9 +856,13 @@ mod lifecycle_tests {
     #[rstest]
     #[case::no_commit(false)]
     #[case::commit(true)]
-    fn test_tracked_transaction_run(mut molecule: Molecule, #[case] commit: bool) {
+    fn test_tracked_transaction_run(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = TrackedTransaction::run(&mut molecule, |mut transaction| {
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             for element in [Element::N, Element::O] {
                 let mut edits = Edits::new();
                 edits.add_atom(AtomForm::from_element(element));
@@ -811,9 +891,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_run_forgotten(mut molecule: Molecule) {
+    fn test_tracked_transaction_run_forgotten(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = TrackedTransaction::run(&mut molecule, |mut transaction| {
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             for element in [Element::N, Element::O] {
                 let mut edits = Edits::new();
                 edits.add_atom(AtomForm::from_element(element));
@@ -829,9 +912,13 @@ mod lifecycle_tests {
     #[rstest]
     #[case::active(false)]
     #[case::commit_requested(true)]
-    fn test_tracked_transaction_run_error(mut molecule: Molecule, #[case] commit: bool) {
+    fn test_tracked_transaction_run_error(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = TrackedTransaction::run(&mut molecule, |mut transaction| {
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             for element in [Element::N, Element::O] {
                 let mut edits = Edits::new();
                 edits.add_atom(AtomForm::from_element(element));
@@ -856,11 +943,16 @@ mod lifecycle_tests {
     #[rstest]
     #[case::active(false)]
     #[case::commit_requested(true)]
-    fn test_tracked_transaction_run_unwind(mut molecule: Molecule, #[case] commit: bool) {
+    fn test_tracked_transaction_run_unwind(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
         let result = catch_unwind(AssertUnwindSafe(|| {
             TrackedTransaction::run(
                 &mut molecule,
+                rollback_method,
                 |mut transaction| -> Result<(), MoleculeApplyError> {
                     for element in [Element::N, Element::O] {
                         let mut edits = Edits::new();
@@ -882,7 +974,10 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_apply(mut molecule: Molecule) {
+    fn test_tracked_transaction_apply(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut first = Edits::new();
         let nitrogen = first.add_atom(AtomForm::from_element(Element::N));
         assert_eq!(nitrogen, AtomHandle::New(0));
@@ -891,7 +986,7 @@ mod lifecycle_tests {
         let oxygen = second.add_atom(AtomForm::from_element(Element::O));
         assert_eq!(oxygen, AtomHandle::New(0));
         second.add_bond(AtomHandle::Id(AtomId(1)), oxygen, BondForm::from_order(2));
-        TrackedTransaction::run(&mut molecule, |mut transaction| {
+        TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             transaction.apply(first)?;
             transaction.apply(second)?;
             transaction.commit()
@@ -919,9 +1014,10 @@ mod lifecycle_tests {
         mut molecule: Molecule,
         #[case] rollback: bool,
         #[values(0, 1)] successful_batches: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let original = molecule.clone();
-        let result = TrackedTransaction::run(&mut molecule, |mut transaction| {
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             for _ in 0..successful_batches {
                 let mut first = Edits::new();
                 first.add_atom(AtomForm::from_element(Element::N));
@@ -956,9 +1052,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_probe(mut molecule: Molecule) {
+    fn test_tracked_transaction_probe(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        TrackedTransaction::run(&mut molecule, |mut transaction| {
+        TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut first = Edits::new();
             first.add_bond(
                 AtomHandle::Id(AtomId(0)),
@@ -984,7 +1083,9 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_commit() {
+    fn test_tracked_transaction_commit(
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut molecule = Molecule::from_entries(MoleculeEntries {
             atoms: [Element::C, Element::N, Element::O, Element::F, Element::S]
                 .into_iter()
@@ -1006,12 +1107,13 @@ mod lifecycle_tests {
         second.remove_atom(AtomHandle::Id(AtomId(4)));
         let mut ordinary = molecule.clone();
         ordinary.transact([first.clone(), second.clone()]).unwrap();
-        let correspondence = TrackedTransaction::run(&mut molecule, |mut transaction| {
-            transaction.apply(first)?;
-            transaction.apply(second)?;
-            transaction.commit()
-        })
-        .unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+                transaction.apply(first)?;
+                transaction.apply(second)?;
+                transaction.commit()
+            })
+            .unwrap();
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms: [Element::N, Element::F, Element::S, Element::Cl]
                 .into_iter()
@@ -1050,7 +1152,10 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_commit_additions(mut molecule: Molecule) {
+    fn test_tracked_transaction_commit_additions(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut edits = Edits::new();
         let nitrogen = edits.add_atom(AtomForm::from_element(Element::N));
         let oxygen = edits.add_atom(AtomForm::from_element(Element::O));
@@ -1063,11 +1168,12 @@ mod lifecycle_tests {
         edits.remove_atom(nitrogen);
         let fluorine = edits.add_atom(AtomForm::from_element(Element::F));
         edits.add_bond(oxygen, fluorine, BondForm::from_order(1));
-        let correspondence = TrackedTransaction::run(&mut molecule, |mut transaction| {
-            transaction.apply(edits)?;
-            transaction.commit()
-        })
-        .unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
         assert_eq!(
             molecule,
             Molecule::from_entries(MoleculeEntries {
@@ -1104,6 +1210,7 @@ mod lifecycle_tests {
     fn test_tracked_transaction_commit_overlays(
         mut all_entities: Molecule,
         #[case] kind: EntityKind,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let original = all_entities.clone();
         let mut edits = Edits::new();
@@ -1194,11 +1301,12 @@ mod lifecycle_tests {
             }
             EntityKind::Atom | EntityKind::Bond => unreachable!(),
         }
-        let correspondence = TrackedTransaction::run(&mut all_entities, |mut transaction| {
-            transaction.apply(edits)?;
-            transaction.commit()
-        })
-        .unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
         assert_eq!(all_entities, original);
         assert_eq!(
             correspondence,
@@ -1240,7 +1348,10 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_commit_modification(mut all_entities: Molecule) {
+    fn test_tracked_transaction_commit_modification(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let edits = Edits::from_iter([
             Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
@@ -1256,11 +1367,12 @@ mod lifecycle_tests {
             },
         ]);
         let expected = all_entities.clone().apply(edits.clone()).unwrap();
-        let correspondence = TrackedTransaction::run(&mut all_entities, |mut transaction| {
-            transaction.apply(edits)?;
-            transaction.commit()
-        })
-        .unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
         assert_eq!(all_entities, expected);
         assert_eq!(
             correspondence,
@@ -1278,14 +1390,18 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_commit_cascade(mut all_entities: Molecule) {
+    fn test_tracked_transaction_commit_cascade(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut edits = Edits::new();
         edits.remove_atom(AtomHandle::Id(AtomId(0)));
-        let correspondence = TrackedTransaction::run(&mut all_entities, |mut transaction| {
-            transaction.apply(edits)?;
-            transaction.commit()
-        })
-        .unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
         assert_eq!(
             all_entities,
             Molecule::from_entries(MoleculeEntries {
@@ -1324,15 +1440,17 @@ mod lifecycle_tests {
     fn test_tracked_transaction_commit_identity(
         mut all_entities: Molecule,
         #[case] batches: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let original = all_entities.clone();
-        let correspondence = TrackedTransaction::run(&mut all_entities, |mut transaction| {
-            for _ in 0..batches {
-                transaction.apply(Edits::new())?;
-            }
-            transaction.commit()
-        })
-        .unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                for _ in 0..batches {
+                    transaction.apply(Edits::new())?;
+                }
+                transaction.commit()
+            })
+            .unwrap();
         assert_eq!(all_entities, original);
         assert_eq!(
             correspondence,
@@ -1350,9 +1468,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_commit_error(mut molecule: Molecule) {
+    fn test_tracked_transaction_commit_error(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = TrackedTransaction::run(&mut molecule, |mut transaction| {
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut edits = Edits::new();
             edits.add_bond(
                 AtomHandle::Id(AtomId(0)),
@@ -1376,9 +1497,12 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_commit_aborted(mut molecule: Molecule) {
+    fn test_tracked_transaction_commit_aborted(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
-        let result = TrackedTransaction::run(&mut molecule, |mut transaction| {
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut edits = Edits::new();
             edits.remove_atom(AtomHandle::Id(AtomId(1)));
             assert_eq!(
@@ -1398,18 +1522,22 @@ mod lifecycle_tests {
     }
 
     #[rstest]
-    fn test_tracked_transaction_rollback(mut all_entities: Molecule) {
+    fn test_tracked_transaction_rollback(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = all_entities.clone();
-        let result = TrackedTransaction::run(&mut all_entities, |mut transaction| {
-            let mut first = Edits::new();
-            first.remove_atom(AtomHandle::Id(AtomId(0)));
-            transaction.apply(first)?;
-            let mut second = Edits::new();
-            second.add_atom(AtomForm::from_element(Element::N));
-            transaction.apply(second)?;
-            transaction.rollback();
-            Ok::<_, MoleculeApplyError>(())
-        });
+        let result =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                let mut first = Edits::new();
+                first.remove_atom(AtomHandle::Id(AtomId(0)));
+                transaction.apply(first)?;
+                let mut second = Edits::new();
+                second.add_atom(AtomForm::from_element(Element::N));
+                transaction.apply(second)?;
+                transaction.rollback();
+                Ok::<_, MoleculeApplyError>(())
+            });
         assert_eq!(result, Ok(()));
         assert_eq!(all_entities, original);
     }
