@@ -365,11 +365,9 @@ impl EntityForm for NoncovalentBondForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     NoncovalentBondForm,
     GraphIrNoncovalentBondForm,
-    |value: &NoncovalentBondForm, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrNoncovalentBondForm| -> PyResult<NoncovalentBondForm> {
         Ok(NoncovalentBondForm::from_rust(value))
     }

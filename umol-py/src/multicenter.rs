@@ -302,11 +302,9 @@ impl EntityForm for MulticenterBondForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     MulticenterBondForm,
     GraphIrMulticenterBondForm,
-    |value: &MulticenterBondForm, _py: Python<'_>| -> PyResult<GraphIrMulticenterBondForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrMulticenterBondForm| -> PyResult<MulticenterBondForm> {
         Ok(MulticenterBondForm::from_rust(value))
     }

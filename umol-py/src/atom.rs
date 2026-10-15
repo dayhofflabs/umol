@@ -545,11 +545,9 @@ impl AtomForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     AtomForm,
     GraphIrAtomForm,
-    |value: &AtomForm, _py: Python<'_>| -> PyResult<GraphIrAtomForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrAtomForm| -> PyResult<AtomForm> {
         Ok(AtomForm::from_rust(value))
     }

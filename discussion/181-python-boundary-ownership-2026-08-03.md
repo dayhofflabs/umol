@@ -5267,7 +5267,7 @@ and validation logs are retained in scratch/181-s6c.
 
 ### S7 — Borrow stored form operands in Python operations
 
-#### S7a — Shared method generation and the eight entity forms
+#### S7a — Shared method generation and the eight entity forms (done)
 
 **Modules:** umol-py lattice, atom, bond, dative, aromatic, multicenter,
 noncovalent, stereo, and their tests. **Internal additive macro support and caller
@@ -5313,6 +5313,22 @@ complete Rust result values where Python value equality is absent. Check that
 returned forms are independent and that the owned-conversion macro arm retains
 existing leaf-form behavior. Follow the test-writing and Python-build skills;
 run focused Rust tests and rebuilt Python integration tests.
+
+**Implemented (2026-10-15):** both shared macros have an explicit borrowed arm,
+used by all eight entity forms. The seven borrowed operations receive references
+to the retained Rust forms directly. normalize keeps its required source clone;
+meet, join, and normalize return independent writable forms. The owned-conversion
+arm and its leaf-form callers are unchanged. No public symbols, signatures,
+storage, mutation rules, or Rust lattice algorithms changed.
+
+All 1,711 Rust binding tests passed (two existing ignored tests), including
+complete stereo results compared with the Rust operations. After rebuilding
+under Python 3.13, the 30 lattice cases and 802 existing entity/edit/delta cases
+passed. These cover all eight forms, source preservation, independent results,
+read-only inputs, normalization errors, and existing leaf-form absence/errors.
+Strict Clippy passed for all umol-py targets. Changed Rust files were formatted
+with nightly rustfmt; git diff --check passed. S7c checks allocations after S7b;
+the combined workspace/MSRV gate remains at S12b.
 
 #### S7b — Entity constraint containers and molecule Constraints
 

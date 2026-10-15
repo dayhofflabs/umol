@@ -329,11 +329,9 @@ impl EntityForm for BondForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     BondForm,
     GraphIrBondForm,
-    |value: &BondForm, _py: Python<'_>| -> PyResult<GraphIrBondForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrBondForm| -> PyResult<BondForm> {
         Ok(BondForm::from_rust(value))
     }

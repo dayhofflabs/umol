@@ -1334,11 +1334,9 @@ macro_rules! stereo_value {
         }
 
         impl_py_lattice!(
+            borrowed,
             $value,
             $rust_form,
-            |value: &$value, _py: Python<'_>| -> PyResult<$rust_form> {
-                Ok(value.to_rust().clone())
-            },
             |_py: Python<'_>, value: $rust_form| -> PyResult<$value> {
                 Ok($value::from_rust(value))
             }
@@ -1722,8 +1720,8 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
         AtomForm as GraphIrAtomForm, BondForm as GraphIrBondForm,
-        FluxionalityForm as GraphIrFluxionalityForm,
-        LigandSymmetryForm as GraphIrLigandSymmetryForm, MoleculeEntries,
+        FluxionalityForm as GraphIrFluxionalityForm, Lattice,
+        LigandSymmetryForm as GraphIrLigandSymmetryForm, MoleculeEntries, Normalize,
         StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
         StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
         StereoAtomConstraintsForm as GraphIrStereoAtomConstraintsForm,
@@ -1737,6 +1735,7 @@ mod tests {
 
     use super::*;
     use crate::boolean::{BooleanForm, BooleanLike};
+    use crate::error::ContradictionError;
 
     #[rstest]
     #[case(vec![0, 1, 2, 3])]
@@ -3277,6 +3276,76 @@ mod tests {
     }
 
     #[rstest]
+    #[case::kindless(GraphIrStereoConfigurationForm::Undetermined)]
+    #[case::equal(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::Tetrahedral,
+        GraphIrStereoCoset::Lit(0)
+    ))]
+    #[case::incompatible(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::Tetrahedral,
+        GraphIrStereoCoset::Lit(1)
+    ))]
+    #[case::singleton(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::LitSet(BTreeSet::from([1]))
+    ))]
+    #[case::set(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::Tetrahedral, GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))
+    ))]
+    #[case::bottom(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::Tetrahedral,
+        GraphIrStereoCoset::LitSet(BTreeSet::new())
+    ))]
+    fn test_stereo_atom_form_lattice(#[case] configuration: GraphIrStereoConfigurationForm) {
+        Python::attach(|py| {
+            let source = GraphIrStereoAtomForm {
+                configuration,
+                constraints: GraphIrStereoAtomConstraintForm::Stereogenicity(
+                    GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
+                )
+                .into(),
+            };
+            let target = GraphIrStereoAtomForm {
+                configuration: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                constraints: source.constraints.clone(),
+            };
+            let value = StereoAtomForm::from_rust(source.clone());
+            let other = StereoAtomForm::from_rust(target.clone());
+            assert_eq!(
+                value
+                    .meet(py, &other)
+                    .unwrap()
+                    .map(|result| result.to_rust().clone()),
+                source.meet(&target),
+            );
+            assert_eq!(
+                value.join(py, &other).unwrap().to_rust(),
+                &source.join(&target).unwrap()
+            );
+            assert_eq!(
+                value.normalized_eq(py, &other).unwrap(),
+                source.normalized_eq(&target)
+            );
+            let normalized = value.normalize(py).map(|result| result.to_rust().clone());
+            match source.clone().normalize() {
+                Ok(expected) => assert_eq!(normalized.unwrap(), expected),
+                Err(expected) => {
+                    let error = normalized.unwrap_err();
+                    assert!(error.is_instance_of::<ContradictionError>(py));
+                    assert_eq!(
+                        error.value(py).str().unwrap().extract::<String>().unwrap(),
+                        expected.to_string(),
+                    );
+                }
+            }
+            assert_eq!(value.to_rust(), &source);
+            assert_eq!(other.to_rust(), &target);
+        });
+    }
+
+    #[rstest]
     fn test_stereo_bond_form_new() {
         Python::attach(|py| {
             let value = StereoBondForm::new(
@@ -3313,6 +3382,76 @@ mod tests {
             GraphIrStereoCoset::Lit(1),
         ));
         assert_eq!(value.__str__(), "Ct1");
+    }
+
+    #[rstest]
+    #[case::kindless(GraphIrStereoConfigurationForm::Undetermined)]
+    #[case::equal(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::CisTrans,
+        GraphIrStereoCoset::Lit(0)
+    ))]
+    #[case::incompatible(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::CisTrans,
+        GraphIrStereoCoset::Lit(1)
+    ))]
+    #[case::singleton(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::CisTrans, GraphIrStereoCoset::LitSet(BTreeSet::from([1]))
+    ))]
+    #[case::set(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::CisTrans, GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))
+    ))]
+    #[case::bottom(GraphIrStereoConfigurationForm::Kinded(
+        GraphIrStereoKind::CisTrans,
+        GraphIrStereoCoset::LitSet(BTreeSet::new())
+    ))]
+    fn test_stereo_bond_form_lattice(#[case] configuration: GraphIrStereoConfigurationForm) {
+        Python::attach(|py| {
+            let source = GraphIrStereoBondForm {
+                configuration,
+                constraints: GraphIrStereoBondConstraintForm::Stereogenicity(
+                    GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
+                )
+                .into(),
+            };
+            let target = GraphIrStereoBondForm {
+                configuration: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                constraints: source.constraints.clone(),
+            };
+            let value = StereoBondForm::from_rust(source.clone());
+            let other = StereoBondForm::from_rust(target.clone());
+            assert_eq!(
+                value
+                    .meet(py, &other)
+                    .unwrap()
+                    .map(|result| result.to_rust().clone()),
+                source.meet(&target),
+            );
+            assert_eq!(
+                value.join(py, &other).unwrap().to_rust(),
+                &source.join(&target).unwrap()
+            );
+            assert_eq!(
+                value.normalized_eq(py, &other).unwrap(),
+                source.normalized_eq(&target)
+            );
+            let normalized = value.normalize(py).map(|result| result.to_rust().clone());
+            match source.clone().normalize() {
+                Ok(expected) => assert_eq!(normalized.unwrap(), expected),
+                Err(expected) => {
+                    let error = normalized.unwrap_err();
+                    assert!(error.is_instance_of::<ContradictionError>(py));
+                    assert_eq!(
+                        error.value(py).str().unwrap().extract::<String>().unwrap(),
+                        expected.to_string(),
+                    );
+                }
+            }
+            assert_eq!(value.to_rust(), &source);
+            assert_eq!(other.to_rust(), &target);
+        });
     }
 
     fn stereo_atom_molecule(py: Python<'_>) -> Py<Molecule> {

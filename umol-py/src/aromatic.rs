@@ -292,11 +292,9 @@ impl EntityForm for AromaticSystemForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     AromaticSystemForm,
     GraphIrAromaticSystemForm,
-    |value: &AromaticSystemForm, _py: Python<'_>| -> PyResult<GraphIrAromaticSystemForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrAromaticSystemForm| -> PyResult<AromaticSystemForm> {
         Ok(AromaticSystemForm::from_rust(value))
     }
