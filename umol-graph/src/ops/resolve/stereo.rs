@@ -8,7 +8,7 @@ use std::mem;
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate, BondConstraintForm,
-    BondConstraintKey, BondHandle, BondId, BondUpdate, CisTransStereoForm, Edit, Edits, Lattice,
+    BondConstraintKey, BondHandle, BondId, BondUpdate, CisTransStereoForm, Edits, Lattice,
     Molecule, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset,
     StereoKind, TetrahedralStereoForm,
 };
@@ -279,6 +279,7 @@ impl StereoResolver {
             remove_bond_constraints.insert(id);
         }
 
+        let mut atom_constraints = Vec::new();
         for atom in remove_atom_constraints {
             if let Some(asserted) = molecule
                 .atom(atom)
@@ -286,13 +287,13 @@ impl StereoResolver {
                 .constraints
                 .get(AtomConstraintKey::TetrahedralStereo)
             {
-                edits.push(Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(atom),
-                    old: Some(asserted.clone()),
-                    new: None,
-                });
+                atom_constraints.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
             }
         }
+        if !atom_constraints.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::TetrahedralStereo, atom_constraints);
+        }
+        let mut bond_constraints = Vec::new();
         for bond in remove_bond_constraints {
             if let Some(asserted) = molecule
                 .bond(bond)
@@ -300,12 +301,11 @@ impl StereoResolver {
                 .constraints
                 .get(BondConstraintKey::CisTransStereo)
             {
-                edits.push(Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(bond),
-                    old: Some(asserted.clone()),
-                    new: None,
-                });
+                bond_constraints.push((BondHandle::Id(bond), Some(asserted.clone()), None));
             }
+        }
+        if !bond_constraints.is_empty() {
+            edits.modify_bond_constraints(BondConstraintKey::CisTransStereo, bond_constraints);
         }
         Ok(Solution::Determined(edits))
     }
@@ -533,7 +533,7 @@ impl StereoResolver {
 mod tests {
     use rstest::{fixture, rstest};
     use umol_graph_ir::ir::{
-        AddStereoAtom, AddStereoBond, AtomId, BondId, Edits, StereoAtomForm, StereoAtomId,
+        AddStereoAtom, AddStereoBond, AtomId, BondId, Edit, Edits, StereoAtomForm, StereoAtomId,
         StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigandKind,
     };
     use umol_graph_ir::mol_dsl_concrete;
@@ -608,86 +608,135 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral(
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
-                             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoAtom(Box::new(AddStereoAtom {
-            site: AtomHandle::Id(AtomId(1)),
-            ligands: vec![
-                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
-            ],
-            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        })), Edit::ModifyAtomConstraint {
-            id: AtomHandle::Id(AtomId(1)),
-            old: Some(AtomConstraintForm::TetrahedralStereo(
-                TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+                             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+        ),
+        Edits::from_iter([
+            Edit::AddStereoAtom(Box::new(AddStereoAtom {
+                site: AtomHandle::Id(AtomId(1)),
+                ligands: vec![
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                ],
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            })),
+            Edit::ModifyAtomConstraints {
+                key: AtomConstraintKey::TetrahedralStereo,
+                changes: vec![(
+                    AtomHandle::Id(AtomId(1)),
+                    Some(AtomConstraintForm::TetrahedralStereo(
+                        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+                    )),
+                    None,
+                )],
+            },
+        ]),
     )]
     #[case::cis_trans(
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
-                             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoBond(Box::new(AddStereoBond {
-            site: BondHandle::Id(BondId(1)),
-            ligands: vec![
-                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
-                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
-            ],
-            attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        })), Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(1)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+                             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#
+        ),
+        Edits::from_iter([
+            Edit::AddStereoBond(Box::new(AddStereoBond {
+                site: BondHandle::Id(BondId(1)),
+                ligands: vec![
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(2)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                ],
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            })),
+            Edit::ModifyBondConstraints {
+                key: BondConstraintKey::CisTransStereo,
+                changes: vec![(
+                    BondHandle::Id(BondId(1)),
+                    Some(BondConstraintForm::CisTransStereo(
+                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                    )),
+                    None,
+                )],
+            },
+        ]),
     )]
     #[case::cyclooctene_asserted(
-        mol_dsl_concrete!(r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoBond(Box::new(AddStereoBond {
-            site: BondHandle::Id(BondId(2)),
-            ligands: vec![
-                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
-                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
-            ],
-            attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        })), Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(2)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
+        ),
+        Edits::from_iter([
+            Edit::AddStereoBond(Box::new(AddStereoBond {
+                site: BondHandle::Id(BondId(2)),
+                ligands: vec![
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(2)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                ],
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            })),
+            Edit::ModifyBondConstraints {
+                key: BondConstraintKey::CisTransStereo,
+                changes: vec![(
+                    BondHandle::Id(BondId(2)),
+                    Some(BondConstraintForm::CisTransStereo(
+                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                    )),
+                    None,
+                )],
+            },
+        ]),
     )]
     #[case::cyclohexene_asserted(
-        mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
-        Edits::from_iter([Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(1)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
+        ),
+        Edits::from_iter([Edit::ModifyBondConstraints {
+            key: BondConstraintKey::CisTransStereo,
+            changes: vec![(
+                BondHandle::Id(BondId(1)),
+                Some(BondConstraintForm::CisTransStereo(
+                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                )),
+                None,
+            )],
+        }]),
     )]
     #[case::cyclohexene_asserted_undetermined(
-        mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
-        Edits::from_iter([Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(1)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Undetermined),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
+        ),
+        Edits::from_iter([Edit::ModifyBondConstraints {
+            key: BondConstraintKey::CisTransStereo,
+            changes: vec![(
+                BondHandle::Id(BondId(1)),
+                Some(BondConstraintForm::CisTransStereo(
+                    CisTransStereoForm::Stereo(StereoCoset::Undetermined),
+                )),
+                None,
+            )],
+        }]),
     )]
     fn test_stereo_resolver_plan_resolve(
         stereo_model: StereoModel,
@@ -703,36 +752,55 @@ mod tests {
     #[rstest]
     #[case::cyclohexene_realized_at_zero(
         0,
-        mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
-        Edits::from_iter([Edit::AddStereoBond(Box::new(AddStereoBond {
-            site: BondHandle::Id(BondId(1)),
-            ligands: vec![
-                (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
-                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
-                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
-            ],
-            attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        })), Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(1)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
+        ),
+        Edits::from_iter([
+            Edit::AddStereoBond(Box::new(AddStereoBond {
+                site: BondHandle::Id(BondId(1)),
+                ligands: vec![
+                    (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(0)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                ],
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            })),
+            Edit::ModifyBondConstraints {
+                key: BondConstraintKey::CisTransStereo,
+                changes: vec![(
+                    BondHandle::Id(BondId(1)),
+                    Some(BondConstraintForm::CisTransStereo(
+                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                    )),
+                    None,
+                )],
+            },
+        ]),
     )]
     #[case::cyclooctene_skipped_at_nine(
         9,
-        mol_dsl_concrete!(r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#),
-        Edits::from_iter([Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(2)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }])
+        mol_dsl_concrete!(
+            r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
+        ),
+        Edits::from_iter([Edit::ModifyBondConstraints {
+            key: BondConstraintKey::CisTransStereo,
+            changes: vec![(
+                BondHandle::Id(BondId(2)),
+                Some(BondConstraintForm::CisTransStereo(
+                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                )),
+                None,
+            )],
+        }]),
     )]
     fn test_stereo_resolver_plan_resolve_stereo_bond_minimum_ring_size(
         #[case] stereo_bond_minimum_ring_size: u32,
@@ -811,16 +879,17 @@ mod tests {
     )]
     #[case::tetrahedral_remove(
         StereoFailurePolicy::Remove,
-        mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
-        ),
-        Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraint {
-            id: AtomHandle::Id(AtomId(1)),
-            old: Some(AtomConstraintForm::TetrahedralStereo(
-                TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }]))
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraints {
+            key: AtomConstraintKey::TetrahedralStereo,
+            changes: vec![(
+                AtomHandle::Id(AtomId(1)),
+                Some(AtomConstraintForm::TetrahedralStereo(
+                    TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+                )),
+                None,
+            )],
+        }])),
     )]
     #[case::tetrahedral_error(
         StereoFailurePolicy::Error,
@@ -840,16 +909,17 @@ mod tests {
     )]
     #[case::cis_trans_remove(
         StereoFailurePolicy::Remove,
-        mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
-        ),
-        Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(1)),
-            old: Some(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-            )),
-            new: None,
-        }]))
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
+        Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraints {
+            key: BondConstraintKey::CisTransStereo,
+            changes: vec![(
+                BondHandle::Id(BondId(1)),
+                Some(BondConstraintForm::CisTransStereo(
+                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                )),
+                None,
+            )],
+        }])),
     )]
     #[case::cis_trans_error(
         StereoFailurePolicy::Error,

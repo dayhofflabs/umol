@@ -69,23 +69,24 @@ impl IsotopeResolver {
     /// Remaining non-ground isotopes yield Underdetermined with any proposed
     /// default edits retained in the plan.
     pub fn plan_resolve(&self, molecule: &Molecule) -> Solution<Edits, IsotopeContradiction> {
-        let mut edits = Edits::new();
+        let mut isotope_masses = Vec::new();
         let mut determined = true;
         for atom in molecule.atoms().iter() {
             if self.policy == IsotopePolicy::Natural
                 && atom.attributes().isotope_mass.is_undetermined()
             {
-                edits.update_atom(
+                isotope_masses.push((
                     AtomHandle::Id(atom.id()),
-                    atom.attributes(),
-                    &AtomUpdate {
-                        isotope_mass: Some(IsotopeMassForm::Natural),
-                        ..Default::default()
-                    },
-                );
+                    IsotopeMassForm::Undetermined,
+                    IsotopeMassForm::Natural,
+                ));
             } else if !atom.attributes().isotope_mass.is_ground() {
                 determined = false;
             }
+        }
+        let mut edits = Edits::new();
+        if !isotope_masses.is_empty() {
+            edits.modify_atom_isotope_masses(isotope_masses);
         }
         if determined {
             Solution::Determined(edits)
@@ -230,12 +231,12 @@ mod tests {
     #[case::natural(
         IsotopePolicy::Natural,
         mol_dsl!(r#"{:atoms ["C#h4" "C#i13" "N#i="]}"#),
-        Solution::Determined(Edits::from_iter([Edit::ModifyAtomField {
-            id: AtomHandle::Id(AtomId(0)),
-            change: AtomFieldChange::IsotopeMass {
-                old: IsotopeMassForm::Undetermined,
-                new: IsotopeMassForm::Natural,
-            },
+        Solution::Determined(Edits::from_iter([Edit::ModifyAtomIsotopeMasses {
+            changes: vec![(
+                AtomHandle::Id(AtomId(0)),
+                IsotopeMassForm::Undetermined,
+                IsotopeMassForm::Natural,
+            )],
         }])),
     )]
     #[case::strict(
@@ -246,22 +247,12 @@ mod tests {
     #[case::partial(
         IsotopePolicy::Natural,
         mol_dsl!(r#"{:atoms ["C" "C#i?mass" "O"]}"#),
-        Solution::Underdetermined(Edits::from_iter([
-            Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::IsotopeMass {
-                    old: IsotopeMassForm::Undetermined,
-                    new: IsotopeMassForm::Natural,
-                },
-            },
-            Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(2)),
-                change: AtomFieldChange::IsotopeMass {
-                    old: IsotopeMassForm::Undetermined,
-                    new: IsotopeMassForm::Natural,
-                },
-            },
-        ])),
+        Solution::Underdetermined(Edits::from_iter([Edit::ModifyAtomIsotopeMasses {
+            changes: vec![
+                (AtomHandle::Id(AtomId(0)), IsotopeMassForm::Undetermined, IsotopeMassForm::Natural),
+                (AtomHandle::Id(AtomId(2)), IsotopeMassForm::Undetermined, IsotopeMassForm::Natural),
+            ],
+        }])),
     )]
     fn test_isotope_resolver_plan_resolve(
         #[case] policy: IsotopePolicy,

@@ -4444,7 +4444,7 @@ and seed changes. Evidence is in scratch/181-s2ij/.
 
 ### S3 — Resolver and projector emission
 
-#### S3a — Resolution plans
+#### S3a — Resolution plans (done)
 
 **Modules:** graph resolver and its phase planners; settled Edits emission methods.
 **Implementation change, green.** [dep: S2a–S2h]
@@ -4460,6 +4460,45 @@ execution. Do not force batching into consumers with isolated modifications.
 source recovery, phase-plan contents, both ownership conditions, and tracked
 results where used. The ordinary raised fixtures have determined isotopes; retain
 an explicitly undetermined isotope fixture when measuring isotope edit emission.
+
+**Implemented — 2026-10-15.** Isotope defaults, localized- and multicenter-bond
+defaults, selected atom fields, and phase-owned constraint removals now emit typed
+field/key batches directly. Constitution planning borrows the selected atom forms
+and emits only changed fields, retaining unchanged raw components of
+unpaired-electron forms. Aromatic-system additions retain their following
+aromatic-valence removal batches; stereo additions/removals retain their position
+before assertion discharge. Chemistry selection, reports, molecule-level
+constraints, public signatures, and recovery selection are unchanged.
+
+**Verification — 2026-10-15.** Passed 840 focused unit cases, 179 property-suite
+cases, 683 resolution conformance cases, and 98 transformer integration cases.
+Coverage includes exact multi-entry plans, empty plans, partial isotope completion,
+raw singleton-count preservation, consuming/mutating resolution with unique/shared
+storage, tracked application, and stale-plan restoration with Clone and Journal.
+Conformance snapshots and property laws are unchanged. Strict graph all-target
+Clippy with proptest/conformance enabled, changed-file nightly formatting, and
+git diff --check passed. The workspace/Python gate remains at the planned combined
+boundary.
+
+**Bounded timing comparison — 2026-10-15.** Compared the saved pre-S3a executable
+at f6933a09d with the candidate using the existing resolve_project_ownership
+resolve_into cases on aarch64-apple-darwin, Rust 1.96.0. Three runs per executable
+used 30 samples, one-second warmup and two-second measurement, ordered before/after,
+after/before, before/after, after builds and tests finished. Each time below is
+the median of the three run medians; parentheses give their range, in microseconds.
+
+| Fixture / storage | Before, µs | After, µs | Time change |
+| --- | --- | --- | --- |
+| sparse8 / unique | 9.326 (9.237–9.630) | 8.458 (8.410–8.698) | −9.3% |
+| sparse8 / shared | 9.658 (9.627–9.685) | 8.788 (8.718–8.797) | −9.0% |
+| dense88 / unique | 225.407 (224.224–225.949) | 209.170 (207.993–210.523) | −7.2% |
+| dense88 / shared | 228.304 (228.217–229.831) | 212.548 (211.724–213.952) | −6.9% |
+
+Every candidate run median was below every baseline run median in its case.
+These fixtures have determined isotopes, so the timing comparison does not measure
+isotope default emission. Broader workload, allocation and recovery comparisons
+remain in S4a. Saved executables, raw samples, source diff, settings and verification
+logs are retained in scratch/181-s3a/.
 
 #### S3b — Projection plans
 

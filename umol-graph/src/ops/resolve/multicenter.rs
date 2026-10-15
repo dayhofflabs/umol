@@ -5,8 +5,8 @@ use std::mem;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate,
-    NumForm, UnpairedElectronsForm,
+    AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, Normalize, NumForm,
+    UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -62,23 +62,40 @@ impl MulticenterBondsResolver {
             }
         }
 
-        let mut edits = Edits::new();
+        let mut charges = Vec::new();
+        let mut unpaired_electrons = Vec::new();
         for bond_id in molecule.multicenter_bonds().ids() {
             let bond = molecule.multicenter_bond(bond_id).attributes();
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
-            let mut update = MulticenterBondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {
-                update.charge = Some(NumForm::Lit(0));
+                charges.push((
+                    MulticenterBondHandle::Id(bond_id),
+                    NumForm::Undetermined,
+                    NumForm::Lit(0),
+                ));
             }
             if selected_unpaired_electrons.is_undetermined() {
                 selected_unpaired_electrons = UnpairedElectronsForm::closed_shell();
             } else {
                 selected_unpaired_electrons.high_spin_complete();
             }
-            update.unpaired_electrons = bond
+            if !bond
                 .unpaired_electrons
-                .difference_to(&selected_unpaired_electrons);
-            edits.update_multicenter_bond(MulticenterBondHandle::Id(bond_id), bond, &update);
+                .normalized_eq(&selected_unpaired_electrons)
+            {
+                unpaired_electrons.push((
+                    MulticenterBondHandle::Id(bond_id),
+                    bond.unpaired_electrons.clone(),
+                    selected_unpaired_electrons,
+                ));
+            }
+        }
+        let mut edits = Edits::new();
+        if !charges.is_empty() {
+            edits.modify_multicenter_bond_charges(charges);
+        }
+        if !unpaired_electrons.is_empty() {
+            edits.modify_multicenter_bond_unpaired_electrons(unpaired_electrons);
         }
         Solution::Determined(edits)
     }
@@ -138,8 +155,8 @@ impl MulticenterBondsResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AtomConstraintForm, AtomId, Edit, Edits, MoleculeApplyError, MulticenterBondFieldChange,
-        MulticenterBondId, MulticenterValenceForm, RollbackMethod, TransactionError,
+        AtomConstraintForm, AtomId, Edit, Edits, MoleculeApplyError, MulticenterBondId,
+        MulticenterValenceForm, RollbackMethod, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -147,38 +164,84 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(
-        mol_dsl!(r#"{:atoms ["B" "H" "B"]
-                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]"}]}"#),
+        mol_dsl!(
+            r#"{:atoms ["B" "H" "B"]
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]"}]}"#
+        ),
         Edits::from_iter([
-            Edit::ModifyMulticenterBondField {
-                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                change: MulticenterBondFieldChange::Charge {
-                    old: NumForm::Undetermined,
-                    new: NumForm::Lit(0),
-                },
+            Edit::ModifyMulticenterBondCharges {
+                changes: vec![(
+                    MulticenterBondHandle::Id(MulticenterBondId(0)),
+                    NumForm::Undetermined,
+                    NumForm::Lit(0),
+                )],
             },
-            Edit::ModifyMulticenterBondField {
-                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                change: MulticenterBondFieldChange::UnpairedElectrons {
-                    old: UnpairedElectronsForm::default(),
-                    new: UnpairedElectronsForm::closed_shell(),
-                },
+            Edit::ModifyMulticenterBondUnpairedElectrons {
+                changes: vec![(
+                    MulticenterBondHandle::Id(MulticenterBondId(0)),
+                    UnpairedElectronsForm::default(),
+                    UnpairedElectronsForm::closed_shell(),
+                )],
             },
-        ])
+        ]),
     )]
     #[case::partial_unpaired_electrons(
-        mol_dsl!(r#"{:atoms ["B" "H" "B"]
-                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#c-#s3"}]}"#),
-        Edits::from_iter([Edit::ModifyMulticenterBondField {
-            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-            change: MulticenterBondFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsForm {
+        mol_dsl!(
+            r#"{:atoms ["B" "H" "B"]
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#c-#s3"}]}"#
+        ),
+        Edits::from_iter([Edit::ModifyMulticenterBondUnpairedElectrons {
+            changes: vec![(
+                MulticenterBondHandle::Id(MulticenterBondId(0)),
+                UnpairedElectronsForm {
                     count: NumForm::Undetermined,
                     multiplicity: NumForm::Lit(3),
                 },
-                new: UnpairedElectronsForm::from((2_u8, 3_u8)),
+                UnpairedElectronsForm::from((2_u8, 3_u8)),
+            )],
+        }]),
+    )]
+    #[case::independent_fields(
+        mol_dsl!(
+            r#"{:atoms ["B" "H" "B" "H" "B" "H" "B"]
+            :multicenter-bonds [
+                {:atoms [0 1 2] :attrs "[1, 0, 1]"}
+                {:atoms [2 3 4] :attrs "[1, 0, 1]#c-#s3"}
+                {:atoms [4 5 6] :attrs "[1, 0, 1]#u0#s"}]}"#
+        ),
+        Edits::from_iter([
+            Edit::ModifyMulticenterBondCharges {
+                changes: vec![
+                    (
+                        MulticenterBondHandle::Id(MulticenterBondId(0)),
+                        NumForm::Undetermined,
+                        NumForm::Lit(0),
+                    ),
+                    (
+                        MulticenterBondHandle::Id(MulticenterBondId(2)),
+                        NumForm::Undetermined,
+                        NumForm::Lit(0),
+                    ),
+                ],
             },
-        }])
+            Edit::ModifyMulticenterBondUnpairedElectrons {
+                changes: vec![
+                    (
+                        MulticenterBondHandle::Id(MulticenterBondId(0)),
+                        UnpairedElectronsForm::default(),
+                        UnpairedElectronsForm::closed_shell(),
+                    ),
+                    (
+                        MulticenterBondHandle::Id(MulticenterBondId(1)),
+                        UnpairedElectronsForm {
+                            count: NumForm::Undetermined,
+                            multiplicity: NumForm::Lit(3),
+                        },
+                        UnpairedElectronsForm::from((2_u8, 3_u8)),
+                    ),
+                ],
+            },
+        ]),
     )]
     fn test_multicenter_bonds_resolver_plan_resolve(
         #[case] molecule: Molecule,
@@ -258,7 +321,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bonds_resolver_plan_resolve_stale() {
+    fn test_multicenter_bonds_resolver_plan_resolve_stale(
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
         let mut molecule = mol_dsl!(
             r#"{
             :atoms ["B" "H" "B" "H" "B"]
@@ -284,7 +349,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            molecule.transact([edits], RollbackMethod::Journal),
+            molecule.transact([edits], rollback),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

@@ -33,7 +33,7 @@ pub use stereo::{
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Molecule,
-    MoleculeApplyError, NumForm, RollbackMethod, Transaction, UnpairedElectronsForm,
+    MoleculeApplyError, Normalize, NumForm, RollbackMethod, Transaction, UnpairedElectronsForm,
 };
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
@@ -1048,14 +1048,93 @@ impl<'a> Resolver<'a> {
         let mut edits = self
             .aromaticity
             .plan_bond_discharge(molecule, &state.aromatic_systems);
+        let mut elements = Vec::new();
+        let mut isotope_masses = Vec::new();
+        let mut charges = Vec::new();
+        let mut implicit_hydrogens = Vec::new();
+        let mut lone_pairs = Vec::new();
+        let mut unpaired_electrons = Vec::new();
+        let mut valences = Vec::new();
         for (atom, disjuncts) in state.completions.iter() {
             let current = molecule.atom(atom).attributes();
-            // Preserve other stored assertions when selecting field values.
-            let mut selected = disjuncts[0].clone();
-            selected.constraints = current.constraints.clone();
-            selected.constraints.remove(AtomConstraintKey::Valence);
-            let update = current.difference_to(&selected);
-            edits.update_atom(AtomHandle::Id(atom), current, &update);
+            let selected = &disjuncts[0];
+            if !current.element.normalized_eq(&selected.element) {
+                elements.push((
+                    AtomHandle::Id(atom),
+                    current.element.clone(),
+                    selected.element.clone(),
+                ));
+            }
+            if !current.isotope_mass.normalized_eq(&selected.isotope_mass) {
+                isotope_masses.push((
+                    AtomHandle::Id(atom),
+                    current.isotope_mass.clone(),
+                    selected.isotope_mass.clone(),
+                ));
+            }
+            if !current.charge.normalized_eq(&selected.charge) {
+                charges.push((
+                    AtomHandle::Id(atom),
+                    current.charge.clone(),
+                    selected.charge.clone(),
+                ));
+            }
+            if !current
+                .implicit_hydrogens
+                .normalized_eq(&selected.implicit_hydrogens)
+            {
+                implicit_hydrogens.push((
+                    AtomHandle::Id(atom),
+                    current.implicit_hydrogens.clone(),
+                    selected.implicit_hydrogens.clone(),
+                ));
+            }
+            if !current.lone_pairs.normalized_eq(&selected.lone_pairs) {
+                lone_pairs.push((
+                    AtomHandle::Id(atom),
+                    current.lone_pairs.clone(),
+                    selected.lone_pairs.clone(),
+                ));
+            }
+            let selected_unpaired_electrons = current.unpaired_electrons.update(
+                &current
+                    .unpaired_electrons
+                    .difference_to(&selected.unpaired_electrons),
+            );
+            if !current
+                .unpaired_electrons
+                .normalized_eq(&selected_unpaired_electrons)
+            {
+                unpaired_electrons.push((
+                    AtomHandle::Id(atom),
+                    current.unpaired_electrons.clone(),
+                    selected_unpaired_electrons,
+                ));
+            }
+            if let Some(asserted) = current.constraints.get(AtomConstraintKey::Valence) {
+                valences.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
+            }
+        }
+        if !elements.is_empty() {
+            edits.modify_atom_elements(elements);
+        }
+        if !isotope_masses.is_empty() {
+            edits.modify_atom_isotope_masses(isotope_masses);
+        }
+        if !charges.is_empty() {
+            edits.modify_atom_charges(charges);
+        }
+        if !implicit_hydrogens.is_empty() {
+            edits.modify_atom_implicit_hydrogens(implicit_hydrogens);
+        }
+        if !lone_pairs.is_empty() {
+            edits.modify_atom_lone_pairs(lone_pairs);
+        }
+        if !unpaired_electrons.is_empty() {
+            edits.modify_atom_unpaired_electrons(unpaired_electrons);
+        }
+        if !valences.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::Valence, valences);
         }
         let existing: BTreeSet<Vec<AtomId>> = molecule
             .aromatic_systems()
@@ -1091,12 +1170,14 @@ mod tests {
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
     use umol_chem::element::Element;
+    use umol_graph_core::Correspondence;
     use umol_graph_ir::ir::{
         AromaticSystemConstraintForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId,
-        BondId, Constraint, IsotopeMassForm, MoleculeConstraint, MoleculeEntries,
-        MulticenterBondId, MulticenterValenceForm, NumForm, StereoAtomConstraintForm, StereoAtomId,
-        StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
-        StereoLigandKind, Stereogenicity, StereogenicityForm, TetrahedralStereoForm,
+        BondId, Constraint, Edit, IsotopeMassForm, MoleculeConstraint, MoleculeCorrespondence,
+        MoleculeEntries, MulticenterBondId, MulticenterValenceForm, NumForm,
+        StereoAtomConstraintForm, StereoAtomId, StereoBondId, StereoConfigurationForm, StereoCoset,
+        StereoKind, StereoLigand, StereoLigandKind, Stereogenicity, StereogenicityForm,
+        TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, bond_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1681,30 +1762,30 @@ mod tests {
         chemistry_model: ChemistryModel,
         #[case] mut molecule: Molecule,
         #[case] expected: Molecule,
+        #[values(false, true)] consuming: bool,
+        #[values(false, true)] shared: bool,
     ) {
-        assert_eq!(
-            Resolver::with_config(
-                &chemistry_model,
-                ResolveConfig {
-                    isotope: IsotopePolicy::Natural,
-                    ..Default::default()
-                }
-            )
-            .resolve(molecule.clone()),
-            Ok(Solution::Determined(expected.clone()))
+        let retained = shared.then(|| molecule.clone());
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                isotope: IsotopePolicy::Natural,
+                ..Default::default()
+            },
         );
-        assert_eq!(
-            Resolver::with_config(
-                &chemistry_model,
-                ResolveConfig {
-                    isotope: IsotopePolicy::Natural,
-                    ..Default::default()
-                }
-            )
-            .resolve_into(&mut molecule),
-            Ok(Solution::Determined(()))
-        );
-        assert_eq!(molecule, expected);
+        if consuming {
+            assert_eq!(
+                resolver.resolve(molecule),
+                Ok(Solution::Determined(expected))
+            );
+        } else {
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Ok(Solution::Determined(()))
+            );
+            assert_eq!(molecule, expected);
+        }
+        drop(retained);
     }
 
     #[rstest]
@@ -2625,6 +2706,144 @@ mod tests {
             editor.finish().unwrap(),
             mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!#T*" "C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
         );
+    }
+
+    #[rstest]
+    #[case::undetermined(NumForm::Undetermined, NumForm::Lit(0))]
+    #[case::singleton(
+        NumForm::LitSet(Box::new(BTreeSet::from([0]))),
+        NumForm::LitSet(Box::new(BTreeSet::from([0]))),
+    )]
+    fn test_resolver_plan_constitution_fields(
+        chemistry_model: ChemistryModel,
+        #[case] count: NumForm,
+        #[case] expected_count: NumForm,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let mut carbon = atom_dsl!("C#i=#v0#a!#T*");
+        carbon.unpaired_electrons.count = count.clone();
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![carbon, atom_dsl!("N#i=#v0#a!")],
+            ..MoleculeEntries::default()
+        });
+        let state = ResolveState {
+            completions: [
+                (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s")]),
+                (AtomId(1), smallvec![atom_dsl!("N#i=#c0#h3#n1#u0#s")]),
+            ]
+            .into_iter()
+            .collect(),
+            ..ResolveState::default()
+        };
+        let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        assert_eq!(
+            edits,
+            Edits::from_iter([
+                Edit::ModifyAtomCharges {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(0)
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(0)
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomImplicitHydrogens {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(4)
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(3)
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomLonePairs {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(0)
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(1)
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomUnpairedElectrons {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            UnpairedElectronsForm {
+                                count,
+                                multiplicity: NumForm::Undetermined,
+                            },
+                            UnpairedElectronsForm {
+                                count: expected_count.clone(),
+                                multiplicity: NumForm::Lit(1),
+                            }
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            UnpairedElectronsForm::default(),
+                            UnpairedElectronsForm::closed_shell()
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomConstraints {
+                    key: AtomConstraintKey::Valence,
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            Some(AtomConstraintForm::Valence(NumForm::Lit(0))),
+                            None
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            Some(AtomConstraintForm::Valence(NumForm::Lit(0))),
+                            None
+                        ),
+                    ],
+                },
+            ])
+        );
+        let mut carbon = atom_dsl!("C#i=#c0#h4#n0#u0#s#a!#T*");
+        carbon.unpaired_electrons.count = expected_count;
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![carbon, atom_dsl!("N#i=#c0#h3#n1#u0#s#a!")],
+            ..MoleculeEntries::default()
+        });
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::identity(2),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+        );
+        assert_eq!(molecule.clone().apply(edits.clone()), Ok(expected.clone()));
+        assert_eq!(
+            molecule.clone().tracked_apply(edits.clone()),
+            Ok((expected.clone(), correspondence.clone()))
+        );
+        assert_eq!(
+            molecule.tracked_transact([edits], rollback),
+            Ok(correspondence)
+        );
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]

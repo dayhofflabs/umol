@@ -11,8 +11,8 @@ use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
     AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
-    BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, Edit,
-    Edits, ElectronCountsForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
+    BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, Edits,
+    ElectronCountsForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -464,17 +464,21 @@ impl AromaticityResolver {
                 membership[atom.index()] = Some(aromatic_system);
             }
         }
+        let mut changes = Vec::new();
         for (bond, asserted) in bonds {
             let [a, b] = bond.atom_ids();
             let aromatic =
                 membership[a.index()].is_some() && membership[a.index()] == membership[b.index()];
             if asserted.meet(&BooleanForm::Lit(aromatic)).is_some() {
-                edits.push(Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(bond.id()),
-                    old: Some(BondConstraintForm::Aromatic(*asserted)),
-                    new: None,
-                });
+                changes.push((
+                    BondHandle::Id(bond.id()),
+                    Some(BondConstraintForm::Aromatic(*asserted)),
+                    None,
+                ));
             }
+        }
+        if !changes.is_empty() {
+            edits.modify_bond_constraints(BondConstraintKey::Aromatic, changes);
         }
         edits
     }
@@ -1218,8 +1222,8 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AddAromaticSystem, AromaticSystemId, BondId, Edit, Edits, NumForm, RingConfig,
-        UnpairedElectronsForm,
+        AddAromaticSystem, AromaticSystemId, AtomConstraintKey, BondId, Edit, Edits, NumForm,
+        RingConfig, UnpairedElectronsForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1353,47 +1357,17 @@ mod tests {
                         .with_charge(0)
                         .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 })),
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(0)),
-                    old: Some(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-                    )),
-                    new: None,
-                },
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(1)),
-                    old: Some(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-                    )),
-                    new: None,
-                },
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(2)),
-                    old: Some(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-                    )),
-                    new: None,
-                },
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(3)),
-                    old: Some(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-                    )),
-                    new: None,
-                },
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(4)),
-                    old: Some(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-                    )),
-                    new: None,
-                },
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(5)),
-                    old: Some(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-                    )),
-                    new: None,
+                Edit::ModifyAtomConstraints {
+                    key: AtomConstraintKey::AromaticValence,
+                    changes: (0..6)
+                        .map(|id| (
+                            AtomHandle::Id(AtomId(id)),
+                            Some(AtomConstraintForm::AromaticValence(
+                                AromaticValenceForm::Aromatic(NumForm::Lit(1))
+                            )),
+                            None,
+                        ))
+                        .collect(),
                 },
             ])))
         );

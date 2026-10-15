@@ -6,7 +6,7 @@ use std::mem;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    BondHandle, BondUpdate, Edits, Lattice, Molecule, NumForm, UnpairedElectronsForm,
+    BondHandle, Edits, Lattice, Molecule, Normalize, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -32,23 +32,40 @@ impl BondsResolver {
 
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
     pub fn plan_resolve(&self, molecule: &Molecule) -> Edits {
-        let mut edits = Edits::new();
+        let mut charges = Vec::new();
+        let mut unpaired_electrons = Vec::new();
         for bond_id in molecule.bonds().ids() {
             let bond = molecule.bond(bond_id).attributes();
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
-            let mut update = BondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {
-                update.charge = Some(NumForm::Lit(0));
+                charges.push((
+                    BondHandle::Id(bond_id),
+                    NumForm::Undetermined,
+                    NumForm::Lit(0),
+                ));
             }
             if selected_unpaired_electrons.is_undetermined() {
                 selected_unpaired_electrons = UnpairedElectronsForm::closed_shell();
             } else {
                 selected_unpaired_electrons.high_spin_complete();
             }
-            update.unpaired_electrons = bond
+            if !bond
                 .unpaired_electrons
-                .difference_to(&selected_unpaired_electrons);
-            edits.update_bond(BondHandle::Id(bond_id), bond, &update);
+                .normalized_eq(&selected_unpaired_electrons)
+            {
+                unpaired_electrons.push((
+                    BondHandle::Id(bond_id),
+                    bond.unpaired_electrons.clone(),
+                    selected_unpaired_electrons,
+                ));
+            }
+        }
+        let mut edits = Edits::new();
+        if !charges.is_empty() {
+            edits.modify_bond_charges(charges);
+        }
+        if !unpaired_electrons.is_empty() {
+            edits.modify_bond_unpaired_electrons(unpaired_electrons);
         }
         edits
     }
@@ -96,7 +113,7 @@ impl BondsResolver {
 mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        BondFieldChange, BondId, Edit, Edits, MoleculeApplyError, RollbackMethod, TransactionError,
+        BondId, Edit, Edits, MoleculeApplyError, RollbackMethod, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -106,34 +123,73 @@ mod tests {
     #[case::undetermined(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
         Edits::from_iter([
-            Edit::ModifyBondField {
-                id: BondHandle::Id(BondId(0)),
-                change: BondFieldChange::Charge {
-                    old: NumForm::Undetermined,
-                    new: NumForm::Lit(0),
-                },
+            Edit::ModifyBondCharges {
+                changes: vec![(
+                    BondHandle::Id(BondId(0)),
+                    NumForm::Undetermined,
+                    NumForm::Lit(0),
+                )],
             },
-            Edit::ModifyBondField {
-                id: BondHandle::Id(BondId(0)),
-                change: BondFieldChange::UnpairedElectrons {
-                    old: UnpairedElectronsForm::default(),
-                    new: UnpairedElectronsForm::closed_shell(),
-                },
+            Edit::ModifyBondUnpairedElectrons {
+                changes: vec![(
+                    BondHandle::Id(BondId(0)),
+                    UnpairedElectronsForm::default(),
+                    UnpairedElectronsForm::closed_shell(),
+                )],
             },
-        ])
+        ]),
     )]
     #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c+#s3"]]}"#),
-        Edits::from_iter([Edit::ModifyBondField {
-            id: BondHandle::Id(BondId(0)),
-            change: BondFieldChange::UnpairedElectrons {
-                old: UnpairedElectronsForm {
+        Edits::from_iter([Edit::ModifyBondUnpairedElectrons {
+            changes: vec![(
+                BondHandle::Id(BondId(0)),
+                UnpairedElectronsForm {
                     count: NumForm::Undetermined,
                     multiplicity: NumForm::Lit(3),
                 },
-                new: UnpairedElectronsForm::from((2_u8, 3_u8)),
+                UnpairedElectronsForm::from((2_u8, 3_u8)),
+            )],
+        }]),
+    )]
+    #[case::independent_fields(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1#c+#s3"] [2 3 "1#u0#s"]]}"#
+        ),
+        Edits::from_iter([
+            Edit::ModifyBondCharges {
+                changes: vec![
+                    (
+                        BondHandle::Id(BondId(0)),
+                        NumForm::Undetermined,
+                        NumForm::Lit(0),
+                    ),
+                    (
+                        BondHandle::Id(BondId(2)),
+                        NumForm::Undetermined,
+                        NumForm::Lit(0),
+                    ),
+                ],
             },
-        }])
+            Edit::ModifyBondUnpairedElectrons {
+                changes: vec![
+                    (
+                        BondHandle::Id(BondId(0)),
+                        UnpairedElectronsForm::default(),
+                        UnpairedElectronsForm::closed_shell(),
+                    ),
+                    (
+                        BondHandle::Id(BondId(1)),
+                        UnpairedElectronsForm {
+                            count: NumForm::Undetermined,
+                            multiplicity: NumForm::Lit(3),
+                        },
+                        UnpairedElectronsForm::from((2_u8, 3_u8)),
+                    ),
+                ],
+            },
+        ]),
     )]
     fn test_bonds_resolver_plan_resolve(#[case] molecule: Molecule, #[case] expected: Edits) {
         assert_eq!(BondsResolver::new().plan_resolve(&molecule), expected);
@@ -163,7 +219,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bonds_resolver_plan_resolve_stale() {
+    fn test_bonds_resolver_plan_resolve_stale(
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
         let edits = BondsResolver::new().plan_resolve(&molecule);
         molecule.bond_mut(BondId(1)).attributes_mut().charge = NumForm::Lit(9);
@@ -175,7 +233,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            molecule.transact([edits], RollbackMethod::Journal),
+            molecule.transact([edits], rollback),
             Err(MoleculeApplyError::Transaction(
                 TransactionError::OldStateMismatch
             ))

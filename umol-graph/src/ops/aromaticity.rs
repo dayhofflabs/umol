@@ -27,7 +27,7 @@ use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValence, AromaticValenceForm, AsLit,
-    AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondId, BooleanForm, Edit, Edits,
+    AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondId, BooleanForm, Edits,
     ElectronCountsForm, Molecule, RingConfig, RingModel, RingSet, RingSetKind,
 };
 use umol_utils::solution::Solution;
@@ -454,6 +454,7 @@ impl AromaticityPerceiver {
     ) -> Edits {
         let mut edits = Edits::new();
         edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), form);
+        let mut changes = Vec::new();
         for atom in atoms {
             if let Some(asserted) = molecule
                 .atom(atom)
@@ -461,12 +462,11 @@ impl AromaticityPerceiver {
                 .constraints
                 .get(AtomConstraintKey::AromaticValence)
             {
-                edits.push(Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(atom),
-                    old: Some(asserted.clone()),
-                    new: None,
-                });
+                changes.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
             }
+        }
+        if !changes.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::AromaticValence, changes);
         }
         edits
     }
