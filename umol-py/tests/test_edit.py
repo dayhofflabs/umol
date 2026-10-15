@@ -2,6 +2,8 @@ import pytest
 
 from umol import (
     AromaticSystemForm,
+    AromaticSystemConstraintForm,
+    AromaticSystemConstraintKey,
     AromaticSystemFieldChange,
     AromaticSystemUpdate,
     AtomForm,
@@ -20,6 +22,8 @@ from umol import (
     ConstraintEdit,
     ConsumedError,
     DativeBondForm,
+    DativeBondConstraintForm,
+    DativeBondConstraintKey,
     DativeBondFieldChange,
     DativeBondUpdate,
     Edit,
@@ -34,16 +38,21 @@ from umol import (
     MoleculeDefaults,
     MoleculeConstraint,
     MulticenterBondForm,
+    MulticenterBondConstraintForm,
+    MulticenterBondConstraintKey,
     MulticenterBondFieldChange,
     MulticenterBondUpdate,
     New,
     NoncovalentBondForm,
+    NoncovalentBondConstraintForm,
+    NoncovalentBondConstraintKey,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
     NoncovalentBondKindForm,
     NoncovalentBondUpdate,
     ParseError,
     RingScope,
+    RingMembershipForm,
     UnpairedElectronsForm,
     StereoAtomForm,
     StereoAtomFieldChange,
@@ -1193,3 +1202,135 @@ def test_edits_bond_constraint_batches_error(key, old, new):
     with pytest.raises(TransactionError):
         source.apply(edits)
     assert source == Molecule.from_entries([AtomForm.parse("C")] * 2, bonds=[(0, 1, BondForm.parse("1"))])
+
+
+@pytest.mark.parametrize(
+    "variant,method,field,form_type,text,old,new,collection,participants",
+    [
+        (Edit.ModifyDativeBondOrders, "modify_dative_bond_orders", "order", DativeBondForm, "1", NumForm.Lit(1), NumForm.LitSet({1, 2}), "dative_bonds", ([2, 0], 1)),
+        (Edit.ModifyAromaticSystemElectrons, "modify_aromatic_system_electrons", "electrons", AromaticSystemForm, "[1,2]", ElectronCountsForm.Lit([1, 2]), ElectronCountsForm.Lit([]), "aromatic_systems", ([2, 0, 1],)),
+        (Edit.ModifyAromaticSystemCharges, "modify_aromatic_system_charges", "charge", AromaticSystemForm, "[1,2]", NumForm.Lit(1), NumForm.LitSet({1, 2}), "aromatic_systems", ([2, 0, 1],)),
+        (Edit.ModifyAromaticSystemUnpairedElectrons, "modify_aromatic_system_unpaired_electrons", "unpaired_electrons", AromaticSystemForm, "[1,2]", UnpairedElectronsForm(0, 1), UnpairedElectronsForm(1, 2), "aromatic_systems", ([2, 0, 1],)),
+        (Edit.ModifyMulticenterBondElectrons, "modify_multicenter_bond_electrons", "electrons", MulticenterBondForm, "[1,2]", ElectronCountsForm.Lit([1, 2]), ElectronCountsForm.Lit([]), "multicenter_bonds", ([2, 0, 1],)),
+        (Edit.ModifyMulticenterBondCharges, "modify_multicenter_bond_charges", "charge", MulticenterBondForm, "[1,2]", NumForm.Lit(1), NumForm.LitSet({1, 2}), "multicenter_bonds", ([2, 0, 1],)),
+        (Edit.ModifyMulticenterBondUnpairedElectrons, "modify_multicenter_bond_unpaired_electrons", "unpaired_electrons", MulticenterBondForm, "[1,2]", UnpairedElectronsForm(0, 1), UnpairedElectronsForm(1, 2), "multicenter_bonds", ([2, 0, 1],)),
+        (Edit.ModifyNoncovalentBondKinds, "modify_noncovalent_bond_kinds", "kind", NoncovalentBondForm, "Hbd", NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond), NoncovalentBondKindForm.Undetermined(), "noncovalent_bonds", ((2, 0),)),
+    ],
+)
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_edits_relation_field_batches(variant, method, field, form_type, text, old, new, collection, participants, count):
+    rows = [(0, old, new), (0, new, old)][:count]
+    expected_rows = tuple(rows)
+    edit = variant(changes=rows)
+    rows.clear()
+    assert edit.changes == expected_rows
+    assert isinstance(edit.changes, tuple)
+    assert all(isinstance(row, tuple) for row in edit.changes)
+    with pytest.raises(AttributeError):
+        edit.changes = ()
+    edits = Edits()
+    getattr(edits, method)(list(expected_rows))
+    assert list(edits) == [edit]
+    assert list(Edits.parse(edits.render())) == [edit]
+    assert repr(edit).startswith("Edit." + variant.__name__ + "(changes=")
+    atoms = [AtomForm.parse("C")] * 3
+    form = form_type.parse(text)
+    setattr(form, field, old)
+    source = Molecule.from_entries(atoms, **{collection: [(*participants, form)]})
+    expected = form_type.parse(text)
+    setattr(expected, field, new if count == 1 else old)
+    assert source.apply(edits) == Molecule.from_entries(atoms, **{collection: [(*participants, expected)]})
+    assert source == Molecule.from_entries(atoms, **{collection: [(*participants, form)]})
+    with pytest.raises(ConsumedError):
+        getattr(edits, method)([])
+
+
+@pytest.mark.parametrize(
+    "variant,method,key,form_type,text,collection,participants",
+    [
+        (Edit.ModifyDativeBondConstraints, "modify_dative_bond_constraints", DativeBondConstraintKey.Aromatic(), DativeBondForm, "1", "dative_bonds", ([2, 0], 1)),
+        (Edit.ModifyDativeBondConstraints, "modify_dative_bond_constraints", DativeBondConstraintKey.RingMembership(RingScope.All()), DativeBondForm, "1", "dative_bonds", ([2, 0], 1)),
+        (Edit.ModifyDativeBondConstraints, "modify_dative_bond_constraints", DativeBondConstraintKey.RingMembership(RingScope.Size(5)), DativeBondForm, "1", "dative_bonds", ([2, 0], 1)),
+        (Edit.ModifyAromaticSystemConstraints, "modify_aromatic_system_constraints", AromaticSystemConstraintKey.ElectronCount(), AromaticSystemForm, "[1,2]", "aromatic_systems", ([2, 0, 1],)),
+        (Edit.ModifyMulticenterBondConstraints, "modify_multicenter_bond_constraints", MulticenterBondConstraintKey.ElectronCount(), MulticenterBondForm, "[1,2]", "multicenter_bonds", ([2, 0, 1],)),
+        (Edit.ModifyNoncovalentBondConstraints, "modify_noncovalent_bond_constraints", NoncovalentBondConstraintKey.Intramolecular(), NoncovalentBondForm, "Hbd", "noncovalent_bonds", ((2, 0),)),
+    ],
+)
+@pytest.mark.parametrize("empty", [False, True])
+def test_edits_relation_constraint_keys(variant, method, key, form_type, text, collection, participants, empty):
+    rows = [] if empty else [(0, None, None)]
+    edit = variant(key, rows)
+    edits = Edits()
+    getattr(edits, method)(key, rows)
+    rows.clear()
+    assert list(edits) == [edit]
+    assert edit.key == key
+    assert edit.changes == (() if empty else ((0, None, None),))
+    assert list(Edits.parse(edits.render())) == [edit]
+    source = Molecule.from_entries([AtomForm.parse("C")] * 3, **{collection: [(*participants, form_type.parse(text))]})
+    assert source.apply(edits) == source
+    with pytest.raises(ConsumedError):
+        getattr(edits, method)(key, [])
+
+
+@pytest.mark.parametrize(
+    "variant,method,add_method,key,first,second,form_type,text,collection,participants,created_participants",
+    [
+        (Edit.ModifyDativeBondConstraints, "modify_dative_bond_constraints", "add_dative_bond", DativeBondConstraintKey.Aromatic(), DativeBondConstraintForm.Aromatic(BooleanForm.Lit(False)), DativeBondConstraintForm.Aromatic(BooleanForm.Undetermined()), DativeBondForm, "1", "dative_bonds", ([2, 0], 1), ([5, 3], 4)),
+        (Edit.ModifyDativeBondConstraints, "modify_dative_bond_constraints", "add_dative_bond", DativeBondConstraintKey.RingMembership(RingScope.Size(5)), DativeBondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(5), NumForm.Lit(1))), DativeBondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(5), NumForm.Undetermined())), DativeBondForm, "1", "dative_bonds", ([2, 0], 1), ([5, 3], 4)),
+        (Edit.ModifyAromaticSystemConstraints, "modify_aromatic_system_constraints", "add_aromatic_system", AromaticSystemConstraintKey.ElectronCount(), AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(2)), AromaticSystemConstraintForm.ElectronCount(NumForm.LitSet({2, 3})), AromaticSystemForm, "[1,2]", "aromatic_systems", ([2, 0, 1],), ([5, 3, 4],)),
+        (Edit.ModifyMulticenterBondConstraints, "modify_multicenter_bond_constraints", "add_multicenter_bond", MulticenterBondConstraintKey.ElectronCount(), MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(2)), MulticenterBondConstraintForm.ElectronCount(NumForm.LitSet({2, 3})), MulticenterBondForm, "[1,2]", "multicenter_bonds", ([2, 0, 1],), ([5, 3, 4],)),
+        (Edit.ModifyNoncovalentBondConstraints, "modify_noncovalent_bond_constraints", "add_noncovalent_bond", NoncovalentBondConstraintKey.Intramolecular(), NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(False)), NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Undetermined()), NoncovalentBondForm, "Hbd", "noncovalent_bonds", ((2, 0),), ((5, 3),)),
+    ],
+)
+def test_edits_relation_constraint_batches(variant, method, add_method, key, first, second, form_type, text, collection, participants, created_participants):
+    rows = [(0, None, first), (New(0), None, second), (0, first, second), (0, None, None), (0, second, None)]
+    expected_rows = tuple(rows)
+    edit = variant(key, rows)
+    edits = Edits()
+    getattr(edits, add_method)(*created_participants, form_type.parse(text))
+    getattr(edits, method)(key, rows)
+    rows.clear()
+    assert edits[1] == edit
+    assert edit.key == key
+    assert edit.changes == expected_rows
+    assert isinstance(edit.changes, tuple)
+    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert list(Edits.parse(edits.render())) == list(edits)
+    atoms = [AtomForm.parse("C")] * 6
+    source = Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})
+    expected = form_type.parse(text)
+    expected.constraints.set(second)
+    assert source.apply(edits) == Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text)), (*created_participants, expected)]})
+    assert source == Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})
+    rejected = Edits()
+    getattr(rejected, method)(key, [(0, None, first), (0, None, second)])
+    with pytest.raises(TransactionError):
+        source.apply(rejected)
+    assert source == Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})
+
+
+@pytest.mark.parametrize(
+    "method,add_method,field,old,new,form_type,text,collection,participants,created_participants",
+    [
+        ("modify_dative_bond_orders", "add_dative_bond", "order", NumForm.Lit(1), NumForm.Lit(2), DativeBondForm, "1", "dative_bonds", ([2, 0], 1), ([5, 3], 4)),
+        ("modify_aromatic_system_electrons", "add_aromatic_system", "electrons", ElectronCountsForm.Lit([1, 2]), ElectronCountsForm.Lit([]), AromaticSystemForm, "[1,2]", "aromatic_systems", ([2, 0, 1],), ([5, 3, 4],)),
+        ("modify_multicenter_bond_electrons", "add_multicenter_bond", "electrons", ElectronCountsForm.Lit([1, 2]), ElectronCountsForm.Lit([]), MulticenterBondForm, "[1,2]", "multicenter_bonds", ([2, 0, 1],), ([5, 3, 4],)),
+        ("modify_noncovalent_bond_kinds", "add_noncovalent_bond", "kind", NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond), NoncovalentBondKindForm.Undetermined(), NoncovalentBondForm, "Hbd", "noncovalent_bonds", ((2, 0),), ((5, 3),)),
+    ],
+)
+def test_edits_relation_field_batches_new(method, add_method, field, old, new, form_type, text, collection, participants, created_participants):
+    atoms = [AtomForm.parse("C")] * 6
+    source = Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})
+    edits = Edits()
+    created = getattr(edits, add_method)(*created_participants, form_type.parse(text))
+    getattr(edits, method)([(0, old, new), (created, old, new), (created, new, old)])
+    assert list(Edits.parse(edits.render())) == list(edits)
+    expected = form_type.parse(text)
+    setattr(expected, field, new)
+    assert source.apply(edits) == Molecule.from_entries(atoms, **{collection: [(*participants, expected), (*created_participants, form_type.parse(text))]})
+    rejected = Edits()
+    getattr(rejected, method)([(0, old, new), (0, old, new)])
+    with pytest.raises(TransactionError):
+        source.apply(rejected)
+    assert source == Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})

@@ -3,8 +3,9 @@ use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
     AddAromaticSystem, AddMulticenterBond, AddStereoAtom, AddStereoBond, AromaticSystemId,
     AtomHandle, AtomId, BondFieldChange, BondHandle, BondId, DativeBondId, Edits, EntityKind,
-    Molecule, MoleculeApplyError, MulticenterBondId, NoncovalentBondId, RollbackMethod,
-    StereoAtomId, StereoBondId, TrackedTransaction, Transaction, TransactionError,
+    Molecule, MoleculeApplyError, MulticenterBondId, NoncovalentBondConstraintKey,
+    NoncovalentBondId, RollbackMethod, StereoAtomId, StereoBondId, TrackedTransaction, Transaction,
+    TransactionError,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -513,6 +514,499 @@ proptest! {
         editor.apply(prefix).unwrap();
         prop_assert_eq!(editor.apply(batch), Err(error));
         prop_assert_eq!(editor.finish().unwrap(), Molecule::from_entries(expected));
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_dative_bond_batches_orders(
+        values in prop::collection::vec(any_num_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, any_num_form_strategy()), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], dative: vec![(vec![AtomId(2), AtomId(0)], AtomId(1), DativeBondForm::default()), (vec![AtomId(3), AtomId(1)], AtomId(2), DativeBondForm::default()), (vec![AtomId(0), AtomId(2)], AtomId(3), DativeBondForm::default())], ..Default::default() };
+        for (entry, value) in entries.dative.iter_mut().zip(values) { entry.2.order = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.dative[index].2.order.clone();
+            expected.dative[index].2.order = new.clone();
+            let id = DativeBondHandle::Id(DativeBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyDativeBondField { id, change: DativeBondFieldChange::Order { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_dative_bond_orders(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Optional constraints retain their raw presence and order through batch application,
+    /// DSL conversion, and rollback; results and correspondence agree with ordered singles.
+    #[test]
+    fn test_molecule_apply_dative_bond_constraint_batches(
+        scope in prop_oneof![Just(RingScope::All), (3u8..=8).prop_map(RingScope::Size)],
+        updates in prop::collection::vec((0usize..3, prop::option::of(constraint_inner_value_strategy(0..=6))), 0..20),
+    ) {
+        let entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], dative: vec![(vec![AtomId(2), AtomId(0)], AtomId(1), DativeBondForm::default()), (vec![AtomId(3), AtomId(1)], AtomId(2), DativeBondForm::default()), (vec![AtomId(0), AtomId(2)], AtomId(3), DativeBondForm::default())], ..Default::default() };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let key = DativeBondConstraintKey::RingMembership(scope);
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, value) in updates {
+            let old = expected.dative[index].2.constraints.get(key).cloned();
+            let new = value.map(|value| DativeBondConstraintForm::ring_membership(scope, value));
+            expected.dative[index].2.constraints = new.clone().into_iter().collect();
+            let id = DativeBondHandle::Id(DativeBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyDativeBondConstraint { id, old, new });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_dative_bond_constraints(key, rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_aromatic_system_batches_electrons(
+        values in prop::collection::vec(prop_oneof![Just(ElectronCountsForm::Undetermined), prop::collection::vec(-2i64..=4, 0..6).prop_map(ElectronCountsForm::Lit)], 3),
+        updates in prop::collection::vec((0usize..3, prop_oneof![Just(ElectronCountsForm::Undetermined), prop::collection::vec(-2i64..=4, 0..6).prop_map(ElectronCountsForm::Lit)]), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 9], aromatic: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], AromaticSystemForm::default()), (vec![AtomId(5), AtomId(3), AtomId(4)], AromaticSystemForm::default()), (vec![AtomId(8), AtomId(6), AtomId(7)], AromaticSystemForm::default())], ..Default::default() };
+        for (entry, value) in entries.aromatic.iter_mut().zip(values) { entry.1.electrons = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.aromatic[index].1.electrons.clone();
+            expected.aromatic[index].1.electrons = new.clone();
+            let id = AromaticSystemHandle::Id(AromaticSystemId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAromaticSystemField { id, change: AromaticSystemFieldChange::Electrons { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_aromatic_system_electrons(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_aromatic_system_batches_charges(
+        values in prop::collection::vec(any_num_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, any_num_form_strategy()), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 9], aromatic: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], AromaticSystemForm::default()), (vec![AtomId(5), AtomId(3), AtomId(4)], AromaticSystemForm::default()), (vec![AtomId(8), AtomId(6), AtomId(7)], AromaticSystemForm::default())], ..Default::default() };
+        for (entry, value) in entries.aromatic.iter_mut().zip(values) { entry.1.charge = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.aromatic[index].1.charge.clone();
+            expected.aromatic[index].1.charge = new.clone();
+            let id = AromaticSystemHandle::Id(AromaticSystemId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAromaticSystemField { id, change: AromaticSystemFieldChange::Charge { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_aromatic_system_charges(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_aromatic_system_batches_unpaired_electrons(
+        values in prop::collection::vec(unpaired_electrons_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, unpaired_electrons_strategy()), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 9], aromatic: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], AromaticSystemForm::default()), (vec![AtomId(5), AtomId(3), AtomId(4)], AromaticSystemForm::default()), (vec![AtomId(8), AtomId(6), AtomId(7)], AromaticSystemForm::default())], ..Default::default() };
+        for (entry, value) in entries.aromatic.iter_mut().zip(values) { entry.1.unpaired_electrons = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.aromatic[index].1.unpaired_electrons.clone();
+            expected.aromatic[index].1.unpaired_electrons = new.clone();
+            let id = AromaticSystemHandle::Id(AromaticSystemId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAromaticSystemField { id, change: AromaticSystemFieldChange::UnpairedElectrons { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_aromatic_system_unpaired_electrons(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Optional constraints retain their raw presence and order through batch application,
+    /// DSL conversion, and rollback; results and correspondence agree with ordered singles.
+    #[test]
+    fn test_molecule_apply_aromatic_system_constraint_batches(
+        updates in prop::collection::vec((0usize..3, prop::option::of(constraint_inner_value_strategy(0..=6))), 0..20),
+    ) {
+        let entries = MoleculeEntries { atoms: vec![AtomForm::default(); 9], aromatic: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], AromaticSystemForm::default()), (vec![AtomId(5), AtomId(3), AtomId(4)], AromaticSystemForm::default()), (vec![AtomId(8), AtomId(6), AtomId(7)], AromaticSystemForm::default())], ..Default::default() };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let key = AromaticSystemConstraintKey::ElectronCount;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, value) in updates {
+            let old = expected.aromatic[index].1.constraints.get(key).cloned();
+            let new = value.map(AromaticSystemConstraintForm::ElectronCount);
+            expected.aromatic[index].1.constraints = new.clone().into_iter().collect();
+            let id = AromaticSystemHandle::Id(AromaticSystemId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyAromaticSystemConstraint { id, old, new });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_aromatic_system_constraints(key, rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_multicenter_bond_batches_electrons(
+        values in prop::collection::vec(prop_oneof![Just(ElectronCountsForm::Undetermined), prop::collection::vec(-2i64..=4, 0..6).prop_map(ElectronCountsForm::Lit)], 3),
+        updates in prop::collection::vec((0usize..3, prop_oneof![Just(ElectronCountsForm::Undetermined), prop::collection::vec(-2i64..=4, 0..6).prop_map(ElectronCountsForm::Lit)]), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], multicenter: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], MulticenterBondForm::default()), (vec![AtomId(3), AtomId(1), AtomId(2)], MulticenterBondForm::default()), (vec![AtomId(0), AtomId(2), AtomId(3)], MulticenterBondForm::default())], ..Default::default() };
+        for (entry, value) in entries.multicenter.iter_mut().zip(values) { entry.1.electrons = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.multicenter[index].1.electrons.clone();
+            expected.multicenter[index].1.electrons = new.clone();
+            let id = MulticenterBondHandle::Id(MulticenterBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyMulticenterBondField { id, change: MulticenterBondFieldChange::Electrons { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_multicenter_bond_electrons(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_multicenter_bond_batches_charges(
+        values in prop::collection::vec(any_num_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, any_num_form_strategy()), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], multicenter: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], MulticenterBondForm::default()), (vec![AtomId(3), AtomId(1), AtomId(2)], MulticenterBondForm::default()), (vec![AtomId(0), AtomId(2), AtomId(3)], MulticenterBondForm::default())], ..Default::default() };
+        for (entry, value) in entries.multicenter.iter_mut().zip(values) { entry.1.charge = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.multicenter[index].1.charge.clone();
+            expected.multicenter[index].1.charge = new.clone();
+            let id = MulticenterBondHandle::Id(MulticenterBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyMulticenterBondField { id, change: MulticenterBondFieldChange::Charge { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_multicenter_bond_charges(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_multicenter_bond_batches_unpaired_electrons(
+        values in prop::collection::vec(unpaired_electrons_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, unpaired_electrons_strategy()), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], multicenter: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], MulticenterBondForm::default()), (vec![AtomId(3), AtomId(1), AtomId(2)], MulticenterBondForm::default()), (vec![AtomId(0), AtomId(2), AtomId(3)], MulticenterBondForm::default())], ..Default::default() };
+        for (entry, value) in entries.multicenter.iter_mut().zip(values) { entry.1.unpaired_electrons = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.multicenter[index].1.unpaired_electrons.clone();
+            expected.multicenter[index].1.unpaired_electrons = new.clone();
+            let id = MulticenterBondHandle::Id(MulticenterBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyMulticenterBondField { id, change: MulticenterBondFieldChange::UnpairedElectrons { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_multicenter_bond_unpaired_electrons(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Optional constraints retain their raw presence and order through batch application,
+    /// DSL conversion, and rollback; results and correspondence agree with ordered singles.
+    #[test]
+    fn test_molecule_apply_multicenter_bond_constraint_batches(
+        updates in prop::collection::vec((0usize..3, prop::option::of(constraint_inner_value_strategy(0..=6))), 0..20),
+    ) {
+        let entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], multicenter: vec![(vec![AtomId(2), AtomId(0), AtomId(1)], MulticenterBondForm::default()), (vec![AtomId(3), AtomId(1), AtomId(2)], MulticenterBondForm::default()), (vec![AtomId(0), AtomId(2), AtomId(3)], MulticenterBondForm::default())], ..Default::default() };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let key = MulticenterBondConstraintKey::ElectronCount;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, value) in updates {
+            let old = expected.multicenter[index].1.constraints.get(key).cloned();
+            let new = value.map(MulticenterBondConstraintForm::ElectronCount);
+            expected.multicenter[index].1.constraints = new.clone().into_iter().collect();
+            let id = MulticenterBondHandle::Id(MulticenterBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyMulticenterBondConstraint { id, old, new });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_multicenter_bond_constraints(key, rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Ordered batches agree with singles and an independently updated entity table;
+    /// either recovery mode restores the exact raw forms, without changing participants.
+    #[test]
+    fn test_molecule_apply_noncovalent_bond_batches_kinds(
+        values in prop::collection::vec(noncovalent_bond_kind_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, noncovalent_bond_kind_form_strategy()), 0..16),
+    ) {
+        let mut entries = MoleculeEntries { atoms: vec![AtomForm::default(); 6], noncovalent: vec![([AtomId(1), AtomId(0)], NoncovalentBondForm::default()), ([AtomId(3), AtomId(2)], NoncovalentBondForm::default()), ([AtomId(5), AtomId(4)], NoncovalentBondForm::default())], ..Default::default() };
+        for (entry, value) in entries.noncovalent.iter_mut().zip(values) { entry.1.kind = value; }
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, new) in updates {
+            let old = expected.noncovalent[index].1.kind.clone();
+            expected.noncovalent[index].1.kind = new.clone();
+            let id = NoncovalentBondHandle::Id(NoncovalentBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyNoncovalentBondField { id, change: NoncovalentBondFieldChange::Kind { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_noncovalent_bond_kinds(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
+    }
+
+    /// Optional constraints retain their raw presence and order through batch application,
+    /// DSL conversion, and rollback; results and correspondence agree with ordered singles.
+    #[test]
+    fn test_molecule_apply_noncovalent_bond_constraint_batches(
+        updates in prop::collection::vec((0usize..3, prop::option::of(prop_oneof![Just(BooleanForm::Undetermined), any::<bool>().prop_map(BooleanForm::Lit)])), 0..20),
+    ) {
+        let entries = MoleculeEntries { atoms: vec![AtomForm::default(); 6], noncovalent: vec![([AtomId(1), AtomId(0)], NoncovalentBondForm::default()), ([AtomId(3), AtomId(2)], NoncovalentBondForm::default()), ([AtomId(5), AtomId(4)], NoncovalentBondForm::default())], ..Default::default() };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let key = NoncovalentBondConstraintKey::Intramolecular;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, value) in updates {
+            let old = expected.noncovalent[index].1.constraints.get(key).cloned();
+            let new = value.map(NoncovalentBondConstraintForm::Intramolecular);
+            expected.noncovalent[index].1.constraints = new.clone().into_iter().collect();
+            let id = NoncovalentBondHandle::Id(NoncovalentBondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyNoncovalentBondConstraint { id, old, new });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_noncovalent_bond_constraints(key, rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&batch, &defaults);
+        prop_assert_eq!(EditsDsl::from_edn(&dsl.to_edn()).unwrap().into_ir(&defaults), batch);
     }
 
     /// Consecutive bulk additions reconstruct the supplied complete entries for any

@@ -9,21 +9,25 @@ use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use crate::ir::bond::BondForm;
 use crate::ir::compact::MoleculeCompaction;
 use crate::ir::constraint::{
-    AromaticSystemConstraintKey, AtomConstraintForm, AtomConstraintKey, BondConstraintForm,
-    BondConstraintKey, Constraint, DativeBondConstraintKey, MulticenterBondConstraintKey,
-    NoncovalentBondConstraintKey, StereoAtomConstraintKey, StereoBondConstraintKey,
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
+    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
+    DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, StereoAtomConstraintKey,
+    StereoBondConstraintKey,
 };
 use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{
     AddAromaticSystem, AddBond, AddMulticenterBond, AddStereoAtom, AddStereoBond,
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
-    AtomFieldChange, AtomHandle, BondFieldChange, BondHandle, CascadedConstraints, ConstraintEdit,
-    DativeBondFieldChange, Edit, Edits, EntityHandle, ModifiedConstraint,
-    MulticenterBondFieldChange, NoncovalentBondFieldChange, RemovedAromaticSystem,
-    RemovedAromaticSystems, RemovedAtom, RemovedConstraint, RemovedOverlays, RemovedTopology,
-    StereoAtomFieldChange, StereoBondFieldChange, Undo,
+    AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
+    CascadedConstraints, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
+    EntityHandle, ModifiedConstraint, MulticenterBondFieldChange, MulticenterBondHandle,
+    NoncovalentBondFieldChange, RemovedAromaticSystem, RemovedAromaticSystems, RemovedAtom,
+    RemovedConstraint, RemovedOverlays, RemovedTopology, StereoAtomFieldChange,
+    StereoBondFieldChange, Undo,
 };
+use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::entity::EntityKind;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -421,6 +425,18 @@ fn test_molecule_apply_undo_field_manipulated(#[case] undo: Undo) {
 #[case(Undo::ModifyBondCharges { changes: vec![(BondId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
 #[case(Undo::ModifyBondUnpairedElectrons { changes: vec![(BondId(7), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
 #[case(Undo::RestoreBondConstraints { key: BondConstraintKey::Aromatic, constraints: vec![(BondId(7), Some(BondConstraintForm::aromatic(true)))] })]
+#[case(Undo::ModifyDativeBondOrders { changes: vec![(DativeBondId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
+#[case(Undo::RestoreDativeBondConstraints { key: DativeBondConstraintKey::Aromatic, constraints: vec![(DativeBondId(7), Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::Aromatic)))] })]
+#[case(Undo::ModifyAromaticSystemElectrons { changes: vec![(AromaticSystemId(7), ElectronCountsForm::Lit(vec![1, 2]), ElectronCountsForm::Undetermined)] })]
+#[case(Undo::ModifyAromaticSystemCharges { changes: vec![(AromaticSystemId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
+#[case(Undo::ModifyAromaticSystemUnpairedElectrons { changes: vec![(AromaticSystemId(7), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
+#[case(Undo::RestoreAromaticSystemConstraints { key: AromaticSystemConstraintKey::ElectronCount, constraints: vec![(AromaticSystemId(7), Some(AromaticSystemConstraintForm::undetermined(AromaticSystemConstraintKey::ElectronCount)))] })]
+#[case(Undo::ModifyMulticenterBondElectrons { changes: vec![(MulticenterBondId(7), ElectronCountsForm::Lit(vec![1, 2]), ElectronCountsForm::Undetermined)] })]
+#[case(Undo::ModifyMulticenterBondCharges { changes: vec![(MulticenterBondId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
+#[case(Undo::ModifyMulticenterBondUnpairedElectrons { changes: vec![(MulticenterBondId(7), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
+#[case(Undo::RestoreMulticenterBondConstraints { key: MulticenterBondConstraintKey::ElectronCount, constraints: vec![(MulticenterBondId(7), Some(MulticenterBondConstraintForm::undetermined(MulticenterBondConstraintKey::ElectronCount)))] })]
+#[case(Undo::ModifyNoncovalentBondKinds { changes: vec![(NoncovalentBondId(7), NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindForm::Undetermined)] })]
+#[case(Undo::RestoreNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, constraints: vec![(NoncovalentBondId(7), Some(NoncovalentBondConstraintForm::undetermined(NoncovalentBondConstraintKey::Intramolecular)))] })]
 fn test_molecule_apply_undo_batches(#[case] undo: Undo) {
     let mut molecule = Molecule::new();
     molecule.apply_undo(undo);
@@ -466,6 +482,63 @@ fn test_molecule_apply_undo_bond_batches_normalized(
             ..Default::default()
         })
     );
+}
+
+#[rstest]
+#[case::dative_bond_order(
+    Edit::ModifyDativeBondOrders { changes: vec![(DativeBondHandle::Id(DativeBondId(0)), NumForm::lit_set([1]), NumForm::Lit(2)), (DativeBondHandle::Id(DativeBondId(0)), NumForm::Lit(2), NumForm::Lit(3))] },
+    Undo::ModifyDativeBondOrders { changes: vec![(DativeBondId(0), NumForm::Lit(2), NumForm::lit_set([1])), (DativeBondId(0), NumForm::Lit(3), NumForm::Lit(2))] },
+    |entries: &mut MoleculeEntries| entries.dative[0].2.order = NumForm::lit_set([1]),
+)]
+#[case::aromatic_system_charge(
+    Edit::ModifyAromaticSystemCharges { changes: vec![(AromaticSystemHandle::Id(AromaticSystemId(0)), NumForm::lit_set([1]), NumForm::Lit(2)), (AromaticSystemHandle::Id(AromaticSystemId(0)), NumForm::Lit(2), NumForm::Lit(3))] },
+    Undo::ModifyAromaticSystemCharges { changes: vec![(AromaticSystemId(0), NumForm::Lit(2), NumForm::lit_set([1])), (AromaticSystemId(0), NumForm::Lit(3), NumForm::Lit(2))] },
+    |entries: &mut MoleculeEntries| entries.aromatic[0].1.charge = NumForm::lit_set([1]),
+)]
+#[case::multicenter_bond_charge(
+    Edit::ModifyMulticenterBondCharges { changes: vec![(MulticenterBondHandle::Id(MulticenterBondId(0)), NumForm::lit_set([1]), NumForm::Lit(2)), (MulticenterBondHandle::Id(MulticenterBondId(0)), NumForm::Lit(2), NumForm::Lit(3))] },
+    Undo::ModifyMulticenterBondCharges { changes: vec![(MulticenterBondId(0), NumForm::Lit(2), NumForm::lit_set([1])), (MulticenterBondId(0), NumForm::Lit(3), NumForm::Lit(2))] },
+    |entries: &mut MoleculeEntries| entries.multicenter[0].1.charge = NumForm::lit_set([1]),
+)]
+#[case::dative_bond_constraint(
+    Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::RingMembership(RingScope::All), changes: vec![(DativeBondHandle::Id(DativeBondId(0)), Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1]))), None)] },
+    Undo::RestoreDativeBondConstraints { key: DativeBondConstraintKey::RingMembership(RingScope::All), constraints: vec![(DativeBondId(0), Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1]))))] },
+    |entries: &mut MoleculeEntries| entries.dative[0].2.constraints = vec![DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1]))].into(),
+)]
+#[case::aromatic_system_constraint(
+    Edit::ModifyAromaticSystemConstraints { key: AromaticSystemConstraintKey::ElectronCount, changes: vec![(AromaticSystemHandle::Id(AromaticSystemId(0)), Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([1]))), None)] },
+    Undo::RestoreAromaticSystemConstraints { key: AromaticSystemConstraintKey::ElectronCount, constraints: vec![(AromaticSystemId(0), Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([1]))))] },
+    |entries: &mut MoleculeEntries| entries.aromatic[0].1.constraints = vec![AromaticSystemConstraintForm::electron_count(NumForm::lit_set([1]))].into(),
+)]
+#[case::multicenter_bond_constraint(
+    Edit::ModifyMulticenterBondConstraints { key: MulticenterBondConstraintKey::ElectronCount, changes: vec![(MulticenterBondHandle::Id(MulticenterBondId(0)), Some(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([1]))), None)] },
+    Undo::RestoreMulticenterBondConstraints { key: MulticenterBondConstraintKey::ElectronCount, constraints: vec![(MulticenterBondId(0), Some(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([1]))))] },
+    |entries: &mut MoleculeEntries| entries.multicenter[0].1.constraints = vec![MulticenterBondConstraintForm::electron_count(NumForm::lit_set([1]))].into(),
+)]
+fn test_molecule_apply_undo_relation_batches_normalized(
+    mut removal_entries: MoleculeEntries,
+    #[case] edit: Edit,
+    #[case] expected_undo: Undo,
+    #[case] restore: fn(&mut MoleculeEntries),
+) {
+    removal_entries.aromatic[0].1.charge = NumForm::Lit(1);
+    removal_entries.multicenter[0].1.charge = NumForm::Lit(1);
+    removal_entries.dative[0].2.constraints =
+        vec![DativeBondConstraintForm::ring_membership(RingScope::All, 1)].into();
+    removal_entries.aromatic[0].1.constraints =
+        vec![AromaticSystemConstraintForm::electron_count(1)].into();
+    removal_entries.multicenter[0].1.constraints =
+        vec![MulticenterBondConstraintForm::electron_count(1)].into();
+    let mut molecule = Molecule::from_entries(removal_entries.clone());
+    let mut state = ApplicationState::new(&molecule);
+    let undo = molecule
+        .apply_edit_with_undo(edit, &mut state)
+        .unwrap()
+        .unwrap();
+    assert_eq!(undo, expected_undo);
+    molecule.apply_undo(undo);
+    restore(&mut removal_entries);
+    assert_eq!(molecule, Molecule::from_entries(removal_entries));
 }
 
 #[rstest]

@@ -313,14 +313,14 @@ pub struct AddStereoBond {
 /// Edits have no normal form. Sorting or deduplicating a sequence would invalidate the `New(n)`
 /// references that depend on its order.
 ///
-/// Atom and bond field and constraint batches apply their rows in order, including repeated
+/// Field and constraint batches apply their rows in order, including repeated
 /// handles. Each row checks its handle and accepted old value before writing; constraint operands
 /// must also match the batch key. Journaled failure restores completed rows before earlier edits
 /// are rolled back. Journal-free failure retains completed rows.
 ///
 /// # Semantic properties
 ///
-/// A valid atom or bond batch has the same result and entity correspondence as its ordered
+/// A valid field or constraint batch has the same result and entity correspondence as its ordered
 /// single-entry edits. Empty batches leave the molecule unchanged. Undo replays rows in reverse order
 /// using the submitted, normalized-equal old values; when those equal the original raw values, rollback
 /// restores the exact representation as well as normalized equality.
@@ -406,6 +406,10 @@ pub enum Edit {
         old: AtomHandle,
         new: AtomHandle,
     },
+    /// Ordered changes to dative bond order values.
+    ModifyDativeBondOrders {
+        changes: Vec<(DativeBondHandle, NumForm, NumForm)>,
+    },
     ModifyDativeBondField {
         id: DativeBondHandle,
         change: DativeBondFieldChange,
@@ -421,6 +425,22 @@ pub enum Edit {
         old: Vec<AtomHandle>,
         new: Vec<AtomHandle>,
     },
+    /// Ordered changes to aromatic system electrons values.
+    ModifyAromaticSystemElectrons {
+        changes: Vec<(AromaticSystemHandle, ElectronCountsForm, ElectronCountsForm)>,
+    },
+    /// Ordered changes to aromatic system charge values.
+    ModifyAromaticSystemCharges {
+        changes: Vec<(AromaticSystemHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to aromatic system unpaired electrons values.
+    ModifyAromaticSystemUnpairedElectrons {
+        changes: Vec<(
+            AromaticSystemHandle,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
+    },
     ModifyAromaticSystemField {
         id: AromaticSystemHandle,
         change: AromaticSystemFieldChange,
@@ -435,6 +455,26 @@ pub enum Edit {
         id: MulticenterBondHandle,
         old: Vec<AtomHandle>,
         new: Vec<AtomHandle>,
+    },
+    /// Ordered changes to multicenter bond electrons values.
+    ModifyMulticenterBondElectrons {
+        changes: Vec<(
+            MulticenterBondHandle,
+            ElectronCountsForm,
+            ElectronCountsForm,
+        )>,
+    },
+    /// Ordered changes to multicenter bond charge values.
+    ModifyMulticenterBondCharges {
+        changes: Vec<(MulticenterBondHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to multicenter bond unpaired electrons values.
+    ModifyMulticenterBondUnpairedElectrons {
+        changes: Vec<(
+            MulticenterBondHandle,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
     },
     ModifyMulticenterBondField {
         id: MulticenterBondHandle,
@@ -453,6 +493,14 @@ pub enum Edit {
         id: NoncovalentBondHandle,
         old: [AtomHandle; 2],
         new: [AtomHandle; 2],
+    },
+    /// Ordered changes to noncovalent bond kind values.
+    ModifyNoncovalentBondKinds {
+        changes: Vec<(
+            NoncovalentBondHandle,
+            NoncovalentBondKindForm,
+            NoncovalentBondKindForm,
+        )>,
     },
     ModifyNoncovalentBondField {
         id: NoncovalentBondHandle,
@@ -533,20 +581,64 @@ pub enum Edit {
         old: Option<BondConstraintForm>,
         new: Option<BondConstraintForm>,
     },
+    /// Ordered constraint changes sharing one exact key.
+    ///
+    /// Application checks every present operand's key before writing that row.
+    ModifyDativeBondConstraints {
+        key: DativeBondConstraintKey,
+        changes: Vec<(
+            DativeBondHandle,
+            Option<DativeBondConstraintForm>,
+            Option<DativeBondConstraintForm>,
+        )>,
+    },
     ModifyDativeBondConstraint {
         id: DativeBondHandle,
         old: Option<DativeBondConstraintForm>,
         new: Option<DativeBondConstraintForm>,
+    },
+    /// Ordered constraint changes sharing one exact key.
+    ///
+    /// Application checks every present operand's key before writing that row.
+    ModifyAromaticSystemConstraints {
+        key: AromaticSystemConstraintKey,
+        changes: Vec<(
+            AromaticSystemHandle,
+            Option<AromaticSystemConstraintForm>,
+            Option<AromaticSystemConstraintForm>,
+        )>,
     },
     ModifyAromaticSystemConstraint {
         id: AromaticSystemHandle,
         old: Option<AromaticSystemConstraintForm>,
         new: Option<AromaticSystemConstraintForm>,
     },
+    /// Ordered constraint changes sharing one exact key.
+    ///
+    /// Application checks every present operand's key before writing that row.
+    ModifyMulticenterBondConstraints {
+        key: MulticenterBondConstraintKey,
+        changes: Vec<(
+            MulticenterBondHandle,
+            Option<MulticenterBondConstraintForm>,
+            Option<MulticenterBondConstraintForm>,
+        )>,
+    },
     ModifyMulticenterBondConstraint {
         id: MulticenterBondHandle,
         old: Option<MulticenterBondConstraintForm>,
         new: Option<MulticenterBondConstraintForm>,
+    },
+    /// Ordered constraint changes sharing one exact key.
+    ///
+    /// Application checks every present operand's key before writing that row.
+    ModifyNoncovalentBondConstraints {
+        key: NoncovalentBondConstraintKey,
+        changes: Vec<(
+            NoncovalentBondHandle,
+            Option<NoncovalentBondConstraintForm>,
+            Option<NoncovalentBondConstraintForm>,
+        )>,
     },
     ModifyNoncovalentBondConstraint {
         id: NoncovalentBondHandle,
@@ -1027,6 +1119,166 @@ impl Edits {
         )>,
     ) {
         self.push(Edit::ModifyBondConstraints { key, changes });
+    }
+
+    /// Append an ordered batch of dative bond order changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_dative_bond_orders(
+        &mut self,
+        changes: Vec<(DativeBondHandle, NumForm, NumForm)>,
+    ) {
+        self.push(Edit::ModifyDativeBondOrders { changes });
+    }
+
+    /// Append ordered dative bond constraint changes under one exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. Construction
+    /// preserves all rows, including an empty batch and repeated handles.
+    pub fn modify_dative_bond_constraints(
+        &mut self,
+        key: DativeBondConstraintKey,
+        changes: Vec<(
+            DativeBondHandle,
+            Option<DativeBondConstraintForm>,
+            Option<DativeBondConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyDativeBondConstraints { key, changes });
+    }
+
+    /// Append an ordered batch of aromatic system electrons changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_aromatic_system_electrons(
+        &mut self,
+        changes: Vec<(AromaticSystemHandle, ElectronCountsForm, ElectronCountsForm)>,
+    ) {
+        self.push(Edit::ModifyAromaticSystemElectrons { changes });
+    }
+
+    /// Append an ordered batch of aromatic system charge changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_aromatic_system_charges(
+        &mut self,
+        changes: Vec<(AromaticSystemHandle, NumForm, NumForm)>,
+    ) {
+        self.push(Edit::ModifyAromaticSystemCharges { changes });
+    }
+
+    /// Append an ordered batch of aromatic system unpaired electrons changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_aromatic_system_unpaired_electrons(
+        &mut self,
+        changes: Vec<(
+            AromaticSystemHandle,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
+    ) {
+        self.push(Edit::ModifyAromaticSystemUnpairedElectrons { changes });
+    }
+
+    /// Append ordered aromatic system constraint changes under one exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. Construction
+    /// preserves all rows, including an empty batch and repeated handles.
+    pub fn modify_aromatic_system_constraints(
+        &mut self,
+        key: AromaticSystemConstraintKey,
+        changes: Vec<(
+            AromaticSystemHandle,
+            Option<AromaticSystemConstraintForm>,
+            Option<AromaticSystemConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyAromaticSystemConstraints { key, changes });
+    }
+
+    /// Append an ordered batch of multicenter bond electrons changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_multicenter_bond_electrons(
+        &mut self,
+        changes: Vec<(
+            MulticenterBondHandle,
+            ElectronCountsForm,
+            ElectronCountsForm,
+        )>,
+    ) {
+        self.push(Edit::ModifyMulticenterBondElectrons { changes });
+    }
+
+    /// Append an ordered batch of multicenter bond charge changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_multicenter_bond_charges(
+        &mut self,
+        changes: Vec<(MulticenterBondHandle, NumForm, NumForm)>,
+    ) {
+        self.push(Edit::ModifyMulticenterBondCharges { changes });
+    }
+
+    /// Append an ordered batch of multicenter bond unpaired electrons changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_multicenter_bond_unpaired_electrons(
+        &mut self,
+        changes: Vec<(
+            MulticenterBondHandle,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
+    ) {
+        self.push(Edit::ModifyMulticenterBondUnpairedElectrons { changes });
+    }
+
+    /// Append ordered multicenter bond constraint changes under one exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. Construction
+    /// preserves all rows, including an empty batch and repeated handles.
+    pub fn modify_multicenter_bond_constraints(
+        &mut self,
+        key: MulticenterBondConstraintKey,
+        changes: Vec<(
+            MulticenterBondHandle,
+            Option<MulticenterBondConstraintForm>,
+            Option<MulticenterBondConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyMulticenterBondConstraints { key, changes });
+    }
+
+    /// Append an ordered batch of noncovalent bond kind changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_noncovalent_bond_kinds(
+        &mut self,
+        changes: Vec<(
+            NoncovalentBondHandle,
+            NoncovalentBondKindForm,
+            NoncovalentBondKindForm,
+        )>,
+    ) {
+        self.push(Edit::ModifyNoncovalentBondKinds { changes });
+    }
+
+    /// Append ordered noncovalent bond constraint changes under one exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. Construction
+    /// preserves all rows, including an empty batch and repeated handles.
+    pub fn modify_noncovalent_bond_constraints(
+        &mut self,
+        key: NoncovalentBondConstraintKey,
+        changes: Vec<(
+            NoncovalentBondHandle,
+            Option<NoncovalentBondConstraintForm>,
+            Option<NoncovalentBondConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyNoncovalentBondConstraints { key, changes });
     }
 
     /// Project an atom update into checked host-relative edits.
@@ -2523,17 +2775,61 @@ pub enum Undo {
         id: BondId,
         change: BondFieldChange,
     },
+    /// Ordered changes to dative bond order values.
+    ModifyDativeBondOrders {
+        changes: Vec<(DativeBondId, NumForm, NumForm)>,
+    },
     ModifyDativeBondField {
         id: DativeBondId,
         change: DativeBondFieldChange,
+    },
+    /// Ordered changes to aromatic system electrons values.
+    ModifyAromaticSystemElectrons {
+        changes: Vec<(AromaticSystemId, ElectronCountsForm, ElectronCountsForm)>,
+    },
+    /// Ordered changes to aromatic system charge values.
+    ModifyAromaticSystemCharges {
+        changes: Vec<(AromaticSystemId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to aromatic system unpaired electrons values.
+    ModifyAromaticSystemUnpairedElectrons {
+        changes: Vec<(
+            AromaticSystemId,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
     },
     ModifyAromaticSystemField {
         id: AromaticSystemId,
         change: AromaticSystemFieldChange,
     },
+    /// Ordered changes to multicenter bond electrons values.
+    ModifyMulticenterBondElectrons {
+        changes: Vec<(MulticenterBondId, ElectronCountsForm, ElectronCountsForm)>,
+    },
+    /// Ordered changes to multicenter bond charge values.
+    ModifyMulticenterBondCharges {
+        changes: Vec<(MulticenterBondId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to multicenter bond unpaired electrons values.
+    ModifyMulticenterBondUnpairedElectrons {
+        changes: Vec<(
+            MulticenterBondId,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
+    },
     ModifyMulticenterBondField {
         id: MulticenterBondId,
         change: MulticenterBondFieldChange,
+    },
+    /// Ordered changes to noncovalent bond kind values.
+    ModifyNoncovalentBondKinds {
+        changes: Vec<(
+            NoncovalentBondId,
+            NoncovalentBondKindForm,
+            NoncovalentBondKindForm,
+        )>,
     },
     ModifyNoncovalentBondField {
         id: NoncovalentBondId,
@@ -2567,20 +2863,40 @@ pub enum Undo {
         key: BondConstraintKey,
         constraint: Option<BondConstraintForm>,
     },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreDativeBondConstraints {
+        key: DativeBondConstraintKey,
+        constraints: Vec<(DativeBondId, Option<DativeBondConstraintForm>)>,
+    },
     RestoreDativeBondConstraint {
         id: DativeBondId,
         key: DativeBondConstraintKey,
         constraint: Option<DativeBondConstraintForm>,
+    },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreAromaticSystemConstraints {
+        key: AromaticSystemConstraintKey,
+        constraints: Vec<(AromaticSystemId, Option<AromaticSystemConstraintForm>)>,
     },
     RestoreAromaticSystemConstraint {
         id: AromaticSystemId,
         key: AromaticSystemConstraintKey,
         constraint: Option<AromaticSystemConstraintForm>,
     },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreMulticenterBondConstraints {
+        key: MulticenterBondConstraintKey,
+        constraints: Vec<(MulticenterBondId, Option<MulticenterBondConstraintForm>)>,
+    },
     RestoreMulticenterBondConstraint {
         id: MulticenterBondId,
         key: MulticenterBondConstraintKey,
         constraint: Option<MulticenterBondConstraintForm>,
+    },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreNoncovalentBondConstraints {
+        key: NoncovalentBondConstraintKey,
+        constraints: Vec<(NoncovalentBondId, Option<NoncovalentBondConstraintForm>)>,
     },
     RestoreNoncovalentBondConstraint {
         id: NoncovalentBondId,

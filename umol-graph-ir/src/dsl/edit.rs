@@ -29,10 +29,11 @@ use crate::ir::aromatic::AromaticSystemUpdate;
 use crate::ir::atom::{AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
-    AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintKey, BondConstraintForm,
-    BondConstraintKey, Constraint, DativeBondConstraintForm, MoleculeConstraint,
-    MulticenterBondConstraintForm, NoncovalentBondConstraintForm, RelationalConstraint, RingScope,
-    StereoAtomConstraintForm, StereoBondConstraintForm,
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
+    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
+    DativeBondConstraintKey, MoleculeConstraint, MulticenterBondConstraintForm,
+    MulticenterBondConstraintKey, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
+    RelationalConstraint, RingScope, StereoAtomConstraintForm, StereoBondConstraintForm,
 };
 use crate::ir::dative::DativeBondUpdate;
 use crate::ir::edit::{
@@ -42,6 +43,7 @@ use crate::ir::edit::{
     MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
     StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle,
 };
+use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::entity::Entity;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -49,7 +51,7 @@ use crate::ir::id::{
 };
 use crate::ir::ligand::StereoLigandKind;
 use crate::ir::multicenter::MulticenterBondUpdate;
-use crate::ir::noncovalent::NoncovalentBondUpdate;
+use crate::ir::noncovalent::{NoncovalentBondKindForm, NoncovalentBondUpdate};
 use crate::ir::num::NumForm;
 use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use crate::ir::stereo::{
@@ -308,6 +310,17 @@ enum EditInput {
         expect: BondUpdate,
         update: BondUpdate,
     },
+    DativeBondModifyOrders {
+        changes: Vec<(DativeBondHandle, NumForm, NumForm)>,
+    },
+    DativeBondModifyConstraints {
+        key: DativeBondConstraintKey,
+        changes: Vec<(
+            DativeBondHandle,
+            Option<DativeBondConstraintForm>,
+            Option<DativeBondConstraintForm>,
+        )>,
+    },
     DativeBondAdd {
         donors: Vec<AtomHandle>,
         acceptor: AtomHandle,
@@ -329,6 +342,27 @@ enum EditInput {
         expect: DativeBondUpdate,
         update: DativeBondUpdate,
     },
+    AromaticSystemModifyElectrons {
+        changes: Vec<(AromaticSystemHandle, ElectronCountsForm, ElectronCountsForm)>,
+    },
+    AromaticSystemModifyCharges {
+        changes: Vec<(AromaticSystemHandle, NumForm, NumForm)>,
+    },
+    AromaticSystemModifyUnpairedElectrons {
+        changes: Vec<(
+            AromaticSystemHandle,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
+    },
+    AromaticSystemModifyConstraints {
+        key: AromaticSystemConstraintKey,
+        changes: Vec<(
+            AromaticSystemHandle,
+            Option<AromaticSystemConstraintForm>,
+            Option<AromaticSystemConstraintForm>,
+        )>,
+    },
     AromaticSystemAdd {
         atoms: Vec<AtomHandle>,
         attributes: AromaticSystemDsl,
@@ -344,6 +378,31 @@ enum EditInput {
         expect: AromaticSystemUpdate,
         update: AromaticSystemUpdate,
     },
+    MulticenterBondModifyElectrons {
+        changes: Vec<(
+            MulticenterBondHandle,
+            ElectronCountsForm,
+            ElectronCountsForm,
+        )>,
+    },
+    MulticenterBondModifyCharges {
+        changes: Vec<(MulticenterBondHandle, NumForm, NumForm)>,
+    },
+    MulticenterBondModifyUnpairedElectrons {
+        changes: Vec<(
+            MulticenterBondHandle,
+            UnpairedElectronsForm,
+            UnpairedElectronsForm,
+        )>,
+    },
+    MulticenterBondModifyConstraints {
+        key: MulticenterBondConstraintKey,
+        changes: Vec<(
+            MulticenterBondHandle,
+            Option<MulticenterBondConstraintForm>,
+            Option<MulticenterBondConstraintForm>,
+        )>,
+    },
     MulticenterBondAdd {
         atoms: Vec<AtomHandle>,
         attributes: MulticenterBondDsl,
@@ -358,6 +417,21 @@ enum EditInput {
         id: MulticenterBondHandle,
         expect: MulticenterBondUpdate,
         update: MulticenterBondUpdate,
+    },
+    NoncovalentBondModifyKinds {
+        changes: Vec<(
+            NoncovalentBondHandle,
+            NoncovalentBondKindForm,
+            NoncovalentBondKindForm,
+        )>,
+    },
+    NoncovalentBondModifyConstraints {
+        key: NoncovalentBondConstraintKey,
+        changes: Vec<(
+            NoncovalentBondHandle,
+            Option<NoncovalentBondConstraintForm>,
+            Option<NoncovalentBondConstraintForm>,
+        )>,
     },
     NoncovalentBondAdd {
         atoms: [AtomHandle; 2],
@@ -734,6 +808,59 @@ impl ToEdn for EditInput {
                     BondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
+            Self::DativeBondModifyOrders { changes } => edit_map(
+                "dative-bond",
+                "modify-order",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::DativeBondModifyConstraints { key, changes } => {
+                let key = match key {
+                    DativeBondConstraintKey::Aromatic => Edn::keyword("aromatic"),
+                    DativeBondConstraintKey::RingMembership(scope) => {
+                        let mut fields = EdnMap::new();
+                        if let RingScope::Size(size) = scope {
+                            fields.insert(Edn::keyword("size"), size.to_edn());
+                        }
+                        single_key_map("ring-membership", Edn::Map(fields))
+                    }
+                };
+                let render_value = |value: &Option<DativeBondConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        DativeBondConstraintDsl::from_ir(value).to_edn()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(2);
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("dative-bond", "modify-constraints", Edn::Map(fields))
+            }
             Self::DativeBondAdd {
                 donors,
                 acceptor,
@@ -780,6 +907,94 @@ impl ToEdn for EditInput {
                     DativeBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
+            Self::AromaticSystemModifyElectrons { changes } => edit_map(
+                "aromatic-system",
+                "modify-electrons",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                AromaticSystemUpdateDsl(AromaticSystemUpdate {
+                                    electrons: Some(old.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                                AromaticSystemUpdateDsl(AromaticSystemUpdate {
+                                    electrons: Some(new.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AromaticSystemModifyCharges { changes } => edit_map(
+                "aromatic-system",
+                "modify-charge",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AromaticSystemModifyUnpairedElectrons { changes } => edit_map(
+                "aromatic-system",
+                "modify-unpaired-electrons",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                render_unpaired_electrons(old),
+                                render_unpaired_electrons(new),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::AromaticSystemModifyConstraints { key, changes } => {
+                let key = match key {
+                    AromaticSystemConstraintKey::ElectronCount => Edn::keyword("electron-count"),
+                };
+                let render_value = |value: &Option<AromaticSystemConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        AromaticSystemConstraintDsl::from_ir(value).to_edn()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(2);
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("aromatic-system", "modify-constraints", Edn::Map(fields))
+            }
             Self::AromaticSystemAdd { atoms, attributes } => edit_map(
                 "aromatic-system",
                 "add",
@@ -812,6 +1027,94 @@ impl ToEdn for EditInput {
                     AromaticSystemUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
+            Self::MulticenterBondModifyElectrons { changes } => edit_map(
+                "multicenter-bond",
+                "modify-electrons",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                MulticenterBondUpdateDsl(MulticenterBondUpdate {
+                                    electrons: Some(old.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                                MulticenterBondUpdateDsl(MulticenterBondUpdate {
+                                    electrons: Some(new.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::MulticenterBondModifyCharges { changes } => edit_map(
+                "multicenter-bond",
+                "modify-charge",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::MulticenterBondModifyUnpairedElectrons { changes } => edit_map(
+                "multicenter-bond",
+                "modify-unpaired-electrons",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                render_unpaired_electrons(old),
+                                render_unpaired_electrons(new),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::MulticenterBondModifyConstraints { key, changes } => {
+                let key = match key {
+                    MulticenterBondConstraintKey::ElectronCount => Edn::keyword("electron-count"),
+                };
+                let render_value = |value: &Option<MulticenterBondConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        MulticenterBondConstraintDsl::from_ir(value).to_edn()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(2);
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("multicenter-bond", "modify-constraints", Edn::Map(fields))
+            }
             Self::MulticenterBondAdd { atoms, attributes } => edit_map(
                 "multicenter-bond",
                 "add",
@@ -844,6 +1147,60 @@ impl ToEdn for EditInput {
                     MulticenterBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
+            Self::NoncovalentBondModifyKinds { changes } => edit_map(
+                "noncovalent-bond",
+                "modify-kind",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NoncovalentBondUpdateDsl(NoncovalentBondUpdate {
+                                    kind: Some(old.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                                NoncovalentBondUpdateDsl(NoncovalentBondUpdate {
+                                    kind: Some(new.clone()),
+                                    ..Default::default()
+                                })
+                                .to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::NoncovalentBondModifyConstraints { key, changes } => {
+                let key = match key {
+                    NoncovalentBondConstraintKey::Intramolecular => Edn::keyword("intramolecular"),
+                };
+                let render_value = |value: &Option<NoncovalentBondConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        NoncovalentBondConstraintDsl::from_ir(value).to_edn()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(2);
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("noncovalent-bond", "modify-constraints", Edn::Map(fields))
+            }
             Self::NoncovalentBondAdd { atoms, attributes } => edit_map(
                 "noncovalent-bond",
                 "add",
@@ -1049,6 +1406,10 @@ impl EditInput {
             Self::BondModify { id, expect, update } => {
                 append_bond_modify(edits, id, expect, update)?;
             }
+            Self::DativeBondModifyOrders { changes } => edits.modify_dative_bond_orders(changes),
+            Self::DativeBondModifyConstraints { key, changes } => {
+                edits.modify_dative_bond_constraints(key, changes)
+            }
             Self::DativeBondAdd {
                 donors,
                 acceptor,
@@ -1078,6 +1439,18 @@ impl EditInput {
             Self::DativeBondModify { id, expect, update } => {
                 append_dative_bond_modify(edits, id, expect, update)?;
             }
+            Self::AromaticSystemModifyElectrons { changes } => {
+                edits.modify_aromatic_system_electrons(changes)
+            }
+            Self::AromaticSystemModifyCharges { changes } => {
+                edits.modify_aromatic_system_charges(changes)
+            }
+            Self::AromaticSystemModifyUnpairedElectrons { changes } => {
+                edits.modify_aromatic_system_unpaired_electrons(changes)
+            }
+            Self::AromaticSystemModifyConstraints { key, changes } => {
+                edits.modify_aromatic_system_constraints(key, changes)
+            }
             Self::AromaticSystemAdd { atoms, attributes } => {
                 edits.add_aromatic_system(atoms, attributes.into_ir(&defaults.aromatic_system));
             }
@@ -1095,6 +1468,18 @@ impl EditInput {
             Self::AromaticSystemModify { id, expect, update } => {
                 append_aromatic_system_modify(edits, id, expect, update)?;
             }
+            Self::MulticenterBondModifyElectrons { changes } => {
+                edits.modify_multicenter_bond_electrons(changes)
+            }
+            Self::MulticenterBondModifyCharges { changes } => {
+                edits.modify_multicenter_bond_charges(changes)
+            }
+            Self::MulticenterBondModifyUnpairedElectrons { changes } => {
+                edits.modify_multicenter_bond_unpaired_electrons(changes)
+            }
+            Self::MulticenterBondModifyConstraints { key, changes } => {
+                edits.modify_multicenter_bond_constraints(key, changes)
+            }
             Self::MulticenterBondAdd { atoms, attributes } => {
                 edits.add_multicenter_bond(atoms, attributes.into_ir(&defaults.multicenter_bond));
             }
@@ -1111,6 +1496,12 @@ impl EditInput {
             }
             Self::MulticenterBondModify { id, expect, update } => {
                 append_multicenter_bond_modify(edits, id, expect, update)?;
+            }
+            Self::NoncovalentBondModifyKinds { changes } => {
+                edits.modify_noncovalent_bond_kinds(changes)
+            }
+            Self::NoncovalentBondModifyConstraints { key, changes } => {
+                edits.modify_noncovalent_bond_constraints(key, changes)
             }
             Self::NoncovalentBondAdd { atoms, attributes } => {
                 edits.add_noncovalent_bond(atoms, attributes.into_ir(&defaults.noncovalent_bond));
@@ -1316,6 +1707,15 @@ impl EditInput {
                     new: new.clone(),
                 }]
             }
+            Edit::ModifyDativeBondOrders { changes } => vec![Self::DativeBondModifyOrders {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyDativeBondConstraints { key, changes } => {
+                vec![Self::DativeBondModifyConstraints {
+                    key: *key,
+                    changes: changes.clone(),
+                }]
+            }
             Edit::ModifyDativeBondField { id, change } => {
                 let (expect, update) = dative_bond_field_updates(change);
                 vec![Self::DativeBondModify {
@@ -1356,6 +1756,27 @@ impl EditInput {
                     id: id.clone(),
                     old: old.clone(),
                     new: new.clone(),
+                }]
+            }
+            Edit::ModifyAromaticSystemElectrons { changes } => {
+                vec![Self::AromaticSystemModifyElectrons {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyAromaticSystemCharges { changes } => {
+                vec![Self::AromaticSystemModifyCharges {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyAromaticSystemUnpairedElectrons { changes } => {
+                vec![Self::AromaticSystemModifyUnpairedElectrons {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyAromaticSystemConstraints { key, changes } => {
+                vec![Self::AromaticSystemModifyConstraints {
+                    key: *key,
+                    changes: changes.clone(),
                 }]
             }
             Edit::ModifyAromaticSystemField { id, change } => {
@@ -1400,6 +1821,27 @@ impl EditInput {
                     new: new.clone(),
                 }]
             }
+            Edit::ModifyMulticenterBondElectrons { changes } => {
+                vec![Self::MulticenterBondModifyElectrons {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyMulticenterBondCharges { changes } => {
+                vec![Self::MulticenterBondModifyCharges {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyMulticenterBondUnpairedElectrons { changes } => {
+                vec![Self::MulticenterBondModifyUnpairedElectrons {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyMulticenterBondConstraints { key, changes } => {
+                vec![Self::MulticenterBondModifyConstraints {
+                    key: *key,
+                    changes: changes.clone(),
+                }]
+            }
             Edit::ModifyMulticenterBondField { id, change } => {
                 let (expect, update) = multicenter_bond_field_updates(change);
                 vec![Self::MulticenterBondModify {
@@ -1437,6 +1879,17 @@ impl EditInput {
                     id: id.clone(),
                     old: old.clone(),
                     new: new.clone(),
+                }]
+            }
+            Edit::ModifyNoncovalentBondKinds { changes } => {
+                vec![Self::NoncovalentBondModifyKinds {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyNoncovalentBondConstraints { key, changes } => {
+                vec![Self::NoncovalentBondModifyConstraints {
+                    key: *key,
+                    changes: changes.clone(),
                 }]
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
@@ -1946,6 +2399,86 @@ fn parse_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
 fn parse_dative_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "dative-bond edit")?;
     match op {
+        "modify-order" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "dative-bond :modify-order expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_dative_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::DativeBondModifyOrders { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "dative-bond constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "dative-bond constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let key = match &key {
+                Edn::Keyword(keyword) => match keyword.name() {
+                    "aromatic" => DativeBondConstraintKey::Aromatic,
+                    other => {
+                        return Err(DeError::Custom(format!(
+                            "unknown dative-bond constraint key :{other}"
+                        )))
+                    }
+                },
+                Edn::Map(_) => {
+                    let (name, scope) = parse_single_key_map(&key, "dative-bond constraint key")?;
+                    if name != "ring-membership" {
+                        return Err(DeError::Custom(format!(
+                            "unknown parameterized dative-bond constraint key :{name}"
+                        )));
+                    }
+                    let scope = expect_map(scope, "ring scope")?;
+                    if scope.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                        return Err(DeError::Custom("ring scope expects keyword fields".into()));
+                    }
+                    let mut helper = EdnMapHelper::new(scope);
+                    let scope = helper
+                        .optional::<u8>("size")?
+                        .map_or(RingScope::All, RingScope::Size);
+                    helper.finalize()?;
+                    DativeBondConstraintKey::RingMembership(scope)
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected a dative-bond constraint keyword or ring-membership map".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "dative-bond :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => DativeBondConstraintDsl::from_edn(value).map(|form| Some(form.into_ir())),
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_dative_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::DativeBondModifyConstraints { key, changes })
+        }
         "add" => {
             let (donors, acceptor, attributes) = parse_dative_bond_addition(payload)?;
             Ok(EditInput::DativeBondAdd {
@@ -1990,6 +2523,110 @@ fn parse_dative_bonds_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
 fn parse_aromatic_system_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "aromatic-system edit")?;
     match op {
+        "modify-electrons" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "aromatic-system :modify-electrons expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<ElectronCountsForm, DeError> {
+                let mut update = AromaticSystemUpdateDsl::from_edn(value)?.0;
+                let form = update.electrons.take().ok_or_else(|| {
+                    DeError::Custom("expected a aromatic-system electrons value".into())
+                })?;
+                if update != AromaticSystemUpdate::default() {
+                    return Err(DeError::Custom(
+                        "unexpected fields in aromatic-system electrons value".into(),
+                    ));
+                }
+                Ok(form)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_aromatic_system_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AromaticSystemModifyElectrons { changes })
+        }
+        "modify-charge" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "aromatic-system :modify-charge expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_aromatic_system_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AromaticSystemModifyCharges { changes })
+        }
+        "modify-unpaired-electrons" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "aromatic-system :modify-unpaired-electrons expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<UnpairedElectronsForm, DeError> {
+                parse_unpaired_electrons(value)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_aromatic_system_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AromaticSystemModifyUnpairedElectrons { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "aromatic-system constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "aromatic-system constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let key = match &key {
+                Edn::Keyword(keyword) if keyword.name() == "electron-count" => {
+                    AromaticSystemConstraintKey::ElectronCount
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected aromatic-system constraint key :electron-count".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "aromatic-system :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => {
+                    AromaticSystemConstraintDsl::from_edn(value).map(|form| Some(form.into_ir()))
+                }
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_aromatic_system_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::AromaticSystemModifyConstraints { key, changes })
+        }
         "add" => {
             let (atoms, attributes) = parse_aromatic_system_addition(payload)?;
             Ok(EditInput::AromaticSystemAdd { atoms, attributes })
@@ -2033,6 +2670,110 @@ fn parse_aromatic_systems_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
 fn parse_multicenter_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "multicenter-bond edit")?;
     match op {
+        "modify-electrons" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "multicenter-bond :modify-electrons expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<ElectronCountsForm, DeError> {
+                let mut update = MulticenterBondUpdateDsl::from_edn(value)?.0;
+                let form = update.electrons.take().ok_or_else(|| {
+                    DeError::Custom("expected a multicenter-bond electrons value".into())
+                })?;
+                if update != MulticenterBondUpdate::default() {
+                    return Err(DeError::Custom(
+                        "unexpected fields in multicenter-bond electrons value".into(),
+                    ));
+                }
+                Ok(form)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_multicenter_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::MulticenterBondModifyElectrons { changes })
+        }
+        "modify-charge" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "multicenter-bond :modify-charge expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_multicenter_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::MulticenterBondModifyCharges { changes })
+        }
+        "modify-unpaired-electrons" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "multicenter-bond :modify-unpaired-electrons expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<UnpairedElectronsForm, DeError> {
+                parse_unpaired_electrons(value)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_multicenter_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::MulticenterBondModifyUnpairedElectrons { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "multicenter-bond constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "multicenter-bond constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let key = match &key {
+                Edn::Keyword(keyword) if keyword.name() == "electron-count" => {
+                    MulticenterBondConstraintKey::ElectronCount
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected multicenter-bond constraint key :electron-count".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "multicenter-bond :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => {
+                    MulticenterBondConstraintDsl::from_edn(value).map(|form| Some(form.into_ir()))
+                }
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_multicenter_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::MulticenterBondModifyConstraints { key, changes })
+        }
         "add" => {
             let (atoms, attributes) = parse_multicenter_bond_addition(payload)?;
             Ok(EditInput::MulticenterBondAdd { atoms, attributes })
@@ -2076,6 +2817,74 @@ fn parse_multicenter_bonds_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
 fn parse_noncovalent_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "noncovalent-bond edit")?;
     match op {
+        "modify-kind" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "noncovalent-bond :modify-kind expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NoncovalentBondKindForm, DeError> {
+                let mut update = NoncovalentBondUpdateDsl::from_edn(value)?.0;
+                let form = update.kind.take().ok_or_else(|| {
+                    DeError::Custom("expected a noncovalent-bond kind value".into())
+                })?;
+                if update != NoncovalentBondUpdate::default() {
+                    return Err(DeError::Custom(
+                        "unexpected fields in noncovalent-bond kind value".into(),
+                    ));
+                }
+                Ok(form)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_noncovalent_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::NoncovalentBondModifyKinds { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "noncovalent-bond constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "noncovalent-bond constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let key = match &key {
+                Edn::Keyword(keyword) if keyword.name() == "intramolecular" => {
+                    NoncovalentBondConstraintKey::Intramolecular
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected noncovalent-bond constraint key :intramolecular".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "noncovalent-bond :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => {
+                    NoncovalentBondConstraintDsl::from_edn(value).map(|form| Some(form.into_ir()))
+                }
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_noncovalent_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::NoncovalentBondModifyConstraints { key, changes })
+        }
         "add" => {
             let (atoms, attributes) = parse_noncovalent_bond_addition(payload)?;
             Ok(EditInput::NoncovalentBondAdd { atoms, attributes })
@@ -5349,6 +6158,142 @@ fn read_edn_bond_change<'a>(
     Ok((BondHandle::from_edn(handle)?, old, new))
 }
 
+fn read_edn_dative_bond_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(DativeBondHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "dative-bond batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "dative-bond batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "dative-bond batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "dative-bond batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["dative-bond batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["dative-bond batch row".into()],
+        })?;
+    Ok((DativeBondHandle::from_edn(handle)?, old, new))
+}
+
+fn read_edn_aromatic_system_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(AromaticSystemHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "aromatic-system batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "aromatic-system batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "aromatic-system batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "aromatic-system batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["aromatic-system batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["aromatic-system batch row".into()],
+        })?;
+    Ok((AromaticSystemHandle::from_edn(handle)?, old, new))
+}
+
+fn read_edn_multicenter_bond_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(MulticenterBondHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "multicenter-bond batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "multicenter-bond batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "multicenter-bond batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "multicenter-bond batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["multicenter-bond batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["multicenter-bond batch row".into()],
+        })?;
+    Ok((MulticenterBondHandle::from_edn(handle)?, old, new))
+}
+
+fn read_edn_noncovalent_bond_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(NoncovalentBondHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "noncovalent-bond batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "noncovalent-bond batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "noncovalent-bond batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "noncovalent-bond batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["noncovalent-bond batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["noncovalent-bond batch row".into()],
+        })?;
+    Ok((NoncovalentBondHandle::from_edn(handle)?, old, new))
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -6744,6 +7689,18 @@ mod tests {
     #[case::bond_unpaired(r#"[{:bond {:modify-unpaired-electrons [[0 {:expect {:count 0 :multiplicity 1} :update {:count 1 :multiplicity 2}}]]}}]"#, Edit::ModifyBondUnpairedElectrons { changes: vec![(BondHandle::Id(BondId(0)), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) })] })]
     #[case::bond_constraints(r#"[{:bond {:modify-constraints {:key :aromatic :changes [[0 {:expect nil :update {:aromatic true}}] [0 {:expect {:aromatic true} :update nil}]]}}}]"#, Edit::ModifyBondConstraints { key: BondConstraintKey::Aromatic, changes: vec![(BondHandle::Id(BondId(0)), None, Some(BondConstraintForm::aromatic(true))), (BondHandle::Id(BondId(0)), Some(BondConstraintForm::aromatic(true)), None)] })]
     #[case::bond_ring_key(r#"[{:bond {:modify-constraints {:key {:ring-membership {:size 5}} :changes []}}}]"#, Edit::ModifyBondConstraints { key: BondConstraintKey::RingMembership(RingScope::Size(5)), changes: vec![] })]
+    #[case::dative_bond_order(r##"[{:dative-bond {:modify-order [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}]"##, Edit::ModifyDativeBondOrders { changes: vec![(DativeBondHandle::Id(DativeBondId(0)), NumForm::Lit(1), NumForm::Lit(2)), (DativeBondHandle::New(0), NumForm::Lit(2), NumForm::Lit(1))] })]
+    #[case::dative_bond_constraints(r##"[{:dative-bond {:modify-constraints {:key :aromatic :changes [[0 {:expect nil :update {:aromatic true}}] [0 {:expect {:aromatic true} :update nil}]]}}}]"##, Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::Aromatic, changes: vec![(DativeBondHandle::Id(DativeBondId(0)), None, Some(DativeBondConstraintForm::aromatic(true))), (DativeBondHandle::Id(DativeBondId(0)), Some(DativeBondConstraintForm::aromatic(true)), None)] })]
+    #[case::aromatic_system_electrons(r##"[{:aromatic-system {:modify-electrons [[0 {:expect "*" :update "[]"}] [{:new 0} {:expect "[]" :update "*"}]]}}]"##, Edit::ModifyAromaticSystemElectrons { changes: vec![(AromaticSystemHandle::Id(AromaticSystemId(0)), ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![])), (AromaticSystemHandle::New(0), ElectronCountsForm::Lit(vec![]), ElectronCountsForm::Undetermined)] })]
+    #[case::aromatic_system_charge(r##"[{:aromatic-system {:modify-charge [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}]"##, Edit::ModifyAromaticSystemCharges { changes: vec![(AromaticSystemHandle::Id(AromaticSystemId(0)), NumForm::Lit(1), NumForm::Lit(2)), (AromaticSystemHandle::New(0), NumForm::Lit(2), NumForm::Lit(1))] })]
+    #[case::aromatic_system_unpaired_electrons(r##"[{:aromatic-system {:modify-unpaired-electrons [[0 {:expect {:count :undetermined :multiplicity :undetermined} :update {:count 0 :multiplicity 1}}] [{:new 0} {:expect {:count 0 :multiplicity 1} :update {:count :undetermined :multiplicity :undetermined}}]]}}]"##, Edit::ModifyAromaticSystemUnpairedElectrons { changes: vec![(AromaticSystemHandle::Id(AromaticSystemId(0)), UnpairedElectronsForm::default(), UnpairedElectronsForm::closed_shell()), (AromaticSystemHandle::New(0), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
+    #[case::aromatic_system_constraints(r##"[{:aromatic-system {:modify-constraints {:key :electron-count :changes [[0 {:expect nil :update {:electron-count 2}}] [0 {:expect {:electron-count 2} :update nil}]]}}}]"##, Edit::ModifyAromaticSystemConstraints { key: AromaticSystemConstraintKey::ElectronCount, changes: vec![(AromaticSystemHandle::Id(AromaticSystemId(0)), None, Some(AromaticSystemConstraintForm::electron_count(2))), (AromaticSystemHandle::Id(AromaticSystemId(0)), Some(AromaticSystemConstraintForm::electron_count(2)), None)] })]
+    #[case::multicenter_bond_electrons(r##"[{:multicenter-bond {:modify-electrons [[0 {:expect "*" :update "[]"}] [{:new 0} {:expect "[]" :update "*"}]]}}]"##, Edit::ModifyMulticenterBondElectrons { changes: vec![(MulticenterBondHandle::Id(MulticenterBondId(0)), ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![])), (MulticenterBondHandle::New(0), ElectronCountsForm::Lit(vec![]), ElectronCountsForm::Undetermined)] })]
+    #[case::multicenter_bond_charge(r##"[{:multicenter-bond {:modify-charge [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}]"##, Edit::ModifyMulticenterBondCharges { changes: vec![(MulticenterBondHandle::Id(MulticenterBondId(0)), NumForm::Lit(1), NumForm::Lit(2)), (MulticenterBondHandle::New(0), NumForm::Lit(2), NumForm::Lit(1))] })]
+    #[case::multicenter_bond_unpaired_electrons(r##"[{:multicenter-bond {:modify-unpaired-electrons [[0 {:expect {:count :undetermined :multiplicity :undetermined} :update {:count 0 :multiplicity 1}}] [{:new 0} {:expect {:count 0 :multiplicity 1} :update {:count :undetermined :multiplicity :undetermined}}]]}}]"##, Edit::ModifyMulticenterBondUnpairedElectrons { changes: vec![(MulticenterBondHandle::Id(MulticenterBondId(0)), UnpairedElectronsForm::default(), UnpairedElectronsForm::closed_shell()), (MulticenterBondHandle::New(0), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
+    #[case::multicenter_bond_constraints(r##"[{:multicenter-bond {:modify-constraints {:key :electron-count :changes [[0 {:expect nil :update {:electron-count 2}}] [0 {:expect {:electron-count 2} :update nil}]]}}}]"##, Edit::ModifyMulticenterBondConstraints { key: MulticenterBondConstraintKey::ElectronCount, changes: vec![(MulticenterBondHandle::Id(MulticenterBondId(0)), None, Some(MulticenterBondConstraintForm::electron_count(2))), (MulticenterBondHandle::Id(MulticenterBondId(0)), Some(MulticenterBondConstraintForm::electron_count(2)), None)] })]
+    #[case::noncovalent_bond_kind(r##"[{:noncovalent-bond {:modify-kind [[0 {:expect "Hbd" :update "*"}] [{:new 0} {:expect "*" :update "Hbd"}]]}}]"##, Edit::ModifyNoncovalentBondKinds { changes: vec![(NoncovalentBondHandle::Id(NoncovalentBondId(0)), NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindForm::Undetermined), (NoncovalentBondHandle::New(0), NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond))] })]
+    #[case::noncovalent_bond_constraints(r##"[{:noncovalent-bond {:modify-constraints {:key :intramolecular :changes [[0 {:expect nil :update {:intramolecular true}}] [0 {:expect {:intramolecular true} :update nil}]]}}}]"##, Edit::ModifyNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, changes: vec![(NoncovalentBondHandle::Id(NoncovalentBondId(0)), None, Some(NoncovalentBondConstraintForm::intramolecular(true))), (NoncovalentBondHandle::Id(NoncovalentBondId(0)), Some(NoncovalentBondConstraintForm::intramolecular(true)), None)] })]
     fn test_edits_dsl_batches(#[case] input: &str, #[case] edit: Edit) {
         let expected = Edits::from_iter([edit]);
         let defaults = MoleculeDefaults::new();
@@ -6862,6 +7819,34 @@ mod tests {
     #[case(Edit::ModifyBondUnpairedElectrons { changes: vec![] })]
     #[case(Edit::ModifyBondOrders { changes: vec![(BondHandle::Id(BondId(0)), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
     #[case(Edit::ModifyBondCharges { changes: vec![(BondHandle::Id(BondId(0)), NumForm::Undetermined, NumForm::var("q"))] })]
+    #[case(Edit::ModifyDativeBondOrders { changes: vec![] })]
+    #[case(Edit::ModifyDativeBondOrders { changes: vec![(DativeBondHandle::New(0), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
+    #[case(Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::Aromatic, changes: vec![] })]
+    #[case(Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::Aromatic, changes: vec![(DativeBondHandle::New(0), None, Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::Aromatic))), (DativeBondHandle::New(0), Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::Aromatic)), None)] })]
+    #[case(Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::RingMembership(RingScope::All), changes: vec![] })]
+    #[case(Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::RingMembership(RingScope::All), changes: vec![(DativeBondHandle::New(0), None, Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::RingMembership(RingScope::All)))), (DativeBondHandle::New(0), Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::RingMembership(RingScope::All))), None)] })]
+    #[case(Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::RingMembership(RingScope::Size(5)), changes: vec![] })]
+    #[case(Edit::ModifyDativeBondConstraints { key: DativeBondConstraintKey::RingMembership(RingScope::Size(5)), changes: vec![(DativeBondHandle::New(0), None, Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::RingMembership(RingScope::Size(5))))), (DativeBondHandle::New(0), Some(DativeBondConstraintForm::undetermined(DativeBondConstraintKey::RingMembership(RingScope::Size(5)))), None)] })]
+    #[case(Edit::ModifyAromaticSystemElectrons { changes: vec![] })]
+    #[case(Edit::ModifyAromaticSystemElectrons { changes: vec![(AromaticSystemHandle::New(0), ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![]))] })]
+    #[case(Edit::ModifyAromaticSystemCharges { changes: vec![] })]
+    #[case(Edit::ModifyAromaticSystemCharges { changes: vec![(AromaticSystemHandle::New(0), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
+    #[case(Edit::ModifyAromaticSystemUnpairedElectrons { changes: vec![] })]
+    #[case(Edit::ModifyAromaticSystemUnpairedElectrons { changes: vec![(AromaticSystemHandle::New(0), UnpairedElectronsForm::default(), UnpairedElectronsForm::from((1_u8, 2_u8)))] })]
+    #[case(Edit::ModifyAromaticSystemConstraints { key: AromaticSystemConstraintKey::ElectronCount, changes: vec![] })]
+    #[case(Edit::ModifyAromaticSystemConstraints { key: AromaticSystemConstraintKey::ElectronCount, changes: vec![(AromaticSystemHandle::New(0), None, Some(AromaticSystemConstraintForm::undetermined(AromaticSystemConstraintKey::ElectronCount))), (AromaticSystemHandle::New(0), Some(AromaticSystemConstraintForm::undetermined(AromaticSystemConstraintKey::ElectronCount)), None)] })]
+    #[case(Edit::ModifyMulticenterBondElectrons { changes: vec![] })]
+    #[case(Edit::ModifyMulticenterBondElectrons { changes: vec![(MulticenterBondHandle::New(0), ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![]))] })]
+    #[case(Edit::ModifyMulticenterBondCharges { changes: vec![] })]
+    #[case(Edit::ModifyMulticenterBondCharges { changes: vec![(MulticenterBondHandle::New(0), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
+    #[case(Edit::ModifyMulticenterBondUnpairedElectrons { changes: vec![] })]
+    #[case(Edit::ModifyMulticenterBondUnpairedElectrons { changes: vec![(MulticenterBondHandle::New(0), UnpairedElectronsForm::default(), UnpairedElectronsForm::from((1_u8, 2_u8)))] })]
+    #[case(Edit::ModifyMulticenterBondConstraints { key: MulticenterBondConstraintKey::ElectronCount, changes: vec![] })]
+    #[case(Edit::ModifyMulticenterBondConstraints { key: MulticenterBondConstraintKey::ElectronCount, changes: vec![(MulticenterBondHandle::New(0), None, Some(MulticenterBondConstraintForm::undetermined(MulticenterBondConstraintKey::ElectronCount))), (MulticenterBondHandle::New(0), Some(MulticenterBondConstraintForm::undetermined(MulticenterBondConstraintKey::ElectronCount)), None)] })]
+    #[case(Edit::ModifyNoncovalentBondKinds { changes: vec![] })]
+    #[case(Edit::ModifyNoncovalentBondKinds { changes: vec![(NoncovalentBondHandle::New(0), NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic))] })]
+    #[case(Edit::ModifyNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, changes: vec![] })]
+    #[case(Edit::ModifyNoncovalentBondConstraints { key: NoncovalentBondConstraintKey::Intramolecular, changes: vec![(NoncovalentBondHandle::New(0), None, Some(NoncovalentBondConstraintForm::undetermined(NoncovalentBondConstraintKey::Intramolecular))), (NoncovalentBondHandle::New(0), Some(NoncovalentBondConstraintForm::undetermined(NoncovalentBondConstraintKey::Intramolecular)), None)] })]
     fn test_edits_dsl_batches_roundtrip(#[case] edit: Edit) {
         let expected = Edits::from_iter([edit]);
         let defaults = MoleculeDefaults::new();
@@ -6897,6 +7882,29 @@ mod tests {
     #[case(r#"{:bond {:modify-constraints {:key :valence :changes []}}}"#, DeError::Custom("unknown bond constraint key :valence".into()))]
     #[case(r#"{:bond {:modify-constraints {:key {:ring-membership {"size" 5}} :changes []}}}"#, DeError::Custom("ring scope expects keyword fields".into()))]
     #[case(r#"{:bond {:modify-constraints {:key :aromatic :changes [] "extra" 1}}}"#, DeError::Custom("bond constraint batch expects keyword fields".into()))]
+    #[case(r##"{:dative-bond {:modify-order [0]}}"##, DeError::Custom("dative-bond batch row expects [handle {:expect old :update new}]".into()))]
+    #[case(r##"{:dative-bond {:modify-order [[0]]}}"##, DeError::Custom("dative-bond batch row expects two elements".into()))]
+    #[case(r##"{:dative-bond {:modify-order [[0 {:expect 1}]]}}"##, DeError::Custom("dative-bond batch row requires exactly :expect and :update".into()))]
+    #[case(r##"{:dative-bond {:modify-constraints {:key :aromatic :changes [] "extra" 1}}}"##, DeError::Custom("dative-bond constraint batch expects keyword fields".into()))]
+    #[case(r##"{:dative-bond {:modify-constraints {:key :valence :changes []}}}"##, DeError::Custom("unknown dative-bond constraint key :valence".into()))]
+    #[case(r##"{:aromatic-system {:modify-electrons [0]}}"##, DeError::Custom("aromatic-system batch row expects [handle {:expect old :update new}]".into()))]
+    #[case(r##"{:aromatic-system {:modify-electrons [[0]]}}"##, DeError::Custom("aromatic-system batch row expects two elements".into()))]
+    #[case(r##"{:aromatic-system {:modify-electrons [[0 {:expect 1}]]}}"##, DeError::Custom("aromatic-system batch row requires exactly :expect and :update".into()))]
+    #[case(r##"{:aromatic-system {:modify-constraints {:key :electron-count :changes [] "extra" 1}}}"##, DeError::Custom("aromatic-system constraint batch expects keyword fields".into()))]
+    #[case(r##"{:aromatic-system {:modify-constraints {:key :valence :changes []}}}"##, DeError::Custom("expected aromatic-system constraint key :electron-count".into()))]
+    #[case(r##"{:aromatic-system {:modify-electrons [[0 {:expect "[1,2]#c1" :update "[]"}]]}}"##, DeError::Custom("unexpected fields in aromatic-system electrons value".into()))]
+    #[case(r##"{:multicenter-bond {:modify-electrons [0]}}"##, DeError::Custom("multicenter-bond batch row expects [handle {:expect old :update new}]".into()))]
+    #[case(r##"{:multicenter-bond {:modify-electrons [[0]]}}"##, DeError::Custom("multicenter-bond batch row expects two elements".into()))]
+    #[case(r##"{:multicenter-bond {:modify-electrons [[0 {:expect 1}]]}}"##, DeError::Custom("multicenter-bond batch row requires exactly :expect and :update".into()))]
+    #[case(r##"{:multicenter-bond {:modify-constraints {:key :electron-count :changes [] "extra" 1}}}"##, DeError::Custom("multicenter-bond constraint batch expects keyword fields".into()))]
+    #[case(r##"{:multicenter-bond {:modify-constraints {:key :valence :changes []}}}"##, DeError::Custom("expected multicenter-bond constraint key :electron-count".into()))]
+    #[case(r##"{:multicenter-bond {:modify-electrons [[0 {:expect "[1,2]#c1" :update "[]"}]]}}"##, DeError::Custom("unexpected fields in multicenter-bond electrons value".into()))]
+    #[case(r##"{:noncovalent-bond {:modify-kind [0]}}"##, DeError::Custom("noncovalent-bond batch row expects [handle {:expect old :update new}]".into()))]
+    #[case(r##"{:noncovalent-bond {:modify-kind [[0]]}}"##, DeError::Custom("noncovalent-bond batch row expects two elements".into()))]
+    #[case(r##"{:noncovalent-bond {:modify-kind [[0 {:expect 1}]]}}"##, DeError::Custom("noncovalent-bond batch row requires exactly :expect and :update".into()))]
+    #[case(r##"{:noncovalent-bond {:modify-constraints {:key :intramolecular :changes [] "extra" 1}}}"##, DeError::Custom("noncovalent-bond constraint batch expects keyword fields".into()))]
+    #[case(r##"{:noncovalent-bond {:modify-constraints {:key :valence :changes []}}}"##, DeError::Custom("expected noncovalent-bond constraint key :intramolecular".into()))]
+    #[case(r##"{:noncovalent-bond {:modify-kind [[0 {:expect "Hbd#I!" :update "*"}]]}}"##, DeError::Custom("unexpected fields in noncovalent-bond kind value".into()))]
     fn test_edit_input_batches_error(#[case] input: &str, #[case] error: DeError) {
         assert_eq!(EditInput::from_edn_str(input), Err(EdnError::De(error)));
     }

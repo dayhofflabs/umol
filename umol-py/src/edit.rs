@@ -27,13 +27,13 @@ use umol_graph_ir::ir::{
 use crate::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use crate::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::bond::{BondForm, BondUpdate};
-use crate::constraint::aromatic::AromaticSystemConstraintForm;
+use crate::constraint::aromatic::{AromaticSystemConstraintForm, AromaticSystemConstraintKey};
 use crate::constraint::atom::{AtomConstraintForm, AtomConstraintKey};
 use crate::constraint::bond::{BondConstraintForm, BondConstraintKey};
-use crate::constraint::dative::DativeBondConstraintForm;
+use crate::constraint::dative::{DativeBondConstraintForm, DativeBondConstraintKey};
 use crate::constraint::molecule::Constraint;
-use crate::constraint::multicenter::MulticenterBondConstraintForm;
-use crate::constraint::noncovalent::NoncovalentBondConstraintForm;
+use crate::constraint::multicenter::{MulticenterBondConstraintForm, MulticenterBondConstraintKey};
+use crate::constraint::noncovalent::{NoncovalentBondConstraintForm, NoncovalentBondConstraintKey};
 use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::into_py_variant;
 use crate::dative::{DativeBondForm, DativeBondUpdate};
@@ -43,11 +43,12 @@ use crate::delta::{
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
+use crate::electrons::ElectronCountsForm;
 use crate::entity::Readonly;
 use crate::error::{parse_error, ConsumedError, InvalidatedViewError};
 use crate::metadata::Entity;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
-use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
+use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
 use crate::num::NumForm;
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
@@ -452,6 +453,30 @@ type BondConstraintChange = (
     Option<Py<BondConstraintForm>>,
 );
 
+type DativeBondConstraintChange = (
+    HandleLike,
+    Option<Py<DativeBondConstraintForm>>,
+    Option<Py<DativeBondConstraintForm>>,
+);
+
+type AromaticSystemConstraintChange = (
+    HandleLike,
+    Option<Py<AromaticSystemConstraintForm>>,
+    Option<Py<AromaticSystemConstraintForm>>,
+);
+
+type MulticenterBondConstraintChange = (
+    HandleLike,
+    Option<Py<MulticenterBondConstraintForm>>,
+    Option<Py<MulticenterBondConstraintForm>>,
+);
+
+type NoncovalentBondConstraintChange = (
+    HandleLike,
+    Option<Py<NoncovalentBondConstraintForm>>,
+    Option<Py<NoncovalentBondConstraintForm>>,
+);
+
 struct TupleItems<T>(Vec<T>);
 
 impl<'a, 'py, T> FromPyObject<'a, 'py> for TupleItems<T>
@@ -560,6 +585,9 @@ pub enum Edit {
         old: HandleLike,
         new: HandleLike,
     },
+    ModifyDativeBondOrders {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
     ModifyDativeBondField {
         id: HandleLike,
         change: Py<DativeBondFieldChange>,
@@ -575,6 +603,19 @@ pub enum Edit {
         id: HandleLike,
         old: Vec<HandleLike>,
         new: Vec<HandleLike>,
+    },
+    ModifyAromaticSystemElectrons {
+        changes: TupleItems<(HandleLike, Py<ElectronCountsForm>, Py<ElectronCountsForm>)>,
+    },
+    ModifyAromaticSystemCharges {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyAromaticSystemUnpairedElectrons {
+        changes: TupleItems<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
     },
     ModifyAromaticSystemField {
         id: HandleLike,
@@ -592,6 +633,19 @@ pub enum Edit {
         old: Vec<HandleLike>,
         new: Vec<HandleLike>,
     },
+    ModifyMulticenterBondElectrons {
+        changes: TupleItems<(HandleLike, Py<ElectronCountsForm>, Py<ElectronCountsForm>)>,
+    },
+    ModifyMulticenterBondCharges {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyMulticenterBondUnpairedElectrons {
+        changes: TupleItems<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
+    },
     ModifyMulticenterBondField {
         id: HandleLike,
         change: Py<MulticenterBondFieldChange>,
@@ -607,6 +661,13 @@ pub enum Edit {
         id: HandleLike,
         old: (HandleLike, HandleLike),
         new: (HandleLike, HandleLike),
+    },
+    ModifyNoncovalentBondKinds {
+        changes: TupleItems<(
+            HandleLike,
+            Py<NoncovalentBondKindForm>,
+            Py<NoncovalentBondKindForm>,
+        )>,
     },
     ModifyNoncovalentBondField {
         id: HandleLike,
@@ -670,20 +731,36 @@ pub enum Edit {
         old: Option<Py<BondConstraintForm>>,
         new: Option<Py<BondConstraintForm>>,
     },
+    ModifyDativeBondConstraints {
+        key: Py<DativeBondConstraintKey>,
+        changes: TupleItems<DativeBondConstraintChange>,
+    },
     ModifyDativeBondConstraint {
         id: HandleLike,
         old: Option<Py<DativeBondConstraintForm>>,
         new: Option<Py<DativeBondConstraintForm>>,
+    },
+    ModifyAromaticSystemConstraints {
+        key: Py<AromaticSystemConstraintKey>,
+        changes: TupleItems<AromaticSystemConstraintChange>,
     },
     ModifyAromaticSystemConstraint {
         id: HandleLike,
         old: Option<Py<AromaticSystemConstraintForm>>,
         new: Option<Py<AromaticSystemConstraintForm>>,
     },
+    ModifyMulticenterBondConstraints {
+        key: Py<MulticenterBondConstraintKey>,
+        changes: TupleItems<MulticenterBondConstraintChange>,
+    },
     ModifyMulticenterBondConstraint {
         id: HandleLike,
         old: Option<Py<MulticenterBondConstraintForm>>,
         new: Option<Py<MulticenterBondConstraintForm>>,
+    },
+    ModifyNoncovalentBondConstraints {
+        key: Py<NoncovalentBondConstraintKey>,
+        changes: TupleItems<NoncovalentBondConstraintChange>,
     },
     ModifyNoncovalentBondConstraint {
         id: HandleLike,
@@ -760,11 +837,21 @@ impl Edit {
             Self::ReplaceDativeBondAcceptor { .. } => {
                 ("ReplaceDativeBondAcceptor", &["id", "old", "new"])
             }
+            Self::ModifyDativeBondOrders { .. } => ("ModifyDativeBondOrders", &["changes"]),
             Self::ModifyDativeBondField { .. } => ("ModifyDativeBondField", &["id", "change"]),
             Self::AddAromaticSystem { .. } => ("AddAromaticSystem", &["atoms", "attributes"]),
             Self::RemoveAromaticSystems { .. } => ("RemoveAromaticSystems", &["removes"]),
             Self::ReplaceAromaticSystemAtoms { .. } => {
                 ("ReplaceAromaticSystemAtoms", &["id", "old", "new"])
+            }
+            Self::ModifyAromaticSystemElectrons { .. } => {
+                ("ModifyAromaticSystemElectrons", &["changes"])
+            }
+            Self::ModifyAromaticSystemCharges { .. } => {
+                ("ModifyAromaticSystemCharges", &["changes"])
+            }
+            Self::ModifyAromaticSystemUnpairedElectrons { .. } => {
+                ("ModifyAromaticSystemUnpairedElectrons", &["changes"])
             }
             Self::ModifyAromaticSystemField { .. } => {
                 ("ModifyAromaticSystemField", &["id", "change"])
@@ -774,6 +861,15 @@ impl Edit {
             Self::ReplaceMulticenterBondAtoms { .. } => {
                 ("ReplaceMulticenterBondAtoms", &["id", "old", "new"])
             }
+            Self::ModifyMulticenterBondElectrons { .. } => {
+                ("ModifyMulticenterBondElectrons", &["changes"])
+            }
+            Self::ModifyMulticenterBondCharges { .. } => {
+                ("ModifyMulticenterBondCharges", &["changes"])
+            }
+            Self::ModifyMulticenterBondUnpairedElectrons { .. } => {
+                ("ModifyMulticenterBondUnpairedElectrons", &["changes"])
+            }
             Self::ModifyMulticenterBondField { .. } => {
                 ("ModifyMulticenterBondField", &["id", "change"])
             }
@@ -782,6 +878,7 @@ impl Edit {
             Self::ReplaceNoncovalentBondAtoms { .. } => {
                 ("ReplaceNoncovalentBondAtoms", &["id", "old", "new"])
             }
+            Self::ModifyNoncovalentBondKinds { .. } => ("ModifyNoncovalentBondKinds", &["changes"]),
             Self::ModifyNoncovalentBondField { .. } => {
                 ("ModifyNoncovalentBondField", &["id", "change"])
             }
@@ -802,14 +899,26 @@ impl Edit {
             Self::ModifyAtomConstraint { .. } => ("ModifyAtomConstraint", &["id", "old", "new"]),
             Self::ModifyBondConstraints { .. } => ("ModifyBondConstraints", &["key", "changes"]),
             Self::ModifyBondConstraint { .. } => ("ModifyBondConstraint", &["id", "old", "new"]),
+            Self::ModifyDativeBondConstraints { .. } => {
+                ("ModifyDativeBondConstraints", &["key", "changes"])
+            }
             Self::ModifyDativeBondConstraint { .. } => {
                 ("ModifyDativeBondConstraint", &["id", "old", "new"])
+            }
+            Self::ModifyAromaticSystemConstraints { .. } => {
+                ("ModifyAromaticSystemConstraints", &["key", "changes"])
             }
             Self::ModifyAromaticSystemConstraint { .. } => {
                 ("ModifyAromaticSystemConstraint", &["id", "old", "new"])
             }
+            Self::ModifyMulticenterBondConstraints { .. } => {
+                ("ModifyMulticenterBondConstraints", &["key", "changes"])
+            }
             Self::ModifyMulticenterBondConstraint { .. } => {
                 ("ModifyMulticenterBondConstraint", &["id", "old", "new"])
+            }
+            Self::ModifyNoncovalentBondConstraints { .. } => {
+                ("ModifyNoncovalentBondConstraints", &["key", "changes"])
             }
             Self::ModifyNoncovalentBondConstraint { .. } => {
                 ("ModifyNoncovalentBondConstraint", &["id", "old", "new"])
@@ -1075,6 +1184,20 @@ impl Edit {
                     new: HandleLike::from_atom_handle(new),
                 }
             }
+            GraphIrEdit::ModifyDativeBondOrders { changes } => Self::ModifyDativeBondOrders {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_dative_bond_handle(id),
+                                into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
             GraphIrEdit::ModifyDativeBondField { id, change } => Self::ModifyDativeBondField {
                 id: HandleLike::from_dative_bond_handle(id),
                 change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
@@ -1103,6 +1226,60 @@ impl Edit {
                     id: HandleLike::from_aromatic_system_handle(id),
                     old: old.iter().map(HandleLike::from_atom_handle).collect(),
                     new: new.iter().map(HandleLike::from_atom_handle).collect(),
+                }
+            }
+            GraphIrEdit::ModifyAromaticSystemElectrons { changes } => {
+                Self::ModifyAromaticSystemElectrons {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_aromatic_system_handle(id),
+                                    into_py_variant(py, ElectronCountsForm::from_rust(old))?,
+                                    into_py_variant(py, ElectronCountsForm::from_rust(new))?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyAromaticSystemCharges { changes } => {
+                Self::ModifyAromaticSystemCharges {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_aromatic_system_handle(id),
+                                    into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                    into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyAromaticSystemUnpairedElectrons { changes } => {
+                Self::ModifyAromaticSystemUnpairedElectrons {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_aromatic_system_handle(id),
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, old)?,
+                                    )?,
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, new)?,
+                                    )?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
                 }
             }
             GraphIrEdit::ModifyAromaticSystemField { id, change } => {
@@ -1135,6 +1312,60 @@ impl Edit {
                     id: HandleLike::from_multicenter_bond_handle(id),
                     old: old.iter().map(HandleLike::from_atom_handle).collect(),
                     new: new.iter().map(HandleLike::from_atom_handle).collect(),
+                }
+            }
+            GraphIrEdit::ModifyMulticenterBondElectrons { changes } => {
+                Self::ModifyMulticenterBondElectrons {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_multicenter_bond_handle(id),
+                                    into_py_variant(py, ElectronCountsForm::from_rust(old))?,
+                                    into_py_variant(py, ElectronCountsForm::from_rust(new))?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyMulticenterBondCharges { changes } => {
+                Self::ModifyMulticenterBondCharges {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_multicenter_bond_handle(id),
+                                    into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                    into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyMulticenterBondUnpairedElectrons { changes } => {
+                Self::ModifyMulticenterBondUnpairedElectrons {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_multicenter_bond_handle(id),
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, old)?,
+                                    )?,
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, new)?,
+                                    )?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
                 }
             }
             GraphIrEdit::ModifyMulticenterBondField { id, change } => {
@@ -1178,6 +1409,22 @@ impl Edit {
                     new: (
                         HandleLike::from_atom_handle(&new[0]),
                         HandleLike::from_atom_handle(&new[1]),
+                    ),
+                }
+            }
+            GraphIrEdit::ModifyNoncovalentBondKinds { changes } => {
+                Self::ModifyNoncovalentBondKinds {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_noncovalent_bond_handle(id),
+                                    into_py_variant(py, NoncovalentBondKindForm::from_rust(old))?,
+                                    into_py_variant(py, NoncovalentBondKindForm::from_rust(new))?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
                     ),
                 }
             }
@@ -1391,6 +1638,37 @@ impl Edit {
                     .map(|value| into_py_variant(py, BondConstraintForm::from_rust(py, value)?))
                     .transpose()?,
             },
+            GraphIrEdit::ModifyDativeBondConstraints { key, changes } => {
+                Self::ModifyDativeBondConstraints {
+                    key: into_py_variant(py, DativeBondConstraintKey::from_rust(py, key)?)?,
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_dative_bond_handle(id),
+                                    old.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                DativeBondConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                    new.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                DativeBondConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
             GraphIrEdit::ModifyDativeBondConstraint { id, old, new } => {
                 Self::ModifyDativeBondConstraint {
                     id: HandleLike::from_dative_bond_handle(id),
@@ -1408,6 +1686,37 @@ impl Edit {
                         .transpose()?,
                 }
             }
+            GraphIrEdit::ModifyAromaticSystemConstraints { key, changes } => {
+                Self::ModifyAromaticSystemConstraints {
+                    key: into_py_variant(py, AromaticSystemConstraintKey::from_rust(key))?,
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_aromatic_system_handle(id),
+                                    old.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                AromaticSystemConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                    new.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                AromaticSystemConstraintForm::from_rust(py, value)?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
             GraphIrEdit::ModifyAromaticSystemConstraint { id, old, new } => {
                 Self::ModifyAromaticSystemConstraint {
                     id: HandleLike::from_aromatic_system_handle(id),
@@ -1423,6 +1732,41 @@ impl Edit {
                             into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
+                }
+            }
+            GraphIrEdit::ModifyMulticenterBondConstraints { key, changes } => {
+                Self::ModifyMulticenterBondConstraints {
+                    key: into_py_variant(py, MulticenterBondConstraintKey::from_rust(key))?,
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_multicenter_bond_handle(id),
+                                    old.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                MulticenterBondConstraintForm::from_rust(
+                                                    py, value,
+                                                )?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                    new.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                MulticenterBondConstraintForm::from_rust(
+                                                    py, value,
+                                                )?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
                 }
             }
             GraphIrEdit::ModifyMulticenterBondConstraint { id, old, new } => {
@@ -1446,6 +1790,41 @@ impl Edit {
                             )
                         })
                         .transpose()?,
+                }
+            }
+            GraphIrEdit::ModifyNoncovalentBondConstraints { key, changes } => {
+                Self::ModifyNoncovalentBondConstraints {
+                    key: into_py_variant(py, NoncovalentBondConstraintKey::from_rust(key))?,
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_noncovalent_bond_handle(id),
+                                    old.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                NoncovalentBondConstraintForm::from_rust(
+                                                    py, value,
+                                                )?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                    new.as_ref()
+                                        .map(|value| {
+                                            into_py_variant(
+                                                py,
+                                                NoncovalentBondConstraintForm::from_rust(
+                                                    py, value,
+                                                )?,
+                                            )
+                                        })
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
                 }
             }
             GraphIrEdit::ModifyNoncovalentBondConstraint { id, old, new } => {
@@ -1719,6 +2098,19 @@ impl Edit {
                     new: new.to_atom_handle(),
                 }
             }
+            Self::ModifyDativeBondOrders { changes } => GraphIrEdit::ModifyDativeBondOrders {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_dative_bond_handle(),
+                            old.bind(py).borrow().to_rust(py),
+                            new.bind(py).borrow().to_rust(py),
+                        )
+                    })
+                    .collect(),
+            },
             Self::ModifyDativeBondField { id, change } => GraphIrEdit::ModifyDativeBondField {
                 id: id.to_dative_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -1746,6 +2138,51 @@ impl Edit {
                     id: id.to_aromatic_system_handle(),
                     old: old.iter().map(HandleLike::to_atom_handle).collect(),
                     new: new.iter().map(HandleLike::to_atom_handle).collect(),
+                }
+            }
+            Self::ModifyAromaticSystemElectrons { changes } => {
+                GraphIrEdit::ModifyAromaticSystemElectrons {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_aromatic_system_handle(),
+                                old.bind(py).borrow().to_rust(),
+                                new.bind(py).borrow().to_rust(),
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Self::ModifyAromaticSystemCharges { changes } => {
+                GraphIrEdit::ModifyAromaticSystemCharges {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_aromatic_system_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Self::ModifyAromaticSystemUnpairedElectrons { changes } => {
+                GraphIrEdit::ModifyAromaticSystemUnpairedElectrons {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_aromatic_system_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
                 }
             }
             Self::ModifyAromaticSystemField { id, change } => {
@@ -1779,6 +2216,51 @@ impl Edit {
                     new: new.iter().map(HandleLike::to_atom_handle).collect(),
                 }
             }
+            Self::ModifyMulticenterBondElectrons { changes } => {
+                GraphIrEdit::ModifyMulticenterBondElectrons {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_multicenter_bond_handle(),
+                                old.bind(py).borrow().to_rust(),
+                                new.bind(py).borrow().to_rust(),
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Self::ModifyMulticenterBondCharges { changes } => {
+                GraphIrEdit::ModifyMulticenterBondCharges {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_multicenter_bond_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Self::ModifyMulticenterBondUnpairedElectrons { changes } => {
+                GraphIrEdit::ModifyMulticenterBondUnpairedElectrons {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_multicenter_bond_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             Self::ModifyMulticenterBondField { id, change } => {
                 GraphIrEdit::ModifyMulticenterBondField {
                     id: id.to_multicenter_bond_handle(),
@@ -1806,6 +2288,21 @@ impl Edit {
                     id: id.to_noncovalent_bond_handle(),
                     old: [old.0.to_atom_handle(), old.1.to_atom_handle()],
                     new: [new.0.to_atom_handle(), new.1.to_atom_handle()],
+                }
+            }
+            Self::ModifyNoncovalentBondKinds { changes } => {
+                GraphIrEdit::ModifyNoncovalentBondKinds {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_noncovalent_bond_handle(),
+                                old.bind(py).borrow().to_rust(),
+                                new.bind(py).borrow().to_rust(),
+                            )
+                        })
+                        .collect(),
                 }
             }
             Self::ModifyNoncovalentBondField { id, change } => {
@@ -1950,6 +2447,24 @@ impl Edit {
                     .as_ref()
                     .map(|value| value.bind(py).borrow().to_rust(py)),
             },
+            Self::ModifyDativeBondConstraints { key, changes } => {
+                GraphIrEdit::ModifyDativeBondConstraints {
+                    key: key.bind(py).borrow().to_rust(py),
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_dative_bond_handle(),
+                                old.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                                new.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             Self::ModifyDativeBondConstraint { id, old, new } => {
                 GraphIrEdit::ModifyDativeBondConstraint {
                     id: id.to_dative_bond_handle(),
@@ -1959,6 +2474,24 @@ impl Edit {
                     new: new
                         .as_ref()
                         .map(|value| value.bind(py).borrow().to_rust(py)),
+                }
+            }
+            Self::ModifyAromaticSystemConstraints { key, changes } => {
+                GraphIrEdit::ModifyAromaticSystemConstraints {
+                    key: key.bind(py).borrow().to_rust(),
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_aromatic_system_handle(),
+                                old.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                                new.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                            )
+                        })
+                        .collect(),
                 }
             }
             Self::ModifyAromaticSystemConstraint { id, old, new } => {
@@ -1972,6 +2505,24 @@ impl Edit {
                         .map(|value| value.bind(py).borrow().to_rust(py)),
                 }
             }
+            Self::ModifyMulticenterBondConstraints { key, changes } => {
+                GraphIrEdit::ModifyMulticenterBondConstraints {
+                    key: key.bind(py).borrow().to_rust(),
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_multicenter_bond_handle(),
+                                old.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                                new.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             Self::ModifyMulticenterBondConstraint { id, old, new } => {
                 GraphIrEdit::ModifyMulticenterBondConstraint {
                     id: id.to_multicenter_bond_handle(),
@@ -1981,6 +2532,24 @@ impl Edit {
                     new: new
                         .as_ref()
                         .map(|value| value.bind(py).borrow().to_rust(py)),
+                }
+            }
+            Self::ModifyNoncovalentBondConstraints { key, changes } => {
+                GraphIrEdit::ModifyNoncovalentBondConstraints {
+                    key: key.bind(py).borrow().to_rust(),
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_noncovalent_bond_handle(),
+                                old.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                                new.as_ref()
+                                    .map(|value| value.bind(py).borrow().to_rust(py)),
+                            )
+                        })
+                        .collect(),
                 }
             }
             Self::ModifyNoncovalentBondConstraint { id, old, new } => {
@@ -2827,6 +3396,286 @@ impl Edits {
                 .map(|(id, old, new)| {
                     (
                         id.to_bond_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_dative_bond_orders(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_dative_bond_orders(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_dative_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_dative_bond_constraints(
+        &mut self,
+        py: Python<'_>,
+        key: Py<DativeBondConstraintKey>,
+        changes: Vec<DativeBondConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_dative_bond_constraints(
+            key.bind(py).borrow().to_rust(py),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_dative_bond_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_aromatic_system_electrons(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<ElectronCountsForm>, Py<ElectronCountsForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_aromatic_system_electrons(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_aromatic_system_handle(),
+                        old.bind(py).borrow().to_rust(),
+                        new.bind(py).borrow().to_rust(),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_aromatic_system_charges(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_aromatic_system_charges(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_aromatic_system_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_aromatic_system_unpaired_electrons(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_aromatic_system_unpaired_electrons(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_aromatic_system_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_aromatic_system_constraints(
+        &mut self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+        changes: Vec<AromaticSystemConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_aromatic_system_constraints(
+            key.bind(py).borrow().to_rust(),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_aromatic_system_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_multicenter_bond_electrons(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<ElectronCountsForm>, Py<ElectronCountsForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_multicenter_bond_electrons(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_multicenter_bond_handle(),
+                        old.bind(py).borrow().to_rust(),
+                        new.bind(py).borrow().to_rust(),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_multicenter_bond_charges(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_multicenter_bond_charges(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_multicenter_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_multicenter_bond_unpaired_electrons(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_multicenter_bond_unpaired_electrons(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_multicenter_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_multicenter_bond_constraints(
+        &mut self,
+        py: Python<'_>,
+        key: Py<MulticenterBondConstraintKey>,
+        changes: Vec<MulticenterBondConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_multicenter_bond_constraints(
+            key.bind(py).borrow().to_rust(),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_multicenter_bond_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_noncovalent_bond_kinds(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<NoncovalentBondKindForm>,
+            Py<NoncovalentBondKindForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_noncovalent_bond_kinds(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_noncovalent_bond_handle(),
+                        old.bind(py).borrow().to_rust(),
+                        new.bind(py).borrow().to_rust(),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_noncovalent_bond_constraints(
+        &mut self,
+        py: Python<'_>,
+        key: Py<NoncovalentBondConstraintKey>,
+        changes: Vec<NoncovalentBondConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_noncovalent_bond_constraints(
+            key.bind(py).borrow().to_rust(),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_noncovalent_bond_handle(),
                         old.as_ref()
                             .map(|value| value.bind(py).borrow().to_rust(py)),
                         new.as_ref()

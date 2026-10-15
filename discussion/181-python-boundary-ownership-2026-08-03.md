@@ -3807,7 +3807,7 @@ old values, and manipulated undo payloads. Tests extend the existing logical gro
 Affected-crate strict Clippy, workspace all-target compilation, nightly formatting,
 and git diff --check passed. Logs are in scratch/181-s2b.
 
-#### S2c — Dative bond field and constraint batches
+#### S2c — Dative bond field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -3836,7 +3836,12 @@ existing separate operations; no relation reconstruction is part of a field batc
 added dative bonds, failure after a completed order change, retained donor order
 and acceptor, and rollback through the existing removal/compaction path.
 
-#### S2d — Aromatic system field and constraint batches
+**Implemented — 2026-10-14.** Order and keyed constraint batches are wired through
+Edit, Undo, Edits, both application paths, DSL, and Python. Tests cover exact ring
+scopes, initial/new/removed handles, retained donor order and acceptor, and recovery
+across removal and compaction. Combined verification is recorded under S2f.
+
+#### S2d — Aromatic system field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -3864,11 +3869,21 @@ Wire Edits construction, both application paths, mutable-view writes, replay, an
 DSL/Python conversion. Preserve atom order and the existing open attribute
 contract; batching adds no electron-count length check or system reconstruction.
 
+**Parser decision — 2026-10-14.** The shared electron-count parser accepts `[]`
+as an empty literal vector, distinct from `*` (Undetermined). This preserves the
+open attribute contract, including vectors whose length differs from the atom
+count, through the existing aromatic-system and multicenter-bond DSLs.
+
 **Checks:** shared S2 cases for all three fields and aromatic constraint keys;
 include electron-count vectors, independent charge changes, repeated electron
 changes, late batch rejection, and unchanged atom lists after application/rollback.
 
-#### S2e — Multicenter bond field and constraint batches
+**Implemented — 2026-10-14.** All three field batches and the keyed constraint
+batch are wired through Rust, DSL, and Python. Empty and mismatched-length electron
+vectors retain their exact values; participant order and correspondence are
+preserved. Combined verification is recorded under S2f.
+
+#### S2e — Multicenter bond field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -3900,7 +3915,13 @@ semantics; neither validation nor structural replacement is added by batching.
 include newly added bonds, electron-count payloads, sequential changes, failure
 following earlier successful field edits, and exact retained atom order.
 
-#### S2f — Noncovalent bond field and constraint batches
+**Implemented — 2026-10-14.** All three field batches and the keyed constraint
+batch are wired through Rust, DSL, and Python, using the shared electron-count
+parser decision above. Tests cover ordered writes, open electron-count payloads,
+prefix recovery, and retained atom order. Combined verification is recorded under
+S2f.
+
+#### S2f — Noncovalent bond field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -3928,6 +3949,24 @@ DSL/Python conversion. Leave the two atom IDs and their replacement API unchange
 **Checks:** shared S2 cases for kind and noncovalent constraint keys; include
 literal/undetermined forms, new and removed handles, repeated kind changes, and
 unchanged atom IDs and correspondence through successful execution and rollback.
+
+**Implemented — 2026-10-14.** Kind and keyed constraint batches are wired through
+Rust, DSL, and Python. Tests cover literal and undetermined kinds, initial/new/
+removed handles, repeated writes, and preservation of both atom IDs.
+
+**Combined verification for S2c–S2f — 2026-10-14.** Passed 10,707 graph-IR unit
+cases (three existing ignored cases), 53 edit properties, and 740 Python cases
+covering edits, transactions, deltas, and the four entity families after rebuilding
+the extension with Python 3.13. Coverage includes first/middle/last failures,
+destructive prefixes, journal and clone recovery, exact accepted-old-value undo,
+manipulated undo payloads, correspondence, typed DSL roundtrips, empty batches,
+and Python tuple rows and input-list independence.
+
+The field and entity-constraint application test groups now have entity submodules;
+all 31 original test function bodies were retained unchanged. Affected-crate
+strict Clippy, workspace all-target compilation, nightly formatting, and
+git diff --check passed. Workspace tests remain at the plan gate; performance
+comparisons remain in S4a. Logs are in scratch/181-s2c-f.
 
 #### S2g1 — Stereo form semantics and constraint readings
 

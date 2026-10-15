@@ -775,6 +775,18 @@ impl Molecule {
                 view.replace_acceptor(new);
                 Ok(())
             }
+            Edit::ModifyDativeBondOrders { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.dative_bond(handle)?;
+                    let mut view = self.dative_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.order.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.order = new;
+                }
+                Ok(())
+            }
             Edit::ModifyDativeBondField { id, change } => {
                 let id = state.dative_bond(id)?;
                 let mut view = self.dative_bond_mut(id);
@@ -850,6 +862,42 @@ impl Molecule {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 view.replace_atoms(&new);
+                Ok(())
+            }
+            Edit::ModifyAromaticSystemElectrons { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.aromatic_system(handle)?;
+                    let mut view = self.aromatic_system_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.electrons.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.electrons = new;
+                }
+                Ok(())
+            }
+            Edit::ModifyAromaticSystemCharges { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.aromatic_system(handle)?;
+                    let mut view = self.aromatic_system_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.charge.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.charge = new;
+                }
+                Ok(())
+            }
+            Edit::ModifyAromaticSystemUnpairedElectrons { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.aromatic_system(handle)?;
+                    let mut view = self.aromatic_system_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.unpaired_electrons.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.unpaired_electrons = new;
+                }
                 Ok(())
             }
             Edit::ModifyAromaticSystemField { id, change } => {
@@ -941,6 +989,42 @@ impl Molecule {
                 view.replace_atoms(&new);
                 Ok(())
             }
+            Edit::ModifyMulticenterBondElectrons { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.multicenter_bond(handle)?;
+                    let mut view = self.multicenter_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.electrons.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.electrons = new;
+                }
+                Ok(())
+            }
+            Edit::ModifyMulticenterBondCharges { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.multicenter_bond(handle)?;
+                    let mut view = self.multicenter_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.charge.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.charge = new;
+                }
+                Ok(())
+            }
+            Edit::ModifyMulticenterBondUnpairedElectrons { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.multicenter_bond(handle)?;
+                    let mut view = self.multicenter_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.unpaired_electrons.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.unpaired_electrons = new;
+                }
+                Ok(())
+            }
             Edit::ModifyMulticenterBondField { id, change } => {
                 let id = state.multicenter_bond(id)?;
                 let mut view = self.multicenter_bond_mut(id);
@@ -1019,6 +1103,18 @@ impl Molecule {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 view.replace_atoms(new);
+                Ok(())
+            }
+            Edit::ModifyNoncovalentBondKinds { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.noncovalent_bond(handle)?;
+                    let mut view = self.noncovalent_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.kind.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.kind = new;
+                }
                 Ok(())
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
@@ -1312,6 +1408,33 @@ impl Molecule {
                 }
                 Ok(())
             }
+            Edit::ModifyDativeBondConstraints { key, changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.dative_bond(handle)?;
+                    if old.as_ref().is_some_and(|value| value.key() != key)
+                        || new.as_ref().is_some_and(|value| value.key() != key)
+                    {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    if old.is_none() && new.is_none() {
+                        continue;
+                    }
+                    let mut view = self.dative_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match (constraints.get(key), old.as_ref()) {
+                        (None, None) => {}
+                        (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                        _ => return Err(TransactionError::OldStateMismatch),
+                    }
+                    match new {
+                        Some(value) => constraints.set(value),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+                Ok(())
+            }
             Edit::ModifyDativeBondConstraint { id, old, new } => {
                 let id = state.dative_bond(id)?;
                 let key = match (&old, &new) {
@@ -1332,6 +1455,33 @@ impl Molecule {
                     Some(constraint) => constraints.set(constraint),
                     None => {
                         constraints.remove(key);
+                    }
+                }
+                Ok(())
+            }
+            Edit::ModifyAromaticSystemConstraints { key, changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.aromatic_system(handle)?;
+                    if old.as_ref().is_some_and(|value| value.key() != key)
+                        || new.as_ref().is_some_and(|value| value.key() != key)
+                    {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    if old.is_none() && new.is_none() {
+                        continue;
+                    }
+                    let mut view = self.aromatic_system_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match (constraints.get(key), old.as_ref()) {
+                        (None, None) => {}
+                        (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                        _ => return Err(TransactionError::OldStateMismatch),
+                    }
+                    match new {
+                        Some(value) => constraints.set(value),
+                        None => {
+                            constraints.remove(key);
+                        }
                     }
                 }
                 Ok(())
@@ -1360,6 +1510,33 @@ impl Molecule {
                 }
                 Ok(())
             }
+            Edit::ModifyMulticenterBondConstraints { key, changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.multicenter_bond(handle)?;
+                    if old.as_ref().is_some_and(|value| value.key() != key)
+                        || new.as_ref().is_some_and(|value| value.key() != key)
+                    {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    if old.is_none() && new.is_none() {
+                        continue;
+                    }
+                    let mut view = self.multicenter_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match (constraints.get(key), old.as_ref()) {
+                        (None, None) => {}
+                        (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                        _ => return Err(TransactionError::OldStateMismatch),
+                    }
+                    match new {
+                        Some(value) => constraints.set(value),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+                Ok(())
+            }
             Edit::ModifyMulticenterBondConstraint { id, old, new } => {
                 let id = state.multicenter_bond(id)?;
                 let key = match (&old, &new) {
@@ -1380,6 +1557,33 @@ impl Molecule {
                     Some(constraint) => constraints.set(constraint),
                     None => {
                         constraints.remove(key);
+                    }
+                }
+                Ok(())
+            }
+            Edit::ModifyNoncovalentBondConstraints { key, changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.noncovalent_bond(handle)?;
+                    if old.as_ref().is_some_and(|value| value.key() != key)
+                        || new.as_ref().is_some_and(|value| value.key() != key)
+                    {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    if old.is_none() && new.is_none() {
+                        continue;
+                    }
+                    let mut view = self.noncovalent_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match (constraints.get(key), old.as_ref()) {
+                        (None, None) => {}
+                        (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                        _ => return Err(TransactionError::OldStateMismatch),
+                    }
+                    match new {
+                        Some(value) => constraints.set(value),
+                        None => {
+                            constraints.remove(key);
+                        }
                     }
                 }
                 Ok(())
@@ -1984,6 +2188,30 @@ impl Molecule {
                 view.replace_acceptor(new);
                 Ok(Undo::RestoreDativeBondAcceptor { id, acceptor })
             }
+            Edit::ModifyDativeBondOrders { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.dative_bond(handle).and_then(|id| {
+                        let mut view = self.dative_bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.order.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.order = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.dative_bond_mut(id).attributes_mut().order = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyDativeBondOrders { changes: inverse })
+            }
             Edit::ModifyDativeBondField { id, change } => {
                 let id = state.dative_bond(id)?;
                 let mut view = self.dative_bond_mut(id);
@@ -2085,6 +2313,80 @@ impl Molecule {
                 }
                 view.replace_atoms(&new);
                 Ok(Undo::RestoreAromaticSystemAtoms { id, atoms })
+            }
+            Edit::ModifyAromaticSystemElectrons { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.aromatic_system(handle).and_then(|id| {
+                        let mut view = self.aromatic_system_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.electrons = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.aromatic_system_mut(id).attributes_mut().electrons = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyAromaticSystemElectrons { changes: inverse })
+            }
+            Edit::ModifyAromaticSystemCharges { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.aromatic_system(handle).and_then(|id| {
+                        let mut view = self.aromatic_system_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.aromatic_system_mut(id).attributes_mut().charge = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyAromaticSystemCharges { changes: inverse })
+            }
+            Edit::ModifyAromaticSystemUnpairedElectrons { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.aromatic_system(handle).and_then(|id| {
+                        let mut view = self.aromatic_system_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.aromatic_system_mut(id)
+                                    .attributes_mut()
+                                    .unpaired_electrons = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyAromaticSystemUnpairedElectrons { changes: inverse })
             }
             Edit::ModifyAromaticSystemField { id, change } => {
                 let id = state.aromatic_system(id)?;
@@ -2200,6 +2502,80 @@ impl Molecule {
                 view.replace_atoms(&new);
                 Ok(Undo::RestoreMulticenterBondAtoms { id, atoms })
             }
+            Edit::ModifyMulticenterBondElectrons { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.multicenter_bond(handle).and_then(|id| {
+                        let mut view = self.multicenter_bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.electrons = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.multicenter_bond_mut(id).attributes_mut().electrons = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyMulticenterBondElectrons { changes: inverse })
+            }
+            Edit::ModifyMulticenterBondCharges { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.multicenter_bond(handle).and_then(|id| {
+                        let mut view = self.multicenter_bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.multicenter_bond_mut(id).attributes_mut().charge = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyMulticenterBondCharges { changes: inverse })
+            }
+            Edit::ModifyMulticenterBondUnpairedElectrons { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.multicenter_bond(handle).and_then(|id| {
+                        let mut view = self.multicenter_bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.multicenter_bond_mut(id)
+                                    .attributes_mut()
+                                    .unpaired_electrons = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyMulticenterBondUnpairedElectrons { changes: inverse })
+            }
             Edit::ModifyMulticenterBondField { id, change } => {
                 let id = state.multicenter_bond(id)?;
                 let mut view = self.multicenter_bond_mut(id);
@@ -2301,6 +2677,30 @@ impl Molecule {
                 }
                 view.replace_atoms(new);
                 Ok(Undo::RestoreNoncovalentBondAtoms { id, atoms })
+            }
+            Edit::ModifyNoncovalentBondKinds { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.noncovalent_bond(handle).and_then(|id| {
+                        let mut view = self.noncovalent_bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.kind.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.kind = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.noncovalent_bond_mut(id).attributes_mut().kind = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyNoncovalentBondKinds { changes: inverse })
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
                 let id = state.noncovalent_bond(id)?;
@@ -2702,6 +3102,57 @@ impl Molecule {
                     constraint: old,
                 })
             }
+            Edit::ModifyDativeBondConstraints { key, changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = (|| {
+                        let id = state.dative_bond(handle)?;
+                        if old.as_ref().is_some_and(|value| value.key() != key)
+                            || new.as_ref().is_some_and(|value| value.key() != key)
+                        {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        if old.is_none() && new.is_none() {
+                            return Ok(None);
+                        }
+                        let mut view = self.dative_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match (constraints.get(key), old.as_ref()) {
+                            (None, None) => {}
+                            (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                            _ => return Err(TransactionError::OldStateMismatch),
+                        }
+                        match new {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                        Ok(Some(id))
+                    })();
+                    match result {
+                        Ok(Some(id)) => inverse.push((id, old)),
+                        Ok(None) => {}
+                        Err(error) => {
+                            for (id, old) in inverse.into_iter().rev() {
+                                let mut view = self.dative_bond_mut(id);
+                                let constraints = &mut view.attributes_mut().constraints;
+                                match old {
+                                    Some(value) => constraints.set(value),
+                                    None => {
+                                        constraints.remove(key);
+                                    }
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::RestoreDativeBondConstraints {
+                    key,
+                    constraints: inverse,
+                })
+            }
             Edit::ModifyDativeBondConstraint { id, old, new } => {
                 let id = state.dative_bond(id)?;
                 let key = match (&old, &new) {
@@ -2728,6 +3179,57 @@ impl Molecule {
                     id,
                     key,
                     constraint: old,
+                })
+            }
+            Edit::ModifyAromaticSystemConstraints { key, changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = (|| {
+                        let id = state.aromatic_system(handle)?;
+                        if old.as_ref().is_some_and(|value| value.key() != key)
+                            || new.as_ref().is_some_and(|value| value.key() != key)
+                        {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        if old.is_none() && new.is_none() {
+                            return Ok(None);
+                        }
+                        let mut view = self.aromatic_system_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match (constraints.get(key), old.as_ref()) {
+                            (None, None) => {}
+                            (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                            _ => return Err(TransactionError::OldStateMismatch),
+                        }
+                        match new {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                        Ok(Some(id))
+                    })();
+                    match result {
+                        Ok(Some(id)) => inverse.push((id, old)),
+                        Ok(None) => {}
+                        Err(error) => {
+                            for (id, old) in inverse.into_iter().rev() {
+                                let mut view = self.aromatic_system_mut(id);
+                                let constraints = &mut view.attributes_mut().constraints;
+                                match old {
+                                    Some(value) => constraints.set(value),
+                                    None => {
+                                        constraints.remove(key);
+                                    }
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::RestoreAromaticSystemConstraints {
+                    key,
+                    constraints: inverse,
                 })
             }
             Edit::ModifyAromaticSystemConstraint { id, old, new } => {
@@ -2758,6 +3260,57 @@ impl Molecule {
                     constraint: old,
                 })
             }
+            Edit::ModifyMulticenterBondConstraints { key, changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = (|| {
+                        let id = state.multicenter_bond(handle)?;
+                        if old.as_ref().is_some_and(|value| value.key() != key)
+                            || new.as_ref().is_some_and(|value| value.key() != key)
+                        {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        if old.is_none() && new.is_none() {
+                            return Ok(None);
+                        }
+                        let mut view = self.multicenter_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match (constraints.get(key), old.as_ref()) {
+                            (None, None) => {}
+                            (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                            _ => return Err(TransactionError::OldStateMismatch),
+                        }
+                        match new {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                        Ok(Some(id))
+                    })();
+                    match result {
+                        Ok(Some(id)) => inverse.push((id, old)),
+                        Ok(None) => {}
+                        Err(error) => {
+                            for (id, old) in inverse.into_iter().rev() {
+                                let mut view = self.multicenter_bond_mut(id);
+                                let constraints = &mut view.attributes_mut().constraints;
+                                match old {
+                                    Some(value) => constraints.set(value),
+                                    None => {
+                                        constraints.remove(key);
+                                    }
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::RestoreMulticenterBondConstraints {
+                    key,
+                    constraints: inverse,
+                })
+            }
             Edit::ModifyMulticenterBondConstraint { id, old, new } => {
                 let id = state.multicenter_bond(id)?;
                 let key = match (&old, &new) {
@@ -2784,6 +3337,57 @@ impl Molecule {
                     id,
                     key,
                     constraint: old,
+                })
+            }
+            Edit::ModifyNoncovalentBondConstraints { key, changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = (|| {
+                        let id = state.noncovalent_bond(handle)?;
+                        if old.as_ref().is_some_and(|value| value.key() != key)
+                            || new.as_ref().is_some_and(|value| value.key() != key)
+                        {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        if old.is_none() && new.is_none() {
+                            return Ok(None);
+                        }
+                        let mut view = self.noncovalent_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match (constraints.get(key), old.as_ref()) {
+                            (None, None) => {}
+                            (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                            _ => return Err(TransactionError::OldStateMismatch),
+                        }
+                        match new {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                        Ok(Some(id))
+                    })();
+                    match result {
+                        Ok(Some(id)) => inverse.push((id, old)),
+                        Ok(None) => {}
+                        Err(error) => {
+                            for (id, old) in inverse.into_iter().rev() {
+                                let mut view = self.noncovalent_bond_mut(id);
+                                let constraints = &mut view.attributes_mut().constraints;
+                                match old {
+                                    Some(value) => constraints.set(value),
+                                    None => {
+                                        constraints.remove(key);
+                                    }
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::RestoreNoncovalentBondConstraints {
+                    key,
+                    constraints: inverse,
                 })
             }
             Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
@@ -3270,6 +3874,13 @@ impl Molecule {
                     }
                 }
             }
+            Undo::ModifyDativeBondOrders { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.dative_bonds().count() {
+                        self.dative_bond_mut(id).attributes_mut().order = new;
+                    }
+                }
+            }
             Undo::ModifyDativeBondField { id, change } => {
                 if id.index() < self.dative_bonds().count() {
                     let mut view = self.dative_bond_mut(id);
@@ -3278,6 +3889,29 @@ impl Molecule {
                         DativeBondFieldChange::Order { new, .. } => {
                             attributes.order = new;
                         }
+                    }
+                }
+            }
+            Undo::ModifyAromaticSystemElectrons { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.aromatic_systems().count() {
+                        self.aromatic_system_mut(id).attributes_mut().electrons = new;
+                    }
+                }
+            }
+            Undo::ModifyAromaticSystemCharges { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.aromatic_systems().count() {
+                        self.aromatic_system_mut(id).attributes_mut().charge = new;
+                    }
+                }
+            }
+            Undo::ModifyAromaticSystemUnpairedElectrons { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.aromatic_systems().count() {
+                        self.aromatic_system_mut(id)
+                            .attributes_mut()
+                            .unpaired_electrons = new;
                     }
                 }
             }
@@ -3298,6 +3932,29 @@ impl Molecule {
                     }
                 }
             }
+            Undo::ModifyMulticenterBondElectrons { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.multicenter_bonds().count() {
+                        self.multicenter_bond_mut(id).attributes_mut().electrons = new;
+                    }
+                }
+            }
+            Undo::ModifyMulticenterBondCharges { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.multicenter_bonds().count() {
+                        self.multicenter_bond_mut(id).attributes_mut().charge = new;
+                    }
+                }
+            }
+            Undo::ModifyMulticenterBondUnpairedElectrons { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.multicenter_bonds().count() {
+                        self.multicenter_bond_mut(id)
+                            .attributes_mut()
+                            .unpaired_electrons = new;
+                    }
+                }
+            }
             Undo::ModifyMulticenterBondField { id, change } => {
                 if id.index() < self.multicenter_bonds().count() {
                     let mut view = self.multicenter_bond_mut(id);
@@ -3312,6 +3969,13 @@ impl Molecule {
                         MulticenterBondFieldChange::UnpairedElectrons { new, .. } => {
                             attributes.unpaired_electrons = new;
                         }
+                    }
+                }
+            }
+            Undo::ModifyNoncovalentBondKinds { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.noncovalent_bonds().count() {
+                        self.noncovalent_bond_mut(id).attributes_mut().kind = new;
                     }
                 }
             }
@@ -3408,6 +4072,20 @@ impl Molecule {
                     }
                 }
             }
+            Undo::RestoreDativeBondConstraints { key, constraints } => {
+                for (id, constraint) in constraints.into_iter().rev() {
+                    if id.index() < self.dative_bonds().count() {
+                        let mut view = self.dative_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match constraint {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                    }
+                }
+            }
             Undo::RestoreDativeBondConstraint {
                 id,
                 key,
@@ -3420,6 +4098,20 @@ impl Molecule {
                         Some(constraint) => constraints.set(constraint),
                         None => {
                             constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreAromaticSystemConstraints { key, constraints } => {
+                for (id, constraint) in constraints.into_iter().rev() {
+                    if id.index() < self.aromatic_systems().count() {
+                        let mut view = self.aromatic_system_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match constraint {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
                         }
                     }
                 }
@@ -3440,6 +4132,20 @@ impl Molecule {
                     }
                 }
             }
+            Undo::RestoreMulticenterBondConstraints { key, constraints } => {
+                for (id, constraint) in constraints.into_iter().rev() {
+                    if id.index() < self.multicenter_bonds().count() {
+                        let mut view = self.multicenter_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match constraint {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                    }
+                }
+            }
             Undo::RestoreMulticenterBondConstraint {
                 id,
                 key,
@@ -3452,6 +4158,20 @@ impl Molecule {
                         Some(constraint) => constraints.set(constraint),
                         None => {
                             constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreNoncovalentBondConstraints { key, constraints } => {
+                for (id, constraint) in constraints.into_iter().rev() {
+                    if id.index() < self.noncovalent_bonds().count() {
+                        let mut view = self.noncovalent_bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match constraint {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
                         }
                     }
                 }

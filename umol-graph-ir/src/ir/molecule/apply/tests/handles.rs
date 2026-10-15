@@ -2,17 +2,26 @@ use rstest::*;
 use umol_graph_core::Compaction;
 
 use super::super::{ApplicationState, HandleTable};
+use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
 use crate::ir::constraint::{AtomConstraintForm, AtomConstraintKey};
+use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{AtomHandle, Edit, Edits};
+use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::entity::EntityKind;
 use crate::ir::id::AtomId;
 use crate::ir::molecule::MoleculeEntries;
+use crate::ir::multicenter::MulticenterBondForm;
+use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm};
 use crate::ir::num::NumForm;
 use crate::ir::{
-    BondConstraintForm, BondConstraintKey, BondHandle, BondId, Molecule, RollbackMethod,
-    TransactionError,
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemHandle,
+    AromaticSystemId, BondConstraintForm, BondConstraintKey, BondHandle, BondId,
+    DativeBondConstraintForm, DativeBondConstraintKey, DativeBondHandle, DativeBondId, Molecule,
+    MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondHandle,
+    MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
+    NoncovalentBondHandle, NoncovalentBondId, RollbackMethod, TransactionError,
 };
 
 #[rstest]
@@ -280,6 +289,481 @@ fn test_molecule_apply_bond_batches_removed(
             expected.bonds[0].2.constraints = vec![BondConstraintForm::aromatic(true)].into();
         } else {
             expected.bonds[0].2.order = NumForm::Lit(2);
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut molecule = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            molecule.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(molecule, source);
+    }
+}
+
+#[rstest]
+fn test_molecule_apply_dative_bond_batches_removed(
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); 4],
+        dative: vec![
+            (
+                vec![AtomId(2), AtomId(0)],
+                AtomId(1),
+                DativeBondForm::default(),
+            ),
+            (
+                vec![AtomId(3), AtomId(1)],
+                AtomId(2),
+                DativeBondForm::default(),
+            ),
+        ],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let removed = if created {
+        prefix.add_dative_bond(
+            vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(2))],
+            AtomHandle::Id(AtomId(3)),
+            DativeBondForm::default(),
+        )
+    } else {
+        DativeBondHandle::Id(DativeBondId(0))
+    };
+    let removal = if created {
+        (
+            vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(2))],
+            AtomHandle::Id(AtomId(3)),
+            DativeBondForm::default(),
+        )
+    } else {
+        (
+            vec![AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(0))],
+            AtomHandle::Id(AtomId(1)),
+            DativeBondForm::default(),
+        )
+    };
+    prefix.remove_dative_bonds(vec![(removed.clone(), removal.0, removal.1, removal.2)]);
+    let key = DativeBondConstraintKey::Aromatic;
+    let form = DativeBondConstraintForm::undetermined(key);
+    let batch = if constraint {
+        Edit::ModifyDativeBondConstraints {
+            key,
+            changes: vec![
+                (
+                    DativeBondHandle::Id(DativeBondId(1)),
+                    None,
+                    Some(form.clone()),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyDativeBondOrders {
+            changes: vec![
+                (
+                    DativeBondHandle::Id(DativeBondId(1)),
+                    NumForm::Undetermined,
+                    NumForm::Lit(1),
+                ),
+                (
+                    removed,
+                    NumForm::Undetermined,
+                    NumForm::LitSet(Box::new([1, 2].into())),
+                ),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::DativeBond,
+        index: 0,
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.dative.remove(0);
+    }
+    if !journaled {
+        let attributes = &mut expected.dative[usize::from(created)].2;
+        if constraint {
+            attributes.constraints = vec![form].into();
+        } else {
+            attributes.order = NumForm::Lit(1);
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut molecule = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            molecule.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(molecule, source);
+    }
+}
+
+#[rstest]
+fn test_molecule_apply_aromatic_system_batches_removed(
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); 9],
+        aromatic: vec![
+            (
+                vec![AtomId(2), AtomId(0), AtomId(1)],
+                AromaticSystemForm::default(),
+            ),
+            (
+                vec![AtomId(5), AtomId(3), AtomId(4)],
+                AromaticSystemForm::default(),
+            ),
+        ],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let removed = if created {
+        prefix.add_aromatic_system(
+            vec![
+                AtomHandle::Id(AtomId(8)),
+                AtomHandle::Id(AtomId(6)),
+                AtomHandle::Id(AtomId(7)),
+            ],
+            AromaticSystemForm::default(),
+        )
+    } else {
+        AromaticSystemHandle::Id(AromaticSystemId(0))
+    };
+    let removal = if created {
+        (
+            vec![
+                AtomHandle::Id(AtomId(8)),
+                AtomHandle::Id(AtomId(6)),
+                AtomHandle::Id(AtomId(7)),
+            ],
+            AromaticSystemForm::default(),
+        )
+    } else {
+        (
+            vec![
+                AtomHandle::Id(AtomId(2)),
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+            ],
+            AromaticSystemForm::default(),
+        )
+    };
+    prefix.remove_aromatic_systems(vec![(removed.clone(), removal.0, removal.1)]);
+    let key = AromaticSystemConstraintKey::ElectronCount;
+    let form = AromaticSystemConstraintForm::undetermined(key);
+    let batch = if constraint {
+        Edit::ModifyAromaticSystemConstraints {
+            key,
+            changes: vec![
+                (
+                    AromaticSystemHandle::Id(AromaticSystemId(1)),
+                    None,
+                    Some(form.clone()),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyAromaticSystemElectrons {
+            changes: vec![
+                (
+                    AromaticSystemHandle::Id(AromaticSystemId(1)),
+                    ElectronCountsForm::Undetermined,
+                    ElectronCountsForm::Lit(vec![1, 2]),
+                ),
+                (
+                    removed,
+                    ElectronCountsForm::Undetermined,
+                    ElectronCountsForm::Lit(vec![]),
+                ),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::AromaticSystem,
+        index: 0,
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.aromatic.remove(0);
+    }
+    if !journaled {
+        let attributes = &mut expected.aromatic[usize::from(created)].1;
+        if constraint {
+            attributes.constraints = vec![form].into();
+        } else {
+            attributes.electrons = ElectronCountsForm::Lit(vec![1, 2]);
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut molecule = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            molecule.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(molecule, source);
+    }
+}
+
+#[rstest]
+fn test_molecule_apply_multicenter_bond_batches_removed(
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); 4],
+        multicenter: vec![
+            (
+                vec![AtomId(2), AtomId(0), AtomId(1)],
+                MulticenterBondForm::default(),
+            ),
+            (
+                vec![AtomId(3), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
+            ),
+        ],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let removed = if created {
+        prefix.add_multicenter_bond(
+            vec![
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(2)),
+                AtomHandle::Id(AtomId(3)),
+            ],
+            MulticenterBondForm::default(),
+        )
+    } else {
+        MulticenterBondHandle::Id(MulticenterBondId(0))
+    };
+    let removal = if created {
+        (
+            vec![
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(2)),
+                AtomHandle::Id(AtomId(3)),
+            ],
+            MulticenterBondForm::default(),
+        )
+    } else {
+        (
+            vec![
+                AtomHandle::Id(AtomId(2)),
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
+            ],
+            MulticenterBondForm::default(),
+        )
+    };
+    prefix.remove_multicenter_bonds(vec![(removed.clone(), removal.0, removal.1)]);
+    let key = MulticenterBondConstraintKey::ElectronCount;
+    let form = MulticenterBondConstraintForm::undetermined(key);
+    let batch = if constraint {
+        Edit::ModifyMulticenterBondConstraints {
+            key,
+            changes: vec![
+                (
+                    MulticenterBondHandle::Id(MulticenterBondId(1)),
+                    None,
+                    Some(form.clone()),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyMulticenterBondElectrons {
+            changes: vec![
+                (
+                    MulticenterBondHandle::Id(MulticenterBondId(1)),
+                    ElectronCountsForm::Undetermined,
+                    ElectronCountsForm::Lit(vec![1, 2]),
+                ),
+                (
+                    removed,
+                    ElectronCountsForm::Undetermined,
+                    ElectronCountsForm::Lit(vec![]),
+                ),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::MulticenterBond,
+        index: 0,
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.multicenter.remove(0);
+    }
+    if !journaled {
+        let attributes = &mut expected.multicenter[usize::from(created)].1;
+        if constraint {
+            attributes.constraints = vec![form].into();
+        } else {
+            attributes.electrons = ElectronCountsForm::Lit(vec![1, 2]);
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut molecule = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            molecule.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(molecule, source);
+    }
+}
+
+#[rstest]
+fn test_molecule_apply_noncovalent_bond_batches_removed(
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); 6],
+        noncovalent: vec![
+            ([AtomId(1), AtomId(0)], NoncovalentBondForm::default()),
+            ([AtomId(3), AtomId(2)], NoncovalentBondForm::default()),
+        ],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let removed = if created {
+        prefix.add_noncovalent_bond(
+            [AtomHandle::Id(AtomId(5)), AtomHandle::Id(AtomId(4))],
+            NoncovalentBondForm::default(),
+        )
+    } else {
+        NoncovalentBondHandle::Id(NoncovalentBondId(0))
+    };
+    let removal = if created {
+        (
+            [AtomHandle::Id(AtomId(5)), AtomHandle::Id(AtomId(4))],
+            NoncovalentBondForm::default(),
+        )
+    } else {
+        (
+            [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
+            NoncovalentBondForm::default(),
+        )
+    };
+    prefix.remove_noncovalent_bonds(vec![(removed.clone(), removal.0, removal.1)]);
+    let key = NoncovalentBondConstraintKey::Intramolecular;
+    let form = NoncovalentBondConstraintForm::undetermined(key);
+    let batch = if constraint {
+        Edit::ModifyNoncovalentBondConstraints {
+            key,
+            changes: vec![
+                (
+                    NoncovalentBondHandle::Id(NoncovalentBondId(1)),
+                    None,
+                    Some(form.clone()),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyNoncovalentBondKinds {
+            changes: vec![
+                (
+                    NoncovalentBondHandle::Id(NoncovalentBondId(1)),
+                    NoncovalentBondKindForm::Undetermined,
+                    NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                ),
+                (
+                    removed,
+                    NoncovalentBondKindForm::Undetermined,
+                    NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
+                ),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::NoncovalentBond,
+        index: 0,
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.noncovalent.remove(0);
+    }
+    if !journaled {
+        let attributes = &mut expected.noncovalent[usize::from(created)].1;
+        if constraint {
+            attributes.constraints = vec![form].into();
+        } else {
+            attributes.kind = NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond);
         }
     }
     assert_eq!(molecule, Molecule::from_entries(expected));
