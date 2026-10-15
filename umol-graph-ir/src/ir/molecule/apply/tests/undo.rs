@@ -9,8 +9,8 @@ use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use crate::ir::bond::BondForm;
 use crate::ir::compact::MoleculeCompaction;
 use crate::ir::constraint::{
-    AromaticSystemConstraintKey, AtomConstraintForm, AtomConstraintKey, BondConstraintKey,
-    Constraint, DativeBondConstraintKey, MulticenterBondConstraintKey,
+    AromaticSystemConstraintKey, AtomConstraintForm, AtomConstraintKey, BondConstraintForm,
+    BondConstraintKey, Constraint, DativeBondConstraintKey, MulticenterBondConstraintKey,
     NoncovalentBondConstraintKey, StereoAtomConstraintKey, StereoBondConstraintKey,
 };
 use crate::ir::dative::DativeBondForm;
@@ -38,7 +38,7 @@ use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
 };
-use crate::ir::Molecule;
+use crate::ir::{Molecule, RingScope};
 
 #[fixture]
 fn empty() -> Molecule {
@@ -417,10 +417,55 @@ fn test_molecule_apply_undo_field_manipulated(#[case] undo: Undo) {
 #[case(Undo::ModifyAtomLonePairs { changes: vec![(AtomId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
 #[case(Undo::ModifyAtomUnpairedElectrons { changes: vec![(AtomId(7), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
 #[case(Undo::RestoreAtomConstraints { key: AtomConstraintKey::Valence, constraints: vec![(AtomId(7), Some(AtomConstraintForm::degree(2)))] })]
-fn test_molecule_apply_undo_atom_batches(#[case] undo: Undo) {
+#[case(Undo::ModifyBondOrders { changes: vec![(BondId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
+#[case(Undo::ModifyBondCharges { changes: vec![(BondId(7), NumForm::Lit(1), NumForm::Undetermined)] })]
+#[case(Undo::ModifyBondUnpairedElectrons { changes: vec![(BondId(7), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm::default())] })]
+#[case(Undo::RestoreBondConstraints { key: BondConstraintKey::Aromatic, constraints: vec![(BondId(7), Some(BondConstraintForm::aromatic(true)))] })]
+fn test_molecule_apply_undo_batches(#[case] undo: Undo) {
     let mut molecule = Molecule::new();
     molecule.apply_undo(undo);
     assert_eq!(molecule, Molecule::new());
+}
+
+#[rstest]
+#[case::order(
+    BondForm::from_order(1),
+    Edit::ModifyBondOrders { changes: vec![(BondHandle::Id(BondId(0)), NumForm::lit_set([1]), NumForm::Lit(2)), (BondHandle::Id(BondId(0)), NumForm::Lit(2), NumForm::Lit(3))] },
+    Undo::ModifyBondOrders { changes: vec![(BondId(0), NumForm::Lit(2), NumForm::lit_set([1])), (BondId(0), NumForm::Lit(3), NumForm::Lit(2))] },
+    BondForm { order: NumForm::lit_set([1]), ..Default::default() },
+)]
+#[case::constraint(
+    BondForm { constraints: vec![BondConstraintForm::ring_membership(RingScope::All, 1)].into(), ..Default::default() },
+    Edit::ModifyBondConstraints { key: BondConstraintKey::RingMembership(RingScope::All), changes: vec![(BondHandle::Id(BondId(0)), Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1]))), None)] },
+    Undo::RestoreBondConstraints { key: BondConstraintKey::RingMembership(RingScope::All), constraints: vec![(BondId(0), Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1]))))] },
+    BondForm { constraints: vec![BondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1]))].into(), ..Default::default() },
+)]
+fn test_molecule_apply_undo_bond_batches_normalized(
+    #[case] initial: BondForm,
+    #[case] edit: Edit,
+    #[case] expected_undo: Undo,
+    #[case] restored: BondForm,
+) {
+    let mut molecule = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::default(); 2],
+        bonds: vec![(AtomId(0), AtomId(1), initial)],
+        ..Default::default()
+    });
+    let mut state = ApplicationState::new(&molecule);
+    let undo = molecule
+        .apply_edit_with_undo(edit, &mut state)
+        .unwrap()
+        .unwrap();
+    assert_eq!(undo, expected_undo);
+    molecule.apply_undo(undo);
+    assert_eq!(
+        molecule,
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            bonds: vec![(AtomId(0), AtomId(1), restored)],
+            ..Default::default()
+        })
+    );
 }
 
 #[rstest]

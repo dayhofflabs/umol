@@ -10,6 +10,9 @@ from umol import (
     AtomConstraintsForm,
     AtomFieldChange,
     AtomUpdate,
+    BooleanForm,
+    BondConstraintForm,
+    BondConstraintKey,
     BondForm,
     BondFieldChange,
     BondUpdate,
@@ -1083,3 +1086,110 @@ def test_edits_atom_batches_error(method):
     with pytest.raises(TransactionError):
         source.apply(edits)
     assert source == Molecule.from_entries([AtomForm.parse("C")])
+
+
+@pytest.mark.parametrize(
+    "variant,method,field,old,new",
+    [
+        (Edit.ModifyBondOrders, "modify_bond_orders", "order", NumForm.Lit(1), NumForm.LitSet({1, 2})),
+        (Edit.ModifyBondCharges, "modify_bond_charges", "charge", NumForm.Lit(0), NumForm.Lit(-1)),
+        (Edit.ModifyBondUnpairedElectrons, "modify_bond_unpaired_electrons", "unpaired_electrons",
+         UnpairedElectronsForm(0, 1), UnpairedElectronsForm(1, 2)),
+    ],
+)
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_edits_bond_batches(variant, method, field, old, new, count):
+    rows = [(0, old, new), (0, new, old)][:count]
+    edit = variant(changes=rows)
+    expected_rows = tuple(rows)
+    rows.clear()
+    assert edit.changes == expected_rows
+    assert isinstance(edit.changes, tuple)
+    assert all(isinstance(row, tuple) for row in edit.changes)
+    with pytest.raises(AttributeError):
+        edit.changes = ()
+    edits = Edits()
+    getattr(edits, method)(list(expected_rows))
+    assert list(edits) == [edit]
+    assert list(Edits.parse(edits.render())) == [edit]
+    assert repr(edit).startswith("Edit." + variant.__name__ + "(changes=")
+    atoms = [AtomForm.parse("C"), AtomForm.parse("N")]
+    bond = BondForm.parse("1")
+    setattr(bond, field, old)
+    source = Molecule.from_entries(atoms, bonds=[(0, 1, bond)])
+    result = source.apply(edits)
+    expected = BondForm.parse("1")
+    setattr(expected, field, new if count == 1 else old)
+    assert result == Molecule.from_entries(atoms, bonds=[(0, 1, expected)])
+    assert source == Molecule.from_entries(atoms, bonds=[(0, 1, bond)])
+    with pytest.raises(ConsumedError):
+        getattr(edits, method)([])
+
+
+@pytest.mark.parametrize("key", [BondConstraintKey.Aromatic(), BondConstraintKey.CisTransStereo(),
+                                  BondConstraintKey.RingMembership(RingScope.All()),
+                                  BondConstraintKey.RingMembership(RingScope.Size(5))])
+@pytest.mark.parametrize("empty", [False, True])
+def test_edits_bond_constraint_keys(key, empty):
+    rows = [] if empty else [(0, None, None)]
+    edit = Edit.ModifyBondConstraints(key, rows)
+    edits = Edits()
+    edits.modify_bond_constraints(key, rows)
+    rows.clear()
+    assert list(edits) == [edit]
+    assert edit.key == key
+    assert edit.changes == (() if empty else ((0, None, None),))
+    assert list(Edits.parse(edits.render())) == [edit]
+    source = Molecule.from_entries([AtomForm.parse("C")] * 2, bonds=[(0, 1, BondForm.parse("1"))])
+    assert source.apply(edits) == source
+    with pytest.raises(ConsumedError):
+        edits.modify_bond_constraints(key, [])
+
+
+def test_edits_bond_batches_new():
+    atoms = [AtomForm.parse("C")] * 3
+    first = BondForm.parse("1")
+    source = Molecule.from_entries(atoms, bonds=[(0, 1, first)])
+    edits = Edits()
+    created = edits.add_bond(1, 2, BondForm.parse("1"))
+    edits.modify_bond_orders([(0, NumForm.Lit(1), NumForm.Lit(2)), (created, NumForm.Lit(1), NumForm.Lit(3))])
+    edits.modify_bond_charges([(created, NumForm.Undetermined(), NumForm.Lit(-1))])
+    edits.modify_bond_unpaired_electrons([(created, UnpairedElectronsForm(NumForm.Undetermined(), NumForm.Undetermined()), UnpairedElectronsForm(0, 1))])
+    assert list(Edits.parse(edits.render())) == list(edits)
+    first.order = 2
+    second = BondForm.parse("3")
+    second.charge = -1
+    second.unpaired_electrons = UnpairedElectronsForm(0, 1)
+    assert source.apply(edits) == Molecule.from_entries(atoms, bonds=[(0, 1, first), (1, 2, second)])
+
+
+def test_edits_bond_constraint_batches():
+    first = BondConstraintForm.Aromatic(BooleanForm.Lit(False))
+    second = BondConstraintForm.Aromatic(BooleanForm.Undetermined())
+    rows = [(0, None, first), (New(0), None, second), (0, first, second)]
+    edit = Edit.ModifyBondConstraints(BondConstraintKey.Aromatic(), rows)
+    edits = Edits()
+    edits.add_bond(1, 2, BondForm.parse("1"))
+    edits.modify_bond_constraints(BondConstraintKey.Aromatic(), rows)
+    rows.clear()
+    assert edits[1] == edit
+    assert list(Edits.parse(edits.render())) == list(edits)
+    atoms = [AtomForm.parse("C")] * 3
+    source = Molecule.from_entries(atoms, bonds=[(0, 1, BondForm.parse("1"))])
+    expected = BondForm.parse("1")
+    expected.constraints.set(second)
+    assert source.apply(edits) == Molecule.from_entries(atoms, bonds=[(0, 1, expected), (1, 2, expected)])
+
+
+@pytest.mark.parametrize("key,old,new", [
+    (BondConstraintKey.Aromatic(), BondConstraintForm.Aromatic(BooleanForm.Lit(False)), None),
+    (BondConstraintKey.CisTransStereo(), None, BondConstraintForm.Aromatic(BooleanForm.Lit(True))),
+])
+def test_edits_bond_constraint_batches_error(key, old, new):
+    edits = Edits()
+    edits.modify_bond_orders([(0, NumForm.Lit(1), NumForm.Lit(2))])
+    edits.modify_bond_constraints(key, [(0, old, new)])
+    source = Molecule.from_entries([AtomForm.parse("C")] * 2, bonds=[(0, 1, BondForm.parse("1"))])
+    with pytest.raises(TransactionError):
+        source.apply(edits)
+    assert source == Molecule.from_entries([AtomForm.parse("C")] * 2, bonds=[(0, 1, BondForm.parse("1"))])

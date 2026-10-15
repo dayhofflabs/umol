@@ -2,9 +2,9 @@ use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
     AddAromaticSystem, AddMulticenterBond, AddStereoAtom, AddStereoBond, AromaticSystemId,
-    AtomHandle, AtomId, BondId, DativeBondId, Edits, EntityKind, Molecule, MoleculeApplyError,
-    MulticenterBondId, NoncovalentBondId, RollbackMethod, StereoAtomId, StereoBondId,
-    TrackedTransaction, Transaction, TransactionError,
+    AtomHandle, AtomId, BondFieldChange, BondHandle, BondId, DativeBondId, Edits, EntityKind,
+    Molecule, MoleculeApplyError, MulticenterBondId, NoncovalentBondId, RollbackMethod,
+    StereoAtomId, StereoBondId, TrackedTransaction, Transaction, TransactionError,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -306,6 +306,213 @@ proptest! {
             }).unwrap();
             prop_assert_eq!(&restored, &source);
         }
+    }
+
+    /// Bond field batches agree with ordered singles and an independently replaced bond
+    /// table; rollback restores raw attributes and topology after repeated writes.
+    #[test]
+    fn test_molecule_apply_bond_batches_orders(
+        bonds in prop::collection::vec(bond_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, bond_form_strategy()), 0..16),
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            bonds: bonds.iter().enumerate().map(|(i, b)| (AtomId::from(i), AtomId::from(i + 1), b.clone())).collect(),
+            ..Default::default()
+        };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected.bonds[index].2.order.clone();
+            let new = form.order;
+            expected.bonds[index].2.order = new.clone();
+            let id = BondHandle::Id(BondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyBondField { id, change: BondFieldChange::Order { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_bond_orders(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut molecule = source.clone();
+            Transaction::run(&mut molecule, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&molecule, &source);
+        }
+    }
+
+    /// Bond field batches agree with ordered singles and an independently replaced bond
+    /// table; rollback restores raw attributes and topology after repeated writes.
+    #[test]
+    fn test_molecule_apply_bond_batches_charges(
+        bonds in prop::collection::vec(bond_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, bond_form_strategy()), 0..16),
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            bonds: bonds.iter().enumerate().map(|(i, b)| (AtomId::from(i), AtomId::from(i + 1), b.clone())).collect(),
+            ..Default::default()
+        };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected.bonds[index].2.charge.clone();
+            let new = form.charge;
+            expected.bonds[index].2.charge = new.clone();
+            let id = BondHandle::Id(BondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyBondField { id, change: BondFieldChange::Charge { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_bond_charges(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut molecule = source.clone();
+            Transaction::run(&mut molecule, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&molecule, &source);
+        }
+    }
+
+    /// Bond field batches agree with ordered singles and an independently replaced bond
+    /// table; rollback restores raw attributes and topology after repeated writes.
+    #[test]
+    fn test_molecule_apply_bond_batches_unpaired_electrons(
+        bonds in prop::collection::vec(bond_form_strategy(), 3),
+        updates in prop::collection::vec((0usize..3, bond_form_strategy()), 0..16),
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            bonds: bonds.iter().enumerate().map(|(i, b)| (AtomId::from(i), AtomId::from(i + 1), b.clone())).collect(),
+            ..Default::default()
+        };
+        let source = Molecule::from_entries(entries.clone());
+        let mut expected = entries;
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, form) in updates {
+            let old = expected.bonds[index].2.unpaired_electrons.clone();
+            let new = form.unpaired_electrons;
+            expected.bonds[index].2.unpaired_electrons = new.clone();
+            let id = BondHandle::Id(BondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyBondField { id, change: BondFieldChange::UnpairedElectrons { old, new } });
+        }
+        let expected = Molecule::from_entries(expected);
+        let mut batch = Edits::new();
+        batch.modify_bond_unpaired_electrons(rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut molecule = source.clone();
+            Transaction::run(&mut molecule, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&molecule, &source);
+        }
+    }
+
+    /// Optional ring constraints agree with ordered single-key edits over generated scopes
+    /// and non-literal counts; rollback restores absent and stored constraints exactly.
+    #[test]
+    fn test_molecule_apply_bond_constraint_batches(
+        scope in prop_oneof![Just(RingScope::All), (3u8..=8).prop_map(RingScope::Size)],
+        updates in prop::collection::vec((0usize..3, prop::option::of(any_num_form_strategy())), 0..20),
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            bonds: (0..3).map(|i| (AtomId(i), AtomId(i + 1), BondForm::default())).collect(),
+            ..Default::default()
+        });
+        let mut values = vec![None; 3];
+        let mut rows = Vec::new();
+        let mut singles = Edits::new();
+        for (index, value) in updates {
+            let old = values[index].clone();
+            let new = value.map(|v| BondConstraintForm::ring_membership(scope, v));
+            values[index] = new.clone();
+            let id = BondHandle::Id(BondId::from(index));
+            rows.push((id.clone(), old.clone(), new.clone()));
+            singles.push(Edit::ModifyBondConstraint { id, old, new });
+        }
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            bonds: values.into_iter().enumerate().map(|(i, value)| (AtomId::from(i), AtomId::from(i + 1), BondForm { constraints: value.into_iter().collect(), ..Default::default() })).collect(),
+            ..Default::default()
+        });
+        let mut batch = Edits::new();
+        batch.modify_bond_constraints(BondConstraintKey::RingMembership(scope), rows);
+        let actual = source.clone().tracked_apply(batch.clone()).unwrap();
+        prop_assert_eq!(&actual.0, &expected);
+        prop_assert_eq!(actual, source.clone().tracked_apply(singles).unwrap());
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut restored = source.clone();
+            Transaction::run(&mut restored, recovery, |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(batch.clone())?;
+                assert_eq!(transaction.probe()?, &expected);
+                transaction.rollback();
+                Ok(())
+            }).unwrap();
+            prop_assert_eq!(&restored, &source);
+        }
+    }
+
+    /// A failing bond row restores the preceding atom edit and completed bond prefix in
+    /// either transaction mode; a destructive editor retains precisely that prefix.
+    #[test]
+    fn test_molecule_apply_bond_batches_failure(
+        values in prop::collection::vec((0usize..3, 1i64..=3), 1..16),
+        split in 0usize..16,
+    ) {
+        let split = split.min(values.len());
+        let entries = MoleculeEntries { atoms: vec![AtomForm::default(); 4], bonds: (0..3).map(|i| (AtomId(i), AtomId(i+1), BondForm::default())).collect(), ..Default::default() };
+        let source = Molecule::from_entries(entries.clone());
+        let mut prefix = Edits::new();
+        prefix.push(Edit::ModifyAtomField { id: AtomHandle::Id(AtomId(0)), change: AtomFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(1) } });
+        let mut expected = entries;
+        expected.atoms[0].charge = NumForm::Lit(1);
+        let mut rows = Vec::new();
+        for (index, value) in &values[..split] {
+            let old = expected.bonds[*index].2.order.clone();
+            expected.bonds[*index].2.order = NumForm::Lit(*value);
+            rows.push((BondHandle::Id(BondId::from(*index)), old, NumForm::Lit(*value)));
+        }
+        rows.push((BondHandle::Id(BondId(3)), NumForm::Undetermined, NumForm::Lit(1)));
+        for (index, value) in &values[split..] { rows.push((BondHandle::Id(BondId::from(*index)), NumForm::Undetermined, NumForm::Lit(*value))); }
+        let mut batch = Edits::new();
+        batch.modify_bond_orders(rows);
+        let error = MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 3, count: 3 });
+        for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+            let mut molecule = source.clone();
+            prop_assert_eq!(molecule.transact([prefix.clone(), batch.clone()], recovery), Err(error.clone()));
+            prop_assert_eq!(molecule, source.clone());
+        }
+        let mut editor = source.edit();
+        editor.apply(prefix).unwrap();
+        prop_assert_eq!(editor.apply(batch), Err(error));
+        prop_assert_eq!(editor.finish().unwrap(), Molecule::from_entries(expected));
     }
 
     /// Consecutive bulk additions reconstruct the supplied complete entries for any

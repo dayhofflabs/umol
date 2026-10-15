@@ -30,9 +30,9 @@ use crate::ir::atom::{AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::ir::bond::BondUpdate;
 use crate::ir::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintKey, BondConstraintForm,
-    Constraint, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
-    StereoBondConstraintForm,
+    BondConstraintKey, Constraint, DativeBondConstraintForm, MoleculeConstraint,
+    MulticenterBondConstraintForm, NoncovalentBondConstraintForm, RelationalConstraint, RingScope,
+    StereoAtomConstraintForm, StereoBondConstraintForm,
 };
 use crate::ir::dative::DativeBondUpdate;
 use crate::ir::edit::{
@@ -280,6 +280,23 @@ enum EditInput {
         id: AtomHandle,
         expect: AtomUpdate,
         update: AtomUpdate,
+    },
+    BondModifyOrders {
+        changes: Vec<(BondHandle, NumForm, NumForm)>,
+    },
+    BondModifyCharges {
+        changes: Vec<(BondHandle, NumForm, NumForm)>,
+    },
+    BondModifyUnpairedElectrons {
+        changes: Vec<(BondHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    },
+    BondModifyConstraints {
+        key: BondConstraintKey,
+        changes: Vec<(
+            BondHandle,
+            Option<BondConstraintForm>,
+            Option<BondConstraintForm>,
+        )>,
     },
     BondAdd {
         atoms: [AtomHandle; 2],
@@ -611,6 +628,94 @@ impl ToEdn for EditInput {
                     AtomUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
+            Self::BondModifyOrders { changes } => edit_map(
+                "bond",
+                "modify-order",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::BondModifyCharges { changes } => edit_map(
+                "bond",
+                "modify-charge",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                NumDsl::from_ir(old, &()).to_edn(),
+                                NumDsl::from_ir(new, &()).to_edn(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::BondModifyUnpairedElectrons { changes } => edit_map(
+                "bond",
+                "modify-unpaired-electrons",
+                Edn::Vector(
+                    changes
+                        .iter()
+                        .map(|(handle, old, new)| {
+                            render_expect_update(
+                                handle.to_edn(),
+                                render_unpaired_electrons(old),
+                                render_unpaired_electrons(new),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            ),
+            Self::BondModifyConstraints { key, changes } => {
+                let key = match key {
+                    BondConstraintKey::Aromatic => Edn::keyword("aromatic"),
+                    BondConstraintKey::CisTransStereo => Edn::keyword("cis-trans-stereo"),
+                    BondConstraintKey::RingMembership(scope) => {
+                        let mut fields = EdnMap::new();
+                        if let RingScope::Size(size) = scope {
+                            fields.insert(Edn::keyword("size"), size.to_edn());
+                        }
+                        single_key_map("ring-membership", Edn::Map(fields))
+                    }
+                };
+                let render_value = |value: &Option<BondConstraintForm>| {
+                    value.as_ref().map_or(Edn::Nil, |value| {
+                        BondConstraintDsl::from_ir(value, &()).to_edn()
+                    })
+                };
+                let mut fields = EdnMap::with_capacity(2);
+                fields.insert(Edn::keyword("key"), key);
+                fields.insert(
+                    Edn::keyword("changes"),
+                    Edn::Vector(
+                        changes
+                            .iter()
+                            .map(|(handle, old, new)| {
+                                render_expect_update(
+                                    handle.to_edn(),
+                                    render_value(old),
+                                    render_value(new),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                );
+                edit_map("bond", "modify-constraints", Edn::Map(fields))
+            }
             Self::BondAdd {
                 atoms: [first, second],
                 attributes,
@@ -926,6 +1031,14 @@ impl EditInput {
             Self::AtomModify { id, expect, update } => {
                 append_atom_modify(edits, id, expect, update)?;
             }
+            Self::BondModifyOrders { changes } => edits.push(Edit::ModifyBondOrders { changes }),
+            Self::BondModifyCharges { changes } => edits.push(Edit::ModifyBondCharges { changes }),
+            Self::BondModifyUnpairedElectrons { changes } => {
+                edits.push(Edit::ModifyBondUnpairedElectrons { changes })
+            }
+            Self::BondModifyConstraints { key, changes } => {
+                edits.modify_bond_constraints(key, changes)
+            }
             Self::BondAdd {
                 atoms: [first, second],
                 attributes,
@@ -1128,6 +1241,21 @@ impl EditInput {
                     update,
                 }]
             }
+            Edit::ModifyBondOrders { changes } => vec![Self::BondModifyOrders {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyBondCharges { changes } => vec![Self::BondModifyCharges {
+                changes: changes.clone(),
+            }],
+            Edit::ModifyBondUnpairedElectrons { changes } => {
+                vec![Self::BondModifyUnpairedElectrons {
+                    changes: changes.clone(),
+                }]
+            }
+            Edit::ModifyBondConstraints { key, changes } => vec![Self::BondModifyConstraints {
+                key: *key,
+                changes: changes.clone(),
+            }],
             Edit::ModifyBondField { id, change } => {
                 let (expect, update) = bond_field_updates(change);
                 vec![Self::BondModify {
@@ -1666,6 +1794,123 @@ fn parse_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
 fn parse_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "bond edit")?;
     match op {
+        "modify-order" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "bond :modify-order expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::BondModifyOrders { changes })
+        }
+        "modify-charge" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "bond :modify-charge expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<NumForm, DeError> {
+                NumDsl::from_edn(value).map(|form| form.into_ir(&()))
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::BondModifyCharges { changes })
+        }
+        "modify-unpaired-electrons" => {
+            let Edn::Vector(rows) = payload else {
+                return Err(DeError::Custom(
+                    "bond :modify-unpaired-electrons expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| -> Result<UnpairedElectronsForm, DeError> {
+                parse_unpaired_electrons(value)
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::BondModifyUnpairedElectrons { changes })
+        }
+        "modify-constraints" => {
+            let map = expect_map(payload, "bond constraint batch")?;
+            if map.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                return Err(DeError::Custom(
+                    "bond constraint batch expects keyword fields".into(),
+                ));
+            }
+            let mut helper = EdnMapHelper::new(map);
+            let key: Edn<'_> = helper.required("key")?;
+            let changes: Edn<'_> = helper.required("changes")?;
+            helper.finalize()?;
+            let key = match &key {
+                Edn::Keyword(keyword) => match keyword.name() {
+                    "aromatic" => BondConstraintKey::Aromatic,
+                    "cis-trans-stereo" => BondConstraintKey::CisTransStereo,
+                    other => {
+                        return Err(DeError::Custom(format!(
+                            "unknown bond constraint key :{other}"
+                        )))
+                    }
+                },
+                Edn::Map(_) => {
+                    let (name, scope) = parse_single_key_map(&key, "bond constraint key")?;
+                    if name != "ring-membership" {
+                        return Err(DeError::Custom(format!(
+                            "unknown parameterized bond constraint key :{name}"
+                        )));
+                    }
+                    let scope = expect_map(scope, "ring scope")?;
+                    if scope.iter().any(|(key, _)| !matches!(key, Edn::Keyword(_))) {
+                        return Err(DeError::Custom("ring scope expects keyword fields".into()));
+                    }
+                    let mut helper = EdnMapHelper::new(scope);
+                    let scope = helper
+                        .optional::<u8>("size")?
+                        .map_or(RingScope::All, RingScope::Size);
+                    helper.finalize()?;
+                    BondConstraintKey::RingMembership(scope)
+                }
+                _ => {
+                    return Err(DeError::Custom(
+                        "expected a bond constraint keyword or ring-membership map".into(),
+                    ))
+                }
+            };
+            let Edn::Vector(rows) = changes else {
+                return Err(DeError::Custom(
+                    "bond :modify-constraints :changes expects a vector".into(),
+                ));
+            };
+            let read_value = |value: &Edn<'_>| match value {
+                Edn::Nil => Ok(None),
+                value => BondConstraintDsl::from_edn(value).map(|form| Some(form.into_ir(&()))),
+            };
+            let changes = rows
+                .iter()
+                .map(|row| {
+                    let (handle, old, new) = read_edn_bond_change(row)?;
+                    Ok((handle, read_value(old)?, read_value(new)?))
+                })
+                .collect::<Result<_, DeError>>()?;
+            Ok(EditInput::BondModifyConstraints { key, changes })
+        }
         "add" => {
             let Edn::Vector(parts) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -5070,6 +5315,40 @@ fn read_edn_atom_change<'a>(
     Ok((AtomHandle::from_edn(handle)?, old, new))
 }
 
+fn read_edn_bond_change<'a>(
+    row: &'a Edn<'a>,
+) -> Result<(BondHandle, &'a Edn<'a>, &'a Edn<'a>), DeError> {
+    let Edn::Vector(parts) = row else {
+        return Err(DeError::Custom(
+            "bond batch row expects [handle {:expect old :update new}]".into(),
+        ));
+    };
+    let [handle, changes] = parts.as_ref() else {
+        return Err(DeError::Custom(
+            "bond batch row expects two elements".into(),
+        ));
+    };
+    let map = expect_map(changes, "bond batch row")?;
+    if map.len() != 2 {
+        return Err(DeError::Custom(
+            "bond batch row requires exactly :expect and :update".into(),
+        ));
+    }
+    let old = map
+        .get_keyword("expect")
+        .ok_or_else(|| DeError::MissingField {
+            key: "expect".into(),
+            path: vec!["bond batch row".into()],
+        })?;
+    let new = map
+        .get_keyword("update")
+        .ok_or_else(|| DeError::MissingField {
+            key: "update".into(),
+            path: vec!["bond batch row".into()],
+        })?;
+    Ok((BondHandle::from_edn(handle)?, old, new))
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -6460,7 +6739,12 @@ mod tests {
             (AtomHandle::Id(AtomId(0)), None, Some(AtomConstraintForm::valence(3))),
             (AtomHandle::Id(AtomId(0)), Some(AtomConstraintForm::valence(3)), None),
         ] })]
-    fn test_edits_dsl_atom_batches(#[case] input: &str, #[case] edit: Edit) {
+    #[case::bond_order(r#"[{:bond {:modify-order [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}]"#, Edit::ModifyBondOrders { changes: vec![(BondHandle::Id(BondId(0)), NumForm::Lit(1), NumForm::Lit(2)), (BondHandle::New(0), NumForm::Lit(2), NumForm::Lit(1))] })]
+    #[case::bond_charge(r#"[{:bond {:modify-charge [[0 {:expect 0 :update 1}]]}}]"#, Edit::ModifyBondCharges { changes: vec![(BondHandle::Id(BondId(0)), NumForm::Lit(0), NumForm::Lit(1))] })]
+    #[case::bond_unpaired(r#"[{:bond {:modify-unpaired-electrons [[0 {:expect {:count 0 :multiplicity 1} :update {:count 1 :multiplicity 2}}]]}}]"#, Edit::ModifyBondUnpairedElectrons { changes: vec![(BondHandle::Id(BondId(0)), UnpairedElectronsForm::closed_shell(), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) })] })]
+    #[case::bond_constraints(r#"[{:bond {:modify-constraints {:key :aromatic :changes [[0 {:expect nil :update {:aromatic true}}] [0 {:expect {:aromatic true} :update nil}]]}}}]"#, Edit::ModifyBondConstraints { key: BondConstraintKey::Aromatic, changes: vec![(BondHandle::Id(BondId(0)), None, Some(BondConstraintForm::aromatic(true))), (BondHandle::Id(BondId(0)), Some(BondConstraintForm::aromatic(true)), None)] })]
+    #[case::bond_ring_key(r#"[{:bond {:modify-constraints {:key {:ring-membership {:size 5}} :changes []}}}]"#, Edit::ModifyBondConstraints { key: BondConstraintKey::RingMembership(RingScope::Size(5)), changes: vec![] })]
+    fn test_edits_dsl_batches(#[case] input: &str, #[case] edit: Edit) {
         let expected = Edits::from_iter([edit]);
         let defaults = MoleculeDefaults::new();
         let dsl = EditsDsl::from_ir(&expected, &defaults);
@@ -6529,6 +6813,41 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondConstraintKey::Aromatic)]
+    #[case(BondConstraintKey::CisTransStereo)]
+    #[case(BondConstraintKey::RingMembership(RingScope::All))]
+    #[case(BondConstraintKey::RingMembership(RingScope::Size(5)))]
+    fn test_edits_dsl_bond_constraint_batches(
+        #[case] key: BondConstraintKey,
+        #[values(false, true)] empty: bool,
+    ) {
+        let form = BondConstraintForm::undetermined(key);
+        let changes = if empty {
+            vec![]
+        } else {
+            vec![
+                (BondHandle::New(0), Some(form.clone()), None),
+                (BondHandle::New(0), None, Some(form)),
+            ]
+        };
+        let expected = Edits::from_iter([Edit::ModifyBondConstraints { key, changes }]);
+        let defaults = MoleculeDefaults::new();
+        let dsl = EditsDsl::from_ir(&expected, &defaults);
+        assert_eq!(
+            EditsDsl::from_edn(&dsl.to_edn())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+        assert_eq!(
+            EditsDsl::from_edn_str(&dsl.to_string())
+                .unwrap()
+                .into_ir(&defaults),
+            expected
+        );
+    }
+
+    #[rstest]
     #[case(Edit::ModifyAtomElements { changes: vec![] })]
     #[case(Edit::ModifyAtomIsotopeMasses { changes: vec![] })]
     #[case(Edit::ModifyAtomCharges { changes: vec![] })]
@@ -6538,7 +6857,12 @@ mod tests {
     #[case(Edit::ModifyAtomElements { changes: vec![(AtomHandle::Id(AtomId(0)), ElementForm::Undetermined, ElementForm::var_in("e", [Element::C, Element::N]))] })]
     #[case(Edit::ModifyAtomIsotopeMasses { changes: vec![(AtomHandle::Id(AtomId(0)), IsotopeMassForm::Undetermined, IsotopeMassForm::var_in("m", [12, 13]))] })]
     #[case(Edit::ModifyAtomCharges { changes: vec![(AtomHandle::Id(AtomId(0)), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
-    fn test_edits_dsl_atom_batches_roundtrip(#[case] edit: Edit) {
+    #[case(Edit::ModifyBondOrders { changes: vec![] })]
+    #[case(Edit::ModifyBondCharges { changes: vec![] })]
+    #[case(Edit::ModifyBondUnpairedElectrons { changes: vec![] })]
+    #[case(Edit::ModifyBondOrders { changes: vec![(BondHandle::Id(BondId(0)), NumForm::Undetermined, NumForm::LitSet(Box::new([1, 2].into())))] })]
+    #[case(Edit::ModifyBondCharges { changes: vec![(BondHandle::Id(BondId(0)), NumForm::Undetermined, NumForm::var("q"))] })]
+    fn test_edits_dsl_batches_roundtrip(#[case] edit: Edit) {
         let expected = Edits::from_iter([edit]);
         let defaults = MoleculeDefaults::new();
         let dsl = EditsDsl::from_ir(&expected, &defaults);
@@ -6566,7 +6890,14 @@ mod tests {
     #[case(r##"{:atom {:modify-constraints {:key :aromatic :changes []}}}"##, DeError::Custom("unknown atom constraint key :aromatic".into()))]
     #[case(r##"{:atom {:modify-constraints {:key {:ring-membership {"size" 5}} :changes []}}}"##, DeError::Custom("ring scope expects keyword fields".into()))]
     #[case(r##"{:atom {:modify-constraints {:key :valence :changes [] "extra" 1}}}"##, DeError::Custom("atom constraint batch expects keyword fields".into()))]
-    fn test_edit_input_atom_batches_error(#[case] input: &str, #[case] error: DeError) {
+    #[case(r#"{:bond {:modify-order [0]}}"#, DeError::Custom("bond batch row expects [handle {:expect old :update new}]".into()))]
+    #[case(r#"{:bond {:modify-charge [[0]]}}"#, DeError::Custom("bond batch row expects two elements".into()))]
+    #[case(r#"{:bond {:modify-order [[0 {:expect 1}]]}}"#, DeError::Custom("bond batch row requires exactly :expect and :update".into()))]
+    #[case(r#"{:bond {:modify-unpaired-electrons [[0 {:expect {} :update {} :extra 1}]]}}"#, DeError::Custom("bond batch row requires exactly :expect and :update".into()))]
+    #[case(r#"{:bond {:modify-constraints {:key :valence :changes []}}}"#, DeError::Custom("unknown bond constraint key :valence".into()))]
+    #[case(r#"{:bond {:modify-constraints {:key {:ring-membership {"size" 5}} :changes []}}}"#, DeError::Custom("ring scope expects keyword fields".into()))]
+    #[case(r#"{:bond {:modify-constraints {:key :aromatic :changes [] "extra" 1}}}"#, DeError::Custom("bond constraint batch expects keyword fields".into()))]
+    fn test_edit_input_batches_error(#[case] input: &str, #[case] error: DeError) {
         assert_eq!(EditInput::from_edn_str(input), Err(EdnError::De(error)));
     }
 }

@@ -29,7 +29,7 @@ use crate::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::bond::{BondForm, BondUpdate};
 use crate::constraint::aromatic::AromaticSystemConstraintForm;
 use crate::constraint::atom::{AtomConstraintForm, AtomConstraintKey};
-use crate::constraint::bond::BondConstraintForm;
+use crate::constraint::bond::{BondConstraintForm, BondConstraintKey};
 use crate::constraint::dative::DativeBondConstraintForm;
 use crate::constraint::molecule::Constraint;
 use crate::constraint::multicenter::MulticenterBondConstraintForm;
@@ -446,6 +446,12 @@ type AtomConstraintChange = (
     Option<Py<AtomConstraintForm>>,
 );
 
+type BondConstraintChange = (
+    HandleLike,
+    Option<Py<BondConstraintForm>>,
+    Option<Py<BondConstraintForm>>,
+);
+
 struct TupleItems<T>(Vec<T>);
 
 impl<'a, 'py, T> FromPyObject<'a, 'py> for TupleItems<T>
@@ -518,6 +524,19 @@ pub enum Edit {
     ModifyAtomField {
         id: HandleLike,
         change: Py<AtomFieldChange>,
+    },
+    ModifyBondOrders {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyBondCharges {
+        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    },
+    ModifyBondUnpairedElectrons {
+        changes: TupleItems<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
     },
     ModifyBondField {
         id: HandleLike,
@@ -642,6 +661,10 @@ pub enum Edit {
         old: Option<Py<AtomConstraintForm>>,
         new: Option<Py<AtomConstraintForm>>,
     },
+    ModifyBondConstraints {
+        key: Py<BondConstraintKey>,
+        changes: TupleItems<BondConstraintChange>,
+    },
     ModifyBondConstraint {
         id: HandleLike,
         old: Option<Py<BondConstraintForm>>,
@@ -723,6 +746,11 @@ impl Edit {
             }
             Self::ModifyAtomConstraints { .. } => ("ModifyAtomConstraints", &["key", "changes"]),
             Self::ModifyAtomField { .. } => ("ModifyAtomField", &["id", "change"]),
+            Self::ModifyBondOrders { .. } => ("ModifyBondOrders", &["changes"]),
+            Self::ModifyBondCharges { .. } => ("ModifyBondCharges", &["changes"]),
+            Self::ModifyBondUnpairedElectrons { .. } => {
+                ("ModifyBondUnpairedElectrons", &["changes"])
+            }
             Self::ModifyBondField { .. } => ("ModifyBondField", &["id", "change"]),
             Self::AddDativeBond { .. } => ("AddDativeBond", &["donors", "acceptor", "attributes"]),
             Self::RemoveDativeBonds { .. } => ("RemoveDativeBonds", &["removes"]),
@@ -772,6 +800,7 @@ impl Edit {
             }
             Self::ModifyStereoBondField { .. } => ("ModifyStereoBondField", &["id", "change"]),
             Self::ModifyAtomConstraint { .. } => ("ModifyAtomConstraint", &["id", "old", "new"]),
+            Self::ModifyBondConstraints { .. } => ("ModifyBondConstraints", &["key", "changes"]),
             Self::ModifyBondConstraint { .. } => ("ModifyBondConstraint", &["id", "old", "new"]),
             Self::ModifyDativeBondConstraint { .. } => {
                 ("ModifyDativeBondConstraint", &["id", "old", "new"])
@@ -956,6 +985,56 @@ impl Edit {
                 id: HandleLike::from_atom_handle(id),
                 change: into_py_variant(py, AtomFieldChange::from_rust(py, change)?)?,
             },
+            GraphIrEdit::ModifyBondOrders { changes } => Self::ModifyBondOrders {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_bond_handle(id),
+                                into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
+            GraphIrEdit::ModifyBondCharges { changes } => Self::ModifyBondCharges {
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_bond_handle(id),
+                                into_py_variant(py, NumForm::from_rust(py, old)?)?,
+                                into_py_variant(py, NumForm::from_rust(py, new)?)?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
+            GraphIrEdit::ModifyBondUnpairedElectrons { changes } => {
+                Self::ModifyBondUnpairedElectrons {
+                    changes: TupleItems(
+                        changes
+                            .iter()
+                            .map(|(id, old, new)| {
+                                Ok((
+                                    HandleLike::from_bond_handle(id),
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, old)?,
+                                    )?,
+                                    into_py_variant(
+                                        py,
+                                        UnpairedElectronsForm::from_rust(py, new)?,
+                                    )?,
+                                ))
+                            })
+                            .collect::<PyResult<_>>()?,
+                    ),
+                }
+            }
             GraphIrEdit::ModifyBondField { id, change } => Self::ModifyBondField {
                 id: HandleLike::from_bond_handle(id),
                 change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
@@ -1272,6 +1351,35 @@ impl Edit {
                     .map(|value| into_py_variant(py, AtomConstraintForm::from_rust(py, value)?))
                     .transpose()?,
             },
+            GraphIrEdit::ModifyBondConstraints { key, changes } => Self::ModifyBondConstraints {
+                key: into_py_variant(py, BondConstraintKey::from_rust(py, key)?)?,
+                changes: TupleItems(
+                    changes
+                        .iter()
+                        .map(|(id, old, new)| {
+                            Ok((
+                                HandleLike::from_bond_handle(id),
+                                old.as_ref()
+                                    .map(|value| {
+                                        into_py_variant(
+                                            py,
+                                            BondConstraintForm::from_rust(py, value)?,
+                                        )
+                                    })
+                                    .transpose()?,
+                                new.as_ref()
+                                    .map(|value| {
+                                        into_py_variant(
+                                            py,
+                                            BondConstraintForm::from_rust(py, value)?,
+                                        )
+                                    })
+                                    .transpose()?,
+                            ))
+                        })
+                        .collect::<PyResult<_>>()?,
+                ),
+            },
             GraphIrEdit::ModifyBondConstraint { id, old, new } => Self::ModifyBondConstraint {
                 id: HandleLike::from_bond_handle(id),
                 old: old
@@ -1530,6 +1638,47 @@ impl Edit {
                 id: id.to_atom_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
+            Self::ModifyBondOrders { changes } => GraphIrEdit::ModifyBondOrders {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_bond_handle(),
+                            old.bind(py).borrow().to_rust(py),
+                            new.bind(py).borrow().to_rust(py),
+                        )
+                    })
+                    .collect(),
+            },
+            Self::ModifyBondCharges { changes } => GraphIrEdit::ModifyBondCharges {
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_bond_handle(),
+                            old.bind(py).borrow().to_rust(py),
+                            new.bind(py).borrow().to_rust(py),
+                        )
+                    })
+                    .collect(),
+            },
+            Self::ModifyBondUnpairedElectrons { changes } => {
+                GraphIrEdit::ModifyBondUnpairedElectrons {
+                    changes: changes
+                        .0
+                        .iter()
+                        .map(|(id, old, new)| {
+                            (
+                                id.to_bond_handle(),
+                                old.bind(py).borrow().to_rust(py),
+                                new.bind(py).borrow().to_rust(py),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             Self::ModifyBondField { id, change } => GraphIrEdit::ModifyBondField {
                 id: id.to_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -1775,6 +1924,22 @@ impl Edit {
                 new: new
                     .as_ref()
                     .map(|value| value.bind(py).borrow().to_rust(py)),
+            },
+            Self::ModifyBondConstraints { key, changes } => GraphIrEdit::ModifyBondConstraints {
+                key: key.bind(py).borrow().to_rust(py),
+                changes: changes
+                    .0
+                    .iter()
+                    .map(|(id, old, new)| {
+                        (
+                            id.to_bond_handle(),
+                            old.as_ref()
+                                .map(|value| value.bind(py).borrow().to_rust(py)),
+                            new.as_ref()
+                                .map(|value| value.bind(py).borrow().to_rust(py)),
+                        )
+                    })
+                    .collect(),
             },
             Self::ModifyBondConstraint { id, old, new } => GraphIrEdit::ModifyBondConstraint {
                 id: id.to_bond_handle(),
@@ -2570,6 +2735,98 @@ impl Edits {
                 .map(|(id, old, new)| {
                     (
                         id.to_atom_handle(),
+                        old.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                        new.as_ref()
+                            .map(|value| value.bind(py).borrow().to_rust(py)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_bond_orders(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_bond_orders(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_bond_charges(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_bond_charges(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_bond_unpaired_electrons(
+        &mut self,
+        py: Python<'_>,
+        changes: Vec<(
+            HandleLike,
+            Py<UnpairedElectronsForm>,
+            Py<UnpairedElectronsForm>,
+        )>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_bond_unpaired_electrons(
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_bond_handle(),
+                        old.bind(py).borrow().to_rust(py),
+                        new.bind(py).borrow().to_rust(py),
+                    )
+                })
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn modify_bond_constraints(
+        &mut self,
+        py: Python<'_>,
+        key: Py<BondConstraintKey>,
+        changes: Vec<BondConstraintChange>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.modify_bond_constraints(
+            key.bind(py).borrow().to_rust(py),
+            changes
+                .into_iter()
+                .map(|(id, old, new)| {
+                    (
+                        id.to_bond_handle(),
                         old.as_ref()
                             .map(|value| value.bind(py).borrow().to_rust(py)),
                         new.as_ref()

@@ -3,13 +3,17 @@ use umol_graph_core::Compaction;
 
 use super::super::{ApplicationState, HandleTable};
 use crate::ir::atom::AtomForm;
+use crate::ir::bond::BondForm;
 use crate::ir::constraint::{AtomConstraintForm, AtomConstraintKey};
 use crate::ir::edit::{AtomHandle, Edit, Edits};
 use crate::ir::entity::EntityKind;
 use crate::ir::id::AtomId;
 use crate::ir::molecule::MoleculeEntries;
 use crate::ir::num::NumForm;
-use crate::ir::{Molecule, RollbackMethod, TransactionError};
+use crate::ir::{
+    BondConstraintForm, BondConstraintKey, BondHandle, BondId, Molecule, RollbackMethod,
+    TransactionError,
+};
 
 #[rstest]
 #[case::first(3, 0, Ok(AtomId(0)))]
@@ -198,4 +202,94 @@ fn test_molecule_apply_atom_batches_removed(
         Err(error.into())
     );
     assert_eq!(molecule, source);
+}
+
+#[rstest]
+fn test_molecule_apply_bond_batches_removed(
+    #[values(false, true)] created: bool,
+    #[values(false, true)] constraint: bool,
+    #[values(false, true)] journaled: bool,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); 4],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::default()),
+            (AtomId(1), AtomId(2), BondForm::default()),
+        ],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let mut prefix = Edits::new();
+    let removed = if created {
+        prefix.add_bond(
+            AtomHandle::Id(AtomId(2)),
+            AtomHandle::Id(AtomId(3)),
+            BondForm::default(),
+        )
+    } else {
+        BondHandle::Id(BondId(1))
+    };
+    prefix.remove_bond(removed.clone());
+    let batch = if constraint {
+        Edit::ModifyBondConstraints {
+            key: BondConstraintKey::Aromatic,
+            changes: vec![
+                (
+                    BondHandle::Id(BondId(0)),
+                    None,
+                    Some(BondConstraintForm::aromatic(true)),
+                ),
+                (removed, None, None),
+            ],
+        }
+    } else {
+        Edit::ModifyBondOrders {
+            changes: vec![
+                (
+                    BondHandle::Id(BondId(0)),
+                    NumForm::Undetermined,
+                    NumForm::Lit(2),
+                ),
+                (removed, NumForm::Undetermined, NumForm::Lit(1)),
+            ],
+        }
+    };
+    let error = TransactionError::HandleRemoved {
+        kind: EntityKind::Bond,
+        index: if created { 0 } else { 1 },
+    };
+    let mut molecule = source.clone();
+    let mut state = ApplicationState::new(&molecule);
+    for edit in prefix.clone() {
+        molecule.apply_edit(edit, &mut state).unwrap();
+    }
+    let result = if journaled {
+        molecule
+            .apply_edit_with_undo(batch.clone(), &mut state)
+            .map(|_| ())
+    } else {
+        molecule.apply_edit(batch.clone(), &mut state)
+    };
+    assert_eq!(result, Err(error.clone()));
+    let mut expected = entries;
+    if !created {
+        expected.bonds.pop();
+    }
+    if !journaled {
+        if constraint {
+            expected.bonds[0].2.constraints = vec![BondConstraintForm::aromatic(true)].into();
+        } else {
+            expected.bonds[0].2.order = NumForm::Lit(2);
+        }
+    }
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for recovery in [RollbackMethod::Journal, RollbackMethod::Clone] {
+        let mut molecule = source.clone();
+        let edits = Edits::from_iter(prefix.clone().into_iter().chain([batch.clone()]));
+        assert_eq!(
+            molecule.transact([edits], recovery),
+            Err(error.clone().into())
+        );
+        assert_eq!(molecule, source);
+    }
 }

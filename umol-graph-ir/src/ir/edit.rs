@@ -313,16 +313,16 @@ pub struct AddStereoBond {
 /// Edits have no normal form. Sorting or deduplicating a sequence would invalidate the `New(n)`
 /// references that depend on its order.
 ///
-/// Atom field and constraint batches apply their rows in order, including repeated handles.
-/// Each row checks its handle and accepted old value before writing; constraint operands must
-/// also match the batch key. Journaled failure restores completed rows before earlier edits
+/// Atom and bond field and constraint batches apply their rows in order, including repeated
+/// handles. Each row checks its handle and accepted old value before writing; constraint operands
+/// must also match the batch key. Journaled failure restores completed rows before earlier edits
 /// are rolled back. Journal-free failure retains completed rows.
 ///
 /// # Semantic properties
 ///
-/// A valid atom batch has the same result and entity correspondence as its ordered single-entry
-/// edits. Empty batches leave the molecule unchanged. Undo replays rows in reverse order using
-/// the submitted, normalized-equal old values; when those equal the original raw values, rollback
+/// A valid atom or bond batch has the same result and entity correspondence as its ordered
+/// single-entry edits. Empty batches leave the molecule unchanged. Undo replays rows in reverse order
+/// using the submitted, normalized-equal old values; when those equal the original raw values, rollback
 /// restores the exact representation as well as normalized equality.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
@@ -364,6 +364,18 @@ pub enum Edit {
     /// Ordered changes to atom unpaired electrons values.
     ModifyAtomUnpairedElectrons {
         changes: Vec<(AtomHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    },
+    /// Ordered changes to bond order values.
+    ModifyBondOrders {
+        changes: Vec<(BondHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to bond charge values.
+    ModifyBondCharges {
+        changes: Vec<(BondHandle, NumForm, NumForm)>,
+    },
+    /// Ordered changes to bond unpaired electrons values.
+    ModifyBondUnpairedElectrons {
+        changes: Vec<(BondHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
     },
     ModifyBondField {
         id: BondHandle,
@@ -504,6 +516,17 @@ pub enum Edit {
         id: AtomHandle,
         old: Option<AtomConstraintForm>,
         new: Option<AtomConstraintForm>,
+    },
+    /// Ordered constraint changes sharing one exact key.
+    ///
+    /// Application checks every present operand's key before writing that row.
+    ModifyBondConstraints {
+        key: BondConstraintKey,
+        changes: Vec<(
+            BondHandle,
+            Option<BondConstraintForm>,
+            Option<BondConstraintForm>,
+        )>,
     },
     ModifyBondConstraint {
         id: BondHandle,
@@ -964,6 +987,46 @@ impl Edits {
         )>,
     ) {
         self.push(Edit::ModifyAtomConstraints { key, changes });
+    }
+
+    /// Append an ordered batch of bond order changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_bond_orders(&mut self, changes: Vec<(BondHandle, NumForm, NumForm)>) {
+        self.push(Edit::ModifyBondOrders { changes });
+    }
+
+    /// Append an ordered batch of bond charge changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_bond_charges(&mut self, changes: Vec<(BondHandle, NumForm, NumForm)>) {
+        self.push(Edit::ModifyBondCharges { changes });
+    }
+
+    /// Append an ordered batch of bond unpaired electrons changes.
+    ///
+    /// Rows, including an empty batch, are retained without checking the host.
+    pub fn modify_bond_unpaired_electrons(
+        &mut self,
+        changes: Vec<(BondHandle, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    ) {
+        self.push(Edit::ModifyBondUnpairedElectrons { changes });
+    }
+
+    /// Append ordered bond constraint changes under one exact key.
+    ///
+    /// Application checks handles, old values, and operand keys. Construction
+    /// preserves all rows, including an empty batch and repeated handles.
+    pub fn modify_bond_constraints(
+        &mut self,
+        key: BondConstraintKey,
+        changes: Vec<(
+            BondHandle,
+            Option<BondConstraintForm>,
+            Option<BondConstraintForm>,
+        )>,
+    ) {
+        self.push(Edit::ModifyBondConstraints { key, changes });
     }
 
     /// Project an atom update into checked host-relative edits.
@@ -2444,6 +2507,18 @@ pub enum Undo {
     ModifyAtomUnpairedElectrons {
         changes: Vec<(AtomId, UnpairedElectronsForm, UnpairedElectronsForm)>,
     },
+    /// Ordered changes to bond order values.
+    ModifyBondOrders {
+        changes: Vec<(BondId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to bond charge values.
+    ModifyBondCharges {
+        changes: Vec<(BondId, NumForm, NumForm)>,
+    },
+    /// Ordered changes to bond unpaired electrons values.
+    ModifyBondUnpairedElectrons {
+        changes: Vec<(BondId, UnpairedElectronsForm, UnpairedElectronsForm)>,
+    },
     ModifyBondField {
         id: BondId,
         change: BondFieldChange,
@@ -2481,6 +2556,11 @@ pub enum Undo {
         id: AtomId,
         key: AtomConstraintKey,
         constraint: Option<AtomConstraintForm>,
+    },
+    /// Accepted previous constraints, replayed in reverse order.
+    RestoreBondConstraints {
+        key: BondConstraintKey,
+        constraints: Vec<(BondId, Option<BondConstraintForm>)>,
     },
     RestoreBondConstraint {
         id: BondId,

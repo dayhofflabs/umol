@@ -633,6 +633,42 @@ impl Molecule {
                 }
                 Ok(())
             }
+            Edit::ModifyBondOrders { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.bond(handle)?;
+                    let mut view = self.bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.order.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.order = new;
+                }
+                Ok(())
+            }
+            Edit::ModifyBondCharges { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.bond(handle)?;
+                    let mut view = self.bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.charge.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.charge = new;
+                }
+                Ok(())
+            }
+            Edit::ModifyBondUnpairedElectrons { changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.bond(handle)?;
+                    let mut view = self.bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    if !attributes.unpaired_electrons.normalized_eq(&old) {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    attributes.unpaired_electrons = new;
+                }
+                Ok(())
+            }
             Edit::ModifyBondField { id, change } => {
                 let id = state.bond(id)?;
                 let mut view = self.bond_mut(id);
@@ -1225,6 +1261,33 @@ impl Molecule {
                 }
                 Ok(())
             }
+            Edit::ModifyBondConstraints { key, changes } => {
+                for (handle, old, new) in changes {
+                    let id = state.bond(handle)?;
+                    if old.as_ref().is_some_and(|value| value.key() != key)
+                        || new.as_ref().is_some_and(|value| value.key() != key)
+                    {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    if old.is_none() && new.is_none() {
+                        continue;
+                    }
+                    let mut view = self.bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match (constraints.get(key), old.as_ref()) {
+                        (None, None) => {}
+                        (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                        _ => return Err(TransactionError::OldStateMismatch),
+                    }
+                    match new {
+                        Some(value) => constraints.set(value),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+                Ok(())
+            }
             Edit::ModifyBondConstraint { id, old, new } => {
                 let id = state.bond(id)?;
                 let key = match (&old, &new) {
@@ -1717,6 +1780,78 @@ impl Molecule {
                     id,
                     change: change.inverse(),
                 })
+            }
+            Edit::ModifyBondOrders { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.bond(handle).and_then(|id| {
+                        let mut view = self.bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.order.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.order = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.bond_mut(id).attributes_mut().order = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyBondOrders { changes: inverse })
+            }
+            Edit::ModifyBondCharges { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.bond(handle).and_then(|id| {
+                        let mut view = self.bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.bond_mut(id).attributes_mut().charge = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyBondCharges { changes: inverse })
+            }
+            Edit::ModifyBondUnpairedElectrons { changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = state.bond(handle).and_then(|id| {
+                        let mut view = self.bond_mut(id);
+                        let attributes = view.attributes_mut();
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                        Ok(id)
+                    });
+                    match result {
+                        Ok(id) => inverse.push((id, new, old)),
+                        Err(error) => {
+                            for (id, _, old) in inverse.into_iter().rev() {
+                                self.bond_mut(id).attributes_mut().unpaired_electrons = old;
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::ModifyBondUnpairedElectrons { changes: inverse })
             }
             Edit::ModifyBondField { id, change } => {
                 let id = state.bond(id)?;
@@ -2488,6 +2623,57 @@ impl Molecule {
                     constraint: old,
                 })
             }
+            Edit::ModifyBondConstraints { key, changes } => {
+                let mut inverse = Vec::with_capacity(changes.len());
+                for (handle, old, new) in changes {
+                    let result = (|| {
+                        let id = state.bond(handle)?;
+                        if old.as_ref().is_some_and(|value| value.key() != key)
+                            || new.as_ref().is_some_and(|value| value.key() != key)
+                        {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        if old.is_none() && new.is_none() {
+                            return Ok(None);
+                        }
+                        let mut view = self.bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match (constraints.get(key), old.as_ref()) {
+                            (None, None) => {}
+                            (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                            _ => return Err(TransactionError::OldStateMismatch),
+                        }
+                        match new {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
+                        }
+                        Ok(Some(id))
+                    })();
+                    match result {
+                        Ok(Some(id)) => inverse.push((id, old)),
+                        Ok(None) => {}
+                        Err(error) => {
+                            for (id, old) in inverse.into_iter().rev() {
+                                let mut view = self.bond_mut(id);
+                                let constraints = &mut view.attributes_mut().constraints;
+                                match old {
+                                    Some(value) => constraints.set(value),
+                                    None => {
+                                        constraints.remove(key);
+                                    }
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                Ok(Undo::RestoreBondConstraints {
+                    key,
+                    constraints: inverse,
+                })
+            }
             Edit::ModifyBondConstraint { id, old, new } => {
                 let id = state.bond(id)?;
                 let key = match (&old, &new) {
@@ -3046,6 +3232,27 @@ impl Molecule {
                     }
                 }
             }
+            Undo::ModifyBondOrders { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.bonds().count() {
+                        self.bond_mut(id).attributes_mut().order = new;
+                    }
+                }
+            }
+            Undo::ModifyBondCharges { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.bonds().count() {
+                        self.bond_mut(id).attributes_mut().charge = new;
+                    }
+                }
+            }
+            Undo::ModifyBondUnpairedElectrons { changes } => {
+                for (id, _, new) in changes.into_iter().rev() {
+                    if id.index() < self.bonds().count() {
+                        self.bond_mut(id).attributes_mut().unpaired_electrons = new;
+                    }
+                }
+            }
             Undo::ModifyBondField { id, change } => {
                 if id.index() < self.bonds().count() {
                     let mut view = self.bond_mut(id);
@@ -3167,6 +3374,20 @@ impl Molecule {
                         Some(constraint) => constraints.set(constraint),
                         None => {
                             constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreBondConstraints { key, constraints } => {
+                for (id, constraint) in constraints.into_iter().rev() {
+                    if id.index() < self.bonds().count() {
+                        let mut view = self.bond_mut(id);
+                        let constraints = &mut view.attributes_mut().constraints;
+                        match constraint {
+                            Some(value) => constraints.set(value),
+                            None => {
+                                constraints.remove(key);
+                            }
                         }
                     }
                 }

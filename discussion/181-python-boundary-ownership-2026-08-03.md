@@ -3760,7 +3760,7 @@ Affected-crate strict Clippy, workspace all-target compilation, nightly formatti
 and git diff --check passed. Workspace tests remain at the plan gate; production
 performance comparisons remain in S4a. Logs are in scratch/181-s2a.
 
-#### S2b — Bond field and constraint batches
+#### S2b — Bond field and constraint batches (done)
 
 **Modules:** graph-IR ir/edit, molecule/apply, dsl/edit; Python edit; their tests.
 **Additive vocabulary with exhaustive-match/caller migration; green at completion.**
@@ -3791,6 +3791,21 @@ batching does not change bond endpoints or introduce topology edits.
 **Checks:** shared S2 cases for all three fields and bond constraint keys; include
 newly added bonds, a bond removed before use of its handle, sequential order
 changes, rollback after earlier atom edits, and unchanged entity correspondence.
+
+**Implementation and verification — 2026-10-14.** Added the three typed field
+batches and keyed constraint batch throughout Edit, Undo, Edits, direct application,
+journaled application, DSL, and Python. Constraint keys retain their ring scope,
+including in empty batches. Ordered application and reverse replay use bond mutable
+views and preserve endpoints and correspondence. Python uses the existing form
+classes and tuple-of-tuples changes properties.
+
+Verification passed 10,381 graph-IR unit cases (three existing ignored cases),
+41 edit properties, and 526 Python edit/transaction/delta cases after rebuilding
+the extension. Coverage includes repeated initial/new handles, removed handles,
+first/middle/last failures, key/scope mismatches, prior atom edits, normalized-equal
+old values, and manipulated undo payloads. Tests extend the existing logical groups.
+Affected-crate strict Clippy, workspace all-target compilation, nightly formatting,
+and git diff --check passed. Logs are in scratch/181-s2b.
 
 #### S2c — Dative bond field and constraint batches
 
