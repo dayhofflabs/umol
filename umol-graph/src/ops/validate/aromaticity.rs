@@ -72,8 +72,10 @@ mod tests {
         ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
-    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, RingConfig};
-    use umol_graph_ir::mol_dsl;
+    use umol_graph_ir::ir::{
+        AromaticSystemForm, AromaticSystemId, AtomId, BondForm, BondId, MoleculeEntries, RingConfig,
+    };
+    use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope};
@@ -128,11 +130,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case::assertion_without_system(
+    #[case::assertion_without_aromatic_system(
         AromaticityModel::daylight(),
         mol_dsl!(r#"{:atoms ["C#a"]}"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+        )),
+    )]
+    #[case::overlapping_perception(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) },
         )),
     )]
     #[case::participant_set_mismatch(
@@ -144,7 +158,7 @@ mod tests {
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -157,7 +171,7 @@ mod tests {
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -172,7 +186,7 @@ mod tests {
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticBondConstraintMismatch {
                 bond: BondId(0),
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -187,7 +201,7 @@ mod tests {
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceMismatch {
                 atom: AtomId(0),
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -200,7 +214,7 @@ mod tests {
         }"#),
         Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0),
+                aromatic_system: AromaticSystemId(0),
             },
         )),
     )]
@@ -244,6 +258,16 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
+        Solution::Determined(()),
+    )]
+    #[case::assertions_complete_stored_contributions(
+        AromaticityModel::daylight(),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom_dsl!("C#a"); 6],
+            bonds: (0..6).map(|atom| (AtomId(atom), AtomId((atom + 1) % 6), BondForm::from_order(1))).collect(),
+            aromatic: vec![((0..6).map(AtomId).collect(), AromaticSystemForm::default())],
+            ..Default::default()
+        }),
         Solution::Determined(()),
     )]
     #[case::non_ground(

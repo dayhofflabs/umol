@@ -1,4 +1,4 @@
-//! Read-only views over `Molecule` topology and relations.
+//! Views over molecule topology, relations, and attributes.
 //!
 //! View records bundle an index with the underlying data so consumers
 //! never assemble (id, data, participants) tuples by hand. Namespace
@@ -7,6 +7,8 @@
 
 #[cfg(test)]
 use std::fmt::Debug;
+
+use super::num::read_num;
 
 mod aromatic;
 mod atom;
@@ -18,6 +20,8 @@ mod ligand;
 mod multicenter;
 mod neighbor;
 mod noncovalent;
+#[cfg(test)]
+mod readings;
 mod ring;
 mod stereo;
 
@@ -49,8 +53,9 @@ pub use noncovalent::{
 };
 pub use ring::{RingAtomView, RingBondView, RingView, RingViews};
 pub use stereo::{
-    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViews,
-    StereoBondEditorView, StereoBondEditorViewMut, StereoBondView, StereoBondViews,
+    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
+    StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,
+    StereoBondViewMut, StereoBondViews,
 };
 
 #[cfg(test)]

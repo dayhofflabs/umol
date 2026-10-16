@@ -1,7 +1,7 @@
-//! Bond views: `BondViews` namespace, `BondView` / `BondViewMut` attribute bundles,
-//! `BondEditorView` / `BondEditorViewMut` builder bundles.
+//! Bond views.
 
 use umol_graph_core::{EdgeId, NodeId};
+use umol_perm::Permutation;
 
 use super::super::bond::BondForm;
 use super::super::boolean::BooleanForm;
@@ -11,8 +11,8 @@ use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{CisTransStereoForm, StereoKind};
-use super::super::traits::Lattice;
+use super::super::stereo::{coset_apply_permutation, CisTransStereoForm, StereoKind};
+use super::super::traits::{Lattice, Normalize};
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 use super::constraints::BondConstraintsView;
@@ -46,10 +46,10 @@ impl<'a> BondViews<'a> {
         graph.edge_ids().map(move |id| {
             let [s, t] = graph.edge_endpoints(id);
             BondView {
+                molecule,
                 id: BondId::from(id),
                 atoms: [s, t],
                 attributes: &bonds[id.index()],
-                molecule,
             }
         })
     }
@@ -64,10 +64,10 @@ impl<'a> BondViews<'a> {
         }
         let [s, t] = self.molecule.raw_graph().edge_endpoints(EdgeId::from(id));
         Some(BondView {
+            molecule: self.molecule,
             id,
             atoms: [s, t],
             attributes: &self.bonds[id.index()],
-            molecule: self.molecule,
         })
     }
 
@@ -113,13 +113,24 @@ impl<'a> BondViews<'a> {
 /// Borrowed view of a bond: its index, the two participating atoms, and data.
 #[derive(Clone, Copy, Debug)]
 pub struct BondView<'a> {
-    pub id: BondId,
-    atoms: [NodeId; 2],
-    pub attributes: &'a BondForm,
     molecule: &'a Molecule,
+    id: BondId,
+    atoms: [NodeId; 2],
+    attributes: &'a BondForm,
 }
 
 impl<'a> BondView<'a> {
+    #[inline]
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    /// The stored bond attributes.
+    #[inline]
+    pub fn attributes(&self) -> &'a BondForm {
+        self.attributes
+    }
+
     #[inline]
     pub fn order(&self) -> &'a NumForm {
         &self.attributes.order
@@ -144,6 +155,7 @@ impl<'a> BondView<'a> {
     }
 
     /// The two atom indices incident to this bond.
+    #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms.map(AtomId::from)
     }
@@ -175,7 +187,7 @@ impl<'a> BondView<'a> {
     }
 
     pub fn stereo_bond_id(&self) -> Option<StereoBondId> {
-        self.stereo_bond().map(|s| s.id)
+        self.stereo_bond().map(|s| s.id())
     }
 
     /// The stereo bond sited on this bond, if any — any bond-centered geometry. A
@@ -195,33 +207,172 @@ impl<'a> BondView<'a> {
     }
 }
 
-// Derivation layer beneath the bond facades: functions of the molecule and
-// bond id, presented by `BondView` (typed) and `BondConstraintsView` (keyed).
-
-/// Stored constraint container of `bond`.
-pub(crate) fn bond_asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondConstraintsForm {
-    &molecule.bond(bond).attributes.constraints
+/// Read-only editor access to a bond.
+pub struct BondEditorView<'a> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a BondForm,
 }
 
-/// Asserted side of one bond constraint key under resolution's closed-world
-/// claim: the stored assertion, else the absence cell closed to its definite
-/// negative. Never reads relations — a bond inside a stored aromatic system
-/// without its own `#a` assertion reads `Lit(false)`.
-pub(crate) fn bond_asserted_complete_constraint(
-    molecule: &Molecule,
-    bond: BondId,
-    key: BondConstraintKey,
-) -> Option<BondConstraintForm> {
-    if let Some(asserted) = bond_asserted_constraints(molecule, bond).get(key) {
-        return Some(asserted.clone());
+impl<'a> BondEditorView<'a> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
     }
-    match key {
-        BondConstraintKey::Aromatic => Some(BondConstraintForm::aromatic(BooleanForm::Lit(false))),
-        BondConstraintKey::CisTransStereo => Some(BondConstraintForm::cis_trans_stereo(
-            CisTransStereoForm::NotStereo,
-        )),
-        BondConstraintKey::RingMembership(_) => None,
+
+    #[inline]
+    pub fn id(&self) -> BondId {
+        self.id
     }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a BondForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn order(&self) -> &'a NumForm {
+        &self.attributes.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
+    }
+
+    #[inline]
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
+}
+
+/// Mutable attribute access to a bond.
+#[derive(Debug)]
+pub struct BondViewMut<'a> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a mut BondForm,
+}
+
+impl<'a> BondViewMut<'a> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    #[inline]
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &BondForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn attributes_mut(&mut self) -> &mut BondForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn order(&self) -> &NumForm {
+        &self.attributes.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &BondConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    #[inline]
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
+}
+
+/// Mutable editor access to a bond.
+#[derive(Debug)]
+pub struct BondEditorViewMut<'a> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a mut BondForm,
+}
+
+impl<'a> BondEditorViewMut<'a> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    #[inline]
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &BondForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn attributes_mut(&mut self) -> &mut BondForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn order(&self) -> &NumForm {
+        &self.attributes.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &BondConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    #[inline]
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
+}
+
+/// Stored constraint container of bond `id`.
+pub(crate) fn bond_asserted_constraints(molecule: &Molecule, id: BondId) -> &BondConstraintsForm {
+    &molecule.bond(id).attributes().constraints
 }
 
 /// Derived side of one bond constraint key, read from the molecule's
@@ -229,81 +380,69 @@ pub(crate) fn bond_asserted_complete_constraint(
 ///
 /// `complete` selects the closure reading: absence of a resolution-written
 /// overlay yields its definite negative (`Aromatic(false)` / `NotStereo`)
-/// instead of no value. A bond is in an aromatic system iff both endpoints
+/// instead of top. A bond is in an aromatic system iff both endpoints
 /// belong to that system. Ring keys require `rings` and panic without it —
 /// the caller scanning keys decides whether to build the ring set.
 pub(crate) fn bond_derived_constraint(
     molecule: &Molecule,
-    bond: BondId,
+    id: BondId,
     rings: Option<&RingSet>,
     key: BondConstraintKey,
     complete: bool,
 ) -> Option<BondConstraintForm> {
     match key {
         BondConstraintKey::Aromatic => {
-            if molecule.bond(bond).is_in_aromatic_system() {
+            if molecule.bond(id).is_in_aromatic_system() {
                 Some(BondConstraintForm::aromatic(BooleanForm::Lit(true)))
             } else if complete {
                 Some(BondConstraintForm::aromatic(BooleanForm::Lit(false)))
             } else {
-                None
+                Some(BondConstraintForm::undetermined(key))
             }
         }
         BondConstraintKey::CisTransStereo => {
             // Total over staging entities: an undetermined kind or coset is
             // an open claim, not the absence of one.
-            if let Some(stereo) = molecule.stereo_bonds().at(bond) {
+            if let Some(stereo) = molecule.stereo_bonds().at(id) {
                 let form = match (
-                    stereo.attributes.configuration.kind(),
-                    stereo.attributes.configuration.coset(),
+                    stereo.attributes().configuration.kind(),
+                    stereo.attributes().configuration.coset(),
                 ) {
                     (Some(StereoKind::CisTrans), Some(coset)) => {
-                        CisTransStereoForm::stereo(coset.clone())
+                        let ligands = stereo.ligand_ids();
+                        let mut image = [0, 1, 2, 3];
+                        for side in image.chunks_exact_mut(2) {
+                            side.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
+                        }
+                        // Swapping the complete endpoint blocks preserves cis-trans configuration.
+                        CisTransStereoForm::stereo(coset_apply_permutation(
+                            coset,
+                            Permutation::from_image(&image),
+                            StereoKind::CisTrans,
+                        )?)
                     }
                     (Some(StereoKind::CisTrans), None) | (None, _) => {
                         CisTransStereoForm::Undetermined
                     }
                     (Some(_), _) => CisTransStereoForm::NotStereo,
                 };
-                Some(BondConstraintForm::cis_trans_stereo(form))
+                BondConstraintForm::cis_trans_stereo(form).normalize().ok()
             } else if complete {
                 Some(BondConstraintForm::cis_trans_stereo(
                     CisTransStereoForm::NotStereo,
                 ))
             } else {
-                None
+                Some(BondConstraintForm::undetermined(key))
             }
         }
         BondConstraintKey::RingMembership(scope) => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(BondConstraintForm::ring_membership(
                 scope,
-                bond_ring_membership(rings, bond, scope),
+                bond_ring_membership(rings, id, scope),
             ))
         }
     }
-}
-
-/// Mutable borrowed view of a bond.
-#[derive(Debug)]
-pub struct BondViewMut<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a mut BondForm,
-}
-
-// Editor-scope view bundles for bonds.
-
-pub struct BondEditorView<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a BondForm,
-}
-
-pub struct BondEditorViewMut<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a mut BondForm,
 }
 
 #[cfg(test)]
@@ -322,6 +461,8 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
+    use crate::ir::num::NumForm;
+    use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::stereo::{StereoBondForm, StereoCoset, StereoKind};
 
     #[fixture]
@@ -355,6 +496,19 @@ mod tests {
         })
     }
 
+    #[fixture]
+    fn attributes() -> BondForm {
+        BondForm {
+            order: NumForm::Lit(2),
+            charge: NumForm::Lit(-1),
+            unpaired_electrons: UnpairedElectronsForm {
+                count: NumForm::Lit(1),
+                multiplicity: NumForm::Lit(2),
+            },
+            ..Default::default()
+        }
+    }
+
     #[rstest]
     fn test_bond_views_count(molecule: Molecule) {
         assert_eq!(molecule.bonds().count(), 3);
@@ -373,7 +527,7 @@ mod tests {
     #[rstest]
     fn test_bond_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().bonds().iter(), vec![], |view| {
-            (view.id, view.atom_ids(), view.attributes.clone())
+            (view.id(), view.atom_ids(), view.attributes().clone())
         });
         assert_exact_size_by(
             molecule.bonds().iter(),
@@ -382,7 +536,7 @@ mod tests {
                 (BondId(1), [AtomId(1), AtomId(2)], BondForm::from_order(2)),
                 (BondId(2), [AtomId(2), AtomId(3)], BondForm::from_order(1)),
             ],
-            |view| (view.id, view.atom_ids(), view.attributes.clone()),
+            |view| (view.id(), view.atom_ids(), view.attributes().clone()),
         );
     }
 
@@ -398,9 +552,9 @@ mod tests {
         let res = molecule.bonds().get(BondId(1));
         assert!(res.is_some());
         let view = res.unwrap();
-        assert_eq!(view.id, BondId(1));
+        assert_eq!(view.id(), BondId(1));
         assert_eq!(view.atom_ids(), [AtomId(1), AtomId(2)]);
-        assert_eq!(*view.attributes, BondForm::from_order(2));
+        assert_eq!(*view.attributes(), BondForm::from_order(2));
     }
 
     #[rstest]
@@ -419,7 +573,7 @@ mod tests {
         assert_exact_size_by(
             molecule.bond(BondId(1)).atoms(),
             vec![AtomId(1), AtomId(2)],
-            |atom| atom.id,
+            |atom| atom.id(),
         );
     }
 
@@ -432,7 +586,7 @@ mod tests {
         #[case] bond: BondId,
         #[case] expected: Option<AromaticSystemId>,
     ) {
-        let id = molecule.bond(bond).aromatic_system().map(|v| v.id);
+        let id = molecule.bond(bond).aromatic_system().map(|v| v.id());
         assert_eq!(id, expected);
     }
 
@@ -496,8 +650,69 @@ mod tests {
     #[rstest]
     fn test_bond_view_stereo_bond(stereo_molecule: Molecule) {
         let view = stereo_molecule.bond(BondId(1)).stereo_bond().unwrap();
-        assert_eq!(view.id, StereoBondId(0));
+        assert_eq!(view.id(), StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert!(stereo_molecule.bond(BondId(0)).stereo_bond().is_none());
+    }
+
+    #[rstest]
+    fn test_bond_editor_view_attributes(attributes: BondForm) {
+        let editor = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            bonds: vec![(AtomId(0), AtomId(1), attributes.clone())],
+            ..Default::default()
+        })
+        .edit();
+        let fields = {
+            let view = editor.bond(BondId(0));
+            (view.order(), view.charge(), view.unpaired_electrons())
+        };
+        assert_eq!(
+            fields,
+            (
+                &attributes.order,
+                &attributes.charge,
+                &attributes.unpaired_electrons
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_bond_view_mut_attributes_mut(mut molecule: Molecule, attributes: BondForm) {
+        {
+            let mut view = molecule.bond_mut(BondId(0));
+            for expected in [attributes, BondForm::default()] {
+                *view.attributes_mut() = expected.clone();
+                assert_eq!(
+                    (view.order(), view.charge(), view.unpaired_electrons()),
+                    (
+                        &expected.order,
+                        &expected.charge,
+                        &expected.unpaired_electrons
+                    ),
+                );
+            }
+        }
+        assert_eq!(molecule.bond(BondId(0)).attributes(), &BondForm::default());
+    }
+
+    #[rstest]
+    fn test_bond_editor_view_mut_attributes_mut(molecule: Molecule, attributes: BondForm) {
+        let mut editor = molecule.edit();
+        {
+            let mut view = editor.bond_mut(BondId(0));
+            for expected in [attributes, BondForm::default()] {
+                *view.attributes_mut() = expected.clone();
+                assert_eq!(
+                    (view.order(), view.charge(), view.unpaired_electrons()),
+                    (
+                        &expected.order,
+                        &expected.charge,
+                        &expected.unpaired_electrons
+                    ),
+                );
+            }
+        }
+        assert_eq!(editor.bond(BondId(0)).attributes(), &BondForm::default());
     }
 }

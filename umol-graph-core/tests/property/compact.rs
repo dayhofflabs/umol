@@ -1,6 +1,11 @@
 //! Finite compaction laws against survivor enumeration, independent of shift arithmetic.
+//!
+//! Generated columns exercise id/value compaction and correspondence conversion through size 64.
+//! Exhaustive removal subsets through size 12 check both inverse lookups and their result-domain
+//! boundary against the complete surviving source-id sequence.
 
 use proptest::prelude::*;
+use rstest::rstest;
 use umol_graph_core::{Compaction, Correspondence, NodeId};
 
 proptest! {
@@ -38,5 +43,34 @@ proptest! {
         prop_assert_eq!(compaction.try_uncompact(NodeId::from(survivors.len())), None);
         prop_assert_eq!(Correspondence::from(&compaction),
             Correspondence::new(pairs, entries.len(), survivors.len()).unwrap());
+    }
+}
+
+#[rstest]
+fn test_compaction_uncompact() {
+    for count in 0..=12 {
+        for mask in 0..(1usize << count) {
+            let removed = (0..count)
+                .filter(|id| mask & (1 << id) != 0)
+                .map(NodeId::from)
+                .collect();
+            let expected: Vec<_> = (0..count)
+                .filter(|id| mask & (1 << id) == 0)
+                .map(NodeId::from)
+                .collect();
+            let compaction = Compaction::new(count, removed).unwrap();
+            let actual: Vec<_> = (0..expected.len())
+                .map(|id| compaction.uncompact(NodeId::from(id)))
+                .collect();
+            assert_eq!(actual, expected);
+            for (id, source) in expected
+                .into_iter()
+                .map(Some)
+                .chain([None, None])
+                .enumerate()
+            {
+                assert_eq!(compaction.try_uncompact(NodeId::from(id)), source);
+            }
+        }
     }
 }

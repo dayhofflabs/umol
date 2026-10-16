@@ -4,7 +4,7 @@ use thiserror::Error;
 use umol_graph_core::RelevantCycleEnumerationAlgorithm;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintsForm, AtomId, BondConstraintForm, BondConstraintsForm,
-    BondId, DativeBondConstraintForm, DativeBondId, Entity, Lattice, Molecule, NumForm,
+    BondId, DativeBondConstraintForm, DativeBondId, Entity, Lattice, Molecule, Normalize, NumForm,
     RingAtomView, RingBondView, RingConfig, RingModel,
 };
 use umol_utils::solution::Solution;
@@ -40,7 +40,7 @@ impl RingConstraintInvariantsValidator {
                 validate_atom_constraints(
                     &rings.atom(id),
                     id,
-                    &molecule.atom(id).attributes.constraints,
+                    &molecule.atom(id).attributes().constraints,
                 ),
                 &mut any_underdetermined,
             ) {
@@ -53,7 +53,7 @@ impl RingConstraintInvariantsValidator {
                 validate_bond_constraints(
                     &rings.bond(id),
                     id,
-                    &molecule.bond(id).attributes.constraints,
+                    &molecule.bond(id).attributes().constraints,
                 ),
                 &mut any_underdetermined,
             ) {
@@ -71,7 +71,7 @@ impl RingConstraintInvariantsValidator {
             }) {
                 return Err(
                     ConstraintInvariantsError::DativeBondRingMembershipUnsupported {
-                        bond: bond.id,
+                        bond: bond.id(),
                     },
                 );
             }
@@ -112,7 +112,7 @@ impl RingConstraintInvariantsValidator {
         Ok(validate_atom_constraints(
             &rings.atom(atom_id),
             atom_id,
-            &atom.attributes.constraints,
+            &atom.attributes().constraints,
         ))
     }
 
@@ -144,7 +144,7 @@ impl RingConstraintInvariantsValidator {
         Ok(validate_bond_constraints(
             &rings.bond(bond_id),
             bond_id,
-            &bond.attributes.constraints,
+            &bond.attributes().constraints,
         ))
     }
 
@@ -181,12 +181,21 @@ fn validate_atom_constraints(
 ) -> Solution<(), RingConstraintInvariantsContradiction> {
     conjunction(constraints.iter().filter_map(|constraint| {
         let (asserted, derived) = match constraint {
-            AtomConstraintForm::RingDegree(asserted) => (asserted, view.ring_degree()),
+            AtomConstraintForm::RingDegree(asserted) => (asserted, Some(view.ring_degree())),
             AtomConstraintForm::RingValence(asserted) => (asserted, view.ring_valence()),
-            AtomConstraintForm::RingMembership(membership) => {
-                (&membership.count, view.ring_membership(membership.scope))
-            }
+            AtomConstraintForm::RingMembership(membership) => (
+                &membership.count,
+                Some(view.ring_membership(membership.scope)),
+            ),
             _ => return None,
+        };
+        let Some(derived) = derived else {
+            return Some(Solution::Contradictory(
+                RingConstraintInvariantsContradiction::Atom {
+                    atom: atom_id,
+                    constraint: constraint.clone(),
+                },
+            ));
         };
         Some(evaluate(
             asserted,
@@ -238,6 +247,9 @@ fn evaluate(
     derived: &NumForm,
     contradiction: RingConstraintInvariantsContradiction,
 ) -> Solution<(), RingConstraintInvariantsContradiction> {
+    let Ok(asserted) = asserted.clone().normalize() else {
+        return Solution::Contradictory(contradiction);
+    };
     if asserted.is_undetermined() {
         Solution::Determined(())
     } else if !derived.is_ground() {

@@ -492,7 +492,7 @@ proptest! {
         let realized = reaction.apply_at_to_reaction(&host, &occurrence).unwrap().unwrap();
         let span = reaction.apply_at_to_reaction_span(&host, &occurrence).unwrap().unwrap();
         prop_assert_eq!(realized.lhs(), &host);
-        prop_assert_eq!(span.lhs(), host.clone());
+        prop_assert_eq!(with_normalized_constraints(&span.lhs()), with_normalized_constraints(&host));
         let context = CanonicalizeContext {
             para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
@@ -543,7 +543,7 @@ proptest! {
     /// including skipped inapplicable matches and termination after the first execution failure.
     #[test]
     fn test_reaction_apply(
-        (reaction, host, _) in reaction_application_strategy(),
+        (reaction, host, _) in matchable_reaction_application_strategy(),
     ) {
         let mut expected = Vec::new();
         for correspondence in reaction
@@ -584,7 +584,7 @@ proptest! {
                     let span = span.unwrap();
                     prop_assert!(witness.is_compatible(&host, &product));
                     prop_assert_eq!(realized.lhs(), &host);
-                    prop_assert_eq!(span.lhs(), host.clone());
+                    prop_assert_eq!(with_normalized_constraints(&span.lhs()), with_normalized_constraints(&host));
                     prop_assert!(product.canonical_eq(&span.rhs(), &context));
                     prop_assert_eq!(realized.normalize(), span.to_reaction().normalize());
                 }
@@ -599,7 +599,7 @@ proptest! {
     /// `Molecule::react` is exactly reaction application followed by conservative splitting.
     #[test]
     fn test_react_react(
-        (reaction, host, _) in reaction_application_strategy(),
+        (reaction, host, _) in matchable_reaction_application_strategy(),
     ) {
         let expected = reaction
             .apply(&host, MATCH_CONFIG)
@@ -619,7 +619,7 @@ proptest! {
     /// Slice reaction preserves manual combination, application, and split order and multiplicity.
     #[test]
     fn test_react_react_slice(
-        reaction in materializable_reaction_strategy(),
+        reaction in matchable_reaction_strategy(),
         extra in molecule_strategy(),
     ) {
         let reactants = vec![reaction.lhs().clone(), extra];
@@ -649,7 +649,7 @@ proptest! {
         })?.expect("generated application is applicable");
         let recovered = reaction.apply_at_to_reaction(&host, &correspondence).unwrap().unwrap();
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
         prop_assert_eq!(
             Reaction::try_new(recovered.lhs().clone(), recovered.deltas().clone()),
             Ok(recovered),
@@ -657,7 +657,7 @@ proptest! {
     }
 
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
-    /// `right()` — the `transact`-apply path agrees with the span projection.
+    /// `right()` — reaction application agrees with the span projection.
     #[test]
     fn test_reaction_apply_reproduces_right(reaction in reaction_strategy()) {
         let span = reaction

@@ -10,16 +10,16 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomForm, AtomId, BondId, DativeBondId, EntitySpan, Molecule,
-    MoleculeCorrespondence, MoleculeEntries, MoleculeRemapping, MulticenterBondId,
-    NoncovalentBondId, Reaction, ReactionSpan, ReactionSpanEntries, StereoAtomId, StereoBondId,
-    StereoLigand,
+    AromaticSystemId, AtomDelta, AtomFieldChange, AtomForm, AtomId, BondId, ConstraintSpan,
+    DativeBondId, Delta, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries,
+    MoleculeRemapping, MulticenterBondId, NoncovalentBondId, Normalize, Reaction, ReactionSpan,
+    ReactionSpanEntries, Reframe, StereoAtomId, StereoBondId, StereoLigand,
 };
 
 use crate::strategies::{
-    materializable_reaction_strategy, molecule_entries_strategy,
-    molecule_entries_structurally_unambiguous_strategy, overlay_reaction_strategy,
-    reaction_strategy,
+    constraint_strategy, element_strategy, materializable_reaction_strategy,
+    molecule_entries_strategy, molecule_entries_structurally_unambiguous_strategy,
+    overlay_reaction_strategy, reaction_strategy, with_normalized_constraints, ConstraintCounts,
 };
 
 #[path = "span/canonicalize.rs"]
@@ -347,12 +347,50 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
         })
 }
 
+/// Constraint spans on about one in ten spans: one or two trees over the span's entity counts, each
+/// Unchanged, Added, or Removed, ordered by normal form as materialization orders them. A choice
+/// that fails span integrity keeps the span without constraints.
+fn sparsely_constrained_reaction_span(
+    entries: ReactionSpanEntries,
+) -> impl Strategy<Value = ReactionSpan> {
+    let span = ReactionSpan::try_from_entries(entries.clone())
+        .expect("generated span entries satisfy representation integrity");
+    let counts = ConstraintCounts::from_reaction_span(&span);
+    prop::option::weighted(
+        0.1,
+        prop::collection::vec((constraint_strategy(counts), 0u8..3), 1..=2),
+    )
+    .prop_map(move |constraints| {
+        let Some(constraints) = constraints else {
+            return span.clone();
+        };
+        let mut constrained = entries.clone();
+        constrained.constraints = constraints
+            .into_iter()
+            .map(|(constraint, tag)| match tag {
+                0 => ConstraintSpan::Unchanged(constraint),
+                1 => ConstraintSpan::Added(constraint),
+                _ => ConstraintSpan::Removed(constraint),
+            })
+            .collect();
+        constrained.constraints.sort_by_cached_key(|span| {
+            let constraint = match span {
+                ConstraintSpan::Unchanged(constraint)
+                | ConstraintSpan::Added(constraint)
+                | ConstraintSpan::Removed(constraint) => constraint,
+            };
+            constraint
+                .clone()
+                .normalize()
+                .unwrap_or_else(|_| constraint.clone())
+        });
+        ReactionSpan::try_from_entries(constrained).unwrap_or_else(|_| span.clone())
+    })
+}
+
 fn reaction_span_strategy() -> impl Strategy<Value = ReactionSpan> {
     prop_oneof![
-        2 => reaction_span_entries_strategy().prop_map(|entries| {
-            ReactionSpan::try_from_entries(entries)
-                .expect("generated span entries satisfy representation integrity")
-        }),
+        2 => reaction_span_entries_strategy().prop_flat_map(sparsely_constrained_reaction_span),
         3 => materializable_reaction_strategy().prop_map(|reaction| {
             reaction
                 .to_reaction_span()
@@ -420,6 +458,77 @@ pub(super) fn reaction_span_scenario_strategy() -> impl Strategy<Value = Reactio
     )
 }
 
+/// A reaction and a reaction derived from it for the canonical equality contract: its
+/// renumbering, normal form, or reframing, its span rematerialized, or a no-op charge
+/// modification of one atom (equivalent), or one added atom (usually not equivalent).
+pub(super) fn reaction_canonical_pair_strategy() -> impl Strategy<Value = (Reaction, Reaction)> {
+    (
+        reaction_span_scenario_strategy(),
+        0u8..6,
+        element_strategy(),
+        any::<prop::sample::Index>(),
+    )
+        .prop_map(|(scenario, transform, element, index)| {
+            let reaction = scenario.span.to_reaction();
+            let derived = match transform {
+                0 => scenario.span.remap(&scenario.first).to_reaction(),
+                1 => reaction
+                    .clone()
+                    .normalize()
+                    .unwrap_or_else(|_| reaction.clone()),
+                2 => reaction
+                    .clone()
+                    .reframe()
+                    .unwrap_or_else(|_| reaction.clone()),
+                3 => reaction
+                    .to_reaction_span()
+                    .map(|span| span.to_reaction())
+                    .unwrap_or_else(|_| reaction.clone()),
+                4 if reaction.lhs().atoms().count() > 0 => {
+                    let id = AtomId(index.index(reaction.lhs().atoms().count()) as u32);
+                    let charge = reaction.lhs().atom(id).attributes().charge.clone();
+                    let mut deltas = reaction.deltas().clone();
+                    deltas.push(Delta::Atom(AtomDelta::ModifyField {
+                        id,
+                        change: AtomFieldChange::Charge {
+                            old: charge.clone(),
+                            new: charge,
+                        },
+                    }));
+                    Reaction::new(reaction.lhs().clone(), deltas)
+                }
+                _ => {
+                    let added = reaction
+                        .deltas()
+                        .iter()
+                        .filter(|delta| matches!(delta, Delta::Atom(AtomDelta::Add { .. })))
+                        .count();
+                    let mut deltas = reaction.deltas().clone();
+                    deltas.push(Delta::Atom(AtomDelta::Add {
+                        id: AtomId((reaction.lhs().atoms().count() + added) as u32),
+                        attributes: AtomForm::from_element(element),
+                    }));
+                    Reaction::new(reaction.lhs().clone(), deltas)
+                }
+            };
+            (reaction, derived)
+        })
+}
+
+/// A reaction span and a span derived from it, through the reaction pairs.
+pub(super) fn reaction_span_canonical_pair_strategy(
+) -> impl Strategy<Value = (ReactionSpan, ReactionSpan)> {
+    reaction_canonical_pair_strategy().prop_filter_map(
+        "both reactions materialize",
+        |(reaction, derived)| {
+            Some((
+                reaction.to_reaction_span().ok()?,
+                derived.to_reaction_span().ok()?,
+            ))
+        },
+    )
+}
+
 proptest! {
     #![proptest_config(Config {
         failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
@@ -436,8 +545,8 @@ proptest! {
         let rhs = span.rhs();
         let reaction = span.to_reaction();
 
-        prop_assert_eq!(lhs.edit().try_build(), Ok(lhs));
-        prop_assert_eq!(rhs.edit().try_build(), Ok(rhs));
+        prop_assert_eq!(lhs.clone().edit().finish(), Ok(lhs));
+        prop_assert_eq!(rhs.clone().edit().finish(), Ok(rhs));
         prop_assert_eq!(
             Reaction::try_new(reaction.lhs().clone(), reaction.deltas().clone()),
             Ok(reaction),
@@ -491,8 +600,9 @@ proptest! {
         prop_assert_eq!(rebuilt, Some(span));
     }
 
-    /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs and
-    /// materialized span, including all entity kinds.
+    /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs,
+    /// with its molecule-level constraints compared as a set, and the materialized span, including
+    /// all entity kinds.
     #[test]
     fn test_reaction_span_roundtrip(reaction in materializable_reaction_strategy()) {
         let span = reaction
@@ -504,7 +614,10 @@ proptest! {
             .expect("reaction derived from a constructed span materializes");
         let normalized_twice = normalized_span.to_reaction();
 
-        prop_assert_eq!(normalized.lhs(), reaction.lhs());
+        prop_assert_eq!(
+            with_normalized_constraints(normalized.lhs()),
+            with_normalized_constraints(reaction.lhs()),
+        );
         prop_assert_eq!(normalized_span, span);
         prop_assert_eq!(normalized_twice, normalized);
     }

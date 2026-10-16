@@ -6,15 +6,15 @@
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{AsLit, ElectronCountsForm as GraphIrElectronCountsForm};
 
-use crate::convert::{hash_rust, variant_repr};
+use crate::convert::{hash_rust, variant_repr, TupleItems};
 use crate::lattice::impl_py_lattice;
 
-/// A per-member-atom electron-count vector: undetermined, or a concrete list of
+/// A per-member-atom electron-count vector: undetermined, or a concrete sequence of
 /// counts positionally aligned to the owning entity's atoms.
 #[pyclass]
 pub enum ElectronCountsForm {
     Undetermined(),
-    Lit(Vec<i64>),
+    Lit(TupleItems<Vec<i64>>),
 }
 
 #[pymethods]
@@ -45,14 +45,14 @@ impl ElectronCountsForm {
     pub(crate) fn from_rust(form: &GraphIrElectronCountsForm) -> Self {
         match form {
             GraphIrElectronCountsForm::Undetermined => Self::Undetermined(),
-            GraphIrElectronCountsForm::Lit(counts) => Self::Lit(counts.clone()),
+            GraphIrElectronCountsForm::Lit(counts) => Self::Lit(TupleItems(counts.clone())),
         }
     }
 
     pub(crate) fn to_rust(&self) -> GraphIrElectronCountsForm {
         match self {
             Self::Undetermined() => GraphIrElectronCountsForm::Undetermined,
-            Self::Lit(counts) => GraphIrElectronCountsForm::Lit(counts.clone()),
+            Self::Lit(counts) => GraphIrElectronCountsForm::Lit(counts.0.clone()),
         }
     }
 }
@@ -118,7 +118,7 @@ mod tests {
                 GraphIrElectronCountsForm::Lit(vec![1, 0, 1])
             );
             // an ElectronCountsForm passes through
-            let form = Py::new(py, ElectronCountsForm::Lit(vec![2, 2])).unwrap();
+            let form = Py::new(py, ElectronCountsForm::Lit(TupleItems(vec![2, 2]))).unwrap();
             assert_eq!(
                 ElectronCountsLike::Form(form).to_rust(py),
                 GraphIrElectronCountsForm::Lit(vec![2, 2])

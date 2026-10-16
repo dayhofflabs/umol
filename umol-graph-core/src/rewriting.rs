@@ -17,7 +17,8 @@
 use std::collections::HashMap;
 
 use crate::correspondence::{Correspondence, GraphCorrespondence, GraphCorrespondenceComposeError};
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 
 /// The two input-to-result correspondences of a graph pushout.
 ///

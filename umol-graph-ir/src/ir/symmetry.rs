@@ -1,6 +1,5 @@
 //! Graph-automorphism symmetry of a molecule, graded into proper vs improper.
 
-use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
@@ -14,7 +13,10 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
-use super::stereo::{coset_apply_permutation, StereoCoset, StereoKind, Stereogenicity, Topicity};
+use super::stereo::{
+    coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
+    Topicity,
+};
 use super::traits::AsLit;
 
 /// Configuration for [`Molecule::graph_symmetry`].
@@ -118,16 +120,17 @@ impl Molecule {
 
     /// The observable coset of a stereo node under the current orbit partition:
     /// the stored coset reduced by ligand-position swaps that preserve the ligands'
-    /// current classes. `None` for non-stereo / undetermined / malformed nodes.
+    /// current classes. `None` for non-stereo nodes or undetermined and
+    /// nonliteral configurations, or a ligand count that differs from the kind's degree.
     fn observable_descriptor(&self, entity: Entity, orbits: &[NodeId]) -> Option<u32> {
         let (kind, coset, ligands) = self.stereo_center(entity)?;
+        if ligands.len() != kind.degree() {
+            return None;
+        }
         let &StereoCoset::Lit(raw) = coset else {
             return None;
         };
         let coset_space = kind.class_key().space();
-        if ligands.len() != coset_space.degree() {
-            return None;
-        }
         let classes: Vec<(StereoLigandKind, NodeId)> = ligands
             .iter()
             .map(|ligand| (ligand.kind, orbits[ligand.atom_id.index()]))
@@ -187,10 +190,6 @@ impl Molecule {
             return Ok(None);
         };
         let coset_space = kind.class_key().space();
-        if ligands.len() != coset_space.degree() || !all_distinct(&ligands) {
-            return Ok(None);
-        }
-
         let target_entity = incidence.entity(generator[incidence.node_of(entity).index()]);
         let Some((_, target_coset, target_ligands)) = self.stereo_center(target_entity) else {
             return Err(());
@@ -223,16 +222,16 @@ impl Molecule {
         [EntityKind::StereoAtom, EntityKind::StereoBond]
             .into_iter()
             .flat_map(|kind| (0..incidence.entity_count(kind)).map(move |i| kind.with_id(i as u32)))
-            .any(|entity| match self.stereo_center(entity) {
-                Some((kind, StereoCoset::Lit(_), ligands)) => {
-                    ligands.len() == kind.class_key().space().degree() && all_distinct(&ligands)
-                }
-                _ => false,
+            .any(|entity| {
+                matches!(
+                    self.stereo_center(entity),
+                    Some((_, StereoCoset::Lit(_), _))
+                )
             })
     }
 
     /// The kind, stored coset, and ordered ligands of a stereo entity; `None` for
-    /// non-stereo entities or out-of-range ids.
+    /// non-stereo entities, out-of-range ids, or an undetermined kind.
     fn stereo_center(
         &self,
         entity: Entity,
@@ -240,19 +239,27 @@ impl Molecule {
         match entity {
             Entity::StereoAtom(id) => {
                 let view = self.stereo_atoms().get(id)?;
+                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes().configuration
+                else {
+                    return None;
+                };
                 let ligands = view
                     .ligands()
                     .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                     .collect();
-                Some((view.kind(), view.coset(), ligands))
+                Some((*kind, coset, ligands))
             }
             Entity::StereoBond(id) => {
                 let view = self.stereo_bonds().get(id)?;
+                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes().configuration
+                else {
+                    return None;
+                };
                 let ligands = view
                     .ligands()
                     .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                     .collect();
-                Some((view.kind(), view.coset(), ligands))
+                Some((*kind, coset, ligands))
             }
             _ => None,
         }
@@ -514,10 +521,6 @@ fn reexpress(
     }
 }
 
-fn all_distinct(ligands: &[StereoLigand]) -> bool {
-    ligands.iter().copied().collect::<HashSet<_>>().len() == ligands.len()
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -618,6 +621,69 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom(
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::default(),
+            )],
+            ..Default::default()
+        },
+        AtomId(1),
+        vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+    )]
+    #[case::bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(0),
+                (2..=5)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoBondForm::default(),
+            )],
+            ..Default::default()
+        },
+        AtomId(2),
+        vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+    )]
+    fn test_molecule_graph_symmetry_kindless(
+        #[case] entries: MoleculeEntries,
+        #[case] atom: AtomId,
+        #[case] expected_orbit: Vec<AtomId>,
+    ) {
+        let molecule = Molecule::try_from_entries(entries).expect("kindless stereo is admitted");
+        for coloring in [
+            ConstitutionColoring::entity_only(),
+            ConstitutionColoring::full(),
+        ] {
+            let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
+                coloring,
+                iterate_to_fixpoint: false,
+                max_iterations: 1,
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            });
+
+            assert_eq!(symmetry.proper_orbit_of(atom), expected_orbit);
+            assert_eq!(symmetry.is_chiral(), false);
+        }
+    }
+
+    #[rstest]
     fn test_graph_symmetry_site_stabilizer(benzene_ring: Molecule) {
         let symmetry = benzene_ring.graph_symmetry(&config());
         // Every stabilizer generator fixes the distinguished site.
@@ -650,8 +716,9 @@ mod tests {
         // element contributes no observable descriptor and the orbit partition
         // is still computed.
         let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        mol.stereo_atom_mut(StereoAtomId(0)).configuration =
-            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
+        mol.stereo_atom_mut(StereoAtomId(0))
+            .attributes_mut()
+            .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
         let gs = mol.graph_symmetry(&config());
         assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
     }
@@ -659,8 +726,9 @@ mod tests {
     #[rstest]
     fn test_molecule_observable_descriptor() {
         let mut mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        mol.stereo_atom_mut(StereoAtomId(0)).configuration =
-            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1);
+        mol.stereo_atom_mut(StereoAtomId(0))
+            .attributes_mut()
+            .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1);
         assert_eq!(
             mol.observable_descriptor(
                 Entity::StereoAtom(StereoAtomId(0)),

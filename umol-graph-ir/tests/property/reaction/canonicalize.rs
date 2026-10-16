@@ -7,8 +7,6 @@
 //! frozen canonical fixtures, rather than a tautological second case, remain the compatibility
 //! target for future algorithms.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{
@@ -20,7 +18,7 @@ use umol_graph_ir::ir::{
     ReactionCanonicalizeError, ReactionSpan, Reframe,
 };
 
-use super::span::reaction_span_scenario_strategy;
+use super::span::{reaction_canonical_pair_strategy, reaction_span_scenario_strategy};
 use crate::strategies::*;
 
 #[derive(Clone, Copy)]
@@ -34,12 +32,6 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
-}
-
-fn structural_hash<T: Hash>(value: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn is_present<T>(value: &EntitySpan<T>, side: Side) -> bool {
@@ -307,13 +299,13 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first).to_reaction();
 
         prop_assert_eq!(
-            source.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            source.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         if let Ok(canonical) = source.clone().canonicalize(&context) {
             prop_assert_eq!(
                 source.canonical_hash(&context),
-                Ok(structural_hash(&canonical)),
+                canonical.canonical_hash(&context),
             );
         }
     }
@@ -479,6 +471,29 @@ proptest! {
         (reaction, expected) in canonicalization_error_strategy(),
     ) {
         prop_assert_eq!(reaction.canonicalize(&context()), Err(expected));
+    }
+
+    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    #[test]
+    fn test_reaction_canonical_eq_contract(
+        (left, right) in reaction_canonical_pair_strategy(),
+    ) {
+        let context = context();
+        let expected = match (
+            left.clone().canonicalize(&context),
+            right.clone().canonicalize(&context),
+        ) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => true,
+            _ => false,
+        };
+
+        prop_assert_eq!(left.canonical_eq(&right, &context), expected);
+        match (left.canonical_hash(&context), right.canonical_hash(&context)) {
+            (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
+            (Err(_), Err(_)) => prop_assert!(expected),
+            _ => prop_assert!(!expected),
+        }
     }
 
     #[test]

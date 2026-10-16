@@ -263,17 +263,17 @@ proptest! {
         }
         let expected: Vec<_> = markers.windows(2).map(|pair| {
             match (pair[0], pair[1]) {
-                (Some(left), Some(right)) => Some(CisTransStereoForm::stereo(
+                (Some(left), Some(right)) => CisTransStereoForm::stereo(
                     StereoCoset::Lit(u32::from(left == right)),
-                )),
-                _ => None,
+                ),
+                _ => CisTransStereoForm::Undetermined,
             }
         }).collect();
         let table = Smiles::parse(&input).unwrap().into_table_ir();
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let actual: Vec<_> = (0..markers.len() - 1).map(|index| {
             molecule.bond(BondId::from(2 * index + 1))
-                .attributes.constraints.cis_trans_stereo().cloned()
+                .attributes().constraints.cis_trans_stereo().clone()
         }).collect();
         prop_assert_eq!(actual, expected);
     }
@@ -373,8 +373,8 @@ proptest! {
         let expected = CisTransStereoForm::stereo(StereoCoset::Lit(
             u32::from(!same ^ first_swap ^ second_swap)));
         let raised: Molecule = (&table).try_into_ir(&()).unwrap();
-        prop_assert_eq!(raised.bond(BondId(2)).attributes.constraints.cis_trans_stereo(),
-            Some(&expected));
+        prop_assert_eq!(raised.bond(BondId(2)).attributes().constraints.cis_trans_stereo(),
+            &expected);
         table.positions = Some(positions.map(|[x,y,z]| Point3D::new(f64::from(x),f64::from(y),f64::from(z))).to_vec());
         let converted = TableMolecule::try_from(ExtendedMolecule::from(table.clone())).unwrap();
         prop_assert_eq!(&converted, &table);

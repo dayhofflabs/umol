@@ -38,7 +38,8 @@ from umol import (
     ],
 )
 def test_dative_bond_update(update, expected):
-    assert (update.order, update.constraints) == expected
+    assert update.order == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -149,8 +150,26 @@ def test_dativebondconstraints_ring_size_count():
         ]
     )
     assert constraints.ring_size_count[6] == NumForm.Lit(1)
-    assert constraints.ring_size_count[5] is None
-    assert constraints.ring_count is None
+    assert constraints.ring_size_count[5] == NumForm.Undetermined()
+    assert constraints.ring_count == NumForm.Undetermined()
+
+
+def test_dativebondconstraints_ring_memberships():
+    constraints = DativeBondConstraintsForm(
+        [
+            DativeBondConstraintForm.RingMembership(
+                RingMembershipForm(RingScope.All(), NumForm.Lit(2))
+            ),
+            DativeBondConstraintForm.RingMembership(
+                RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
+            ),
+        ]
+    )
+    assert constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
+    assert DativeBondConstraintsForm([]).ring_memberships() == []
 
 
 def test_dativebondconstraints_mapping_ops():
@@ -201,7 +220,8 @@ def test_dativebondview_fields():
     assert view.id == 0
     assert view.order == NumForm.Lit(1)
     assert view.acceptor == 0
-    assert view.donors == [1]
+    assert type(view.donors) is tuple
+    assert view.donors == (1,)
     # atom_ids is the donors followed by the acceptor
     assert view.atom_ids == (1, 0)
     assert repr(view) == "DativeBondView(id=0)"
@@ -242,7 +262,18 @@ def test_dativebondview_constraints_ring_size_count():
     mol.dative_bonds[0].constraints.ring_size_count[6] = 3
     assert mol.dative_bonds[0].constraints.ring_size_count[6].as_lit() == 3
     del mol.dative_bonds[0].constraints.ring_size_count[6]
-    assert mol.dative_bonds[0].constraints.ring_size_count[6] is None
+    assert mol.dative_bonds[0].constraints.ring_size_count[6] == NumForm.Undetermined()
+
+
+def test_dativebondview_constraints_ring_memberships():
+    mol = ammonia_borane()
+    assert mol.dative_bonds[0].constraints.ring_memberships() == []
+    mol.dative_bonds[0].constraints.ring_count = 2
+    mol.dative_bonds[0].constraints.ring_size_count[6] = 1
+    assert mol.dative_bonds[0].constraints.ring_memberships() == [
+        RingMembershipForm(RingScope.All(), NumForm.Lit(2)),
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)),
+    ]
 
 
 def test_dativebondview_set_constraints():
@@ -271,7 +302,7 @@ def test_dativebondviews_setitem():
     # value replaced, participants preserved
     assert view.order == NumForm.Lit(2)
     assert view.acceptor == 0
-    assert view.donors == [1]
+    assert view.donors == (1,)
 
 
 def test_dativebondviews_setitem_out_of_range():

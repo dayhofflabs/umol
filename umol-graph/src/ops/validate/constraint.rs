@@ -321,13 +321,24 @@ impl<'a> ConstraintEvaluation<'a> {
             }
             let ring_atom = self.rings().atom(id);
             let (asserted, derived) = match constraint {
-                AtomConstraintForm::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
+                AtomConstraintForm::RingDegree(asserted) => {
+                    (asserted, Some(ring_atom.ring_degree()))
+                }
                 AtomConstraintForm::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
                 AtomConstraintForm::RingMembership(membership) => (
                     &membership.count,
-                    ring_atom.ring_membership(membership.scope),
+                    Some(ring_atom.ring_membership(membership.scope)),
                 ),
                 _ => unreachable!("ring constraint classified above"),
+            };
+            let Some(derived) = derived else {
+                return Ok(Solution::Contradictory(
+                    RingConstraintInvariantsContradiction::Atom {
+                        atom: id,
+                        constraint: constraint.clone(),
+                    }
+                    .into(),
+                ));
             };
             Ok(evaluate_value(asserted, &derived, || {
                 RingConstraintInvariantsContradiction::Atom {
@@ -595,19 +606,25 @@ fn evaluate_value(
 fn evaluate_stereo_constraint<C>(
     kind_matches: bool,
     asserted: &C,
-    stored: Option<&C>,
+    stored: Option<C>,
     contradiction: impl FnOnce() -> ConstraintInvariantsContradiction,
 ) -> Solution<(), ConstraintInvariantsContradiction>
 where
     C: Lattice,
 {
+    let Some(stored) = stored else {
+        return Solution::Contradictory(contradiction());
+    };
+    let Ok(asserted) = asserted.clone().normalize() else {
+        return Solution::Contradictory(contradiction());
+    };
     if asserted.is_undetermined() {
         Solution::Determined(())
     } else if !kind_matches {
         Solution::Contradictory(contradiction())
-    } else if stored.is_none_or(|stored| !stored.is_ground()) {
+    } else if !stored.is_ground() {
         Solution::Underdetermined(())
-    } else if asserted.matches(stored.expect("ground stored constraint")) {
+    } else if asserted.matches(&stored) {
         Solution::Determined(())
     } else {
         Solution::Contradictory(contradiction())
@@ -754,9 +771,9 @@ mod tests {
         #[case] constraint: Constraint,
         #[case] expected: Solution<(), ConstraintInvariantsContradiction>,
     ) {
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint))
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(constraint);
+        molecule = editor.finish().unwrap();
 
         assert_eq!(
             ConstraintInvariantsValidator::new(CONFIG).validate(&molecule),
@@ -777,9 +794,9 @@ mod tests {
         mut molecule: Molecule,
         #[case] constraint: Constraint,
     ) {
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint.clone()))
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(constraint.clone());
+        molecule = editor.finish().unwrap();
 
         assert_eq!(
             ConstraintInvariantsValidator::new(CONFIG).validate(&molecule),
@@ -800,15 +817,15 @@ mod tests {
         let mut inline = molecule.clone().edit();
         inline
             .atom_mut(AtomId(0))
-            .attributes
+            .attributes_mut()
             .constraints
             .set(constraint.clone());
-        let inline = inline.build();
+        let inline = inline.finish().unwrap();
         let mut top_level = molecule.edit();
         top_level
             .constraints_mut()
             .push(Constraint::Atom(AtomId(0), constraint));
-        let top_level = top_level.build();
+        let top_level = top_level.finish().unwrap();
         let validator = ConstraintInvariantsValidator::new(CONFIG);
 
         assert_eq!(validator.validate(&inline), validator.validate(&top_level));

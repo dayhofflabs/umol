@@ -130,10 +130,10 @@ fn interpret_molecule(
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
 ) -> Result<Molecule, MoleculeInterpretationError> {
-    let mut molecule: Molecule = molecule.try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
-        Solution::Determined(_) => Ok(molecule),
-        Solution::Underdetermined(report) => Err(ResolveUnderdetermined { report }.into()),
+    let molecule: Molecule = molecule.try_into_ir(&())?;
+    match Resolver::with_config(model, *resolve_config).resolve(molecule)? {
+        Solution::Determined(molecule) => Ok(molecule),
+        Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),
         Solution::Contradictory(error) => Err(error.into()),
     }
 }
@@ -290,14 +290,13 @@ mod tests {
     use std::error::Error as _;
 
     use rstest::rstest;
-    use smallvec::smallvec;
     use umol_chem::element::Element;
     use umol_graph_core::{NodeId, Remapping};
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondConstraintForm, BondId,
-        BooleanForm, Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm,
-        Entity, MoleculeEntries, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm,
-        StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+        AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondId, BooleanForm, Canonicalize,
+        CanonicalizeContext, Deltas, ElectronCountsForm, Entity, MoleculeEntries,
+        MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset, StereoKind,
+        StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
     use umol_io::table_ir::{AtomPair, BondConfiguration};
@@ -311,11 +310,11 @@ mod tests {
         ValenceTieBreak,
     };
     use crate::ops::resolve::{
-        AromaticityFailurePolicy, AromaticityResolveConfig, DischargeContradiction,
-        StereoContradiction, StereoResolveConfig, ValenceContradiction,
+        AromaticityFailurePolicy, AromaticityResolveConfig, StereoContradiction,
+        StereoResolveConfig, ValenceContradiction,
     };
     use crate::ops::stereo::StereoInconsistency;
-    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, AtomTypingError, ResolveReport};
+    use crate::ops::valence::{AtomTypeRegistry, AtomTypingError, CountsError};
 
     #[rstest]
     #[case::model_conversion(
@@ -329,7 +328,7 @@ mod tests {
         "hmo: invalid input: invalid input"
     )]
     #[case::underdetermined(
-        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
+        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
         "resolution underdetermined"
     )]
     #[case::execution(
@@ -361,7 +360,7 @@ mod tests {
     )]
     #[case::products(
         ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
-            ResolveUnderdetermined::default()
+            ResolveUnderdetermined
         ),),
         "products: resolution underdetermined",
         Some("resolution underdetermined")
@@ -409,7 +408,7 @@ mod tests {
         "hmo: invalid input: invalid input"
     )]
     #[case::underdetermined(
-        SmilesInputError::Underdetermined(ResolveUnderdetermined::default()),
+        SmilesInputError::Underdetermined(ResolveUnderdetermined),
         "resolution underdetermined"
     )]
     #[case::execution(
@@ -440,8 +439,8 @@ mod tests {
         ))
     )]
     #[case::underdetermined(
-        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
-        SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
+        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+        SmilesInputError::Underdetermined(ResolveUnderdetermined)
     )]
     #[case::execution(
         MoleculeInterpretationError::Execution(ResolveError::Aromaticity(
@@ -479,7 +478,7 @@ mod tests {
     )]
     #[case::products(
         ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Products(
-            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
+            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
         )),
         "products: resolution underdetermined",
         vec![
@@ -612,7 +611,7 @@ mod tests {
         assert_eq!(
             parsed.interpret(&model, &resolve_config),
             Err(MoleculeInterpretationError::Underdetermined(
-                ResolveUnderdetermined::default()
+                ResolveUnderdetermined
             ))
         );
     }
@@ -741,36 +740,18 @@ mod tests {
             product_count: 2,
         },
     )]
-    #[case::reactants_model_conversion(
-        "C[S@]C>>",
-        ChemistryModel::default(),
-        ReactionInterpretationError::Reactants(
-            MoleculeInterpretationError::ModelConversion(
-                RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }),
-            ),
-        ),
-    )]
-    #[case::products_model_conversion(
-        ">>C[S@]C",
-        ChemistryModel::default(),
-        ReactionInterpretationError::Products(
-            MoleculeInterpretationError::ModelConversion(
-                RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }),
-            ),
-        ),
-    )]
     #[case::reactants_underdetermined(
         "*>>",
         ChemistryModel::default(),
         ReactionInterpretationError::Reactants(MoleculeInterpretationError::Underdetermined(
-            ResolveUnderdetermined::default()
+            ResolveUnderdetermined
         ),)
     )]
     #[case::products_underdetermined(
         ">>*",
         ChemistryModel::default(),
         ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
-            ResolveUnderdetermined::default()
+            ResolveUnderdetermined
         ),)
     )]
     #[case::reactants_contradiction(
@@ -853,6 +834,29 @@ mod tests {
     }
 
     #[rstest]
+    #[case::reactants("C[S@]C>>", true)]
+    #[case::products(">>C[S@]C", false)]
+    fn test_reaction_smiles_interpret_stereo_error(#[case] input: &str, #[case] reactants: bool) {
+        let model = ChemistryModel::default();
+        let config = ResolveConfig::default();
+        let error = Smiles::parse("C[S@]C")
+            .unwrap()
+            .interpret(&model, &config)
+            .unwrap_err();
+        let expected = if reactants {
+            ReactionInterpretationError::Reactants(error)
+        } else {
+            ReactionInterpretationError::Products(error)
+        };
+        assert_eq!(
+            ReactionSmiles::parse(input)
+                .unwrap()
+                .interpret(&model, &config),
+            Err(expected)
+        );
+    }
+
+    #[rstest]
     #[case::opening("C[C@H]1CCCCO1")]
     #[case::closing("O1CCCC[C@@H]1C")]
     #[case::lone_pair("C[S@](=O)CC")]
@@ -926,9 +930,12 @@ mod tests {
     #[rstest]
     #[case::methane("C")]
     #[case::benzene("c1ccccc1")]
+    #[case::tetrahedral("C[C@H](F)Cl")]
+    #[case::cis_trans("F/C=C/Cl")]
     fn test_ingest_smiles(#[case] input: &str) {
+        let molecule = ingest_smiles(input).unwrap();
         assert_eq!(
-            ingest_smiles(input),
+            Ok(molecule.clone()),
             ingest_smiles_with(
                 input,
                 &SmilesIoConfig::opensmiles(),
@@ -939,18 +946,16 @@ mod tests {
                 &ResolveConfig::default(),
             )
         );
+        assert_eq!(molecule.clone().edit().finish(), Ok(molecule));
     }
 
     #[rstest]
     #[case::syntax(" C", SmilesInputError::Syntax(SmilesParseError::LeadingWhitespace))]
-    #[case::model_conversion(
+    #[case::incomplete_stereo(
         "C[S@]C",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
-    #[case::underdetermined(
-        "*",
-        SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
-    )]
+    #[case::underdetermined("*", SmilesInputError::Underdetermined(ResolveUnderdetermined))]
     #[case::trigonal_carbon(
         "[C@](F)(Cl)Br",
         SmilesInputError::Contradiction(ResolveContradiction::Stereo(
@@ -969,29 +974,22 @@ mod tests {
     )]
     #[case::two_carbon_substituents(
         "[C@](F)Cl",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral, expected: 4, actual: 2,
-            },
-        ))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::one_carbon_substituent(
         "[C@]F",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral, expected: 4, actual: 1,
-            },
-        ))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::five_ligands(
         "[C@H](F)(Cl)(Br)I",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral, expected: 4, actual: 5,
-            },
+        SmilesInputError::Contradiction(ResolveContradiction::Valence(
+            ValenceContradiction::Counts(CountsError::NoMatch)
+        ))
+    )]
+    #[case::non_aromatic_atom_on_aromatic_bond(
+        "C:C",
+        SmilesInputError::Contradiction(ResolveContradiction::Valence(
+            ValenceContradiction::Counts(CountsError::NoMatch)
         ))
     )]
     #[case::duplicate_bracket_h(
@@ -1008,17 +1006,20 @@ mod tests {
         // must be explicitly represented; the unwritten bond raises as an
         // aromatic assertion no system can claim.
         "c1ccc(cc1)c1ccccc1",
-        SmilesInputError::Contradiction(ResolveContradiction::Discharge(
-            DischargeContradiction::Assertion {
-                constraint: Constraint::Bond(
-                    BondId(6),
-                    BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
-                ),
-            },
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
+            AromaticityInconsistency::AromaticBondConstraintFailure { bond: BondId(6) }.into(),
         ))
     )]
     #[case::cyclobutadiene(
         "c1ccc1",
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        ))
+    )]
+    #[case::non_aromatic_bond_in_aromatic_ring(
+        "c1ccc-cc1",
         SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::Inconsistency(
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
@@ -1072,14 +1073,14 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.charge.clone())
+                .map(|atom| atom.attributes().charge.clone())
                 .collect::<Vec<_>>(),
             expected_atom_charges
         );
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .charge,
             expected_system_charge
         );
@@ -1136,7 +1137,7 @@ mod tests {
             molecule
                 .stereo_bonds()
                 .iter()
-                .map(|bond| (usize::from(bond.site_id()), bond.attributes.clone()))
+                .map(|bond| (usize::from(bond.site_id()), bond.attributes().clone()))
                 .collect::<Vec<_>>(),
             expected
                 .into_iter()
@@ -1146,30 +1147,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::retained(
+    #[case::default(
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![None; 6]
-    )]
-    #[case::reset(
-        SmilesIoConfig::opensmiles(),
-        ChemistryModel::default(),
-        ResolveConfig {
-            isotope: IsotopePolicy::Strict,
-            aromaticity: AromaticityResolveConfig {
-                reset_aromatic_valence: true,
-                ..AromaticityResolveConfig::default()
-            },
-            stereo: StereoResolveConfig::default(),
-        },
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_ingest_smiles_with_aromatic_valence(
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Vec<Option<AromaticValenceForm>>,
+        #[case] expected: Vec<AromaticValenceForm>,
     ) {
         let molecule = ingest_smiles_with("c1ccccc1", &io_config, &model, &resolve_config).unwrap();
 
@@ -1177,7 +1165,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
             expected
         );
@@ -1305,6 +1293,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::ethanol(
+        "CCO",
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h3" "C#h2" "O#h1#n2"]
+            :bonds [[0 1 "1"] [1 2 "1"]]
+        }"#)
+    )]
+    #[case::benzene(
+        "c1ccccc1",
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h1" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+            :bonds [[0 5 "1"] [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
     #[case::pyrrole(
         "c1cccn1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,2]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 4 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]]}"##)
@@ -1497,7 +1500,7 @@ mod tests {
             &ResolveConfig::default(),
         )
         .unwrap();
-        assert_eq!(molecule.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(molecule.atom(AtomId(0)).attributes(), &expected);
         assert_eq!(
             molecule.stereo_atoms().ids().collect::<Vec<_>>(),
             vec![StereoAtomId(0)]
@@ -1537,7 +1540,7 @@ mod tests {
             &ResolveConfig::default(),
         )
         .unwrap();
-        assert_eq!(molecule.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(molecule.atom(AtomId(0)).attributes(), &expected);
         assert_eq!(
             molecule.stereo_atoms().ids().collect::<Vec<_>>(),
             vec![StereoAtomId(0)]
@@ -1589,24 +1592,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::imidazole(
-        "c1cncn1",
-        SmilesInputError::Underdetermined(ResolveUnderdetermined {
-            report: ResolveReport {
-                unresolved: AtomCompletions::from_iter([2, 4].map(|atom| (
-                    AtomId(atom),
-                    smallvec![
-                        atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
-                        atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
-                    ],
-                ))),
-                tie_breaks: Vec::new(),
-            },
-        })
-    )]
+    #[case::imidazole("c1cncn1", SmilesInputError::Underdetermined(ResolveUnderdetermined))]
     fn test_ingest_smiles_with_tie_break(#[case] input: &str, #[case] expected: SmilesInputError) {
-        // Both tautomeric assignments survive `Strict`: the report carries the
-        // two nitrogen splits.
         let model = ChemistryModel {
             valence: ValenceModel {
                 tie_break: ValenceTieBreak::Strict,
@@ -1669,15 +1656,15 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
-            vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
+            vec![AromaticValenceForm::Aromatic(NumForm::Undetermined); 5]
         );
         assert_eq!(
             molecule
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes.constraints.aromatic())
+                .map(|bond| *bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );
@@ -1688,7 +1675,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::retained(
+    #[case::default(
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
             valence: ValenceModel {
@@ -1698,32 +1685,13 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        None
-    )]
-    #[case::reset(
-        SmilesIoConfig::opensmiles(),
-        ChemistryModel {
-            valence: ValenceModel {
-                tie_break: ValenceTieBreak::MostSaturated,
-                ..ValenceModel::default()
-            },
-            ..ChemistryModel::default()
-        },
-        ResolveConfig {
-            isotope: IsotopePolicy::Strict,
-            aromaticity: AromaticityResolveConfig::default(),
-            stereo: StereoResolveConfig {
-                reset_stereo_constraints: true,
-                ..StereoResolveConfig::default()
-            },
-        },
-        None
+        TetrahedralStereoForm::Undetermined
     )]
     fn test_ingest_smiles_with_stereo(
         #[case] io_config: SmilesIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Option<TetrahedralStereoForm>,
+        #[case] expected: TetrahedralStereoForm,
     ) {
         let molecule =
             ingest_smiles_with("C[C@H](N)O", &io_config, &model, &resolve_config).unwrap();
@@ -1731,10 +1699,10 @@ mod tests {
         assert_eq!(
             molecule
                 .atom(AtomId(1))
-                .attributes
+                .attributes()
                 .constraints
                 .tetrahedral_stereo()
-                .cloned(),
+                .clone(),
             expected
         );
         assert!(molecule.stereo_atoms().is_at(AtomId(1)));
@@ -1763,7 +1731,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
+        SmilesInputError::Underdetermined(ResolveUnderdetermined)
     )]
     #[case::mdl_furan(
         "o1cccc1",
@@ -1879,7 +1847,7 @@ mod tests {
     #[case::underdetermined(
         "*>>C",
         ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
-            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
+            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
         ),)
     )]
     #[case::reactant_direction("F/C=C>>C", ReactionSmilesInputError::Syntax(SmilesParseError::DanglingBondDirection { bond: 0 }))]
@@ -1926,21 +1894,32 @@ mod tests {
     }
 
     #[rstest]
-    #[case::io("C~C>>C.C")]
-    fn test_ingest_reaction_smiles_with_underdetermined_report(#[case] input: &str) {
+    #[case::reactants(
+        "C~C>>C.C",
+        ReactionInterpretationError::Reactants(MoleculeInterpretationError::Underdetermined(
+            ResolveUnderdetermined
+        ))
+    )]
+    #[case::products(
+        "[CH4]>>C~C",
+        ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
+            ResolveUnderdetermined
+        ))
+    )]
+    fn test_ingest_reaction_smiles_with_underdetermined(
+        #[case] input: &str,
+        #[case] expected: ReactionInterpretationError,
+    ) {
         let result = ingest_reaction_smiles_with(
             input,
             &SmilesIoConfig::lenient(),
             &ChemistryModel::default(),
             &ResolveConfig::default(),
         );
-        let Err(ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
-            MoleculeInterpretationError::Underdetermined(underdetermined),
-        ))) = result
-        else {
-            panic!("expected an underdetermined reactants interpretation: {result:?}");
-        };
-        assert!(!underdetermined.report.unresolved.is_empty());
+        assert_eq!(
+            result,
+            Err(ReactionSmilesInputError::Interpretation(expected))
+        );
     }
 
     #[rstest]
@@ -2140,16 +2119,16 @@ mod tests {
                 .lhs()
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
-            vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
+            vec![AromaticValenceForm::Aromatic(NumForm::Undetermined); 5]
         );
         assert_eq!(
             reaction
                 .lhs()
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes.constraints.aromatic())
+                .map(|bond| *bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );

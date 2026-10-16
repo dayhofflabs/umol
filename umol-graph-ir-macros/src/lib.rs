@@ -92,7 +92,7 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
                     #( #fields: #lattice::meet(&self.#fields, &other.#fields)?, )*
                 })
             }
-            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ir::NoJoin> {
+            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ir::NoJoinError> {
                 ::core::result::Result::Ok(Self {
                     #( #fields: #lattice::join(&self.#fields, &other.#fields)?, )*
                 })
@@ -109,8 +109,7 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
 }
 
 /// Derive `Normalize` by normalizing each named field. Every field type
-/// must itself implement `Normalize`. `normalized` uses the trait default
-/// (the fast-path borrow is a per-type override, not generated here).
+/// must itself implement `Normalize`. `normalized_eq` uses the trait default.
 #[proc_macro_derive(Normalize)]
 pub fn derive_normalize(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

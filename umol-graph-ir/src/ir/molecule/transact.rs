@@ -1,50 +1,14 @@
-//! `Edit` application on `MoleculeEditor`.
-//!
-//! `transact(edits)` applies each `Edit` in order, records realized `Undo`
-//! entries, and either returns a rollback-capable `Transaction` or reverse-
-//! replays the journal before surfacing a `TransactionError`.
-//! `apply(edits)` consumes the editor and returns its modified state without
-//! constructing an undo journal. A failed application drops the consumed
-//! editor, so partially applied state cannot escape.
-//!
-//! `Id(n)` handles retain the identity of entity `n` in the initial host, while
-//! `New(n)` handles retain the identity of the `n`th same-kind creation in the
-//! edit sequence. Transaction application alone realizes those stable handles
-//! against a host and tracks their liveness across compaction.
-
-use std::collections::HashSet;
-use std::hash::Hash;
-use std::mem;
+//! Scoped molecule transactions with selectable recovery.
 
 use thiserror::Error;
-use umol_graph_core::{Compaction, Correspondence, GraphCompaction};
+use umol_graph_core::Correspondence;
 
-use super::super::compact::{MoleculeCompaction, UndoCompaction};
-use super::super::constraint::{
-    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
-    DativeBondConstraintForm, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
-    StereoAtomConstraintForm, StereoBondConstraintForm,
-};
-use super::super::correspondence::MoleculeCorrespondence;
-use super::super::edit::{
-    AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
-    AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
-    CascadedConstraints, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit, Edits,
-    MulticenterBondFieldChange, MulticenterBondHandle, NoncovalentBondFieldChange,
-    NoncovalentBondHandle, RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedConstraint,
-    RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays,
-    RemovedStereoAtom, RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle,
-    StereoBondFieldChange, StereoBondHandle, Undo,
-};
-use super::super::entity::EntityKind;
-use super::super::id::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId,
-};
-use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::traits::Normalize;
-use super::MoleculeEditor;
+use super::apply::ApplicationState;
+use super::{Molecule, MoleculeIntegrityError};
+use crate::ir::correspondence::MoleculeCorrespondence;
+use crate::ir::edit::{Edits, Undo};
+use crate::ir::entity::EntityKind;
+use crate::ir::error::MoleculeApplyError;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum TransactionError {
@@ -61,8 +25,7 @@ pub enum TransactionError {
     #[error("duplicate {kind} in removal batch")]
     DuplicateRemoval { kind: EntityKind },
 
-    /// `Set*Field` or `Set*Constraint`: current state does not match the
-    /// edit's `old` payload.
+    /// The current state does not match the edit's old value.
     #[error("precondition failed: old state does not match current")]
     OldStateMismatch,
 
@@ -70,5358 +33,1562 @@ pub enum TransactionError {
     #[error("missing constraint entry on remove")]
     MissingEntry,
 
-    /// Edit shape is structurally invalid (e.g., `AddDativeBond` with no
-    /// participants).
+    /// Edit shape is structurally invalid.
     #[error("malformed edit: {0}")]
     MalformedEdit(&'static str),
 
-    #[error("rollback failed after apply error: apply={apply}; rollback={rollback}")]
-    RollbackFailed {
-        apply: Box<TransactionError>,
-        rollback: Box<TransactionError>,
-    },
-
-    /// The rollback journal cannot be structurally applied to the supplied editor state.
-    ///
-    /// A transaction guarantees exact restoration only when rolled back against the exact
-    /// post-transaction state (or the end of the consecutive chain represented by an appended
-    /// journal). Other states are rejected when a required receiver or reconstruction entry is
-    /// absent; structurally compatible but unrelated states are outside that guarantee.
-    #[error("rollback journal does not match editor state")]
-    RollbackStateMismatch,
+    /// An earlier application or commit failure aborted the transaction.
+    #[error("transaction has been aborted")]
+    Aborted,
 }
 
-/// Detached journal of the realized undos for one successfully applied edit batch.
+/// Recovery method for a scoped molecule transaction.
 ///
-/// Detachment permits journals for consecutive transactions to be appended and rolled back as a
-/// unit. Exact restoration is guaranteed only for the exact post-transaction editor state, or the
-/// end state of the consecutively appended transaction chain. A structurally incompatible state
-/// returns [`TransactionError::RollbackStateMismatch`] without panicking; a structurally compatible
-/// but unrelated state is outside the semantic guarantee.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Transaction {
-    undo: Vec<Undo>,
+/// Both methods restore transaction-entry state under Molecule::normalized_eq on failure or
+/// cancellation, preserving participant order. Selection changes recovery storage and execution
+/// cost, not the transaction's acceptance or correspondence contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RollbackMethod {
+    /// Edit one working copy and install it only after commit and callback success.
+    Clone,
+    /// Edit the receiver while recording undo entries for restoration.
+    Journal,
 }
 
-impl Transaction {
-    pub fn undos(&self) -> &[Undo] {
-        &self.undo
-    }
+/// Scoped access to a molecule with selectable recovery.
+///
+/// Transaction::run owns the restoration guard and lends this handle to its callback.
+/// Completed changes are accepted only when commit succeeds and the callback returns Ok.
+/// Otherwise the guard restores the molecule, including when the handle is forgotten or
+/// the callback unwinds between completed edits. Ordinary transactions do not accumulate an
+/// entity correspondence; use TrackedTransaction when that mapping is required.
+///
+/// # Semantic properties
+///
+/// Rollback restores transaction-entry state under Molecule::normalized_eq. Participant
+/// sequences retain their original order. Recovery from allocation failure or an internal
+/// panic during an Edit is outside this contract.
+pub struct Transaction<'scope> {
+    molecule: &'scope mut Molecule,
+    storage: &'scope mut TransactionStorage,
+    status: &'scope mut TransactionStatus,
+}
 
-    /// Append the rollback journal for a transaction applied after this one.
-    pub fn append(&mut self, later: Self) {
-        self.undo.extend(later.undo);
-    }
-
-    /// Reverse the journal against its exact post-transaction editor state.
+impl Transaction<'_> {
+    /// Run a callback with exclusive transaction access and the selected recovery method.
     ///
-    /// This exactly restores the pre-transaction state when the editor is the state produced by
-    /// this transaction (or by its appended consecutive chain). Structural incompatibility returns
-    /// [`TransactionError::RollbackStateMismatch`] rather than panicking. No semantic result is
-    /// guaranteed when a different editor happens to satisfy the journal's structural requirements.
-    pub fn rollback(self, editor: &mut MoleculeEditor) -> Result<(), TransactionError> {
-        rollback_journal(editor, self.undo)
-    }
-
-    /// Roll back and return the correspondence from the rollback input to the restored state.
-    ///
-    /// The returned witness covers this rollback, not the editor's entire session. No intermediate
-    /// molecule is published. Restored entities without a rollback-input partner remain unmatched.
+    /// A successful commit requests acceptance. The callback must also return Ok for its
+    /// changes to be retained. Returning without commit restores the molecule and returns
+    /// the callback's value. Callback errors and unwinding restore unaccepted completed
+    /// changes; forgetting the handle does not disable restoration.
     ///
     /// # Errors
     ///
-    /// Returns the same error and leaves the same editor state as [`Self::rollback`].
-    ///
-    /// # Semantic properties
-    ///
-    /// On the transaction's exact post-state, the witness is the inverse of its forward
-    /// correspondence. For appended transactions it is the inverse of their composed witness.
-    pub fn tracked_rollback(
-        self,
-        editor: &mut MoleculeEditor,
-    ) -> Result<MoleculeCorrespondence, TransactionError> {
-        let identity = MoleculeCorrespondence::new(
-            Correspondence::identity(editor.atom_count()),
-            Correspondence::identity(editor.bond_count()),
-            Correspondence::identity(editor.dative_bond_count()),
-            Correspondence::identity(editor.aromatic_system_count()),
-            Correspondence::identity(editor.multicenter_bond_count()),
-            Correspondence::identity(editor.noncovalent_bond_count()),
-            Correspondence::identity(editor.stereo_atom_count()),
-            Correspondence::identity(editor.stereo_bond_count()),
-        );
-        let session = mem::replace(&mut editor.correspondence, identity);
-        let result = self.rollback(editor);
-        let correspondence =
-            mem::replace(&mut editor.correspondence, MoleculeCorrespondence::empty());
-        editor.correspondence = session
-            .compose(&correspondence)
-            .expect("rollback correspondence starts in the current editor id spaces");
-        result?;
-        Ok(correspondence)
-    }
-}
-
-#[derive(Default)]
-struct HandleTable<I> {
-    initial: Vec<Option<I>>,
-    created: Vec<Option<I>>,
-}
-
-impl<I: Copy> HandleTable<I> {
-    fn new(initial: impl IntoIterator<Item = I>) -> Self {
-        Self {
-            initial: initial.into_iter().map(Some).collect(),
-            created: Vec::new(),
-        }
-    }
-
-    fn initial(&self, kind: EntityKind, index: usize) -> Result<I, TransactionError> {
-        Self::resolve(&self.initial, kind, index)
-    }
-
-    fn created(&self, kind: EntityKind, index: usize) -> Result<I, TransactionError> {
-        Self::resolve(&self.created, kind, index)
-    }
-
-    fn resolve(
-        entries: &[Option<I>],
-        kind: EntityKind,
-        index: usize,
-    ) -> Result<I, TransactionError> {
-        entries
-            .get(index)
-            .ok_or(TransactionError::HandleOutOfRange {
-                kind,
-                index,
-                count: entries.len(),
-            })?
-            .ok_or(TransactionError::HandleRemoved { kind, index })
-    }
-
-    fn push(&mut self, id: I) {
-        self.created.push(Some(id));
-    }
-
-    fn compact(&mut self, mut compact: impl FnMut(I) -> Option<I>) {
-        for id in self.initial.iter_mut().chain(&mut self.created) {
-            if let Some(current) = *id {
-                *id = compact(current);
-            }
-        }
-    }
-}
-
-/// Host-specific realization of the stable handles in one [`Edits`] sequence.
-///
-/// Initial-host and newly created ordinals remain in separate per-kind tables. Removals compact
-/// every surviving concrete id in both tables and leave tombstones for removed entities; the
-/// transaction driver alone owns this realization and compaction state.
-struct ApplicationState {
-    atoms: HandleTable<AtomId>,
-    bonds: HandleTable<BondId>,
-    dative_bonds: HandleTable<DativeBondId>,
-    aromatic_systems: HandleTable<AromaticSystemId>,
-    multicenter_bonds: HandleTable<MulticenterBondId>,
-    noncovalent_bonds: HandleTable<NoncovalentBondId>,
-    stereo_atoms: HandleTable<StereoAtomId>,
-    stereo_bonds: HandleTable<StereoBondId>,
-}
-
-impl ApplicationState {
-    fn new(editor: &MoleculeEditor) -> Self {
-        Self {
-            atoms: HandleTable::new((0..editor.atom_count()).map(AtomId::from)),
-            bonds: HandleTable::new((0..editor.bond_count()).map(BondId::from)),
-            dative_bonds: HandleTable::new((0..editor.dative_bond_count()).map(DativeBondId::from)),
-            aromatic_systems: HandleTable::new(
-                (0..editor.aromatic_system_count()).map(AromaticSystemId::from),
-            ),
-            multicenter_bonds: HandleTable::new(
-                (0..editor.multicenter_bond_count()).map(MulticenterBondId::from),
-            ),
-            noncovalent_bonds: HandleTable::new(
-                (0..editor.noncovalent_bond_count()).map(NoncovalentBondId::from),
-            ),
-            stereo_atoms: HandleTable::new((0..editor.stereo_atom_count()).map(StereoAtomId::from)),
-            stereo_bonds: HandleTable::new((0..editor.stereo_bond_count()).map(StereoBondId::from)),
-        }
-    }
-
-    fn atom(&self, handle: AtomHandle) -> Result<AtomId, TransactionError> {
-        match handle {
-            AtomHandle::Id(id) => self.atoms.initial(EntityKind::Atom, id.index()),
-            AtomHandle::New(index) => self.atoms.created(EntityKind::Atom, index),
-        }
-    }
-
-    fn bond(&self, handle: BondHandle) -> Result<BondId, TransactionError> {
-        match handle {
-            BondHandle::Id(id) => self.bonds.initial(EntityKind::Bond, id.index()),
-            BondHandle::New(index) => self.bonds.created(EntityKind::Bond, index),
-        }
-    }
-
-    fn dative_bond(&self, handle: DativeBondHandle) -> Result<DativeBondId, TransactionError> {
-        match handle {
-            DativeBondHandle::Id(id) => self
-                .dative_bonds
-                .initial(EntityKind::DativeBond, id.index()),
-            DativeBondHandle::New(index) => {
-                self.dative_bonds.created(EntityKind::DativeBond, index)
-            }
-        }
-    }
-
-    fn aromatic_system(
-        &self,
-        handle: AromaticSystemHandle,
-    ) -> Result<AromaticSystemId, TransactionError> {
-        match handle {
-            AromaticSystemHandle::Id(id) => self
-                .aromatic_systems
-                .initial(EntityKind::AromaticSystem, id.index()),
-            AromaticSystemHandle::New(index) => self
-                .aromatic_systems
-                .created(EntityKind::AromaticSystem, index),
-        }
-    }
-
-    fn multicenter_bond(
-        &self,
-        handle: MulticenterBondHandle,
-    ) -> Result<MulticenterBondId, TransactionError> {
-        match handle {
-            MulticenterBondHandle::Id(id) => self
-                .multicenter_bonds
-                .initial(EntityKind::MulticenterBond, id.index()),
-            MulticenterBondHandle::New(index) => self
-                .multicenter_bonds
-                .created(EntityKind::MulticenterBond, index),
-        }
-    }
-
-    fn noncovalent_bond(
-        &self,
-        handle: NoncovalentBondHandle,
-    ) -> Result<NoncovalentBondId, TransactionError> {
-        match handle {
-            NoncovalentBondHandle::Id(id) => self
-                .noncovalent_bonds
-                .initial(EntityKind::NoncovalentBond, id.index()),
-            NoncovalentBondHandle::New(index) => self
-                .noncovalent_bonds
-                .created(EntityKind::NoncovalentBond, index),
-        }
-    }
-
-    fn stereo_atom(&self, handle: StereoAtomHandle) -> Result<StereoAtomId, TransactionError> {
-        match handle {
-            StereoAtomHandle::Id(id) => self
-                .stereo_atoms
-                .initial(EntityKind::StereoAtom, id.index()),
-            StereoAtomHandle::New(index) => {
-                self.stereo_atoms.created(EntityKind::StereoAtom, index)
-            }
-        }
-    }
-
-    fn stereo_bond(&self, handle: StereoBondHandle) -> Result<StereoBondId, TransactionError> {
-        match handle {
-            StereoBondHandle::Id(id) => self
-                .stereo_bonds
-                .initial(EntityKind::StereoBond, id.index()),
-            StereoBondHandle::New(index) => {
-                self.stereo_bonds.created(EntityKind::StereoBond, index)
-            }
-        }
-    }
-
-    fn push_atom(&mut self, id: AtomId) {
-        self.atoms.push(id);
-    }
-
-    fn push_bond(&mut self, id: BondId) {
-        self.bonds.push(id);
-    }
-
-    fn push_dative_bond(&mut self, id: DativeBondId) {
-        self.dative_bonds.push(id);
-    }
-
-    fn push_aromatic_system(&mut self, id: AromaticSystemId) {
-        self.aromatic_systems.push(id);
-    }
-
-    fn push_multicenter_bond(&mut self, id: MulticenterBondId) {
-        self.multicenter_bonds.push(id);
-    }
-
-    fn push_noncovalent_bond(&mut self, id: NoncovalentBondId) {
-        self.noncovalent_bonds.push(id);
-    }
-
-    fn push_stereo_atom(&mut self, id: StereoAtomId) {
-        self.stereo_atoms.push(id);
-    }
-
-    fn push_stereo_bond(&mut self, id: StereoBondId) {
-        self.stereo_bonds.push(id);
-    }
-
-    fn stereo_ligands(
-        &self,
-        ligands: Vec<(AtomHandle, StereoLigandKind)>,
-    ) -> Result<Vec<StereoLigand>, TransactionError> {
-        ligands
-            .into_iter()
-            .map(|(atom, kind)| Ok(StereoLigand::new(self.atom(atom)?, kind)))
-            .collect()
-    }
-
-    fn resolve_constraint(&self, edit: ConstraintEdit) -> Result<Constraint, TransactionError> {
-        edit.resolve(
-            |handle| self.atom(handle),
-            |handle| self.bond(handle),
-            |handle| self.dative_bond(handle),
-            |handle| self.aromatic_system(handle),
-            |handle| self.multicenter_bond(handle),
-            |handle| self.noncovalent_bond(handle),
-            |handle| self.stereo_atom(handle),
-            |handle| self.stereo_bond(handle),
-        )
-    }
-
-    fn compact(&mut self, compaction: &MoleculeCompaction) {
-        self.atoms.compact(|id| compaction.compact_atom(id));
-        self.bonds.compact(|id| compaction.compact_bond(id));
-        self.dative_bonds
-            .compact(|id| compaction.compact_dative_bond(id));
-        self.aromatic_systems
-            .compact(|id| compaction.compact_aromatic_system(id));
-        self.multicenter_bonds
-            .compact(|id| compaction.compact_multicenter_bond(id));
-        self.noncovalent_bonds
-            .compact(|id| compaction.compact_noncovalent_bond(id));
-        self.stereo_atoms
-            .compact(|id| compaction.compact_stereo_atom(id));
-        self.stereo_bonds
-            .compact(|id| compaction.compact_stereo_bond(id));
-    }
-}
-
-fn ensure_unique<I>(ids: &[I], kind: EntityKind) -> Result<(), TransactionError>
-where
-    I: Copy + Eq + Hash,
-{
-    let mut seen = HashSet::with_capacity(ids.len());
-    if ids.iter().copied().all(|id| seen.insert(id)) {
-        Ok(())
-    } else {
-        Err(TransactionError::DuplicateRemoval { kind })
-    }
-}
-
-impl MoleculeEditor {
-    /// Apply an ordered [`Edits`] batch atomically. On success, returns a rollback
-    /// transaction. On any apply failure, reverse-replays the already-created
-    /// undo journal.
-    pub fn transact(&mut self, edits: Edits) -> Result<Transaction, TransactionError> {
-        let correspondence = self.correspondence.clone();
-        let mut journal: Vec<Undo> = Vec::with_capacity(edits.len());
-        let mut state = ApplicationState::new(self);
-        for edit in edits {
-            match self.apply_edit_with_undo(edit, &mut state) {
-                Ok(undo) => journal.push(undo),
-                Err(apply) => {
-                    if let Err(rollback) = rollback_journal(self, journal) {
-                        return Err(TransactionError::RollbackFailed {
-                            apply: Box::new(apply),
-                            rollback: Box::new(rollback),
-                        });
+    /// Returns the callback's error unchanged. If the callback returns Ok after the
+    /// transaction was aborted, returns TransactionError::Aborted through MoleculeApplyError
+    /// and E.
+    pub fn run<T, E>(
+        molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
+        f: impl for<'scope> FnOnce(Transaction<'scope>) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<MoleculeApplyError>,
+    {
+        let storage = match rollback_method {
+            RollbackMethod::Clone => TransactionStorage::Clone(Some(molecule.clone())),
+            RollbackMethod::Journal => TransactionStorage::Journal(Vec::new()),
+        };
+        let mut guard = TransactionGuard {
+            molecule,
+            storage,
+            status: TransactionStatus::Active,
+        };
+        let value = f(Transaction {
+            molecule: guard.molecule,
+            storage: &mut guard.storage,
+            status: &mut guard.status,
+        })?;
+        match guard.status {
+            TransactionStatus::CommitRequested => {
+                if let TransactionStorage::Clone(working) = &mut guard.storage {
+                    if let Some(working) = working.take() {
+                        *guard.molecule = working;
                     }
-                    self.correspondence = correspondence;
-                    return Err(apply);
+                }
+                guard.status = TransactionStatus::Accepted;
+            }
+            TransactionStatus::Aborted => {
+                return Err(MoleculeApplyError::Transaction(TransactionError::Aborted).into());
+            }
+            TransactionStatus::Active
+            | TransactionStatus::Accepted
+            | TransactionStatus::RolledBack => {}
+        }
+        Ok(value)
+    }
+
+    /// Apply a batch immediately using the selected recovery method.
+    ///
+    /// Journal records undo entries while editing the receiver. Clone edits the working copy
+    /// without recording undo.
+    ///
+    /// Each call starts a separate handle namespace. Id handles name entities at this
+    /// batch's entry; New handles name entities created within this batch. Intermediate
+    /// state may violate integrity until a later batch repairs it.
+    ///
+    /// # Errors
+    ///
+    /// An invalid handle, old value, or edit shape restores the whole transaction and
+    /// aborts it. Later apply or commit calls return TransactionError::Aborted.
+    pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
+        let mut state = ApplicationState::new(self.molecule());
+        if *self.status == TransactionStatus::Aborted {
+            return Err(TransactionError::Aborted.into());
+        }
+        match self.storage {
+            TransactionStorage::Journal(journal) => {
+                for edit in edits {
+                    match self.molecule.apply_edit_with_undo(edit, &mut state) {
+                        Ok(Some(undo)) => journal.push(undo),
+                        Ok(None) => {}
+                        Err(error) => {
+                            self.storage.rollback(self.molecule);
+                            *self.status = TransactionStatus::Aborted;
+                            return Err(error.into());
+                        }
+                    }
                 }
             }
+            TransactionStorage::Clone(Some(working)) => {
+                for edit in edits {
+                    if let Err(error) = working.apply_edit(edit, &mut state) {
+                        self.storage.rollback(self.molecule);
+                        *self.status = TransactionStatus::Aborted;
+                        return Err(error.into());
+                    }
+                }
+            }
+            TransactionStorage::Clone(None) => return Err(TransactionError::Aborted.into()),
         }
-        Ok(Transaction { undo: journal })
+        Ok(())
     }
 
-    /// Apply a batch atomically, returning its transaction and input-to-result correspondence.
+    /// Borrow the molecule after checking its representation integrity.
     ///
-    /// The witness starts at this batch's input, independently of the editor's session origin.
-    /// The transaction retains its ordinary undo journal. No molecule is published.
+    /// A failed check leaves the transaction active. After an application failure,
+    /// the borrow observes the restored transaction-entry state.
     ///
     /// # Errors
     ///
-    /// Returns the same error and leaves the same editor state as [`Self::transact`].
+    /// Returns the same integrity errors as molecule construction, without changing state.
+    pub fn probe(&self) -> Result<&Molecule, MoleculeIntegrityError> {
+        let molecule = self.molecule();
+        molecule.check_integrity()?;
+        Ok(molecule)
+    }
+
+    /// Check integrity and request acceptance of the transaction's changes.
+    ///
+    /// Changes are retained only if the enclosing Transaction::run callback also returns Ok.
+    ///
+    /// # Errors
+    ///
+    /// Returns Aborted after an earlier application failure. Failed integrity restores
+    /// transaction-entry state, aborts the transaction, and returns the integrity error.
+    pub fn commit(self) -> Result<(), MoleculeApplyError> {
+        if *self.status == TransactionStatus::Aborted {
+            return Err(TransactionError::Aborted.into());
+        }
+        if let Err(error) = self.molecule().check_integrity() {
+            self.storage.rollback(self.molecule);
+            *self.status = TransactionStatus::Aborted;
+            return Err(error.into());
+        }
+        *self.status = TransactionStatus::CommitRequested;
+        Ok(())
+    }
+
+    /// Restore transaction-entry state and consume the handle.
+    ///
+    /// An earlier application failure remains latched as Aborted, so the enclosing
+    /// run cannot accept a callback's Ok result after that failure.
+    pub fn rollback(self) {
+        self.storage.rollback(self.molecule);
+        if *self.status != TransactionStatus::Aborted {
+            *self.status = TransactionStatus::RolledBack;
+        }
+    }
+
+    fn molecule(&self) -> &Molecule {
+        match &*self.storage {
+            TransactionStorage::Clone(Some(working)) => working,
+            TransactionStorage::Clone(None) | TransactionStorage::Journal(_) => self.molecule,
+        }
+    }
+}
+
+/// Scoped molecule transaction with an accumulated entity correspondence.
+///
+/// TrackedTransaction::run owns the restoration guard and lends this handle to its callback.
+/// The correspondence pairs transaction-entry entity ids with their surviving ids at commit
+/// across all batches. Commit requests acceptance; changes are retained only when the callback
+/// also returns Ok. Forgetting the handle does not disable restoration.
+///
+/// # Semantic properties
+///
+/// For the same batches and callback outcome, discarding the commit correspondence gives the
+/// same final molecule and errors as Transaction. Rollback restores transaction-entry state
+/// under Molecule::normalized_eq and preserves participant order. Recovery from allocation
+/// failure or an internal panic during an Edit is outside this contract.
+pub struct TrackedTransaction<'scope> {
+    transaction: Transaction<'scope>,
+    correspondence: &'scope mut Option<MoleculeCorrespondence>,
+}
+
+impl TrackedTransaction<'_> {
+    /// Run a callback with exclusive tracked transaction access and the selected recovery method.
+    ///
+    /// A successful commit requests acceptance and returns the correspondence to the callback.
+    /// The callback must return Ok for its changes to be retained. Returning without commit,
+    /// returning an error, or unwinding restores unaccepted completed changes. Returns the
+    /// callback's value after acceptance or cancellation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the callback's error unchanged. If the callback returns Ok after the transaction
+    /// was aborted, returns TransactionError::Aborted through MoleculeApplyError and E.
+    pub fn run<T, E>(
+        molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
+        f: impl for<'scope> FnOnce(TrackedTransaction<'scope>) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<MoleculeApplyError>,
+    {
+        let mut correspondence = Some(MoleculeCorrespondence::new(
+            Correspondence::identity(molecule.atoms().count()),
+            Correspondence::identity(molecule.bonds().count()),
+            Correspondence::identity(molecule.dative_bonds().count()),
+            Correspondence::identity(molecule.aromatic_systems().count()),
+            Correspondence::identity(molecule.multicenter_bonds().count()),
+            Correspondence::identity(molecule.noncovalent_bonds().count()),
+            Correspondence::identity(molecule.stereo_atoms().count()),
+            Correspondence::identity(molecule.stereo_bonds().count()),
+        ));
+        Transaction::run(molecule, rollback_method, |transaction| {
+            f(TrackedTransaction {
+                transaction,
+                correspondence: &mut correspondence,
+            })
+        })
+    }
+
+    /// Apply one batch immediately and update the accumulated correspondence.
+    ///
+    /// Each call starts a separate handle namespace. Id handles name entities at batch entry;
+    /// New handles name creations within that batch. Intermediate state may violate integrity
+    /// until a later batch repairs it.
+    ///
+    /// # Errors
+    ///
+    /// An invalid handle, old value or edit shape restores the whole transaction and aborts it.
+    /// Later apply or commit calls return TransactionError::Aborted.
+    pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
+        let transaction = &mut self.transaction;
+        let mut state = ApplicationState::new(transaction.molecule());
+        if *transaction.status == TransactionStatus::Aborted {
+            return Err(TransactionError::Aborted.into());
+        }
+        match transaction.storage {
+            TransactionStorage::Journal(journal) => {
+                for edit in edits {
+                    match transaction.molecule.apply_edit_with_undo(edit, &mut state) {
+                        Ok(Some(undo)) => journal.push(undo),
+                        Ok(None) => {}
+                        Err(error) => {
+                            transaction.storage.rollback(transaction.molecule);
+                            *transaction.status = TransactionStatus::Aborted;
+                            return Err(error.into());
+                        }
+                    }
+                }
+            }
+            TransactionStorage::Clone(Some(working)) => {
+                for edit in edits {
+                    if let Err(error) = working.apply_edit(edit, &mut state) {
+                        transaction.storage.rollback(transaction.molecule);
+                        *transaction.status = TransactionStatus::Aborted;
+                        return Err(error.into());
+                    }
+                }
+            }
+            TransactionStorage::Clone(None) => return Err(TransactionError::Aborted.into()),
+        }
+        state.update_correspondence(self.correspondence.as_mut().expect("active correspondence"));
+        Ok(())
+    }
+
+    /// Borrow the molecule after checking its representation integrity.
+    ///
+    /// Failed checks leave the transaction active. After an application failure, the borrow
+    /// observes the restored transaction-entry state.
+    ///
+    /// # Errors
+    ///
+    /// Returns MoleculeIntegrityError without changing state when integrity does not hold.
+    pub fn probe(&self) -> Result<&Molecule, MoleculeIntegrityError> {
+        self.transaction.probe()
+    }
+
+    /// Check integrity, request acceptance and return the transaction-entry to commit correspondence.
+    ///
+    /// The correspondence covers all eight entity kinds. Additions and removals remain unmatched;
+    /// attribute and participant changes preserve pairing. Participant positions are not mapped.
+    /// Changes are retained only if the enclosing run callback also returns Ok.
+    ///
+    /// # Errors
+    ///
+    /// Returns TransactionError::Aborted after an earlier application failure. Failed integrity
+    /// restores transaction-entry state, aborts the transaction and returns the integrity error
+    /// through MoleculeApplyError.
     ///
     /// # Semantic properties
     ///
-    /// Discarding the witness gives the same transaction and editor state as the plain operation.
-    /// Composing the previous session correspondence with this witness gives the new session.
+    /// The correspondence equals the composition of consecutive successful batches' mappings.
+    /// Regrouping the same ordered edits into batches preserves the final molecule and
+    /// correspondence, provided handles name the same entities in each batch's namespace.
+    pub fn commit(self) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
+        self.transaction.commit()?;
+        Ok(self.correspondence.take().expect("active correspondence"))
+    }
+
+    /// Restore transaction-entry state and consume the handle.
+    ///
+    /// An earlier application failure remains latched as Aborted, so run rejects a subsequent
+    /// callback Ok result even after explicit rollback.
+    pub fn rollback(self) {
+        self.transaction.rollback();
+    }
+}
+
+impl Molecule {
+    /// Apply prepared batches in one transaction and commit their combined result.
+    ///
+    /// Each batch has its own handle namespace. Integrity is checked once, after all
+    /// batches have been applied. Journal records undo entries; Clone edits a working copy.
+    ///
+    /// # Errors
+    ///
+    /// Application and integrity failures restore the receiver to its entry state under
+    /// Molecule::normalized_eq and return the original failure. Participant order is preserved.
+    pub fn transact(
+        &mut self,
+        batches: impl IntoIterator<Item = Edits>,
+        rollback_method: RollbackMethod,
+    ) -> Result<(), MoleculeApplyError> {
+        Transaction::run(self, rollback_method, |mut transaction| {
+            for edits in batches {
+                transaction.apply(edits)?;
+            }
+            transaction.commit()
+        })
+    }
+
+    /// Apply prepared batches and return the receiver-entry to result correspondence.
+    ///
+    /// Uses the selected recovery method with the same batch namespaces as transact.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors and restores the same state as transact.
+    ///
+    /// # Semantic properties
+    ///
+    /// Discarding the correspondence gives transact's result and final molecule state.
     pub fn tracked_transact(
         &mut self,
-        edits: Edits,
-    ) -> Result<(Transaction, MoleculeCorrespondence), TransactionError> {
-        let identity = MoleculeCorrespondence::new(
-            Correspondence::identity(self.atom_count()),
-            Correspondence::identity(self.bond_count()),
-            Correspondence::identity(self.dative_bond_count()),
-            Correspondence::identity(self.aromatic_system_count()),
-            Correspondence::identity(self.multicenter_bond_count()),
-            Correspondence::identity(self.noncovalent_bond_count()),
-            Correspondence::identity(self.stereo_atom_count()),
-            Correspondence::identity(self.stereo_bond_count()),
-        );
-        let session = mem::replace(&mut self.correspondence, identity);
-        let result = self.transact(edits);
-        let correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty());
-        self.correspondence = session
-            .compose(&correspondence)
-            .expect("batch correspondence starts in the current editor id spaces");
-        Ok((result?, correspondence))
-    }
-
-    /// Apply an ordered [`Edits`] batch without constructing an undo journal.
-    ///
-    /// The editor is consumed so that a failed batch cannot expose partially applied state. On
-    /// success, the returned editor remains transient; [`MoleculeEditor::try_build`] or
-    /// [`MoleculeEditor::build`] performs the molecule-integrity publication gate.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TransactionError`] when an edit handle, precondition, or shape is invalid for the
-    /// evolving editor state.
-    ///
-    /// # Semantic properties
-    ///
-    /// For every edit batch accepted by [`Self::transact`] from the same initial editor,
-    /// successfully building the returned editor produces the same molecule as building the
-    /// post-transaction editor. On failure, no intermediate editor state is returned.
-    pub fn apply(mut self, edits: Edits) -> Result<Self, TransactionError> {
-        let mut state = ApplicationState::new(&self);
-        for edit in edits {
-            self.apply_edit(edit, &mut state)?;
-        }
-        Ok(self)
-    }
-
-    /// Consume the editor and apply a batch, returning the resulting editor and batch correspondence.
-    ///
-    /// The witness starts at this batch's input, not the editor's session origin. The resulting
-    /// editor remains transient; publication performs the integrity check.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same transaction error as [`Self::apply`], consuming the editor on failure.
-    ///
-    /// # Semantic properties
-    ///
-    /// Discarding the witness gives the same editor as the plain operation. Composing the previous
-    /// session correspondence with this witness gives the resulting session correspondence.
-    pub fn tracked_apply(
-        mut self,
-        edits: Edits,
-    ) -> Result<(Self, MoleculeCorrespondence), TransactionError> {
-        let identity = MoleculeCorrespondence::new(
-            Correspondence::identity(self.atom_count()),
-            Correspondence::identity(self.bond_count()),
-            Correspondence::identity(self.dative_bond_count()),
-            Correspondence::identity(self.aromatic_system_count()),
-            Correspondence::identity(self.multicenter_bond_count()),
-            Correspondence::identity(self.noncovalent_bond_count()),
-            Correspondence::identity(self.stereo_atom_count()),
-            Correspondence::identity(self.stereo_bond_count()),
-        );
-        let session = mem::replace(&mut self.correspondence, identity);
-        let mut editor = self.apply(edits)?;
-        let correspondence =
-            mem::replace(&mut editor.correspondence, MoleculeCorrespondence::empty());
-        editor.correspondence = session
-            .compose(&correspondence)
-            .expect("batch correspondence starts in the current editor id spaces");
-        Ok((editor, correspondence))
-    }
-
-    fn apply_edit(
-        &mut self,
-        edit: Edit,
-        state: &mut ApplicationState,
-    ) -> Result<(), TransactionError> {
-        match edit {
-            Edit::AddAtoms { atoms } => {
-                for atom in atoms {
-                    let id = self.add_atom(atom);
-                    state.push_atom(id);
-                }
-                Ok(())
-            }
-            Edit::AddBonds { bonds } => {
-                let bonds: Vec<_> = bonds
-                    .into_iter()
-                    .map(
-                        |AddBond {
-                             endpoints: [first, second],
-                             attributes,
-                         }| {
-                            Ok(([state.atom(first)?, state.atom(second)?], attributes))
-                        },
-                    )
-                    .collect::<Result<_, TransactionError>>()?;
-                for ([first, second], attributes) in bonds {
-                    let id = self.add_bond(first, second, attributes);
-                    state.push_bond(id);
-                }
-                Ok(())
-            }
-            Edit::RemoveTopology { atoms, bonds } => {
-                let atoms: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|id| {
-                        let id = state.atom(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
-                let bonds: Vec<BondId> = bonds
-                    .into_iter()
-                    .map(|id| {
-                        let id = state.bond(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
-                ensure_unique(&atoms, EntityKind::Atom)?;
-                ensure_unique(&bonds, EntityKind::Bond)?;
-                let compaction = self.tracked_remove(&atoms, &bonds);
-                state.compact(&compaction);
-                Ok(())
-            }
-            Edit::ModifyAtomField { id, change } => {
-                let id = state.atom(id)?;
-                self.apply_modify_atom_field(id, change)
-            }
-            Edit::ModifyBondField { id, change } => {
-                let id = state.bond(id)?;
-                self.apply_modify_bond_field(id, change)
-            }
-            Edit::AddDativeBond { atoms, attributes } => {
-                let resolved: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|r| state.atom(r))
-                    .collect::<Result<_, _>>()?;
-                let (acceptor, donors) =
-                    resolved
-                        .split_last()
-                        .ok_or(TransactionError::MalformedEdit(
-                            "AddDativeBond requires at least one participant atom",
-                        ))?;
-                let id = self.add_dative_bond(donors.to_vec(), *acceptor, attributes);
-                state.push_dative_bond(id);
-                Ok(())
-            }
-            Edit::RemoveDativeBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.dative_bond(id)?;
-                    let saved_atoms: Vec<AtomId> = atoms
-                        .iter()
-                        .map(|r| state.atom(r.clone()))
-                        .collect::<Result<_, _>>()?;
-                    let (acceptor, donors) =
-                        saved_atoms
-                            .split_last()
-                            .ok_or(TransactionError::MalformedEdit(
-                                "RemoveDativeBond requires at least one participant atom",
-                            ))?;
-                    if !self.dative_bond_equiv(id, *acceptor, donors, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = self.tracked_remove_dative_bonds(&ids);
-                state.compact(&forward);
-                Ok(())
-            }
-            Edit::ModifyDativeBondField { id, change } => {
-                let id = state.dative_bond(id)?;
-                self.apply_modify_dative_bond_field(id, change)
-            }
-            Edit::AddAromaticSystem { atoms, attributes } => {
-                let resolved: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|r| state.atom(r))
-                    .collect::<Result<_, _>>()?;
-                let id = self.add_aromatic_system(resolved, attributes);
-                state.push_aromatic_system(id);
-                Ok(())
-            }
-            Edit::RemoveAromaticSystems { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.aromatic_system(id)?;
-                    let saved_atoms: Vec<AtomId> = atoms
-                        .iter()
-                        .map(|r| state.atom(r.clone()))
-                        .collect::<Result<_, _>>()?;
-                    if !self.aromatic_system_equiv(id, &saved_atoms, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = self.tracked_remove_aromatic_systems(&ids);
-                state.compact(&forward);
-                Ok(())
-            }
-            Edit::ModifyAromaticSystemField { id, change } => {
-                let id = state.aromatic_system(id)?;
-                self.apply_modify_aromatic_system_field(id, change)
-            }
-            Edit::AddMulticenterBond { atoms, attributes } => {
-                let resolved: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|r| state.atom(r))
-                    .collect::<Result<_, _>>()?;
-                let id = self.add_multicenter_bond(resolved, attributes);
-                state.push_multicenter_bond(id);
-                Ok(())
-            }
-            Edit::RemoveMulticenterBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.multicenter_bond(id)?;
-                    let saved_atoms: Vec<AtomId> = atoms
-                        .iter()
-                        .map(|r| state.atom(r.clone()))
-                        .collect::<Result<_, _>>()?;
-                    if !self.multicenter_bond_equiv(id, &saved_atoms, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = self.tracked_remove_multicenter_bonds(&ids);
-                state.compact(&forward);
-                Ok(())
-            }
-            Edit::ModifyMulticenterBondField { id, change } => {
-                let id = state.multicenter_bond(id)?;
-                self.apply_modify_multicenter_bond_field(id, change)
-            }
-            Edit::AddNoncovalentBond { atoms, attributes } => {
-                let a = state.atom(atoms[0].clone())?;
-                let b = state.atom(atoms[1].clone())?;
-                let id = self.add_noncovalent_bond([a, b], attributes);
-                state.push_noncovalent_bond(id);
-                Ok(())
-            }
-            Edit::RemoveNoncovalentBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.noncovalent_bond(id)?;
-                    let saved_atoms =
-                        [state.atom(atoms[0].clone())?, state.atom(atoms[1].clone())?];
-                    if !self.noncovalent_bond_equiv(id, saved_atoms, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = self.tracked_remove_noncovalent_bonds(&ids);
-                state.compact(&forward);
-                Ok(())
-            }
-            Edit::ModifyNoncovalentBondField { id, change } => {
-                let id = state.noncovalent_bond(id)?;
-                self.apply_modify_noncovalent_bond_field(id, change)
-            }
-            Edit::AddStereoAtom {
-                site,
-                ligands,
-                attributes,
-            } => {
-                let site = state.atom(site)?;
-                let ligands = state.stereo_ligands(ligands)?;
-                let id = self.add_stereo_atom(site, ligands, attributes);
-                state.push_stereo_atom(id);
-                Ok(())
-            }
-            Edit::RemoveStereoAtoms { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                for (id, site, ligands, attributes) in removes {
-                    let id = state.stereo_atom(id)?;
-                    let site = state.atom(site)?;
-                    let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_atom_equiv(id, site, &ligands, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = self.tracked_remove_stereo_atoms(&ids);
-                state.compact(&forward);
-                Ok(())
-            }
-            Edit::ModifyStereoAtomField { id, change } => {
-                let id = state.stereo_atom(id)?;
-                self.apply_modify_stereo_atom_field(id, change)
-            }
-            Edit::AddStereoBond {
-                site,
-                ligands,
-                attributes,
-            } => {
-                let site = state.bond(site)?;
-                let ligands = state.stereo_ligands(ligands)?;
-                let id = self.add_stereo_bond(site, ligands, attributes);
-                state.push_stereo_bond(id);
-                Ok(())
-            }
-            Edit::RemoveStereoBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                for (id, site, ligands, attributes) in removes {
-                    let id = state.stereo_bond(id)?;
-                    let site = state.bond(site)?;
-                    let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_bond_equiv(id, site, &ligands, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = self.tracked_remove_stereo_bonds(&ids);
-                state.compact(&forward);
-                Ok(())
-            }
-            Edit::ModifyStereoBondField { id, change } => {
-                let id = state.stereo_bond(id)?;
-                self.apply_modify_stereo_bond_field(id, change)
-            }
-            Edit::ModifyAtomConstraint { id, old, new } => {
-                let id = state.atom(id)?;
-                self.apply_modify_atom_constraint(id, old, new)
-            }
-            Edit::ModifyBondConstraint { id, old, new } => {
-                let id = state.bond(id)?;
-                self.apply_modify_bond_constraint(id, old, new)
-            }
-            Edit::ModifyDativeBondConstraint { id, old, new } => {
-                let id = state.dative_bond(id)?;
-                self.apply_modify_dative_bond_constraint(id, old, new)
-            }
-            Edit::ModifyAromaticSystemConstraint { id, old, new } => {
-                let id = state.aromatic_system(id)?;
-                self.apply_modify_aromatic_system_constraint(id, old, new)
-            }
-            Edit::ModifyMulticenterBondConstraint { id, old, new } => {
-                let id = state.multicenter_bond(id)?;
-                self.apply_modify_multicenter_bond_constraint(id, old, new)
-            }
-            Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
-                let id = state.noncovalent_bond(id)?;
-                self.apply_modify_noncovalent_bond_constraint(id, old, new)
-            }
-            Edit::ModifyStereoAtomConstraint {
-                id,
-                kind: _,
-                old,
-                new,
-            } => {
-                let id = state.stereo_atom(id)?;
-                self.apply_modify_stereo_atom_constraint(id, old, new)
-            }
-            Edit::ModifyStereoBondConstraint {
-                id,
-                kind: _,
-                old,
-                new,
-            } => {
-                let id = state.stereo_bond(id)?;
-                self.apply_modify_stereo_bond_constraint(id, old, new)
-            }
-            Edit::AddMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
-                self.push_constraint(constraint);
-                Ok(())
-            }
-            Edit::RemoveMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
-                let list = self.constraints_mut();
-                let position = list
-                    .as_slice()
-                    .iter()
-                    .rposition(|c| *c == constraint)
-                    .ok_or(TransactionError::MissingEntry)?;
-                list.remove_at(position);
-                Ok(())
-            }
-        }
-    }
-
-    fn apply_edit_with_undo(
-        &mut self,
-        edit: Edit,
-        state: &mut ApplicationState,
-    ) -> Result<Undo, TransactionError> {
-        match edit {
-            Edit::AddAtoms { atoms } => {
-                let mut added = Vec::with_capacity(atoms.len());
-                for attributes in atoms {
-                    let id = self.add_atom(attributes.clone());
-                    state.push_atom(id);
-                    added.push(AddedAtom { id, attributes });
-                }
-                Ok(Undo::RemoveAddedTopology {
-                    atoms: added,
-                    bonds: Vec::new(),
-                })
-            }
-            Edit::AddBonds { bonds } => {
-                let bonds: Vec<_> = bonds
-                    .into_iter()
-                    .map(
-                        |AddBond {
-                             endpoints: [first, second],
-                             attributes,
-                         }| {
-                            Ok(([state.atom(first)?, state.atom(second)?], attributes))
-                        },
-                    )
-                    .collect::<Result<_, TransactionError>>()?;
-                let mut added = Vec::with_capacity(bonds.len());
-                for ([first, second], attributes) in bonds {
-                    let id = self.add_bond(first, second, attributes.clone());
-                    state.push_bond(id);
-                    added.push(AddedBond {
-                        id,
-                        endpoints: [first, second],
-                        attributes,
-                    });
-                }
-                Ok(Undo::RemoveAddedTopology {
-                    atoms: Vec::new(),
-                    bonds: added,
-                })
-            }
-            Edit::RemoveTopology { atoms, bonds } => {
-                let atoms: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|id| {
-                        let id = state.atom(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
-                let bonds: Vec<BondId> = bonds
-                    .into_iter()
-                    .map(|id| {
-                        let id = state.bond(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
-                ensure_unique(&atoms, EntityKind::Atom)?;
-                ensure_unique(&bonds, EntityKind::Bond)?;
-                let (removed_atoms, removed_bonds, overlays) =
-                    self.capture_removed_topology(&atoms, &bonds);
-                let pre_constraints = self.constraints().clone();
-                let compaction = if !atoms.is_empty() || !bonds.is_empty() {
-                    self.tracked_remove(&atoms, &bonds)
-                } else {
-                    MoleculeCompaction::new(
-                        GraphCompaction::new(
-                            Compaction::identity(self.atom_count()),
-                            Compaction::identity(self.bond_count()),
-                        ),
-                        Compaction::identity(self.dative_bond_count()),
-                        Compaction::identity(self.aromatic_system_count()),
-                        Compaction::identity(self.multicenter_bond_count()),
-                        Compaction::identity(self.noncovalent_bond_count()),
-                        Compaction::identity(self.stereo_atom_count()),
-                        Compaction::identity(self.stereo_bond_count()),
-                    )
-                };
-                state.compact(&compaction);
-                let mut constraints = pre_constraints;
-                let cascade = constraints.compact_with_update(&compaction);
-                let undo_compaction = compaction.undo_compaction();
-                Ok(Undo::RestoreRemovedTopology {
-                    atoms: removed_atoms,
-                    bonds: removed_bonds,
-                    overlays,
-                    compaction,
-                    undo_compaction,
-                    cascade,
-                })
-            }
-            Edit::ModifyAtomField { id, change } => {
-                let id = state.atom(id)?;
-                let undo = Undo::ModifyAtomField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_atom_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::ModifyBondField { id, change } => {
-                let id = state.bond(id)?;
-                let undo = Undo::ModifyBondField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_bond_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::AddDativeBond { atoms, attributes } => {
-                let resolved: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|r| state.atom(r))
-                    .collect::<Result<_, _>>()?;
-                let (acceptor, donors) =
-                    resolved
-                        .split_last()
-                        .ok_or(TransactionError::MalformedEdit(
-                            "AddDativeBond requires at least one participant atom",
-                        ))?;
-                let id = self.add_dative_bond(donors.to_vec(), *acceptor, attributes);
-                state.push_dative_bond(id);
-                let view = self.dative_bond(id);
-                Ok(Undo::RemoveAddedDativeBond(AddedDativeBond {
-                    id,
-                    atoms: view.atom_ids().collect(),
-                    attributes: view.attributes.clone(),
-                }))
-            }
-            Edit::RemoveDativeBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                let mut removed = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.dative_bond(id)?;
-                    let saved_atoms: Vec<AtomId> = atoms
-                        .iter()
-                        .map(|r| state.atom(r.clone()))
-                        .collect::<Result<_, _>>()?;
-                    let (acceptor, donors) =
-                        saved_atoms
-                            .split_last()
-                            .ok_or(TransactionError::MalformedEdit(
-                                "RemoveDativeBond requires at least one participant atom",
-                            ))?;
-                    if !self.dative_bond_equiv(id, *acceptor, donors, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    let view = self.dative_bond(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    removed.push(RemovedDativeBond {
-                        id,
-                        atoms: current_atoms,
-                        attributes: view.attributes.clone(),
-                    });
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::DativeBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_dative_bonds(&ids);
-                state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
-                Ok(Undo::RestoreRemovedDativeBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
-            }
-            Edit::ModifyDativeBondField { id, change } => {
-                let id = state.dative_bond(id)?;
-                let undo = Undo::ModifyDativeBondField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_dative_bond_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::AddAromaticSystem { atoms, attributes } => {
-                let resolved: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|r| state.atom(r))
-                    .collect::<Result<_, _>>()?;
-                let id = self.add_aromatic_system(resolved, attributes);
-                state.push_aromatic_system(id);
-                let view = self.aromatic_system(id);
-                Ok(Undo::RemoveAddedAromaticSystem(AddedAromaticSystem {
-                    id,
-                    atoms: view.atom_ids().collect(),
-                    attributes: view.attributes.clone(),
-                }))
-            }
-            Edit::RemoveAromaticSystems { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                let mut removed = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.aromatic_system(id)?;
-                    let saved_atoms: Vec<AtomId> = atoms
-                        .iter()
-                        .map(|r| state.atom(r.clone()))
-                        .collect::<Result<_, _>>()?;
-                    if !self.aromatic_system_equiv(id, &saved_atoms, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    let view = self.aromatic_system(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    removed.push(RemovedAromaticSystem {
-                        id,
-                        atoms: current_atoms,
-                        attributes: view.attributes.clone(),
-                    });
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_aromatic_systems(&ids);
-                state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
-                Ok(Undo::RestoreRemovedAromaticSystems {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
-            }
-            Edit::ModifyAromaticSystemField { id, change } => {
-                let id = state.aromatic_system(id)?;
-                let undo = Undo::ModifyAromaticSystemField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_aromatic_system_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::AddMulticenterBond { atoms, attributes } => {
-                let resolved: Vec<AtomId> = atoms
-                    .into_iter()
-                    .map(|r| state.atom(r))
-                    .collect::<Result<_, _>>()?;
-                let id = self.add_multicenter_bond(resolved, attributes);
-                state.push_multicenter_bond(id);
-                let view = self.multicenter_bond(id);
-                Ok(Undo::RemoveAddedMulticenterBond(AddedMulticenterBond {
-                    id,
-                    atoms: view.atom_ids().collect(),
-                    attributes: view.attributes.clone(),
-                }))
-            }
-            Edit::RemoveMulticenterBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                let mut removed = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.multicenter_bond(id)?;
-                    let saved_atoms: Vec<AtomId> = atoms
-                        .iter()
-                        .map(|r| state.atom(r.clone()))
-                        .collect::<Result<_, _>>()?;
-                    if !self.multicenter_bond_equiv(id, &saved_atoms, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    let view = self.multicenter_bond(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    removed.push(RemovedMulticenterBond {
-                        id,
-                        atoms: current_atoms,
-                        attributes: view.attributes.clone(),
-                    });
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_multicenter_bonds(&ids);
-                state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
-                Ok(Undo::RestoreRemovedMulticenterBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
-            }
-            Edit::ModifyMulticenterBondField { id, change } => {
-                let id = state.multicenter_bond(id)?;
-                let undo = Undo::ModifyMulticenterBondField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_multicenter_bond_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::AddNoncovalentBond { atoms, attributes } => {
-                let a = state.atom(atoms[0].clone())?;
-                let b = state.atom(atoms[1].clone())?;
-                let id = self.add_noncovalent_bond([a, b], attributes);
-                state.push_noncovalent_bond(id);
-                let view = self.noncovalent_bond(id);
-                Ok(Undo::RemoveAddedNoncovalentBond(AddedNoncovalentBond {
-                    id,
-                    atoms: view.atoms,
-                    attributes: view.attributes.clone(),
-                }))
-            }
-            Edit::RemoveNoncovalentBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                let mut removed = Vec::with_capacity(removes.len());
-                for (id, atoms, attributes) in removes {
-                    let id = state.noncovalent_bond(id)?;
-                    let saved_atoms =
-                        [state.atom(atoms[0].clone())?, state.atom(atoms[1].clone())?];
-                    if !self.noncovalent_bond_equiv(id, saved_atoms, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    let view = self.noncovalent_bond(id);
-                    removed.push(RemovedNoncovalentBond {
-                        id,
-                        atoms: view.atoms,
-                        attributes: view.attributes.clone(),
-                    });
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_noncovalent_bonds(&ids);
-                state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
-                Ok(Undo::RestoreRemovedNoncovalentBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
-            }
-            Edit::ModifyNoncovalentBondField { id, change } => {
-                let id = state.noncovalent_bond(id)?;
-                let undo = Undo::ModifyNoncovalentBondField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_noncovalent_bond_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::AddStereoAtom {
-                site,
-                ligands,
-                attributes,
-            } => {
-                let site = state.atom(site)?;
-                let ligands = state.stereo_ligands(ligands)?;
-                let id = self.add_stereo_atom(site, ligands.clone(), attributes.clone());
-                state.push_stereo_atom(id);
-                Ok(Undo::RemoveAddedStereoAtom(AddedStereoAtom {
-                    id,
-                    site,
-                    ligands,
-                    attributes,
-                }))
-            }
-            Edit::RemoveStereoAtoms { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                let mut removed = Vec::with_capacity(removes.len());
-                for (id, site, ligands, attributes) in removes {
-                    let id = state.stereo_atom(id)?;
-                    let site = state.atom(site)?;
-                    let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_atom_equiv(id, site, &ligands, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    let view = self.stereo_atom(id);
-                    removed.push(RemovedStereoAtom {
-                        id,
-                        site: view.site,
-                        ligands: view.ligands.to_vec(),
-                        attributes: view.attributes.clone(),
-                    });
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_stereo_atoms(&ids);
-                state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
-                Ok(Undo::RestoreRemovedStereoAtoms {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
-            }
-            Edit::ModifyStereoAtomField { id, change } => {
-                let id = state.stereo_atom(id)?;
-                let undo = Undo::ModifyStereoAtomField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_stereo_atom_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::AddStereoBond {
-                site,
-                ligands,
-                attributes,
-            } => {
-                let site = state.bond(site)?;
-                let ligands = state.stereo_ligands(ligands)?;
-                let id = self.add_stereo_bond(site, ligands.clone(), attributes.clone());
-                state.push_stereo_bond(id);
-                Ok(Undo::RemoveAddedStereoBond(AddedStereoBond {
-                    id,
-                    site,
-                    ligands,
-                    attributes,
-                }))
-            }
-            Edit::RemoveStereoBonds { removes } => {
-                let mut ids = Vec::with_capacity(removes.len());
-                let mut removed = Vec::with_capacity(removes.len());
-                for (id, site, ligands, attributes) in removes {
-                    let id = state.stereo_bond(id)?;
-                    let site = state.bond(site)?;
-                    let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_bond_equiv(id, site, &ligands, &attributes) {
-                        return Err(TransactionError::OldStateMismatch);
-                    }
-                    let view = self.stereo_bond(id);
-                    removed.push(RemovedStereoBond {
-                        id,
-                        site: view.site,
-                        ligands: view.ligands.to_vec(),
-                        attributes: view.attributes.clone(),
-                    });
-                    ids.push(id);
-                }
-                ensure_unique(&ids, EntityKind::StereoBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_stereo_bonds(&ids);
-                state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
-                Ok(Undo::RestoreRemovedStereoBonds {
-                    removed,
-                    undo_compaction: forward.undo_compaction(),
-                    cascade,
-                })
-            }
-            Edit::ModifyStereoBondField { id, change } => {
-                let id = state.stereo_bond(id)?;
-                let undo = Undo::ModifyStereoBondField {
-                    id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_stereo_bond_field(id, change)?;
-                Ok(undo)
-            }
-            Edit::ModifyAtomConstraint { id, old, new } => {
-                let id = state.atom(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_atom_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyBondConstraint { id, old, new } => {
-                let id = state.bond(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_bond_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyDativeBondConstraint { id, old, new } => {
-                let id = state.dative_bond(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyDativeBondConstraint {
-                    id: DativeBondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_dative_bond_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyAromaticSystemConstraint { id, old, new } => {
-                let id = state.aromatic_system(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyAromaticSystemConstraint {
-                    id: AromaticSystemHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_aromatic_system_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyMulticenterBondConstraint { id, old, new } => {
-                let id = state.multicenter_bond(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyMulticenterBondConstraint {
-                    id: MulticenterBondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_multicenter_bond_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
-                let id = state.noncovalent_bond(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyNoncovalentBondConstraint {
-                    id: NoncovalentBondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_noncovalent_bond_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyStereoAtomConstraint { id, kind, old, new } => {
-                let id = state.stereo_atom(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoAtomConstraint {
-                    id: StereoAtomHandle::Id(id),
-                    kind,
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_stereo_atom_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::ModifyStereoBondConstraint { id, kind, old, new } => {
-                let id = state.stereo_bond(id.clone())?;
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoBondConstraint {
-                    id: StereoBondHandle::Id(id),
-                    kind,
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_stereo_bond_constraint(id, old, new)?;
-                Ok(undo)
-            }
-            Edit::AddMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
-                self.push_constraint(constraint.clone());
-                Ok(Undo::ApplyEdit(Box::new(Edit::RemoveMoleculeConstraint {
-                    constraint: constraint.into(),
-                })))
-            }
-            Edit::RemoveMoleculeConstraint { constraint } => {
-                let constraint = state.resolve_constraint(constraint)?;
-                let list = self.constraints_mut();
-                let position = list
-                    .as_slice()
-                    .iter()
-                    .rposition(|c| *c == constraint)
-                    .ok_or(TransactionError::MissingEntry)?;
-                list.remove_at(position);
-                Ok(Undo::ApplyCascadedConstraints(CascadedConstraints {
-                    removed: vec![RemovedConstraint {
-                        position,
-                        constraint,
-                    }],
-                    modified: Vec::new(),
-                }))
-            }
-        }
-    }
-
-    fn capture_removed_topology(
-        &self,
-        atoms: &[AtomId],
-        bonds: &[BondId],
-    ) -> (Vec<RemovedAtom>, Vec<RemovedBond>, RemovedOverlays) {
-        let atom_set: HashSet<AtomId> = atoms.iter().copied().collect();
-        let bond_set: HashSet<BondId> = bonds.iter().copied().collect();
-        let removed_atoms = atoms
-            .iter()
-            .map(|&id| RemovedAtom {
-                id,
-                attributes: self.atom(id).attributes.clone(),
-            })
-            .collect();
-        let removed_bonds = (0..self.bond_count())
-            .map(BondId::from)
-            .filter(|&id| {
-                let view = self.bond(id);
-                bond_set.contains(&id) || view.atoms.iter().any(|atom| atom_set.contains(atom))
-            })
-            .map(|id| {
-                let view = self.bond(id);
-                RemovedBond {
-                    id,
-                    endpoints: view.atoms,
-                    attributes: view.attributes.clone(),
-                }
-            })
-            .collect();
-
-        let dative_bonds = (0..self.dative_bond_count())
-            .map(DativeBondId::from)
-            .filter_map(|id| {
-                let view = self.dative_bond(id);
-                let atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedDativeBond {
-                        id,
-                        atoms,
-                        attributes: view.attributes.clone(),
-                    })
-            })
-            .collect();
-        let aromatic_systems = (0..self.aromatic_system_count())
-            .map(AromaticSystemId::from)
-            .filter_map(|id| {
-                let view = self.aromatic_system(id);
-                let atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedAromaticSystem {
-                        id,
-                        atoms,
-                        attributes: view.attributes.clone(),
-                    })
-            })
-            .collect();
-        let multicenter_bonds = (0..self.multicenter_bond_count())
-            .map(MulticenterBondId::from)
-            .filter_map(|id| {
-                let view = self.multicenter_bond(id);
-                let atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedMulticenterBond {
-                        id,
-                        atoms,
-                        attributes: view.attributes.clone(),
-                    })
-            })
-            .collect();
-        let noncovalent_bonds = (0..self.noncovalent_bond_count())
-            .map(NoncovalentBondId::from)
-            .filter_map(|id| {
-                let view = self.noncovalent_bond(id);
-                view.atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedNoncovalentBond {
-                        id,
-                        atoms: view.atoms,
-                        attributes: view.attributes.clone(),
-                    })
-            })
-            .collect();
-
-        // A stereo atom drops when its site atom or any ligand atom is removed;
-        // a stereo bond drops when its site bond (directly or via a removed
-        // endpoint) or any ligand atom is removed. Mirrors `birelation_removed`.
-        let stereo_atoms = (0..self.stereo_atom_count())
-            .map(StereoAtomId::from)
-            .filter_map(|id| {
-                let view = self.stereo_atom(id);
-                let dropped = atom_set.contains(&view.site)
-                    || view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
-                dropped.then(|| RemovedStereoAtom {
-                    id,
-                    site: view.site,
-                    ligands: view.ligands.to_vec(),
-                    attributes: view.attributes.clone(),
-                })
-            })
-            .collect();
-        let stereo_bonds = (0..self.stereo_bond_count())
-            .map(StereoBondId::from)
-            .filter_map(|id| {
-                let view = self.stereo_bond(id);
-                let site = view.site;
-                let site_dropped = bond_set.contains(&site)
-                    || self.bond(site).atoms.iter().any(|a| atom_set.contains(a));
-                let ligand_dropped = view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
-                (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
-                    id,
-                    site,
-                    ligands: view.ligands.to_vec(),
-                    attributes: view.attributes.clone(),
-                })
-            })
-            .collect();
-
-        (
-            removed_atoms,
-            removed_bonds,
-            RemovedOverlays {
-                dative_bonds,
-                aromatic_systems,
-                multicenter_bonds,
-                noncovalent_bonds,
-                stereo_atoms,
-                stereo_bonds,
-            },
-        )
-    }
-
-    fn apply_modify_atom_field(
-        &mut self,
-        id: AtomId,
-        change: AtomFieldChange,
-    ) -> Result<(), TransactionError> {
-        let atom = self.atom_mut(id);
-        match change {
-            AtomFieldChange::Element { old, new } => {
-                if !atom.attributes.element.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes.element = new;
-            }
-            AtomFieldChange::IsotopeMass { old, new } => {
-                if !atom.attributes.isotope_mass.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes.isotope_mass = new;
-            }
-            AtomFieldChange::Charge { old, new } => {
-                if !atom.attributes.charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes.charge = new;
-            }
-            AtomFieldChange::ImplicitHydrogens { old, new } => {
-                if !atom.attributes.implicit_hydrogens.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes.implicit_hydrogens = new;
-            }
-            AtomFieldChange::LonePairs { old, new } => {
-                if !atom.attributes.lone_pairs.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes.lone_pairs = new;
-            }
-            AtomFieldChange::UnpairedElectrons { old, new } => {
-                if !atom.attributes.unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes.unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_bond_field(
-        &mut self,
-        id: BondId,
-        change: BondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let bond = self.bond_mut(id);
-        match change {
-            BondFieldChange::Order { old, new } => {
-                if !bond.attributes.order.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                bond.attributes.order = new;
-            }
-            BondFieldChange::Charge { old, new } => {
-                if !bond.attributes.charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                bond.attributes.charge = new;
-            }
-            BondFieldChange::UnpairedElectrons { old, new } => {
-                if !bond.attributes.unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                bond.attributes.unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_dative_bond_field(
-        &mut self,
-        id: DativeBondId,
-        change: DativeBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let dat = self.dative_bond_mut(id);
-        match change {
-            DativeBondFieldChange::Order { old, new } => {
-                if !dat.attributes.order.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                dat.attributes.order = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_aromatic_system_field(
-        &mut self,
-        id: AromaticSystemId,
-        change: AromaticSystemFieldChange,
-    ) -> Result<(), TransactionError> {
-        let ar = self.aromatic_system_mut(id);
-        match change {
-            AromaticSystemFieldChange::Electrons { old, new } => {
-                if !ar.attributes.electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                ar.attributes.electrons = new;
-            }
-            AromaticSystemFieldChange::Charge { old, new } => {
-                if !ar.attributes.charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                ar.attributes.charge = new;
-            }
-            AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
-                if !ar.attributes.unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                ar.attributes.unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_multicenter_bond_field(
-        &mut self,
-        id: MulticenterBondId,
-        change: MulticenterBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mc = self.multicenter_bond_mut(id);
-        match change {
-            MulticenterBondFieldChange::Electrons { old, new } => {
-                if !mc.attributes.electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                mc.attributes.electrons = new;
-            }
-            MulticenterBondFieldChange::Charge { old, new } => {
-                if !mc.attributes.charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                mc.attributes.charge = new;
-            }
-            MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
-                if !mc.attributes.unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                mc.attributes.unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_noncovalent_bond_field(
-        &mut self,
-        id: NoncovalentBondId,
-        change: NoncovalentBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let nc = self.noncovalent_bond_mut(id);
-        match change {
-            NoncovalentBondFieldChange::Kind { old, new } => {
-                if !nc.attributes.kind.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                nc.attributes.kind = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_stereo_atom_field(
-        &mut self,
-        id: StereoAtomId,
-        change: StereoAtomFieldChange,
-    ) -> Result<(), TransactionError> {
-        let sa = self.stereo_atom_mut(id);
-        match change {
-            StereoAtomFieldChange::Configuration { old, new } => {
-                if !sa.attributes.configuration.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                sa.attributes.configuration = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_stereo_bond_field(
-        &mut self,
-        id: StereoBondId,
-        change: StereoBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let sb = self.stereo_bond_mut(id);
-        match change {
-            StereoBondFieldChange::Configuration { old, new } => {
-                if !sb.attributes.configuration.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                sb.attributes.configuration = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_atom_constraint(
-        &mut self,
-        id: AtomId,
-        old: Option<AtomConstraintForm>,
-        new: Option<AtomConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.atom_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_bond_constraint(
-        &mut self,
-        id: BondId,
-        old: Option<BondConstraintForm>,
-        new: Option<BondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.bond_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_dative_bond_constraint(
-        &mut self,
-        id: DativeBondId,
-        old: Option<DativeBondConstraintForm>,
-        new: Option<DativeBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.dative_bond_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_aromatic_system_constraint(
-        &mut self,
-        id: AromaticSystemId,
-        old: Option<AromaticSystemConstraintForm>,
-        new: Option<AromaticSystemConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.aromatic_system_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_multicenter_bond_constraint(
-        &mut self,
-        id: MulticenterBondId,
-        old: Option<MulticenterBondConstraintForm>,
-        new: Option<MulticenterBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.multicenter_bond_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_noncovalent_bond_constraint(
-        &mut self,
-        id: NoncovalentBondId,
-        old: Option<NoncovalentBondConstraintForm>,
-        new: Option<NoncovalentBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.noncovalent_bond_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_stereo_atom_constraint(
-        &mut self,
-        id: StereoAtomId,
-        old: Option<StereoAtomConstraintForm>,
-        new: Option<StereoAtomConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.stereo_atom_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_stereo_bond_constraint(
-        &mut self,
-        id: StereoBondId,
-        old: Option<StereoBondConstraintForm>,
-        new: Option<StereoBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.stereo_bond_mut(id)
-            .attributes
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
+        batches: impl IntoIterator<Item = Edits>,
+        rollback_method: RollbackMethod,
+    ) -> Result<MoleculeCorrespondence, MoleculeApplyError> {
+        TrackedTransaction::run(self, rollback_method, |mut transaction| {
+            for edits in batches {
+                transaction.apply(edits)?;
+            }
+            transaction.commit()
+        })
     }
 }
 
-fn rollback_journal(
-    editor: &mut MoleculeEditor,
-    journal: Vec<Undo>,
-) -> Result<(), TransactionError> {
-    for undo in journal.into_iter().rev() {
-        editor.apply_undo(undo)?;
-    }
-    Ok(())
+struct TransactionGuard<'a> {
+    molecule: &'a mut Molecule,
+    storage: TransactionStorage,
+    status: TransactionStatus,
 }
 
-fn ids_fit(ids: impl IntoIterator<Item = usize>, count: usize) -> bool {
-    let mut seen = HashSet::new();
-    ids.into_iter().all(|id| id < count && seen.insert(id))
-}
-
-fn reconstruction_fits(
-    current_count: usize,
-    removed: impl IntoIterator<Item = usize>,
-    mut uncompact: impl FnMut(usize) -> usize,
-) -> bool {
-    let removed: Vec<_> = removed.into_iter().collect();
-    let Some(restored_count) = current_count.checked_add(removed.len()) else {
-        return false;
-    };
-    let mut occupied = vec![false; restored_count];
-    for id in removed {
-        if id >= restored_count || occupied[id] {
-            return false;
-        }
-        occupied[id] = true;
-    }
-    for id in 0..current_count {
-        let restored = uncompact(id);
-        if restored >= restored_count || occupied[restored] {
-            return false;
-        }
-        occupied[restored] = true;
-    }
-    occupied.into_iter().all(|is_occupied| is_occupied)
-}
-
-fn restored_constraints(
-    update: &CascadedConstraints,
-    current: &Constraints,
-) -> Option<Constraints> {
-    let restored_count = current.as_slice().len().checked_add(update.removed.len())?;
-    let mut removed = vec![None; restored_count];
-    let mut modified = vec![None; restored_count];
-
-    for entry in &update.removed {
-        let target = removed.get_mut(entry.position)?;
-        if target.is_some() {
-            return None;
-        }
-        *target = Some(&entry.constraint);
-    }
-    for entry in &update.modified {
-        if removed.get(entry.position)?.is_some() {
-            return None;
-        }
-        let target = modified.get_mut(entry.position)?;
-        if target.is_some() {
-            return None;
-        }
-        *target = Some(entry);
-    }
-
-    let mut current = current.as_slice().iter();
-    let mut restored = Vec::with_capacity(restored_count);
-    for position in 0..restored_count {
-        if let Some(constraint) = removed[position] {
-            restored.push(constraint.clone());
-            continue;
-        }
-        let constraint = current.next()?;
-        if let Some(change) = modified[position] {
-            if constraint != &change.new {
-                return None;
-            }
-            restored.push(change.old.clone());
-        } else {
-            restored.push(constraint.clone());
+impl Drop for TransactionGuard<'_> {
+    fn drop(&mut self) {
+        if matches!(
+            self.status,
+            TransactionStatus::Active | TransactionStatus::CommitRequested
+        ) {
+            self.storage.rollback(self.molecule);
         }
     }
-    if current.next().is_some() {
-        return None;
-    }
-    Some(restored.into_iter().collect())
 }
 
-fn removed_dative_bonds_fit(removed: &[RemovedDativeBond], atom_count: usize) -> bool {
-    removed.iter().all(|entry| {
-        !entry.atoms.is_empty() && entry.atoms.iter().all(|id| id.index() < atom_count)
-    })
+enum TransactionStorage {
+    Journal(Vec<Undo>),
+    Clone(Option<Molecule>),
 }
 
-fn removed_aromatic_systems_fit(removed: &[RemovedAromaticSystem], atom_count: usize) -> bool {
-    removed
-        .iter()
-        .all(|entry| entry.atoms.iter().all(|id| id.index() < atom_count))
-}
-
-fn removed_multicenter_bonds_fit(removed: &[RemovedMulticenterBond], atom_count: usize) -> bool {
-    removed
-        .iter()
-        .all(|entry| entry.atoms.iter().all(|id| id.index() < atom_count))
-}
-
-fn removed_noncovalent_bonds_fit(removed: &[RemovedNoncovalentBond], atom_count: usize) -> bool {
-    removed
-        .iter()
-        .all(|entry| entry.atoms.iter().all(|id| id.index() < atom_count))
-}
-
-fn removed_stereo_atoms_fit(removed: &[RemovedStereoAtom], atom_count: usize) -> bool {
-    removed.iter().all(|entry| {
-        entry.site.index() < atom_count
-            && entry
-                .ligands
-                .iter()
-                .all(|ligand| ligand.atom_id.index() < atom_count)
-    })
-}
-
-fn removed_stereo_bonds_fit(
-    removed: &[RemovedStereoBond],
-    atom_count: usize,
-    bond_count: usize,
-) -> bool {
-    removed.iter().all(|entry| {
-        entry.site.index() < bond_count
-            && entry
-                .ligands
-                .iter()
-                .all(|ligand| ligand.atom_id.index() < atom_count)
-    })
-}
-
-fn removed_overlays_fit(
-    editor: &MoleculeEditor,
-    removed: &RemovedOverlays,
-    undo_compaction: &UndoCompaction,
-    atom_count: usize,
-    bond_count: usize,
-) -> bool {
-    reconstruction_fits(
-        editor.dative_bond_count(),
-        removed.dative_bonds.iter().map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_dative_bond(DativeBondId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        editor.aromatic_system_count(),
-        removed
-            .aromatic_systems
-            .iter()
-            .map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_aromatic_system(AromaticSystemId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        editor.multicenter_bond_count(),
-        removed
-            .multicenter_bonds
-            .iter()
-            .map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_multicenter_bond(MulticenterBondId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        editor.noncovalent_bond_count(),
-        removed
-            .noncovalent_bonds
-            .iter()
-            .map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_noncovalent_bond(NoncovalentBondId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        editor.stereo_atom_count(),
-        removed.stereo_atoms.iter().map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_stereo_atom(StereoAtomId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        editor.stereo_bond_count(),
-        removed.stereo_bonds.iter().map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_stereo_bond(StereoBondId::from(id))
-                .index()
-        },
-    ) && removed_dative_bonds_fit(&removed.dative_bonds, atom_count)
-        && removed_aromatic_systems_fit(&removed.aromatic_systems, atom_count)
-        && removed_multicenter_bonds_fit(&removed.multicenter_bonds, atom_count)
-        && removed_noncovalent_bonds_fit(&removed.noncovalent_bonds, atom_count)
-        && removed_stereo_atoms_fit(&removed.stereo_atoms, atom_count)
-        && removed_stereo_bonds_fit(&removed.stereo_bonds, atom_count, bond_count)
-}
-
-fn rollback_mismatch() -> TransactionError {
-    TransactionError::RollbackStateMismatch
-}
-
-impl MoleculeEditor {
-    fn validate_undo(&self, undo: &Undo) -> Result<(), TransactionError> {
-        let compaction = match undo {
-            Undo::RestoreRemovedTopology {
-                undo_compaction, ..
+impl TransactionStorage {
+    fn rollback(&mut self, molecule: &mut Molecule) {
+        match self {
+            Self::Journal(journal) => {
+                while let Some(undo) = journal.pop() {
+                    molecule.apply_undo(undo);
+                }
             }
-            | Undo::RestoreRemovedDativeBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedAromaticSystems {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedMulticenterBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedNoncovalentBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedStereoAtoms {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedStereoBonds {
-                undo_compaction, ..
-            } => Some(undo_compaction.forward()),
-            _ => None,
-        };
-        if let Some(compaction) = compaction {
-            let counts_match = [
-                (self.atom_count(), compaction.graph().nodes().result_count()),
-                (self.bond_count(), compaction.graph().edges().result_count()),
-                (
-                    self.dative_bond_count(),
-                    compaction.dative_bonds().result_count(),
-                ),
-                (
-                    self.aromatic_system_count(),
-                    compaction.aromatic_systems().result_count(),
-                ),
-                (
-                    self.multicenter_bond_count(),
-                    compaction.multicenter_bonds().result_count(),
-                ),
-                (
-                    self.noncovalent_bond_count(),
-                    compaction.noncovalent_bonds().result_count(),
-                ),
-                (
-                    self.stereo_atom_count(),
-                    compaction.stereo_atoms().result_count(),
-                ),
-                (
-                    self.stereo_bond_count(),
-                    compaction.stereo_bonds().result_count(),
-                ),
-            ]
-            .into_iter()
-            .all(|(actual, expected)| actual == expected);
-            if !counts_match {
-                return Err(rollback_mismatch());
+            Self::Clone(working) => {
+                *working = None;
             }
         }
-        let fits = match undo {
-            Undo::RemoveAddedTopology { atoms, bonds } => {
-                ids_fit(
-                    atoms.iter().map(|entry| entry.id.index()),
-                    self.atom_count(),
-                ) && ids_fit(
-                    bonds.iter().map(|entry| entry.id.index()),
-                    self.bond_count(),
-                )
-            }
-            Undo::RestoreRemovedTopology {
-                atoms,
-                bonds,
-                overlays,
-                compaction,
-                undo_compaction,
-                cascade: _,
-            } => {
-                let Some(atom_count) = self.atom_count().checked_add(atoms.len()) else {
-                    return Err(rollback_mismatch());
-                };
-                let Some(bond_count) = self.bond_count().checked_add(bonds.len()) else {
-                    return Err(rollback_mismatch());
-                };
-                undo_compaction.forward() == compaction
-                    && reconstruction_fits(
-                        self.atom_count(),
-                        atoms.iter().map(|entry| entry.id.index()),
-                        |id| undo_compaction.uncompact_atom(AtomId::from(id)).index(),
-                    )
-                    && reconstruction_fits(
-                        self.bond_count(),
-                        bonds.iter().map(|entry| entry.id.index()),
-                        |id| undo_compaction.uncompact_bond(BondId::from(id)).index(),
-                    )
-                    && bonds
-                        .iter()
-                        .all(|entry| entry.endpoints.iter().all(|id| id.index() < atom_count))
-                    && removed_overlays_fit(self, overlays, undo_compaction, atom_count, bond_count)
-            }
-            Undo::RemoveAddedDativeBond(entry) => entry.id.index() < self.dative_bond_count(),
-            Undo::RestoreRemovedDativeBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.dative_bond_count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_dative_bond(DativeBondId::from(id))
-                            .index()
-                    },
-                ) && removed_dative_bonds_fit(removed, self.atom_count())
-            }
-            Undo::RemoveAddedAromaticSystem(entry) => {
-                entry.id.index() < self.aromatic_system_count()
-            }
-            Undo::RestoreRemovedAromaticSystems {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.aromatic_system_count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_aromatic_system(AromaticSystemId::from(id))
-                            .index()
-                    },
-                ) && removed_aromatic_systems_fit(removed, self.atom_count())
-            }
-            Undo::RemoveAddedMulticenterBond(entry) => {
-                entry.id.index() < self.multicenter_bond_count()
-            }
-            Undo::RestoreRemovedMulticenterBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.multicenter_bond_count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_multicenter_bond(MulticenterBondId::from(id))
-                            .index()
-                    },
-                ) && removed_multicenter_bonds_fit(removed, self.atom_count())
-            }
-            Undo::RemoveAddedNoncovalentBond(entry) => {
-                entry.id.index() < self.noncovalent_bond_count()
-            }
-            Undo::RestoreRemovedNoncovalentBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.noncovalent_bond_count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_noncovalent_bond(NoncovalentBondId::from(id))
-                            .index()
-                    },
-                ) && removed_noncovalent_bonds_fit(removed, self.atom_count())
-            }
-            Undo::RemoveAddedStereoAtom(entry) => entry.id.index() < self.stereo_atom_count(),
-            Undo::RestoreRemovedStereoAtoms {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.stereo_atom_count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_stereo_atom(StereoAtomId::from(id))
-                            .index()
-                    },
-                ) && removed_stereo_atoms_fit(removed, self.atom_count())
-            }
-            Undo::RemoveAddedStereoBond(entry) => entry.id.index() < self.stereo_bond_count(),
-            Undo::RestoreRemovedStereoBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.stereo_bond_count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_stereo_bond(StereoBondId::from(id))
-                            .index()
-                    },
-                ) && removed_stereo_bonds_fit(removed, self.atom_count(), self.bond_count())
-            }
-            Undo::ModifyAtomField { id, .. } => id.index() < self.atom_count(),
-            Undo::ModifyBondField { id, .. } => id.index() < self.bond_count(),
-            Undo::ModifyDativeBondField { id, .. } => id.index() < self.dative_bond_count(),
-            Undo::ModifyAromaticSystemField { id, .. } => id.index() < self.aromatic_system_count(),
-            Undo::ModifyMulticenterBondField { id, .. } => {
-                id.index() < self.multicenter_bond_count()
-            }
-            Undo::ModifyNoncovalentBondField { id, .. } => {
-                id.index() < self.noncovalent_bond_count()
-            }
-            Undo::ModifyStereoAtomField { id, .. } => id.index() < self.stereo_atom_count(),
-            Undo::ModifyStereoBondField { id, .. } => id.index() < self.stereo_bond_count(),
-            Undo::ApplyCascadedConstraints(_) => true,
-            Undo::ApplyEdit(_) => true,
-        };
-        fits.then_some(()).ok_or_else(rollback_mismatch)
     }
+}
 
-    fn apply_undo(&mut self, undo: Undo) -> Result<(), TransactionError> {
-        self.validate_undo(&undo)?;
-        match undo {
-            Undo::RemoveAddedTopology { atoms, bonds } => {
-                self.remove_added_topology(&atoms, &bonds);
-            }
-            Undo::RestoreRemovedTopology {
-                atoms,
-                bonds,
-                overlays,
-                undo_compaction,
-                cascade,
-                ..
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_topology(atoms, bonds, overlays, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::RemoveAddedDativeBond(added) => self.remove_added_dative_bond(&added),
-            Undo::RestoreRemovedDativeBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_dative_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::RemoveAddedAromaticSystem(added) => self.remove_added_aromatic_system(&added),
-            Undo::RestoreRemovedAromaticSystems {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_aromatic_systems(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::RemoveAddedMulticenterBond(added) => self.remove_added_multicenter_bond(&added),
-            Undo::RestoreRemovedMulticenterBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_multicenter_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::RemoveAddedNoncovalentBond(added) => self.remove_added_noncovalent_bond(&added),
-            Undo::RestoreRemovedNoncovalentBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_noncovalent_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::RemoveAddedStereoAtom(added) => self.remove_added_stereo_atom(&added),
-            Undo::RestoreRemovedStereoAtoms {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_stereo_atoms(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::RemoveAddedStereoBond(added) => self.remove_added_stereo_bond(&added),
-            Undo::RestoreRemovedStereoBonds {
-                removed,
-                undo_compaction,
-                cascade,
-            } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_stereo_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
-                *self.constraints_mut() = constraints;
-            }
-            Undo::ModifyAtomField { id, change } => self
-                .apply_modify_atom_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyBondField { id, change } => self
-                .apply_modify_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyDativeBondField { id, change } => self
-                .apply_modify_dative_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyAromaticSystemField { id, change } => self
-                .apply_modify_aromatic_system_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyMulticenterBondField { id, change } => self
-                .apply_modify_multicenter_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyNoncovalentBondField { id, change } => self
-                .apply_modify_noncovalent_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyStereoAtomField { id, change } => self
-                .apply_modify_stereo_atom_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyStereoBondField { id, change } => self
-                .apply_modify_stereo_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ApplyCascadedConstraints(update) => {
-                let constraints = restored_constraints(&update, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                *self.constraints_mut() = constraints;
-            }
-            Undo::ApplyEdit(edit) => {
-                let mut state = ApplicationState::new(self);
-                self.apply_edit(*edit, &mut state)
-                    .map_err(|_| rollback_mismatch())?;
-            }
-        }
-        Ok(())
-    }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransactionStatus {
+    Active,
+    CommitRequested,
+    Accepted,
+    RolledBack,
+    Aborted,
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
+mod tests;
 
-    use rstest::*;
+#[cfg(test)]
+mod lifecycle_tests {
+    use std::mem::ManuallyDrop;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    use rstest::{fixture, rstest};
     use umol_chem::element::Element;
+    use umol_graph_core::Correspondence;
 
-    use super::super::super::aromatic::AromaticSystemForm;
-    use super::super::super::atom::{AtomForm, ElementForm};
-    use super::super::super::bond::BondForm;
-    use super::super::super::constraint::{
-        AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
-        DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-        NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereogenicityForm,
+    use super::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
+    use crate::ir::aromatic::AromaticSystemForm;
+    use crate::ir::atom::AtomForm;
+    use crate::ir::bond::BondForm;
+    use crate::ir::correspondence::MoleculeCorrespondence;
+    use crate::ir::dative::DativeBondForm;
+    use crate::ir::edit::{
+        AromaticSystemHandle, AtomFieldChange, AtomHandle, BondHandle, DativeBondHandle, Edit,
+        Edits, MulticenterBondHandle, NoncovalentBondHandle, StereoAtomHandle, StereoBondHandle,
     };
-    use super::super::super::dative::DativeBondForm;
-    use super::super::super::edit::EntityHandle;
-    use super::super::super::entity::Entity;
-    use super::super::super::ligand::StereoLigandKind;
-    use super::super::super::multicenter::MulticenterBondForm;
-    use super::super::super::noncovalent::{
-        NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
+    use crate::ir::entity::{Entity, EntityKind};
+    use crate::ir::error::MoleculeApplyError;
+    use crate::ir::id::{
+        AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        StereoAtomId, StereoBondId,
     };
-    use super::super::super::num::NumForm;
-    use super::super::super::stereo::{
-        CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
-        StereoKind,
-    };
-    use super::super::Molecule;
-    use super::*;
-    use crate::ir::BooleanForm;
+    use crate::ir::ligand::{StereoLigand, StereoLigandKind};
+    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::NoncovalentBondForm;
+    use crate::ir::num::NumForm;
+    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
 
     #[fixture]
-    fn empty() -> MoleculeEditor {
-        Molecule::default().edit()
-    }
-
-    #[fixture]
-    fn one_atom() -> MoleculeEditor {
-        let mut b = Molecule::default().edit();
-        b.add_atom(AtomForm::from_element(Element::C));
-        b
+    fn molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..MoleculeEntries::default()
+        })
     }
 
     #[fixture]
-    fn diatomic() -> MoleculeEditor {
-        let mut b = Molecule::default().edit();
-        b.add_atom(AtomForm::from_element(Element::C));
-        b.add_atom(AtomForm::from_element(Element::C));
-        b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
-        b
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_atom(mut empty: MoleculeEditor) {
-        let mut edits = Edits::new();
-        edits.add_atom(AtomForm::from_element(Element::C));
-        let tx = empty.transact(edits).unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [Undo::RemoveAddedTopology { atoms, bonds }]
-                if atoms.iter().map(|a| a.id).collect::<Vec<_>>() == vec![AtomId(0)]
-                    && bonds.is_empty()
-        ));
-        let built = empty.build();
-        assert_eq!(built.atoms().count(), 1);
-        assert_eq!(
-            built.atom(AtomId(0)).attributes.element,
-            ElementForm::Lit(Element::C)
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_atoms(mut empty: MoleculeEditor) {
-        let mut edits = Edits::new();
-        edits.add_atoms([
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::N),
-        ]);
-        let tx = empty.transact(edits).unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [Undo::RemoveAddedTopology { atoms, bonds }]
-                if atoms.iter().map(|a| a.id).collect::<Vec<_>>() == vec![AtomId(0), AtomId(1)]
-                    && bonds.is_empty()
-        ));
-        let built = empty.build();
-        assert_eq!(built.atoms().count(), 2);
-        assert_eq!(
-            built.atom(AtomId(0)).attributes.element,
-            ElementForm::Lit(Element::C)
-        );
-        assert_eq!(
-            built.atom(AtomId(1)).attributes.element,
-            ElementForm::Lit(Element::N)
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_bond_via_handle(mut empty: MoleculeEditor) {
-        let mut edits = Edits::new();
-        let atoms = edits.add_atoms([
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-        ]);
-        edits.add_bond(atoms[0].clone(), atoms[1].clone(), BondForm::from_order(1));
-        let tx = empty.transact(edits).unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [
-                Undo::RemoveAddedTopology { atoms, bonds },
-                Undo::RemoveAddedTopology { atoms: bond_atoms, bonds: added_bonds },
-            ] if atoms.iter().map(|a| a.id).collect::<Vec<_>>() == vec![AtomId(0), AtomId(1)]
-                && bonds.is_empty()
-                && bond_atoms.is_empty()
-                && added_bonds.iter().map(|b| b.id).collect::<Vec<_>>() == vec![BondId(0)]
-        ));
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_rollback(mut one_atom: MoleculeEditor) {
-        let before = one_atom.clone().build();
-        // Mid-batch failure (out-of-range id on edit 2) rolls back the
-        // already-applied AddAtom on edit 1.
-        let mut edits = Edits::new();
-        edits.add_atom(AtomForm::from_element(Element::N));
-        edits.remove_atom(AtomHandle::Id(AtomId(99)));
-        let err = one_atom.transact(edits).unwrap_err();
-        assert_eq!(
-            err,
-            TransactionError::HandleOutOfRange {
-                kind: EntityKind::Atom,
-                index: 99,
-                count: 1,
-            }
-        );
-        assert_eq!(one_atom.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_atom_field(mut one_atom: MoleculeEditor) {
-        let tx = one_atom
-            .transact(Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            tx.undos(),
-            &[Undo::ModifyAtomField {
-                id: AtomId(0),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::Lit(1),
-                    new: NumForm::default(),
-                },
-            }],
-        );
-        assert_eq!(
-            one_atom.build().atom(AtomId(0)).attributes.charge,
-            NumForm::Lit(1)
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_atom_field_error(mut one_atom: MoleculeEditor) {
-        let err = one_atom
-            .transact(Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::Lit(99),
-                    new: NumForm::Lit(1),
-                },
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    #[case::created_out_of_range(
-        Edits::from_iter([Edit::AddBonds {
-            bonds: vec![AddBond {
-                endpoints: [AtomHandle::New(5), AtomHandle::New(6)],
-                attributes: BondForm::default(),
-            }],
-        }]),
-        TransactionError::HandleOutOfRange {
-            kind: EntityKind::Atom,
-            index: 5,
-            count: 0,
-        },
-    )]
-    #[case::initial_out_of_range(
-        Edits::from_iter([Edit::RemoveTopology {
-            atoms: vec![AtomHandle::Id(AtomId(0))],
-            bonds: Vec::new(),
-        }]),
-        TransactionError::HandleOutOfRange {
-            kind: EntityKind::Atom,
-            index: 0,
-            count: 0,
-        },
-    )]
-    fn test_molecule_editor_transact_handle_error(
-        mut empty: MoleculeEditor,
-        #[case] edits: Edits,
-        #[case] expected: TransactionError,
-    ) {
-        let before = empty.clone().build();
-        assert_eq!(empty.transact(edits).unwrap_err(), expected);
-        assert_eq!(empty.build(), before);
-    }
-
-    #[rstest]
-    #[case::initial(
-        1,
-        Edits::from_iter([
-            Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(0))],
-                bonds: Vec::new(),
-            },
-            Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            },
-        ]),
-    )]
-    #[case::created(
-        0,
-        Edits::from_iter([
-            Edit::AddAtoms {
-                atoms: vec![AtomForm::from_element(Element::C)],
-            },
-            Edit::RemoveTopology {
-                atoms: vec![AtomHandle::New(0)],
-                bonds: Vec::new(),
-            },
-            Edit::ModifyAtomField {
-                id: AtomHandle::New(0),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            },
-        ]),
-    )]
-    fn test_molecule_editor_transact_handle_removed_error(
-        #[case] initial_atom_count: usize,
-        #[case] edits: Edits,
-    ) {
-        let mut editor = Molecule::default().edit();
-        for _ in 0..initial_atom_count {
-            editor.add_atom(AtomForm::from_element(Element::C));
-        }
-        let before = editor.clone().build();
-
-        assert_eq!(
-            editor.transact(edits).unwrap_err(),
-            TransactionError::HandleRemoved {
-                kind: EntityKind::Atom,
-                index: 0,
-            }
-        );
-        assert_eq!(editor.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_handles_initial() {
-        let mut editor = Molecule::default().edit();
-        editor.add_atom(AtomForm::from_element(Element::C));
-        editor.add_atom(AtomForm::from_element(Element::N));
-        editor.add_atom(AtomForm::from_element(Element::O));
-        let edits = Edits::from_iter([
-            Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(0))],
-                bonds: Vec::new(),
-            },
-            Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(1)),
-                change: AtomFieldChange::Element {
-                    old: ElementForm::Lit(Element::N),
-                    new: ElementForm::Lit(Element::F),
-                },
-            },
-            Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(2)),
-                change: AtomFieldChange::Element {
-                    old: ElementForm::Lit(Element::O),
-                    new: ElementForm::Lit(Element::Cl),
-                },
-            },
-        ]);
-
-        editor.transact(edits).unwrap();
-
-        assert_eq!(
-            (0..editor.atom_count())
-                .map(|index| editor.atom(AtomId(index as u32)).attributes.element.clone())
-                .collect::<Vec<_>>(),
-            vec![ElementForm::Lit(Element::F), ElementForm::Lit(Element::Cl)]
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_handles_created() {
-        let mut editor = Molecule::default().edit();
-        let mut edits = Edits::new();
-        let atoms = edits.add_atoms([
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::N),
-        ]);
-        edits.remove_atom(atoms[0].clone());
-        edits.push(Edit::ModifyAtomField {
-            id: atoms[1].clone(),
-            change: AtomFieldChange::Charge {
-                old: NumForm::default(),
-                new: NumForm::Lit(1),
-            },
-        });
-
-        editor.transact(edits).unwrap();
-
-        assert_eq!(editor.atom_count(), 1);
-        assert_eq!(
-            (
-                editor.atom(AtomId(0)).attributes.element.clone(),
-                editor.atom(AtomId(0)).attributes.charge.clone(),
-            ),
-            (ElementForm::Lit(Element::N), NumForm::Lit(1))
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_handles_reuse() {
-        let mut editor = Molecule::default().edit();
-        let mut edits = Edits::new();
-        let removed = edits.add_atom(AtomForm::from_element(Element::C));
-        edits.remove_atom(removed);
-        let surviving = edits.add_atom(AtomForm::from_element(Element::N));
-        edits.push(Edit::ModifyAtomField {
-            id: surviving,
-            change: AtomFieldChange::Charge {
-                old: NumForm::default(),
-                new: NumForm::Lit(-1),
-            },
-        });
-
-        editor.transact(edits).unwrap();
-
-        assert_eq!(editor.atom_count(), 1);
-        assert_eq!(
-            (
-                editor.atom(AtomId(0)).attributes.element.clone(),
-                editor.atom(AtomId(0)).attributes.charge.clone(),
-            ),
-            (ElementForm::Lit(Element::N), NumForm::Lit(-1))
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_handles_per_kind() {
-        let mut editor = Molecule::default().edit();
-        let before = editor.clone().build();
-        let mut edits = Edits::new();
-        let atoms = edits.add_atoms([
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::N),
-            AtomForm::from_element(Element::O),
-            AtomForm::from_element(Element::F),
-        ]);
-        let bonds = edits.add_bonds([
-            AddBond {
-                endpoints: [atoms[0].clone(), atoms[1].clone()],
-                attributes: BondForm::from_order(1),
-            },
-            AddBond {
-                endpoints: [atoms[1].clone(), atoms[2].clone()],
-                attributes: BondForm::from_order(1),
-            },
-            AddBond {
-                endpoints: [atoms[2].clone(), atoms[3].clone()],
-                attributes: BondForm::from_order(1),
-            },
-        ]);
-        let dative = edits.add_dative_bond(
-            vec![atoms[0].clone(), atoms[1].clone()],
-            DativeBondForm::from_order(1),
-        );
-        let aromatic = edits.add_aromatic_system(
-            vec![atoms[0].clone(), atoms[1].clone()],
-            AromaticSystemForm::default(),
-        );
-        let multicenter = edits.add_multicenter_bond(
-            vec![atoms[0].clone(), atoms[1].clone()],
-            MulticenterBondForm::default(),
-        );
-        let noncovalent = edits.add_noncovalent_bond(
-            [atoms[0].clone(), atoms[1].clone()],
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        );
-        let stereo_atom = edits.add_stereo_atom(
-            atoms[1].clone(),
-            vec![
-                (atoms[0].clone(), StereoLigandKind::Atom),
-                (atoms[2].clone(), StereoLigandKind::Atom),
-                (atoms[3].clone(), StereoLigandKind::Atom),
-                (atoms[1].clone(), StereoLigandKind::ImplicitHydrogen),
+    fn all_entities() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
             ],
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let stereo_bond = edits.add_stereo_bond(
-            bonds[1].clone(),
-            vec![
-                (atoms[0].clone(), StereoLigandKind::Atom),
-                (atoms[1].clone(), StereoLigandKind::ImplicitHydrogen),
-                (atoms[3].clone(), StereoLigandKind::Atom),
-                (atoms[2].clone(), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        );
-        edits.push(Edit::ModifyAtomField {
-            id: atoms[0].clone(),
-            change: AtomFieldChange::Charge {
-                old: NumForm::default(),
-                new: NumForm::Lit(1),
-            },
-        });
-        edits.push(Edit::ModifyBondField {
-            id: bonds[0].clone(),
-            change: BondFieldChange::Order {
-                old: NumForm::Lit(1),
-                new: NumForm::Lit(2),
-            },
-        });
-        edits.push(Edit::ModifyDativeBondField {
-            id: dative,
-            change: DativeBondFieldChange::Order {
-                old: NumForm::Lit(1),
-                new: NumForm::Lit(2),
-            },
-        });
-        edits.push(Edit::ModifyAromaticSystemField {
-            id: aromatic,
-            change: AromaticSystemFieldChange::Charge {
-                old: NumForm::default(),
-                new: NumForm::Lit(1),
-            },
-        });
-        edits.push(Edit::ModifyMulticenterBondField {
-            id: multicenter,
-            change: MulticenterBondFieldChange::Charge {
-                old: NumForm::default(),
-                new: NumForm::Lit(-1),
-            },
-        });
-        edits.push(Edit::ModifyNoncovalentBondField {
-            id: noncovalent,
-            change: NoncovalentBondFieldChange::Kind {
-                old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-                new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
-            },
-        });
-        edits.push(Edit::ModifyStereoAtomField {
-            id: stereo_atom,
-            change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            },
-        });
-        edits.push(Edit::ModifyStereoBondField {
-            id: stereo_bond,
-            change: StereoBondFieldChange::Configuration {
-                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-            },
-        });
-
-        let transaction = editor.transact(edits).unwrap();
-
-        assert_eq!(editor.atom(AtomId(0)).attributes.charge, NumForm::Lit(1));
-        assert_eq!(editor.bond(BondId(0)).attributes.order, NumForm::Lit(2));
-        assert_eq!(
-            editor.dative_bond(DativeBondId(0)).attributes.order,
-            NumForm::Lit(2)
-        );
-        assert_eq!(
-            editor
-                .aromatic_system(AromaticSystemId(0))
-                .attributes
-                .charge,
-            NumForm::Lit(1)
-        );
-        assert_eq!(
-            editor
-                .multicenter_bond(MulticenterBondId(0))
-                .attributes
-                .charge,
-            NumForm::Lit(-1)
-        );
-        assert_eq!(
-            editor
-                .noncovalent_bond(NoncovalentBondId(0))
-                .attributes
-                .kind,
-            NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
-        );
-        assert_eq!(
-            editor.stereo_atom(StereoAtomId(0)).attributes.configuration,
-            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
-        );
-        assert_eq!(
-            editor.stereo_bond(StereoBondId(0)).attributes.configuration,
-            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
-        );
-
-        transaction.rollback(&mut editor).unwrap();
-        assert_eq!(editor.build(), before);
-    }
-
-    #[rstest]
-    #[case::first(0)]
-    #[case::middle(1)]
-    #[case::last(2)]
-    fn test_molecule_editor_transact_add_bonds_error(
-        mut diatomic: MoleculeEditor,
-        #[case] invalid_position: usize,
-    ) {
-        let before = diatomic.clone().build();
-        let mut bonds = vec![
-            AddBond {
-                endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: BondForm::from_order(1),
-            },
-            AddBond {
-                endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: BondForm::from_order(2),
-            },
-            AddBond {
-                endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: BondForm::from_order(3),
-            },
-        ];
-        bonds[invalid_position].endpoints[1] = AtomHandle::Id(AtomId(9));
-
-        assert_eq!(
-            diatomic
-                .transact(Edits::from_iter([Edit::AddBonds { bonds }]))
-                .unwrap_err(),
-            TransactionError::HandleOutOfRange {
-                kind: EntityKind::Atom,
-                index: 9,
-                count: 2,
-            }
-        );
-        assert_eq!(diatomic.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_topology(mut diatomic: MoleculeEditor) {
-        let tx = diatomic
-            .transact(Edits::from_iter([Edit::RemoveTopology {
-                atoms: Vec::new(),
-                bonds: vec![BondHandle::Id(BondId(0))],
-            }]))
-            .unwrap();
-
-        assert_eq!(diatomic.bond_count(), 0);
-        let [Undo::RestoreRemovedTopology {
-            atoms,
-            bonds,
-            overlays,
-            compaction,
-            ..
-        }] = tx.undos()
-        else {
-            panic!("RemoveTopology should produce one topology-restore undo")
-        };
-        assert!(atoms.is_empty());
-        assert_eq!(
-            bonds.iter().map(|b| b.id).collect::<Vec<_>>(),
-            vec![BondId(0)]
-        );
-        assert!(overlays.dative_bonds.is_empty());
-        assert_eq!(compaction.compact_bond(BondId(0)), None);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_atom_constraint(mut one_atom: MoleculeEditor) {
-        one_atom
-            .transact(Edits::from_iter([
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(0)),
-                    old: None,
-                    new: Some(AtomConstraintForm::ring_membership(RingScope::Size(5), 1)),
-                },
-                Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(0)),
-                    old: None,
-                    new: Some(AtomConstraintForm::ring_membership(RingScope::Size(6), 1)),
-                },
-            ]))
-            .unwrap();
-        let next = one_atom.build();
-        let cs: Vec<_> = next
-            .atom(AtomId(0))
-            .attributes
-            .constraints
-            .iter()
-            .cloned()
-            .collect();
-        assert_eq!(
-            cs,
-            vec![
-                AtomConstraintForm::ring_membership(RingScope::Size(5), 1),
-                AtomConstraintForm::ring_membership(RingScope::Size(6), 1),
-            ]
-        );
-    }
-
-    #[rstest]
-    #[case::singleton_set(NumForm::Lit(1), NumForm::lit_set([1]))]
-    fn test_molecule_editor_transact_modify_atom_field_canonical(
-        mut one_atom: MoleculeEditor,
-        #[case] current: NumForm,
-        #[case] old: NumForm,
-    ) {
-        // The modify's recorded `old` is equivalent to — but structurally distinct from — the
-        // stored charge, so the old-state check passes (structural `!=` would raise `OldStateMismatch`).
-        one_atom.atom_mut(AtomId(0)).attributes.charge = current;
-        one_atom
-            .transact(Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old,
-                    new: NumForm::Lit(2),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            one_atom.atom_mut(AtomId(0)).attributes.charge,
-            NumForm::Lit(2)
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_modify_atom_constraint_absent_error(
-        mut one_atom: MoleculeEditor,
-    ) {
-        let err = one_atom
-            .transact(Edits::from_iter([Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old: Some(AtomConstraintForm::ring_membership(RingScope::Size(5), 1)),
-                new: None,
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    #[case::introduce(None, Some(AtomConstraintForm::valence(4)), Some(NumForm::Lit(4)))]
-    #[case::replace(
-        Some(AtomConstraintForm::valence(3)),
-        Some(AtomConstraintForm::valence(4)),
-        Some(NumForm::Lit(4))
-    )]
-    #[case::remove(Some(AtomConstraintForm::valence(3)), None, None)]
-    fn test_molecule_editor_transact_set_atom_constraint(
-        mut one_atom: MoleculeEditor,
-        #[case] old: Option<AtomConstraintForm>,
-        #[case] new: Option<AtomConstraintForm>,
-        #[case] expected: Option<NumForm>,
-    ) {
-        if let Some(c) = old.clone() {
-            one_atom.atom_mut(AtomId(0)).attributes.constraints.set(c);
-        }
-        one_atom
-            .transact(Edits::from_iter([Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old,
-                new,
-            }]))
-            .unwrap();
-        assert_eq!(
-            one_atom
-                .atom_mut(AtomId(0))
-                .attributes
-                .constraints
-                .valence(),
-            expected.as_ref()
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_bond_constraint(mut diatomic: MoleculeEditor) {
-        diatomic
-            .transact(Edits::from_iter([Edit::ModifyBondConstraint {
-                id: BondHandle::Id(BondId(0)),
-                old: None,
-                new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
-            }]))
-            .unwrap();
-        assert!(diatomic
-            .bond_mut(BondId(0))
-            .attributes
-            .constraints
-            .iter()
-            .any(|c| *c == BondConstraintForm::Aromatic(BooleanForm::Lit(true))));
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_molecule_constraint(mut empty: MoleculeEditor) {
-        let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
-        empty
-            .transact(Edits::from_iter([Edit::AddMoleculeConstraint {
-                constraint: c.clone().into(),
-            }]))
-            .unwrap();
-        assert_eq!(empty.constraints_mut().as_slice(), &[c]);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_molecule_constraint(mut empty: MoleculeEditor) {
-        let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
-        empty.push_constraint(c.clone());
-        empty
-            .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                constraint: c.clone().into(),
-            }]))
-            .unwrap();
-        assert!(empty.constraints_mut().as_slice().is_empty());
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_molecule_constraint_absent_error(
-        mut empty: MoleculeEditor,
-    ) {
-        let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
-        empty.push_constraint(c.clone());
-        let err = empty
-            .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                constraint: Constraint::Molecule(MoleculeConstraint::ChargeSum {
-                    atoms: None,
-                    sum: NumForm::Lit(0),
-                })
-                .into(),
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::MissingEntry);
-        assert_eq!(empty.constraints_mut().as_slice(), &[c]);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_molecule_constraint_initial(
-        mut batched_overlays: MoleculeEditor,
-    ) {
-        let constraint = Constraint::And(vec![
-            Constraint::Atom(AtomId(1), AtomConstraintForm::valence(3_i64)),
-            Constraint::Bond(BondId(1), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::aromatic(true)),
-            Constraint::AromaticSystem(
-                AromaticSystemId(1),
-                AromaticSystemConstraintForm::electron_count(6_i64),
-            ),
-            Constraint::MulticenterBond(
-                MulticenterBondId(1),
-                MulticenterBondConstraintForm::electron_count(2_i64),
-            ),
-            Constraint::NoncovalentBond(
-                NoncovalentBondId(1),
-                NoncovalentBondConstraintForm::intramolecular(true),
-            ),
-            Constraint::StereoAtom(
-                StereoAtomId(1),
-                StereoKind::Tetrahedral,
-                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-            ),
-            Constraint::StereoBond(
-                StereoBondId(1),
-                StereoKind::CisTrans,
-                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-            ),
-        ]);
-        let before = batched_overlays.clone().build();
-        let mut edits = Edits::new();
-        edits.add_molecule_constraint(constraint.clone().into());
-
-        let transaction = batched_overlays.transact(edits).unwrap();
-        assert_eq!(batched_overlays.constraints().as_slice(), &[constraint]);
-
-        transaction.rollback(&mut batched_overlays).unwrap();
-        assert_eq!(batched_overlays.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_molecule_constraint_created(mut empty: MoleculeEditor) {
-        let before = empty.clone().build();
-        let mut edits = Edits::new();
-        let atoms = edits.add_atoms([
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::N),
-        ]);
-        let bond = edits.add_bond(atoms[0].clone(), atoms[1].clone(), BondForm::from_order(1));
-        let dative = edits.add_dative_bond(
-            vec![atoms[0].clone(), atoms[1].clone()],
-            DativeBondForm::from_order(1),
-        );
-        let aromatic = edits.add_aromatic_system(atoms.clone(), AromaticSystemForm::default());
-        let multicenter = edits.add_multicenter_bond(atoms.clone(), MulticenterBondForm::default());
-        let noncovalent = edits.add_noncovalent_bond(
-            [atoms[0].clone(), atoms[1].clone()],
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        );
-        let stereo_atom = edits.add_stereo_atom(
-            atoms[0].clone(),
-            vec![
-                (atoms[1].clone(), StereoLigandKind::Atom),
-                (atoms[0].clone(), StereoLigandKind::ImplicitHydrogen),
-                (atoms[0].clone(), StereoLigandKind::LonePair),
-                (atoms[1].clone(), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let stereo_bond = edits.add_stereo_bond(
-            bond.clone(),
-            vec![
-                (atoms[0].clone(), StereoLigandKind::Atom),
-                (atoms[0].clone(), StereoLigandKind::ImplicitHydrogen),
-                (atoms[1].clone(), StereoLigandKind::Atom),
-                (atoms[1].clone(), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        );
-        let source = Constraint::And(vec![
-            Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
-            Constraint::Bond(BondId(7), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(7), DativeBondConstraintForm::aromatic(true)),
-            Constraint::AromaticSystem(
-                AromaticSystemId(7),
-                AromaticSystemConstraintForm::electron_count(6_i64),
-            ),
-            Constraint::MulticenterBond(
-                MulticenterBondId(7),
-                MulticenterBondConstraintForm::electron_count(2_i64),
-            ),
-            Constraint::NoncovalentBond(
-                NoncovalentBondId(7),
-                NoncovalentBondConstraintForm::intramolecular(true),
-            ),
-            Constraint::StereoAtom(
-                StereoAtomId(7),
-                StereoKind::Tetrahedral,
-                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-            ),
-            Constraint::StereoBond(
-                StereoBondId(7),
-                StereoKind::CisTrans,
-                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-            ),
-            Constraint::Relational(RelationalConstraint::DativeBondParallels {
-                dative: DativeBondId(7),
-                parallel: BondId(7),
-            }),
-        ]);
-        let mappings = HashMap::from([
-            (
-                Entity::Atom(AtomId(7)),
-                EntityHandle::Atom(atoms[0].clone()),
-            ),
-            (Entity::Bond(BondId(7)), EntityHandle::Bond(bond)),
-            (
-                Entity::DativeBond(DativeBondId(7)),
-                EntityHandle::DativeBond(dative),
-            ),
-            (
-                Entity::AromaticSystem(AromaticSystemId(7)),
-                EntityHandle::AromaticSystem(aromatic),
-            ),
-            (
-                Entity::MulticenterBond(MulticenterBondId(7)),
-                EntityHandle::MulticenterBond(multicenter),
-            ),
-            (
-                Entity::NoncovalentBond(NoncovalentBondId(7)),
-                EntityHandle::NoncovalentBond(noncovalent),
-            ),
-            (
-                Entity::StereoAtom(StereoAtomId(7)),
-                EntityHandle::StereoAtom(stereo_atom),
-            ),
-            (
-                Entity::StereoBond(StereoBondId(7)),
-                EntityHandle::StereoBond(stereo_bond),
-            ),
-        ]);
-        edits.add_molecule_constraint(
-            ConstraintEdit::new(source, |entity| mappings.get(&entity).cloned()).unwrap(),
-        );
-        let expected = Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
-            Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
-            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
-            Constraint::AromaticSystem(
-                AromaticSystemId(0),
-                AromaticSystemConstraintForm::electron_count(6_i64),
-            ),
-            Constraint::MulticenterBond(
-                MulticenterBondId(0),
-                MulticenterBondConstraintForm::electron_count(2_i64),
-            ),
-            Constraint::NoncovalentBond(
-                NoncovalentBondId(0),
-                NoncovalentBondConstraintForm::intramolecular(true),
-            ),
-            Constraint::StereoAtom(
-                StereoAtomId(0),
-                StereoKind::Tetrahedral,
-                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-            ),
-            Constraint::StereoBond(
-                StereoBondId(0),
-                StereoKind::CisTrans,
-                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-            ),
-            Constraint::Relational(RelationalConstraint::DativeBondParallels {
-                dative: DativeBondId(0),
-                parallel: BondId(0),
-            }),
-        ]);
-
-        let transaction = empty.transact(edits).unwrap();
-        assert_eq!(empty.constraints().as_slice(), &[expected]);
-
-        transaction.rollback(&mut empty).unwrap();
-        assert_eq!(empty.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_molecule_constraint_compaction(
-        mut batched_overlays: MoleculeEditor,
-    ) {
-        let removed = Constraint::AromaticSystem(
-            AromaticSystemId(1),
-            AromaticSystemConstraintForm::electron_count(6_i64),
-        );
-        let added = Constraint::AromaticSystem(
-            AromaticSystemId(1),
-            AromaticSystemConstraintForm::electron_count(4_i64),
-        );
-        batched_overlays.push_constraint(removed.clone());
-        let before = batched_overlays.clone().build();
-        let mut edits = Edits::from_iter([Edit::RemoveAromaticSystems {
-            removes: vec![(
-                AromaticSystemHandle::Id(AromaticSystemId(0)),
-                vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemForm::default(),
             )],
-        }]);
-        edits.add_molecule_constraint(added.into());
-        edits.remove_molecule_constraint(removed.into());
-
-        let transaction = batched_overlays.transact(edits).unwrap();
-        assert_eq!(
-            batched_overlays.constraints().as_slice(),
-            &[Constraint::AromaticSystem(
-                AromaticSystemId(0),
-                AromaticSystemConstraintForm::electron_count(4_i64),
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
             )],
-        );
-
-        transaction.rollback(&mut batched_overlays).unwrap();
-        assert_eq!(batched_overlays.build(), before);
-    }
-
-    #[rstest]
-    #[case::forward(
-        0,
-        Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: ConstraintEdit::new(
-                Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
-                |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
-            ).unwrap(),
-        }]),
-        TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 0, count: 0 },
-    )]
-    #[case::removed(
-        1,
-        Edits::from_iter([
-            Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(0))],
-                bonds: Vec::new(),
-            },
-            Edit::AddMoleculeConstraint {
-                constraint: ConstraintEdit::new(
-                    Constraint::Atom(AtomId(7), AtomConstraintForm::valence(3_i64)),
-                    |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
-                ).unwrap(),
-            },
-        ]),
-        TransactionError::HandleRemoved { kind: EntityKind::Atom, index: 0 },
-    )]
-    fn test_molecule_editor_transact_molecule_constraint_error(
-        #[case] initial_atom_count: usize,
-        #[case] edits: Edits,
-        #[case] expected: TransactionError,
-    ) {
-        let mut editor = Molecule::default().edit();
-        for _ in 0..initial_atom_count {
-            editor.add_atom(AtomForm::from_element(Element::C));
-        }
-        let before = editor.clone().build();
-
-        assert_eq!(editor.transact(edits), Err(expected));
-        assert_eq!(editor.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_topology_atom_error(mut one_atom: MoleculeEditor) {
-        let before = one_atom.clone().build();
-        let mut edits = Edits::new();
-        edits.remove_atom(AtomHandle::Id(AtomId(9)));
-        let err = one_atom.transact(edits).unwrap_err();
-        assert_eq!(
-            err,
-            TransactionError::HandleOutOfRange {
-                kind: EntityKind::Atom,
-                index: 9,
-                count: 1,
-            }
-        );
-        assert_eq!(one_atom.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_topology_bond_error(mut diatomic: MoleculeEditor) {
-        let before = diatomic.clone().build();
-        let mut edits = Edits::new();
-        edits.remove_bond(BondHandle::Id(BondId(9)));
-        let err = diatomic.transact(edits).unwrap_err();
-        assert_eq!(
-            err,
-            TransactionError::HandleOutOfRange {
-                kind: EntityKind::Bond,
-                index: 9,
-                count: 1,
-            }
-        );
-        assert_eq!(diatomic.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_dative_bond_empty_atoms_error(
-        mut one_atom: MoleculeEditor,
-    ) {
-        let err = one_atom
-            .transact(Edits::from_iter([Edit::AddDativeBond {
-                atoms: vec![],
-                attributes: DativeBondForm::from_order(1),
-            }]))
-            .unwrap_err();
-        assert!(matches!(err, TransactionError::MalformedEdit(_)));
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_bond_field(mut diatomic: MoleculeEditor) {
-        diatomic
-            .transact(Edits::from_iter([Edit::ModifyBondField {
-                id: BondHandle::Id(BondId(0)),
-                change: BondFieldChange::Order {
-                    old: NumForm::Lit(1),
-                    new: NumForm::Lit(2),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(diatomic.bond(BondId(0)).attributes.order, NumForm::Lit(2));
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_bond_field_error(mut diatomic: MoleculeEditor) {
-        let err = diatomic
-            .transact(Edits::from_iter([Edit::ModifyBondField {
-                id: BondHandle::Id(BondId(0)),
-                change: BondFieldChange::Order {
-                    old: NumForm::Lit(99),
-                    new: NumForm::Lit(2),
-                },
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    // Stereo elements — transactional add/remove + undo, and topology-cascade
-    // restore. (D3i behavior, tested against D3j's view-based read path.)
-
-    #[fixture]
-    fn stereo_atom_skeleton() -> MoleculeEditor {
-        let mut b = Molecule::default().edit();
-        for el in [Element::C, Element::F, Element::Cl, Element::Br, Element::I] {
-            b.add_atom(AtomForm::from_element(el));
-        }
-        for t in 1u32..=4 {
-            b.add_bond(AtomId(0), AtomId(t), BondForm::from_order(1));
-        }
-        b
-    }
-
-    fn tetrahedral_ligands() -> Vec<StereoLigand> {
-        (1u32..=4)
-            .map(|t| StereoLigand::new(AtomId(t), StereoLigandKind::Atom))
-            .collect()
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_stereo_atom(mut stereo_atom_skeleton: MoleculeEditor) {
-        let before = stereo_atom_skeleton.clone().build();
-        let tx = stereo_atom_skeleton
-            .transact(Edits::from_iter([Edit::AddStereoAtom {
-                site: AtomHandle::Id(AtomId(0)),
-                ligands: (1u32..=4)
-                    .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
-                    .collect(),
-                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-            }]))
-            .unwrap();
-        assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 1);
-        tx.rollback(&mut stereo_atom_skeleton).unwrap();
-        assert_eq!(stereo_atom_skeleton.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_stereo_atom(mut stereo_atom_skeleton: MoleculeEditor) {
-        stereo_atom_skeleton.add_stereo_atom(
-            AtomId(0),
-            tetrahedral_ligands(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let before = stereo_atom_skeleton.clone().build();
-        let tx = stereo_atom_skeleton
-            .transact(Edits::from_iter([Edit::RemoveStereoAtoms {
-                removes: vec![(
-                    StereoAtomHandle::Id(StereoAtomId(0)),
-                    AtomHandle::Id(AtomId(0)),
-                    (1u32..=4)
-                        .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
-                        .collect(),
-                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 0);
-        tx.rollback(&mut stereo_atom_skeleton).unwrap();
-        assert_eq!(stereo_atom_skeleton.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_stereo_atom_error(
-        mut stereo_atom_skeleton: MoleculeEditor,
-    ) {
-        stereo_atom_skeleton.add_stereo_atom(
-            AtomId(0),
-            tetrahedral_ligands(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let err = stereo_atom_skeleton
-            .transact(Edits::from_iter([Edit::RemoveStereoAtoms {
-                removes: vec![(
-                    StereoAtomHandle::Id(StereoAtomId(0)),
-                    AtomHandle::Id(AtomId(0)),
-                    (1u32..=4)
-                        .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
-                        .collect(),
-                    // Wrong recorded coset (Th0 vs the stored Th1).
-                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                )],
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_topology_removal_restores_stereo_atom(
-        mut stereo_atom_skeleton: MoleculeEditor,
-    ) {
-        stereo_atom_skeleton.add_stereo_atom(
-            AtomId(0),
-            tetrahedral_ligands(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let before = stereo_atom_skeleton.clone().build();
-        // Removing a ligand atom cascades the stereo element away.
-        let tx = stereo_atom_skeleton
-            .transact(Edits::from_iter([Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(1))],
-                bonds: Vec::new(),
-            }]))
-            .unwrap();
-        assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 0);
-        tx.rollback(&mut stereo_atom_skeleton).unwrap();
-        assert_eq!(stereo_atom_skeleton.build(), before);
-    }
-
-    #[fixture]
-    fn stereo_bond_skeleton() -> MoleculeEditor {
-        let mut b = Molecule::default().edit();
-        for _ in 0..4 {
-            b.add_atom(AtomForm::from_element(Element::C));
-        }
-        b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
-        b.add_bond(AtomId(1), AtomId(2), BondForm::from_order(2));
-        b.add_bond(AtomId(2), AtomId(3), BondForm::from_order(1));
-        b
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_stereo_bond(mut stereo_bond_skeleton: MoleculeEditor) {
-        let before = stereo_bond_skeleton.clone().build();
-        let tx = stereo_bond_skeleton
-            .transact(Edits::from_iter([Edit::AddStereoBond {
-                site: BondHandle::Id(BondId(1)),
-                ligands: vec![
-                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                    (
-                        AtomHandle::Id(AtomId(1)),
-                        StereoLigandKind::ImplicitHydrogen,
-                    ),
-                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                    (
-                        AtomHandle::Id(AtomId(2)),
-                        StereoLigandKind::ImplicitHydrogen,
-                    ),
-                ],
-                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-            }]))
-            .unwrap();
-        assert_eq!(stereo_bond_skeleton.stereo_bond_count(), 1);
-        tx.rollback(&mut stereo_bond_skeleton).unwrap();
-        assert_eq!(stereo_bond_skeleton.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_stereo_bond(mut stereo_bond_skeleton: MoleculeEditor) {
-        stereo_bond_skeleton.add_stereo_bond(
-            BondId(1),
-            vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        );
-        let before = stereo_bond_skeleton.clone().build();
-        let tx = stereo_bond_skeleton
-            .transact(Edits::from_iter([Edit::RemoveStereoBonds {
-                removes: vec![(
-                    StereoBondHandle::Id(StereoBondId(0)),
-                    BondHandle::Id(BondId(1)),
-                    vec![
-                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                        (
-                            AtomHandle::Id(AtomId(1)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
-                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                        (
-                            AtomHandle::Id(AtomId(2)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
-                    ],
-                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(stereo_bond_skeleton.stereo_bond_count(), 0);
-        tx.rollback(&mut stereo_bond_skeleton).unwrap();
-        assert_eq!(stereo_bond_skeleton.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_stereo_bond_error(
-        mut stereo_bond_skeleton: MoleculeEditor,
-    ) {
-        stereo_bond_skeleton.add_stereo_bond(
-            BondId(1),
-            vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        );
-        let error = stereo_bond_skeleton
-            .transact(Edits::from_iter([Edit::RemoveStereoBonds {
-                removes: vec![(
-                    StereoBondHandle::Id(StereoBondId(0)),
-                    BondHandle::Id(BondId(1)),
-                    vec![
-                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                        (
-                            AtomHandle::Id(AtomId(1)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
-                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
-                        (
-                            AtomHandle::Id(AtomId(2)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
-                    ],
-                    // Wrong recorded coset (Ct0 vs the stored Ct1).
-                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                )],
-            }]))
-            .unwrap_err();
-
-        assert_eq!(error, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_stereo_atom_field(
-        mut stereo_atom_skeleton: MoleculeEditor,
-    ) {
-        stereo_atom_skeleton.add_stereo_atom(
-            AtomId(0),
-            tetrahedral_ligands(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let before = stereo_atom_skeleton.clone().build();
-        let tx = stereo_atom_skeleton
-            .transact(Edits::from_iter([Edit::ModifyStereoAtomField {
-                id: StereoAtomHandle::Id(StereoAtomId(0)),
-                change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationForm::kinded(
-                        StereoKind::Tetrahedral,
-                        StereoCoset::Lit(1),
-                    ),
-                    new: StereoConfigurationForm::kinded(
-                        StereoKind::Tetrahedral,
-                        StereoCoset::Lit(0),
-                    ),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            stereo_atom_skeleton
-                .stereo_atom(StereoAtomId(0))
-                .attributes
-                .configuration,
-            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0),),
-        );
-        tx.rollback(&mut stereo_atom_skeleton).unwrap();
-        assert_eq!(stereo_atom_skeleton.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_stereo_atom_field_error(
-        mut stereo_atom_skeleton: MoleculeEditor,
-    ) {
-        stereo_atom_skeleton.add_stereo_atom(
-            AtomId(0),
-            tetrahedral_ligands(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        );
-        let err = stereo_atom_skeleton
-            .transact(Edits::from_iter([Edit::ModifyStereoAtomField {
-                id: StereoAtomHandle::Id(StereoAtomId(0)),
-                change: StereoAtomFieldChange::Configuration {
-                    // Wrong recorded coset (Th0 vs the stored Th1).
-                    old: StereoConfigurationForm::kinded(
-                        StereoKind::Tetrahedral,
-                        StereoCoset::Lit(0),
-                    ),
-                    new: StereoConfigurationForm::kinded(
-                        StereoKind::Tetrahedral,
-                        StereoCoset::Lit(1),
-                    ),
-                },
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_stereo_bond_field(
-        mut stereo_bond_skeleton: MoleculeEditor,
-    ) {
-        stereo_bond_skeleton.add_stereo_bond(
-            BondId(1),
-            vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        );
-        let before = stereo_bond_skeleton.clone().build();
-        let tx = stereo_bond_skeleton
-            .transact(Edits::from_iter([Edit::ModifyStereoBondField {
-                id: StereoBondHandle::Id(StereoBondId(0)),
-                change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            stereo_bond_skeleton
-                .stereo_bond(StereoBondId(0))
-                .attributes
-                .configuration,
-            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-        );
-        tx.rollback(&mut stereo_bond_skeleton).unwrap();
-        assert_eq!(stereo_bond_skeleton.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_stereo_bond_field_error(
-        mut stereo_bond_skeleton: MoleculeEditor,
-    ) {
-        stereo_bond_skeleton.add_stereo_bond(
-            BondId(1),
-            vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-        );
-        let err = stereo_bond_skeleton
-            .transact(Edits::from_iter([Edit::ModifyStereoBondField {
-                id: StereoBondHandle::Id(StereoBondId(0)),
-                change: StereoBondFieldChange::Configuration {
-                    // Wrong recorded coset (vs the stored 1).
-                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                },
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[fixture]
-    fn diatomic_with_overlays() -> MoleculeEditor {
-        let mut b = Molecule::default().edit();
-        b.add_atom(AtomForm::from_element(Element::C));
-        b.add_atom(AtomForm::from_element(Element::N));
-        b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
-        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1));
-        b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default());
-        b.add_multicenter_bond(vec![AtomId(0), AtomId(1)], MulticenterBondForm::default());
-        b.add_noncovalent_bond(
-            [AtomId(0), AtomId(1)],
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        );
-        b
-    }
-
-    #[fixture]
-    fn batched_overlays() -> MoleculeEditor {
-        let mut editor = Molecule::default().edit();
-        for _ in 0..6 {
-            editor.add_atom(AtomForm::from_element(Element::C));
-        }
-        for index in 0..3_u32 {
-            let first = AtomId(index * 2);
-            let second = AtomId(index * 2 + 1);
-            let bond = editor.add_bond(first, second, BondForm::from_order(1));
-            editor.add_dative_bond(vec![first], second, DativeBondForm::from_order(1));
-            editor.add_aromatic_system(vec![first, second], AromaticSystemForm::default());
-            editor.add_multicenter_bond(vec![first, second], MulticenterBondForm::default());
-            editor.add_noncovalent_bond(
-                [first, second],
-                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-            );
-            editor.add_stereo_atom(
-                first,
+            noncovalent: vec![([AtomId(0), AtomId(3)], NoncovalentBondForm::default())],
+            stereo_atoms: vec![(
+                AtomId(0),
                 vec![
-                    StereoLigand::new(second, StereoLigandKind::Atom),
-                    StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(first, StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomForm::default(),
-            );
-            editor.add_stereo_bond(
-                bond,
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
                 vec![
-                    StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(first, StereoLigandKind::LonePair),
-                    StereoLigand::new(second, StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(second, StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-            );
-        }
-        editor
-    }
-
-    #[rstest]
-    #[case::dative_first(EntityKind::DativeBond, 0)]
-    #[case::dative_middle(EntityKind::DativeBond, 1)]
-    #[case::dative_last(EntityKind::DativeBond, 2)]
-    #[case::aromatic_first(EntityKind::AromaticSystem, 0)]
-    #[case::aromatic_middle(EntityKind::AromaticSystem, 1)]
-    #[case::aromatic_last(EntityKind::AromaticSystem, 2)]
-    #[case::multicenter_first(EntityKind::MulticenterBond, 0)]
-    #[case::multicenter_middle(EntityKind::MulticenterBond, 1)]
-    #[case::multicenter_last(EntityKind::MulticenterBond, 2)]
-    #[case::noncovalent_first(EntityKind::NoncovalentBond, 0)]
-    #[case::noncovalent_middle(EntityKind::NoncovalentBond, 1)]
-    #[case::noncovalent_last(EntityKind::NoncovalentBond, 2)]
-    #[case::stereo_atom_first(EntityKind::StereoAtom, 0)]
-    #[case::stereo_atom_middle(EntityKind::StereoAtom, 1)]
-    #[case::stereo_atom_last(EntityKind::StereoAtom, 2)]
-    #[case::stereo_bond_first(EntityKind::StereoBond, 0)]
-    #[case::stereo_bond_middle(EntityKind::StereoBond, 1)]
-    #[case::stereo_bond_last(EntityKind::StereoBond, 2)]
-    fn test_molecule_editor_transact_remove_overlays_error(
-        mut batched_overlays: MoleculeEditor,
-        #[case] kind: EntityKind,
-        #[case] invalid_position: usize,
-    ) {
-        let before = batched_overlays.clone().build();
-        let edit = match kind {
-            EntityKind::DativeBond => Edit::RemoveDativeBonds {
-                removes: (0..3_u32)
-                    .map(|index| {
-                        (
-                            DativeBondHandle::Id(DativeBondId(
-                                if index as usize == invalid_position {
-                                    9
-                                } else {
-                                    index
-                                },
-                            )),
-                            vec![
-                                AtomHandle::Id(AtomId(index * 2)),
-                                AtomHandle::Id(AtomId(index * 2 + 1)),
-                            ],
-                            DativeBondForm::from_order(1),
-                        )
-                    })
-                    .collect(),
-            },
-            EntityKind::AromaticSystem => Edit::RemoveAromaticSystems {
-                removes: (0..3_u32)
-                    .map(|index| {
-                        (
-                            AromaticSystemHandle::Id(AromaticSystemId(
-                                if index as usize == invalid_position {
-                                    9
-                                } else {
-                                    index
-                                },
-                            )),
-                            vec![
-                                AtomHandle::Id(AtomId(index * 2)),
-                                AtomHandle::Id(AtomId(index * 2 + 1)),
-                            ],
-                            AromaticSystemForm::default(),
-                        )
-                    })
-                    .collect(),
-            },
-            EntityKind::MulticenterBond => Edit::RemoveMulticenterBonds {
-                removes: (0..3_u32)
-                    .map(|index| {
-                        (
-                            MulticenterBondHandle::Id(MulticenterBondId(
-                                if index as usize == invalid_position {
-                                    9
-                                } else {
-                                    index
-                                },
-                            )),
-                            vec![
-                                AtomHandle::Id(AtomId(index * 2)),
-                                AtomHandle::Id(AtomId(index * 2 + 1)),
-                            ],
-                            MulticenterBondForm::default(),
-                        )
-                    })
-                    .collect(),
-            },
-            EntityKind::NoncovalentBond => Edit::RemoveNoncovalentBonds {
-                removes: (0..3_u32)
-                    .map(|index| {
-                        (
-                            NoncovalentBondHandle::Id(NoncovalentBondId(
-                                if index as usize == invalid_position {
-                                    9
-                                } else {
-                                    index
-                                },
-                            )),
-                            [
-                                AtomHandle::Id(AtomId(index * 2)),
-                                AtomHandle::Id(AtomId(index * 2 + 1)),
-                            ],
-                            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-                        )
-                    })
-                    .collect(),
-            },
-            EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
-                removes: (0..3_u32)
-                    .map(|index| {
-                        (
-                            StereoAtomHandle::Id(StereoAtomId(
-                                if index as usize == invalid_position {
-                                    9
-                                } else {
-                                    index
-                                },
-                            )),
-                            AtomHandle::Id(AtomId(index * 2)),
-                            vec![
-                                (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
-                                    StereoLigandKind::Atom,
-                                ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2)),
-                                    StereoLigandKind::ImplicitHydrogen,
-                                ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2)),
-                                    StereoLigandKind::LonePair,
-                                ),
-                            ],
-                            StereoAtomForm::default(),
-                        )
-                    })
-                    .collect(),
-            },
-            EntityKind::StereoBond => Edit::RemoveStereoBonds {
-                removes: (0..3_u32)
-                    .map(|index| {
-                        (
-                            StereoBondHandle::Id(StereoBondId(
-                                if index as usize == invalid_position {
-                                    9
-                                } else {
-                                    index
-                                },
-                            )),
-                            BondHandle::Id(BondId(index)),
-                            vec![
-                                (
-                                    AtomHandle::Id(AtomId(index * 2)),
-                                    StereoLigandKind::ImplicitHydrogen,
-                                ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2)),
-                                    StereoLigandKind::LonePair,
-                                ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
-                                    StereoLigandKind::ImplicitHydrogen,
-                                ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
-                                    StereoLigandKind::LonePair,
-                                ),
-                            ],
-                            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                        )
-                    })
-                    .collect(),
-            },
-            EntityKind::Atom | EntityKind::Bond => unreachable!(),
-        };
-
-        assert_eq!(
-            batched_overlays
-                .transact(Edits::from_iter([edit]))
-                .unwrap_err(),
-            TransactionError::HandleOutOfRange {
-                kind,
-                index: 9,
-                count: 3,
-            }
-        );
-        assert_eq!(batched_overlays.build(), before);
-    }
-
-    #[rstest]
-    #[case::atom(EntityKind::Atom)]
-    #[case::bond(EntityKind::Bond)]
-    #[case::dative_bond(EntityKind::DativeBond)]
-    #[case::aromatic_system(EntityKind::AromaticSystem)]
-    #[case::multicenter_bond(EntityKind::MulticenterBond)]
-    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
-    #[case::stereo_atom(EntityKind::StereoAtom)]
-    #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_molecule_editor_transact_duplicate_removal_error(
-        mut batched_overlays: MoleculeEditor,
-        #[case] kind: EntityKind,
-    ) {
-        let before = batched_overlays.clone().build();
-        let edit = match kind {
-            EntityKind::Atom => Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
-                bonds: Vec::new(),
-            },
-            EntityKind::Bond => Edit::RemoveTopology {
-                atoms: Vec::new(),
-                bonds: vec![BondHandle::Id(BondId(0)), BondHandle::Id(BondId(0))],
-            },
-            EntityKind::DativeBond => Edit::RemoveDativeBonds {
-                removes: vec![
-                    (
-                        DativeBondHandle::Id(DativeBondId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        DativeBondForm::from_order(1),
-                    ),
-                    (
-                        DativeBondHandle::Id(DativeBondId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        DativeBondForm::from_order(1),
-                    ),
-                ],
-            },
-            EntityKind::AromaticSystem => Edit::RemoveAromaticSystems {
-                removes: vec![
-                    (
-                        AromaticSystemHandle::Id(AromaticSystemId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        AromaticSystemForm::default(),
-                    ),
-                    (
-                        AromaticSystemHandle::Id(AromaticSystemId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        AromaticSystemForm::default(),
-                    ),
-                ],
-            },
-            EntityKind::MulticenterBond => Edit::RemoveMulticenterBonds {
-                removes: vec![
-                    (
-                        MulticenterBondHandle::Id(MulticenterBondId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        MulticenterBondForm::default(),
-                    ),
-                    (
-                        MulticenterBondHandle::Id(MulticenterBondId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        MulticenterBondForm::default(),
-                    ),
-                ],
-            },
-            EntityKind::NoncovalentBond => Edit::RemoveNoncovalentBonds {
-                removes: vec![
-                    (
-                        NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                        [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-                    ),
-                    (
-                        NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                        [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-                    ),
-                ],
-            },
-            EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
-                removes: vec![
-                    (
-                        StereoAtomHandle::Id(StereoAtomId(0)),
-                        AtomHandle::Id(AtomId(0)),
-                        vec![
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
-                            (
-                                AtomHandle::Id(AtomId(0)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                        ],
-                        StereoAtomForm::default(),
-                    ),
-                    (
-                        StereoAtomHandle::Id(StereoAtomId(0)),
-                        AtomHandle::Id(AtomId(0)),
-                        vec![
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
-                            (
-                                AtomHandle::Id(AtomId(0)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                        ],
-                        StereoAtomForm::default(),
-                    ),
-                ],
-            },
-            EntityKind::StereoBond => Edit::RemoveStereoBonds {
-                removes: vec![
-                    (
-                        StereoBondHandle::Id(StereoBondId(0)),
-                        BondHandle::Id(BondId(0)),
-                        vec![
-                            (
-                                AtomHandle::Id(AtomId(0)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                            (
-                                AtomHandle::Id(AtomId(1)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
-                        ],
-                        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                    ),
-                    (
-                        StereoBondHandle::Id(StereoBondId(0)),
-                        BondHandle::Id(BondId(0)),
-                        vec![
-                            (
-                                AtomHandle::Id(AtomId(0)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                            (
-                                AtomHandle::Id(AtomId(1)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
-                        ],
-                        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                    ),
-                ],
-            },
-        };
-
-        assert_eq!(
-            batched_overlays
-                .transact(Edits::from_iter([edit]))
-                .unwrap_err(),
-            TransactionError::DuplicateRemoval { kind }
-        );
-        assert_eq!(batched_overlays.build(), before);
-    }
-
-    #[rstest]
-    #[case::dative_bond(EntityKind::DativeBond)]
-    #[case::aromatic_system(EntityKind::AromaticSystem)]
-    #[case::multicenter_bond(EntityKind::MulticenterBond)]
-    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
-    #[case::stereo_atom(EntityKind::StereoAtom)]
-    #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_molecule_editor_transact_handle_removed_error_cascade(
-        mut batched_overlays: MoleculeEditor,
-        #[case] kind: EntityKind,
-    ) {
-        let before = batched_overlays.clone().build();
-        let mut edits = Edits::from_iter([Edit::RemoveTopology {
-            atoms: vec![AtomHandle::Id(AtomId(0))],
-            bonds: Vec::new(),
-        }]);
-        edits.push(match kind {
-            EntityKind::DativeBond => Edit::RemoveDativeBonds {
-                removes: vec![(
-                    DativeBondHandle::Id(DativeBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    DativeBondForm::from_order(1),
-                )],
-            },
-            EntityKind::AromaticSystem => Edit::RemoveAromaticSystems {
-                removes: vec![(
-                    AromaticSystemHandle::Id(AromaticSystemId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    AromaticSystemForm::default(),
-                )],
-            },
-            EntityKind::MulticenterBond => Edit::RemoveMulticenterBonds {
-                removes: vec![(
-                    MulticenterBondHandle::Id(MulticenterBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    MulticenterBondForm::default(),
-                )],
-            },
-            EntityKind::NoncovalentBond => Edit::RemoveNoncovalentBonds {
-                removes: vec![(
-                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-                )],
-            },
-            EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
-                removes: vec![(
-                    StereoAtomHandle::Id(StereoAtomId(0)),
-                    AtomHandle::Id(AtomId(0)),
-                    vec![(AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom)],
-                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-                )],
-            },
-            EntityKind::StereoBond => Edit::RemoveStereoBonds {
-                removes: vec![(
-                    StereoBondHandle::Id(StereoBondId(0)),
-                    BondHandle::Id(BondId(0)),
-                    vec![
-                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
-                        (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
-                    ],
-                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                )],
-            },
-            EntityKind::Atom | EntityKind::Bond => unreachable!(),
-        });
-
-        assert_eq!(
-            batched_overlays.transact(edits).unwrap_err(),
-            TransactionError::HandleRemoved { kind, index: 0 }
-        );
-        assert_eq!(batched_overlays.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_dative_bond_field(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyDativeBondField {
-                id: DativeBondHandle::Id(DativeBondId(0)),
-                change: DativeBondFieldChange::Order {
-                    old: NumForm::Lit(1),
-                    new: NumForm::Lit(2),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic_with_overlays
-                .dative_bond(DativeBondId(0))
-                .attributes
-                .order,
-            NumForm::Lit(2),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_aromatic_system_field(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyAromaticSystemField {
-                id: AromaticSystemHandle::Id(AromaticSystemId(0)),
-                change: AromaticSystemFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic_with_overlays
-                .aromatic_system(AromaticSystemId(0))
-                .attributes
-                .charge,
-            NumForm::Lit(1),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_multicenter_bond_field(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyMulticenterBondField {
-                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                change: MulticenterBondFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(-1),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic_with_overlays
-                .multicenter_bond(MulticenterBondId(0))
-                .attributes
-                .charge,
-            NumForm::Lit(-1),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_noncovalent_bond_field(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyNoncovalentBondField {
-                id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                change: NoncovalentBondFieldChange::Kind {
-                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
-                },
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic_with_overlays
-                .noncovalent_bond(NoncovalentBondId(0))
-                .attributes
-                .kind,
-            NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_dative_bond(mut diatomic: MoleculeEditor) {
-        let tx = diatomic
-            .transact(Edits::from_iter([Edit::AddDativeBond {
-                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: DativeBondForm::from_order(1),
-            }]))
-            .unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [Undo::RemoveAddedDativeBond(added)] if added.id == DativeBondId(0)
-        ));
-        assert_eq!(diatomic.dative_bond_count(), 1);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_aromatic_system(mut diatomic: MoleculeEditor) {
-        let tx = diatomic
-            .transact(Edits::from_iter([Edit::AddAromaticSystem {
-                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: AromaticSystemForm::default(),
-            }]))
-            .unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [Undo::RemoveAddedAromaticSystem(added)] if added.id == AromaticSystemId(0)
-        ));
-        assert_eq!(diatomic.aromatic_system_count(), 1);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_multicenter_bond(mut diatomic: MoleculeEditor) {
-        let tx = diatomic
-            .transact(Edits::from_iter([Edit::AddMulticenterBond {
-                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: MulticenterBondForm::default(),
-            }]))
-            .unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [Undo::RemoveAddedMulticenterBond(added)] if added.id == MulticenterBondId(0)
-        ));
-        assert_eq!(diatomic.multicenter_bond_count(), 1);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_add_noncovalent_bond(mut diatomic: MoleculeEditor) {
-        let tx = diatomic
-            .transact(Edits::from_iter([Edit::AddNoncovalentBond {
-                atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-            }]))
-            .unwrap();
-        assert!(matches!(
-            tx.undos(),
-            [Undo::RemoveAddedNoncovalentBond(added)] if added.id == NoncovalentBondId(0)
-        ));
-        assert_eq!(diatomic.noncovalent_bond_count(), 1);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_dative_bond(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        let before = diatomic_with_overlays.clone().build();
-        let transaction = diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::RemoveDativeBonds {
-                removes: vec![(
-                    DativeBondHandle::Id(DativeBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    DativeBondForm {
-                        order: NumForm::Lit(1),
-                        constraints: Default::default(),
-                    },
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(diatomic_with_overlays.dative_bond_count(), 0);
-        transaction.rollback(&mut diatomic_with_overlays).unwrap();
-        assert_eq!(diatomic_with_overlays.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_dative_bond_atoms_mismatch_error(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        let err = diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::RemoveDativeBonds {
-                removes: vec![(
-                    DativeBondHandle::Id(DativeBondId(0)),
-                    vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))], // wrong order
-                    DativeBondForm {
-                        order: NumForm::Lit(1),
-                        constraints: Default::default(),
-                    },
-                )],
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-        assert_eq!(diatomic_with_overlays.dative_bond_count(), 1);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_aromatic_system(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        let before = diatomic_with_overlays.clone().build();
-        let transaction = diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::RemoveAromaticSystems {
-                removes: vec![(
-                    AromaticSystemHandle::Id(AromaticSystemId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    AromaticSystemForm::default(),
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(diatomic_with_overlays.aromatic_system_count(), 0);
-        transaction.rollback(&mut diatomic_with_overlays).unwrap();
-        assert_eq!(diatomic_with_overlays.build(), before);
-    }
-
-    // Batch removal of non-contiguous same-kind ids (0 and 2) in one edit: ids resolve against the
-    // pre-removal state and compact once, so the survivor (former id 1) remaps to id 0. A single-id
-    // sequence would stale id 2 after removing id 0.
-    #[rstest]
-    fn test_molecule_editor_transact_remove_aromatic_systems() {
-        let mut b = Molecule::default().edit();
-        for _ in 0..6 {
-            b.add_atom(AtomForm::from_element(Element::C));
-        }
-        b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default());
-        b.add_aromatic_system(vec![AtomId(2), AtomId(3)], AromaticSystemForm::default());
-        b.add_aromatic_system(vec![AtomId(4), AtomId(5)], AromaticSystemForm::default());
-        b.transact(Edits::from_iter([Edit::RemoveAromaticSystems {
-            removes: vec![
-                (
-                    AromaticSystemHandle::Id(AromaticSystemId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    AromaticSystemForm::default(),
-                ),
-                (
-                    AromaticSystemHandle::Id(AromaticSystemId(2)),
-                    vec![AtomHandle::Id(AtomId(4)), AtomHandle::Id(AtomId(5))],
-                    AromaticSystemForm::default(),
-                ),
-            ],
-        }]))
-        .unwrap();
-        assert_eq!(b.aromatic_system_count(), 1);
-        assert_eq!(
-            b.aromatic_system(AromaticSystemId(0))
-                .atom_ids()
-                .collect::<Vec<_>>(),
-            vec![AtomId(2), AtomId(3)],
-        );
-    }
-
-    // Rolling back an aromatic-system removal restores a molecule constraint the removal dropped
-    // (`dropped`) or remapped (`remapped`) — the overlay-remove undo captures the constraint cascade.
-    #[rstest]
-    #[case::dropped(AromaticSystemId(0), 0)]
-    #[case::remapped(AromaticSystemId(1), 1)]
-    fn test_molecule_editor_transact_remove_aromatic_system_rollback(
-        #[case] constrained: AromaticSystemId,
-        #[case] forward_constraint_count: usize,
-    ) {
-        let mut b = Molecule::default().edit();
-        for _ in 0..6 {
-            b.add_atom(AtomForm::from_element(Element::C));
-        }
-        b.add_aromatic_system(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemForm::default(),
-        );
-        b.add_aromatic_system(
-            vec![AtomId(3), AtomId(4), AtomId(5)],
-            AromaticSystemForm::default(),
-        );
-        b.transact(Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: Constraint::AromaticSystem(
-                constrained,
-                AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
-            )
-            .into(),
-        }]))
-        .unwrap();
-        let before = b.clone().build();
-
-        let tx = b
-            .transact(Edits::from_iter([Edit::RemoveAromaticSystems {
-                removes: vec![(
-                    AromaticSystemHandle::Id(AromaticSystemId(0)),
-                    vec![
-                        AtomHandle::Id(AtomId(0)),
-                        AtomHandle::Id(AtomId(1)),
-                        AtomHandle::Id(AtomId(2)),
-                    ],
-                    AromaticSystemForm::default(),
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(b.aromatic_system_count(), 1);
-        assert_eq!(b.constraints().iter().count(), forward_constraint_count);
-
-        tx.rollback(&mut b).unwrap();
-        assert_eq!(b.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_multicenter_bond(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        let before = diatomic_with_overlays.clone().build();
-        let transaction = diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::RemoveMulticenterBonds {
-                removes: vec![(
-                    MulticenterBondHandle::Id(MulticenterBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    MulticenterBondForm::default(),
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(diatomic_with_overlays.multicenter_bond_count(), 0);
-        transaction.rollback(&mut diatomic_with_overlays).unwrap();
-        assert_eq!(diatomic_with_overlays.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_noncovalent_bond(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        let before = diatomic_with_overlays.clone().build();
-        let transaction = diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::RemoveNoncovalentBonds {
-                removes: vec![(
-                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-                )],
-            }]))
-            .unwrap();
-        assert_eq!(diatomic_with_overlays.noncovalent_bond_count(), 0);
-        transaction.rollback(&mut diatomic_with_overlays).unwrap();
-        assert_eq!(diatomic_with_overlays.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_remove_noncovalent_bond_form_mismatch_error(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        let err = diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::RemoveNoncovalentBonds {
-                removes: vec![(
-                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic), // wrong
-                )],
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_bond_constraint_value_bearing(
-        mut diatomic: MoleculeEditor,
-    ) {
-        diatomic
-            .transact(Edits::from_iter([Edit::ModifyBondConstraint {
-                id: BondHandle::Id(BondId(0)),
-                old: None,
-                new: Some(BondConstraintForm::cis_trans_stereo(
-                    CisTransStereoForm::NotStereo,
-                )),
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic
-                .bond(BondId(0))
-                .attributes
-                .constraints
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
-            vec![BondConstraintForm::cis_trans_stereo(
-                CisTransStereoForm::NotStereo
             )],
-        );
+            ..MoleculeEntries::default()
+        })
     }
 
     #[rstest]
-    fn test_molecule_editor_transact_add_bond_constraint(mut diatomic: MoleculeEditor) {
-        diatomic
-            .transact(Edits::from_iter([Edit::ModifyBondConstraint {
-                id: BondHandle::Id(BondId(0)),
-                old: None,
-                new: Some(BondConstraintForm::ring_membership(RingScope::Size(5), 1)),
-            }]))
-            .unwrap();
-        assert!(diatomic
-            .bond(BondId(0))
-            .attributes
-            .constraints
-            .iter()
-            .any(|c| *c == BondConstraintForm::ring_membership(RingScope::Size(5), 1)));
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_modify_bond_constraint_absent_error(
-        mut diatomic: MoleculeEditor,
+    #[case::no_commit(false)]
+    #[case::commit(true)]
+    fn test_transaction_run(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
-        let err = diatomic
-            .transact(Edits::from_iter([Edit::ModifyBondConstraint {
-                id: BondHandle::Id(BondId(0)),
-                old: Some(BondConstraintForm::ring_membership(RingScope::Size(5), 1)),
-                new: None,
-            }]))
-            .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_dative_bond_constraint(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyDativeBondConstraint {
-                id: DativeBondHandle::Id(DativeBondId(0)),
-                old: None,
-                new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
-            }]))
-            .unwrap();
-        assert!(diatomic_with_overlays
-            .dative_bond(DativeBondId(0))
-            .attributes
-            .constraints
-            .iter()
-            .any(|c| *c == DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))));
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_aromatic_system_constraint(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyAromaticSystemConstraint {
-                id: AromaticSystemHandle::Id(AromaticSystemId(0)),
-                old: None,
-                new: Some(AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6))),
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic_with_overlays
-                .aromatic_system(AromaticSystemId(0))
-                .attributes
-                .constraints
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
-            vec![AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6))],
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_set_multicenter_bond_constraint(
-        mut diatomic_with_overlays: MoleculeEditor,
-    ) {
-        diatomic_with_overlays
-            .transact(Edits::from_iter([Edit::ModifyMulticenterBondConstraint {
-                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                old: None,
-                new: Some(MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(
-                    2,
-                ))),
-            }]))
-            .unwrap();
-        assert_eq!(
-            diatomic_with_overlays
-                .multicenter_bond(MulticenterBondId(0))
-                .attributes
-                .constraints
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
-            vec![MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(
-                2
-            ))],
-        );
-    }
-
-    #[fixture]
-    fn triatomic_with_overlays() -> MoleculeEditor {
-        let mut b = Molecule::default().edit();
-        b.add_atom(AtomForm::from_element(Element::C));
-        b.add_atom(AtomForm::from_element(Element::N));
-        b.add_atom(AtomForm::from_element(Element::O));
-        b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
-        b.add_bond(AtomId(1), AtomId(2), BondForm::from_order(1));
-        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1));
-        b.add_aromatic_system(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemForm::default(),
-        );
-        b.add_multicenter_bond(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondForm::default(),
-        );
-        b.add_noncovalent_bond(
-            [AtomId(0), AtomId(2)],
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        );
-        b
-    }
-
-    #[rstest]
-    fn test_transaction_append(mut diatomic: MoleculeEditor) {
-        let before = diatomic.clone().build();
-        let first = diatomic
-            .transact(Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            }]))
-            .unwrap();
-        let second = diatomic
-            .transact(Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::Lit(1),
-                    new: NumForm::Lit(2),
-                },
-            }]))
-            .unwrap();
-        let expected_undos = [first.undos(), second.undos()].concat();
-
-        let mut combined = Transaction::default();
-        combined.append(first);
-        combined.append(second);
-
-        assert_eq!(combined.undos(), expected_undos);
-        combined.rollback(&mut diatomic).unwrap();
-        assert_eq!(diatomic.build(), before);
-    }
-
-    #[rstest]
-    fn test_transaction_append_error(mut diatomic: MoleculeEditor) {
-        let before = diatomic.clone().build();
-        let first = diatomic
-            .transact(Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            }]))
-            .unwrap();
-        let second = diatomic
-            .transact(Edits::from_iter([Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old: None,
-                new: Some(AtomConstraintForm::degree(1)),
-            }]))
-            .unwrap();
-        let third = diatomic
-            .transact(Edits::from_iter([Edit::AddDativeBond {
-                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: DativeBondForm::from_order(1),
-            }]))
-            .unwrap();
-        let expected_undos = [first.undos(), second.undos(), third.undos()].concat();
-
-        let mut combined = Transaction::default();
-        combined.append(first);
-        combined.append(second);
-        combined.append(third);
-
-        let materialized = diatomic.clone().build();
-        let mut rejected = Edits::from_iter([Edit::ModifyAtomField {
-            id: AtomHandle::Id(AtomId(0)),
-            change: AtomFieldChange::Charge {
-                old: NumForm::Lit(1),
-                new: NumForm::Lit(2),
-            },
-        }]);
-        rejected.remove_atom(AtomHandle::Id(AtomId(99)));
-        let error = diatomic.transact(rejected).unwrap_err();
-        assert_eq!(
-            error,
-            TransactionError::HandleOutOfRange {
-                kind: EntityKind::Atom,
-                index: 99,
-                count: 2,
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for element in [Element::N, Element::O] {
+                let mut edits = Edits::new();
+                edits.add_atom(AtomForm::from_element(element));
+                transaction.apply(edits)?;
             }
-        );
-        assert_eq!(diatomic.clone().build(), materialized);
-        assert_eq!(combined.undos(), expected_undos);
-
-        combined.rollback(&mut diatomic).unwrap();
-        assert_eq!(diatomic.build(), before);
-    }
-
-    enum RollbackCase {
-        RemoveTopology,
-        RemoveBond,
-        AddTopology,
-        Field,
-        AddOverlay,
-        RemoveOverlay,
-        Constraint,
-        CascadedConstraints,
-    }
-
-    #[rstest]
-    #[case::remove_topology(RollbackCase::RemoveTopology)]
-    #[case::remove_bond(RollbackCase::RemoveBond)]
-    #[case::add_topology(RollbackCase::AddTopology)]
-    #[case::field(RollbackCase::Field)]
-    #[case::add_overlay(RollbackCase::AddOverlay)]
-    #[case::remove_overlay(RollbackCase::RemoveOverlay)]
-    #[case::constraint(RollbackCase::Constraint)]
-    #[case::cascade(RollbackCase::CascadedConstraints)]
-    fn test_transaction_rollback(#[case] case: RollbackCase) {
-        let mut editor = match case {
-            RollbackCase::AddTopology => Molecule::default().edit(),
-            RollbackCase::Field | RollbackCase::Constraint => {
-                let mut b = Molecule::default().edit();
-                b.add_atom(AtomForm::from_element(Element::C));
-                b
+            let count = transaction.probe()?.atoms().count();
+            if commit {
+                transaction.commit()?;
             }
-            RollbackCase::AddOverlay => {
-                let mut b = Molecule::default().edit();
-                b.add_atom(AtomForm::from_element(Element::C));
-                b.add_atom(AtomForm::from_element(Element::C));
-                b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
-                b
-            }
-            RollbackCase::RemoveBond => {
-                let mut b = Molecule::default().edit();
-                b.add_atom(AtomForm::from_element(Element::C));
-                b.add_atom(AtomForm::from_element(Element::N));
-                b.add_atom(AtomForm::from_element(Element::O));
-                b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
-                b.add_bond(AtomId(1), AtomId(2), BondForm::from_order(2));
-                b
-            }
-            RollbackCase::CascadedConstraints => {
-                let mut b = Molecule::default().edit();
-                b.add_atom(AtomForm::from_element(Element::C));
-                b.add_atom(AtomForm::from_element(Element::N));
-                b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintForm::degree(3)));
-                b
-            }
-            RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => triatomic_with_overlays(),
-        };
-        let before = editor.clone().build();
-        let edits = match case {
-            RollbackCase::RemoveTopology => Edits::from_iter([Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(1))],
-                bonds: vec![],
-            }]),
-            RollbackCase::RemoveBond => Edits::from_iter([Edit::RemoveTopology {
-                atoms: Vec::new(),
-                bonds: vec![BondHandle::Id(BondId(0))],
-            }]),
-            RollbackCase::AddTopology => Edits::from_iter([
-                Edit::AddAtoms {
-                    atoms: vec![
-                        AtomForm::from_element(Element::C),
-                        AtomForm::from_element(Element::O),
-                    ],
-                },
-                Edit::AddBonds {
-                    bonds: vec![AddBond {
-                        endpoints: [AtomHandle::New(0), AtomHandle::New(1)],
-                        attributes: BondForm::from_order(2),
-                    }],
-                },
-            ]),
-            RollbackCase::Field => Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::default(),
-                    new: NumForm::Lit(1),
-                },
-            }]),
-            RollbackCase::AddOverlay => Edits::from_iter([Edit::AddDativeBond {
-                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                attributes: DativeBondForm::from_order(1),
-            }]),
-            RollbackCase::RemoveOverlay => Edits::from_iter([Edit::RemoveDativeBonds {
-                removes: vec![(
-                    DativeBondHandle::Id(DativeBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    DativeBondForm {
-                        order: NumForm::Lit(1),
-                        constraints: Default::default(),
-                    },
-                )],
-            }]),
-            RollbackCase::Constraint => Edits::from_iter([Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old: None,
-                new: Some(AtomConstraintForm::ring_membership(RingScope::Size(5), 1)),
-            }]),
-            RollbackCase::CascadedConstraints => Edits::from_iter([Edit::RemoveTopology {
-                atoms: vec![AtomHandle::Id(AtomId(1))],
-                bonds: Vec::new(),
-            }]),
-        };
-        let tx = editor.transact(edits).unwrap();
-        tx.rollback(&mut editor).unwrap();
-        assert_eq!(editor.build(), before);
-    }
-
-    #[rstest]
-    fn test_transaction_rollback_empty(mut one_atom: MoleculeEditor) {
-        let before = one_atom.clone().build();
-        Transaction::default().rollback(&mut one_atom).unwrap();
-        assert_eq!(one_atom.build(), before);
-    }
-
-    #[rstest]
-    #[case::atom(EntityKind::Atom)]
-    #[case::bond(EntityKind::Bond)]
-    #[case::dative_bond(EntityKind::DativeBond)]
-    #[case::aromatic_system(EntityKind::AromaticSystem)]
-    #[case::multicenter_bond(EntityKind::MulticenterBond)]
-    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
-    #[case::stereo_atom(EntityKind::StereoAtom)]
-    #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_transaction_rollback_field_receiver(
-        mut empty: MoleculeEditor,
-        #[case] kind: EntityKind,
-    ) {
-        let undo = match kind {
-            EntityKind::Atom => Undo::ModifyAtomField {
-                id: AtomId(0),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::Lit(1),
-                    new: NumForm::default(),
-                },
-            },
-            EntityKind::Bond => Undo::ModifyBondField {
-                id: BondId(0),
-                change: BondFieldChange::Order {
-                    old: NumForm::Lit(2),
-                    new: NumForm::Lit(1),
-                },
-            },
-            EntityKind::DativeBond => Undo::ModifyDativeBondField {
-                id: DativeBondId(0),
-                change: DativeBondFieldChange::Order {
-                    old: NumForm::Lit(2),
-                    new: NumForm::Lit(1),
-                },
-            },
-            EntityKind::AromaticSystem => Undo::ModifyAromaticSystemField {
-                id: AromaticSystemId(0),
-                change: AromaticSystemFieldChange::Charge {
-                    old: NumForm::Lit(1),
-                    new: NumForm::default(),
-                },
-            },
-            EntityKind::MulticenterBond => Undo::ModifyMulticenterBondField {
-                id: MulticenterBondId(0),
-                change: MulticenterBondFieldChange::Charge {
-                    old: NumForm::Lit(1),
-                    new: NumForm::default(),
-                },
-            },
-            EntityKind::NoncovalentBond => Undo::ModifyNoncovalentBondField {
-                id: NoncovalentBondId(0),
-                change: NoncovalentBondFieldChange::Kind {
-                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
-                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
-                },
-            },
-            EntityKind::StereoAtom => Undo::ModifyStereoAtomField {
-                id: StereoAtomId(0),
-                change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationForm::kinded(
-                        StereoKind::Tetrahedral,
-                        StereoCoset::Lit(0),
-                    ),
-                    new: StereoConfigurationForm::kinded(
-                        StereoKind::Tetrahedral,
-                        StereoCoset::Lit(1),
-                    ),
-                },
-            },
-            EntityKind::StereoBond => Undo::ModifyStereoBondField {
-                id: StereoBondId(0),
-                change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                },
-            },
-        };
-
-        assert_eq!(
-            (Transaction { undo: vec![undo] }).rollback(&mut empty),
-            Err(TransactionError::RollbackStateMismatch),
-        );
-    }
-
-    #[rstest]
-    #[case::atom(EntityKind::Atom)]
-    #[case::bond(EntityKind::Bond)]
-    #[case::dative_bond(EntityKind::DativeBond)]
-    #[case::aromatic_system(EntityKind::AromaticSystem)]
-    #[case::multicenter_bond(EntityKind::MulticenterBond)]
-    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
-    #[case::stereo_atom(EntityKind::StereoAtom)]
-    #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_transaction_rollback_constraint_receiver(
-        mut empty: MoleculeEditor,
-        #[case] kind: EntityKind,
-    ) {
-        let edit = match kind {
-            EntityKind::Atom => Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::Bond => Edit::ModifyBondConstraint {
-                id: BondHandle::Id(BondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::DativeBond => Edit::ModifyDativeBondConstraint {
-                id: DativeBondHandle::Id(DativeBondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::AromaticSystem => Edit::ModifyAromaticSystemConstraint {
-                id: AromaticSystemHandle::Id(AromaticSystemId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::MulticenterBond => Edit::ModifyMulticenterBondConstraint {
-                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::NoncovalentBond => Edit::ModifyNoncovalentBondConstraint {
-                id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::StereoAtom => Edit::ModifyStereoAtomConstraint {
-                id: StereoAtomHandle::Id(StereoAtomId(0)),
-                kind: None,
-                old: None,
-                new: None,
-            },
-            EntityKind::StereoBond => Edit::ModifyStereoBondConstraint {
-                id: StereoBondHandle::Id(StereoBondId(0)),
-                kind: None,
-                old: None,
-                new: None,
-            },
-        };
-
-        assert_eq!(
-            (Transaction {
-                undo: vec![Undo::ApplyEdit(Box::new(edit))],
+            Ok::<_, MoleculeApplyError>(count)
+        });
+        let expected = if commit {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::N),
+                    AtomForm::from_element(Element::O),
+                ],
+                ..MoleculeEntries::default()
             })
-            .rollback(&mut empty),
-            Err(TransactionError::RollbackStateMismatch),
-        );
+        } else {
+            original
+        };
+        assert_eq!(result, Ok(3));
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    fn test_transaction_rollback_added_topology_duplicate(mut one_atom: MoleculeEditor) {
-        let before = one_atom.clone().build();
-        let added = AddedAtom {
-            id: AtomId(0),
-            attributes: AtomForm::from_element(Element::C),
-        };
-        let transaction = Transaction {
-            undo: vec![Undo::RemoveAddedTopology {
-                atoms: vec![added.clone(), added],
-                bonds: Vec::new(),
-            }],
-        };
-
-        assert_eq!(
-            transaction.rollback(&mut one_atom),
-            Err(TransactionError::RollbackStateMismatch),
-        );
-        assert_eq!(one_atom.build(), before);
-    }
-
-    #[rstest]
-    fn test_transaction_rollback_reconstruction_entry(mut empty: MoleculeEditor) {
-        let transaction = Transaction {
-            undo: vec![Undo::RestoreRemovedAromaticSystems {
-                removed: vec![RemovedAromaticSystem {
-                    id: AromaticSystemId(1),
-                    atoms: Vec::new(),
-                    attributes: AromaticSystemForm::default(),
-                }],
-                undo_compaction: MoleculeCompaction::empty().undo_compaction(),
-                cascade: CascadedConstraints::default(),
-            }],
-        };
-
-        assert_eq!(
-            transaction.rollback(&mut empty),
-            Err(TransactionError::RollbackStateMismatch),
-        );
-    }
-
-    #[rstest]
-    #[case::atoms_short([0, 0, 0, 0, 0, 0, 0, 0])]
-    #[case::atoms_long([2, 0, 0, 0, 0, 0, 0, 0])]
-    #[case::bonds([1, 1, 0, 0, 0, 0, 0, 0])]
-    #[case::dative([1, 0, 1, 0, 0, 0, 0, 0])]
-    #[case::aromatic([1, 0, 0, 1, 0, 0, 0, 0])]
-    #[case::multicenter([1, 0, 0, 0, 1, 0, 0, 0])]
-    #[case::noncovalent([1, 0, 0, 0, 0, 1, 0, 0])]
-    #[case::stereo_atoms([1, 0, 0, 0, 0, 0, 1, 0])]
-    #[case::stereo_bonds([1, 0, 0, 0, 0, 0, 0, 1])]
-    fn test_transaction_rollback_compaction_counts(
-        mut one_atom: MoleculeEditor,
-        #[case] counts: [usize; 8],
+    fn test_transaction_run_forgotten(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
-        let before = one_atom.clone().build();
-        let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(
-                Compaction::identity(counts[0]),
-                Compaction::identity(counts[1]),
-            ),
-            Compaction::identity(counts[2]),
-            Compaction::identity(counts[3]),
-            Compaction::identity(counts[4]),
-            Compaction::identity(counts[5]),
-            Compaction::identity(counts[6]),
-            Compaction::identity(counts[7]),
-        );
-        let transaction = Transaction {
-            undo: vec![Undo::RestoreRemovedTopology {
-                atoms: Vec::new(),
-                bonds: Vec::new(),
-                overlays: RemovedOverlays::default(),
-                undo_compaction: compaction.undo_compaction(),
-                compaction,
-                cascade: CascadedConstraints::default(),
-            }],
-        };
-        assert_eq!(
-            transaction.rollback(&mut one_atom),
-            Err(TransactionError::RollbackStateMismatch)
-        );
-        assert_eq!(one_atom.build(), before);
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for element in [Element::N, Element::O] {
+                let mut edits = Edits::new();
+                edits.add_atom(AtomForm::from_element(element));
+                transaction.apply(edits)?;
+            }
+            let _ = ManuallyDrop::new(transaction);
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
-    fn test_transaction_rollback_compaction_dimension(mut one_atom: MoleculeEditor) {
-        let compaction = MoleculeCompaction::empty();
-        let transaction = Transaction {
-            undo: vec![Undo::RestoreRemovedTopology {
-                atoms: vec![RemovedAtom {
-                    id: AtomId(0),
-                    attributes: AtomForm::from_element(Element::N),
-                }],
-                bonds: Vec::new(),
-                overlays: RemovedOverlays::default(),
-                undo_compaction: compaction.undo_compaction(),
-                compaction,
-                cascade: CascadedConstraints::default(),
-            }],
-        };
-
+    #[case::active(false)]
+    #[case::commit_requested(true)]
+    fn test_transaction_run_error(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for element in [Element::N, Element::O] {
+                let mut edits = Edits::new();
+                edits.add_atom(AtomForm::from_element(element));
+                transaction.apply(edits)?;
+            }
+            if commit {
+                transaction.commit()?;
+            }
+            Err::<(), _>(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch,
+            ))
+        });
         assert_eq!(
-            transaction.rollback(&mut one_atom),
-            Err(TransactionError::RollbackStateMismatch),
+            result,
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
         );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
-    fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEditor) {
-        let repeated = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
-        let middle = Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4));
-        one_atom.push_constraint(repeated.clone());
-        one_atom.push_constraint(middle.clone());
-        one_atom.push_constraint(repeated.clone());
-        let before = one_atom.clone().build();
+    #[case::active(false)]
+    #[case::commit_requested(true)]
+    fn test_transaction_run_unwind(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            Transaction::run(
+                &mut molecule,
+                rollback_method,
+                |mut transaction| -> Result<(), MoleculeApplyError> {
+                    for element in [Element::N, Element::O] {
+                        let mut edits = Edits::new();
+                        edits.add_atom(AtomForm::from_element(element));
+                        transaction.apply(edits)?;
+                    }
+                    if commit {
+                        transaction.commit()?;
+                    }
+                    panic!("callback failure");
+                },
+            )
+        }));
+        assert_eq!(
+            *result.unwrap_err().downcast::<&str>().unwrap(),
+            "callback failure"
+        );
+        assert_eq!(molecule, original);
+    }
 
-        let transaction = one_atom
-            .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
-                constraint: repeated.clone().into(),
-            }]))
+    #[rstest]
+    fn test_transaction_apply(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut first = Edits::new();
+        let nitrogen = first.add_atom(AtomForm::from_element(Element::N));
+        assert_eq!(nitrogen, AtomHandle::New(0));
+        first.add_bond(AtomHandle::Id(AtomId(0)), nitrogen, BondForm::from_order(1));
+        let mut second = Edits::new();
+        let oxygen = second.add_atom(AtomForm::from_element(Element::O));
+        assert_eq!(oxygen, AtomHandle::New(0));
+        second.add_bond(AtomHandle::Id(AtomId(1)), oxygen, BondForm::from_order(2));
+        Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            transaction.apply(first)?;
+            transaction.apply(second)?;
+            transaction.commit()
+        })
+        .unwrap();
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+            ],
+            ..MoleculeEntries::default()
+        });
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::drop(false)]
+    #[case::rollback(true)]
+    fn test_transaction_apply_error(
+        mut molecule: Molecule,
+        #[case] rollback: bool,
+        #[values(0, 1)] successful_batches: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for _ in 0..successful_batches {
+                let mut first = Edits::new();
+                first.add_atom(AtomForm::from_element(Element::N));
+                transaction.apply(first)?;
+            }
+            let count = 1 + successful_batches;
+            let mut second = Edits::new();
+            second.add_atom(AtomForm::from_element(Element::O));
+            second.remove_atom(AtomHandle::Id(AtomId(count as u32)));
+            assert_eq!(
+                transaction.apply(second),
+                Err(MoleculeApplyError::Transaction(
+                    TransactionError::HandleOutOfRange {
+                        kind: EntityKind::Atom,
+                        index: count,
+                        count
+                    }
+                ))
+            );
+            assert_eq!(transaction.probe()?, &original);
+            assert_eq!(
+                transaction.apply(Edits::new()),
+                Err(TransactionError::Aborted.into())
+            );
+            if rollback {
+                transaction.rollback();
+            }
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_transaction_probe(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut first = Edits::new();
+            first.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(0)),
+                BondForm::from_order(1),
+            );
+            transaction.apply(first)?;
+            assert_eq!(
+                transaction.probe(),
+                Err(MoleculeIntegrityError::DuplicateAtom {
+                    entity: Entity::Bond(BondId(0)),
+                    atom: AtomId(0),
+                })
+            );
+            let mut second = Edits::new();
+            second.remove_bond(BondHandle::Id(BondId(0)));
+            transaction.apply(second)?;
+            assert_eq!(transaction.probe()?, &original);
+            transaction.commit()
+        })
+        .unwrap();
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_transaction_commit_error(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut edits = Edits::new();
+            edits.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(0)),
+                BondForm::from_order(1),
+            );
+            transaction.apply(edits)?;
+            let commit = transaction.commit();
+            assert_eq!(
+                commit,
+                Err(MoleculeApplyError::Integrity(
+                    MoleculeIntegrityError::DuplicateAtom {
+                        entity: Entity::Bond(BondId(0)),
+                        atom: AtomId(0),
+                    }
+                ))
+            );
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_transaction_commit_aborted(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut edits = Edits::new();
+            edits.remove_atom(AtomHandle::Id(AtomId(1)));
+            assert_eq!(
+                transaction.apply(edits),
+                Err(MoleculeApplyError::Transaction(
+                    TransactionError::HandleOutOfRange {
+                        kind: EntityKind::Atom,
+                        index: 1,
+                        count: 1
+                    }
+                ))
+            );
+            transaction.commit()
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_transaction_rollback(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = all_entities.clone();
+        let result = Transaction::run(&mut all_entities, rollback_method, |mut transaction| {
+            let mut first = Edits::new();
+            first.remove_atom(AtomHandle::Id(AtomId(0)));
+            transaction.apply(first)?;
+            let mut second = Edits::new();
+            second.add_atom(AtomForm::from_element(Element::N));
+            transaction.apply(second)?;
+            transaction.rollback();
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(all_entities, original);
+    }
+
+    #[rstest]
+    #[case::no_commit(false)]
+    #[case::commit(true)]
+    fn test_tracked_transaction_run(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for element in [Element::N, Element::O] {
+                let mut edits = Edits::new();
+                edits.add_atom(AtomForm::from_element(element));
+                transaction.apply(edits)?;
+            }
+            let count = transaction.probe()?.atoms().count();
+            if commit {
+                transaction.commit()?;
+            }
+            Ok::<_, MoleculeApplyError>(count)
+        });
+        let expected = if commit {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::N),
+                    AtomForm::from_element(Element::O),
+                ],
+                ..MoleculeEntries::default()
+            })
+        } else {
+            original
+        };
+        assert_eq!(result, Ok(3));
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_run_forgotten(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for element in [Element::N, Element::O] {
+                let mut edits = Edits::new();
+                edits.add_atom(AtomForm::from_element(element));
+                transaction.apply(edits)?;
+            }
+            let _ = ManuallyDrop::new(transaction);
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::active(false)]
+    #[case::commit_requested(true)]
+    fn test_tracked_transaction_run_error(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for element in [Element::N, Element::O] {
+                let mut edits = Edits::new();
+                edits.add_atom(AtomForm::from_element(element));
+                transaction.apply(edits)?;
+            }
+            if commit {
+                transaction.commit()?;
+            }
+            Err::<(), _>(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch,
+            ))
+        });
+        assert_eq!(
+            result,
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::active(false)]
+    #[case::commit_requested(true)]
+    fn test_tracked_transaction_run_unwind(
+        mut molecule: Molecule,
+        #[case] commit: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            TrackedTransaction::run(
+                &mut molecule,
+                rollback_method,
+                |mut transaction| -> Result<(), MoleculeApplyError> {
+                    for element in [Element::N, Element::O] {
+                        let mut edits = Edits::new();
+                        edits.add_atom(AtomForm::from_element(element));
+                        transaction.apply(edits)?;
+                    }
+                    if commit {
+                        transaction.commit()?;
+                    }
+                    panic!("callback failure");
+                },
+            )
+        }));
+        assert_eq!(
+            *result.unwrap_err().downcast::<&str>().unwrap(),
+            "callback failure"
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_apply(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut first = Edits::new();
+        let nitrogen = first.add_atom(AtomForm::from_element(Element::N));
+        assert_eq!(nitrogen, AtomHandle::New(0));
+        first.add_bond(AtomHandle::Id(AtomId(0)), nitrogen, BondForm::from_order(1));
+        let mut second = Edits::new();
+        let oxygen = second.add_atom(AtomForm::from_element(Element::O));
+        assert_eq!(oxygen, AtomHandle::New(0));
+        second.add_bond(AtomHandle::Id(AtomId(1)), oxygen, BondForm::from_order(2));
+        TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            transaction.apply(first)?;
+            transaction.apply(second)?;
+            transaction.commit()
+        })
+        .unwrap();
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+            ],
+            ..MoleculeEntries::default()
+        });
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::drop(false)]
+    #[case::rollback(true)]
+    fn test_tracked_transaction_apply_error(
+        mut molecule: Molecule,
+        #[case] rollback: bool,
+        #[values(0, 1)] successful_batches: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            for _ in 0..successful_batches {
+                let mut first = Edits::new();
+                first.add_atom(AtomForm::from_element(Element::N));
+                transaction.apply(first)?;
+            }
+            let count = 1 + successful_batches;
+            let mut second = Edits::new();
+            second.add_atom(AtomForm::from_element(Element::O));
+            second.remove_atom(AtomHandle::Id(AtomId(count as u32)));
+            assert_eq!(
+                transaction.apply(second),
+                Err(MoleculeApplyError::Transaction(
+                    TransactionError::HandleOutOfRange {
+                        kind: EntityKind::Atom,
+                        index: count,
+                        count,
+                    }
+                ))
+            );
+            assert_eq!(transaction.probe()?, &original);
+            assert_eq!(
+                transaction.apply(Edits::new()),
+                Err(TransactionError::Aborted.into())
+            );
+            if rollback {
+                transaction.rollback();
+            }
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_probe(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut first = Edits::new();
+            first.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(0)),
+                BondForm::from_order(1),
+            );
+            transaction.apply(first)?;
+            assert_eq!(
+                transaction.probe(),
+                Err(MoleculeIntegrityError::DuplicateAtom {
+                    entity: Entity::Bond(BondId(0)),
+                    atom: AtomId(0),
+                })
+            );
+            let mut second = Edits::new();
+            second.remove_bond(BondHandle::Id(BondId(0)));
+            transaction.apply(second)?;
+            assert_eq!(transaction.probe()?, &original);
+            transaction.commit()
+        })
+        .unwrap();
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_commit(
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: [Element::C, Element::N, Element::O, Element::F, Element::S]
+                .into_iter()
+                .map(AtomForm::from_element)
+                .collect(),
+            bonds: (0..4)
+                .map(|id| (AtomId(id), AtomId(id + 1), BondForm::from_order(1)))
+                .collect(),
+            ..MoleculeEntries::default()
+        });
+        let mut first = Edits::new();
+        first.remove_atom(AtomHandle::Id(AtomId(0)));
+        let hydrogen = first.add_atom(AtomForm::from_element(Element::H));
+        first.add_bond(AtomHandle::Id(AtomId(4)), hydrogen, BondForm::from_order(1));
+        let mut second = Edits::new();
+        second.remove_atom(AtomHandle::Id(AtomId(1)));
+        let chlorine = second.add_atom(AtomForm::from_element(Element::Cl));
+        second.add_bond(AtomHandle::Id(AtomId(2)), chlorine, BondForm::from_order(1));
+        second.remove_atom(AtomHandle::Id(AtomId(4)));
+        let mut ordinary = molecule.clone();
+        ordinary
+            .transact([first.clone(), second.clone()], RollbackMethod::Journal)
             .unwrap();
-        assert_eq!(one_atom.constraints().as_slice(), &[repeated, middle]);
-
-        transaction.rollback(&mut one_atom).unwrap();
-        assert_eq!(one_atom.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_apply(empty: MoleculeEditor) {
-        let mut edits = Edits::new();
-        edits.add_atom(AtomForm::from_element(Element::C));
-        let empty = empty.apply(edits).unwrap();
-        assert_eq!(empty.atom_count(), 1);
+        let correspondence =
+            TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+                transaction.apply(first)?;
+                transaction.apply(second)?;
+                transaction.commit()
+            })
+            .unwrap();
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: [Element::N, Element::F, Element::S, Element::Cl]
+                .into_iter()
+                .map(AtomForm::from_element)
+                .collect(),
+            bonds: vec![
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(1), AtomId(3), BondForm::from_order(1)),
+            ],
+            ..MoleculeEntries::default()
+        });
+        assert_eq!(molecule, expected);
+        assert_eq!(molecule, ordinary);
         assert_eq!(
-            empty.atom(AtomId(0)).attributes.element,
-            ElementForm::Lit(Element::C)
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::new(
+                    vec![
+                        (AtomId(1), AtomId(0)),
+                        (AtomId(3), AtomId(1)),
+                        (AtomId(4), AtomId(2))
+                    ],
+                    5,
+                    4
+                )
+                .unwrap(),
+                Correspondence::new(vec![(BondId(3), BondId(0))], 4, 2).unwrap(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+            )
         );
     }
 
     #[rstest]
-    fn test_molecule_editor_apply_error(empty: MoleculeEditor) {
+    fn test_tracked_transaction_commit_additions(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut edits = Edits::new();
+        let nitrogen = edits.add_atom(AtomForm::from_element(Element::N));
+        let oxygen = edits.add_atom(AtomForm::from_element(Element::O));
+        edits.add_bond(
+            AtomHandle::Id(AtomId(0)),
+            nitrogen.clone(),
+            BondForm::from_order(1),
+        );
+        edits.add_bond(nitrogen.clone(), oxygen.clone(), BondForm::from_order(1));
+        edits.remove_atom(nitrogen);
+        let fluorine = edits.add_atom(AtomForm::from_element(Element::F));
+        edits.add_bond(oxygen, fluorine, BondForm::from_order(1));
+        let correspondence =
+            TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
+        assert_eq!(
+            molecule,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: [Element::C, Element::O, Element::F]
+                    .into_iter()
+                    .map(AtomForm::from_element)
+                    .collect(),
+                bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))],
+                ..MoleculeEntries::default()
+            })
+        );
+        assert_eq!(
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(AtomId(0), AtomId(0))], 1, 3).unwrap(),
+                Correspondence::new(Vec::new(), 0, 1).unwrap(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+            )
+        );
+    }
+
+    #[rstest]
+    #[case::dative_bond(EntityKind::DativeBond)]
+    #[case::aromatic_system(EntityKind::AromaticSystem)]
+    #[case::multicenter_bond(EntityKind::MulticenterBond)]
+    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_tracked_transaction_commit_overlays(
+        mut all_entities: Molecule,
+        #[case] kind: EntityKind,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = all_entities.clone();
+        let mut edits = Edits::new();
+        match kind {
+            EntityKind::DativeBond => {
+                let donors = vec![AtomHandle::Id(AtomId(0))];
+                let acceptor = AtomHandle::Id(AtomId(1));
+                let attributes = DativeBondForm::from_order(1);
+                edits.remove_dative_bonds(vec![(
+                    DativeBondHandle::Id(DativeBondId(0)),
+                    donors.clone(),
+                    acceptor.clone(),
+                    attributes.clone(),
+                )]);
+                edits.add_dative_bond(donors, acceptor, attributes);
+            }
+            EntityKind::AromaticSystem => {
+                let atoms = vec![
+                    AtomHandle::Id(AtomId(0)),
+                    AtomHandle::Id(AtomId(1)),
+                    AtomHandle::Id(AtomId(2)),
+                ];
+                let attributes = AromaticSystemForm::default();
+                edits.remove_aromatic_systems(vec![(
+                    AromaticSystemHandle::Id(AromaticSystemId(0)),
+                    atoms.clone(),
+                    attributes.clone(),
+                )]);
+                edits.add_aromatic_system(atoms, attributes);
+            }
+            EntityKind::MulticenterBond => {
+                let atoms = vec![
+                    AtomHandle::Id(AtomId(0)),
+                    AtomHandle::Id(AtomId(1)),
+                    AtomHandle::Id(AtomId(2)),
+                ];
+                let attributes = MulticenterBondForm::default();
+                edits.remove_multicenter_bonds(vec![(
+                    MulticenterBondHandle::Id(MulticenterBondId(0)),
+                    atoms.clone(),
+                    attributes.clone(),
+                )]);
+                edits.add_multicenter_bond(atoms, attributes);
+            }
+            EntityKind::NoncovalentBond => {
+                let atoms = [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(3))];
+                let attributes = NoncovalentBondForm::default();
+                edits.remove_noncovalent_bonds(vec![(
+                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                    atoms.clone(),
+                    attributes.clone(),
+                )]);
+                edits.add_noncovalent_bond(atoms, attributes);
+            }
+            EntityKind::StereoAtom => {
+                let site = AtomHandle::Id(AtomId(0));
+                let ligands: Vec<_> = original
+                    .stereo_atom(StereoAtomId(0))
+                    .ligand_ids()
+                    .iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect();
+                let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
+                edits.remove_stereo_atoms(vec![(
+                    StereoAtomHandle::Id(StereoAtomId(0)),
+                    site.clone(),
+                    ligands.clone(),
+                    attributes.clone(),
+                )]);
+                edits.add_stereo_atom(site, ligands, attributes);
+            }
+            EntityKind::StereoBond => {
+                let site = BondHandle::Id(BondId(0));
+                let ligands: Vec<_> = original
+                    .stereo_bond(StereoBondId(0))
+                    .ligand_ids()
+                    .iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect();
+                let attributes = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1));
+                edits.remove_stereo_bonds(vec![(
+                    StereoBondHandle::Id(StereoBondId(0)),
+                    site.clone(),
+                    ligands.clone(),
+                    attributes.clone(),
+                )]);
+                edits.add_stereo_bond(site, ligands, attributes);
+            }
+            EntityKind::Atom | EntityKind::Bond => unreachable!(),
+        }
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
+        assert_eq!(all_entities, original);
+        assert_eq!(
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::identity(4),
+                Correspondence::identity(4),
+                if kind == EntityKind::DativeBond {
+                    Correspondence::new(Vec::new(), 1, 1).unwrap()
+                } else {
+                    Correspondence::identity(1)
+                },
+                if kind == EntityKind::AromaticSystem {
+                    Correspondence::new(Vec::new(), 1, 1).unwrap()
+                } else {
+                    Correspondence::identity(1)
+                },
+                if kind == EntityKind::MulticenterBond {
+                    Correspondence::new(Vec::new(), 1, 1).unwrap()
+                } else {
+                    Correspondence::identity(1)
+                },
+                if kind == EntityKind::NoncovalentBond {
+                    Correspondence::new(Vec::new(), 1, 1).unwrap()
+                } else {
+                    Correspondence::identity(1)
+                },
+                if kind == EntityKind::StereoAtom {
+                    Correspondence::new(Vec::new(), 1, 1).unwrap()
+                } else {
+                    Correspondence::identity(1)
+                },
+                if kind == EntityKind::StereoBond {
+                    Correspondence::new(Vec::new(), 1, 1).unwrap()
+                } else {
+                    Correspondence::identity(1)
+                },
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_commit_modification(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let edits = Edits::from_iter([
+            Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::default(),
+                    new: NumForm::Lit(1),
+                },
+            },
+            Edit::ReplaceNoncovalentBondAtoms {
+                id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                old: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(3))],
+                new: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(3))],
+            },
+        ]);
+        let expected = all_entities.clone().apply(edits.clone()).unwrap();
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
+        assert_eq!(all_entities, expected);
+        assert_eq!(
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::identity(4),
+                Correspondence::identity(4),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_commit_cascade(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut edits = Edits::new();
         edits.remove_atom(AtomHandle::Id(AtomId(0)));
-        let error = match empty.apply(edits) {
-            Ok(_) => panic!("invalid edit unexpectedly applied"),
-            Err(error) => error,
-        };
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                transaction.apply(edits)?;
+                transaction.commit()
+            })
+            .unwrap();
         assert_eq!(
-            error,
-            TransactionError::HandleOutOfRange {
-                kind: EntityKind::Atom,
-                index: 0,
-                count: 0,
-            }
+            all_entities,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))],
+                ..MoleculeEntries::default()
+            })
         );
+        assert_eq!(
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::new(
+                    vec![
+                        (AtomId(1), AtomId(0)),
+                        (AtomId(2), AtomId(1)),
+                        (AtomId(3), AtomId(2))
+                    ],
+                    4,
+                    3
+                )
+                .unwrap(),
+                Correspondence::new(vec![(BondId(1), BondId(0))], 4, 1).unwrap(),
+                Correspondence::new(Vec::new(), 1, 0).unwrap(),
+                Correspondence::new(Vec::new(), 1, 0).unwrap(),
+                Correspondence::new(Vec::new(), 1, 0).unwrap(),
+                Correspondence::new(Vec::new(), 1, 0).unwrap(),
+                Correspondence::new(Vec::new(), 1, 0).unwrap(),
+                Correspondence::new(Vec::new(), 1, 0).unwrap(),
+            )
+        );
+    }
+
+    #[rstest]
+    #[case::no_batches(0)]
+    #[case::empty_batches(3)]
+    fn test_tracked_transaction_commit_identity(
+        mut all_entities: Molecule,
+        #[case] batches: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = all_entities.clone();
+        let correspondence =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                for _ in 0..batches {
+                    transaction.apply(Edits::new())?;
+                }
+                transaction.commit()
+            })
+            .unwrap();
+        assert_eq!(all_entities, original);
+        assert_eq!(
+            correspondence,
+            MoleculeCorrespondence::new(
+                Correspondence::identity(4),
+                Correspondence::identity(4),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+                Correspondence::identity(1),
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_commit_error(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut edits = Edits::new();
+            edits.add_bond(
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(0)),
+                BondForm::from_order(1),
+            );
+            transaction.apply(edits)?;
+            assert_eq!(
+                transaction.commit(),
+                Err(MoleculeApplyError::Integrity(
+                    MoleculeIntegrityError::DuplicateAtom {
+                        entity: Entity::Bond(BondId(0)),
+                        atom: AtomId(0),
+                    }
+                ))
+            );
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_commit_aborted(
+        mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut edits = Edits::new();
+            edits.remove_atom(AtomHandle::Id(AtomId(1)));
+            assert_eq!(
+                transaction.apply(edits),
+                Err(MoleculeApplyError::Transaction(
+                    TransactionError::HandleOutOfRange {
+                        kind: EntityKind::Atom,
+                        index: 1,
+                        count: 1
+                    }
+                ))
+            );
+            transaction.commit()
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_tracked_transaction_rollback(
+        mut all_entities: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = all_entities.clone();
+        let result =
+            TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
+                let mut first = Edits::new();
+                first.remove_atom(AtomHandle::Id(AtomId(0)));
+                transaction.apply(first)?;
+                let mut second = Edits::new();
+                second.add_atom(AtomForm::from_element(Element::N));
+                transaction.apply(second)?;
+                transaction.rollback();
+                Ok::<_, MoleculeApplyError>(())
+            });
+        assert_eq!(result, Ok(()));
+        assert_eq!(all_entities, original);
+    }
+
+    #[rstest]
+    #[case::application(
+        Edits::from_iter([Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge { old: NumForm::Lit(1), new: NumForm::Lit(0) },
+        }]),
+        MoleculeApplyError::Transaction(TransactionError::OldStateMismatch),
+    )]
+    #[case::integrity(
+        Edits::from_iter([Edit::ReplaceNoncovalentBondAtoms {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            old: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(3))],
+            new: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+        }]),
+        MoleculeApplyError::Integrity(MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::NoncovalentBond(NoncovalentBondId(0)), atom: AtomId(0),
+        }),
+    )]
+    fn test_molecule_transact_error(
+        mut all_entities: Molecule,
+        #[case] failing: Edits,
+        #[case] error: MoleculeApplyError,
+        #[values(false, true)] tracked: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = all_entities.clone();
+        let first = Edits::from_iter([Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(1)),
+            change: AtomFieldChange::Charge {
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
+            },
+        }]);
+        let result = if tracked {
+            all_entities
+                .tracked_transact([first, failing], rollback_method)
+                .map(|_| ())
+        } else {
+            all_entities.transact([first, failing], rollback_method)
+        };
+        assert_eq!(result, Err(error));
+        assert_eq!(all_entities, original);
     }
 }

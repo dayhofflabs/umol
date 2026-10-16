@@ -2,97 +2,21 @@
 //!
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
-//! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a [`crate::compact::GraphCompaction`] for reindexing external data.
+//! Clones share the CSR through `Arc`; mutation preserves other clones. Tracked removals produce a
+//! [`GraphCompaction`] for reindexing external data and restoring original node/edge positions.
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use std::ops::{Add, Sub};
 use std::sync::Arc;
 
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NodeId(pub u32);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct EdgeId(pub u32);
+use crate::id::{EdgeId, IdRange, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Neighbor {
     pub node: NodeId,
     pub edge: EdgeId,
-}
-
-impl NodeId {
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl From<NodeId> for usize {
-    fn from(id: NodeId) -> Self {
-        id.0 as usize
-    }
-}
-
-impl From<usize> for NodeId {
-    fn from(index: usize) -> Self {
-        Self(index as u32)
-    }
-}
-
-/// Dense positional offset, for renumbering a dense id space.
-impl Add<usize> for NodeId {
-    type Output = Self;
-
-    fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset as u32)
-    }
-}
-
-impl Sub<usize> for NodeId {
-    type Output = Self;
-
-    fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset as u32)
-    }
-}
-
-impl EdgeId {
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl From<EdgeId> for usize {
-    fn from(id: EdgeId) -> Self {
-        id.0 as usize
-    }
-}
-
-impl From<usize> for EdgeId {
-    fn from(index: usize) -> Self {
-        Self(index as u32)
-    }
-}
-
-/// Dense positional offset, for renumbering a dense id space.
-impl Add<usize> for EdgeId {
-    type Output = Self;
-
-    fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset as u32)
-    }
-}
-
-impl Sub<usize> for EdgeId {
-    type Output = Self;
-
-    fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset as u32)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -253,21 +177,106 @@ impl Graph {
             .all(|&[first, second]| first != second && endpoints.insert([first, second]))
     }
 
+    /// Append one isolated node and return its id.
     pub fn add_node(&mut self) -> NodeId {
-        let old = &*self.csr;
-        let new_id = NodeId(old.node_count as u32);
-        let edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[a, b]| [a.0, b.0]).collect();
-        self.csr = Arc::new(Self::build_csr(old.node_count + 1, &edges));
-        new_id
+        self.extend_nodes(1).next().unwrap()
     }
 
+    /// Append one edge and return its id, retaining loops and parallel edges.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside this graph.
     pub fn add_edge(&mut self, first: NodeId, second: NodeId) -> EdgeId {
-        let old = &*self.csr;
-        let new_id = EdgeId(old.edge_count as u32);
-        let mut edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[s, t]| [s.0, t.0]).collect();
-        edges.push([first.0, second.0]);
-        self.csr = Arc::new(Self::build_csr(old.node_count, &edges));
-        new_id
+        self.extend_edges(&[[first, second]]).next().unwrap()
+    }
+
+    /// Append isolated nodes and return their ids in ascending order.
+    ///
+    /// Mutation completes before return. The exact-size iterator owns its bounds;
+    /// it allocates nothing and borrows neither the graph nor its storage.
+    /// Unique storage grows only its offset vector. Shared storage is copied once.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids and adjacency are unchanged. New ids form the contiguous range
+    /// starting at the original node count. A zero count leaves storage unchanged;
+    /// other clones retain their original graph. Properties in `tests/property/graph.rs`
+    /// compare the result with independently constructed topology.
+    pub fn extend_nodes(&mut self, count: usize) -> IdRange<NodeId> {
+        let start = self.csr.node_count;
+        let end = start + count;
+        if count != 0 {
+            let csr = Arc::make_mut(&mut self.csr);
+            let offset = *csr.offsets.last().unwrap();
+            csr.offsets.resize(end + 1, offset);
+            csr.node_count = end;
+        }
+        IdRange::new(start, end)
+    }
+
+    /// Append edges between existing nodes and return their ids in input order.
+    ///
+    /// Adjacency is rebuilt once for a nonempty batch. Mutation completes before
+    /// return; the allocation-free exact-size iterator borrows neither the graph
+    /// nor the input slice.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids remain unchanged. New edge ids start at the original edge count;
+    /// endpoint order is canonicalized while loops and parallel edges are retained.
+    /// An empty batch leaves storage unchanged; other clones retain their original
+    /// graph. Properties in `tests/property/graph.rs` compare the complete edge list.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside this graph.
+    pub fn extend_edges(&mut self, edges: &[[NodeId; 2]]) -> IdRange<EdgeId> {
+        self.extend(0, edges).1
+    }
+
+    /// Append nodes and edges, returning their respective contiguous id ranges.
+    ///
+    /// Endpoints refer to the resulting node space, including appended nodes.
+    /// Adjacency is rebuilt once when adding edges; node-only batches use
+    /// [`Self::extend_nodes`]. Mutation completes before return. Both ranges own their
+    /// bounds and borrow neither the graph nor the input.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids and edge order are preserved. New ids start at the original
+    /// count of their kind; new edge order follows the input. Endpoint order is
+    /// canonicalized, retaining loops and parallel edges. Empty input leaves storage
+    /// unchanged and other clones keep their original graph. Public properties in
+    /// `tests/property/graph.rs` derive adjacency directly from the final edge list.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside the resulting node space.
+    pub fn extend(
+        &mut self,
+        node_count: usize,
+        edges: &[[NodeId; 2]],
+    ) -> (IdRange<NodeId>, IdRange<EdgeId>) {
+        let node_start = self.csr.node_count;
+        let edge_start = self.csr.edge_count;
+        if edges.is_empty() {
+            self.extend_nodes(node_count);
+        } else {
+            let node_end = node_start + node_count;
+            let endpoints: Vec<_> = self
+                .csr
+                .endpoints
+                .iter()
+                .chain(edges)
+                .map(|&[a, b]| [a.0, b.0])
+                .collect();
+            self.csr = Arc::new(Self::build_csr(node_end, &endpoints));
+        }
+        (
+            IdRange::new(node_start, self.csr.node_count),
+            IdRange::new(edge_start, self.csr.edge_count),
+        )
     }
 
     /// SqPO-style removal: delete `nodes` and `edges`, sweeping along every edge incident to a
@@ -346,6 +355,67 @@ impl Graph {
         ));
 
         compaction
+    }
+
+    /// Undo a removal using its compaction and original saved edges.
+    ///
+    /// Saved entries use original edge and node ids and may arrive in any order. The
+    /// compaction supplies the original node count; no saved node entries are needed.
+    /// Surviving endpoints are expanded to their original ids, and adjacency is rebuilt
+    /// with loops and parallel edges retained.
+    ///
+    /// The compaction and saved entries must come from the removal being undone. Manipulated
+    /// or mismatched inputs do not panic, but the resulting graph is unspecified.
+    ///
+    /// # Semantic properties
+    ///
+    /// Restoring a matching removal with the original saved edges recovers the original graph,
+    /// including its ids and adjacency. Identity compaction with empty saved entries is a no-op.
+    /// Other graphs sharing the original CSR remain unchanged. Public-API properties in
+    /// `tests/property/restore.rs` check independent topology, roundtrips, and freedom from panics.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use umol_graph_core::{Graph, NodeId};
+    /// let mut graph = Graph::new(3, &[[0, 1]]);
+    /// let original = graph.clone();
+    /// let compaction = graph.tracked_remove_cascading(&[NodeId(2)], &[]);
+    /// graph.restore(&compaction, &[]);
+    /// assert_eq!(graph, original);
+    /// ```
+    pub fn restore(&mut self, compaction: &GraphCompaction, removed: &[(EdgeId, [NodeId; 2])]) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        let node_count = compaction.nodes().source_count();
+        let edge_count = compaction.edges().source_count();
+        if node_count == 0 && edge_count != 0 {
+            return;
+        }
+        let mut endpoints = vec![[0; 2]; edge_count];
+        for (index, &[a, b]) in self.csr.endpoints.iter().enumerate() {
+            let Some(original) = compaction.try_uncompact_edge(EdgeId::from(index)) else {
+                return;
+            };
+            let (Some(a), Some(b)) = (
+                compaction.try_uncompact_node(a),
+                compaction.try_uncompact_node(b),
+            ) else {
+                return;
+            };
+            endpoints[original.index()] = [a.0, b.0];
+        }
+        for &(id, [a, b]) in removed {
+            let Some(pair) = endpoints.get_mut(id.index()) else {
+                return;
+            };
+            if a.index() >= node_count || b.index() >= node_count {
+                return;
+            }
+            *pair = [a.0, b.0];
+        }
+        self.csr = Arc::new(Self::build_csr(node_count, &endpoints));
     }
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an
@@ -1040,7 +1110,7 @@ mod tests {
         assert_eq!(g1, g2);
     }
 
-    #[test]
+    #[rstest]
     fn test_graph_add_node() {
         let mut g = Graph::new(2, &[[0, 1]]);
         let n = g.add_node();
@@ -1051,7 +1121,7 @@ mod tests {
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
     }
 
-    #[test]
+    #[rstest]
     fn test_graph_add_edge() {
         let mut g = Graph::new(3, &[[0, 1]]);
         let e = g.add_edge(NodeId(1), NodeId(2));
@@ -1059,6 +1129,144 @@ mod tests {
         assert_eq!(g.edge_count(), 2);
         assert_eq!(g.degree(NodeId(1)), 2);
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 3)]
+    #[case::connected(3, &[[0, 1], [1, 2]], 2)]
+    #[case::loops_and_parallel_edges(2, &[[1, 1], [1, 0], [0, 1]], 1)]
+    fn test_graph_extend_nodes(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] count: usize,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(node_count, edges);
+        let original = shared.then(|| graph.clone());
+        let ids = graph.extend_nodes(count);
+        assert_eq!(graph, Graph::new(node_count + count, edges));
+        graph.add_node();
+        assert_exact_size(
+            ids,
+            (node_count..node_count + count).map(NodeId::from).collect(),
+        );
+        assert_eq!(graph, Graph::new(node_count + count + 1, edges));
+        if let Some(original) = original {
+            assert_eq!(original, Graph::new(node_count, edges));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default())]
+    #[case::connected(Graph::new(2, &[[0, 1]]))]
+    fn test_graph_extend_nodes_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        assert_exact_size(graph.extend_nodes(0), vec![]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::isolated(3, &[], &[[2, 0], [1, 2]], &[[0, 2], [1, 2]])]
+    #[case::loops_and_parallel_edges(3, &[[0, 1]], &[[2, 2], [1, 0], [1, 2]], &[[0, 1], [2, 2], [0, 1], [1, 2]])]
+    fn test_graph_extend_edges(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] added: &[[u32; 2]],
+        #[case] expected: &[[u32; 2]],
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(node_count, edges);
+        let original = shared.then(|| graph.clone());
+        let ids = {
+            let added: Vec<_> = added.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
+            graph.extend_edges(&added)
+        };
+        assert_eq!(graph, Graph::new(node_count, expected));
+        graph.add_node();
+        assert_exact_size(
+            ids,
+            (edges.len()..expected.len()).map(EdgeId::from).collect(),
+        );
+        assert_eq!(graph, Graph::new(node_count + 1, expected));
+        if let Some(original) = original {
+            assert_eq!(original, Graph::new(node_count, edges));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default())]
+    #[case::connected(Graph::new(2, &[[0, 1]]))]
+    fn test_graph_extend_edges_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        assert_exact_size(graph.extend_edges(&[]), vec![]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 3, &[[2, 1], [0, 0]], &[[1, 2], [0, 0]])]
+    #[case::connected(3, &[[0, 1]], 2, &[[4, 2], [3, 4]], &[[0, 1], [2, 4], [3, 4]])]
+    #[case::nodes_only(2, &[[1, 0]], 2, &[], &[[0, 1]])]
+    #[case::edges_only(2, &[[0, 1]], 0, &[[1, 0], [1, 1]], &[[0, 1], [0, 1], [1, 1]])]
+    fn test_graph_extend(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] count: usize,
+        #[case] added: &[[u32; 2]],
+        #[case] expected: &[[u32; 2]],
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(node_count, edges);
+        let original = shared.then(|| graph.clone());
+        let (nodes, edge_ids) = {
+            let added: Vec<_> = added.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
+            graph.extend(count, &added)
+        };
+        assert_eq!(graph, Graph::new(node_count + count, expected));
+        graph.add_node();
+        assert_exact_size(
+            nodes,
+            (node_count..node_count + count).map(NodeId::from).collect(),
+        );
+        assert_exact_size(
+            edge_ids,
+            (edges.len()..expected.len()).map(EdgeId::from).collect(),
+        );
+        assert_eq!(graph, Graph::new(node_count + count + 1, expected));
+        if let Some(original) = original {
+            assert_eq!(original, Graph::new(node_count, edges));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default())]
+    #[case::connected(Graph::new(2, &[[0, 1]]))]
+    fn test_graph_extend_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        let (nodes, edges) = graph.extend(0, &[]);
+        assert_exact_size(nodes, vec![]);
+        assert_exact_size(edges, vec![]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::first([NodeId(2), NodeId(0)])]
+    #[case::second([NodeId(0), NodeId(2)])]
+    #[should_panic]
+    fn test_graph_extend_edges_error(#[case] edge: [NodeId; 2]) {
+        let mut graph = Graph::new(2, &[]);
+        graph.extend_edges(&[edge]);
+    }
+
+    #[rstest]
+    #[case::first([NodeId(3), NodeId(0)])]
+    #[case::second([NodeId(0), NodeId(3)])]
+    #[should_panic]
+    fn test_graph_extend_error(#[case] edge: [NodeId; 2]) {
+        let mut graph = Graph::new(2, &[]);
+        graph.extend(1, &[edge]);
     }
 
     #[rstest]
@@ -1162,6 +1370,146 @@ mod tests {
         for (idx, &old) in surviving_edges.iter().enumerate() {
             assert_eq!(compaction.compact_edge(old), Some(EdgeId::from(idx)));
         }
+    }
+
+    #[rstest]
+    #[case::isolated_nodes(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![], vec![], Graph::new(3, &[]))]
+    #[case::node_only(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![], vec![], Graph::new(4, &[[1, 3]]))]
+    #[case::edge_only(Graph::new(3, &[[1, 2]]), vec![], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(0), NodeId(0)]), (EdgeId(2), [NodeId(2), NodeId(1)]), (EdgeId(0), [NodeId(1), NodeId(1)])], Graph::new(3, &[[1, 1], [1, 2], [1, 2], [0, 0]]))]
+    #[case::mixed(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(2), NodeId(1)]), (EdgeId(2), [NodeId(3), NodeId(3)]), (EdgeId(0), [NodeId(1), NodeId(2)])], Graph::new(4, &[[1, 2], [1, 3], [3, 3], [1, 2]]))]
+    #[case::all(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1), EdgeId(2)], vec![(EdgeId(2), [NodeId(2), NodeId(0)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(1), [NodeId(1), NodeId(1)])], Graph::new(3, &[[0, 2], [1, 1], [0, 2]]))]
+    fn test_graph_restore(
+        #[case] mut graph: Graph,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] removed: Vec<(EdgeId, [NodeId; 2])>,
+        #[case] expected: Graph,
+        #[values(false, true)] shared: bool,
+    ) {
+        let before = Graph::new(
+            graph.node_count(),
+            &graph
+                .edge_ids()
+                .map(|edge| graph.edge_endpoints(edge).map(|node| node.0))
+                .collect::<Vec<_>>(),
+        );
+        let retained = shared.then(|| graph.clone());
+        let compaction = GraphCompaction::new(
+            Compaction::new(expected.node_count(), nodes).unwrap(),
+            Compaction::new(expected.edge_count(), edges).unwrap(),
+        );
+        graph.restore(&compaction, &removed);
+        assert_eq!(graph, expected);
+        if let Some(retained) = retained {
+            assert_eq!(retained, before);
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::new(0, &[]))]
+    #[case::isolates(Graph::new(3, &[]))]
+    #[case::multigraph(Graph::new(4, &[[0, 1], [1, 0], [2, 2]]))]
+    fn test_graph_restore_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        let compaction = GraphCompaction::new(
+            Compaction::identity(graph.node_count()),
+            Compaction::identity(graph.edge_count()),
+        );
+        graph.restore(&compaction, &[]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::node_count(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(4, vec![NodeId(1)]).unwrap(), Compaction::new(4, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::edge_count(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(4, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::missing_entries(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![],
+    )]
+    #[case::missing_and_bad_reference(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::duplicates_and_missing(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(2), [NodeId(1), NodeId(1)]), (EdgeId(2), [NodeId(1), NodeId(1)])],
+    )]
+    #[case::duplicates_and_bad_reference(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)]), (EdgeId(0), [NodeId(3), NodeId(3)]), (EdgeId(2), [NodeId(1), NodeId(1)])],
+    )]
+    #[case::duplicates_and_survivor(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(1), [NodeId(0), NodeId(0)])],
+    )]
+    #[case::survivor_and_duplicates(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(1), [NodeId(0), NodeId(0)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(0), [NodeId(0), NodeId(2)])],
+    )]
+    #[case::outside_edge_domain(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(3), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::bad_endpoints(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(2), [NodeId(4), NodeId(3)]), (EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::second_endpoint(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(2), [NodeId(1), NodeId(1)]), (EdgeId(0), [NodeId(0), NodeId(3)])],
+    )]
+    #[case::identity_entries(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::identity(2), Compaction::identity(1)),
+        vec![(EdgeId(0), [NodeId(0), NodeId(2)])],
+    )]
+    #[case::empty_node_domain(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::empty(), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(0)])],
+    )]
+    #[case::missing_edges_without_nodes(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::empty(), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![],
+    )]
+    #[case::survivor_node_domain(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(2, vec![NodeId(0)]).unwrap(), Compaction::identity(1)),
+        vec![],
+    )]
+    #[case::survivor_edge_domain(
+        Graph::new(1, &[[0, 0]]),
+        GraphCompaction::new(Compaction::identity(1), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(0)])],
+    )]
+    fn test_graph_restore_malformed(
+        #[case] mut graph: Graph,
+        #[case] compaction: GraphCompaction,
+        #[case] removed: Vec<(EdgeId, [NodeId; 2])>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let retained = shared.then(|| graph.clone());
+        graph.restore(&compaction, &removed);
+        drop(retained);
     }
 
     #[rstest]

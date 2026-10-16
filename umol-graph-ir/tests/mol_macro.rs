@@ -15,15 +15,15 @@ fn test_mol_builds_molecule() {
     assert_eq!(molecule.bonds().count(), 3);
     // bonds in declaration order: c1-c2 single, c2=o double, c1-n single
     assert_eq!(
-        molecule.bond(BondId(0)).attributes,
+        molecule.bond(BondId(0)).attributes(),
         &BondForm::from_order(1)
     );
     assert_eq!(
-        molecule.bond(BondId(1)).attributes,
+        molecule.bond(BondId(1)).attributes(),
         &BondForm::from_order(2)
     );
     assert_eq!(
-        molecule.bond(BondId(2)).attributes,
+        molecule.bond(BondId(2)).attributes(),
         &BondForm::from_order(1)
     );
     assert_eq!(molecule.bond(BondId(1)).atom_ids(), [AtomId(1), AtomId(2)]);
@@ -49,7 +49,7 @@ fn test_mol_bond_spec() {
 
     assert_eq!(molecule.bonds().count(), 1);
     assert_eq!(
-        molecule.bond(BondId(0)).attributes,
+        molecule.bond(BondId(0)).attributes(),
         &"1#a".parse::<BondForm>().unwrap()
     );
 }
@@ -61,7 +61,7 @@ fn test_mol_named_bond() {
 
     assert_eq!(molecule.bonds().count(), 1);
     assert_eq!(
-        molecule.bond(BondId(0)).attributes,
+        molecule.bond(BondId(0)).attributes(),
         &"2".parse::<BondForm>().unwrap()
     );
 }
@@ -74,11 +74,11 @@ fn test_mol_anonymous_atoms() {
     assert_eq!(molecule.atoms().count(), 2);
     assert_eq!(molecule.bonds().count(), 1);
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes,
+        molecule.atom(AtomId(0)).attributes(),
         &"C".parse::<AtomForm>().unwrap()
     );
     assert_eq!(
-        molecule.atom(AtomId(1)).attributes,
+        molecule.atom(AtomId(1)).attributes(),
         &"O".parse::<AtomForm>().unwrap()
     );
     assert_eq!(molecule.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
@@ -90,15 +90,15 @@ fn test_mol_anonymous_spec() {
     let molecule: Molecule = mol!("C#h3" - "O#h");
 
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes,
+        molecule.atom(AtomId(0)).attributes(),
         &"C#h3".parse::<AtomForm>().unwrap()
     );
     assert_eq!(
-        molecule.atom(AtomId(1)).attributes,
+        molecule.atom(AtomId(1)).attributes(),
         &"O#h".parse::<AtomForm>().unwrap()
     );
     assert_eq!(
-        molecule.bond(BondId(0)).attributes,
+        molecule.bond(BondId(0)).attributes(),
         &BondForm::from_order(1)
     );
 }
@@ -115,7 +115,7 @@ fn test_mol_anonymous_mixed() {
     assert_eq!(molecule.bonds().count(), 2);
     // c=O double: position 0 (c) to position 1 (O)
     assert_eq!(
-        molecule.bond(BondId(0)).attributes,
+        molecule.bond(BondId(0)).attributes(),
         &BondForm::from_order(2)
     );
     assert_eq!(molecule.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
@@ -135,7 +135,7 @@ fn test_mol_aromatic() {
         molecule
             .aromatic_system(AromaticSystemId(0))
             .atoms()
-            .map(|view| view.id)
+            .map(|view| view.id())
             .collect::<Vec<_>>(),
         vec![AtomId(0), AtomId(1)]
     );

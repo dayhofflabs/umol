@@ -24,7 +24,8 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 use crate::algorithms::traversal::NeighborhoodAlgorithm;
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 
 /// A refinement algorithm and its configuration. Parameterized variants carry
 /// their own parameters (unlike parameter-free unit-variant algorithm enums).

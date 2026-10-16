@@ -18,6 +18,7 @@ from umol import (
     CanonicalizeConfig,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
+    ConsumedError,
     Constraint,
     ContradictionError,
     Correspondence,
@@ -31,7 +32,6 @@ from umol import (
     InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     MetadataError,
-    ModelConversionError,
     IsotopePolicy,
     Molecule,
     MoleculeCompaction,
@@ -62,6 +62,8 @@ from umol import (
     StereoModel,
     StereoResolveConfig,
     TetrahedralConfiguration,
+    TetrahedralStereoForm,
+    TransactionError,
     UnderdeterminedError,
     ValenceCandidateSource,
     ValenceEntry,
@@ -407,7 +409,7 @@ def test_molecule_tracked_canonicalize():
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
     assert remapping.to_correspondence().is_total()
-    assert remapping.atoms.images == [1, 0]
+    assert remapping.atoms.images == (1, 0)
 
 
 def test_molecule_canonicalize_error():
@@ -421,26 +423,25 @@ def test_molecule_canonicalize_error():
         molecule.tracked_canonicalize()
 
 
-def test_molecule_stereo_mutation_integrity_error():
+def test_molecule_stereo_mutation_attributes():
     molecule = Molecule.parse(
         '{:atoms ["C" "F" "Cl" "Br" "I"] '
         ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
         ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}'
     )
-    with pytest.raises(InvalidStructureError, match="ligands"):
-        molecule.stereo_atoms[0].configuration = (
-            StereoConfigurationForm.Kinded(
-                StereoKind.Octahedral,
-                StereoCoset.Lit(0),
-            )
-        )
-
-    assert molecule.stereo_atoms[0].configuration == StereoConfigurationForm.Kinded(
-        StereoKind.Tetrahedral,
+    molecule.stereo_atoms[0].configuration = StereoConfigurationForm.Kinded(
+        StereoKind.Octahedral,
         StereoCoset.Lit(0),
     )
-    molecule.canonicalize()
-    molecule.tracked_canonicalize()
+
+    assert molecule.stereo_atoms[0].configuration == StereoConfigurationForm.Kinded(
+        StereoKind.Octahedral,
+        StereoCoset.Lit(0),
+    )
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        molecule.canonicalize()
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        molecule.tracked_canonicalize()
 
 
 def test_molecule_from_smiles():
@@ -582,10 +583,14 @@ def _counts_strict_model():
     )
 
 
-def test_molecule_resolve():
+@pytest.mark.parametrize(
+    ("method", "copying"),
+    [("resolve_with_report", True), ("resolve_into_with_report", False)],
+)
+def test_molecule_resolve_with_report(method, copying):
     molecule = Molecule.parse('{:atoms ["C#c0"]}')
 
-    solution = molecule.resolve(
+    solution, report = getattr(molecule, method)(
         chemistry_model=_smiles_valence_model(),
         resolve_config=ResolveConfig(
             isotope=IsotopePolicy.Natural,
@@ -595,38 +600,59 @@ def test_molecule_resolve():
     )
 
     assert isinstance(solution, Solution.Determined)
-    assert solution.molecule == Molecule.parse(
-        '{:atoms ["C#i=#c0#h4#n0#u0#s"]}'
-    )
-    assert solution.report.tie_breaks == [0]
-    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
+    expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+    if copying:
+        assert solution.molecule == expected
+    else:
+        assert solution.molecule is None
+        assert molecule == expected
+    assert report.tie_breaks == (0,)
+    if copying:
+        assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
-def test_molecule_resolve_underdetermined():
+def test_molecule_resolve_with_report_underdetermined():
     molecule = Molecule.parse('{:atoms ["C#c0"]}')
 
-    solution = molecule.resolve(chemistry_model=_counts_strict_model())
+    solution, report = molecule.resolve_with_report(chemistry_model=_counts_strict_model())
 
     assert isinstance(solution, Solution.Underdetermined)
-    assert len(solution.report.unresolved.get(0)) == 5
+    assert report.unresolved.get(0) == [
+        AtomForm.parse("C#c0#h0#n2#u0#s#v0#a!"),
+        AtomForm.parse("C#c0#h#n#u#s2#v0#a!"),
+        AtomForm.parse("C#c0#h2#n#u0#s#v0#a!"),
+        AtomForm.parse("C#c0#h3#n0#u#s2#v0#a!"),
+        AtomForm.parse("C#c0#h4#n0#u0#s#v0#a!"),
+    ]
     assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
-def test_molecule_resolve_contradiction():
+def test_molecule_resolve_with_report_contradiction():
     molecule = Molecule.parse('{:atoms ["C#c0#h5"]}')
 
-    solution = molecule.resolve(chemistry_model=_smiles_valence_model())
+    solution, report = molecule.resolve_with_report(chemistry_model=_smiles_valence_model())
 
     assert isinstance(solution, Solution.Contradictory)
     assert str(solution.contradiction) == "no matching valence state"
+    assert report is None
     assert molecule == Molecule.parse('{:atoms ["C#c0#h5"]}')
 
 
-def test_molecule_resolve_default_model():
-    solution = Molecule.parse('{:atoms ["C"]}').resolve()
+def test_molecule_resolve_with_report_default_model():
+    solution, report = Molecule.parse('{:atoms ["C"]}').resolve_with_report()
 
     assert isinstance(solution, Solution.Underdetermined)
-    assert len(solution.report.unresolved.get(0)) == 9
+    assert report.unresolved.get(0) == [
+        AtomForm.parse("C#c-#h3#n#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h2#n#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h#n#u#s2#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h0#n#u2#s3#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!"),
+    ]
 
 
 
@@ -738,7 +764,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         NumForm.Lit(1),
     ]
     assert [atom.constraints.tetrahedral_stereo for atom in molecule.atoms] == [
-        None
+        TetrahedralStereoForm.Undetermined()
     ] * 4
     assert list(molecule.stereo_atoms) == []
 
@@ -766,14 +792,13 @@ def test_molecule_from_smiles_chemistry_model_stereo():
                             MaximumIndependentSetAlgorithm.BranchAndBound()
                         ),
                     ),
-                    reset_aromatic_valence=False,
                 ),
                 stereo=StereoResolveConfig(),
             ),
             (
                 [NumForm.Lit(1), NumForm.Lit(0), NumForm.Lit(0)],
-                [None] * 3,
-                [None] * 3,
+                [AromaticValenceForm.Undetermined()] * 3,
+                [TetrahedralStereoForm.Undetermined()] * 3,
                 [((0, 1, 2), NumForm.Lit(0))],
                 [],
             ),
@@ -781,15 +806,13 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         (
             "c1ccccc1",
             ResolveConfig(
-                aromaticity=AromaticityResolveConfig(
-                    reset_aromatic_valence=True,
-                ),
+                aromaticity=AromaticityResolveConfig(),
                 stereo=StereoResolveConfig(),
             ),
             (
                 [NumForm.Lit(0)] * 6,
-                [None] * 6,
-                [None] * 6,
+                [AromaticValenceForm.Undetermined()] * 6,
+                [TetrahedralStereoForm.Undetermined()] * 6,
                 [((0, 1, 2, 3, 4, 5), NumForm.Lit(0))],
                 [],
             ),
@@ -798,12 +821,12 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             "C[C@H](N)O",
             ResolveConfig(
                 aromaticity=AromaticityResolveConfig(),
-                stereo=StereoResolveConfig(reset_stereo_constraints=True),
+                stereo=StereoResolveConfig(),
             ),
             (
                 [NumForm.Lit(0)] * 4,
-                [None] * 4,
-                [None] * 4,
+                [AromaticValenceForm.Undetermined()] * 4,
+                [TetrahedralStereoForm.Undetermined()] * 4,
                 [],
                 [(1, StereoKind.Tetrahedral, StereoCoset.Lit(0))],
             ),
@@ -832,8 +855,8 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
         (
             "C[S@]C",
             {},
-            ModelConversionError,
-            "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral",
+            ContradictionError,
+            "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized",
         ),
         (
             "[nH]1cccc1",
@@ -1048,7 +1071,7 @@ def test_molecule_from_smiles_stereo_frame(source, site, ligands, coset):
     ] == [
         (
             site,
-            [StereoLigand(atom, kind) for atom, kind in ligands],
+            tuple(StereoLigand(atom, kind) for atom, kind in ligands),
             StereoKind.Tetrahedral,
             coset,
         )
@@ -1200,13 +1223,29 @@ def test_molecule_combine_all_empty():
 
 
 def test_correspondence_constructor():
-    correspondence = Correspondence([(2, 0), (0, 2)], 3, 3)
+    pairs = [(2, 0), (0, 2)]
+    correspondence = Correspondence(pairs, 3, 3)
+    pairs.clear()
+    for result in (
+        correspondence.matched_pairs,
+        correspondence.left_unmatched,
+        correspondence.right_unmatched,
+    ):
+        assert type(result) is tuple
+        with pytest.raises(TypeError):
+            result[0] = None
+    assert all(type(pair) is tuple for pair in correspondence.matched_pairs)
+    assert Correspondence(
+        correspondence.matched_pairs,
+        correspondence.left_count,
+        correspondence.right_count,
+    ) == correspondence
 
-    assert correspondence.matched_pairs == [(0, 2), (2, 0)]
+    assert correspondence.matched_pairs == ((0, 2), (2, 0))
     assert correspondence.left_count == 3
     assert correspondence.right_count == 3
-    assert correspondence.left_unmatched == [1]
-    assert correspondence.right_unmatched == [1]
+    assert correspondence.left_unmatched == (1,)
+    assert correspondence.right_unmatched == (1,)
     assert repr(correspondence) == (
         "Correspondence(matched_pairs=[(0, 2), (2, 0)], "
         "left_count=3, right_count=3)"
@@ -1267,11 +1306,11 @@ def test_correspondence_value():
 
     assert isinstance(correspondence, Correspondence)
     assert len(correspondence) == 2
-    assert correspondence.matched_pairs == [(0, 1), (1, 2)]
+    assert correspondence.matched_pairs == ((0, 1), (1, 2))
     assert correspondence.left_count == 2
     assert correspondence.right_count == 3
-    assert correspondence.left_unmatched == []
-    assert correspondence.right_unmatched == [0]
+    assert correspondence.left_unmatched == ()
+    assert correspondence.right_unmatched == (0,)
     assert correspondence.right_of(0) == 1
     assert correspondence.right_of(2) is None
     assert correspondence.left_of(2) == 1
@@ -1281,10 +1320,10 @@ def test_correspondence_value():
     reverse = correspondence.reverse()
     composite = correspondence.compose(reverse)
 
-    assert reverse.matched_pairs == [(1, 0), (2, 1)]
+    assert reverse.matched_pairs == ((1, 0), (2, 1))
     assert reverse.left_count == 3
     assert reverse.right_count == 2
-    assert composite.matched_pairs == [(0, 0), (1, 1)]
+    assert composite.matched_pairs == ((0, 0), (1, 1))
     assert composite.is_total()
     assert Correspondence.compose_all(
         item for item in [correspondence, reverse]
@@ -1344,11 +1383,11 @@ def test_molecule_correspondence_value():
     reverse = correspondence.reverse()
     composite = correspondence.compose(reverse)
 
-    assert reverse.atoms.matched_pairs == [(1, 0), (2, 1)]
-    assert reverse.bonds.matched_pairs == [(0, 0)]
+    assert reverse.atoms.matched_pairs == ((1, 0), (2, 1))
+    assert reverse.bonds.matched_pairs == ((0, 0),)
     assert not reverse.is_total()
-    assert composite.atoms.matched_pairs == [(0, 0), (1, 1)]
-    assert composite.bonds.matched_pairs == [(0, 0)]
+    assert composite.atoms.matched_pairs == ((0, 0), (1, 1))
+    assert composite.bonds.matched_pairs == ((0, 0),)
     assert composite.is_total()
     assert MoleculeCorrespondence.compose_all(
         item for item in [correspondence, reverse]
@@ -1367,13 +1406,88 @@ def test_molecule_correspondence_constructor():
     assert correspondence.bonds == empty
 
 
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_molecule_apply_identity(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    alias = molecule
+    copied = molecule.copy()
+    if method == "edit":
+        result = molecule.edit().finish()
+    else:
+        result = getattr(molecule, method)(Edits())
+        if method == "tracked_apply":
+            result = result[0]
+    assert result == copied
+    result.atoms[0].charge = 1
+    assert result == Molecule.parse('{:atoms ["C#c1"]}')
+    assert alias == molecule == copied == Molecule.parse('{:atoms ["C"]}')
+    alias.atoms[0].charge = -1
+    assert molecule == Molecule.parse('{:atoms ["C#c-1"]}')
+    assert result == Molecule.parse('{:atoms ["C#c1"]}')
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+@pytest.mark.parametrize(("kind", "error", "message"), [
+    ("application", TransactionError, "atom handle 7"),
+    ("integrity", InvalidStructureError, "parallel bonds"),
+])
+def test_molecule_apply_error(method, kind, error, message):
+    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    copied = molecule.copy()
+    view = molecule.atoms[0]
+    edits = Edits()
+    edits.add_atom(AtomForm.parse("O"))
+    if kind == "application":
+        edits.remove_topology([7], [])
+    else:
+        edits.add_bond(0, 1, BondForm(1))
+    with pytest.raises(error, match=message):
+        getattr(molecule, method)(edits)
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        len(edits)
+    assert view.id == 0
+    assert molecule == copied == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_apply_argument_error(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    view = molecule.atoms[0]
+    with pytest.raises(TypeError):
+        getattr(molecule, method)(None)
+    assert view.id == 0
+    assert molecule == Molecule.parse('{:atoms ["C"]}')
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+@pytest.mark.parametrize("editor", [False, True])
+def test_molecule_apply_consumed_edits(method, editor):
+    edits = Edits()
+    Molecule().apply(edits)
+    receiver = Molecule.parse('{:atoms ["C"]}')
+    view = receiver.atoms[0]
+    if editor:
+        receiver = receiver.edit()
+
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        getattr(receiver, method)(edits)
+    if editor:
+        assert receiver.finish() == Molecule.parse('{:atoms ["C"]}')
+    else:
+        assert receiver == Molecule.parse('{:atoms ["C"]}')
+    assert view.id == 0
+
+
 def test_molecule_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
     edits = Edits.parse('[{:atom {:add "C#h4"}}]')
 
+    copied = Edits(list(edits))
+    original = molecule.copy()
     product, correspondence = molecule.tracked_apply(edits)
 
-    assert product == molecule.apply(edits)
+    assert product == original.apply(copied)
+    assert molecule == original == Molecule.parse('{:atoms ["N#h3"]}')
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
     assert correspondence.bonds == Correspondence([], 0, 0)
 
@@ -1402,8 +1516,8 @@ def test_molecule_tracked_extract():
     assert extracted == Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
-    assert compaction.atoms.removed == [1]
-    assert compaction.bonds.removed == [0, 1]
+    assert compaction.atoms.removed == (1,)
+    assert compaction.bonds.removed == (0, 1)
 
 
 def test_molecule_split():
@@ -1428,10 +1542,10 @@ def test_molecule_split():
     ]
     assert [
         correspondence.atoms.matched_pairs for _, correspondence in components
-    ] == [[(0, 0)], [(1, 0), (2, 1)]]
+    ] == [((0, 0),), ((1, 0), (2, 1))]
     assert [
         correspondence.bonds.matched_pairs for _, correspondence in components
-    ] == [[], [(0, 0)]]
+    ] == [(), ((0, 0),)]
     assert [
         (correspondence.atoms.left_count, correspondence.atoms.right_count)
         for _, correspondence in components

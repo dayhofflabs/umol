@@ -17,6 +17,19 @@ from umol import (
 )
 
 
+@pytest.mark.parametrize("counts", [[], [2, 1, 2]])
+def test_electron_counts_form_payload(counts):
+    expected = tuple(counts)
+    form = ElectronCountsForm.Lit(counts)
+    counts.clear()
+    assert type(form._0) is tuple
+    assert form._0 == expected
+    assert ElectronCountsForm.Lit(form._0) == form
+    assert form.as_lit() == list(expected)
+    with pytest.raises(TypeError):
+        form._0[0] = 1
+
+
 @pytest.mark.parametrize(
     ("update", "expected"),
     [
@@ -73,8 +86,8 @@ def test_aromatic_system_update(update, expected):
         update.electrons,
         update.charge,
         update.unpaired_electrons,
-        update.constraints,
-    ) == expected
+    ) == expected[:-1]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -252,12 +265,11 @@ def test_aromaticsystemview_set_electrons():
     assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
 
 
-def test_aromaticsystemview_set_electrons_error():
+@pytest.mark.parametrize("electrons", [[], [2], [2, 2, 2, 2, 2, 2, 2]])
+def test_aromaticsystemview_set_electrons_mismatched_length(electrons):
     mol = benzene()
-    before = str(mol)
-    with pytest.raises(ValueError, match="electron-count vector has length 1, expected 6"):
-        mol.aromatic_systems[0].electrons = [2]
-    assert str(mol) == before
+    mol.aromatic_systems[0].electrons = electrons
+    assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit(electrons)
 
 
 def test_aromaticsystemview_set_charge():
@@ -328,12 +340,10 @@ def test_aromaticsystemviews_setitem():
     assert view.atom_ids == (0, 1, 2, 3, 4, 5)
 
 
-def test_aromaticsystemviews_setitem_error():
+def test_aromaticsystemviews_setitem_attributes():
     mol = benzene()
-    before = str(mol)
-    with pytest.raises(ValueError, match="electron-count vector has length 1, expected 6"):
-        mol.aromatic_systems[0] = AromaticSystemForm([2])
-    assert str(mol) == before
+    mol.aromatic_systems[0] = AromaticSystemForm([2])
+    assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit([2])
 
 
 def test_aromaticsystemviews_setitem_out_of_range():

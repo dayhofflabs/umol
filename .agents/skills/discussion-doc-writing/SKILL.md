@@ -75,4 +75,3 @@ Use one document per work unit unless a genuinely independent concern emerges.
 - Make narrow diffs; preserve untouched wrapping, heading style, and list style.
 - Add reciprocal `Relates` links when either document should lead readers to the other, including
   permitted link-only changes to closed documents.
-- Run `git diff --check`.

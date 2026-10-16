@@ -62,14 +62,14 @@ fn compose_all(
 
     let mut node_match = |ra: NodeId, lb: NodeId| {
         r_a.atom(AtomId::from(ra))
-            .attributes
-            .meet(l_b.atom(AtomId::from(lb)).attributes)
+            .attributes()
+            .meet(l_b.atom(AtomId::from(lb)).attributes())
             .is_some()
     };
     let mut edge_match = |re: EdgeId, le: EdgeId| {
         r_a.bond(BondId::from(re))
-            .attributes
-            .meet(l_b.bond(BondId::from(le)).attributes)
+            .attributes()
+            .meet(l_b.bond(BondId::from(le)).attributes())
             .is_some()
     };
     let a_inverse = a.reverse().ok()?;

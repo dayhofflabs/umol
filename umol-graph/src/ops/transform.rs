@@ -1,8 +1,4 @@
-//! Pure transformations over a fully resolved `Molecule`. Distinct from
-//! the resolvers in `ops/resolver`: a transformer rewrites a determined IR
-//! into another determined IR without filling in undetermined values. Each
-//! concrete transformer carries its own `Error` type via the trait's
-//! associated type.
+//! Transformations of determined molecular representations.
 
 pub mod aromatizer;
 pub mod delocalize_charge;
@@ -13,23 +9,40 @@ pub use delocalize_charge::DelocalizeCharge;
 pub use kekulizer::{KekulizeConfig, KekulizeError, Kekulizer, MaximumMatchingAlgorithm};
 use umol_graph_ir::ir::Molecule;
 
+/// Rewrites a determined molecular representation.
+///
+/// Derives a complete plan before mutation, reporting every rejection during planning.
+/// The plan applies to its unchanged input and preserves representation integrity;
+/// a failed application or publication is an implementation defect.
+///
+/// # Semantic properties
+///
+/// - Successful `transform` and `transform_into` produce the same molecule.
+/// - Rejected `transform_into` leaves the input unchanged.
+/// - Every published result satisfies molecule representation integrity.
+/// - `transform_iter` preserves its source and yields independently mutable molecules.
 pub trait Transformer {
+    /// Failure reported by this transformation.
     type Error;
 
+    /// Consumes the input and returns its transformed value.
+    ///
+    /// # Errors
+    ///
+    /// Returns the transformation's error on rejection. The input is dropped.
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error>;
+
+    /// Plans and transforms the borrowed molecule in place without a transaction or rollback.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same planning errors as `transform`; rejection leaves the input unchanged.
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error>;
 
-    fn transform(&self, molecule: &Molecule) -> Result<Molecule, Self::Error> {
-        let mut out = molecule.clone();
-        self.transform_into(&mut out)?;
-        Ok(out)
-    }
-
-    /// Yields every result the transformer can produce. For deterministic
-    /// transformers this is a single-element iterator; for non-deterministic
-    /// ones this enumerates the alternatives. On error the iterator is
-    /// empty.
-    fn generate_all<'a>(
-        &'a self,
-        molecule: &'a Molecule,
-    ) -> Box<dyn Iterator<Item = Molecule> + 'a>;
+    /// Lazily yields the transformation's independent results.
+    ///
+    /// Candidate copying and transformation begin when iteration requests a result.
+    /// Deterministic transformations yield one molecule on success and none on error;
+    /// transformations with alternatives enumerate their results in implementation order.
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a;
 }

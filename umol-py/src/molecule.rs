@@ -27,14 +27,14 @@ use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
 use crate::atom::{AtomForm, AtomViews};
 use crate::bond::{BondForm, BondViews};
 use crate::compact::MoleculeCompaction;
-use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
+use crate::constraint::molecule::{Constraint, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    fingerprint_error, metadata_error, molecule_apply_error, molecule_integrity_error, parse_error,
-    smiles_input_error, smiles_output_error, InvalidStructureError,
+    fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
+    smiles_output_error, InvalidStructureError, InvalidatedViewError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -48,24 +48,31 @@ use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
 use crate::reaction::{Reaction, ReactionApplicationConfig, ReactionProductsIter};
 use crate::resolve::{ResolveConfig, ResolveContradiction, ResolveReport, Solution};
+use crate::ring::{RingConfig, RingModel, RingViews};
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{
     StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand,
 };
 use crate::substructure::SubstructureSearchConfig;
-use crate::transaction::MoleculeEditor;
+use crate::transaction::{MoleculeEditor, RollbackMethod};
 
 /// A molecule: the owned graph-IR root.
-#[pyclass(eq, from_py_object)]
-#[derive(Clone, Debug, PartialEq)]
-pub struct Molecule(GraphIrMolecule);
+///
+/// Copy-producing operations preserve the source and its views. Whole-molecule mutation
+/// invalidates existing views; ordinary attribute changes remain visible through them.
+#[pyclass]
+#[derive(Debug)]
+pub struct Molecule {
+    value: GraphIrMolecule,
+    counter: u64,
+}
 
 #[pymethods]
 impl Molecule {
     /// An empty molecule: zero atoms, zero bonds.
     #[new]
     fn new() -> Self {
-        Self(GraphIrMolecule::new())
+        Self::from_rust(GraphIrMolecule::new())
     }
 
     /// Parse a molecule from its EDN representation under explicit construction defaults.
@@ -98,7 +105,7 @@ impl Molecule {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
-        GraphIrMoleculeDsl::from_ir(&self.0, defaults.to_rust()).to_string()
+        GraphIrMoleculeDsl::from_ir(self.to_rust(), defaults.to_rust()).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -112,7 +119,7 @@ impl Molecule {
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
-        let lowered = GraphIrMoleculeDsl::from_ir(&self.0, defaults.to_rust())
+        let lowered = GraphIrMoleculeDsl::from_ir(self.to_rust(), defaults.to_rust())
             .into_parts()
             .0;
         GraphIrMoleculeDsl::new(lowered, metadata.to_rust().clone())
@@ -223,7 +230,7 @@ impl Molecule {
         let ir_constraints = constraints
             .iter()
             .map(|constraint| constraint.bind(py).borrow().to_rust(py))
-            .collect::<Vec<_>>();
+            .collect::<PyResult<Vec<_>>>()?;
         GraphIrMolecule::try_from_entries(GraphIrMoleculeEntries {
             atoms: ir_atoms,
             bonds: ir_bonds,
@@ -235,7 +242,7 @@ impl Molecule {
             stereo_bonds: ir_stereo_bonds,
             constraints: ir_constraints.into(),
         })
-        .map(Molecule)
+        .map(Self::from_rust)
         .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
@@ -248,18 +255,22 @@ impl Molecule {
     fn from_smiles(
         source: &str,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -268,7 +279,7 @@ impl Molecule {
             ResolveConfig::to_rust,
         );
 
-        ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
+        ingest_smiles_with(source, &io_config, chemistry_model, &resolve_config)
             .map(Self::from_rust)
             .map_err(smiles_input_error)
     }
@@ -280,18 +291,22 @@ impl Molecule {
     fn to_smiles(
         &self,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<String> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -300,34 +315,44 @@ impl Molecule {
             ResolveConfig::to_rust,
         );
 
-        export_smiles_with(&self.0, &io_config, &chemistry_model, &resolve_config)
+        export_smiles_with(self.to_rust(), &io_config, chemistry_model, &resolve_config)
             .map_err(smiles_output_error)
     }
 
-    /// Create a mutable editor initialized from this molecule.
-    fn edit(&self) -> MoleculeEditor {
-        MoleculeEditor::from_rust(self.0.edit())
+    /// Copy the molecule into an independent owner.
+    fn copy(&self) -> Self {
+        Self::from_rust(self.to_rust().clone())
     }
 
-    /// Apply a checked edit batch without modifying this molecule.
+    /// Copy this molecule into an independent editor, preserving the source and its views.
+    fn edit(&self) -> MoleculeEditor {
+        MoleculeEditor::from_rust(self.to_rust().clone().edit())
+    }
+
+    /// Consume the edit batch and return a changed copy of this molecule.
     ///
     /// Raises `TransactionError` when the edits cannot be applied and `InvalidStructureError` when
     /// the modified draft cannot be published as a molecule.
+    /// The source and its views remain unchanged on success or failure. A transferred batch stays
+    /// consumed even if application or publication fails.
     fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
-        self.0
-            .apply(edits.bind(py).borrow().to_rust().clone())
+        self.to_rust()
+            .clone()
+            .apply(edits.try_borrow_mut(py)?.take()?)
             .map(Self::from_rust)
             .map_err(molecule_apply_error)
     }
 
-    /// Apply the same checked edit batch and return the source-to-result correspondence.
+    /// Apply the batch to a copy as in apply, also returning the source-to-result
+    /// correspondence.
     fn tracked_apply(
         &self,
         py: Python<'_>,
         edits: Py<Edits>,
     ) -> PyResult<(Self, MoleculeCorrespondence)> {
-        self.0
-            .tracked_apply(edits.bind(py).borrow().to_rust().clone())
+        self.to_rust()
+            .clone()
+            .tracked_apply(edits.try_borrow_mut(py)?.take()?)
             .map(|(molecule, correspondence)| {
                 (
                     Self::from_rust(molecule),
@@ -337,16 +362,78 @@ impl Molecule {
             .map_err(molecule_apply_error)
     }
 
+    /// Consume prepared batches in order and apply them in one transaction.
+    ///
+    /// The input iterable is collected before any batch is consumed.
+    /// Each batch has its own handle namespace. Once execution starts, existing views are
+    /// invalidated, including on failure or a no-op. Application and integrity failures restore
+    /// the molecule under normalized equality, preserving participant order.
+    /// If a batch cannot be consumed, earlier batches remain consumed and the molecule is unchanged.
+    /// RollbackMethod.Journal is the default; RollbackMethod.Clone edits a working copy.
+    #[pyo3(signature = (batches, *, rollback_method=RollbackMethod::Journal))]
+    fn transact(
+        slf: Py<Self>,
+        py: Python<'_>,
+        batches: &Bound<'_, PyAny>,
+        rollback_method: RollbackMethod,
+    ) -> PyResult<()> {
+        let batches = batches
+            .try_iter()?
+            .map(|item| -> PyResult<Py<Edits>> { Ok(item?.cast_into::<Edits>()?.unbind()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let batches = batches
+            .into_iter()
+            .map(|edits| edits.try_borrow_mut(py)?.take())
+            .collect::<PyResult<Vec<_>>>()?;
+        let mut molecule = slf.try_borrow_mut(py)?;
+        molecule.advance_counter();
+        molecule
+            .to_rust_mut()
+            .transact(batches, rollback_method.to_rust())
+            .map_err(molecule_apply_error)
+    }
+
+    /// Apply prepared batches and return the transaction-entry to result correspondence.
+    ///
+    /// Batches are consumed and existing views are invalidated as in transact.
+    /// RollbackMethod.Journal is the default; RollbackMethod.Clone edits a working copy.
+    #[pyo3(signature = (batches, *, rollback_method=RollbackMethod::Journal))]
+    fn tracked_transact(
+        slf: Py<Self>,
+        py: Python<'_>,
+        batches: &Bound<'_, PyAny>,
+        rollback_method: RollbackMethod,
+    ) -> PyResult<MoleculeCorrespondence> {
+        let batches = batches
+            .try_iter()?
+            .map(|item| -> PyResult<Py<Edits>> { Ok(item?.cast_into::<Edits>()?.unbind()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let batches = batches
+            .into_iter()
+            .map(|edits| edits.try_borrow_mut(py)?.take())
+            .collect::<PyResult<Vec<_>>>()?;
+        let mut molecule = slf.try_borrow_mut(py)?;
+        molecule.advance_counter();
+        molecule
+            .to_rust_mut()
+            .tracked_transact(batches, rollback_method.to_rust())
+            .map(MoleculeCorrespondence::from_rust)
+            .map_err(molecule_apply_error)
+    }
+
     /// Combine by disjoint concatenation. For each entity kind, this molecule's ids remain
     /// the prefix and other follows in its original order.
     fn combine(&self, other: &Self) -> Self {
-        Self::from_rust(self.0.combine(&other.0))
+        Self::from_rust(self.to_rust().clone().combine(other.to_rust()))
     }
 
     /// Append other in place, preserving existing ids and each entity kind's order.
-    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) {
-        let other = other.bind(py).borrow().to_rust().clone();
-        slf.borrow_mut(py).to_rust_mut().combine_from(&other);
+    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) -> PyResult<()> {
+        let other = other.try_borrow(py)?.to_rust().clone();
+        let mut molecule = slf.try_borrow_mut(py)?;
+        molecule.advance_counter();
+        molecule.to_rust_mut().combine_from(&other);
+        Ok(())
     }
 
     /// Combine an iterable by disjoint concatenation, in input order for each entity kind.
@@ -358,47 +445,170 @@ impl Molecule {
             .collect::<PyResult<Vec<_>>>()?;
         let borrowed = molecules
             .iter()
-            .map(|molecule| molecule.bind(py).borrow())
-            .collect::<Vec<_>>();
-        Ok(Self::from_rust(GraphIrMolecule::combine_all(
-            borrowed.iter().map(|molecule| molecule.to_rust()),
-        )))
+            .map(|molecule| molecule.try_borrow(py))
+            .collect::<Result<Vec<_>, _>>()?;
+        let molecules = borrowed.iter().map(|molecule| molecule.to_rust());
+        Ok(Self::from_rust(GraphIrMolecule::combine_all(molecules)))
     }
 
-    /// Resolve under a chemistry model, returning the three-valued solution.
+    /// Resolve a copy of this molecule under the chemistry model.
     ///
-    /// The receiver is never modified; `Determined` carries the resolved copy
-    /// together with the tie-break record, `Underdetermined` the surviving
-    /// per-atom candidate lists, and `Contradictory` the model's rejection.
-    /// `chemistry_model` defaults to `ChemistryModel.default()` — presets are
-    /// reader conventions, and a constructed molecule has no format.
-    /// Resolution fills what is open; validating committed structure under a
-    /// chemistry model is a separate operation.
+    /// Determined carries the resolved molecule. The source and its views remain
+    /// unchanged on every outcome. No report is built.
+    /// The default model is ChemistryModel.default(); resolution completes open fields.
+    ///
+    /// Raises RuntimeError for planning errors.
     #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
     fn resolve(
         &self,
-        chemistry_model: Option<ChemistryModel>,
+        py: Python<'_>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Solution> {
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
-        let mut molecule = self.0.clone();
-        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
-            .resolve(&mut molecule)
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
+            .resolve(self.to_rust().clone())
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
-            GraphSolution::Determined(report) => Solution::Determined {
-                molecule: Self(molecule),
-                report: ResolveReport::from_rust(&report),
+            GraphSolution::Determined(molecule) => Solution::Determined {
+                molecule: Some(Py::new(py, Self::from_rust(molecule))?),
             },
-            GraphSolution::Underdetermined(report) => Solution::Underdetermined {
-                report: ResolveReport::from_rust(&report),
-            },
+            GraphSolution::Underdetermined(()) => Solution::Underdetermined {},
             GraphSolution::Contradictory(contradiction) => Solution::Contradictory {
                 contradiction: ResolveContradiction::from_rust(contradiction),
             },
+        })
+    }
+
+    /// Resolve a copy of this molecule and return (solution, report).
+    ///
+    /// Ownership and errors follow resolve. Determined carries the resolved molecule.
+    /// The report is present for Determined and Underdetermined, and None for Contradictory.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
+    fn resolve_with_report(
+        &self,
+        py: Python<'_>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<(Solution, Option<ResolveReport>)> {
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
+            .resolve_with_report(self.to_rust().clone())
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined((molecule, report)) => (
+                Solution::Determined {
+                    molecule: Some(Py::new(py, Self::from_rust(molecule))?),
+                },
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Underdetermined(report) => (
+                Solution::Underdetermined {},
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Contradictory(contradiction) => (
+                Solution::Contradictory {
+                    contradiction: ResolveContradiction::from_rust(contradiction),
+                },
+                None,
+            ),
+        })
+    }
+
+    /// Resolve in place, retaining changes only on Determined.
+    ///
+    /// Other outcomes restore the molecule under normalized equality. Existing views
+    /// are invalidated once execution starts, including on rejection or error.
+    /// Determined has molecule=None; no report is built. Defaults and errors follow resolve.
+    /// Rollback defaults to Clone; Journal provides the same recovery guarantee.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None, rollback_method=RollbackMethod::Clone))]
+    fn resolve_into(
+        &mut self,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
+        resolve_config: Option<ResolveConfig>,
+        rollback_method: RollbackMethod,
+    ) -> PyResult<Solution> {
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        self.advance_counter();
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
+            .resolve_into(self.to_rust_mut(), rollback_method.to_rust())
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined(()) => Solution::Determined { molecule: None },
+            GraphSolution::Underdetermined(()) => Solution::Underdetermined {},
+            GraphSolution::Contradictory(contradiction) => Solution::Contradictory {
+                contradiction: ResolveContradiction::from_rust(contradiction),
+            },
+        })
+    }
+
+    /// Resolve in place and return (solution, report).
+    ///
+    /// Mutation, restoration, invalidation, and errors follow resolve_into.
+    /// The report is present for Determined and Underdetermined, and None for Contradictory.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None, rollback_method=RollbackMethod::Clone))]
+    fn resolve_into_with_report(
+        &mut self,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
+        resolve_config: Option<ResolveConfig>,
+        rollback_method: RollbackMethod,
+    ) -> PyResult<(Solution, Option<ResolveReport>)> {
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel::default();
+                &default_model
+            }
+        };
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        self.advance_counter();
+        let solution = GraphResolver::with_config(chemistry_model, resolve_config)
+            .resolve_into_with_report(self.to_rust_mut(), rollback_method.to_rust())
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined(report) => (
+                Solution::Determined { molecule: None },
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Underdetermined(report) => (
+                Solution::Underdetermined {},
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Contradictory(contradiction) => (
+                Solution::Contradictory {
+                    contradiction: ResolveContradiction::from_rust(contradiction),
+                },
+                None,
+            ),
         })
     }
 
@@ -450,8 +660,8 @@ impl Molecule {
             .collect::<PyResult<Vec<_>>>()?;
         let reactants = reactants
             .iter()
-            .map(|molecule| molecule.bind(py).borrow().to_rust().clone())
-            .collect::<Vec<_>>();
+            .map(|molecule| -> PyResult<_> { Ok(molecule.try_borrow(py)?.to_rust().clone()) })
+            .collect::<PyResult<Vec<_>>>()?;
         let reaction = reaction.to_rust(py)?;
         let products = GraphIrReact::react(
             reactants.as_slice(),
@@ -465,12 +675,16 @@ impl Molecule {
 
     /// Decompose into conservatively connected components, ordered by lowest source atom id.
     fn split(&self) -> Vec<Self> {
-        self.0.split().into_iter().map(Self::from_rust).collect()
+        self.to_rust()
+            .split()
+            .into_iter()
+            .map(Self::from_rust)
+            .collect()
     }
 
     /// Return the same components as split, paired with source-to-component correspondences.
     fn tracked_split(&self) -> Vec<(Self, MoleculeCorrespondence)> {
-        self.0
+        self.to_rust()
             .tracked_split()
             .into_iter()
             .map(|(component, correspondence)| {
@@ -484,12 +698,12 @@ impl Molecule {
 
     /// Extract the atoms selected by a sub-to-host correspondence, preserving host order.
     fn extract(&self, selection: &MoleculeCorrespondence) -> Self {
-        Self::from_rust(self.0.extract(selection.to_rust()))
+        Self::from_rust(self.to_rust().extract(selection.to_rust()))
     }
 
     /// Return the same extraction and its host-to-result compaction.
     fn tracked_extract(&self, selection: &MoleculeCorrespondence) -> (Self, MoleculeCompaction) {
-        let (molecule, compaction) = self.0.tracked_extract(selection.to_rust());
+        let (molecule, compaction) = self.to_rust().tracked_extract(selection.to_rust());
         (
             Self::from_rust(molecule),
             MoleculeCompaction::from_rust(compaction),
@@ -505,8 +719,8 @@ impl Molecule {
     ) -> PyResult<Vec<MoleculeCorrespondence>> {
         let config = config.unwrap_or_default().to_rust();
         Ok(self
-            .0
-            .substructure_matches(&host.0, config)
+            .to_rust()
+            .substructure_matches(host.to_rust(), config)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .into_iter()
             .map(MoleculeCorrespondence::from_rust)
@@ -518,7 +732,7 @@ impl Molecule {
     fn hashed_fingerprint(&self, config: HashedFingerprintConfig) -> PyResult<HashedFeatureSet> {
         config
             .to_rust()
-            .featurize(&self.0)
+            .featurize(self.to_rust())
             .map(HashedFeatureSet::from_rust)
             .map_err(fingerprint_error)
     }
@@ -531,7 +745,7 @@ impl Molecule {
     ) -> PyResult<CountedHashedFeatureSet> {
         config
             .to_rust()
-            .featurize_counted(&self.0)
+            .featurize_counted(self.to_rust())
             .map(CountedHashedFeatureSet::from_rust)
             .map_err(fingerprint_error)
     }
@@ -544,7 +758,7 @@ impl Molecule {
                 GraphPatternFingerprinter::new,
                 PatternFingerprintConfig::to_rust,
             )
-            .fingerprint(&self.0)
+            .fingerprint(self.to_rust())
             .map(BitFp::from_rust)
             .map_err(fingerprint_error)
     }
@@ -557,90 +771,100 @@ impl Molecule {
     ) -> PyResult<StructuralFeatureSet> {
         config
             .to_rust()
-            .featurize(&self.0)
+            .featurize(self.to_rust())
             .map(StructuralFeatureSet::from_rust)
             .map_err(fingerprint_error)
     }
 
+    /// Compute rings under the supplied model and algorithms, retaining this molecule.
+    fn rings(
+        slf: Py<Self>,
+        py: Python<'_>,
+        model: RingModel,
+        config: RingConfig,
+    ) -> PyResult<RingViews> {
+        let rings = slf
+            .try_borrow(py)?
+            .to_rust()
+            .rings(model.to_rust(), config.to_rust())
+            .into_ring_set();
+        RingViews::from_rust(py, rings, slf)
+    }
+
     /// The atoms, indexed by integer position.
     #[getter]
-    fn atoms(slf: Py<Self>) -> AtomViews {
-        AtomViews::new(slf)
+    fn atoms(slf: Py<Self>, py: Python<'_>) -> PyResult<AtomViews> {
+        AtomViews::new(slf, py)
     }
 
     /// The bonds, indexed by integer position.
     #[getter]
-    fn bonds(slf: Py<Self>) -> BondViews {
-        BondViews::new(slf)
+    fn bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<BondViews> {
+        BondViews::new(slf, py)
     }
 
     /// The dative bonds, indexed by integer position.
     #[getter]
-    fn dative_bonds(slf: Py<Self>) -> DativeBondViews {
-        DativeBondViews::new(slf)
+    fn dative_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<DativeBondViews> {
+        DativeBondViews::new(slf, py)
     }
 
     /// The aromatic systems, indexed by integer position.
     #[getter]
-    fn aromatic_systems(slf: Py<Self>) -> AromaticSystemViews {
-        AromaticSystemViews::new(slf)
+    fn aromatic_systems(slf: Py<Self>, py: Python<'_>) -> PyResult<AromaticSystemViews> {
+        AromaticSystemViews::new(slf, py)
     }
 
     /// The multicenter bonds, indexed by integer position.
     #[getter]
-    fn multicenter_bonds(slf: Py<Self>) -> MulticenterBondViews {
-        MulticenterBondViews::new(slf)
+    fn multicenter_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<MulticenterBondViews> {
+        MulticenterBondViews::new(slf, py)
     }
 
     /// The noncovalent bonds, indexed by integer position.
     #[getter]
-    fn noncovalent_bonds(slf: Py<Self>) -> NoncovalentBondViews {
-        NoncovalentBondViews::new(slf)
+    fn noncovalent_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<NoncovalentBondViews> {
+        NoncovalentBondViews::new(slf, py)
     }
 
     /// The stereo atoms, indexed by integer position.
     #[getter]
-    fn stereo_atoms(slf: Py<Self>) -> StereoAtomViews {
-        StereoAtomViews::new(slf)
+    fn stereo_atoms(slf: Py<Self>, py: Python<'_>) -> PyResult<StereoAtomViews> {
+        StereoAtomViews::new(slf, py)
     }
 
     /// The stereo bonds, indexed by integer position.
     #[getter]
-    fn stereo_bonds(slf: Py<Self>) -> StereoBondViews {
-        StereoBondViews::new(slf)
+    fn stereo_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<StereoBondViews> {
+        StereoBondViews::new(slf, py)
     }
 
     /// The molecule-level constraints in insertion order.
     #[getter]
-    fn constraints(slf: Py<Self>) -> ConstraintsView {
-        ConstraintsView::new(slf)
+    fn constraints(slf: Py<Self>, py: Python<'_>) -> PyResult<ConstraintsView> {
+        ConstraintsView::new(slf, py)
     }
 
-    /// Replace the molecule-level constraints from an owned container or live view.
-    #[setter]
-    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsLike) -> PyResult<()> {
-        let constraints = value.to_rust(py)?;
-        slf.borrow_mut(py)
-            .to_rust_mut()
-            .try_modify_constraints(|current| *current = constraints)
-            .map_err(molecule_integrity_error)
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
     }
 
     pub(crate) fn __repr__(&self) -> String {
+        let molecule = self.to_rust();
         // Atoms and bonds always; the other entity kinds (dative bonds, aromatic systems,
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
         // so a plain covalent molecule stays uncluttered. Names match the `from_entries` kwargs.
         let mut parts = vec![
-            format!("atoms={}", self.0.atoms().count()),
-            format!("bonds={}", self.0.bonds().count()),
+            format!("atoms={}", molecule.atoms().count()),
+            format!("bonds={}", molecule.bonds().count()),
         ];
         for (name, count) in [
-            ("dative_bonds", self.0.dative_bonds().count()),
-            ("aromatic_systems", self.0.aromatic_systems().count()),
-            ("multicenter_bonds", self.0.multicenter_bonds().count()),
-            ("noncovalent_bonds", self.0.noncovalent_bonds().count()),
-            ("stereo_atoms", self.0.stereo_atoms().count()),
-            ("stereo_bonds", self.0.stereo_bonds().count()),
+            ("dative_bonds", molecule.dative_bonds().count()),
+            ("aromatic_systems", molecule.aromatic_systems().count()),
+            ("multicenter_bonds", molecule.multicenter_bonds().count()),
+            ("noncovalent_bonds", molecule.noncovalent_bonds().count()),
+            ("stereo_atoms", molecule.stereo_atoms().count()),
+            ("stereo_bonds", molecule.stereo_bonds().count()),
         ] {
             if count > 0 {
                 parts.push(format!("{name}={count}"));
@@ -651,20 +875,39 @@ impl Molecule {
 }
 
 impl Molecule {
-    /// The wrapped IR molecule — read access for atom views.
-    pub(crate) fn to_rust(&self) -> &GraphIrMolecule {
-        &self.0
+    pub(crate) fn view_counter(&self) -> u64 {
+        self.counter
     }
 
-    /// Mutable access to the wrapped IR molecule — write access for the live
-    /// atom and constraint views (copy-on-write through `atom_mut`).
+    pub(crate) fn check_access(&self, expected: u64, accessor: &'static str) -> PyResult<()> {
+        if self.counter != expected {
+            return Err(InvalidatedViewError::new_err(format!(
+                "{accessor} was invalidated by Molecule mutation"
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn advance_counter(&mut self) {
+        self.counter += 1;
+    }
+
+    /// Read access to the wrapped IR molecule.
+    pub(crate) fn to_rust(&self) -> &GraphIrMolecule {
+        &self.value
+    }
+
+    /// Mutable access to the wrapped IR molecule.
     pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrMolecule {
-        &mut self.0
+        &mut self.value
     }
 
     /// Wrap a Rust molecule as a Python molecule value.
     pub(crate) fn from_rust(molecule: GraphIrMolecule) -> Self {
-        Molecule(molecule)
+        Self {
+            value: molecule,
+            counter: 0,
+        }
     }
 }
 
@@ -672,6 +915,7 @@ impl Molecule {
 mod tests {
     use std::borrow::Cow;
 
+    use pyo3::exceptions::{PyAttributeError, PyRuntimeError};
     use pyo3::types::{PyBytes, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -691,14 +935,12 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemForm as GraphIrAromaticSystemForm,
-        AromaticSystemId as GraphIrAromaticSystemId,
-        AtomConstraintForm as GraphIrAtomConstraintForm, AtomFieldChange as GraphIrAtomFieldChange,
+        AromaticSystemId as GraphIrAromaticSystemId, AtomFieldChange as GraphIrAtomFieldChange,
         AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle,
         AtomUpdate as GraphIrAtomUpdate, BondForm as GraphIrBondForm,
-        Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
-        DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
-        Edit as GraphIrEdit, Edits as GraphIrEdits, Entity as GraphIrEntity,
-        MoleculeConstraint as GraphIrMoleculeConstraint,
+        Constraint as GraphIrConstraint, DativeBondForm as GraphIrDativeBondForm,
+        DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
+        Entity as GraphIrEntity, MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
         MulticenterBondForm as GraphIrMulticenterBondForm,
         MulticenterBondId as GraphIrMulticenterBondId,
@@ -712,10 +954,9 @@ mod tests {
 
     use super::*;
     use crate::atom::AtomForm as PyAtomForm;
-    use crate::constraint::molecule::Constraints;
-    use crate::convert::into_py_variant;
     use crate::error::{
-        InvalidStructureError, MetadataError, ParseError, TransactionError, UnderdeterminedError,
+        ConsumedError, InvalidStructureError, MetadataError, ParseError, TransactionError,
+        UnderdeterminedError,
     };
     use crate::fingerprint::config::{
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
@@ -735,7 +976,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_new() {
-        assert_eq!(Molecule::new().to_rust().atoms().count(), 0);
+        assert_eq!(Molecule::new().to_rust(), &GraphIrMolecule::new());
     }
 
     #[rstest]
@@ -949,8 +1190,7 @@ mod tests {
             let constraint = GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
                 atoms: Some(vec![GraphIrAtomId(0), GraphIrAtomId(2)]),
             });
-            let constraints =
-                vec![into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap()];
+            let constraints = vec![Constraint::from_rust(py, &constraint).unwrap()];
             let molecule = Molecule::from_entries(
                 py,
                 atoms,
@@ -1003,7 +1243,7 @@ mod tests {
     #[case::defaults(None, None, None)]
     #[case::explicit(
         Some(SmilesIoConfig::from_rust(&IoSmilesIoConfig::opensmiles())),
-        Some(ChemistryModel::from_rust(&GraphChemistryModel {
+        Some(ChemistryModel::from_rust(GraphChemistryModel {
             valence: GraphValenceModel::smiles(),
             ..GraphChemistryModel::default()
         })),
@@ -1014,18 +1254,28 @@ mod tests {
         #[case] chemistry_model: Option<ChemistryModel>,
         #[case] resolve_config: Option<ResolveConfig>,
     ) {
-        assert_eq!(
-            Molecule::from_smiles("C", io_config, chemistry_model, resolve_config).unwrap(),
-            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))
-        );
+        Python::attach(|py| {
+            let chemistry_model = chemistry_model.map(|model| Py::new(py, model).unwrap());
+            assert_eq!(
+                Molecule::from_smiles(
+                    "C",
+                    io_config,
+                    chemistry_model.as_ref().map(|model| model.borrow(py)),
+                    resolve_config,
+                )
+                .unwrap()
+                .to_rust(),
+                &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#)
+            );
+        });
     }
 
     #[rstest]
     #[case::syntax(" C", "ParseError", "Leading whitespace")]
-    #[case::model_conversion(
+    #[case::incomplete_stereo(
         "C[S@]C",
-        "ModelConversionError",
-        "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral"
+        "ContradictionError",
+        "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized"
     )]
     #[case::underdetermined("*", "UnderdeterminedError", "resolution underdetermined")]
     fn test_molecule_from_smiles_error(
@@ -1044,28 +1294,51 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_copy() {
+        let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter();
+        let mut copied = molecule.copy();
+        assert_eq!(copied.view_counter(), 0);
+        assert!(molecule.__eq__(&copied));
+        copied
+            .to_rust_mut()
+            .atom_mut(GraphIrAtomId(0))
+            .attributes_mut()
+            .charge = GraphIrNumForm::Lit(1);
+        assert_eq!(molecule.to_rust(), &initial);
+        assert_eq!(copied.to_rust(), &mol_dsl!(r#"{:atoms ["C#c+"]}"#));
+    }
+
+    #[rstest]
     fn test_molecule_edit() {
         Python::attach(|py| {
             let expected = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
-            let editor = Py::new(py, Molecule::from_rust(expected.clone()).edit()).unwrap();
-            let snapshot = editor
+            let mut molecule = Molecule::from_rust(expected.clone());
+            molecule.advance_counter();
+            let editor = Py::new(py, molecule.edit()).unwrap();
+            let published = editor
                 .bind(py)
-                .call_method0("snapshot")
+                .call_method0("finish")
                 .unwrap()
                 .extract::<Py<Molecule>>()
                 .unwrap();
 
-            assert_eq!(snapshot.bind(py).borrow().to_rust(), &expected);
+            assert_eq!(published.bind(py).borrow().to_rust(), &expected);
+            assert_eq!(molecule.to_rust(), &expected);
+            assert_eq!(molecule.view_counter(), 1);
         });
     }
 
     #[rstest]
-    fn test_molecule_apply() {
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply(#[case] tracked: bool) {
         let initial = mol_dsl!(r#"{:atoms ["N#h3"]}"#);
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.update_atom(
             GraphIrAtomHandle::Id(GraphIrAtomId(0)),
-            initial.atom(GraphIrAtomId(0)).attributes,
+            initial.atom(GraphIrAtomId(0)).attributes(),
             &GraphIrAtomUpdate {
                 implicit_hydrogens: Some(GraphIrNumForm::Lit(2)),
                 ..Default::default()
@@ -1078,25 +1351,34 @@ mod tests {
             methyl,
             GraphIrBondForm::from_order(1),
         );
-        let molecule = Molecule::from_rust(initial.clone());
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter();
 
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
 
-            let result = molecule.apply(py, edits).unwrap();
+            let result = if tracked {
+                molecule.tracked_apply(py, edits).unwrap().0
+            } else {
+                molecule.apply(py, edits).unwrap()
+            };
 
             assert_eq!(
                 result.to_rust(),
                 &mol_dsl!(r#"{:atoms ["N#h2" "C#h3"] :bonds [[0 1 "1"]]}"#)
             );
             assert_eq!(molecule.to_rust(), &initial);
+            assert_eq!(molecule.view_counter(), 1);
         });
     }
 
     #[rstest]
-    fn test_molecule_apply_error() {
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply_error(#[case] tracked: bool) {
         let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
-        let molecule = Molecule::from_rust(initial.clone());
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter();
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         rust_edits.push(GraphIrEdit::ModifyAtomField {
@@ -1110,7 +1392,11 @@ mod tests {
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
 
-            let error = molecule.apply(py, edits).unwrap_err();
+            let error = if tracked {
+                molecule.tracked_apply(py, edits).unwrap_err()
+            } else {
+                molecule.apply(py, edits).unwrap_err()
+            };
 
             assert!(error.is_instance_of::<TransactionError>(py));
             assert_eq!(
@@ -1118,13 +1404,17 @@ mod tests {
                 "atom handle 7 is out of range for 1 entries"
             );
             assert_eq!(molecule.to_rust(), &initial);
+            assert_eq!(molecule.view_counter(), 1);
         });
     }
 
     #[rstest]
-    fn test_molecule_apply_publication_error() {
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply_publication_error(#[case] tracked: bool) {
         let initial = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-        let molecule = Molecule::from_rust(initial.clone());
+        let mut molecule = Molecule::from_rust(initial.clone());
+        molecule.advance_counter();
         let mut rust_edits = GraphIrEdits::new();
         rust_edits.add_bond(
             GraphIrAtomHandle::Id(GraphIrAtomId(0)),
@@ -1135,7 +1425,11 @@ mod tests {
         Python::attach(|py| {
             let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
 
-            let error = molecule.apply(py, edits).unwrap_err();
+            let error = if tracked {
+                molecule.tracked_apply(py, edits).unwrap_err()
+            } else {
+                molecule.apply(py, edits).unwrap_err()
+            };
 
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
@@ -1143,6 +1437,139 @@ mod tests {
                 "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
             assert_eq!(molecule.to_rust(), &initial);
+            assert_eq!(molecule.view_counter(), 1);
+        });
+    }
+
+    #[rstest]
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_apply_borrowed_edits(#[case] tracked: bool) {
+        Python::attach(|py| {
+            let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+            let mut molecule = Molecule::from_rust(initial.clone());
+            molecule.advance_counter();
+            let edits = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let borrowed = edits.borrow(py);
+            let error = if tracked {
+                molecule.tracked_apply(py, edits.clone_ref(py)).unwrap_err()
+            } else {
+                molecule.apply(py, edits.clone_ref(py)).unwrap_err()
+            };
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(borrowed.to_rust().unwrap(), &GraphIrEdits::new());
+            assert_eq!(molecule.to_rust(), &initial);
+            assert_eq!(molecule.view_counter(), 1);
+        });
+    }
+
+    #[rstest]
+    #[case::untracked(false)]
+    #[case::tracked(true)]
+    fn test_molecule_transact_borrow_error(
+        #[case] tracked: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        Python::attach(|py| {
+            let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+            let molecule = Py::new(py, Molecule::from_rust(initial.clone())).unwrap();
+            let edits = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let borrowed = molecule.borrow(py);
+            let batches = PyList::new(py, [edits.clone_ref(py)]).unwrap();
+
+            let result = if tracked {
+                Molecule::tracked_transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
+                .map(drop)
+            } else {
+                Molecule::transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
+            };
+
+            let error = result.unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(borrowed.to_rust(), &initial);
+            assert_eq!(borrowed.view_counter(), 0);
+            assert!(edits
+                .borrow(py)
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
+        });
+    }
+
+    #[rstest]
+    #[case::untracked(false)]
+    #[case::tracked(true)]
+    fn test_molecule_transact_batch_borrow_error(
+        #[case] tracked: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        Python::attach(|py| {
+            let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+            let molecule = Py::new(py, Molecule::from_rust(initial.clone())).unwrap();
+            let first = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let second = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let third = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let borrowed = second.borrow(py);
+            let batches = PyList::new(
+                py,
+                [
+                    first.clone_ref(py),
+                    second.clone_ref(py),
+                    third.clone_ref(py),
+                ],
+            )
+            .unwrap();
+
+            let result = if tracked {
+                Molecule::tracked_transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
+                .map(drop)
+            } else {
+                Molecule::transact(
+                    molecule.clone_ref(py),
+                    py,
+                    batches.as_any(),
+                    rollback_method,
+                )
+            };
+
+            let error = result.unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(molecule.borrow(py).to_rust(), &initial);
+            assert_eq!(molecule.borrow(py).view_counter(), 0);
+            assert!(first
+                .borrow(py)
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
+            assert_eq!(borrowed.to_rust().unwrap(), &GraphIrEdits::new());
+            assert_eq!(third.borrow(py).to_rust().unwrap(), &GraphIrEdits::new());
         });
     }
 
@@ -1353,13 +1780,13 @@ mod tests {
         Python::attach(|py| {
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
-            fingerprint
+
+            assert!(fingerprint
                 .getattr("ids")
                 .unwrap()
-                .cast::<PyList>()
-                .unwrap()
-                .append(9u64)
-                .unwrap();
+                .call_method1("append", (9u64,))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("ids")
@@ -1441,13 +1868,13 @@ mod tests {
         Python::attach(|py| {
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
-            fingerprint
+
+            assert!(fingerprint
                 .getattr("entries")
                 .unwrap()
-                .cast::<PyList>()
-                .unwrap()
-                .append((9u64, 3u32))
-                .unwrap();
+                .call_method1("append", ((9u64, 3u32),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("entries")
@@ -1586,13 +2013,13 @@ mod tests {
         Python::attach(|py| {
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
-            fingerprint
+
+            assert!(fingerprint
                 .getattr("keys")
                 .unwrap()
-                .cast::<PyList>()
-                .unwrap()
-                .append(PyBytes::new(py, b"detached"))
-                .unwrap();
+                .call_method1("append", (PyBytes::new(py, b"detached"),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("keys")
@@ -1627,7 +2054,7 @@ mod tests {
             .into_iter()
             .map(GraphIrAtomForm::from_element)
             .collect();
-        let molecule = Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+        let molecule = Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms,
             ..Default::default()
         }));
@@ -1638,129 +2065,29 @@ mod tests {
     fn test_molecule_constraints() {
         Python::attach(|py| {
             let molecule = Py::new(py, Molecule::new()).unwrap();
-            let view = Molecule::constraints(molecule.clone_ref(py));
-            let constraint =
-                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-            view.with_mut(py, |constraints| constraints.push(constraint.clone()))
-                .unwrap();
-
+            let view = Molecule::constraints(molecule, py).unwrap();
             assert_eq!(
-                molecule
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[constraint]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_molecule_set_constraints() {
-        Python::attach(|py| {
-            let molecule = Py::new(py, Molecule::new()).unwrap();
-            let constraint = GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
-                atoms: Some(vec![]),
-            });
-            let constraints = Py::new(
-                py,
-                Constraints::from_rust(GraphIrConstraints::from(vec![constraint.clone()])),
-            )
-            .unwrap();
-
-            Molecule::set_constraints(
-                molecule.clone_ref(py),
-                py,
-                ConstraintsLike::Container(constraints),
-            )
-            .unwrap();
-
-            assert_eq!(
-                molecule
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[constraint]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_molecule_set_constraints_integrity_error() {
-        Python::attach(|py| {
-            let molecule = Py::new(py, Molecule::new()).unwrap();
-            let invalid =
-                GraphIrConstraint::Atom(GraphIrAtomId(0), GraphIrAtomConstraintForm::degree(1));
-            let constraints = Py::new(
-                py,
-                Constraints::from_rust(GraphIrConstraints::from(vec![invalid])),
-            )
-            .unwrap();
-
-            let error = Molecule::set_constraints(
-                molecule.clone_ref(py),
-                py,
-                ConstraintsLike::Container(constraints),
-            )
-            .unwrap_err();
-
-            assert!(error.is_instance_of::<InvalidStructureError>(py));
-            assert!(molecule
-                .bind(py)
-                .borrow()
-                .to_rust()
-                .constraints()
-                .is_empty());
-        });
-    }
-
-    #[rstest]
-    fn test_molecule_set_constraints_self() {
-        Python::attach(|py| {
-            let constraint =
-                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-            let molecule = Py::new(
-                py,
-                Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                    constraints: GraphIrConstraints::from(vec![constraint.clone()]),
-                    ..Default::default()
-                })),
-            )
-            .unwrap();
-            let own_view = Py::new(py, Molecule::constraints(molecule.clone_ref(py))).unwrap();
-
-            Molecule::set_constraints(molecule.clone_ref(py), py, ConstraintsLike::View(own_view))
-                .unwrap();
-
-            assert_eq!(
-                molecule
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[constraint]
+                view.read(py, |constraints| Ok(constraints.to_vec()))
+                    .unwrap(),
+                Vec::new()
             );
         });
     }
 
     #[rstest]
     fn test_molecule_eq() {
-        assert_eq!(Molecule::new(), Molecule::new());
-        let carbon = Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+        assert!(Molecule::new().__eq__(&Molecule::new()));
+        let carbon = Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }));
-        assert_ne!(Molecule::new(), carbon);
+        assert!(!Molecule::new().__eq__(&carbon));
     }
 
     #[rstest]
     #[case::empty(Molecule::new(), "Molecule(atoms=0, bonds=0)")]
     #[case::noncovalent(
-        Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+        Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),
@@ -1777,92 +2104,137 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_resolve() {
-        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
-        let model = ChemistryModel::from_rust(&GraphChemistryModel {
-            valence: GraphValenceModel::smiles(),
-            ..GraphChemistryModel::default()
+    fn test_molecule_resolve_with_report() {
+        Python::attach(|py| {
+            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+            let model = ChemistryModel::from_rust(GraphChemistryModel {
+                valence: GraphValenceModel::smiles(),
+                ..GraphChemistryModel::default()
+            });
+
+            let model = Py::new(py, model).unwrap();
+            let (solution, report) = molecule
+                .resolve_with_report(
+                    py,
+                    Some(model.borrow(py)),
+                    Some(ResolveConfig::from_rust(GraphResolveConfig {
+                        isotope: GraphIsotopePolicy::Natural,
+                        ..Default::default()
+                    })),
+                )
+                .unwrap();
+
+            let Solution::Determined {
+                molecule: Some(resolved),
+            } = solution
+            else {
+                panic!("expected Determined");
+            };
+            assert_eq!(
+                resolved.borrow(py).to_rust(),
+                &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#)
+            );
+            assert_eq!(report.unwrap().tie_breaks().0, vec![0]);
+            assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["C#c0"]}"#));
         });
-
-        let solution = molecule
-            .resolve(
-                Some(model),
-                Some(ResolveConfig::from_rust(GraphResolveConfig {
-                    isotope: GraphIsotopePolicy::Natural,
-                    ..Default::default()
-                })),
-            )
-            .unwrap();
-
-        let Solution::Determined {
-            molecule: resolved,
-            report,
-        } = solution
-        else {
-            panic!("expected Determined");
-        };
-        assert_eq!(
-            resolved,
-            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))
-        );
-        assert_eq!(report.tie_breaks(), vec![0]);
-        assert_eq!(
-            molecule,
-            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#))
-        );
     }
 
     #[rstest]
-    fn test_molecule_resolve_underdetermined() {
-        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
-        let model = ChemistryModel::from_rust(&GraphChemistryModel {
-            valence: GraphValenceModel::counts(Cow::Borrowed(GraphValenceTable::default_table())),
-            ..GraphChemistryModel::default()
+    fn test_molecule_resolve_with_report_underdetermined() {
+        Python::attach(|py| {
+            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+            let model = ChemistryModel::from_rust(GraphChemistryModel {
+                valence: GraphValenceModel::counts(Cow::Borrowed(
+                    GraphValenceTable::default_table(),
+                )),
+                ..GraphChemistryModel::default()
+            });
+
+            let model = Py::new(py, model).unwrap();
+            let (solution, report) = molecule
+                .resolve_with_report(py, Some(model.borrow(py)), None)
+                .unwrap();
+
+            let Solution::Underdetermined {} = solution else {
+                panic!("expected Underdetermined");
+            };
+            assert_eq!(
+                report
+                    .unwrap()
+                    .unresolved()
+                    .get(0)
+                    .unwrap()
+                    .iter()
+                    .map(|form| form.to_rust().to_string())
+                    .collect::<Vec<_>>(),
+                vec![
+                    "C#c0#h0#n2#u0#s#v0#a!",
+                    "C#c0#h#n#u#s2#v0#a!",
+                    "C#c0#h2#n#u0#s#v0#a!",
+                    "C#c0#h3#n0#u#s2#v0#a!",
+                    "C#c0#h4#n0#u0#s#v0#a!",
+                ]
+            );
+            assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["C#c0"]}"#));
         });
-
-        let solution = molecule.resolve(Some(model), None).unwrap();
-
-        let Solution::Underdetermined { report } = solution else {
-            panic!("expected Underdetermined");
-        };
-        assert_eq!(report.unresolved().get(0).unwrap().len(), 5);
-        assert_eq!(
-            molecule,
-            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#))
-        );
     }
 
     #[rstest]
-    fn test_molecule_resolve_contradiction() {
-        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
-        let model = ChemistryModel::from_rust(&GraphChemistryModel {
-            valence: GraphValenceModel::smiles(),
-            ..GraphChemistryModel::default()
+    fn test_molecule_resolve_with_report_contradiction() {
+        Python::attach(|py| {
+            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
+            let model = ChemistryModel::from_rust(GraphChemistryModel {
+                valence: GraphValenceModel::smiles(),
+                ..GraphChemistryModel::default()
+            });
+
+            let model = Py::new(py, model).unwrap();
+            let (solution, report) = molecule
+                .resolve_with_report(py, Some(model.borrow(py)), None)
+                .unwrap();
+
+            let Solution::Contradictory { contradiction } = solution else {
+                panic!("expected Contradictory");
+            };
+            assert_eq!(contradiction.__str__(), "no matching valence state");
+            assert_eq!(report, None);
+            assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
         });
-
-        let solution = molecule.resolve(Some(model), None).unwrap();
-
-        let Solution::Contradictory { contradiction } = solution else {
-            panic!("expected Contradictory");
-        };
-        assert_eq!(contradiction.__str__(), "no matching valence state");
-        assert_eq!(
-            molecule,
-            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#))
-        );
     }
 
     #[rstest]
-    fn test_molecule_resolve_default_model() {
-        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
+    fn test_molecule_resolve_with_report_default_model() {
+        Python::attach(|py| {
+            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
 
-        let solution = molecule.resolve(None, None).unwrap();
+            let (solution, report) = molecule.resolve_with_report(py, None, None).unwrap();
 
-        let Solution::Underdetermined { report } = solution else {
-            panic!("expected Underdetermined under the default model");
-        };
-        // The charge-open atom takes the registry's charge-less lookup: every
-        // carbon row is a candidate.
-        assert_eq!(report.unresolved().get(0).unwrap().len(), 9);
+            let Solution::Underdetermined {} = solution else {
+                panic!("expected Underdetermined under the default model");
+            };
+            // The charge-open atom takes the registry's charge-less lookup: every
+            // carbon row is a candidate.
+            assert_eq!(
+                report
+                    .unwrap()
+                    .unresolved()
+                    .get(0)
+                    .unwrap()
+                    .iter()
+                    .map(|form| form.to_rust().to_string())
+                    .collect::<Vec<_>>(),
+                vec![
+                    "C#c-#h3#n#u0#s#v0#d0#t0#a!#m!",
+                    "C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!",
+                    "C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!",
+                    "C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!",
+                    "C#c0#h2#n#u0#s#v0#d0#t0#a!#m!",
+                    "C#c0#h#n#u#s2#v0#d0#t0#a!#m!",
+                    "C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!",
+                    "C#c0#h0#n#u2#s3#v0#d0#t0#a!#m!",
+                    "C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!",
+                ]
+            );
+        });
     }
 }

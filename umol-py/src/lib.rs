@@ -40,7 +40,8 @@ use crate::{
             DativeBondConstraintsView, DativeBondRingSizeCounts,
         },
         molecule::{
-            Constraint, Constraints, ConstraintsView, MoleculeConstraint, RelationalConstraint,
+            register_constraint, Constraint, Constraints, ConstraintsView, MoleculeConstraint,
+            RelationalConstraint,
         },
         multicenter::{
             MulticenterBondConstraintForm, MulticenterBondConstraintKey,
@@ -72,8 +73,9 @@ use crate::{
     electrons::ElectronCountsForm,
     element::Element,
     error::{
-        ContradictionError, InvalidStructureError, MetadataError, ModelConversionError, ParseError,
-        TransactionError, UnderdeterminedError,
+        ConsumedError, ContradictionError, InvalidStructureError, InvalidatedViewError,
+        MetadataError, ModelConversionError, NoJoinError, ParseError, TransactionError,
+        UnderdeterminedError,
     },
     fingerprint::config::{
         EcfpHashScheme, HashedFingerprintConfig, PatternFingerprintConfig,
@@ -111,12 +113,14 @@ use crate::{
     reaction_span::ReactionSpan,
     remap::{MoleculeRemapping, Remapping},
     resolve::{
-        AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
-        AromaticityResolveConfig, AtomCompletions, IsotopePolicy, ResolveConfig,
-        ResolveContradiction, ResolveReport, Solution, StereoFailurePolicy, StereoMismatchPolicy,
-        StereoResolveConfig,
+        AromaticityFailurePolicy, AromaticityResolveConfig, AtomCompletions,
+        AtomSelectionAlgorithm, IsotopePolicy, ResolveConfig, ResolveContradiction, ResolveReport,
+        Solution, StereoFailurePolicy, StereoResolveConfig,
     },
-    ring::RingConfig,
+    ring::{
+        RingAtomView, RingBondView, RingConfig, RingConnection, RingGraph, RingModel, RingRelation,
+        RingSet, RingSetKind, RingView, RingViews,
+    },
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::{SpinState, UnpairedElectrons, UnpairedElectronsForm, UnpairedElectronsUpdate},
     stereo::{
@@ -128,7 +132,7 @@ use crate::{
         TetrahedralStereo, TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
-    transaction::{MoleculeEditor, Transaction},
+    transaction::{MoleculeEditor, RollbackMethod},
 };
 
 #[cfg(feature = "graph")]
@@ -241,6 +245,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "ContradictionError",
             module.py().get_type::<ContradictionError>(),
         )?;
+        module.add("NoJoinError", module.py().get_type::<NoJoinError>())?;
         module.add(
             "InvalidStructureError",
             module.py().get_type::<InvalidStructureError>(),
@@ -255,13 +260,18 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "TransactionError",
             module.py().get_type::<TransactionError>(),
         )?;
+        module.add("ConsumedError", module.py().get_type::<ConsumedError>())?;
+        module.add(
+            "InvalidatedViewError",
+            module.py().get_type::<InvalidatedViewError>(),
+        )?;
         module.add(
             "UnderdeterminedError",
             module.py().get_type::<UnderdeterminedError>(),
         )?;
         module.add_class::<Molecule>()?;
         module.add_class::<MoleculeEditor>()?;
-        module.add_class::<Transaction>()?;
+        module.add_class::<RollbackMethod>()?;
         module.add_class::<MoleculeDefaults>()?;
         module.add_class::<ReactionDefaults>()?;
         module.add_class::<AtomTypeRegistry>()?;
@@ -276,15 +286,13 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticityModel>()?;
         module.add_class::<AromaticityRule>()?;
         module.add_class::<AromaticityTieBreak>()?;
-        module.add_class::<AromaticBondConstraintMismatchPolicy>()?;
         module.add_class::<AromaticityFailurePolicy>()?;
-        module.add_class::<AromaticityMismatchPolicy>()?;
         module.add_class::<StereoFailurePolicy>()?;
-        module.add_class::<StereoMismatchPolicy>()?;
         module.add_class::<StereoKindModel>()?;
         module.add_class::<StereoModel>()?;
         module.add_class::<ConnectivityModel>()?;
         module.add_class::<ChemistryModel>()?;
+        module.add_class::<AtomSelectionAlgorithm>()?;
         module.add_class::<AromaticityResolveConfig>()?;
         module.add_class::<StereoResolveConfig>()?;
         module.add_class::<ResolveConfig>()?;
@@ -321,6 +329,16 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Reaction>()?;
         module.add_class::<ReactionSpan>()?;
         module.add_class::<RingConfig>()?;
+        module.add_class::<RingSetKind>()?;
+        module.add_class::<RingModel>()?;
+        module.add_class::<RingRelation>()?;
+        module.add_class::<RingConnection>()?;
+        module.add_class::<RingGraph>()?;
+        module.add_class::<RingSet>()?;
+        module.add_class::<RingViews>()?;
+        module.add_class::<RingView>()?;
+        module.add_class::<RingAtomView>()?;
+        module.add_class::<RingBondView>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;
         module.add_class::<RefinementRounds>()?;
@@ -351,6 +369,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;
         module.add_class::<Constraint>()?;
+        register_constraint(module.py())?;
         module.add_class::<Constraints>()?;
         module.add_class::<ConstraintsView>()?;
         module.add_class::<RelOp>()?;

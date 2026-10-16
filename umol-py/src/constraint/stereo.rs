@@ -4,29 +4,32 @@
 use std::collections::BTreeSet;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
     FluxionalityForm as GraphIrFluxionalityForm, LigandSymmetryForm as GraphIrLigandSymmetryForm,
     StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
     StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
     StereoAtomConstraintsForm as GraphIrStereoAtomConstraintsForm,
+    StereoAtomConstraintsView as GraphIrStereoAtomConstraintsView,
     StereoAtomId as GraphIrStereoAtomId,
     StereoBondConstraintForm as GraphIrStereoBondConstraintForm,
     StereoBondConstraintKey as GraphIrStereoBondConstraintKey,
     StereoBondConstraintsForm as GraphIrStereoBondConstraintsForm,
-    StereoBondId as GraphIrStereoBondId, StereogenicityForm as GraphIrStereogenicityForm,
-    TopicityForm as GraphIrTopicityForm, TopicityRelationForm as GraphIrTopicityRelationForm,
+    StereoBondConstraintsView as GraphIrStereoBondConstraintsView,
+    StereoBondId as GraphIrStereoBondId,
+    StereoConfigurationUpdate as GraphIrStereoConfigurationUpdate, StereoKind as GraphIrStereoKind,
+    StereogenicityForm as GraphIrStereogenicityForm, TopicityForm as GraphIrTopicityForm,
+    TopicityRelationForm as GraphIrTopicityRelationForm,
 };
 
 use crate::boolean::{BooleanForm, BooleanLike};
-use crate::convert::{hash_rust, into_py_variant, variant_repr};
-use crate::error::molecule_integrity_error;
+use crate::convert::{hash_rust, into_py_variant, variant_repr, FrozenSetItems};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::stereo::{
-    LigandPermutation, OrientedLigandPermutation, StereoAtomForm, StereoBondForm, StereoLigandPair,
-    Stereogenicity, Topicity,
+    LigandPermutation, OrientedLigandPermutation, StereoAtomForm, StereoAtomUpdate, StereoBondForm,
+    StereoBondUpdate, StereoLigandPair, Stereogenicity, Topicity,
 };
 
 /// A topicity relation constraint value: the undetermined wildcard, a single topicity, a set
@@ -36,8 +39,8 @@ use crate::stereo::{
 pub enum TopicityRelationForm {
     Undetermined(),
     Lit(Topicity),
-    LitSet(BTreeSet<Topicity>),
-    NotSet(BTreeSet<Topicity>),
+    LitSet(FrozenSetItems<BTreeSet<Topicity>>),
+    NotSet(FrozenSetItems<BTreeSet<Topicity>>),
 }
 
 #[pymethods]
@@ -140,8 +143,8 @@ impl TopicityRelationLike {
 pub enum StereogenicityForm {
     Undetermined(),
     Lit(Stereogenicity),
-    LitSet(BTreeSet<Stereogenicity>),
-    NotSet(BTreeSet<Stereogenicity>),
+    LitSet(FrozenSetItems<BTreeSet<Stereogenicity>>),
+    NotSet(FrozenSetItems<BTreeSet<Stereogenicity>>),
 }
 
 #[pymethods]
@@ -468,7 +471,7 @@ macro_rules! stereo_constraints {
         $update:ident, $resolved:ident, $like:ident,
         $key_iter:ident, $iter:ident, $items_iter:ident,
         $rust_key:ident, $rust_constraint:ident, $rust_constraints:ident,
-        $value:ident, $view:ident, $backing:ident,
+        $value:ident, $entity_update:ident, $view:ident, $storage:ident, $rust_view:ident,
         $rust_id:ident, $namespace:ident, $entity_mut:ident, $id_error:literal $(,)?
     ) => {
         /// The key (identity) of a stereo constraint: the sub-keyed oriented/ligand
@@ -797,6 +800,28 @@ macro_rules! stereo_constraints {
                 })
             }
 
+            /// Read the normalized own assertion; absence is top and None is bottom.
+            fn asserted(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.0
+                    .asserted(key)
+                    .map(|value| $constraint::from_rust(py, &value))
+                    .transpose()
+            }
+
+            /// Read the own assertion with closure of top; None remains bottom.
+            fn asserted_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.0
+                    .asserted_complete(key)
+                    .map(|value| $constraint::from_rust(py, &value))
+                    .transpose()
+            }
+
             /// The constraint with the given key, or `default` (`None`) if absent.
             #[pyo3(signature = (key, default=None))]
             pub(crate) fn get(
@@ -855,13 +880,12 @@ macro_rules! stereo_constraints {
                     .collect()
             }
 
-            /// The ligand-symmetry constraint at `permutation` (undetermined if absent).
+            /// The ligand-symmetry `invariant` value at `permutation` (undetermined if absent).
             pub(crate) fn ligand_symmetry(
                 &self,
-                py: Python<'_>,
                 permutation: OrientedLigandPermutation,
-            ) -> PyResult<LigandSymmetryForm> {
-                LigandSymmetryForm::from_rust(py, &self.0.ligand_symmetry(permutation.to_rust()))
+            ) -> BooleanForm {
+                BooleanForm::from_rust(self.0.ligand_symmetry(permutation.to_rust()))
             }
 
             /// The fluxionality constraints.
@@ -872,13 +896,9 @@ macro_rules! stereo_constraints {
                     .collect()
             }
 
-            /// The fluxionality constraint at `permutation` (undetermined if absent).
-            pub(crate) fn fluxionality(
-                &self,
-                py: Python<'_>,
-                permutation: LigandPermutation,
-            ) -> PyResult<FluxionalityForm> {
-                FluxionalityForm::from_rust(py, &self.0.fluxionality(permutation.to_rust()))
+            /// The fluxionality `active` value at `permutation` (undetermined if absent).
+            pub(crate) fn fluxionality(&self, permutation: LigandPermutation) -> BooleanForm {
+                BooleanForm::from_rust(self.0.fluxionality(permutation.to_rust()))
             }
 
             /// The topicity constraints.
@@ -891,12 +911,12 @@ macro_rules! stereo_constraints {
 
             /// The topicity relation at ligand `pair` (undetermined if absent).
             pub(crate) fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
-                TopicityRelationForm::from_rust(&self.0.topicity(pair.to_rust()))
+                TopicityRelationForm::from_rust(self.0.topicity(pair.to_rust()))
             }
 
             /// The stereogenicity constraint (undetermined if absent).
             pub(crate) fn stereogenicity(&self) -> StereogenicityForm {
-                StereogenicityForm::from_rust(&self.0.stereogenicity())
+                StereogenicityForm::from_rust(self.0.stereogenicity())
             }
         }
 
@@ -905,17 +925,20 @@ macro_rules! stereo_constraints {
                 &self.0
             }
 
+            #[allow(
+                dead_code,
+                reason = "Rust-to-Python conversion for standalone constraint values"
+            )]
+
             pub(crate) fn from_rust(constraints: $rust_constraints) -> Self {
                 $constraints(constraints)
             }
         }
 
         impl_py_lattice!(
+            borrowed,
             $constraints,
             $rust_constraints,
-            |value: &$constraints, _py: Python<'_>| -> PyResult<$rust_constraints> {
-                Ok(value.to_rust().clone())
-            },
             |_py: Python<'_>, value: $rust_constraints| -> PyResult<$constraints> {
                 Ok($constraints(value))
             }
@@ -969,68 +992,95 @@ macro_rules! stereo_constraints {
             }
         }
 
-        /// What a `$view` writes through to: a stereo entity within a molecule (by id) or a
-        /// standalone own-value stereo entity (`Py<$value>`).
-        pub(crate) enum $backing {
-            Molecule { owner: Py<Molecule>, id: $rust_id },
+        /// Owner of the constraints exposed by the stereo constraint view.
+        pub(crate) enum $storage {
+            Update(Py<$entity_update>),
+            Molecule {
+                owner: Py<Molecule>,
+                counter: u64,
+                id: $rust_id,
+            },
             Value(Py<$value>),
         }
 
-        /// A live handle onto one stereo entity's constraints, backed by either a
-        /// molecule-embedded entity or a standalone value. Reads borrow the entity and read
-        /// only what they need; molecule-backed mutators use the checked molecule boundary.
+        /// A view of one stereo entity's constraints, retaining its molecule, form,
+        /// or Update owner. Reads borrow the stored constraints; mutations write
+        /// through when the owner is mutable. Whole-molecule mutation invalidates
+        /// molecule-backed views.
+        /// Semantic readings return independent normal values; None is bottom.
+        /// Kindless assertions are vacuous; raw access and mutation retain their payload.
+        /// Derivation, evidence, and comparisons require molecule context.
+        /// Views obtained from an Update are read-only; writes raise TypeError.
         #[pyclass]
         pub struct $view {
-            pub(crate) backing: $backing,
+            pub(crate) storage: $storage,
         }
 
         impl $view {
+            fn read_view<R>(
+                &self,
+                py: Python<'_>,
+                f: impl FnOnce($rust_view<'_>) -> PyResult<R>,
+            ) -> PyResult<R> {
+                let $storage::Molecule { owner, counter, id } = &self.storage else {
+                    return Err(PyValueError::new_err(concat!(
+                        stringify!($view),
+                        " requires molecule context"
+                    )));
+                };
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!($view))?;
+                let entity = molecule
+                    .to_rust()
+                    .$namespace()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err($id_error))?;
+                f(entity.constraints())
+            }
+
             /// Borrow the backing entity's constraints and read through `f` — no clone.
             pub(crate) fn read<R>(
                 &self,
                 py: Python<'_>,
                 f: impl FnOnce(&$rust_constraints) -> PyResult<R>,
             ) -> PyResult<R> {
-                match &self.backing {
-                    $backing::Molecule { owner, id } => {
-                        let molecule = owner.bind(py).borrow();
+                self.read_with_kind(py, |_, constraints| f(constraints))
+            }
+
+            fn read_with_kind<R>(
+                &self,
+                py: Python<'_>,
+                f: impl FnOnce(Option<GraphIrStereoKind>, &$rust_constraints) -> PyResult<R>,
+            ) -> PyResult<R> {
+                match &self.storage {
+                    $storage::Update(owner) => {
+                        let owner = owner.try_borrow(py)?;
+                        let update = owner.to_rust();
+                        let kind = match update.configuration {
+                            GraphIrStereoConfigurationUpdate::Kinded { kind, .. } => Some(kind),
+                            _ => None,
+                        };
+                        f(kind, &update.constraints)
+                    }
+                    $storage::Molecule { owner, counter, id } => {
+                        let molecule = owner.try_borrow(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
                         let view = molecule
                             .to_rust()
                             .$namespace()
                             .get(*id)
                             .ok_or_else(|| PyIndexError::new_err($id_error))?;
-                        f(&view.attributes.constraints)
+                        f(
+                            view.attributes().configuration.kind(),
+                            &view.attributes().constraints,
+                        )
                     }
-                    $backing::Value(entity) => {
+                    $storage::Value(entity) => {
                         let entity = entity.bind(py).borrow();
-                        f(&entity.to_rust().constraints)
-                    }
-                }
-            }
-
-            /// Mutate the backing entity's constraints in place through `f`.
-            pub(crate) fn with_mut<R>(
-                &self,
-                py: Python<'_>,
-                f: impl FnOnce(&mut $rust_constraints) -> R,
-            ) -> PyResult<R> {
-                match &self.backing {
-                    $backing::Molecule { owner, id } => {
-                        let mut molecule = owner.borrow_mut(py);
-                        if !molecule.to_rust().$namespace().contains(*id) {
-                            return Err(PyIndexError::new_err($id_error));
-                        }
-                        let mut result = None;
-                        molecule
-                            .to_rust_mut()
-                            .$entity_mut(*id, |attributes| {
-                                result = Some(f(&mut attributes.constraints));
-                            })
-                            .map_err(molecule_integrity_error)?;
-                        Ok(result.expect("the checked mutation callback always runs"))
-                    }
-                    $backing::Value(entity) => {
-                        Ok(f(&mut entity.borrow_mut(py).to_rust_mut()?.constraints))
+                        f(
+                            entity.to_rust().configuration.kind(),
+                            &entity.to_rust().constraints,
+                        )
                     }
                 }
             }
@@ -1038,6 +1088,95 @@ macro_rules! stereo_constraints {
 
         #[pymethods]
         impl $view {
+            /// Read the normalized own assertion; absence is top and None is bottom.
+            /// Stored constraints are vacuous when the owning entity has no stereo kind.
+            fn asserted(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_with_kind(py, |kind, constraints| {
+                    let value = if kind.is_none() {
+                        Some($rust_constraint::undetermined(key))
+                    } else {
+                        constraints.asserted(key)
+                    };
+                    value
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read the own assertion; stereo has no closure negative, so this agrees with asserted.
+            fn asserted_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                self.asserted(py, key)
+            }
+
+            /// Read the relation projection; None is bottom and undetermined is top.
+            /// Raises ValueError without molecule context.
+            fn derived(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.derived(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read the relation projection with closure; None remains bottom.
+            /// Raises ValueError without molecule context.
+            fn derived_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.derived_complete(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Meet the own assertion with derived and additional evidence; None is bottom.
+            /// Raises ValueError without molecule context.
+            fn evidenced(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.evidenced(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read combined evidence with relation closure; None remains bottom.
+            /// Raises ValueError without molecule context.
+            fn evidenced_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.evidenced_complete(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Whether complete evidence satisfies every pattern entry.
+            /// Raises ValueError without molecule context, including for empty inputs.
+            fn satisfies(&self, py: Python<'_>, pattern: &$constraints) -> PyResult<bool> {
+                self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+            }
+
+            /// Whether open evidence is compatible with every entry of other.
+            /// Raises ValueError without molecule context, including for empty inputs.
+            fn is_compatible(&self, py: Python<'_>, other: &$constraints) -> PyResult<bool> {
+                self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+            }
+
             pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
                 let count = self.read(py, |cs| Ok(cs.len()))?;
                 Ok(format!("{}({count} entries)", stringify!($view)))
@@ -1047,7 +1186,31 @@ macro_rules! stereo_constraints {
             /// (last-wins).
             pub(crate) fn set(&self, py: Python<'_>, c: Py<$constraint>) -> PyResult<()> {
                 let constraint = c.bind(py).borrow().to_rust(py);
-                self.with_mut(py, |cs| cs.set(constraint))
+                match &self.storage {
+                    $storage::Update(_) => {
+                        return Err(PyTypeError::new_err(concat!(
+                            stringify!($entity_update),
+                            " constraints are read-only"
+                        )))
+                    }
+                    $storage::Molecule { owner, counter, id } => {
+                        let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
+                        if !molecule.to_rust().$namespace().contains(*id) {
+                            return Err(PyIndexError::new_err($id_error));
+                        }
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
+                        let cs = &mut view.attributes_mut().constraints;
+                        cs.set(constraint);
+                        Ok(())
+                    }
+                    $storage::Value(value) => {
+                        let mut value = value.try_borrow_mut(py)?;
+                        let cs = &mut value.to_rust_mut()?.constraints;
+                        cs.set(constraint);
+                        Ok(())
+                    }
+                }
             }
 
             /// Remove the entry with the given key, returning it if present (dict `pop`).
@@ -1057,15 +1220,59 @@ macro_rules! stereo_constraints {
                 key: Py<$key>,
             ) -> PyResult<Option<$constraint>> {
                 let rust_key = key.bind(py).borrow().to_rust(py);
-                self.with_mut(py, |cs| cs.remove(rust_key))?
-                    .map(|c| $constraint::from_rust(py, &c))
-                    .transpose()
+                let removed = match &self.storage {
+                    $storage::Update(_) => {
+                        return Err(PyTypeError::new_err(concat!(
+                            stringify!($entity_update),
+                            " constraints are read-only"
+                        )))
+                    }
+                    $storage::Molecule { owner, counter, id } => {
+                        let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
+                        if !molecule.to_rust().$namespace().contains(*id) {
+                            return Err(PyIndexError::new_err($id_error));
+                        }
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
+                        let cs = &mut view.attributes_mut().constraints;
+                        cs.remove(rust_key)
+                    }
+                    $storage::Value(value) => {
+                        let mut value = value.try_borrow_mut(py)?;
+                        let cs = &mut value.to_rust_mut()?.constraints;
+                        cs.remove(rust_key)
+                    }
+                };
+                removed.map(|c| $constraint::from_rust(py, &c)).transpose()
             }
 
             /// Remove the entry with the given key; raises `KeyError` if absent.
             pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
                 let rust_key = key.bind(py).borrow().to_rust(py);
-                if self.with_mut(py, |cs| cs.remove(rust_key))?.is_some() {
+                let removed = match &self.storage {
+                    $storage::Update(_) => {
+                        return Err(PyTypeError::new_err(concat!(
+                            stringify!($entity_update),
+                            " constraints are read-only"
+                        )))
+                    }
+                    $storage::Molecule { owner, counter, id } => {
+                        let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
+                        if !molecule.to_rust().$namespace().contains(*id) {
+                            return Err(PyIndexError::new_err($id_error));
+                        }
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
+                        let cs = &mut view.attributes_mut().constraints;
+                        cs.remove(rust_key)
+                    }
+                    $storage::Value(value) => {
+                        let mut value = value.try_borrow_mut(py)?;
+                        let cs = &mut value.to_rust_mut()?.constraints;
+                        cs.remove(rust_key)
+                    }
+                };
+                if removed.is_some() {
                     Ok(())
                 } else {
                     Err(PyKeyError::new_err(
@@ -1079,7 +1286,31 @@ macro_rules! stereo_constraints {
             /// entries remove). Resolves `other` before the write borrow (self-alias safe).
             pub(crate) fn update(&self, py: Python<'_>, other: $update) -> PyResult<()> {
                 let resolved = other.resolve(py)?;
-                self.with_mut(py, |cs| resolved.apply(cs))
+                match &self.storage {
+                    $storage::Update(_) => {
+                        return Err(PyTypeError::new_err(concat!(
+                            stringify!($entity_update),
+                            " constraints are read-only"
+                        )))
+                    }
+                    $storage::Molecule { owner, counter, id } => {
+                        let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
+                        if !molecule.to_rust().$namespace().contains(*id) {
+                            return Err(PyIndexError::new_err($id_error));
+                        }
+                        let mut view = molecule.to_rust_mut().$entity_mut(*id);
+                        let cs = &mut view.attributes_mut().constraints;
+                        resolved.apply(cs);
+                        Ok(())
+                    }
+                    $storage::Value(value) => {
+                        let mut value = value.try_borrow_mut(py)?;
+                        let cs = &mut value.to_rust_mut()?.constraints;
+                        resolved.apply(cs);
+                        Ok(())
+                    }
+                }
             }
 
             pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -1189,14 +1420,16 @@ macro_rules! stereo_constraints {
                 })
             }
 
-            /// The ligand-symmetry constraint at `permutation` (undetermined if absent).
+            /// The ligand-symmetry `invariant` value at `permutation` (undetermined if absent).
             pub(crate) fn ligand_symmetry(
                 &self,
                 py: Python<'_>,
                 permutation: OrientedLigandPermutation,
-            ) -> PyResult<LigandSymmetryForm> {
+            ) -> PyResult<BooleanForm> {
                 self.read(py, |cs| {
-                    LigandSymmetryForm::from_rust(py, &cs.ligand_symmetry(permutation.to_rust()))
+                    Ok(BooleanForm::from_rust(
+                        cs.ligand_symmetry(permutation.to_rust()),
+                    ))
                 })
             }
 
@@ -1209,14 +1442,16 @@ macro_rules! stereo_constraints {
                 })
             }
 
-            /// The fluxionality constraint at `permutation` (undetermined if absent).
+            /// The fluxionality `active` value at `permutation` (undetermined if absent).
             pub(crate) fn fluxionality(
                 &self,
                 py: Python<'_>,
                 permutation: LigandPermutation,
-            ) -> PyResult<FluxionalityForm> {
+            ) -> PyResult<BooleanForm> {
                 self.read(py, |cs| {
-                    FluxionalityForm::from_rust(py, &cs.fluxionality(permutation.to_rust()))
+                    Ok(BooleanForm::from_rust(
+                        cs.fluxionality(permutation.to_rust()),
+                    ))
                 })
             }
 
@@ -1236,16 +1471,14 @@ macro_rules! stereo_constraints {
                 pair: StereoLigandPair,
             ) -> PyResult<TopicityRelationForm> {
                 self.read(py, |cs| {
-                    Ok(TopicityRelationForm::from_rust(
-                        &cs.topicity(pair.to_rust()),
-                    ))
+                    Ok(TopicityRelationForm::from_rust(cs.topicity(pair.to_rust())))
                 })
             }
 
             /// The stereogenicity constraint (undetermined if absent).
             pub(crate) fn stereogenicity(&self, py: Python<'_>) -> PyResult<StereogenicityForm> {
                 self.read(py, |cs| {
-                    Ok(StereogenicityForm::from_rust(&cs.stereogenicity()))
+                    Ok(StereogenicityForm::from_rust(cs.stereogenicity()))
                 })
             }
         }
@@ -1257,8 +1490,8 @@ stereo_constraints! {
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
-    StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
-    GraphIrStereoAtomId, stereo_atoms, try_modify_stereo_atom, "stereo atom id out of range",
+    StereoAtomForm, StereoAtomUpdate, StereoAtomConstraintsView, StereoAtomConstraintsStorage, GraphIrStereoAtomConstraintsView,
+    GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut, "stereo atom id out of range",
 }
 
 stereo_constraints! {
@@ -1266,6 +1499,6 @@ stereo_constraints! {
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,
-    StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsBacking,
-    GraphIrStereoBondId, stereo_bonds, try_modify_stereo_bond, "stereo bond id out of range",
+    StereoBondForm, StereoBondUpdate, StereoBondConstraintsView, StereoBondConstraintsStorage, GraphIrStereoBondConstraintsView,
+    GraphIrStereoBondId, stereo_bonds, stereo_bond_mut, "stereo bond id out of range",
 }

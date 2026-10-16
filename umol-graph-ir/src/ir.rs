@@ -70,37 +70,41 @@ pub use delta::{
     StereoBondDelta,
 };
 pub use edit::{
-    AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
+    AddAromaticSystem, AddBond, AddMulticenterBond, AddStereoAtom, AddStereoBond,
+    AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
     AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
     CascadedConstraints, ConstraintEdit, ConstraintEditError, DativeBondFieldChange,
     DativeBondHandle, Edit, Edits, EntityHandle, ModifiedConstraint, MulticenterBondFieldChange,
     MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
-    RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedConstraint, RemovedDativeBond,
-    RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom,
-    RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval,
-    StereoBondFieldChange, StereoBondHandle, StereoBondRemoval, Undo,
+    RemovedAromaticSystem, RemovedAromaticSystems, RemovedAtom, RemovedBond, RemovedConstraint,
+    RemovedDativeBond, RemovedDativeBonds, RemovedMulticenterBond, RemovedMulticenterBonds,
+    RemovedNoncovalentBond, RemovedNoncovalentBonds, RemovedOverlays, RemovedStereoAtom,
+    RemovedStereoAtoms, RemovedStereoBond, RemovedStereoBonds, RemovedTopology,
+    StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval, StereoBondFieldChange,
+    StereoBondHandle, StereoBondRemoval, Undo,
 };
 pub use electrons::ElectronCountsForm;
 pub use entity::{Entity, EntityKind};
-pub use error::{ApplyError, ApplyPreconditionError, Contradiction, MoleculeApplyError, NoJoin};
+pub use error::{
+    ApplyError, ApplyPreconditionError, Contradiction, MoleculeApplyError, NoJoinError,
+};
 pub use frame::{
     AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
     NoncovalentBondsFrameAction, OverlaysFrameAction, StereoAtomsFrameAction,
     StereoBondsFrameAction,
 };
 pub use id::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId, StereoLigandPosition,
+    AromaticSystemId, AtomId, AtomPosition, BondId, DativeBondId, MulticenterBondId,
+    NoncovalentBondId, StereoAtomId, StereoBondId, StereoLigandPosition,
 };
 pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
-pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
     spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
     MoleculeIntegrityError, MoleculePushoutCorrespondence, MoleculeSpec, MoleculeSpecTerm, Port,
-    PortArg,
+    PortArg, RollbackMethod, TrackedTransaction, Transaction, TransactionError,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
 pub use noncovalent::{
@@ -134,12 +138,16 @@ pub use traits::{
     TryIntoIr,
 };
 pub use view::{
-    AromaticSystemConstraintsView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
-    AtomAutomorphism, AtomConstraintsView, AtomView, AtomViewMut, AtomViews, BondConstraintsView,
-    BondView, BondViewMut, BondViews, DativeBondConstraintsView, DativeBondView, DativeBondViewMut,
-    DativeBondViews, MulticenterBondConstraintsView, MulticenterBondView, MulticenterBondViewMut,
-    MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView, NoncovalentBondView,
-    NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView, RingBondView, RingView, RingViews,
-    StereoAtomConstraintsView, StereoAtomView, StereoAtomViews, StereoBondConstraintsView,
-    StereoBondView, StereoBondViews, StereoLigandView,
+    AromaticSystemConstraintsView, AromaticSystemEditorViewMut, AromaticSystemView,
+    AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomConstraintsView,
+    AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondConstraintsView, BondEditorViewMut,
+    BondView, BondViewMut, BondViews, DativeBondConstraintsView, DativeBondEditorViewMut,
+    DativeBondView, DativeBondViewMut, DativeBondViews, MulticenterBondConstraintsView,
+    MulticenterBondEditorViewMut, MulticenterBondView, MulticenterBondViewMut,
+    MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView,
+    NoncovalentBondEditorViewMut, NoncovalentBondView, NoncovalentBondViewMut,
+    NoncovalentBondViews, RingAtomView, RingBondView, RingView, RingViews,
+    StereoAtomConstraintsView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
+    StereoAtomViews, StereoBondConstraintsView, StereoBondEditorViewMut, StereoBondView,
+    StereoBondViewMut, StereoBondViews, StereoLigandView,
 };

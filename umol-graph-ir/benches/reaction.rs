@@ -12,8 +12,8 @@ use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, BondForm, Constraint, ConstraintSpan, Delta,
     Deltas, Edits, ElectronCountsForm, EntitySpan, Molecule, MoleculeCorrespondence,
-    MoleculeEntries, Reaction, ReactionSpan, ReactionSpanEntries, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig,
+    MoleculeEntries, Reaction, ReactionSpan, ReactionSpanEntries, RollbackMethod,
+    SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
@@ -251,6 +251,7 @@ fn benchmark_mutation(c: &mut Criterion) {
             BondForm::from_order(1),
         );
         molecule
+            .clone()
             .apply(edits.clone())
             .expect("benchmark edit batch succeeds");
         molecule
@@ -259,38 +260,28 @@ fn benchmark_mutation(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("editor_session/path", size), |b| {
             b.iter(|| {
-                let mut editor = molecule.edit();
-                editor.remove(&[AtomId((size - 1) as u32)], &[]);
+                let mut editor = molecule.clone().edit();
+                editor.remove_topology(&[AtomId((size - 1) as u32)], &[]);
                 let added = editor.add_atom(AtomForm::from_element(Element::O));
                 editor.add_bond(AtomId((size - 2) as u32), added, BondForm::from_order(1));
-                black_box(editor.tracked_build())
+                black_box(editor.finish().unwrap())
             })
         });
-        group.bench_function(BenchmarkId::new("remove/path", size), |b| {
+        group.bench_function(BenchmarkId::new("remove_topology/path", size), |b| {
             b.iter_batched(
-                || molecule.edit(),
+                || molecule.clone().edit(),
                 |mut editor| {
-                    editor.remove(black_box(&removed), &[]);
+                    editor.remove_topology(black_box(&removed), &[]);
                     black_box(editor)
-                },
-                BatchSize::SmallInput,
-            )
-        });
-        group.bench_function(BenchmarkId::new("tracked_remove/path", size), |b| {
-            b.iter_batched(
-                || molecule.edit(),
-                |mut editor| {
-                    let compaction = editor.tracked_remove(black_box(&removed), &[]);
-                    black_box((editor, compaction))
                 },
                 BatchSize::SmallInput,
             )
         });
         group.bench_function(BenchmarkId::new("apply/path_three_edits", size), |b| {
             b.iter_batched(
-                || edits.clone(),
-                |edits| {
-                    black_box(&molecule)
+                || (molecule.clone(), edits.clone()),
+                |(molecule, edits)| {
+                    black_box(molecule)
                         .apply(edits)
                         .expect("benchmark edit batch succeeds")
                 },
@@ -302,9 +293,9 @@ fn benchmark_mutation(c: &mut Criterion) {
             BenchmarkId::new("tracked_apply/path_three_edits", size),
             |b| {
                 b.iter_batched(
-                    || edits.clone(),
-                    |edits| {
-                        black_box(&molecule)
+                    || (molecule.clone(), edits.clone()),
+                    |(molecule, edits)| {
+                        black_box(molecule)
                             .tracked_apply(edits)
                             .expect("benchmark edit batch succeeds")
                     },
@@ -312,23 +303,42 @@ fn benchmark_mutation(c: &mut Criterion) {
                 )
             },
         );
-        group.bench_function(
-            BenchmarkId::new("tracked_transact/path_three_edits", size),
-            |b| {
+        for (operation, rollback_method) in [
+            ("tracked_transact/path_three_edits", RollbackMethod::Journal),
+            (
+                "tracked_transact_clone/path_three_edits",
+                RollbackMethod::Clone,
+            ),
+        ] {
+            group.bench_function(BenchmarkId::new(operation, size), |b| {
                 b.iter_batched(
-                    || (molecule.edit(), edits.clone()),
-                    |(mut editor, edits)| {
-                        let result = editor
-                            .tracked_transact(edits)
+                    || (molecule.clone(), edits.clone()),
+                    |(mut molecule, edits)| {
+                        let result = molecule
+                            .tracked_transact([edits], rollback_method)
                             .expect("benchmark edit batch succeeds");
-                        black_box((editor, result))
+                        black_box((molecule, result))
                     },
                     BatchSize::SmallInput,
                 )
-            },
-        );
+            });
+        }
         group.bench_function(BenchmarkId::new("combine/path_pair", size), |b| {
-            b.iter(|| black_box(&molecule).combine(black_box(&molecule)))
+            b.iter_batched(
+                || molecule.clone(),
+                |combined| black_box(combined.combine(black_box(&molecule))),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("combine_from/path_pair", size), |b| {
+            b.iter_batched(
+                || molecule.clone(),
+                |mut combined| {
+                    combined.combine_from(black_box(&molecule));
+                    black_box(combined)
+                },
+                BatchSize::SmallInput,
+            )
         });
         group.bench_function(BenchmarkId::new("split/two_paths", size), |b| {
             b.iter(|| black_box(&disconnected).split())

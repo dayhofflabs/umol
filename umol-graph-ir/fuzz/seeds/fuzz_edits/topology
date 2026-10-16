@@ -1,0 +1,4 @@
+[{:atom {:add "C#h3"}}
+ {:bond {:add [0 {:new 0} :single]}}
+ {:atom {:modify [0 {:expect "#h3" :update "#h2"}]}}
+ {:topology {:remove {:atoms [0] :bonds [0]}}}]

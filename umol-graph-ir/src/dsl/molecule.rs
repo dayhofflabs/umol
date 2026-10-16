@@ -18,9 +18,9 @@ use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
-use super::aromatic::AromaticSystemDsl;
-use super::atom::AtomDsl;
-use super::bond::{expand_bond_keyword, BondDsl};
+use super::aromatic::{lower_aromatic_system, raise_aromatic_system, AromaticSystemDsl};
+use super::atom::{lower_atom, raise_atom, AtomDsl};
+use super::bond::{expand_bond_keyword, lower_bond, raise_bond, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl};
 use super::dative::{expand_dative_keyword, DativeBondDsl};
@@ -30,16 +30,14 @@ use super::edn_utils::{
 };
 use super::error::ParseError;
 use super::metadata::{Metadata, MetadataError, MoleculeMetadata};
-use super::multicenter::MulticenterBondDsl;
+use super::multicenter::{lower_multicenter_bond, raise_multicenter_bond, MulticenterBondDsl};
 use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{
     parse_stereo_ligand, read_atom_ref, read_bond_ref, read_stereo_ligand, AtomRef, BondRef,
     StereoLigandRef,
 };
-use super::stereo::{
-    expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
-};
+use super::stereo::{read_stereo_atom, read_stereo_bond, StereoAtomDsl, StereoBondDsl};
 use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
@@ -460,38 +458,6 @@ pub(super) fn read_noncovalent_bond_entry(
     })
 }
 
-fn read_stereo_atom_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoAtomDsl, EdnError> {
-    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
-        let kw = de.read_keyword_name()?;
-        let expanded = expand_stereo_atom_keyword(kw.as_ref())
-            .ok_or_else(|| DeError::Custom(format!("unknown stereo atom keyword :{kw}")))?;
-        expanded
-            .parse::<StereoAtomDsl>()
-            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
-    } else {
-        de.read_string()?
-            .as_ref()
-            .parse::<StereoAtomDsl>()
-            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
-    }
-}
-
-fn read_stereo_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoBondDsl, EdnError> {
-    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
-        let kw = de.read_keyword_name()?;
-        let expanded = expand_stereo_bond_keyword(kw.as_ref())
-            .ok_or_else(|| DeError::Custom(format!("unknown stereo bond keyword :{kw}")))?;
-        expanded
-            .parse::<StereoBondDsl>()
-            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
-    } else {
-        de.read_string()?
-            .as_ref()
-            .parse::<StereoBondDsl>()
-            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
-    }
-}
-
 pub(super) fn read_stereo_atom_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<StereoAtomEntryInput, EdnError> {
@@ -504,7 +470,7 @@ pub(super) fn read_stereo_atom_entry(
             "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "site" => site = Some(read_atom_ref(de)?),
             "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
-            "attrs" => stereo = Some(read_stereo_atom_dsl(de)?),
+            "attrs" => stereo = Some(read_stereo_atom(de)?),
             _ => de.read_skip_value()?,
         }
         Ok(())
@@ -529,7 +495,7 @@ pub(super) fn read_stereo_bond_entry(
             "id" => keyword = Some(de.read_keyword_name()?.into_owned()),
             "site" => site = Some(read_bond_ref(de)?),
             "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
-            "attrs" => stereo = Some(read_stereo_bond_dsl(de)?),
+            "attrs" => stereo = Some(read_stereo_bond(de)?),
             _ => de.read_skip_value()?,
         }
         Ok(())
@@ -579,25 +545,34 @@ impl FromIr<Molecule> for MoleculeDsl {
 
     fn from_ir(molecule: &Molecule, context: &Self::Context) -> Self {
         let mut dsl_molecule = molecule.clone();
-        dsl_molecule.modify_atoms(|atom| AtomDsl::from_ir(&atom, &context.atom).0);
-        dsl_molecule.modify_bonds(|bond| BondDsl::from_ir(&bond, &context.bond).0);
-        dsl_molecule.modify_aromatic_systems(|system| {
-            AromaticSystemDsl::from_ir(&system, &context.aromatic_system).0
-        });
-        dsl_molecule.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl::from_ir(&bond, &context.multicenter_bond).0
-        });
-        dsl_molecule
-            .modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &context.dative_bond).0);
-        dsl_molecule.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl::from_ir(&bond, &context.noncovalent_bond).0
-        });
-        dsl_molecule.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl::from_ir(&stereo_atom, &context.stereo_atom).0
-        });
-        dsl_molecule.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl::from_ir(&stereo_bond, &context.stereo_bond).0
-        });
+        for index in 0..dsl_molecule.atoms().count() {
+            lower_atom(
+                dsl_molecule.atom_mut(AtomId(index as u32)).attributes_mut(),
+                &context.atom,
+            );
+        }
+        for index in 0..dsl_molecule.bonds().count() {
+            lower_bond(
+                dsl_molecule.bond_mut(BondId(index as u32)).attributes_mut(),
+                &context.bond,
+            );
+        }
+        for index in 0..dsl_molecule.aromatic_systems().count() {
+            lower_aromatic_system(
+                dsl_molecule
+                    .aromatic_system_mut(AromaticSystemId(index as u32))
+                    .attributes_mut(),
+                &context.aromatic_system,
+            );
+        }
+        for index in 0..dsl_molecule.multicenter_bonds().count() {
+            lower_multicenter_bond(
+                dsl_molecule
+                    .multicenter_bond_mut(MulticenterBondId(index as u32))
+                    .attributes_mut(),
+                &context.multicenter_bond,
+            );
+        }
         MoleculeDsl {
             molecule: dsl_molecule,
             metadata: MoleculeMetadata::default(),
@@ -610,24 +585,34 @@ impl IntoIr<Molecule> for MoleculeDsl {
 
     fn into_ir(self, context: &Self::Context) -> Molecule {
         let mut molecule = self.molecule;
-        molecule.modify_atoms(|atom| AtomDsl(atom).into_ir(&context.atom));
-        molecule.modify_bonds(|bond| BondDsl(bond).into_ir(&context.bond));
-        molecule.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&context.dative_bond));
-        molecule.modify_aromatic_systems(|system| {
-            AromaticSystemDsl(system).into_ir(&context.aromatic_system)
-        });
-        molecule.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl(bond).into_ir(&context.multicenter_bond)
-        });
-        molecule.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl(bond).into_ir(&context.noncovalent_bond)
-        });
-        molecule.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl(stereo_atom).into_ir(&context.stereo_atom)
-        });
-        molecule.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl(stereo_bond).into_ir(&context.stereo_bond)
-        });
+        for index in 0..molecule.atoms().count() {
+            raise_atom(
+                molecule.atom_mut(AtomId(index as u32)).attributes_mut(),
+                &context.atom,
+            );
+        }
+        for index in 0..molecule.bonds().count() {
+            raise_bond(
+                molecule.bond_mut(BondId(index as u32)).attributes_mut(),
+                &context.bond,
+            );
+        }
+        for index in 0..molecule.aromatic_systems().count() {
+            raise_aromatic_system(
+                molecule
+                    .aromatic_system_mut(AromaticSystemId(index as u32))
+                    .attributes_mut(),
+                &context.aromatic_system,
+            );
+        }
+        for index in 0..molecule.multicenter_bonds().count() {
+            raise_multicenter_bond(
+                molecule
+                    .multicenter_bond_mut(MulticenterBondId(index as u32))
+                    .attributes_mut(),
+                &context.multicenter_bond,
+            );
+        }
         molecule
     }
 }
@@ -684,7 +669,7 @@ fn render_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = molecule
         .atoms()
         .iter()
-        .map(|view| render_atom_entry(view.id, view.attributes, meta))
+        .map(|view| render_atom_entry(view.id(), view.attributes(), meta))
         .collect();
     Edn::Vector(entries.into())
 }
@@ -750,9 +735,9 @@ fn render_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             render_bond_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
-                BondDsl::from_ref(view.attributes).to_edn(),
+                BondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })
@@ -798,10 +783,10 @@ fn render_dative(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             render_dative_entry(
-                view.id,
+                view.id(),
                 view.donor_ids(),
                 view.acceptor_id(),
-                DativeBondDsl::from_ref(view.attributes).to_edn(),
+                DativeBondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })
@@ -841,10 +826,10 @@ fn render_aromatic(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static>
         .iter()
         .map(|view| {
             render_aromatic_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
                 Edn::Str(Cow::Owned(
-                    AromaticSystemDsl::from_ref(view.attributes).to_string(),
+                    AromaticSystemDsl::from_ref(view.attributes()).to_string(),
                 )),
                 meta,
             )
@@ -885,10 +870,10 @@ fn render_multicenter(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'stat
         .iter()
         .map(|view| {
             render_multicenter_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
                 Edn::Str(Cow::Owned(
-                    MulticenterBondDsl::from_ref(view.attributes).to_string(),
+                    MulticenterBondDsl::from_ref(view.attributes()).to_string(),
                 )),
                 meta,
             )
@@ -924,9 +909,9 @@ fn render_noncovalent(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'stat
         .iter()
         .map(|view| {
             render_noncovalent_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
-                NoncovalentBondDsl::from_ref(view.attributes).to_edn(),
+                NoncovalentBondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })
@@ -960,13 +945,14 @@ fn render_stereo_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'sta
         .iter()
         .map(|view| {
             render_stereo_atom_entry(
-                view.id,
+                view.id(),
                 view.site_id(),
-                view.ligand_frame()
-                    .into_iter()
+                view.ligand_ids()
+                    .iter()
+                    .copied()
                     .map(|l| render_stereo_ligand(l, meta))
                     .collect(),
-                StereoAtomDsl::from_ref(view.attributes).to_edn(),
+                StereoAtomDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })
@@ -1000,13 +986,14 @@ fn render_stereo_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'sta
         .iter()
         .map(|view| {
             render_stereo_bond_entry(
-                view.id,
+                view.id(),
                 view.site_id(),
-                view.ligand_frame()
-                    .into_iter()
+                view.ligand_ids()
+                    .iter()
+                    .copied()
                     .map(|l| render_stereo_ligand(l, meta))
                     .collect(),
-                StereoBondDsl::from_ref(view.attributes).to_edn(),
+                StereoBondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })

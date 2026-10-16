@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -6,13 +7,18 @@ use umol_chem::element::Element;
 use umol_edn::read_string;
 
 use super::*;
+use crate::dsl::config::NumDefault;
 use crate::ir::atom::AtomForm;
 use crate::ir::boolean::BooleanForm;
-use crate::ir::constraint::{BondConstraintForm, Constraint, MoleculeConstraint};
+use crate::ir::constraint::{
+    BondConstraintForm, Constraint, MoleculeConstraint, StereoAtomConstraintForm,
+    StereoBondConstraintForm, StereogenicityForm,
+};
 use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::molecule::MoleculeIntegrityError;
 use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
+use crate::ir::stereo::{StereoConfigurationForm, Stereogenicity};
 use crate::mol_dsl;
 
 #[fixture]
@@ -35,36 +41,6 @@ fn populated_molecule_dsl() -> MoleculeDsl {
     }"#
     .parse()
     .unwrap()
-}
-
-/// Every `fuzz_molecule` seed must parse (tree and streaming) — guards the seed corpus against
-/// rot as the molecule DSL evolves.
-#[rstest]
-fn test_fuzz_molecule_seeds_valid() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_molecule");
-    let mut count = 0;
-    let mut failures: Vec<String> = Vec::new();
-    for entry in fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let data = fs::read_to_string(&path).unwrap();
-        if let Err(e) = MoleculeDsl::from_edn_str(&data) {
-            failures.push(format!("{name}: stream: {e:?}"));
-        }
-        let tree = read_string(&data)
-            .ok()
-            .and_then(|edn| MoleculeDsl::from_edn(&edn).ok());
-        if tree.is_none() {
-            failures.push(format!("{name}: tree parse failed"));
-        }
-        count += 1;
-    }
-    assert!(
-        failures.is_empty(),
-        "invalid seeds:\n{}",
-        failures.join("\n")
-    );
-    assert_eq!(count, 28);
 }
 
 #[rstest]
@@ -304,6 +280,15 @@ fn test_molecule_dsl_from_edn_str_from_edn_parity(#[case] source: &str) {
     assert_eq!(via_str, via_tree);
 }
 
+#[rstest]
+fn test_molecule_dsl_from_edn_str_seeds(#[files("fuzz/seeds/fuzz_molecule/*")] path: PathBuf) {
+    let source = fs::read_to_string(path).unwrap();
+    let via_str = MoleculeDsl::from_edn_str(&source).unwrap();
+    let tree = read_string(&source).unwrap();
+    let via_tree = MoleculeDsl::from_edn(&tree).unwrap();
+    assert_eq!(via_str, via_tree);
+}
+
 #[rustfmt::skip]
 #[rstest]
 #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"##)]
@@ -318,6 +303,48 @@ fn test_molecule_dsl_stereo_edn_roundtrip(#[case] source: &str) {
     let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
     let reparsed = MoleculeDsl::from_edn(&dsl.to_edn()).unwrap();
     assert_eq!(reparsed, dsl);
+}
+
+#[rstest]
+#[case::literal(StereogenicityForm::Lit(Stereogenicity::Stereogenic))]
+#[case::contradiction(StereogenicityForm::lit_set([]))]
+fn test_molecule_dsl_to_edn_kindless_stereo(
+    populated_molecule_dsl: MoleculeDsl,
+    #[case] payload: StereogenicityForm,
+) {
+    let (mut bare, _) = populated_molecule_dsl.into_parts();
+    bare.stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::Undetermined;
+    bare.stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::Undetermined;
+    let mut raw = bare.clone();
+    raw.stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .constraints = StereoAtomConstraintForm::Stereogenicity(payload.clone()).into();
+    raw.stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .constraints = StereoBondConstraintForm::Stereogenicity(payload).into();
+    let defaults = MoleculeDefaults::new();
+    let dsl = MoleculeDsl::from_ir(&raw, &defaults);
+    assert_eq!(
+        dsl.to_edn(),
+        MoleculeDsl::from_ir(&bare, &defaults).to_edn()
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn(&dsl.to_edn())
+            .unwrap()
+            .into_ir(&defaults),
+        bare
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&dsl.to_string())
+            .unwrap()
+            .into_ir(&defaults),
+        bare
+    );
+    assert_eq!(dsl.into_ir(&defaults), raw);
 }
 
 #[rustfmt::skip]
@@ -361,11 +388,7 @@ fn test_molecule_dsl_from_str_error() {
     assert!(matches!(err, ParseError::EdnParse(_)));
 }
 
-// Round-trip direction: DSL → IR (raise) → DSL (lower) is the
-// identity. IR → DSL → IR isn't, since raising `Undetermined`
-// fields to `Lit(0)` is one-way under grounding defaults. One case per
-// overlay kind so the `into_ir` / `from_ir` per-relation loops are
-// exercised.
+// Raising then lowering these omitted-default forms preserves the DSL molecule.
 #[rustfmt::skip]
 #[rstest]
 #[case::atoms_bonds(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##)]
@@ -382,6 +405,75 @@ fn test_molecule_dsl_dsl_to_ir_to_dsl_roundtrip(#[case] source: &str) {
     let raised = dsl.clone().into_ir(&cfg);
     let lowered = MoleculeDsl::from_ir(&raised, &cfg);
     assert_eq!(lowered.molecule(), dsl.molecule());
+}
+
+#[rstest]
+fn test_molecule_dsl_from_ir(populated_molecule_dsl: MoleculeDsl) {
+    let expected = populated_molecule_dsl.into_parts().0;
+    let mut source = expected.clone();
+    for index in 0..source.atoms().count() {
+        source
+            .atom_mut(AtomId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    for index in 0..source.bonds().count() {
+        source
+            .bond_mut(BondId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    source
+        .aromatic_system_mut(AromaticSystemId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    source
+        .multicenter_bond_mut(MulticenterBondId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    let before = source.clone();
+    let mut defaults = MoleculeDefaults::new();
+    defaults.atom.charge = NumDefault::Zero;
+    defaults.bond.charge = NumDefault::Zero;
+    defaults.aromatic_system.charge = NumDefault::Zero;
+    defaults.multicenter_bond.charge = NumDefault::Zero;
+
+    let actual = MoleculeDsl::from_ir(&source, &defaults);
+
+    assert_eq!(actual.into_parts(), (expected, MoleculeMetadata::default()));
+    assert_eq!(source, before);
+}
+
+#[rstest]
+fn test_molecule_dsl_into_ir(populated_molecule_dsl: MoleculeDsl) {
+    let mut expected = populated_molecule_dsl.molecule().clone();
+    for index in 0..expected.atoms().count() {
+        expected
+            .atom_mut(AtomId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    for index in 0..expected.bonds().count() {
+        expected
+            .bond_mut(BondId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    expected
+        .aromatic_system_mut(AromaticSystemId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    expected
+        .multicenter_bond_mut(MulticenterBondId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    let mut defaults = MoleculeDefaults::new();
+    defaults.atom.charge = NumDefault::Zero;
+    defaults.bond.charge = NumDefault::Zero;
+    defaults.aromatic_system.charge = NumDefault::Zero;
+    defaults.multicenter_bond.charge = NumDefault::Zero;
+
+    assert_eq!(populated_molecule_dsl.into_ir(&defaults), expected);
 }
 
 #[rstest]
@@ -423,11 +515,11 @@ fn test_molecule_dsl_edn_parse_electrons_undetermined(#[case] source: &str) {
     let electrons = molecule
         .aromatic_systems()
         .iter()
-        .map(|v| v.attributes.electrons.clone())
+        .map(|v| v.attributes().electrons.clone())
         .chain(
             molecule.multicenter_bonds()
                 .iter()
-                .map(|v| v.attributes.electrons.clone()),
+                .map(|v| v.attributes().electrons.clone()),
         )
         .next()
         .unwrap();
@@ -462,10 +554,11 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
     #[case] pushed: Vec<MoleculeConstraint>,
     #[case] expected: Vec<MoleculeConstraint>,
 ) {
-    let mut molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+    let mut editor = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#).edit();
     for c in pushed {
-        molecule.constraints_mut().push(Constraint::Molecule(c));
+        editor.constraints_mut().push(Constraint::Molecule(c));
     }
+    let molecule = editor.finish().unwrap();
     let dsl = MoleculeDsl::new(molecule, MoleculeMetadata::default()).unwrap();
     let reparsed = Molecule::from_edn(&dsl.to_edn()).unwrap();
     let surviving: Vec<MoleculeConstraint> = reparsed

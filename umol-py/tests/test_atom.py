@@ -77,8 +77,8 @@ def test_atom_update(update, expected):
         update.implicit_hydrogens,
         update.lone_pairs,
         update.unpaired_electrons,
-        update.constraints,
-    ) == expected
+    ) == expected[:-1]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -116,6 +116,39 @@ def test_element_form_undetermined_match():
     assert ElementForm.Undetermined() == ElementForm.Undetermined()
 
 
+@pytest.mark.parametrize(
+    ("variant", "values"),
+    [
+        (ElementForm.LitSet, {Element("N"), Element("C")}),
+        (ElementForm.NotSet, {Element("C")}),
+        (IsotopeMassForm.LitSet, {13, 12}),
+    ],
+)
+def test_atom_form_set_members(variant, values):
+    expected = frozenset(values)
+    form = variant(values)
+    values.clear()
+    assert type(form._0) is frozenset
+    assert form._0 == expected
+    assert variant(form._0) == form
+    with pytest.raises(AttributeError):
+        form._0.clear()
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_element_form_var_restriction(restricted):
+    members = {Element("C"), Element("N")}
+    restriction = (MemOp.In, members) if restricted else None
+    form = ElementForm.Var("e", restriction)
+    members.clear()
+    expected = (MemOp.In, frozenset({Element("C"), Element("N")})) if restricted else None
+    assert form._1 == expected
+    if restricted:
+        assert type(form._1) is tuple
+        assert type(form._1[1]) is frozenset
+    assert ElementForm.Var(form._0, form._1) == form
+
+
 def test_element_form_litset():
     members = ElementForm.LitSet({Element("C"), Element("N")})._0
     assert members == {Element("C"), Element("N")}
@@ -148,6 +181,17 @@ def test_isotope_mass_form_lit():
 
 def test_isotope_mass_form_litset():
     assert IsotopeMassForm.LitSet({12, 13, 14})._0 == {12, 13, 14}
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_isotope_mass_form_var_restriction(restricted):
+    members = {12, 13}
+    form = IsotopeMassForm.Var("m", members if restricted else None)
+    members.clear()
+    assert form._1 == (frozenset({12, 13}) if restricted else None)
+    if restricted:
+        assert type(form._1) is frozenset
+    assert IsotopeMassForm.Var(form._0, form._1) == form
 
 
 def test_isotope_mass_form_var_free():

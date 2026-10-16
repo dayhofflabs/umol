@@ -15,92 +15,78 @@ use self::aromaticity::AromaticityModel;
 use self::connectivity::ConnectivityModel;
 use self::stereo::StereoModel;
 use self::valence::ValenceModel;
+use crate::convert::TupleItems;
 use crate::element::Element;
 
 /// Semantic configuration for connectivity, valence, aromaticity, and stereo perception.
-#[pyclass(eq, frozen, from_py_object)]
+#[pyclass(eq, frozen, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
-pub struct ChemistryModel {
-    connectivity: ConnectivityModel,
-    valence: ValenceModel,
-    aromaticity: AromaticityModel,
-    stereo: StereoModel,
-}
+pub struct ChemistryModel(GraphChemistryModel);
 
 #[pymethods]
 impl ChemistryModel {
     #[new]
     #[pyo3(signature = (*, connectivity, valence, aromaticity, stereo))]
     fn new(
-        connectivity: ConnectivityModel,
-        valence: ValenceModel,
-        aromaticity: AromaticityModel,
-        stereo: StereoModel,
+        connectivity: PyRef<'_, ConnectivityModel>,
+        valence: PyRef<'_, ValenceModel>,
+        aromaticity: PyRef<'_, AromaticityModel>,
+        stereo: PyRef<'_, StereoModel>,
     ) -> Self {
-        Self {
-            connectivity,
-            valence,
-            aromaticity,
-            stereo,
-        }
+        Self::from_rust(GraphChemistryModel {
+            connectivity: connectivity.to_rust(),
+            valence: valence.to_rust(),
+            aromaticity: aromaticity.to_rust(),
+            stereo: stereo.to_rust(),
+        })
     }
 
     #[staticmethod]
     fn default() -> Self {
-        Self::from_rust(&GraphChemistryModel::default())
+        Self::from_rust(GraphChemistryModel::default())
     }
 
     #[getter]
     fn connectivity(&self) -> ConnectivityModel {
-        self.connectivity
+        ConnectivityModel::from_rust(&self.0.connectivity)
     }
 
     #[getter]
     fn valence(&self) -> ValenceModel {
-        self.valence.clone()
+        ValenceModel::from_rust(&self.0.valence)
     }
 
     #[getter]
     fn aromaticity(&self) -> AromaticityModel {
-        self.aromaticity.clone()
+        AromaticityModel::from_rust(&self.0.aromaticity)
     }
 
     #[getter]
     fn stereo(&self) -> StereoModel {
-        self.stereo.clone()
+        StereoModel::from_rust(&self.0.stereo)
     }
 
     fn __repr__(&self) -> String {
-        if self == &Self::from_rust(&GraphChemistryModel::default()) {
+        if self.0 == GraphChemistryModel::default() {
             return "ChemistryModel.default()".to_owned();
         }
         format!(
             "ChemistryModel(connectivity={}, valence={}, aromaticity={}, stereo={})",
-            self.connectivity.__repr__(),
-            self.valence.__repr__(),
-            self.aromaticity.__repr__(),
-            self.stereo.__repr__(),
+            self.connectivity().__repr__(),
+            self.valence().__repr__(),
+            self.aromaticity().__repr__(),
+            self.stereo().__repr__(),
         )
     }
 }
 
 impl ChemistryModel {
-    pub(crate) fn from_rust(model: &GraphChemistryModel) -> Self {
-        Self {
-            connectivity: ConnectivityModel::from_rust(&model.connectivity),
-            valence: ValenceModel::from_rust(&model.valence),
-            aromaticity: AromaticityModel::from_rust(&model.aromaticity),
-            stereo: StereoModel::from_rust(&model.stereo),
-        }
+    pub(crate) fn from_rust(model: GraphChemistryModel) -> Self {
+        Self(model)
     }
 
-    pub(crate) fn to_rust(&self) -> GraphChemistryModel {
-        GraphChemistryModel {
-            connectivity: self.connectivity.to_rust(),
-            valence: self.valence.to_rust(),
-            aromaticity: self.aromaticity.to_rust(),
-            stereo: self.stereo.to_rust(),
-        }
+    pub(crate) fn to_rust(&self) -> &GraphChemistryModel {
+        &self.0
     }
 }
 
@@ -112,7 +98,7 @@ pub enum ElementScope {
     Any {},
     /// Only the listed elements are eligible.
     #[pyo3(constructor = (elements))]
-    AllowList { elements: Vec<Element> },
+    AllowList { elements: TupleItems<Vec<Element>> },
 }
 
 #[pymethods]
@@ -164,7 +150,7 @@ mod tests {
     use umol_graph::ops::model::{
         AromaticityModel as GraphAromaticityModel, AromaticityRule as GraphAromaticityRule,
         AromaticityTieBreak as GraphAromaticityTieBreak, StereoModel as GraphStereoModel,
-        ValenceModel as GraphValenceModel,
+        ValenceCandidateSource as GraphValenceCandidateSource, ValenceModel as GraphValenceModel,
     };
     use umol_graph::ops::validate::ConnectivityModel as GraphConnectivityModel;
     use umol_graph::valence_table;
@@ -173,31 +159,29 @@ mod tests {
 
     #[rstest]
     fn test_chemistry_model_default() {
-        let model = GraphChemistryModel::default();
+        let model = ChemistryModel::default();
 
-        assert_eq!(
-            ChemistryModel::default(),
-            ChemistryModel {
-                connectivity: ConnectivityModel::from_rust(&model.connectivity),
-                valence: ValenceModel::from_rust(&model.valence),
-                aromaticity: AromaticityModel::from_rust(&model.aromaticity),
-                stereo: StereoModel::from_rust(&model.stereo),
+        assert_eq!(model, ChemistryModel(GraphChemistryModel::default()));
+        assert!(matches!(
+            model.to_rust().valence.candidates,
+            GraphValenceCandidateSource::AtomTyping {
+                registry: Cow::Borrowed(_)
             }
-        );
+        ));
     }
 
     #[rstest]
     #[case::default(ChemistryModel::default(), "ChemistryModel.default()")]
     #[case::configured(
-        ChemistryModel::new(
-            ConnectivityModel::from_rust(&GraphConnectivityModel::default()),
-            ValenceModel::from_rust(&GraphValenceModel::counts(Cow::Owned(valence_table![C => [4]]))),
-            AromaticityModel::from_rust(&GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::Strict }),
-            StereoModel::from_rust(&GraphStereoModel {
+        ChemistryModel(GraphChemistryModel {
+            connectivity: GraphConnectivityModel::default(),
+            valence: GraphValenceModel::counts(Cow::Owned(valence_table![C => [4]])),
+            aromaticity: GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::Strict },
+            stereo: GraphStereoModel {
                 para_stereo: true,
                 ..GraphStereoModel::default()
-            }),
-        ),
+            },
+        }),
         "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[], fallback_aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict), aromaticity=AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.Strict), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True, stereo_bond_minimum_ring_size=8))"
     )]
     fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
@@ -224,13 +208,8 @@ mod tests {
         };
 
         assert_eq!(
-            ChemistryModel::from_rust(&model),
-            ChemistryModel {
-                connectivity: ConnectivityModel::from_rust(&model.connectivity),
-                valence: ValenceModel::from_rust(&model.valence),
-                aromaticity: AromaticityModel::from_rust(&model.aromaticity),
-                stereo: StereoModel::from_rust(&model.stereo),
-            }
+            ChemistryModel::from_rust(model.clone()),
+            ChemistryModel(model)
         );
     }
 
@@ -252,27 +231,22 @@ mod tests {
                 ..GraphStereoModel::default()
             },
         };
-        let model = ChemistryModel {
-            connectivity: ConnectivityModel::from_rust(&expected.connectivity),
-            valence: ValenceModel::from_rust(&expected.valence),
-            aromaticity: AromaticityModel::from_rust(&expected.aromaticity),
-            stereo: StereoModel::from_rust(&expected.stereo),
-        };
+        let model = ChemistryModel(expected.clone());
 
-        assert_eq!(model.to_rust(), expected);
+        assert_eq!(model.to_rust(), &expected);
     }
 
     #[rstest]
     #[case::any(ElementScope::Any {}, "ElementScope.Any()")]
     #[case::empty(
         ElementScope::AllowList {
-            elements: Vec::new(),
+            elements: TupleItems(Vec::new()),
         },
         "ElementScope.AllowList([])"
     )]
     #[case::populated(
         ElementScope::AllowList {
-            elements: vec![Element::from(ChemElement::C), Element::from(ChemElement::N)],
+            elements: TupleItems(vec![Element::from(ChemElement::C), Element::from(ChemElement::N)]),
         },
         "ElementScope.AllowList([Element('C'), Element('N')])"
     )]
@@ -285,17 +259,17 @@ mod tests {
     #[case::empty(
         GraphElementScope::AllowList(Vec::new()),
         ElementScope::AllowList {
-            elements: Vec::new(),
+            elements: TupleItems(Vec::new()),
         }
     )]
     #[case::populated(
         GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N, ChemElement::C]),
         ElementScope::AllowList {
-            elements: vec![
+            elements: TupleItems(vec![
                 Element::from(ChemElement::C),
                 Element::from(ChemElement::N),
                 Element::from(ChemElement::C),
-            ],
+            ]),
         }
     )]
     fn test_element_scope_from_rust(
@@ -309,17 +283,17 @@ mod tests {
     #[case::any(ElementScope::Any {}, GraphElementScope::Any)]
     #[case::empty(
         ElementScope::AllowList {
-            elements: Vec::new(),
+            elements: TupleItems(Vec::new()),
         },
         GraphElementScope::AllowList(Vec::new())
     )]
     #[case::populated(
         ElementScope::AllowList {
-            elements: vec![
+            elements: TupleItems(vec![
                 Element::from(ChemElement::C),
                 Element::from(ChemElement::N),
                 Element::from(ChemElement::C),
-            ],
+            ]),
         },
         GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N, ChemElement::C])
     )]

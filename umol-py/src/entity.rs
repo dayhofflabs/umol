@@ -45,8 +45,8 @@ impl<T> Readonly<T>
 where
     T: EntityForm,
 {
-    pub(crate) fn from_rust(py: Python<'_>, value: &T::RustForm) -> PyResult<Self> {
-        Ok(Self(T::new_readonly(py, value.clone())?))
+    pub(crate) fn from_rust(py: Python<'_>, value: T::RustForm) -> PyResult<Self> {
+        Ok(Self(T::new_readonly(py, value)?))
     }
 
     pub(crate) fn to_rust(&self, py: Python<'_>) -> T::RustForm {

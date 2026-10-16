@@ -9,8 +9,6 @@
 //! constitution-bearing, and structure-bearing molecules, plus adjacent description-level
 //! operands for binary equality.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
@@ -22,8 +20,9 @@ use umol_graph_ir::ir::{
 };
 
 use crate::strategies::{
-    edge_set_strategy, element_strategy, molecule_dense_renumbering_strategy,
-    standardization_scenario_strategy, stereo_reframed_molecule_pair_strategy,
+    edge_set_strategy, element_strategy, molecule_canonical_pair_strategy,
+    molecule_dense_renumbering_strategy, standardization_scenario_strategy,
+    stereo_reframed_molecule_pair_strategy,
 };
 
 fn context() -> CanonicalizeContext {
@@ -31,12 +30,6 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
-}
-
-fn structural_hash<T: Hash>(value: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn dense_renumbering_strategy(molecule: Molecule) -> BoxedStrategy<(Molecule, MoleculeRemapping)> {
@@ -248,7 +241,7 @@ proptest! {
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
         let canonical = molecule.clone().canonicalize(&context);
         let renumbered_canonical = renumbered.canonicalize(&context);
 
@@ -259,7 +252,7 @@ proptest! {
                 .tracked_canonicalize(&context)
                 .expect("successful canonicalization returns its correspondence");
             let reframed = molecule
-                .remap(&correspondence)
+                .clone().remap(&correspondence)
                 .reframe()
                 .expect("a canonical correspondence preserves molecule integrity");
 
@@ -277,7 +270,7 @@ proptest! {
         ],
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
         let (canonical, correspondence) = molecule
             .clone()
             .tracked_canonicalize(&context)
@@ -297,8 +290,8 @@ proptest! {
         prop_assert_eq!(molecule.clone().canonicalize(&context), Ok(canonical.clone()));
         prop_assert_eq!(renumbered.clone().canonicalize(&context), Ok(canonical.clone()));
         prop_assert_eq!(
-            molecule.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            molecule.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         prop_assert_eq!(
             molecule.remap(&correspondence).reframe(),
@@ -342,16 +335,16 @@ proptest! {
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
 
         prop_assert_eq!(
-            molecule.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            molecule.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         if let Ok(canonical) = molecule.clone().canonicalize(&context) {
             prop_assert_eq!(
                 molecule.canonical_hash(&context),
-                Ok(structural_hash(&canonical)),
+                canonical.canonical_hash(&context),
             );
         }
     }
@@ -375,7 +368,7 @@ proptest! {
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
         let canonical = molecule.clone().canonicalize(&context);
 
         prop_assert!(molecule.canonical_eq(&molecule, &context));
@@ -387,6 +380,29 @@ proptest! {
         if let Ok(canonical) = canonical {
             prop_assert!(renumbered.canonical_eq(&canonical, &context));
             prop_assert!(molecule.canonical_eq(&canonical, &context));
+        }
+    }
+
+    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    #[test]
+    fn test_molecule_canonical_eq_contract(
+        (left, right) in molecule_canonical_pair_strategy(),
+    ) {
+        let context = context();
+        let expected = match (
+            left.clone().canonicalize(&context),
+            right.clone().canonicalize(&context),
+        ) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => true,
+            _ => false,
+        };
+
+        prop_assert_eq!(left.canonical_eq(&right, &context), expected);
+        match (left.canonical_hash(&context), right.canonical_hash(&context)) {
+            (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
+            (Err(_), Err(_)) => prop_assert!(expected),
+            _ => prop_assert!(!expected),
         }
     }
 

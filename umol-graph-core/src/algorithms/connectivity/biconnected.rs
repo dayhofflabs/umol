@@ -7,7 +7,8 @@
 
 use std::collections::HashSet;
 
-use crate::graph::{Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::NodeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BiconnectedComponentsAlgorithm {
@@ -129,7 +130,8 @@ mod tests {
     use rstest::*;
 
     use super::BiconnectedComponentsAlgorithm::Tarjan;
-    use crate::graph::{Graph, NodeId};
+    use crate::graph::Graph;
+    use crate::id::NodeId;
 
     fn n(i: u32) -> NodeId {
         NodeId(i)

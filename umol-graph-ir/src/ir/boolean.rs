@@ -1,8 +1,6 @@
 //! Boolean form.
 
-use std::borrow::Cow;
-
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::traits::{AsLit, Lattice, Normalize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -33,8 +31,8 @@ impl Normalize for BooleanForm {
         Ok(self)
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Borrowed(self))
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -73,7 +71,7 @@ impl Lattice for BooleanForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         Ok(match (self, other) {
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
             _ => Self::Undetermined,
@@ -160,5 +158,14 @@ mod tests {
     #[case::undetermined(BooleanForm::Undetermined)]
     fn test_boolean_form_normalize(#[case] b: BooleanForm) {
         assert_eq!(b.normalize(), Ok(b));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_boolean_form_normalized_eq_default(
+        #[values(BooleanForm::Undetermined, BooleanForm::Lit(true), BooleanForm::Lit(false))] left: BooleanForm,
+        #[values(BooleanForm::Undetermined, BooleanForm::Lit(true), BooleanForm::Lit(false))] right: BooleanForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.normalize() == right.normalize());
     }
 }

@@ -1,0 +1,1 @@
+{:atoms ["C" "C" "C"] :bonds [[0 1 "2"] [1 2 "2"]] :constraints [{:bond-order-sum {:bonds [0 1] :sum 4}}]}

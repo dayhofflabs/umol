@@ -3,11 +3,17 @@ import pytest
 from umol import (
     AtomForm,
     BondForm,
+    BooleanForm,
     CisTransConfiguration,
     CisTransStereo,
     CisTransStereoForm,
     Element,
+    FluxionalityForm,
+    LigandPermutation,
+    LigandSymmetryForm,
     Molecule,
+    Orientation,
+    OrientedLigandPermutation,
     ParseError,
     Permutation,
     StereoAtomForm,
@@ -24,13 +30,65 @@ from umol import (
     StereoKind,
     StereoLigand,
     StereoLigandKind,
+    StereoLigandPair,
     StereoTerm,
     Stereogenicity,
     StereogenicityForm,
     TetrahedralConfiguration,
     TetrahedralStereo,
     TetrahedralStereoForm,
+    Topicity,
+    TopicityForm,
+    TopicityRelationForm,
 )
+
+
+@pytest.mark.parametrize(
+    ("variant", "members"),
+    [
+        (StereoTerm.LitSet, {0, 1}),
+        (StereoCoset.LitSet, {0, 1}),
+        (TopicityRelationForm.LitSet, {Topicity.Homotopic, Topicity.Enantiotopic}),
+        (TopicityRelationForm.NotSet, {Topicity.Homotopic}),
+        (StereogenicityForm.LitSet, {Stereogenicity.Prochiral, Stereogenicity.Symmetric}),
+        (StereogenicityForm.NotSet, {Stereogenicity.Symmetric}),
+    ],
+)
+def test_stereo_set_members(variant, members):
+    expected = frozenset(members)
+    form = variant(members)
+    members.clear()
+    assert type(form._0) is frozenset
+    assert form._0 == expected
+    assert variant(form._0) == form
+    with pytest.raises(AttributeError):
+        form._0.clear()
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_stereo_term_var_restriction(restricted):
+    members = {0, 1}
+    form = StereoTerm.Var("s", members if restricted else None)
+    members.clear()
+    assert form._1 == (frozenset({0, 1}) if restricted else None)
+    if restricted:
+        assert type(form._1) is frozenset
+    assert StereoTerm.Var(form._0, form._1) == form
+
+
+@pytest.mark.parametrize("coset", [None, StereoCoset.LitSet({0, 1})])
+def test_stereo_configuration_update_kinded(coset):
+    value = StereoConfigurationUpdate.Kinded(kind=StereoKind.Tetrahedral, coset=coset)
+    assert value.kind == StereoKind.Tetrahedral
+    assert value.coset == coset
+    assert value.__match_args__ == ("kind", "coset")
+    assert value == StereoConfigurationUpdate.Kinded(value.kind, value.coset)
+    assert repr(value) == (
+        f"StereoConfigurationUpdate.Kinded(kind=StereoKind.Tetrahedral, coset={coset!r})"
+    )
+    for field in ("kind", "coset"):
+        with pytest.raises(AttributeError):
+            setattr(value, field, None)
 
 
 @pytest.mark.parametrize(
@@ -123,7 +181,8 @@ def test_stereo_configuration_update(update, expected):
     ],
 )
 def test_stereo_atom_update(update, expected):
-    assert (update.configuration, update.constraints) == expected
+    assert update.configuration == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -206,7 +265,8 @@ def test_stereo_atom_update_parse_error():
     ],
 )
 def test_stereo_bond_update(update, expected):
-    assert (update.configuration, update.constraints) == expected
+    assert update.configuration == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -228,6 +288,63 @@ def test_stereo_bond_update_parse(dsl, canonical):
 def test_stereo_bond_update_parse_error():
     with pytest.raises(ParseError):
         StereoBondUpdate.parse("*#g/")
+
+
+@pytest.mark.parametrize(
+    ("update_type", "container_type", "constraint_type", "kind"),
+    [
+        (StereoAtomUpdate, StereoAtomConstraintsForm, StereoAtomConstraintForm, StereoKind.Tetrahedral),
+        (StereoBondUpdate, StereoBondConstraintsForm, StereoBondConstraintForm, StereoKind.CisTrans),
+    ],
+)
+def test_stereo_update_constraints_asserted(update_type, container_type, constraint_type, kind):
+    entry = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral))
+    update = update_type(
+        configuration=StereoConfigurationUpdate.Kinded(kind, None),
+        constraints=container_type([entry]),
+    )
+    assert update.constraints.asserted(entry.key) == entry
+    assert update.constraints.asserted_complete(entry.key) == entry
+    assert update_type(configuration=update.configuration, constraints=update.constraints) == update
+
+
+@pytest.mark.parametrize(
+    ("form_type", "update_type", "container_type", "constraint_type"),
+    [
+        (StereoAtomForm, StereoAtomUpdate, StereoAtomConstraintsForm, StereoAtomConstraintForm),
+        (StereoBondForm, StereoBondUpdate, StereoBondConstraintsForm, StereoBondConstraintForm),
+    ],
+)
+@pytest.mark.parametrize(
+    "payload",
+    [StereogenicityForm.Lit(Stereogenicity.Stereogenic), StereogenicityForm.LitSet(set())],
+)
+@pytest.mark.parametrize(
+    ("configuration", "head"),
+    [
+        (StereoConfigurationUpdate.Unchanged(), ""),
+        (StereoConfigurationUpdate.Undetermined(), "*"),
+    ],
+)
+def test_stereo_update_str_kindless(
+    form_type, update_type, container_type, constraint_type, payload, configuration, head
+):
+    constraints = container_type([constraint_type.Stereogenicity(payload)])
+    update = update_type(configuration=configuration, constraints=constraints)
+    form = form_type(StereoConfigurationForm.Undetermined(), constraints=constraints)
+
+    assert str(update) == head
+    assert repr(update) == f"{update_type.__name__}.parse('{head}')"
+    assert update_type.parse(str(update)) == update_type(configuration=configuration)
+    assert list(update.constraints.values()) == list(constraints.values())
+    key = constraint_type.Stereogenicity(payload).key
+    top = constraint_type.Stereogenicity(StereogenicityForm.Undetermined())
+    assert update.constraints.asserted(key) == top
+    assert update.constraints.asserted_complete(key) == top
+    assert str(form) == "*"
+    assert repr(form) == f"{form_type.__name__}.parse('*')"
+    assert form.constraints.stereogenicity() == payload
+
 
 
 def test_permutation_image_degree():
@@ -368,6 +485,44 @@ def test_stereoatom_form_new():
     assert len(atom.constraints) == 0
 
 
+@pytest.mark.parametrize(
+    "form_type,container_type,constraint_type,kind",
+    [
+        (StereoAtomForm, StereoAtomConstraintsForm, StereoAtomConstraintForm, StereoKind.Tetrahedral),
+        (StereoBondForm, StereoBondConstraintsForm, StereoBondConstraintForm, StereoKind.CisTrans),
+    ],
+)
+@pytest.mark.parametrize("payload", [
+    StereogenicityForm.Lit(Stereogenicity.Symmetric), StereogenicityForm.LitSet(set()),
+])
+@pytest.mark.parametrize("coset", [StereoCoset.Lit(0), StereoCoset.Undetermined()])
+def test_stereo_form_meet_constraints(form_type, container_type, constraint_type, kind, payload, coset):
+    raw = constraint_type.Stereogenicity(payload)
+    form = form_type(StereoConfigurationForm.Undetermined(), constraints=container_type([raw]))
+    top = form_type(StereoConfigurationForm.Undetermined())
+    kinded = form_type(
+        StereoConfigurationForm.Kinded(kind, coset),
+        constraints=container_type([
+            constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Stereogenic))
+        ]),
+    )
+    assert form.asdict() != top.asdict()
+    assert form.normalize().asdict() == top.asdict()
+    assert form.normalized_eq(top)
+    assert top.normalized_eq(form)
+    assert form.is_undetermined()
+    assert not form.is_ground()
+    assert form.meet(kinded).asdict() == kinded.asdict()
+    assert kinded.meet(form).asdict() == kinded.asdict()
+    assert form.join(kinded).asdict() == top.asdict()
+    assert kinded.join(form).asdict() == top.asdict()
+    assert form.matches(kinded)
+    assert not kinded.matches(form)
+    assert form.is_compatible(kinded)
+    assert kinded.is_compatible(form)
+    assert form.constraints.get(raw.key) == raw
+
+
 @pytest.mark.parametrize("dsl", ["Th0", "Th*", "Sp2"])
 def test_stereoatom_form_parse_roundtrip(dsl):
     atom = StereoAtomForm.parse(dsl)
@@ -397,6 +552,44 @@ def test_stereoatom_form_constraints_kwarg():
     )
 
 
+def test_stereoatomconstraints_ligand_symmetry():
+    permutation = OrientedLigandPermutation(
+        LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Proper
+    )
+    constraints = StereoAtomConstraintsForm(
+        [StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(permutation, True))]
+    )
+    assert constraints.ligand_symmetry(permutation) == BooleanForm.Lit(True)
+    improper = OrientedLigandPermutation(
+        LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Improper
+    )
+    assert constraints.ligand_symmetry(improper) == BooleanForm.Undetermined()
+
+
+def test_stereoatomconstraints_fluxionality():
+    permutation = LigandPermutation(Permutation([1, 0, 2, 3]))
+    constraints = StereoAtomConstraintsForm(
+        [StereoAtomConstraintForm.Fluxionality(FluxionalityForm(permutation, False))]
+    )
+    assert constraints.fluxionality(permutation) == BooleanForm.Lit(False)
+    other = LigandPermutation(Permutation([0, 1, 3, 2]))
+    assert constraints.fluxionality(other) == BooleanForm.Undetermined()
+
+
+def test_stereoatomconstraints_topicity():
+    constraints = StereoAtomConstraintsForm(
+        [
+            StereoAtomConstraintForm.Topicity(
+                TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Lit(Topicity.Homotopic))
+            )
+        ]
+    )
+    assert constraints.topicity(StereoLigandPair(0, 1)) == TopicityRelationForm.Lit(
+        Topicity.Homotopic
+    )
+    assert constraints.topicity(StereoLigandPair(0, 2)) == TopicityRelationForm.Undetermined()
+
+
 def test_stereoatom_form_asdict():
     atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     d = atom.asdict()
@@ -421,7 +614,8 @@ def test_molecule_stereo_atoms_from_entries():
     view = views[0]
     assert view.id == 0
     assert view.site_id == 0
-    assert view.ligands == [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)]
+    assert view.ligands == tuple(StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5))
+    assert type(view.ligands) is tuple
     assert view.kind == StereoKind.Tetrahedral
     assert view.coset == StereoCoset.Lit(0)
     assert view.configuration == StereoConfigurationForm.Kinded(
@@ -448,6 +642,22 @@ def test_stereoatomview_constraints_write_through():
     )
 
 
+def test_stereoatomview_constraints_ligand_symmetry_and_fluxionality():
+    mol = stereo_atom_molecule()
+    permutation = LigandPermutation(Permutation([1, 0, 2, 3]))
+    oriented = OrientedLigandPermutation(permutation, Orientation.Proper)
+    assert mol.stereo_atoms[0].constraints.ligand_symmetry(oriented) == BooleanForm.Undetermined()
+    assert mol.stereo_atoms[0].constraints.fluxionality(permutation) == BooleanForm.Undetermined()
+    mol.stereo_atoms[0].constraints.set(
+        StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(oriented, True))
+    )
+    mol.stereo_atoms[0].constraints.set(
+        StereoAtomConstraintForm.Fluxionality(FluxionalityForm(permutation, False))
+    )
+    assert mol.stereo_atoms[0].constraints.ligand_symmetry(oriented) == BooleanForm.Lit(True)
+    assert mol.stereo_atoms[0].constraints.fluxionality(permutation) == BooleanForm.Lit(False)
+
+
 def test_stereoatomviews_at():
     views = stereo_atom_molecule().stereo_atoms
     assert views.at(0).id == 0
@@ -472,7 +682,98 @@ def test_stereoatomviews_setitem():
     assert view.site_id == 0
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [StereogenicityForm.Lit(Stereogenicity.Stereogenic), StereogenicityForm.LitSet(set())],
+)
+def test_molecule_render_kindless_stereo(payload):
+    atom_constraints = StereoAtomConstraintsForm(
+        [StereoAtomConstraintForm.Stereogenicity(payload)]
+    )
+    bond_constraints = StereoBondConstraintsForm(
+        [StereoBondConstraintForm.Stereogenicity(payload)]
+    )
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(6)],
+        bonds=[
+            (a, b, BondForm(1))
+            for a, b in [(0, 1), (0, 2), (0, 3), (0, 4), (1, 4), (1, 5)]
+        ],
+        stereo_atoms=[
+            (
+                0,
+                [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)],
+                StereoAtomForm(
+                    StereoConfigurationForm.Undetermined(), constraints=atom_constraints
+                ),
+            )
+        ],
+        stereo_bonds=[
+            (
+                0,
+                [StereoLigand(i, StereoLigandKind.Atom) for i in range(2, 6)],
+                StereoBondForm(
+                    StereoConfigurationForm.Undetermined(), constraints=bond_constraints
+                ),
+            )
+        ],
+    )
+    expected = molecule.copy()
+    expected.stereo_atoms[0] = StereoAtomForm(StereoConfigurationForm.Undetermined())
+    expected.stereo_bonds[0] = StereoBondForm(StereoConfigurationForm.Undetermined())
+
+    assert molecule.render() == expected.render()
+    assert str(molecule) == expected.render()
+    assert Molecule.parse(molecule.render()) == expected
+    assert molecule.stereo_atoms[0].constraints.stereogenicity() == payload
+    assert molecule.stereo_bonds[0].constraints.stereogenicity() == payload
+
+
 def test_molecule_repr_stereo():
     assert repr(stereo_atom_molecule()) == (
         "Molecule(atoms=5, bonds=4, stereo_atoms=1)"
     )
+
+
+@pytest.mark.parametrize(
+    ("namespace", "form", "kind", "ligands"),
+    [
+        (
+            "stereo_atoms",
+            StereoAtomForm,
+            StereoKind.Tetrahedral,
+            [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)],
+        ),
+        (
+            "stereo_bonds",
+            StereoBondForm,
+            StereoKind.CisTrans,
+            [
+                StereoLigand(2, StereoLigandKind.Atom),
+                StereoLigand(0, StereoLigandKind.ImplicitHydrogen),
+                StereoLigand(3, StereoLigandKind.Atom),
+                StereoLigand(1, StereoLigandKind.ImplicitHydrogen),
+            ],
+        ),
+    ],
+)
+@pytest.mark.parametrize("replace_form", [False, True])
+def test_stereo_view_assignment_out_of_range_coset(namespace, form, kind, ligands, replace_form):
+    initial = StereoConfigurationForm.Kinded(kind, StereoCoset.Lit(0))
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(5)],
+        bonds=[(0, i, BondForm(1)) for i in range(1, 5)] + [(1, 3, BondForm(1))],
+        **{namespace: [(0, ligands, form(initial))]},
+    )
+    collection = getattr(molecule, namespace)
+    view = collection[0]
+    configuration = StereoConfigurationForm.Kinded(kind, StereoCoset.Lit(2))
+
+    if replace_form:
+        collection[0] = form(configuration)
+    else:
+        view.configuration = configuration
+
+    assert view.configuration == configuration
+    assert collection[0].configuration == configuration
+    assert view.site_id == 0

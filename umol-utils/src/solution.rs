@@ -1,20 +1,25 @@
 //! Three-valued outcome of an engine pass.
 //!
-//! `Solution<T, C>` distinguishes a fully-determined result, a
-//! partially-resolved one (the engine ran but the represented value is still not ground),
-//! and a chemistry-level contradiction with a typed diagnostic payload `C`.
+//! `Solution<T, C, U = T>` distinguishes a fully-determined result carrying `T`,
+//! an underdetermined outcome carrying `U`, and a chemistry-level contradiction
+//! with a typed diagnostic payload `C`. The two-parameter form uses `T` for both
+//! non-contradictory outcomes.
 //!
 //! Engine setup or parameter-table errors travel separately in `Result<_, _>`
 //! and never collapse into `Solution`.
 
+/// Semantic outcome with separate determined, underdetermined, and contradiction payloads.
+///
+/// `U` defaults to `T`; the two-parameter form retains one payload type for both
+/// non-contradictory outcomes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Solution<T, C> {
+pub enum Solution<T, C, U = T> {
     Determined(T),
-    Underdetermined(T),
+    Underdetermined(U),
     Contradictory(C),
 }
 
-impl<T, C> Solution<T, C> {
+impl<T, C, U> Solution<T, C, U> {
     pub fn is_determined(&self) -> bool {
         matches!(self, Self::Determined(_))
     }
@@ -25,14 +30,6 @@ impl<T, C> Solution<T, C> {
 
     pub fn is_contradictory(&self) -> bool {
         matches!(self, Self::Contradictory(_))
-    }
-
-    /// Borrow the success payload (Determined or Underdetermined).
-    pub fn data(&self) -> Option<&T> {
-        match self {
-            Self::Determined(v) | Self::Underdetermined(v) => Some(v),
-            Self::Contradictory(_) => None,
-        }
     }
 
     pub fn contradiction(&self) -> Option<&C> {
@@ -50,14 +47,6 @@ impl<T, C> Solution<T, C> {
         }
     }
 
-    /// Extract the success payload (Determined or Underdetermined).
-    pub fn into_data(self) -> Option<T> {
-        match self {
-            Self::Determined(v) | Self::Underdetermined(v) => Some(v),
-            Self::Contradictory(_) => None,
-        }
-    }
-
     pub fn into_contradiction(self) -> Option<C> {
         match self {
             Self::Contradictory(c) => Some(c),
@@ -65,21 +54,9 @@ impl<T, C> Solution<T, C> {
         }
     }
 
-    /// Transform the success payload type. Contradiction passes through.
-    pub fn map<U, F>(self, f: F) -> Solution<U, C>
-    where
-        F: FnOnce(T) -> U,
-    {
-        match self {
-            Self::Determined(v) => Solution::Determined(f(v)),
-            Self::Underdetermined(v) => Solution::Underdetermined(f(v)),
-            Self::Contradictory(c) => Solution::Contradictory(c),
-        }
-    }
-
     /// Transform the contradiction payload type. Used by composite engines
     /// to wrap a sub-engine's contradiction in their union enum.
-    pub fn map_contradiction<D, F>(self, f: F) -> Solution<T, D>
+    pub fn map_contradiction<D, F>(self, f: F) -> Solution<T, D, U>
     where
         F: FnOnce(C) -> D,
     {
@@ -111,6 +88,36 @@ impl<T, C> Solution<T, C> {
             Self::Determined(v) => Ok(v),
             Self::Underdetermined(_) => Err(on_underdetermined),
             Self::Contradictory(c) => Err(c.into()),
+        }
+    }
+}
+
+impl<T, C> Solution<T, C> {
+    /// Borrow the success payload (Determined or Underdetermined).
+    pub fn data(&self) -> Option<&T> {
+        match self {
+            Self::Determined(v) | Self::Underdetermined(v) => Some(v),
+            Self::Contradictory(_) => None,
+        }
+    }
+
+    /// Extract the success payload (Determined or Underdetermined).
+    pub fn into_data(self) -> Option<T> {
+        match self {
+            Self::Determined(v) | Self::Underdetermined(v) => Some(v),
+            Self::Contradictory(_) => None,
+        }
+    }
+
+    /// Transform the success payload type. Contradiction passes through.
+    pub fn map<V, F>(self, f: F) -> Solution<V, C>
+    where
+        F: FnOnce(T) -> V,
+    {
+        match self {
+            Self::Determined(v) => Solution::Determined(f(v)),
+            Self::Underdetermined(v) => Solution::Underdetermined(f(v)),
+            Self::Contradictory(c) => Solution::Contradictory(c),
         }
     }
 }
@@ -309,6 +316,74 @@ mod tests {
         assert_eq!(
             contradictory.into_decisive::<DecisiveError>(DecisiveError::Undetermined),
             Err(DecisiveError::Mismatch(Mismatch::Reason("nope"))),
+        );
+    }
+
+    #[rstest]
+    #[case::determined(Solution::Determined(7), (true, false, false))]
+    #[case::underdetermined(Solution::Underdetermined(()), (false, true, false))]
+    #[case::contradictory(Solution::Contradictory("nope"), (false, false, true))]
+    fn test_solution_predicates_distinct(
+        #[case] solution: Solution<i32, &'static str, ()>,
+        #[case] expected: (bool, bool, bool),
+    ) {
+        assert_eq!(
+            (
+                solution.is_determined(),
+                solution.is_underdetermined(),
+                solution.is_contradictory(),
+            ),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::determined(Solution::Determined(7), Some(7))]
+    #[case::underdetermined(Solution::Underdetermined(()), None)]
+    #[case::contradictory(Solution::Contradictory("nope"), None)]
+    fn test_solution_into_determined_distinct(
+        #[case] solution: Solution<i32, &'static str, ()>,
+        #[case] expected: Option<i32>,
+    ) {
+        assert_eq!(solution.into_determined(), expected);
+    }
+
+    #[rstest]
+    #[case::determined(Solution::Determined(7), Solution::Determined(7))]
+    #[case::underdetermined(Solution::Underdetermined(()), Solution::Underdetermined(()))]
+    #[case::contradictory(
+        Solution::Contradictory("nope"),
+        Solution::Contradictory(String::from("nope"))
+    )]
+    fn test_solution_map_contradiction_distinct(
+        #[case] solution: Solution<i32, &'static str, ()>,
+        #[case] expected: Solution<i32, String, ()>,
+    ) {
+        assert_eq!(solution.map_contradiction(String::from), expected);
+    }
+
+    #[rstest]
+    #[case::determined(Solution::Determined(7), Ok(()))]
+    #[case::underdetermined(Solution::Underdetermined(()), Ok(()))]
+    #[case::contradictory(Solution::Contradictory("nope"), Err("nope"))]
+    fn test_solution_into_observation_distinct(
+        #[case] solution: Solution<i32, &'static str, ()>,
+        #[case] expected: Result<(), &'static str>,
+    ) {
+        assert_eq!(solution.into_observation(), expected);
+    }
+
+    #[rstest]
+    #[case::determined(Solution::Determined(7), Ok(7))]
+    #[case::underdetermined(Solution::Underdetermined(()), Err(String::from("underdetermined")))]
+    #[case::contradictory(Solution::Contradictory("nope"), Err(String::from("nope")))]
+    fn test_solution_into_decisive_distinct(
+        #[case] solution: Solution<i32, &'static str, ()>,
+        #[case] expected: Result<i32, String>,
+    ) {
+        assert_eq!(
+            solution.into_decisive(String::from("underdetermined")),
+            expected
         );
     }
 }

@@ -1,5 +1,12 @@
 # Experiment B: single-structure kekulization implementation plan
 
+Relates: [236](236-operation-ownership-copy-costs-2026-10-09.md)
+
+2026-10-12 correction: S4a1 in 236 replaces this record's one-fixed-hole limit
+and unchanged donor lone-pair rule. Fixed two-electron contributions must return
+to atom-local lone pairs during localization. The original implementation scope
+and reasoning remain below.
+
 ## Objective and boundary
 
 Implement deterministic single-structure kekulization for the closed-shell cases settled in

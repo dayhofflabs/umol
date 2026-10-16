@@ -24,10 +24,12 @@ def test_molecule_remapping_empty(field):
 @pytest.mark.parametrize("images", [[], [0], [2, 0, 1]])
 def test_remapping_constructor(images):
     remapping = Remapping(images)
-    assert remapping.images == images
+    assert type(remapping.images) is tuple
+    assert Remapping(remapping.images) == remapping
+    assert remapping.images == tuple(images)
     assert len(remapping) == len(images)
     assert remapping.is_empty() == (images == [])
-    assert remapping.to_correspondence().matched_pairs == list(enumerate(images))
+    assert remapping.to_correspondence().matched_pairs == tuple(enumerate(images))
     assert remapping.to_correspondence().left_count == len(images)
     assert remapping.to_correspondence().right_count == len(images)
 
@@ -61,8 +63,9 @@ def test_remapping_map_error():
 def test_remapping_frozen():
     remapping = Remapping([1, 0])
     images = remapping.images
-    images[0] = 0
-    assert remapping.images == [1, 0]
+    with pytest.raises(TypeError):
+        images[0] = 0
+    assert remapping.images == (1, 0)
     with pytest.raises(AttributeError):
         remapping.images = [0, 1]
 
@@ -86,7 +89,7 @@ def molecule_remapping():
 def test_molecule_remapping_components(molecule_remapping, field, images):
     assert getattr(molecule_remapping, field) == Remapping(images)
     correspondence = getattr(molecule_remapping.to_correspondence(), field)
-    assert correspondence.matched_pairs == list(enumerate(images))
+    assert correspondence.matched_pairs == tuple(enumerate(images))
     assert correspondence.left_count == len(images)
     assert correspondence.right_count == len(images)
 

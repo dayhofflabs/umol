@@ -5,14 +5,17 @@
 //! benzenoid hydrocarbons (all-carbon, all 6-membered rings); rejects
 //! non-benzenoid or heterocyclic input.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
+use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm, UnionFind};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, ElementForm, Molecule, RingId, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AtomId, ElementForm, Molecule, RingId, RingSet,
+    UnpairedElectronsForm,
 };
+
+use super::{bond_exclusions, ring_components};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -24,13 +27,51 @@ pub enum ClarError {
 pub struct ClarAromaticity;
 
 impl ClarAromaticity {
+    pub(super) fn candidate_components(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        ring_components(rings, can_contribute)
+    }
+
+    pub(super) fn candidate_aromatic_systems(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        let mut candidates: Vec<BTreeSet<AtomId>> = rings
+            .iter()
+            .filter(|ring| {
+                ring.atoms().contains(&atom)
+                    && ring.atoms().iter().all(|&atom| can_contribute(atom))
+            })
+            .map(|ring| ring.atoms().iter().copied().collect())
+            .collect();
+        candidates.sort();
+        candidates.dedup();
+        candidates
+    }
+
     /// The Clar rule supplies no usable contribution bound: no candidate is
     /// settled early.
-    pub fn accepts_range(&self, _members: &[(u32, u32)]) -> bool {
+    pub(super) fn accepts_contributions(&self, _members: &[&[AromaticValence]]) -> bool {
         true
     }
 
-    pub fn find_from_rings<F>(
+    /// Perceive systems from the supplied rings and aromatic contributions.
+    /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
+    /// Non-aromatic bonds exclude sextets and separate selected regions.
+    /// A region still containing both endpoints is rejected without another selection.
+    ///
+    /// # Assumes
+    ///
+    /// The ring set is contextually valid for the molecule: its atom and bond ids
+    /// and ring incidence agree with the molecule.
+    pub(crate) fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -38,11 +79,31 @@ impl ClarAromaticity {
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, ClarError>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
+    {
+        self.find_with_exclusions(
+            molecule,
+            rings,
+            maximum_independent_set_algorithm,
+            &bond_exclusions(molecule),
+            electrons_at,
+        )
+    }
+
+    pub(super) fn find_with_exclusions<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
+        excluded_bonds: &[[AtomId; 2]],
+        electrons_at: &F,
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, ClarError>
+    where
+        F: Fn(AtomId) -> AromaticValence,
     {
         let has_non_benzenoid = molecule.atoms().iter().any(|view| {
-            !matches!(view.attributes.element, ElementForm::Lit(Element::C))
-                && electrons_at(view.id).is_some()
+            !matches!(view.attributes().element, ElementForm::Lit(Element::C))
+                && matches!(electrons_at(view.id()), AromaticValence::Aromatic(_))
         });
         if has_non_benzenoid {
             return Err(ClarError::NonBenzenoid(
@@ -58,10 +119,13 @@ impl ClarAromaticity {
                     return false;
                 };
                 cycle.len() == 6
+                    && !excluded_bonds
+                        .iter()
+                        .any(|[a, b]| cycle.atoms().contains(a) && cycle.atoms().contains(b))
                     && cycle.atoms().iter().all(|&id| {
                         let a = molecule.atom(id);
-                        matches!(a.attributes.element, ElementForm::Lit(Element::C))
-                            && electrons_at(a.id).is_some()
+                        matches!(a.attributes().element, ElementForm::Lit(Element::C))
+                            && matches!(electrons_at(a.id()), AromaticValence::Aromatic(_))
                     })
             })
             .collect();
@@ -82,20 +146,57 @@ impl ClarAromaticity {
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
 
-        let mut atoms: Vec<AtomId> = selected_atoms.into_iter().collect();
-        atoms.sort_unstable();
-
-        let electrons: Vec<i64> = atoms
+        let mut regions = Vec::new();
+        if excluded_bonds
             .iter()
-            .map(|&id| electrons_at(id).unwrap_or(0) as i64)
-            .collect();
+            .any(|[a, b]| selected_atoms.contains(a) && selected_atoms.contains(b))
+        {
+            let mut components = UnionFind::new(molecule.atoms().count());
+            for bond in molecule.bonds().iter() {
+                let [a, b] = bond.atom_ids();
+                if selected_atoms.contains(&a)
+                    && selected_atoms.contains(&b)
+                    && !excluded_bonds
+                        .iter()
+                        .any(|&pair| pair == [a, b] || pair == [b, a])
+                {
+                    components.union(a.index(), b.index());
+                }
+            }
+            let mut groups: BTreeMap<usize, Vec<AtomId>> = BTreeMap::new();
+            for atom in selected_atoms {
+                groups
+                    .entry(components.find(atom.index()))
+                    .or_default()
+                    .push(atom);
+            }
+            regions.extend(groups.into_values());
+        } else {
+            regions.push(selected_atoms.into_iter().collect());
+        }
 
-        Ok(vec![(
-            atoms,
-            AromaticSystemForm::from_electrons(electrons)
-                .with_charge(0)
-                .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
-        )])
+        let mut aromatic_systems = Vec::new();
+        for mut atoms in regions {
+            if excluded_bonds
+                .iter()
+                .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+            {
+                continue;
+            }
+            atoms.sort_unstable();
+            let electrons: Vec<i64> = atoms
+                .iter()
+                .map(|&id| electrons_at(id).valence_count())
+                .collect();
+            aromatic_systems.push((
+                atoms,
+                AromaticSystemForm::from_electrons(electrons)
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            ));
+        }
+        aromatic_systems.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(aromatic_systems)
     }
 }
 
@@ -209,7 +310,7 @@ mod tests {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
                             matches!(
-                                molecule.atom(atom).attributes.element,
+                                molecule.atom(atom).attributes().element,
                                 ElementForm::Lit(Element::C)
                             )
                         })
@@ -244,10 +345,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_bound(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])]
-    fn test_clar_aromaticity_accepts_range(#[case] members: &[(u32, u32)]) {
-        // No usable bound: every range is accepted, nothing settles early.
-        assert!(ClarAromaticity.accepts_range(members));
+    #[case::no_bound(vec![vec![AromaticValence::Aromatic(1)]; 5])]
+    #[case::non_aromatic(vec![vec![AromaticValence::NotAromatic]])]
+    #[case::empty_member(vec![vec![]])]
+    #[case::empty(vec![])]
+    fn test_clar_aromaticity_accepts_contributions(#[case] members: Vec<Vec<AromaticValence>>) {
+        let members: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+        assert!(ClarAromaticity.accepts_contributions(&members));
     }
 
     #[rstest]
@@ -283,7 +387,7 @@ mod tests {
     #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
     fn test_clar_aromaticity_find_from_rings(
         #[case] molecule: Molecule,
-        #[case] expected_systems: usize,
+        #[case] expected_aromatic_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
         let rings = molecule
@@ -296,27 +400,24 @@ mod tests {
             )
             .into_ring_set();
         let model = ClarAromaticity;
-        let systems = model
+        let aromatic_systems = model
             .find_from_rings(
                 &molecule,
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
-                &|v| match molecule
-                    .atom(v)
-                    .attributes
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceForm::Undetermined)
-                {
-                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                    _ => None,
+                &|v| match molecule.atom(v).attributes().constraints.aromatic_valence() {
+                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                        AromaticValence::Aromatic(*n)
+                    }
+                    _ => AromaticValence::NotAromatic,
                 },
             )
             .unwrap();
-        assert_eq!(systems.len(), expected_systems);
-        assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
-        if let Some((system_atoms_vec, _)) = systems.first() {
-            let system_atoms: HashSet<AtomId> = system_atoms_vec.iter().copied().collect();
+        assert_eq!(aromatic_systems.len(), expected_aromatic_systems);
+        assert_eq!(aromatic_systems.first().map(|s| s.0.len()), expected_atoms);
+        if let Some((aromatic_system_atoms_vec, _)) = aromatic_systems.first() {
+            let aromatic_system_atoms: HashSet<AtomId> =
+                aromatic_system_atoms_vec.iter().copied().collect();
             let expected_atoms: HashSet<AtomId> = select_disjoint_sextets(
                 &rings,
                 &hex_ring_indices(&molecule, &rings),
@@ -326,7 +427,7 @@ mod tests {
             .filter_map(|id| rings.get(id))
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
-            assert_eq!(system_atoms, expected_atoms);
+            assert_eq!(aromatic_system_atoms, expected_atoms);
         }
     }
 
@@ -370,15 +471,11 @@ mod tests {
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| {
-                    match molecule
-                        .atom(v)
-                        .attributes
-                        .constraints
-                        .aromatic_valence()
-                        .unwrap_or(&AromaticValenceForm::Undetermined)
-                    {
-                        AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                        _ => None,
+                    match molecule.atom(v).attributes().constraints.aromatic_valence() {
+                        AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                            AromaticValence::Aromatic(*n)
+                        }
+                        _ => AromaticValence::NotAromatic,
                     }
                 },
             )

@@ -50,6 +50,19 @@ requires such a span reports the failure at that boundary. Host-dependent DPO ap
 conditions are a separate contextual concern. This guide generalizes that decision and makes it
 available independently of the reaction implementation history.
 
+## Index and count arithmetic
+
+Indices, positions, offsets, and collection counts are assumed to fit their integer
+representations. The u32 range is much larger than the molecules that can reasonably be
+represented and manipulated. Use infallible integer conversions and ordinary arithmetic for
+these values. Do not add checked or saturating arithmetic, maximum-value comparisons, or
+conversion errors to guard index overflow. All contracts involving indices use this size
+assumption, including restoration from manipulated history.
+
+Bounds checks against actual collections, endpoint/reference checks, and compatibility checks
+between correspondence or compaction domains retain their existing contracts. Lifecycle counters
+and integer forms (NumForm) follow the same rules.
+
 ## Operation taxonomy
 
 | Operation | Establishes | Does not implicitly do |
@@ -59,6 +72,31 @@ available independently of the reaction implementation history.
 | Integrity check | A tier-1 representation contract | Semantic validation, mutation, or repair |
 | Validation | A tier-2 invariant or tier-3 conformance property | Mutation or repair |
 | Transformation | An explicitly named change of representation or state | Pretend that the input was already valid or canonical |
+
+### Operation ownership
+
+For operations that rewrite a graph-IR value or resolve, project, or transform a molecule, the bare
+verb consumes the value and returns the result. An `_into` counterpart mutates a borrowed molecule
+in place with recovery. A caller that keeps its input clones it explicitly before calling the
+consuming operation. Failure returns neither the input nor a partially rewritten value.
+
+A consuming implementation uses its ownership: it moves fields and reuses storage instead of
+cloning an input it already owns. Shared backing storage may still require a copy when written;
+see [copy-on-write aggregate storage](#copy-on-write-aggregate-storage).
+
+Logical analogs share an ownership contract. The normal-form tower's normalize, reframe, and
+canonicalize operations consume, including their tracked forms. Graph-IR transport operations
+map, remap, compact, and reframe_by likewise consume the transported value, including checked and
+tracked variants where present. They borrow the supplied correspondence, remapping, compaction,
+or frame action. Graph-core relation-set map and remap retain their borrowing rebuild contract.
+Queries and derivations that keep the source as the primary object, such as extract, edits, and
+split, borrow it.
+
+Two-operand operations borrow both operands: meet, join, frame-action compose, meet_pushout, and
+Reaction::compose follow this rule. An infallible operation whose result extends its receiver
+instead consumes the receiver, borrows the other operand, and reuses the receiver's storage;
+Molecule::combine is the example. In-place counterparts use `_from` or `_with`, as in
+combine_from, narrow_from, and widen_with.
 
 ## Integrity checks and validation tiers
 
@@ -84,8 +122,8 @@ failure belongs to that conversion.
 
 Tier 1 is representation integrity. It is an invariant of the data type and is established by every
 public constructor, conversion, and mutation that produces the type. It includes resolvable stored
-references, required collection shapes, participant-frame arity, and values lying in the
-kind-dependent domain needed to interpret their representation. A checked constructor returns an
+references, topology/attribute storage alignment, fixed relation structure, and the bounded
+size of stereo ligand frames. A checked constructor returns an
 error for a violation; an asserted constructor may panic when its documented producer contract is
 broken.
 
@@ -114,13 +152,15 @@ endpoint pairs regardless of interaction kind; and stereo-atom and stereo-bond s
 within their kinds. These are not deferred semantic judgments. They define the stored relation
 represented by each entity kind and are established whenever a `Molecule` is published.
 
-For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
-outside that kind's coset space are representation-integrity failures. The same applies to an
-explicit coset set or variable domain containing an out-of-range member and to an explicit frame
-permutation of the wrong degree. These values do not denote malformed-but-chemically-questionable
-stereo configurations; they fail to denote configurations at all. Whether a structurally valid
-configuration is stereogenic, physically realizable, or admitted by a selected stereo model belongs
-to the later tiers.
+Entity attributes are open forms. Electron-count lengths, stereo kind/site and kind/frame
+agreement, coset indices, expression-permutation degrees, and entity-level constraint positions
+are not aggregate integrity requirements. Constructors store them faithfully. Frame transport,
+canonicalization, matching, and chemistry operations check the relationships their results require;
+normalization does not validate coset ranges. Infallible symmetry queries do not promise meaningful
+classification for incompatible stereo attributes.
+
+Top-level stereo constraints retain their kind/site, frame-degree, permutation-degree, and
+position checks. Their scope differs from freely mutable entity-level constraints.
 
 Tier 2 contains universal conditions over an otherwise coherent representation, such as electron
 and angular-momentum consistency and agreement between independently meaningful stored constraints
@@ -140,10 +180,9 @@ Representation integrity has one authoritative implementation in the crate that 
 It is the crate-private `check_integrity` operation with a corresponding public `*IntegrityError`;
 there is no public validator or `*Checker` object. An integrity check returns
 `Result<(), *IntegrityError>`, never `Solution`,
-`Underdetermined`, or `Contradictory`. It includes stored entity and constraint references, parallel
-collection shapes such as participant and electron-count lengths, fixed entity-relation semantics,
-and kind-dependent data needed to interpret a value such as stereo frame arity, coset domains, and
-permutation degree.
+`Underdetermined`, or `Contradictory`. It includes stored entity and constraint references,
+topology/attribute storage alignment, fixed entity-relation semantics, bounded stereo-frame size,
+and the positions and degrees in top-level stereo constraints.
 
 Every path that publishes an aggregate IR value uses that same implementation:
 
@@ -164,8 +203,6 @@ Every path that publishes an aggregate IR value uses that same implementation:
 
 For `Molecule`, this places the same gate behind direct checked entry construction, molecule-DSL
 raise, TableIR raise, Python construction from entries, and finalization of builders and editors.
-The public aromatic-system and multicenter-bond mutation operations use a private candidate and
-commit only after the same gate succeeds; their raw whole-form mutation kernels remain crate-private.
 Reaction code uses the molecule constructor whenever it materializes a molecule side or projection;
 it does not grow a reaction-specific copy of molecule integrity. A route that already establishes
 the contract may use the asserted constructor, but the asserted and checked routes must share the
@@ -181,14 +218,14 @@ is checked by the shared integrity gate.
 Those assertions must eventually be realized against an integrity-valid stereo frame. They do not
 create distinguishable occurrences of an equal virtual ligand. If perception could satisfy `#T` or
 `#C` only by repeating an implicit hydrogen or lone pair, it perceives no such stereo entity and
-follows the operation's existing absence policy. Any boundary that supplies an explicit repeated or
-oversized frame instead rejects it during raise; it must not normalize, deduplicate, or choose an
+follows the operation's existing absence policy. Any boundary that supplies an explicit repeated
+ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it during raise; it must not normalize, deduplicate, or choose an
 arbitrary coset for malformed input.
 
 Canonicalization is a transformation of a closed, representation-integrity-valid value. It does not
 repair or revalidate malformed representation state, and its error types contain no unreachable
-integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization
-or reaction-span materialization may still report `Contradiction`.
+integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization,
+frame transport, or reaction-span materialization may still report `Contradiction`.
 
 ## Representation ownership and crate layering
 
@@ -219,6 +256,17 @@ the automorphism algorithm selector. `umol-graph-ir` owns typed incidence, stere
 complete remapping, constraint transport, and canonical representative construction.
 `umol-graph` may project `StereoModel::para_stereo` and its operation config into the public graph-IR
 context, but canonicalization itself remains in `umol-graph-ir`.
+
+### Copy-on-write aggregate storage
+
+Molecule, Reaction, and ReactionSpan share their backing storage when cloned. Cloning increments
+reference counts for topology, entity tables, constraints, and reaction deltas without copying
+their payloads. The clones remain independent values: changing one leaves the others unchanged.
+
+In-place writes to shared storage use Arc::make_mut. Unique storage is reused; shared storage is
+copied before mutation. A consuming rebuild that needs an owned payload uses Arc::unwrap_or_clone
+to move it when uniquely owned and clone it only when another owner remains. Owning an aggregate
+does not establish unique ownership of its backing storage.
 
 ### Construction
 
@@ -277,6 +325,13 @@ The error belongs to the failed boundary:
 
 ### Raw representation and semantic normal form
 
+The equalities normalized_eq, framed_eq, and canonical_eq borrow both operands. A default may
+clone the inputs and run the consuming normal-form operation; implementations override it with
+borrowing computations where copy costs matter, preserving the same equality and failure
+semantics. Trivially normal scalar variants compare directly. canonical_hash likewise borrows its
+input. A caller that needs the normalized value itself from a reference writes
+`value.clone().normalize()`.
+
 Derived structural equality may observe storage details that are deliberately absent from the
 semantic model. Their presence in a raw IR value does not require every operation or intermediate
 representation to preserve them. In particular, do not introduce ordering or multiset semantics
@@ -285,9 +340,10 @@ solely to make an exact structural roundtrip retain redundant input.
 Molecule-level `Constraints` is the reference case. Its raw `Vec` representation permits ordering
 and duplicate entries, and `==` observes both. Its semantic value is an implicit conjunction:
 conjunct order is irrelevant and repeated equal constraints are idempotent. Normalization
-therefore normalizes the individual constraints, flattens conjunctions, sorts them, and removes
-duplicates. Reaction deltas, reaction spans, matching, and aggregate canonicalization must use this
-set-like semantic value; they must not treat duplicate occurrences as distinct chemical assertions.
+therefore normalizes the individual constraints, sorts them, and removes duplicates. A top-level
+conjunction stays one constraint, as a disjunction does. Reaction deltas, reaction spans,
+matching, and aggregate canonicalization must use this set-like semantic value; they must not
+treat duplicate occurrences as distinct chemical assertions.
 Context-free constraint-delta normalization deduplicates repeated additions or removals and cancels
 an equal addition/removal pair. Materializing the normalized delta against an LHS then enforces
 continuity: adding an already-present canonical constraint or removing an absent one is a
@@ -414,7 +470,7 @@ pub trait Canonicalize: Reframe {
     ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
     fn canonical_hash(
-        self,
+        &self,
         context: &CanonicalizeContext,
     ) -> Result<u64, Self::Error>;
 
@@ -654,11 +710,32 @@ construction. A valid partial bijection is not necessarily a correspondence over
 molecules supplied to a later operation. `MoleculeCorrespondence` is likewise not bound to molecule
 instances by its ids.
 
-An **operation-issued value** may instead be provenance-bound. A `Transaction` is issued by applying
-edits and records how to undo that particular successful application. It has no public constructor
-for independently asserting that provenance. Replacing it with another transaction or mutating the
-object independently violates the operation contract; rollback must not panic, but it does not owe
-correct restoration for the compromised pairing.
+An **operation-issued value** may instead be provenance-bound. Transaction and TrackedTransaction
+are scoped handles issued only by their respective run methods, borrowing a molecule and private
+recovery state. Neither handle is copyable or cloneable or exposes conversion or mutable access to
+the other. Callers cannot replace the receiver or alter recovery storage. Commit checks representation
+integrity; acceptance also requires the callback to return Ok. Application or commit failure, or
+cancellation, restores transaction-entry state under Molecule::normalized_eq, preserving participant
+order. The guard belongs to run, so forgetting the handle cannot prevent restoration of completed
+edits. Recovery from allocation failure or an internal panic during an Edit is outside this contract.
+
+Undo payloads remain public. Restoration from matching history is correct under the stated
+equivalence; manipulated history must not panic but has no specified result.
+
+Graph::restore and relation-set restore/restore_participants likewise consume undo data from a
+matching removal. The compaction and saved rows are supplied separately, but their required
+relationship comes from that operation history; restoration does not revalidate the entire
+history. Matching inputs recover original storage. Manipulated or mismatched inputs must not
+panic, but have no specified result, diagnostic, or unchanged-receiver guarantee. Local guards
+protect indexing and inverse translation. Relation restoration assumes conforming
+RelationParticipant implementations, whose transported references are all reported by refs.
+
+Whole-row restoration reinstates saved rows at their original ids without translating their
+participants and preserves current surviving values. Participant restoration expands only
+surviving references. After graph removal and relation compaction, undo restores the graph,
+restores participant references in surviving relations, then restores saved relation rows.
+Relation payloads move without requiring Clone. Uncompaction remains non-mutating id/value
+translation; its existing asserted and checked interfaces retain their contracts.
 
 Reaction iterators are operation-issued values with a different lifecycle. `Reaction::apply`
 checks reaction-wide preconditions and then issues a `ReactionApplicationIter<T>` that owns snapshots
@@ -735,13 +812,16 @@ Realized reactions and spans use the existing lhs-anchored representation and co
 normal form; their product projections preserve the produced molecule's semantics rather
 than promising its exact row ordering.
 
-### Consuming correspondence updates
+### Mutable correspondence updates
 
 `Correspondence::identity(count)` initializes a declared identity without temporary images.
-`extend_right` consumes the correspondence and adds unmatched right-domain ids by increasing
+`extend_right` mutably borrows the correspondence and adds unmatched right-domain ids by increasing
 its right count. `compact_right` discards affected pairs and compacts surviving right ids;
 `uncompact_right` expands those ids through the inverse compaction, leaving restored positions
 unmatched. Both check the applicable intermediate count using the existing composition errors.
+All three take `&mut self`: extension returns `()`, compaction and uncompaction return
+`Result<(), _>`. A count mismatch leaves the entire correspondence unchanged; graph and molecule
+correspondences check all applicable counts before updating any pairs.
 They preserve the left count and reuse the pair-vector allocation, including when all pairs
 are removed. Compaction followed by expansion does not recreate discarded pairings.
 
@@ -751,18 +831,114 @@ the removed atom/bond id lists from graph ids, not the vectors of matched pairs.
 do not clone molecular payloads or require intermediate molecules. Ordinary `compose` remains
 borrowed and returns a separate correspondence.
 
-### Editor session correspondence
+### Molecule mutation and publication
 
-`MoleculeEditor` accumulates an initial-to-current correspondence over all eight entity kinds.
-Tracking retains only id pairs and counts. Additions extend the right domains, removals compact
-them, and undo restoration applies inverse compaction without recreating discarded pairs.
-Attribute changes preserve pairings. A failed transaction whose rollback succeeds restores the
-pre-transaction session correspondence, alongside the molecular state.
+Every fallible operation on a published Molecule is atomic at its public boundary. A rejected
+in-place operation preserves the entry state under its documented equivalence; a consuming
+operation drops its input without publishing a partial result. In-place editing exists only with
+recovery. This may use a transaction, or a complete plan that reports every rejection before
+mutation and guarantees successful application and publication on its unchanged input, or a
+working copy installed only after successful publication.
 
-`tracked_snapshot` returns the same integrity-checked molecule as `snapshot`, plus an independent
-copy of the session correspondence. `try_tracked_build` and `tracked_build` transfer the accumulated
-vectors into the result and share the ordinary checked/asserted publication boundary. Plain
-publication returns only the molecule; plain snapshots do not copy the correspondence.
+Molecule entity views expose mutable attributes and entity-level constraints. Structural changes
+use MoleculeEditor or Transaction. Molecule::edit moves the molecule into an editor without cloning.
+Direct editor mutations and edit batches can be interleaved; neither records undo.
+
+Python Molecule.edit, apply, and tracked_apply preserve the source by cloning it before invoking
+the consuming Rust operation. The editor still mutates on application and is consumed by finish.
+The [Python API guide](python-api.md#editor) specifies batch ownership, errors, and view lifecycles.
+
+| Operation | Successful result | Failure |
+| --- | --- | --- |
+| MoleculeEditor::apply | Mutably borrows the editor, consumes Edits, and returns unit after checking each edit's preconditions | Retains the completed prefix for inspection and further changes, without rollback |
+| MoleculeEditor::probe | Checks integrity and lends `&Molecule` | Retains the editor for further changes |
+| MoleculeEditor::finish | Consumes the editor, checks integrity, returns Molecule | Drops the editor and its molecule |
+| Molecule::apply | Consumes Molecule and Edits; applies edits and finishes | Drops the molecule |
+| Molecule::edit_into | Lends an editor over one working copy to a callback, checks integrity, installs success, and returns the callback's value | Callback error, integrity failure, or callback unwinding leaves the receiver unchanged under structural equality |
+| Molecule::apply_into | Consumes Edits, applies them to one working copy, and installs the checked result | Leaves the receiver unchanged under structural equality |
+| Transaction::apply, TrackedTransaction::apply | Consumes Edits and immediately applies it to the receiver with undo recording (Journal) or a working copy without undo (Clone); only tracked application updates the accumulated correspondence | Restores transaction-entry state and aborts the transaction |
+| Transaction::probe, TrackedTransaction::probe | Checks integrity and lends `&Molecule` | Leaves the transaction active |
+| Transaction::commit | Consumes the handle, checks integrity, returns unit and requests acceptance by Transaction::run | Restores transaction-entry state and aborts the transaction |
+| TrackedTransaction::commit | Consumes the handle, checks integrity, returns MoleculeCorrespondence and requests acceptance by TrackedTransaction::run | Restores transaction-entry state and aborts the transaction |
+
+Molecule::edit_into does not abort when its callback catches an editor application error. The
+completed prefix remains available for further editing; a successful callback return installs
+that state if the final integrity check succeeds. Callback errors propagate unchanged, and
+publication errors convert through MoleculeApplyError into the callback's error type.
+
+Molecule::transact accepts prepared batches, applies each, and commits once through Transaction.
+Molecule::tracked_transact uses TrackedTransaction and returns the whole operation's correspondence.
+Both conveniences take an explicit RollbackMethod (Clone or Journal). Both run methods take the
+same selector, support planning later batches from probe results and return the callback's
+value. Clone installs the working molecule only after acceptance; Journal retains edits to the
+receiver. Recovery selection is independent of correspondence tracking. Commit succeeds only as
+a request: the callback must return Ok to retain changes. The restoration contract and cancellation behavior are specified [above](#provenance-and-contextual-validity).
+Python exposes the prepared-batch methods with the same outcomes and a keyword-only
+rollback_method defaulting to Journal; scoped callback handles are Rust-only.
+
+MoleculeApplyError::Transaction carries edit-precondition or aborted-transaction failures;
+MoleculeApplyError::Integrity carries publication failures. The editor's apply returns only the
+former; molecule apply and transaction commit can return the latter. Probe and finish return
+MoleculeIntegrityError directly. Integrity is the same representation contract as construction,
+not a chemistry or model-conformance check.
+
+Each batch uses its own handle namespace. Id handles name entities at batch entry; New handles
+name creations within that batch, separately for each entity kind. Appending an edit to Edits
+continues that sequence; submitting another batch starts a new one. Handles are not translated
+between independently prepared batches.
+
+### Editor batch correspondence
+
+MoleculeEditor owns its molecule. Direct mutation and apply do not accumulate a
+correspondence. tracked_apply returns the current batch's input-to-result mapping
+over all eight entity kinds. Earlier direct changes and batches are outside that
+mapping. The editor remains transient; probe checks integrity before
+borrowing the molecule, and finish checks it before transferring ownership.
+
+Discarding a batch correspondence gives the same editor state as plain apply.
+Correspondences from consecutive batches compose to the whole operation's mapping.
+TrackedTransaction initializes an identity mapping at entry, accumulates the whole-transaction
+mapping after each successful batch independently of recovery storage, and returns it from commit.
+Transaction constructs, updates and retains no aggregate correspondence. Both paths use per-batch
+handle resolution state; neither retains batch mapping history or reconstructs mappings from Undo.
+A failed editor application retains the completed prefix and returns no correspondence;
+a failed transaction application restores its entry state and aborts.
+
+These correspondences track entity ids. Replacing an entity's atoms, ligands, or site preserves
+that entity's pairing; the correspondence does not map positions within those lists.
+
+### Resolution, projection, and transformations
+
+Resolver::resolve and project consume a molecule and execute through one editor, without a recovery
+copy or journal. Only a determined result returns a molecule; underdetermination, contradiction,
+and planning errors drop it. Resolver::resolve_into and project_into borrow mutably and use a
+transaction: only a determined result retains changes. Every other outcome restores the molecule
+under the transaction's equivalence. Intermediate probe and final finish/commit check integrity.
+All three composite in-place methods take an explicit RollbackMethod as their last argument,
+after ProjectFlags where present. One transaction uses that method across all phases; Clone
+uses one working copy and Journal retains undo data. Neither path adds per-phase recovery scopes.
+
+Resolver::resolve_with_report and resolve_into_with_report collect the report explicitly. They
+return it with determined or underdetermined outcomes; contradictions carry only their diagnostic.
+The ordinary resolution methods do not construct a report. Ingestion consumes its newly raised
+molecule and treats underdetermination as an error without a report.
+
+Each transformer derives a complete edit plan from its input before mutation. Planning reports
+every rejection, including any condition that would make the planned result violate representation
+integrity. The plan must apply to the unchanged molecule it was derived from and preserve its
+integrity; a failed application or publication is an implementation defect.
+
+Transformer::transform consumes its molecule and applies the plan through an editor.
+Transformer::transform_into applies the same plan in place without a transaction or rollback
+method; rejection leaves the input unchanged. transform_iter borrows the source and lazily clones
+and transforms it; each yielded molecule is independent. Rejected candidates are omitted.
+
+The individual resolvers' resolve_into and project_into follow the same planning rule. They
+complete planning before mutation and apply a determined plan without a transaction or rollback
+method. Underdetermination, contradiction, and planning errors leave the input unchanged. Plan
+application and publication must succeed on that input; failure is an implementation defect.
+The composite Resolver retains its transaction across phases because a later phase can reject
+changes already applied by an earlier phase.
 
 ## Pushout results
 
@@ -824,14 +1000,20 @@ Single-node/edge cascading-removal conveniences return no witness. Relation-set
 `compact` returns the resulting set; `tracked_compact` returns that set
 and its relation-id compaction. Each pair preserves the same output and failure behavior.
 
-Molecule editor `remove` and the six bulk relation-removal methods return `()`; their
-`tracked_` companions return a full `MoleculeCompaction`, including unchanged-family counts.
+The graph-IR owning overlay sets expose crate-private `compact` returning the resulting set
+and its row compaction. Molecule's crate-private `compact_<entity>` delegates install the set
+and return the row compaction. These mappings are required to update dependent constraints
+and handles, so these internal operations have no separate tracked counterpart.
+
+Molecule editor remove_topology and the six bulk relation-removal methods return ().
+Crate-private tracked counterparts supply the full MoleculeCompaction for extraction
+and constraint compaction, including unchanged-family counts.
 Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual
 host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
 extraction preserves host order. Both forms retain the same cascades and constraint transport.
 
-Rollback checks result counts against the current editor before applying an inverse compaction.
-A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.
+Restoration uses local count and indexing guards to avoid panics on manipulated history.
+It does not validate the history or report a rollback error.
 
 ## Remapping
 
@@ -891,8 +1073,8 @@ Comparing two entries therefore has three independent parts, and a site chooses 
 - **identity** — do the two hold the same structured participants under the entity kind's factor
   semantics. Each ordinary factor is compared as a multiset; stereo-bond endpoint blocks may be
   exchanged only as complete blocks. Graph-core coincidence supplies ordinary factor comparison
-  through `coincident`, `coincident_edge`, `is_coincident`, and `participants_match`; graph IR adds
-  the entity-kind structure that storage alone cannot express.
+  through `coincident_to_node`, `coincident_to_edge`, `is_coincident`, and `participants_match`;
+  graph IR adds the entity-kind structure that storage alone cannot express.
 - **frame transport** — restating one side's payload in the other's frame. Every entity frame has
   distinct complete participant values, so equal structured incidence determines one action in the
   entity kind's group. `DynPermutation::between` or `Permutation::between` derives that action, and
@@ -927,12 +1109,29 @@ to select one. `Reframe` is implemented only by a frame-owning carrier. It exten
 derives a representative action, and therefore represents the second prefix in the
 normalize–reframe–canonicalize pipeline.
 
+Each owning entity set has a crate-private `entry(id)` getter returning its complete
+single-entity value: `DativeBondEntry`, `AromaticSystemEntry`, `MulticenterBondEntry`,
+`NoncovalentBondEntry`, `StereoAtomEntry`, or `StereoBondEntry`. These open values
+carry the atom/site/ligand ids and attributes, without the entity's own storage id.
+They implement `Normalize`, `FrameTransport`, and `Reframe`; normalization changes
+attributes alone, while reframing transports the complete value into its selected
+frame. Attributes and variable frames use `Cow` so inputs can be borrowed and
+transformed results owned. An unavailable entry id panics like the set's other
+direct getters.
+
+Edit removal checks structured incidence separately, then compares the stored entry
+with the edit's old entry using `framed_eq`. Two contradictory values compare equal
+under that trait, so this comparison alone does not establish the incidence
+required for removal. Stereo-bond incidence includes the endpoint-block restriction.
+
 The associated action is complete for its receiver:
 
 | Carrier | `FrameTransport::Action` |
 | --- | --- |
 | One ordinary overlay form or form span | one `DynPermutation` |
 | One stereo form or form span | one bounded `Permutation` |
+| One ordinary overlay entry | one `DynPermutation` |
+| One stereo entry | one bounded `Permutation`, restricted to the endpoint-block group for stereo bonds |
 | One entity-kind aggregate or `*Spans` peer | one typed local action per entity id |
 | `Molecule` or `ReactionSpan` | one six-component `OverlaysFrameAction` |
 | `Reaction` | one `OverlaysFrameAction` covering every lhs and `Add`-owned overlay id |
@@ -976,7 +1175,7 @@ Reaction integrity reports that case as `IncidenceMismatch`.
 
 Reaction application derives the unique action from each mapped rule frame to the host frame and
 transports every frame-relative field and constraint delta before matching. After the pattern
-`old` value matches, lowering records the realized host value as the transaction's `old`; it does
+`old` value matches, lowering records the realized host value as the edit's `old`; it does
 not retain the rule pattern as if it were the concrete value being replaced.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual

@@ -3,6 +3,10 @@
 //! Implements `TryIntoIr<Molecule> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
 //! raise applies fixed IO ground semantics for resolution.
+//! Non-aromatic atom assertions are emitted only next to aromatic table bonds.
+//! Single covalent bonds between aromatic table atoms carry non-aromatic assertions.
+//! Standalone atom conversion has no bond context and emits only positive
+//! aromatic assertions.
 //! Explicit stereo frames map to graph IR; MOL wedges retain their atom-stereo
 //! interpretation path. Raw MOL parity is ignored.
 
@@ -76,7 +80,7 @@ impl TryIntoIr<Molecule> for &TableMolecule {
         let mut frames: Vec<_> = self.stereo_bonds.iter().collect();
         frames.sort_unstable_by_key(|frame| frame.bond);
         let mut frames = frames.into_iter().peekable();
-        let atoms: Vec<AtomForm> = self
+        let mut atoms: Vec<AtomForm> = self
             .atoms
             .iter()
             .enumerate()
@@ -108,21 +112,48 @@ impl TryIntoIr<Molecule> for &TableMolecule {
                 };
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
+            if b.order == TableBondOrder::Aromatic {
+                for id in [a_idx, b_idx] {
+                    let index = usize::from(id);
+                    if self
+                        .atoms
+                        .get(index)
+                        .is_some_and(|atom| atom.aromatic == Some(false))
+                    {
+                        atoms[index]
+                            .constraints
+                            .set(AtomConstraintForm::AromaticValence(
+                                AromaticValenceForm::NotAromatic,
+                            ));
+                    }
+                }
+            }
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
                 noncovalent_bonds.push(([a_idx, b_idx], NoncovalentBondForm::from_kind(kind)));
-            } else if let Some(donation) = b.donation {
-                let (donor, acceptor) = match donation {
-                    TableBondDonation::Donating => (a_idx, b_idx),
-                    TableBondDonation::Accepting => (b_idx, a_idx),
-                    _ => {
-                        bonds.push((a_idx, b_idx, b.try_into_ir(context)?));
-                        continue;
-                    }
+            } else if let Some(
+                donation @ (TableBondDonation::Donating | TableBondDonation::Accepting),
+            ) = b.donation
+            {
+                let (donor, acceptor) = if donation == TableBondDonation::Donating {
+                    (a_idx, b_idx)
+                } else {
+                    (b_idx, a_idx)
                 };
                 let dative_bond = DativeBondForm::new(raise_bond_order(b.order));
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
                 let mut bond_form = b.try_into_ir(context)?;
+                if b.order == TableBondOrder::Single
+                    && [a_idx, b_idx].into_iter().all(|id| {
+                        self.atoms
+                            .get(usize::from(id))
+                            .is_some_and(|atom| atom.aromatic == Some(true))
+                    })
+                {
+                    bond_form
+                        .constraints
+                        .set(BondConstraintForm::Aromatic(BooleanForm::Lit(false)));
+                }
                 if let Some(constraint) = constraint {
                     bond_form.constraints.set(constraint);
                 }
@@ -232,18 +263,10 @@ impl TryIntoIr<AtomForm> for &TableAtom {
             },
             constraints: Default::default(),
         };
-        match self.aromatic {
-            Some(true) => {
-                atom.constraints.set(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(NumForm::Undetermined),
-                ));
-            }
-            Some(false) => {
-                atom.constraints.set(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::NotAromatic,
-                ));
-            }
-            None => {}
+        if self.aromatic == Some(true) {
+            atom.constraints.set(AtomConstraintForm::AromaticValence(
+                AromaticValenceForm::Aromatic(NumForm::Undetermined),
+            ));
         }
         // IO ground defaults for fields the table left unset.
         if matches!(atom.isotope_mass, IsotopeMassForm::Undetermined) {
@@ -471,6 +494,7 @@ mod tests {
     use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
     use umol_graph_ir::ir::{
         AtomConstraintsForm, BondId, Entity, MoleculeRemapping, NoncovalentBondKind, StereoAtomId,
+        StereoConfigurationForm,
     };
 
     use super::*;
@@ -611,6 +635,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty_frame(
+        parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(),
+        1, vec![], Winding::Clockwise, vec![], 1
+    )]
+    #[case::five_ligands(
+        parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(),
+        1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4), TableStereoLigand::ImplicitHydrogen], Winding::Clockwise,
+        vec![(0, StereoLigandKind::Atom), (2, StereoLigandKind::Atom), (3, StereoLigandKind::Atom), (4, StereoLigandKind::Atom), (1, StereoLigandKind::ImplicitHydrogen)], 1
+    )]
     #[case::actual(
         Smiles::parse("[C@](F)(Cl)(Br)I").unwrap().into_table_ir(), 0,
         vec![TableStereoLigand::Atom(4), TableStereoLigand::Atom(2), TableStereoLigand::Atom(1), TableStereoLigand::Atom(3)], Winding::Clockwise,
@@ -675,13 +708,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(1, vec![], 1, MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 0 })]
-    #[case::oversized(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4), TableStereoLigand::ImplicitHydrogen], 1, MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 5 })]
     #[case::repeated_hydrogen(1, vec![TableStereoLigand::ImplicitHydrogen, TableStereoLigand::ImplicitHydrogen, TableStereoLigand::Atom(2), TableStereoLigand::Atom(3)], 1, MoleculeIntegrityError::DuplicateStereoLigand { entity: Entity::StereoAtom(StereoAtomId(0)), ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen) })]
     #[case::missing_site(8, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
     #[case::missing_ligand(1, vec![TableStereoLigand::Atom(8), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
-    #[case::duplicate_site(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 2, MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: AtomId(1) })]
-    #[case::site_ligand(1, vec![TableStereoLigand::Atom(1), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::DuplicateParticipant { entity: Entity::StereoAtom(StereoAtomId(0)), atom: AtomId(1) })]
+    #[case::duplicate_site(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 2, MoleculeIntegrityError::DuplicateStereoAtomSites { atom: AtomId(1) })]
+    #[case::site_ligand(1, vec![TableStereoLigand::Atom(1), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::DuplicateAtom { entity: Entity::StereoAtom(StereoAtomId(0)), atom: AtomId(1) })]
     #[case::non_neighbor(1, vec![TableStereoLigand::Atom(5), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity: Entity::StereoAtom(StereoAtomId(0)) })]
     fn test_table_molecule_try_into_ir_frame_error(
         #[case] atom: u32,
@@ -730,6 +761,28 @@ mod tests {
             entity: Entity::Atom(AtomId(1)),
         })
     )]
+    #[case::invalid_aromatic_bond_endpoint(
+        {
+            let mut molecule = TableMolecule::empty();
+            molecule.atoms.push(TableAtom::aliphatic_atom(Element::C));
+            molecule.bonds.push(TableBond::new(0, 1, TableBondOrder::Aromatic));
+            molecule
+        },
+        RaiseError::MoleculeEntries(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        })
+    )]
+    #[case::invalid_single_bond_aromatic_endpoint(
+        {
+            let mut molecule = TableMolecule::empty();
+            molecule.atoms.push(TableAtom::aromatic_atom(Element::C));
+            molecule.bonds.push(TableBond::new(0, 1, TableBondOrder::Single));
+            molecule
+        },
+        RaiseError::MoleculeEntries(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        })
+    )]
     #[case::repeated_virtual_tetrahedral_completion(
         Smiles::parse_bytes(b"[C@H2](F)Cl").unwrap().into_table_ir(),
         RaiseError::MoleculeEntries(MoleculeIntegrityError::DuplicateStereoLigand {
@@ -737,20 +790,35 @@ mod tests {
             ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         })
     )]
-    #[case::incomplete(
-        Smiles::parse("[C@]").unwrap().into_table_ir(),
-        RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 0 })
-    )]
-    #[case::oversized(
-        Smiles::parse("[C@](F)(Cl)(Br)(I)N").unwrap().into_table_ir(),
-        RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 5 })
-    )]
     fn test_table_molecule_try_into_ir_error(
         #[case] molecule: TableMolecule,
         #[case] expected: RaiseError,
     ) {
         let actual: Result<Molecule, RaiseError> = (&molecule).try_into_ir(&());
         assert_eq!(actual, Err(expected));
+    }
+
+    #[rstest]
+    #[case::empty("[C@]", vec![])]
+    #[case::five_ligands("[C@](F)(Cl)(Br)(I)N", vec![1, 2, 3, 4, 5])]
+    fn test_table_molecule_try_into_ir_stereo_attributes(
+        #[case] input: &str,
+        #[case] ligands: Vec<u32>,
+    ) {
+        let table = Smiles::parse(input).unwrap().into_table_ir();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
+        let view = molecule.stereo_atom(StereoAtomId(0));
+        assert_eq!(
+            view.ligand_ids(),
+            ligands
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            view.attributes().configuration,
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)
+        );
     }
 
     #[rstest]
@@ -773,7 +841,7 @@ mod tests {
                                 .ligands()
                                 .map(|ligand| (ligand.atom_id(), ligand.kind()))
                                 .collect::<Vec<_>>(),
-                            frame.attributes.clone(),
+                            frame.attributes().clone(),
                         )
                     })
                     .collect();
@@ -793,18 +861,20 @@ mod tests {
                 assert_eq!(
                     molecule
                         .atom(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .tetrahedral_stereo(),
-                    None
+                    &TetrahedralStereoForm::Undetermined
                 );
             }
-            Entity::Bond(id) => assert!(molecule
-                .bond(id)
-                .attributes
-                .constraints
-                .cis_trans_stereo()
-                .is_some()),
+            Entity::Bond(id) => assert_ne!(
+                molecule
+                    .bond(id)
+                    .attributes()
+                    .constraints
+                    .cis_trans_stereo(),
+                &CisTransStereoForm::Undetermined
+            ),
             _ => unreachable!("stereo constraints are raised only on atoms and bonds"),
         }
     }
@@ -818,18 +888,22 @@ mod tests {
         assert_eq!(molecule.stereo_atoms().count(), 0);
         assert_eq!(molecule.stereo_bonds().count(), 0);
         match entity {
-            Entity::Atom(id) => assert!(molecule
-                .atom(id)
-                .attributes
-                .constraints
-                .tetrahedral_stereo()
-                .is_some()),
-            Entity::Bond(id) => assert!(molecule
-                .bond(id)
-                .attributes
-                .constraints
-                .cis_trans_stereo()
-                .is_some()),
+            Entity::Atom(id) => assert_ne!(
+                molecule
+                    .atom(id)
+                    .attributes()
+                    .constraints
+                    .tetrahedral_stereo(),
+                &TetrahedralStereoForm::Undetermined
+            ),
+            Entity::Bond(id) => assert_ne!(
+                molecule
+                    .bond(id)
+                    .attributes()
+                    .constraints
+                    .cis_trans_stereo(),
+                &CisTransStereoForm::Undetermined
+            ),
             _ => unreachable!("stereo constraints are raised only on atoms and bonds"),
         }
     }
@@ -897,9 +971,20 @@ mod tests {
     }
 
     #[rstest]
-    fn test_table_atom_try_into_ir_aromatic_wildcard() {
+    #[case::unknown(None, AtomConstraintsForm::new())]
+    #[case::non_aromatic(Some(false), AtomConstraintsForm::new())]
+    #[case::aromatic(
+        Some(true),
+        AtomConstraintsForm::from(AtomConstraintForm::AromaticValence(
+            AromaticValenceForm::Aromatic(NumForm::Undetermined)
+        ))
+    )]
+    fn test_table_atom_try_into_ir_aromatic_wildcard(
+        #[case] aromatic: Option<bool>,
+        #[case] constraints: AtomConstraintsForm,
+    ) {
         let atom = TableAtom {
-            aromatic: Some(true),
+            aromatic,
             ..TableAtom::wildcard()
         };
         assert_eq!(
@@ -914,34 +999,29 @@ mod tests {
                     count: NumForm::Lit(0),
                     multiplicity: NumForm::Undetermined,
                 },
-                constraints: AtomConstraintsForm::from(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(NumForm::Undetermined),
-                )),
+                constraints,
             })
         );
     }
 
     #[rstest]
-    #[case::table_aromatic_none(None, None)]
-    #[case::table_aromatic_false(Some(false), Some(AromaticValenceForm::NotAromatic))]
-    #[case::table_aromatic_true(
-        Some(true),
-        Some(AromaticValenceForm::Aromatic(NumForm::Undetermined))
-    )]
+    #[case::table_aromatic_none(None, AromaticValenceForm::Undetermined)]
+    #[case::table_aromatic_false(Some(false), AromaticValenceForm::Undetermined)]
+    #[case::table_aromatic_true(Some(true), AromaticValenceForm::Aromatic(NumForm::Undetermined))]
     fn test_table_molecule_try_into_ir_aromatic(
         mut carbon: TableMolecule,
         #[case] aromatic: Option<bool>,
-        #[case] expected: Option<AromaticValenceForm>,
+        #[case] expected: AromaticValenceForm,
     ) {
         carbon.atoms[0].aromatic = aromatic;
         let molecule: Molecule = (&carbon).try_into_ir(&()).unwrap();
         assert_eq!(
             molecule
                 .atom(AtomId(0))
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence(),
-            expected.as_ref()
+            &expected
         );
     }
 
@@ -966,7 +1046,7 @@ mod tests {
         mol.atoms.push(atom);
         let molecule: Molecule = (&mol).try_into_ir(&()).unwrap();
         assert_eq!(
-            molecule.atom(AtomId(0)).attributes.implicit_hydrogens,
+            molecule.atom(AtomId(0)).attributes().implicit_hydrogens,
             expected
         );
     }
@@ -976,7 +1056,7 @@ mod tests {
         #[with(TableBondOrder::Double)] diatomic: TableMolecule,
     ) {
         let molecule: Molecule = (&diatomic).try_into_ir(&()).unwrap();
-        let bond = molecule.bond(BondId(0)).attributes;
+        let bond = molecule.bond(BondId(0)).attributes();
         assert!(matches!(bond.order, NumForm::Lit(2)));
     }
 
@@ -985,19 +1065,21 @@ mod tests {
         #[with(TableBondOrder::Aromatic)] diatomic: TableMolecule,
     ) {
         let molecule: Molecule = (&diatomic).try_into_ir(&()).unwrap();
-        let bond = molecule.bond(BondId(0)).attributes;
+        let bond = molecule.bond(BondId(0)).attributes();
         assert!(matches!(bond.order, NumForm::Lit(1)));
         assert!(bond
             .constraints
             .iter()
             .any(|c| matches!(c, BondConstraintForm::Aromatic(BooleanForm::Lit(true)))));
         for i in 0..2 {
-            assert!(molecule
-                .atom(AtomId(i))
-                .attributes
-                .constraints
-                .aromatic_valence()
-                .is_none());
+            assert_eq!(
+                molecule
+                    .atom(AtomId(i))
+                    .attributes()
+                    .constraints
+                    .aromatic_valence(),
+                &AromaticValenceForm::Undetermined
+            );
         }
     }
 
@@ -1007,25 +1089,165 @@ mod tests {
     #[case::carbon_h0(CARBON_H0_EXPLICIT_MOL, "C#i=#c0#h0")]
     fn test_parse_mol_to_ir(#[case] input: &str, #[case] expected_atom: &str) {
         let molecule = parse_mol_to_ir(input).unwrap();
-        let atom = molecule.atom(AtomId(0)).attributes;
+        let atom = molecule.atom(AtomId(0)).attributes();
         assert_eq!(atom.charge, NumForm::Lit(0));
-        assert!(atom.constraints.aromatic_valence().is_none());
+        assert_eq!(
+            atom.constraints.aromatic_valence(),
+            &AromaticValenceForm::Undetermined
+        );
         assert_eq!(atom.to_string(), expected_atom);
     }
 
     #[rstest]
-    #[case::organic("C", "C#i=#c0#u0#a!")]
+    #[case::organic("C", "C#i=#c0#u0")]
     fn test_table_molecule_try_into_ir_smiles(#[case] input: &str, #[case] expected_atom: &str) {
         let smiles = Smiles::parse(input).unwrap();
         let molecule: Molecule = smiles.as_table_ir().try_into_ir(&()).unwrap();
-        let atom = molecule.atom(AtomId(0)).attributes;
+        let atom = molecule.atom(AtomId(0)).attributes();
         assert_eq!(atom.charge, NumForm::Lit(0));
-        assert!(matches!(atom.implicit_hydrogens, NumForm::Undetermined));
-        assert!(matches!(
+        assert_eq!(atom.implicit_hydrogens, NumForm::Undetermined);
+        assert_eq!(
             atom.constraints.aromatic_valence(),
-            Some(AromaticValenceForm::NotAromatic)
-        ));
+            &AromaticValenceForm::Undetermined
+        );
         assert_eq!(atom.to_string(), expected_atom);
+    }
+
+    #[rstest]
+    #[case::aliphatic("CCO", vec![vec![]; 3], vec![vec![]; 2])]
+    #[case::ethane("CC", vec![vec![]; 2], vec![vec![]])]
+    #[case::aromatic(
+        "c1ccccc1",
+        vec![vec![AtomConstraintForm::AromaticValence(
+            AromaticValenceForm::Aromatic(NumForm::Undetermined)
+        )]; 6],
+        vec![vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]; 6]
+    )]
+    #[case::biphenyl(
+        "c1ccccc1-c1ccccc1",
+        vec![vec![AtomConstraintForm::AromaticValence(
+            AromaticValenceForm::Aromatic(NumForm::Undetermined)
+        )]; 12],
+        {
+            let mut constraints = vec![vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]; 6];
+            constraints.push(vec![BondConstraintForm::Aromatic(BooleanForm::Lit(false))]);
+            constraints.extend(vec![vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]; 6]);
+            constraints
+        }
+    )]
+    #[case::aromatic_neighbor(
+        "c1ccccc1C",
+        {
+            let mut constraints = vec![vec![AtomConstraintForm::AromaticValence(
+                AromaticValenceForm::Aromatic(NumForm::Undetermined)
+            )]; 6];
+            constraints.push(vec![]);
+            constraints
+        },
+        {
+            let mut constraints = vec![vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]; 6];
+            constraints.push(vec![]);
+            constraints
+        }
+    )]
+    #[case::selective_negative(
+        "CC.C:C",
+        vec![
+            vec![],
+            vec![],
+            vec![AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic)],
+            vec![AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic)],
+        ],
+        vec![vec![], vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]]
+    )]
+    #[case::mixed_flags(
+        "C:c",
+        vec![
+            vec![AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic)],
+            vec![AtomConstraintForm::AromaticValence(
+                AromaticValenceForm::Aromatic(NumForm::Undetermined)
+            )],
+        ],
+        vec![vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]]
+    )]
+    #[case::aliphatic_neighbor(
+        "Cc1ccccc1",
+        {
+            let mut constraints = vec![vec![]];
+            constraints.extend(vec![vec![AtomConstraintForm::AromaticValence(
+                AromaticValenceForm::Aromatic(NumForm::Undetermined)
+            )]; 6]);
+            constraints
+        },
+        {
+            let mut constraints = vec![vec![]];
+            constraints.extend(vec![vec![BondConstraintForm::Aromatic(BooleanForm::Lit(true))]; 6]);
+            constraints
+        }
+    )]
+    fn test_table_molecule_try_into_ir_smiles_aromatic(
+        #[case] input: &str,
+        #[case] expected_atoms: Vec<Vec<AtomConstraintForm>>,
+        #[case] expected_bonds: Vec<Vec<BondConstraintForm>>,
+    ) {
+        let smiles = Smiles::parse(input).unwrap();
+        let molecule: Molecule = smiles.as_table_ir().try_into_ir(&()).unwrap();
+
+        assert_eq!(
+            molecule
+                .atoms()
+                .iter()
+                .map(|atom| atom
+                    .attributes()
+                    .constraints
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            expected_atoms
+        );
+        assert_eq!(
+            molecule
+                .bonds()
+                .iter()
+                .map(|bond| bond
+                    .attributes()
+                    .constraints
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            expected_bonds
+        );
+    }
+
+    #[rstest]
+    #[case::aromatic(
+        [Some(true), Some(true)],
+        vec![BondConstraintForm::Aromatic(BooleanForm::Lit(false))]
+    )]
+    #[case::first_unknown([None, Some(true)], vec![])]
+    #[case::second_unknown([Some(true), None], vec![])]
+    #[case::unknown([None, None], vec![])]
+    fn test_table_molecule_try_into_ir_single_bond(
+        mut diatomic: TableMolecule,
+        #[case] aromatic: [Option<bool>; 2],
+        #[case] expected: Vec<BondConstraintForm>,
+        #[values(None, Some(TableBondDonation::Shared))] donation: Option<TableBondDonation>,
+    ) {
+        for (atom, aromatic) in diatomic.atoms.iter_mut().zip(aromatic) {
+            atom.aromatic = aromatic;
+        }
+        diatomic.bonds[0].donation = donation;
+        let molecule: Molecule = diatomic.try_into_ir(&()).unwrap();
+        assert_eq!(
+            molecule.bond(BondId(0)).attributes(),
+            &BondForm {
+                order: NumForm::Lit(1),
+                constraints: expected.into(),
+                ..BondForm::default()
+            }
+        );
     }
 
     #[rstest]
@@ -1057,7 +1279,7 @@ mod tests {
         let molecule: Molecule = table.try_into_ir(&()).unwrap();
 
         assert_eq!(
-            molecule.atom(AtomId(0)).attributes,
+            molecule.atom(AtomId(0)).attributes(),
             &AtomForm {
                 element: ElementForm::Undetermined,
                 isotope_mass,
@@ -1333,18 +1555,21 @@ mod tests {
                     .map(|(index, _)| {
                         molecule
                             .bond(BondId::from(index))
-                            .attributes
+                            .attributes()
                             .constraints
                             .cis_trans_stereo()
-                            .cloned()
+                            .clone()
                     })
                     .collect();
                 assert_eq!(
                     actual,
                     expected
                         .iter()
-                        .map(|coset| coset
-                            .map(|value| CisTransStereoForm::stereo(StereoCoset::Lit(value))))
+                        .map(
+                            |coset| coset.map_or(CisTransStereoForm::Undetermined, |value| {
+                                CisTransStereoForm::stereo(StereoCoset::Lit(value))
+                            })
+                        )
                         .collect::<Vec<_>>()
                 );
             }
@@ -1368,11 +1593,11 @@ mod tests {
         assert_eq!(
             molecule
                 .bond(BondId(1))
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo()
-                .cloned(),
-            expected.map(CisTransStereoForm::stereo),
+                .clone(),
+            expected.map_or(CisTransStereoForm::Undetermined, CisTransStereoForm::stereo),
         );
     }
 
@@ -1419,17 +1644,21 @@ mod tests {
             .map(|(index, _)| {
                 molecule
                     .bond(BondId::from(index))
-                    .attributes
+                    .attributes()
                     .constraints
                     .cis_trans_stereo()
-                    .cloned()
+                    .clone()
             })
             .collect();
         assert_eq!(
             actual,
             expected
                 .into_iter()
-                .map(|coset| coset.map(|value| CisTransStereoForm::stereo(StereoCoset::Lit(value))))
+                .map(
+                    |coset| coset.map_or(CisTransStereoForm::Undetermined, |value| {
+                        CisTransStereoForm::stereo(StereoCoset::Lit(value))
+                    })
+                )
                 .collect::<Vec<_>>()
         );
     }
@@ -1457,10 +1686,10 @@ mod tests {
         assert_eq!(
             molecule
                 .bond(BondId(2))
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo(),
-            Some(&CisTransStereoForm::stereo(StereoCoset::Lit(expected)))
+            &CisTransStereoForm::stereo(StereoCoset::Lit(expected))
         );
     }
 
@@ -1593,10 +1822,10 @@ mod tests {
         assert_eq!(
             molecule
                 .bond(BondId(1))
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo(),
-            Some(&CisTransStereoForm::stereo(StereoCoset::Lit(1)))
+            &CisTransStereoForm::stereo(StereoCoset::Lit(1))
         );
         table.stereo_bonds[0].bond = 0;
         let result: Result<Molecule, _> = table.try_into_ir(&());

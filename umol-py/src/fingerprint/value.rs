@@ -9,6 +9,8 @@ use umol_graph::fingerprint::{
     BitFp as GraphBitFp, CountedFeatureSet as GraphCountedFeatureSet, FeatureSet as GraphFeatureSet,
 };
 
+use crate::convert::TupleItems;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum HashedFeatureSetData {
     U32(GraphFeatureSet<u32>),
@@ -37,8 +39,8 @@ impl HashedFeatureSet {
 
     /// Sorted identifier snapshot as ordinary Python integers.
     #[getter]
-    fn ids(&self) -> Vec<u128> {
-        match &self.data {
+    fn ids(&self) -> TupleItems<Vec<u128>> {
+        TupleItems(match &self.data {
             HashedFeatureSetData::U32(features) => {
                 features.ids().iter().copied().map(u128::from).collect()
             }
@@ -46,7 +48,7 @@ impl HashedFeatureSet {
                 features.ids().iter().copied().map(u128::from).collect()
             }
             HashedFeatureSetData::U128(features) => features.ids().to_vec(),
-        }
+        })
     }
 
     fn tanimoto(&self, other: &Self) -> PyResult<f64> {
@@ -115,14 +117,14 @@ impl HashedFeatureSet {
 
     fn __iter__(&self) -> HashedFeatureSetIter {
         HashedFeatureSetIter {
-            ids: self.ids().into_iter(),
+            ids: self.ids().0.into_iter(),
         }
     }
 
     fn __repr__(&self) -> String {
         format!(
             "HashedFeatureSet(ids={:?}, id_width={})",
-            self.ids(),
+            self.ids().0,
             self.id_width()
         )
     }
@@ -213,8 +215,8 @@ impl CountedHashedFeatureSet {
 
     /// Sorted `(identifier, count)` snapshot using ordinary Python integers.
     #[getter]
-    fn entries(&self) -> Vec<(u128, u32)> {
-        match &self.data {
+    fn entries(&self) -> TupleItems<Vec<(u128, u32)>> {
+        TupleItems(match &self.data {
             CountedHashedFeatureSetData::U32(features) => features
                 .entries()
                 .iter()
@@ -226,7 +228,7 @@ impl CountedHashedFeatureSet {
                 .map(|(id, count)| (u128::from(*id), *count))
                 .collect(),
             CountedHashedFeatureSetData::U128(features) => features.entries().to_vec(),
-        }
+        })
     }
 
     /// Occurrence count of `id`, or zero when the identifier is absent.
@@ -252,14 +254,14 @@ impl CountedHashedFeatureSet {
 
     fn __iter__(&self) -> CountedHashedFeatureSetIter {
         CountedHashedFeatureSetIter {
-            entries: self.entries().into_iter(),
+            entries: self.entries().0.into_iter(),
         }
     }
 
     fn __repr__(&self) -> String {
         format!(
             "CountedHashedFeatureSet(entries={:?}, id_width={})",
-            self.entries(),
+            self.entries().0,
             self.id_width()
         )
     }
@@ -397,12 +399,14 @@ pub struct StructuralFeatureSet {
 impl StructuralFeatureSet {
     /// Sorted key snapshot as Python bytes.
     #[getter]
-    fn keys(&self, py: Python<'_>) -> Vec<Py<PyBytes>> {
-        self.inner
-            .ids()
-            .iter()
-            .map(|key| PyBytes::new(py, key).unbind())
-            .collect()
+    fn keys(&self, py: Python<'_>) -> TupleItems<Vec<Py<PyBytes>>> {
+        TupleItems(
+            self.inner
+                .ids()
+                .iter()
+                .map(|key| PyBytes::new(py, key).unbind())
+                .collect(),
+        )
     }
 
     fn is_subset(&self, other: &Self) -> bool {
@@ -420,7 +424,7 @@ impl StructuralFeatureSet {
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let keys = PyList::new(py, self.keys(py))?
+        let keys = PyList::new(py, self.keys(py).0)?
             .repr()?
             .extract::<String>()?;
         Ok(format!("StructuralFeatureSet(keys={keys})"))
@@ -451,6 +455,7 @@ impl StructuralFeatureSetIter {
 
 #[cfg(test)]
 mod tests {
+    use pyo3::exceptions::PyAttributeError;
     use pyo3::types::{PyInt, PyTuple};
     use rstest::rstest;
 
@@ -495,7 +500,7 @@ mod tests {
             assert!(features.eq(expected).unwrap());
             assert_eq!(ids.extract::<Vec<u128>>().unwrap(), expected_ids);
             assert!(ids
-                .cast::<PyList>()
+                .cast::<PyTuple>()
                 .unwrap()
                 .iter()
                 .all(|id| id.is_instance_of::<PyInt>()));
@@ -639,7 +644,10 @@ mod tests {
             let features = features.bind(py).as_any();
             let ids = features.getattr("ids").unwrap();
 
-            ids.cast::<PyList>().unwrap().append(9u128).unwrap();
+            assert!(ids
+                .call_method1("append", (9u128,))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
 
             assert_eq!(
                 features
@@ -722,7 +730,7 @@ mod tests {
                 entries.extract::<Vec<(u128, u32)>>().unwrap(),
                 expected_entries
             );
-            assert!(entries.cast::<PyList>().unwrap().iter().all(|entry| {
+            assert!(entries.cast::<PyTuple>().unwrap().iter().all(|entry| {
                 let entry = entry.cast::<PyTuple>().unwrap();
                 entry.iter().all(|item| item.is_instance_of::<PyInt>())
             }));
@@ -817,11 +825,10 @@ mod tests {
             let features = features.bind(py).as_any();
             let entries = features.getattr("entries").unwrap();
 
-            entries
-                .cast::<PyList>()
-                .unwrap()
-                .append((9u128, 6u32))
-                .unwrap();
+            assert!(entries
+                .call_method1("append", ((9u128, 6u32),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
 
             assert_eq!(
                 features
@@ -1024,7 +1031,7 @@ mod tests {
             assert!(features.eq(expected).unwrap());
             assert_eq!(keys.extract::<Vec<Vec<u8>>>().unwrap(), expected_keys);
             assert!(keys
-                .cast::<PyList>()
+                .cast::<PyTuple>()
                 .unwrap()
                 .iter()
                 .all(|key| key.is_instance_of::<PyBytes>()));
@@ -1098,10 +1105,10 @@ mod tests {
             let features = features.bind(py).as_any();
             let keys = features.getattr("keys").unwrap();
 
-            keys.cast::<PyList>()
-                .unwrap()
-                .append(PyBytes::new(py, b"c"))
-                .unwrap();
+            assert!(keys
+                .call_method1("append", (PyBytes::new(py, b"c"),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
 
             assert_eq!(
                 features

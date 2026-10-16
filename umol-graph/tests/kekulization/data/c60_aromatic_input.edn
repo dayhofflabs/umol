@@ -1,0 +1,26 @@
+{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+         "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+         "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+         "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+         "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
+         "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+ :bonds [[0 1 :aromatic] [0 2 :aromatic] [0 3 :aromatic] [1 4 :aromatic] [1 5 :aromatic]
+         [2 6 :aromatic] [2 7 :aromatic] [3 8 :aromatic] [3 9 :aromatic] [4 10 :aromatic]
+         [4 11 :aromatic] [5 12 :aromatic] [5 13 :aromatic] [6 13 :aromatic] [6 14 :aromatic]
+         [7 9 :aromatic] [7 15 :aromatic] [8 11 :aromatic] [8 16 :aromatic] [9 17 :aromatic]
+         [10 12 :aromatic] [10 18 :aromatic] [11 19 :aromatic] [12 20 :aromatic] [13 21 :aromatic]
+         [14 22 :aromatic] [14 23 :aromatic] [15 23 :aromatic] [15 24 :aromatic] [16 25 :aromatic]
+         [16 26 :aromatic] [17 26 :aromatic] [17 27 :aromatic] [18 28 :aromatic] [18 29 :aromatic]
+         [19 25 :aromatic] [19 29 :aromatic] [20 30 :aromatic] [20 31 :aromatic] [21 22 :aromatic]
+         [21 31 :aromatic] [22 32 :aromatic] [23 33 :aromatic] [24 27 :aromatic] [24 34 :aromatic]
+         [25 35 :aromatic] [26 36 :aromatic] [27 37 :aromatic] [28 30 :aromatic] [28 38 :aromatic]
+         [29 39 :aromatic] [30 40 :aromatic] [31 41 :aromatic] [32 42 :aromatic] [32 43 :aromatic]
+         [33 34 :aromatic] [33 43 :aromatic] [34 44 :aromatic] [35 45 :aromatic] [35 46 :aromatic]
+         [36 37 :aromatic] [36 46 :aromatic] [37 47 :aromatic] [38 39 :aromatic] [38 48 :aromatic]
+         [39 45 :aromatic] [40 41 :aromatic] [40 49 :aromatic] [41 42 :aromatic] [42 50 :aromatic]
+         [43 51 :aromatic] [44 47 :aromatic] [44 52 :aromatic] [45 53 :aromatic] [46 54 :aromatic]
+         [47 55 :aromatic] [48 49 :aromatic] [48 56 :aromatic] [49 57 :aromatic] [50 51 :aromatic]
+         [50 57 :aromatic] [51 52 :aromatic] [52 58 :aromatic] [53 54 :aromatic] [53 56 :aromatic]
+         [54 55 :aromatic] [55 58 :aromatic] [56 59 :aromatic] [57 59 :aromatic] [58 59 :aromatic]]
+ :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59]
+                     :attrs "[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]"}]}

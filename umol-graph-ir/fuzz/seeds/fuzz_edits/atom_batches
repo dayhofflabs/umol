@@ -1,0 +1,9 @@
+[
+ {:atom {:modify-element [[0 {:expect "C" :update "N"}] [{:new 0} {:expect "N" :update "C"}]]}}
+ {:atom {:modify-isotope-mass [[0 {:expect "#i12" :update "#i13"}] [{:new 0} {:expect "#i13" :update "#i12"}]]}}
+ {:atom {:modify-charge [[0 {:expect 0 :update 1}] [{:new 0} {:expect 1 :update 0}]]}}
+ {:atom {:modify-implicit-hydrogens [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}
+ {:atom {:modify-lone-pairs [[0 {:expect 0 :update 1}] [{:new 0} {:expect 1 :update 0}]]}}
+ {:atom {:modify-unpaired-electrons [[0 {:expect {:count 0 :multiplicity 1} :update {:count 1 :multiplicity 2}}] [{:new 0} {:expect {:count 1 :multiplicity 2} :update {:count 0 :multiplicity 1}}]]}}
+ {:atom {:modify-constraints {:key :valence :changes [[0 {:expect nil :update {:valence 3}}] [0 {:expect {:valence 3} :update nil}]]}}}
+]

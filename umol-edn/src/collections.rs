@@ -155,7 +155,59 @@ impl hashbrown::Equivalent<Edn<'_>> for EdnKeyRef<'_> {
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum EdnSortKey<'a> {
+    Scalar(&'a Edn<'a>),
+    Sequence(Vec<Self>),
+    Map(Vec<(Self, Self)>),
+    Set(Vec<Self>),
+    Tagged(&'a str, Box<Self>),
+}
+
+impl<'a> EdnSortKey<'a> {
+    fn new(value: &'a Edn<'a>) -> Self {
+        match value {
+            Edn::List(items) | Edn::Vector(items) => {
+                Self::Sequence(items.iter().map(Self::new).collect())
+            }
+            Edn::Map(map) => Self::from_map(map),
+            Edn::Set(set) => Self::from_set(set),
+            Edn::Tagged(tag, value) => Self::Tagged(tag, Box::new(Self::new(value))),
+            Edn::Nil
+            | Edn::Bool(_)
+            | Edn::Int(_)
+            | Edn::Float(_)
+            | Edn::Char(_)
+            | Edn::Str(_)
+            | Edn::Keyword(_)
+            | Edn::Symbol(_) => Self::Scalar(value),
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(_) | Edn::BigDecimal(_) => Self::Scalar(value),
+        }
+    }
+
+    fn from_map(map: &'a EdnMap<'a>) -> Self {
+        let mut entries: Vec<_> = map
+            .iter()
+            .map(|(key, value)| (Self::new(key), Self::new(value)))
+            .collect();
+        entries.sort();
+        Self::Map(entries)
+    }
+
+    fn from_set(set: &'a EdnSet<'a>) -> Self {
+        let mut items: Vec<_> = set.iter().map(Self::new).collect();
+        items.sort();
+        Self::Set(items)
+    }
+}
+
 /// An unordered map of EDN values.
+///
+/// # Semantic properties
+///
+/// Equality and hashing ignore entry order. Ordering compares key-sorted entries
+/// lexicographically, comparing each key before its value.
 #[derive(Clone, Debug)]
 pub struct EdnMap<'a>(HashMap<Edn<'a>, Edn<'a>>);
 
@@ -277,14 +329,21 @@ impl PartialOrd for EdnMap<'_> {
 }
 
 impl Ord for EdnMap<'_> {
-    /// O(n log n) with allocation — sorts entries on each call. Used for
-    /// deterministic comparison of unordered maps, not intended for hot paths.
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut a: Vec<_> = self.0.iter().collect();
-        let mut b: Vec<_> = other.0.iter().collect();
-        a.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
-        b.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
-        a.cmp(&b)
+        if self.keys().chain(other.keys()).any(|key| {
+            matches!(
+                key,
+                Edn::List(_) | Edn::Vector(_) | Edn::Map(_) | Edn::Set(_) | Edn::Tagged(_, _)
+            )
+        }) {
+            EdnSortKey::from_map(self).cmp(&EdnSortKey::from_map(other))
+        } else {
+            let mut a: Vec<_> = self.0.iter().collect();
+            let mut b: Vec<_> = other.0.iter().collect();
+            a.sort_by_key(|(key, _)| *key);
+            b.sort_by_key(|(key, _)| *key);
+            a.cmp(&b)
+        }
     }
 }
 
@@ -388,6 +447,11 @@ impl<'m, 'de: 'm> EdnMapHelper<'m, 'de> {
 }
 
 /// An unordered set of EDN values.
+///
+/// # Semantic properties
+///
+/// Equality and hashing ignore element order. Ordering compares sorted elements
+/// lexicographically.
 #[derive(Clone, Debug)]
 pub struct EdnSet<'a>(HashSet<Edn<'a>>);
 
@@ -470,14 +534,21 @@ impl PartialOrd for EdnSet<'_> {
 }
 
 impl Ord for EdnSet<'_> {
-    /// O(n log n) with allocation — sorts elements on each call. Used for
-    /// deterministic comparison of unordered sets, not intended for hot paths.
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut a: Vec<_> = self.0.iter().collect();
-        let mut b: Vec<_> = other.0.iter().collect();
-        a.sort();
-        b.sort();
-        a.cmp(&b)
+        if self.iter().chain(other.iter()).any(|value| {
+            matches!(
+                value,
+                Edn::List(_) | Edn::Vector(_) | Edn::Map(_) | Edn::Set(_) | Edn::Tagged(_, _)
+            )
+        }) {
+            EdnSortKey::from_set(self).cmp(&EdnSortKey::from_set(other))
+        } else {
+            let mut a: Vec<_> = self.0.iter().collect();
+            let mut b: Vec<_> = other.0.iter().collect();
+            a.sort();
+            b.sort();
+            a.cmp(&b)
+        }
     }
 }
 
@@ -606,6 +677,7 @@ mod tests {
 
     use super::*;
     use crate::edn::{EdnKeyword, EdnSymbol};
+    use crate::reader::read_string;
 
     fn hash_edn(v: &Edn<'_>) -> u64 {
         let mut h = DefaultHasher::new();
@@ -866,14 +938,25 @@ mod tests {
         assert_eq!(m.len(), 2);
     }
 
-    #[test]
-    fn test_edn_map_ord() {
-        let mut m1 = EdnMap::new();
-        m1.insert(Edn::Int(1), Edn::Int(10));
-        let mut m2 = EdnMap::new();
-        m2.insert(Edn::Int(2), Edn::Int(20));
-        assert!(m1 < m2);
-        assert_eq!(m1.partial_cmp(&m2), Some(Ordering::Less));
+    #[rstest]
+    #[case::key("{1 10}", "{2 0}", Ordering::Less)]
+    #[case::value("{1 2}", "{1 3}", Ordering::Less)]
+    #[case::prefix("{1 2}", "{1 2 3 0}", Ordering::Less)]
+    #[case::empty("{}", "{0 0}", Ordering::Less)]
+    #[case::nested_key("{{1 2} 0}", "{{1 3} 0}", Ordering::Less)]
+    #[case::nested_value("{0 #{[1]}}", "{0 #{[2]}}", Ordering::Less)]
+    #[case::sequence_kind("{(1) #{2}}", "{[1] #{2}}", Ordering::Equal)]
+    #[case::tagged("{0 #ex/tag {:a [1]}}", "{0 #ex/tag {:a (2)}}", Ordering::Less)]
+    fn test_edn_map_ord(#[case] left: &str, #[case] right: &str, #[case] expected: Ordering) {
+        let Edn::Map(left) = read_string(left).unwrap() else {
+            unreachable!()
+        };
+        let Edn::Map(right) = read_string(right).unwrap() else {
+            unreachable!()
+        };
+        assert_eq!(left.cmp(&right), expected);
+        assert_eq!(left.partial_cmp(&right), Some(expected));
+        assert_eq!(right.cmp(&left), expected.reverse());
     }
 
     #[rstest]
@@ -916,14 +999,23 @@ mod tests {
         assert_eq!(s.len(), 2);
     }
 
-    #[test]
-    fn test_edn_set_ord() {
-        let mut s1 = EdnSet::new();
-        s1.insert(Edn::Int(1));
-        let mut s2 = EdnSet::new();
-        s2.insert(Edn::Int(2));
-        assert!(s1 < s2);
-        assert_eq!(s1.partial_cmp(&s2), Some(Ordering::Less));
+    #[rstest]
+    #[case::scalar("#{1}", "#{2}", Ordering::Less)]
+    #[case::prefix("#{1}", "#{1 2}", Ordering::Less)]
+    #[case::empty("#{}", "#{0}", Ordering::Less)]
+    #[case::nested_map("#{{1 2}}", "#{{1 3}}", Ordering::Less)]
+    #[case::nested_set("#{#{1}}", "#{#{2}}", Ordering::Less)]
+    #[case::sequence_kind("#{(1)}", "#{[1]}", Ordering::Equal)]
+    fn test_edn_set_ord(#[case] left: &str, #[case] right: &str, #[case] expected: Ordering) {
+        let Edn::Set(left) = read_string(left).unwrap() else {
+            unreachable!()
+        };
+        let Edn::Set(right) = read_string(right).unwrap() else {
+            unreachable!()
+        };
+        assert_eq!(left.cmp(&right), expected);
+        assert_eq!(left.partial_cmp(&right), Some(expected));
+        assert_eq!(right.cmp(&left), expected.reverse());
     }
 
     #[test]

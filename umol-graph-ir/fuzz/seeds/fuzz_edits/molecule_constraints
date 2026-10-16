@@ -1,0 +1,2 @@
+[{:constraint {:add {:and [{:atom [{:new 0} {:valence 4}]} {:not {:bond [0 {:aromatic false}]}}]}}}
+ {:constraint {:remove {:connected {}}}}]

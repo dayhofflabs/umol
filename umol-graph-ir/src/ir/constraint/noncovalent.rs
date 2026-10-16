@@ -9,7 +9,7 @@ use umol_perm::DynPermutation;
 
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
@@ -26,6 +26,15 @@ impl NoncovalentBondConstraintForm {
         Self::Intramolecular(b.into())
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: NoncovalentBondConstraintKey) -> Self {
+        match key {
+            NoncovalentBondConstraintKey::Intramolecular => {
+                Self::Intramolecular(BooleanForm::Undetermined)
+            }
+        }
+    }
+
     /// Noncovalent-bond constraint key, unique within a `NoncovalentBondConstraintsForm` container.
     pub fn key(&self) -> NoncovalentBondConstraintKey {
         match self {
@@ -35,9 +44,7 @@ impl NoncovalentBondConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::Intramolecular(_) => Self::Intramolecular(BooleanForm::Undetermined),
-        }
+        Self::undetermined(self.key())
     }
 
     /// Value-only: no indices to compact.
@@ -92,7 +99,7 @@ impl Lattice for NoncovalentBondConstraintForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         match (self, other) {
             (Self::Intramolecular(a), Self::Intramolecular(b)) => {
                 Ok(Self::Intramolecular(a.join(b)?))
@@ -128,11 +135,32 @@ impl NoncovalentBondConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(
+        &self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<NoncovalentBondConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(NoncovalentBondConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// The normalized own assertion. This entity kind has no closure negative,
+    /// so this agrees with [`Self::asserted`]. Reads no molecule context.
+    pub fn asserted_complete(
+        &self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<NoncovalentBondConstraintForm> {
+        self.asserted(key)
+    }
+
     /// The bond's intramolecular value, or `Undetermined` when no `Intramolecular` constraint is present.
-    pub fn intramolecular(&self) -> BooleanForm {
+    pub fn intramolecular(&self) -> &BooleanForm {
         match self.get(NoncovalentBondConstraintKey::Intramolecular) {
-            Some(NoncovalentBondConstraintForm::Intramolecular(b)) => *b,
-            _ => BooleanForm::Undetermined,
+            Some(NoncovalentBondConstraintForm::Intramolecular(b)) => b,
+            _ => &BooleanForm::Undetermined,
         }
     }
 
@@ -327,7 +355,7 @@ impl Lattice for NoncovalentBondConstraintsForm {
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`NoncovalentBondConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: Vec<NoncovalentBondConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
@@ -354,7 +382,7 @@ impl Lattice for NoncovalentBondConstraintsForm {
     /// Pattern-driven: the intramolecular value is matched on its own lattice; an empty
     /// pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
-        self.intramolecular().matches(&target.intramolecular())
+        self.intramolecular().matches(target.intramolecular())
     }
 
     /// Sorted merge, short-circuit: only shared keys can conflict; non-shared keys are always
@@ -429,6 +457,16 @@ mod tests {
         #[case] expected: NoncovalentBondConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraint_form_undetermined() {
+        assert_eq!(
+            NoncovalentBondConstraintForm::undetermined(
+                NoncovalentBondConstraintKey::Intramolecular
+            ),
+            NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)
+        );
     }
 
     #[rstest]
@@ -522,7 +560,7 @@ mod tests {
     #[rstest]
     #[case::same_value(NoncovalentBondConstraintForm::intramolecular(true), NoncovalentBondConstraintForm::intramolecular(true), Ok(NoncovalentBondConstraintForm::intramolecular(true)))]
     #[case::differ_widens(NoncovalentBondConstraintForm::intramolecular(true), NoncovalentBondConstraintForm::intramolecular(false), Ok(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)))]
-    fn test_noncovalent_bond_constraint_form_join(#[case] a: NoncovalentBondConstraintForm, #[case] b: NoncovalentBondConstraintForm, #[case] expected: Result<NoncovalentBondConstraintForm, NoJoin>) {
+    fn test_noncovalent_bond_constraint_form_join(#[case] a: NoncovalentBondConstraintForm, #[case] b: NoncovalentBondConstraintForm, #[case] expected: Result<NoncovalentBondConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 
@@ -541,6 +579,25 @@ mod tests {
         assert_eq!(cs.len(), 0);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absent(None, NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)))]
+    #[case::top(Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)))]
+    #[case::positive(Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))), NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))))]
+    #[case::negative(Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))), NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))))]
+    fn test_noncovalent_bond_constraints_form_asserted(
+        #[case] source: Option<NoncovalentBondConstraintForm>,
+        #[case] key: NoncovalentBondConstraintKey,
+        #[case] expected: Option<NoncovalentBondConstraintForm>,
+        #[case] complete: Option<NoncovalentBondConstraintForm>,
+    ) {
+        let constraints: NoncovalentBondConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
+    }
+
     #[rstest]
     #[case::present(
         NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(true)),
@@ -551,7 +608,7 @@ mod tests {
         #[case] cs: NoncovalentBondConstraintsForm,
         #[case] expected: BooleanForm,
     ) {
-        assert_eq!(cs.intramolecular(), expected);
+        assert_eq!(cs.intramolecular(), &expected);
     }
 
     #[rstest]

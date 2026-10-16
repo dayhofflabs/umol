@@ -7,16 +7,66 @@ strategy and PyO3 implementation are not themselves part of that contract. A Pyt
 able to tell from a type and operation whether a value is immutable, independently mutable, or a
 live accessor into another object.
 
-The public Rust API is the starting point. Its types, constructors, value-producing operations,
-mutating operations, views, editors, and lifecycle boundaries carry deliberate semantics that the
-Python binding preserves where Python can express them reasonably. The binding may omit Rust APIs
-and may adapt call syntax, but it does not redesign the type hierarchy merely because Python has a
-different ownership model. A Python-specific deviation needs a concrete usability or correctness
-reason.
+The public Rust API defines the operations and contracts to preserve. Every difference in Python
+requires a specific justification, without exceptions: exposed types and methods, names, semantics,
+construction, lifecycle, ownership, aliasing, failure behavior, and copying. The binding may omit
+Rust APIs or adapt call syntax for a concrete usability reason; it must not invent domain
+operations. Existing code, tests, documentation, and prior acceptance do not justify a deviation.
+
+For each deviation, identify the public Rust counterpart, the precise difference, the concrete
+Python requirement, and the evidence supporting the chosen adaptation. Claims that PyO3 or the
+Python ABI requires a design need evidence for the relevant version and code path. An unexplained
+or unreviewed difference remains unresolved; familiarity and passing tests do not establish parity.
+
+Cloning and snapshots require the same justification. State what is copied and why, distinguishing
+shared ownership from copying owned data and subsequent copy-on-write costs. Examine whether
+borrowing, ownership transfer with an explicit consumed state, or a supported live view can preserve
+the Rust contract before selecting a copy. These are alternatives to evaluate, not mandatory new
+wrappers. Converting a consuming Rust operation into a reusable copy-producing Python operation is
+a lifecycle change. Neither defensive cloning nor a universal ban on copying decides its contract.
+Do not change the Rust API solely to legitimize a wrapper convenience.
+
+Python aliases do not follow Rust's move rules. Molecule remains reusable: edit, apply,
+tracked_apply, resolve, resolve_with_report, canonicalize, tracked_canonicalize, and combine
+clone the Rust receiver and pass that clone to the consuming Rust operation. The Python source,
+its aliases, and its views remain unchanged on every outcome. The initial clone shares topology,
+entity tables, and constraints; shared payloads are copied when the operation modifies or takes
+ownership of them. This is the same ownership choice as a Rust caller explicitly cloning its
+input to keep it available. Python does not expose project or Transformer methods.
+
+Edits retains consumption on transfer: implicitly cloning a complete batch would copy its entries
+and payloads, so callers request Edits.copy() when they need reuse. MoleculeEditor.finish consumes
+the editor on success or failure. An into_… conversion retains its consuming lifecycle;
+RingViews.into_ring_set consumes the views while leaving the molecule usable. Deltas has no
+consuming Python operation; its explicit copy and value-producing operations preserve the source.
+
+Consumption leaves all aliases of the Python owner in a consumed state and invalidates its
+outstanding views and iterators, including nested accessors. Access raises one of two shared
+exceptions, both subclasses of `RuntimeError`:
+
+- `ConsumedError`: access to an owned object whose Rust contents have been consumed.
+- `InvalidatedViewError`: access through a view or iterator invalidated by owner consumption or
+  structural replacement.
+
+Messages identify the consumed type or the invalidated accessor and its owning type. Explicit
+independent copies made before consumption remain usable. Do not copy automatically on invalid
+access or block consumption solely because an accessor remains alive.
 
 The central rule is that apparent mutation must have one observable meaning. An assignment either
 changes the object through which the value was obtained or is rejected. A property must not return
 a disconnected mutable copy on which assignments succeed but have no effect on the parent.
+This includes nested containers and mutating methods. Mutable access updates backing storage;
+immutable observations reject mutation. An explicitly requested independent copy may be mutable,
+with mutations affecting its own storage. Calling a property result detached does not justify
+silent, ineffective writes.
+
+Keep bindings thin and cheap. Prefer read-only access to backing Rust storage over copied
+observations where possible. Preserve iterator laziness: creating an iterator must not materialize
+its entries, and requesting one entry must not convert the unrequested remainder. Prefer a thin
+read-only Python accessor for each yielded entry, including nested access, over copying its payload.
+Owner lifetime and interaction with mutation or consumption need explicit contracts; they do not
+justify defaulting to snapshots. Python being the primary application interface does not justify
+separate semantics or additional copying.
 
 ## Graph-IR naming at the boundary
 
@@ -29,18 +79,84 @@ properties, annotations, representations, and structural pattern-matching fields
 The corresponding DSL map key is `:attrs`. Rust-side binding conversions use `from_rust`, `to_rust`,
 and `to_rust_mut`; graph-IR boundary conversions use the `*Ir` trait family.
 
+Named Rust variant fields retain their names in Python properties, constructor keywords,
+representations, and `__match_args__`. Genuine tuple fields use `_0`, `_1`, and so on.
+All payloads are accessible through properties on Python 3.9. Structural pattern matching is
+an optional convenience on Python 3.10 and later, never the only way to inspect a value.
+
 Recursive subpattern constraints are currently absent from both Rust and Python. They must not be
 reintroduced on only one side of the binding boundary.
 
 ## Public object roles
 
-Every exported class has one of the following roles.
+Every exported class has an explicit ownership/access role. Combining owned and accessor
+representations in one class requires a type-specific justification and an explicit mutation
+contract.
+
+### Reusable owner-backed access pattern
+
+Where Rust exposes borrowed access to stored data, a Python accessor can retain its owner and a
+location within that owner. Each operation briefly borrows the owner, checks availability, locates
+the data, and performs the requested access. No Rust reference into relocatable storage survives
+between Python calls. Nested accessors preserve the same ownership and invalidation contract.
+
+Read-only access rejects mutation; mutable access updates backing storage. Explicit copying
+produces an independent owned value. Consumption invalidates dependent accessors as specified
+above. The location and its behavior under structural mutation must be defined for the owning type.
+
+For molecule access, each view retains the owner and its accessor counter. Starting transact,
+tracked_transact, resolve_into, resolve_into_with_report, or combine_from
+invalidates all existing views and iterators, including nested accessors. The counter advances
+immediately before execution, including for a no-op or a call that rolls back. No list of views is
+maintained. Ordinary attribute and entity-constraint assignments leave accessors valid and their
+changes visible. Fresh accessors read the current molecule; independent copies remain usable.
+Argument extraction or borrowing failure before execution leaves the counter unchanged.
+
+RingViews retains its molecule and any borrowed RingSet. into_ring_set moves owned ring data or
+copies borrowed ring data into an independent RingSet without repeating perception. It consumes
+the RingViews, whose later access raises ConsumedError; its dependent ring, atom, bond, and
+iterator accessors raise InvalidatedViewError. The molecule and any source RingSet remain usable.
+
+This is a reusable pattern, not a requirement to give every type an owned-or-accessor representation.
+Owned-only values and accessor-only views remain appropriate. Where one Python class legitimately
+supports both roles, an internal owned-or-owner-and-location representation is possible; it is not
+ordinary Rust `Cow` and must not clone automatically on mutation. Public role distinctions are
+settled per type. Introduce shared implementation machinery only when concrete uses support it;
+this pattern does not authorize a universal wrapper framework or a blanket binding rewrite.
+
+Edit and Delta are immutable owned values. Indexing Edits or Deltas returns an independent entry;
+iteration copies one entry per step and excludes entries appended after iterator creation.
+Entity forms retained within an entry are read-only, including nested constraints; their readonly
+property reports that restriction, and copy() returns an ordinary writable form. These copies
+isolate immutable mutation data from later changes to the supplied mutable forms without requiring
+consumed state on every form. Consuming Edits invalidates its iterators; already returned entries
+remain usable.
+
+Edits.copy() explicitly clones the complete Rust batch into an independent, unconsumed owner.
+It preserves entry order, duplicates, handles, payloads, and creation ordinals without checking
+applicability against a molecule. Appending to or consuming either batch leaves the other usable;
+copying leaves existing source iterators valid. A consumed source raises ConsumedError.
+
+Deltas.copy() clones the complete Rust collection into an independent owner, preserving order,
+duplicates, ids, and payloads without normalization or applicability checks. Both containers and
+existing source iterators remain usable; appending to either leaves the other unchanged.
+
+Delta.inverse() and each entity delta's inverse() return an independent immutable inverse,
+leaving the source usable. Retained entity forms remain read-only. Inversion preserves the Rust
+operation: it does not normalize payloads or check applicability against a molecule.
 
 ### Immutable owned value
 
 An immutable owned value represents data rather than a mutable identity. Its public fields cannot
 be assigned or deleted. Operations that change it return another value or an explicitly mutable
 counterpart.
+
+Collection payload properties use tuples for sequences and frozensets for sets, including
+nested restriction sets and participant rows. StereoModel.kind_models returns a mapping proxy
+over an independent dictionary of the existing model values. Constructors accept their ordinary
+list, set, and dictionary inputs as well as the corresponding immutable getter results.
+These observation containers preserve the stored contents, order, duplicates, and absence;
+they do not normalize the underlying values.
 
 Immutability applies transitively to the umol-owned objects exposed through its properties. An
 immutable `AtomForm` must not expose a mutable constraints container, for example. Returning an
@@ -51,6 +167,17 @@ Small forms, enum variants, field changes, deltas, and other declarative values 
 this role, but being data-like does not establish immutability. Preserve a Rust type's deliberate
 public fields and mutating operations unless a Python-specific conflict requires adaptation. Do not
 create mutable counterparts for immutable leaf values merely for symmetry.
+
+Each Python ChemistryModel owns a complete Rust ChemistryModel. Construction converts the supplied
+connectivity, valence, aromaticity, and stereo components once; custom registries and tables may be
+copied at that boundary. ChemistryModel.default() preserves the Rust default's borrowed static
+registry. Operations borrow the retained model for the synchronous call, without consuming the
+Python object or rebuilding its registry or table. Omitting the model selects the operation's Rust
+default, which can differ from ChemistryModel.default().
+
+The four component properties return independent values of their existing Python types. Reading a
+component may copy its registry, table, or other owned data. Reusing the ChemistryModel directly
+avoids that extraction and reconstruction cost; rebuilding it from its properties does not.
 
 ### Mutable owned object
 
@@ -72,14 +199,90 @@ write through to the molecule, while the form has its own ownership and mutation
 
 ### Editor
 
-An editor represents a staged or transactional mutation lifecycle. It is appropriate when users
-begin with an owned value, perform several related structural changes, and then finalize or commit
-a new value. The `*Editor` suffix communicates that lifecycle and is preferable to presenting the
-editor as a generally mutable form of the original type.
+An editor owns transient working state. It permits direct changes and edit batches before finish
+checks integrity and returns a molecule. It provides no rollback.
 
-For molecules, the editor is the structural mutation boundary: adding or removing topology and
-overlays goes through `MoleculeEditor`. Ordinary attribute and constraint mutation does not require
-an editor; it writes through the molecule's entity and constraint views.
+Structural changes use MoleculeEditor or prepared transaction batches. Ordinary attributes and
+entity-level constraints are assigned through the molecule's entity views. Molecule-level
+constraints are read-only on the molecule; changing them requires editing and publication.
+
+| Python operation | Result | Receiver and batch ownership |
+| --- | --- | --- |
+| Molecule.edit | MoleculeEditor | Edits an independent copy; source and views remain usable |
+| Molecule.apply | Molecule | Consumes Edits and publishes a changed copy; source and views remain unchanged |
+| Molecule.tracked_apply | (Molecule, MoleculeCorrespondence) | Same ownership as apply |
+| MoleculeEditor.apply | None | Mutates the editor and consumes Edits |
+| MoleculeEditor.tracked_apply | MoleculeCorrespondence | Same ownership as editor apply; maps only this batch's input to its result |
+| MoleculeEditor.finish | Molecule | Consumes the editor on success or failure; checks representation integrity |
+
+Editor application checks edit preconditions but does not check final molecule integrity or record
+undo. Failure raises TransactionError and retains the completed prefix for further editing; it
+returns no correspondence. finish raises InvalidStructureError if publication fails, leaving every
+alias of the editor consumed. These are the Rust editor's mutation and publication contracts.
+Molecule.apply and tracked_apply include finish; either kind of failure discards the working copy
+and leaves the source unchanged.
+
+A batch stays consumed after transfer, even when application or publication fails. An unavailable
+batch leaves the molecule or editor unchanged. A consumed editor rejects application before taking
+the batch. Use Edits.copy() to apply a prepared batch more than once:
+
+```python
+from umol import AtomForm, Edits, Element, Molecule
+
+source = Molecule.from_entries([AtomForm(Element("C"))])
+edits = Edits()
+edits.add_atom(AtomForm(Element("N")))
+product = source.apply(edits.copy())
+
+editor = source.edit()
+editor.apply(edits)
+assert editor.finish() == product
+assert source == Molecule.from_entries([AtomForm(Element("C"))])
+```
+
+Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
+transact returns None; tracked_transact returns the whole transaction's correspondence. On
+application or integrity failure they restore the receiver under Rust's Molecule::normalized_eq,
+preserving participant order. Python exposes these prepared-batch operations without scoped
+Transaction or TrackedTransaction handles, editor probe, or edit_into callbacks, avoiding Rust
+borrows retained across Python calls.
+
+Both methods accept keyword-only rollback_method, defaulting to RollbackMethod.Journal;
+RollbackMethod.Clone remains selectable. Rust requires the selector explicitly. Journal records
+undo for the applied changes, while Clone edits one working copy and installs it only on success.
+Journal is the prepared-batch default because its recovery storage follows the changes rather
+than a whole working molecule. The choice changes storage and execution cost, not recovery or
+correspondence guarantees.
+
+The iterable is fully extracted before any batch is consumed. Batches are then consumed in order,
+before molecule execution. If a later batch cannot be transferred, earlier batches remain consumed
+and the molecule and its views remain unchanged. Thus `[edits, edits]` consumes the first occurrence
+and fails on the second. Once execution starts, rollback restores the molecule, not its old views
+or consumed Edits. Edit failures raise TransactionError; publication failures raise
+InvalidStructureError.
+
+### Resolution
+
+Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
+molecule; Underdetermined is payload-free and Contradictory contains its diagnostic. Planning errors
+raise RuntimeError. Every outcome preserves the source and its existing views.
+
+Molecule.resolve_into mutates the receiver only on Determined, whose molecule field is None.
+Underdetermined, Contradictory, and planning errors restore the receiver under Rust's
+Molecule::normalized_eq, preserving participant order. Existing views are invalidated when
+execution starts, even if the molecule is restored.
+Its keyword-only rollback_method selects RollbackMethod.Clone (the default) or
+RollbackMethod.Journal with the same recovery guarantee. The selector covers all phases in one
+transaction. Rust requires the selector explicitly; Python defaults to Clone here because one
+working copy avoids recording undo across the resolution pipeline. Neither default promises the
+cheaper choice for every workload; callers can select either method.
+
+Molecule.resolve_with_report and resolve_into_with_report return `(solution, report)`. The report
+is present on Determined and Underdetermined, and None on Contradictory. Solution itself has no
+report field. Returning a separate report preserves one Python Solution variant hierarchy for
+the Rust methods' different payload types. Ordinary resolution does not construct a report.
+resolve_with_report preserves the source and its views; resolve_into_with_report follows
+resolve_into's mutation, invalidation, and rollback selection contract.
 
 ### Operation-issued iterator
 
@@ -144,12 +347,14 @@ does not by itself require renaming that type: Python users ordinarily expect a 
 advertise mutation through its methods and properties. A split is justified when one name would
 otherwise cover observably incompatible aliasing or lifecycle behavior.
 
-An immutable entry type may belong to a mutable container. `Edit` and `Delta` variants are immutable
-values, while `Edits` and `Deltas` provide iterable construction, `append`, and `extend` in insertion
-order. Container mutation does not imply entry mutation. These operations establish list-like
-append-only accumulation, not unrestricted list replacement, insertion, deletion, or reordering.
-Extension appends entries exactly as written and does not rebase or otherwise rewrite identifiers or
-`New(n)` handles.
+An immutable entry type may belong to a mutable container; container mutation does not imply entry
+mutation. Python collection idioms must preserve the owning Rust container's reference semantics.
+A spelling such as `append` may delegate to Rust `push`; it does not authorize batch concatenation.
+Entries in an Edits sequence share one handle namespace. Independent batches are supplied
+separately to transact or tracked_transact, each with its own namespace; raw list extension
+cannot establish that contract.
+Any supported bulk operation on `Deltas` likewise belongs to its Rust container. Do not implement
+collection composition in the bindings merely because Python lists support `extend`.
 
 ## Properties and nested objects
 
@@ -165,11 +370,20 @@ A property contract is determined by the returned object's role:
 These rules apply recursively. Marking the outer PyO3 class as frozen is insufficient when a nested
 constraints container or other umol object remains mutable.
 
-The existing constraint-container distinction is retained. A value-backed `*ConstraintsForm` is an
-owned mutable container; a molecule-backed `*ConstraintsView` is a live container whose writes
-update the molecule. Entity views use the latter and do not require an editor. If a frozen parent
-needs to expose constraints, resolve that parent's access contract without replacing this general
-container design or returning a misleading mutable disconnected copy.
+A value-backed entity `*ConstraintsForm` is an owned mutable container; an entity
+`*ConstraintsView` writes through to the stored entity constraints. These writes do not require
+an editor. A view obtained from an entity Update retains that immutable owner and borrows its
+constraints. All writes through that view, including indexed ring counts, raise TypeError.
+Molecule-level `ConstraintsView` is a read-only sequence. Its iterator yields one
+stored constraint per step, including an entire `And` or `Or` as one entry. Accessing a
+composition's children produces another read-only sequence; iteration never descends implicitly.
+
+Molecule-backed `Constraint` entries retain their owner and location. Variant fields read the
+stored constraint; leaf payloads are converted to the existing immutable value forms when
+requested. `copy()` produces an independent constraint value. Structural mutation invalidates
+the collection, entries, child sequences, and iterators through the molecule's accessor counter.
+Ordinary entity assignment leaves these constraint accessors valid. Standalone `Constraints`
+remains mutable and returns independent entry values.
 
 ## Construction and conversion
 
@@ -177,12 +391,11 @@ Construction of an immutable owner must not retain a mutable Python alias that c
 owner. Convert mutable inputs to the owner's immutable representation at the construction boundary.
 This is an ownership rule, not semantic validation; validation follows the data-type contracts.
 
-Entity forms are ordinarily writable owned objects. When an entity form is stored in an immutable
-delta, construction clones its value into a form instance whose `readonly` property is true. The
-state cannot be changed in place, getters retain that same read-only instance, and field and
-constraint mutation raise `TypeError`. `copy`, `normalize`, `meet`, and `join` produce ordinary
-writable forms. Individual delta variants are immutable; `Deltas` provides only append-only
-container mutation.
+Entity forms are ordinarily writable owned objects. Forms retained in Edit or Delta are read-only,
+including nested fields and constraints. Such access rejects mutation with `TypeError`.
+`copy`, `normalize`, `meet`, and `join` produce ordinary
+writable forms. Edits and Deltas provide append-only container mutation; retrieved entries do not
+permit mutation of stored entries.
 
 Use `*Like` argument adapters for accepted alternate input representations. A `*Like` type is an
 argument boundary and is not exposed as the stored or returned type.

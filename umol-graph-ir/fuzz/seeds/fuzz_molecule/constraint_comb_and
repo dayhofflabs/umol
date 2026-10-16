@@ -1,0 +1,1 @@
+{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}]}

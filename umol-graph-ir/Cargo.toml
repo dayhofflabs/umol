@@ -68,6 +68,9 @@ name = "canonicalization"
 [[test]]
 name = "reaction_span"
 
+[[test]]
+name = "integrity"
+
 [[bench]]
 name = "parsing"
 harness = false
@@ -90,6 +93,22 @@ harness = false
 
 [[bench]]
 name = "canonicalize"
+harness = false
+
+[[bench]]
+name = "integrity"
+harness = false
+
+[[bench]]
+name = "editor"
+harness = false
+
+[[bench]]
+name = "constraint_readings"
+harness = false
+
+[[bench]]
+name = "aggregate_storage"
 harness = false
 
 [lints.clippy]

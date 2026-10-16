@@ -527,13 +527,15 @@ def test_fingerprint_result_constructor_error(result_type):
 def test_molecule_hashed_fingerprint(ethanol, config, expected_ids):
     fingerprint = ethanol.hashed_fingerprint(config=config)
     ids = fingerprint.ids
+    assert type(ids) is tuple
 
-    assert ids == expected_ids
+    assert ids == tuple(expected_ids)
     assert list(fingerprint) == expected_ids
     assert fingerprint.id_width == 64
     assert all(type(identifier) is int for identifier in fingerprint)
-    ids.append(9)
-    assert fingerprint.ids == expected_ids
+    with pytest.raises(AttributeError):
+        ids.append(9)
+    assert fingerprint.ids == tuple(expected_ids)
 
 
 @pytest.mark.parametrize(
@@ -594,8 +596,10 @@ def test_molecule_counted_hashed_fingerprint(config, expected_entries):
         config=config
     )
     entries = fingerprint.entries
+    assert type(entries) is tuple
+    assert all(type(entry) is tuple for entry in entries)
 
-    assert entries == expected_entries
+    assert entries == tuple(expected_entries)
     assert list(fingerprint) == expected_entries
     assert fingerprint.id_width == 64
     assert fingerprint.count(expected_entries[0][0]) == expected_entries[0][1]
@@ -604,8 +608,9 @@ def test_molecule_counted_hashed_fingerprint(config, expected_entries):
         type(identifier) is int and type(count) is int
         for identifier, count in fingerprint
     )
-    entries.append((9, 3))
-    assert fingerprint.entries == expected_entries
+    with pytest.raises(AttributeError):
+        entries.append((9, 3))
+    assert fingerprint.entries == tuple(expected_entries)
 
 
 @pytest.mark.parametrize(
@@ -725,12 +730,14 @@ def test_molecule_pattern_fingerprint(
 def test_molecule_structural_fingerprint(ethanol, config, expected_keys):
     fingerprint = ethanol.structural_fingerprint(config=config)
     keys = fingerprint.keys
+    assert type(keys) is tuple
 
-    assert keys == expected_keys
+    assert keys == tuple(expected_keys)
     assert list(fingerprint) == expected_keys
     assert all(type(key) is bytes for key in fingerprint)
-    keys.append(b"detached")
-    assert fingerprint.keys == expected_keys
+    with pytest.raises(AttributeError):
+        keys.append(b"detached")
+    assert fingerprint.keys == tuple(expected_keys)
 
 
 def test_hashed_feature_set_operations():
@@ -889,7 +896,7 @@ def test_reaction_combined_fingerprint_difference(ethanol_deoxygenation):
     assert type(result) is ReactionCombinedFingerprint
     assert type(features) is SignedHashedFeatureSet
     assert features.id_width == 64
-    assert features.entries == expected
+    assert features.entries == tuple(expected)
     assert list(features) == expected
     assert all(type(identifier) is int for identifier, _ in features)
     assert all(type(count) is int for _, count in features)
@@ -918,7 +925,7 @@ def test_reaction_combined_fingerprint_disjoint_union(ethanol_deoxygenation):
     assert type(result) is ReactionCombinedFingerprint
     assert type(features) is RoleTaggedHashedFeatureSet
     assert features.id_width == 64
-    assert features.ids == expected
+    assert features.ids == tuple(expected)
     assert list(features) == expected
     assert all(type(side) is ReactionSide for side, _ in features)
     assert all(type(identifier) is int for _, identifier in features)

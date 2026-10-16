@@ -1,8 +1,7 @@
 //! Binding exceptions.
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
-use pyo3::types::PyAnyMethods;
-use pyo3::{create_exception, PyErr, Python};
+use pyo3::{create_exception, PyErr};
 use umol_graph::export::{
     ConveyError as GraphConveyError, ReactionConveyError as GraphReactionConveyError,
     ReactionSmilesOutputError as GraphReactionSmilesOutputError,
@@ -23,13 +22,18 @@ use umol_graph_ir::ir::{
     TransactionError as GraphIrTransactionError,
 };
 
-use crate::resolve::ResolveReport;
-
 create_exception!(
     umol,
     ContradictionError,
     PyException,
     "Raised when a umol operation reaches a contradiction."
+);
+
+create_exception!(
+    umol,
+    NoJoinError,
+    PyException,
+    "Raised when the terms have no least upper bound."
 );
 
 create_exception!(
@@ -71,7 +75,21 @@ create_exception!(
     umol,
     TransactionError,
     PyException,
-    "Raised when transactional molecule editing or rollback fails."
+    "Raised when an edit batch cannot be applied or a transaction has been aborted."
+);
+
+create_exception!(
+    umol,
+    ConsumedError,
+    PyRuntimeError,
+    "Raised when an operation accesses an object whose contents have been consumed."
+);
+
+create_exception!(
+    umol,
+    InvalidatedViewError,
+    PyRuntimeError,
+    "Raised when a view or iterator is invalidated by owner mutation or consumption."
 );
 
 /// Map an `umol_graph_ir` parse error onto the catchable `umol.ParseError`.
@@ -104,7 +122,7 @@ pub(crate) fn reaction_integrity_error(error: GraphIrReactionIntegrityError) -> 
     PyValueError::new_err(error.to_string())
 }
 
-/// Map immutable molecule-application failures onto the existing Python exception taxonomy.
+/// Map molecule-application failures onto the existing Python exception taxonomy.
 pub(crate) fn molecule_apply_error(error: GraphIrMoleculeApplyError) -> PyErr {
     match error {
         GraphIrMoleculeApplyError::Transaction(error) => transaction_error(error),
@@ -122,13 +140,9 @@ pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
         GraphSmilesInputError::Contradiction(error) => {
             ContradictionError::new_err(error.to_string())
         }
-        GraphSmilesInputError::Underdetermined(error) => Python::attach(|py| {
-            let underdetermined = UnderdeterminedError::new_err(error.to_string());
-            let _ = underdetermined
-                .value(py)
-                .setattr("report", ResolveReport::from_rust(&error.report));
-            underdetermined
-        }),
+        GraphSmilesInputError::Underdetermined(error) => {
+            UnderdeterminedError::new_err(error.to_string())
+        }
         GraphSmilesInputError::Execution(error) => PyRuntimeError::new_err(error.to_string()),
     }
 }
@@ -206,10 +220,7 @@ pub(crate) fn reaction_smiles_output_error(error: GraphReactionSmilesOutputError
         GraphReactionSmilesOutputError::Convey(
             GraphReactionConveyError::Reactants(error) | GraphReactionConveyError::Products(error),
         ) => convey_error(error, message),
-        GraphReactionSmilesOutputError::Convey(GraphReactionConveyError::AtomMapLabel {
-            ..
-        })
-        | GraphReactionSmilesOutputError::Render(_) => ModelConversionError::new_err(message),
+        GraphReactionSmilesOutputError::Render(_) => ModelConversionError::new_err(message),
     }
 }
 
@@ -337,18 +348,7 @@ mod tests {
         ),
         "malformed edit: AddDativeBond requires at least one participant atom"
     )]
-    #[case::rollback_failed(
-        GraphIrTransactionError::RollbackFailed {
-            apply: Box::new(GraphIrTransactionError::MissingEntry),
-            rollback: Box::new(GraphIrTransactionError::RollbackStateMismatch),
-        },
-        "rollback failed after apply error: apply=missing constraint entry on remove; \
-         rollback=rollback journal does not match editor state",
-    )]
-    #[case::rollback_state_mismatch(
-        GraphIrTransactionError::RollbackStateMismatch,
-        "rollback journal does not match editor state"
-    )]
+    #[case::aborted(GraphIrTransactionError::Aborted, "transaction has been aborted")]
     fn test_transaction_error(
         #[case] input: GraphIrTransactionError,
         #[case] expected_message: &str,
@@ -370,9 +370,16 @@ mod tests {
         "Leading whitespace"
     )]
     #[case::model_conversion(
-        ingest_smiles("C[S@]C").unwrap_err(),
+        GraphSmilesInputError::ModelConversion(
+            RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+        ),
         "ModelConversionError",
-        "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral"
+        "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
+    )]
+    #[case::incomplete_stereo(
+        ingest_smiles("C[S@]C").unwrap_err(),
+        "ContradictionError",
+        "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized"
     )]
     #[case::contradiction(
         GraphSmilesInputError::Contradiction(GraphResolveContradiction::Aromaticity(
@@ -467,9 +474,7 @@ mod tests {
     #[case::reactant_underdetermined(
         GraphReactionSmilesInputError::Interpretation(
             GraphReactionInterpretationError::Reactants(
-                GraphMoleculeInterpretationError::Underdetermined(
-                    GraphResolveUnderdetermined::default()
-                ),
+                GraphMoleculeInterpretationError::Underdetermined(GraphResolveUnderdetermined),
             ),
         ),
         "UnderdeterminedError",
@@ -477,9 +482,7 @@ mod tests {
     )]
     #[case::product_underdetermined(
         GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
-            GraphMoleculeInterpretationError::Underdetermined(
-                GraphResolveUnderdetermined::default()
-            ),
+            GraphMoleculeInterpretationError::Underdetermined(GraphResolveUnderdetermined),
         ),),
         "UnderdeterminedError",
         "products: resolution underdetermined"

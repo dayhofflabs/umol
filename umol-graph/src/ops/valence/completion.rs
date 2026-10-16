@@ -81,8 +81,7 @@ impl FromIterator<(AtomId, SmallVec<[AtomForm; 1]>)> for AtomCompletions {
 pub struct ResolveReport {
     /// Per-atom plural survivors; empty under a `Determined` solution.
     pub unresolved: AtomCompletions,
-    /// Atoms whose completion was selected by the valence-preference
-    /// tie-break; sorted and deduplicated.
+    /// Atoms selected by valence or aromaticity tie-breaks; sorted and deduplicated.
     pub tie_breaks: Vec<AtomId>,
 }
 

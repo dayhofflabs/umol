@@ -19,7 +19,8 @@ use std::slice::Iter;
 
 use num_bigint::BigUint;
 
-use crate::graph::{EdgeId, Graph, NodeId, SubdividedGraph, SubdivisionNodeSource};
+use crate::graph::{Graph, SubdividedGraph, SubdivisionNodeSource};
+use crate::id::{EdgeId, NodeId};
 
 mod basis;
 mod relevant;
@@ -645,7 +646,8 @@ mod tests {
     use super::SimpleCycleEnumerationAlgorithm::ReadTarjan;
     use super::UniqueRingFamilyAlgorithm::Kolodzik;
     use super::{Cycle, NonSimpleGraphError, UniqueRingFamilyId};
-    use crate::graph::{EdgeId, Graph, NodeId};
+    use crate::graph::Graph;
+    use crate::id::{EdgeId, NodeId};
 
     type ExpectedUniqueRingFamily = (Vec<NodeId>, Vec<EdgeId>, usize, u64, Vec<Cycle>);
 

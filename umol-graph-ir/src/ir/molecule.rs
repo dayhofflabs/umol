@@ -11,7 +11,11 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId, UnionFind};
+pub use transact::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
+use umol_graph_core::{
+    Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,
+    NodeId, UnionFind,
+};
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
@@ -22,8 +26,8 @@ use super::constraint::{
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
-use super::edit::{AtomHandle, BondHandle, Edits};
-use super::entity::{Entity, EntityKind};
+use super::edit::{AtomHandle, BondHandle, CascadedConstraints, Edits, RemovedAtom, RemovedBond};
+use super::entity::EntityKind;
 use super::error::{Contradiction, MoleculeApplyError};
 use super::frame::OverlaysFrameAction;
 use super::id::{
@@ -41,13 +45,17 @@ use super::stereo::{
 };
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
 use super::view::{
-    AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
-    AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
-    DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
-    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingViews,
-    StereoAtomView, StereoAtomViews, StereoBondView, StereoBondViews,
+    AromaticSystemEditorViewMut, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
+    AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondEditorViewMut, BondView, BondViewMut,
+    BondViews, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut, DativeBondViews,
+    GraphView, MulticenterBondEditorViewMut, MulticenterBondView, MulticenterBondViewMut,
+    MulticenterBondViews, NeighborView, NoncovalentBondEditorViewMut, NoncovalentBondView,
+    NoncovalentBondViewMut, NoncovalentBondViews, RingViews, StereoAtomEditorViewMut,
+    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondEditorViewMut, StereoBondView,
+    StereoBondViewMut, StereoBondViews,
 };
 
+mod apply;
 mod build;
 mod editor;
 mod fragment;
@@ -55,12 +63,20 @@ pub(crate) mod integrity;
 mod pushout;
 mod remap;
 pub mod spec;
-pub(crate) mod transact;
+mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
-/// Per-entity data are `Arc`-shared (copy-on-write). The molecule itself only allows
-/// attribute mutation; structural edits go through `MoleculeEditor` via [`Molecule::edit`].
+/// Entity attributes and entity-level constraints are mutable through entity views.
+/// Structural edits and molecule-level constraint changes go through `MoleculeEditor` via
+/// [`Molecule::edit`].
+///
+/// Clones share storage until mutation.
+///
+/// # Semantic properties
+///
+/// Editing or transforming one clone leaves the other unchanged, including its
+/// molecule-level constraints.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Molecule {
     graph: Graph,
@@ -72,7 +88,7 @@ pub struct Molecule {
     noncovalent_bonds: NoncovalentBonds,
     stereo_atoms: StereoAtoms,
     stereo_bonds: StereoBonds,
-    constraints: Constraints,
+    constraints: Arc<Constraints>,
 }
 
 /// Constructor input for [`Molecule::from_entries`].
@@ -89,233 +105,14 @@ pub struct MoleculeEntries {
     pub constraints: Constraints,
 }
 
-pub(super) fn validate_entry_references(
-    entries: &MoleculeEntries,
-) -> Result<(), MoleculeIntegrityError> {
-    validate_entry_references_inner(entries)
-        .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })
-}
-
-fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Entity> {
-    let contains = |entity| match entity {
-        Entity::Atom(id) => id.index() < entries.atoms.len(),
-        Entity::Bond(id) => id.index() < entries.bonds.len(),
-        Entity::DativeBond(id) => id.index() < entries.dative.len(),
-        Entity::AromaticSystem(id) => id.index() < entries.aromatic.len(),
-        Entity::MulticenterBond(id) => id.index() < entries.multicenter.len(),
-        Entity::NoncovalentBond(id) => id.index() < entries.noncovalent.len(),
-        Entity::StereoAtom(id) => id.index() < entries.stereo_atoms.len(),
-        Entity::StereoBond(id) => id.index() < entries.stereo_bonds.len(),
-    };
-
-    for &(first, second, _) in &entries.bonds {
-        require_reference(&contains, Entity::Atom(first))?;
-        require_reference(&contains, Entity::Atom(second))?;
-    }
-    for (donors, acceptor, _) in &entries.dative {
-        require_references(&contains, donors.iter().copied().map(Entity::Atom))?;
-        require_reference(&contains, Entity::Atom(*acceptor))?;
-    }
-    for (atoms, _) in &entries.aromatic {
-        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
-    }
-    for (atoms, _) in &entries.multicenter {
-        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
-    }
-    for (atoms, _) in &entries.noncovalent {
-        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
-    }
-    for (site, ligands, _) in &entries.stereo_atoms {
-        require_reference(&contains, Entity::Atom(*site))?;
-        require_references(
-            &contains,
-            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
-        )?;
-    }
-    for (site, ligands, _) in &entries.stereo_bonds {
-        require_reference(&contains, Entity::Bond(*site))?;
-        require_references(
-            &contains,
-            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
-        )?;
-    }
-    for constraint in entries.constraints.iter() {
-        validate_constraint_references(constraint, &contains)?;
-    }
-    Ok(())
-}
-
-fn require_reference(contains: &dyn Fn(Entity) -> bool, entity: Entity) -> Result<(), Entity> {
-    if contains(entity) {
-        Ok(())
-    } else {
-        Err(entity)
-    }
-}
-
-fn require_references(
-    contains: &dyn Fn(Entity) -> bool,
-    entities: impl IntoIterator<Item = Entity>,
-) -> Result<(), Entity> {
-    for entity in entities {
-        require_reference(contains, entity)?;
-    }
-    Ok(())
-}
-
-pub(super) fn validate_constraint_references(
-    constraint: &Constraint,
-    contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), Entity> {
-    match constraint {
-        Constraint::Atom(id, _) => require_reference(contains, Entity::Atom(*id)),
-        Constraint::Bond(id, _) => require_reference(contains, Entity::Bond(*id)),
-        Constraint::DativeBond(id, _) => require_reference(contains, Entity::DativeBond(*id)),
-        Constraint::AromaticSystem(id, _) => {
-            require_reference(contains, Entity::AromaticSystem(*id))
-        }
-        Constraint::MulticenterBond(id, _) => {
-            require_reference(contains, Entity::MulticenterBond(*id))
-        }
-        Constraint::NoncovalentBond(id, _) => {
-            require_reference(contains, Entity::NoncovalentBond(*id))
-        }
-        Constraint::StereoAtom(id, _, _) => require_reference(contains, Entity::StereoAtom(*id)),
-        Constraint::StereoBond(id, _, _) => require_reference(contains, Entity::StereoBond(*id)),
-        Constraint::Relational(constraint) => {
-            validate_relational_constraint_references(constraint, contains)
-        }
-        Constraint::Molecule(constraint) => {
-            validate_molecule_constraint_references(constraint, contains)
-        }
-        Constraint::And(constraints) | Constraint::Or(constraints) => {
-            for constraint in constraints {
-                validate_constraint_references(constraint, contains)?;
-            }
-            Ok(())
-        }
-        Constraint::Not(constraint) => validate_constraint_references(constraint, contains),
-    }
-}
-
-fn validate_relational_constraint_references(
-    constraint: &RelationalConstraint,
-    contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), Entity> {
-    match constraint {
-        RelationalConstraint::DativeBondDonors { bond, atoms }
-        | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
-            require_reference(contains, Entity::DativeBond(*bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::DativeBondDonor { bond, atom }
-        | RelationalConstraint::DativeBondAcceptor { bond, atom } => {
-            require_reference(contains, Entity::DativeBond(*bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::DativeBondAllDonors { bond, .. }
-        | RelationalConstraint::DativeBondAnyDonor { bond, .. }
-        | RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => {
-            require_reference(contains, Entity::DativeBond(*bond))
-        }
-        RelationalConstraint::DativeBondParallels { dative, parallel } => {
-            require_reference(contains, Entity::DativeBond(*dative))?;
-            require_reference(contains, Entity::Bond(*parallel))
-        }
-        RelationalConstraint::AromaticSystemAtoms { system, atoms }
-        | RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
-            require_reference(contains, Entity::AromaticSystem(*system))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::AromaticSystemContains { system, atom } => {
-            require_reference(contains, Entity::AromaticSystem(*system))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::AromaticSystemAllAtoms { system, .. }
-        | RelationalConstraint::AromaticSystemAnyAtom { system, .. } => {
-            require_reference(contains, Entity::AromaticSystem(*system))
-        }
-        RelationalConstraint::MulticenterBondAtoms { bond, atoms }
-        | RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
-            require_reference(contains, Entity::MulticenterBond(*bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::MulticenterBondContains { bond, atom } => {
-            require_reference(contains, Entity::MulticenterBond(*bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::MulticenterBondAllAtoms { bond, .. }
-        | RelationalConstraint::MulticenterBondAnyAtom { bond, .. } => {
-            require_reference(contains, Entity::MulticenterBond(*bond))
-        }
-        RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
-            require_reference(contains, Entity::NoncovalentBond(*bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::NoncovalentBondContains { bond, atom } => {
-            require_reference(contains, Entity::NoncovalentBond(*bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => {
-            require_reference(contains, Entity::NoncovalentBond(*bond))
-        }
-        RelationalConstraint::StereoAtomSite { stereo_atom, atom }
-        | RelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
-            require_reference(contains, Entity::StereoAtom(*stereo_atom))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
-            require_reference(contains, Entity::StereoAtom(*stereo_atom))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::StereoAtomAllLigands { stereo_atom, .. }
-        | RelationalConstraint::StereoAtomAnyLigand { stereo_atom, .. } => {
-            require_reference(contains, Entity::StereoAtom(*stereo_atom))
-        }
-        RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
-            require_reference(contains, Entity::Bond(*bond))
-        }
-        RelationalConstraint::StereoBondContains { stereo_bond, atom } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::StereoBondAllLigands { stereo_bond, .. }
-        | RelationalConstraint::StereoBondAnyLigand { stereo_bond, .. } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))
-        }
-    }
-}
-
-fn validate_molecule_constraint_references(
-    constraint: &MoleculeConstraint,
-    contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), Entity> {
-    match constraint {
-        MoleculeConstraint::ChargeSum { atoms, .. }
-        | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
-        | MoleculeConstraint::Connected { atoms } => {
-            require_references(contains, atoms.iter().flatten().copied().map(Entity::Atom))
-        }
-        MoleculeConstraint::BondOrderSum { bonds, .. } => {
-            require_references(contains, bonds.iter().flatten().copied().map(Entity::Bond))
-        }
-    }
-}
-
 impl Molecule {
     /// Empty molecule: zero atoms, zero bonds, zero overlays, zero constraints.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Start an empty `MoleculeEditor` for fluent / programmatic
-    /// construction. Use [`Molecule::edit`] to start from an existing
-    /// molecule.
+    /// Start an empty [`MoleculeBuilder`] for programmatic construction.
+    /// Use [`Self::edit`] to start from an existing molecule.
     pub fn builder() -> MoleculeBuilder {
         MoleculeBuilder::new()
     }
@@ -337,7 +134,7 @@ impl Molecule {
     /// including the fixed simple-relation semantics of every entity kind, but does not enforce
     /// chemistry or constraint satisfiability.
     pub fn try_from_entries(entries: MoleculeEntries) -> Result<Self, MoleculeIntegrityError> {
-        validate_entry_references(&entries)?;
+        integrity::check_entry_references(&entries)?;
         let MoleculeEntries {
             atoms,
             bonds,
@@ -367,7 +164,7 @@ impl Molecule {
             NoncovalentBonds::new(noncovalent),
             StereoAtoms::new(stereo_atoms),
             StereoBonds::new(stereo_bonds),
-            constraints,
+            Arc::new(constraints),
         )
     }
 
@@ -382,7 +179,7 @@ impl Molecule {
         noncovalent_bonds: NoncovalentBonds,
         stereo_atoms: StereoAtoms,
         stereo_bonds: StereoBonds,
-        constraints: Constraints,
+        constraints: Arc<Constraints>,
     ) -> Result<Self, MoleculeIntegrityError> {
         let molecule = Self {
             graph,
@@ -412,6 +209,36 @@ impl Molecule {
         &self.graph
     }
 
+    /// Underlying dative-bond set.
+    pub fn raw_dative_bonds(&self) -> &DativeBonds {
+        &self.dative_bonds
+    }
+
+    /// Underlying aromatic-system set.
+    pub fn raw_aromatic_systems(&self) -> &AromaticSystems {
+        &self.aromatic_systems
+    }
+
+    /// Underlying multicenter-bond set.
+    pub fn raw_multicenter_bonds(&self) -> &MulticenterBonds {
+        &self.multicenter_bonds
+    }
+
+    /// Underlying noncovalent-bond set.
+    pub fn raw_noncovalent_bonds(&self) -> &NoncovalentBonds {
+        &self.noncovalent_bonds
+    }
+
+    /// Underlying stereo-atom set.
+    pub fn raw_stereo_atoms(&self) -> &StereoAtoms {
+        &self.stereo_atoms
+    }
+
+    /// Underlying stereo-bond set.
+    pub fn raw_stereo_bonds(&self) -> &StereoBonds {
+        &self.stereo_bonds
+    }
+
     /// Complete framed equality under an entity-id remapping from `self` to `other`.
     ///
     /// Returns `false` when a component length differs from `self`'s entity count or the
@@ -422,14 +249,15 @@ impl Molecule {
     /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
     /// Equality totalization for two intrinsic contradictions does not require such a witness.
     pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
-        self.try_remap(remapping)
+        self.clone()
+            .try_remap(remapping)
             .is_some_and(|remapped| remapped.framed_eq(other))
     }
 
-    /// Neighbors of `atom`, ordered by ascending neighbor atom id.
-    pub fn neighbors(&self, atom: AtomId) -> impl ExactSizeIterator<Item = NeighborView<'_>> {
+    /// Neighbors of atom `id`, ordered by ascending neighbor atom id.
+    pub fn neighbors(&self, id: AtomId) -> impl ExactSizeIterator<Item = NeighborView<'_>> {
         self.graph
-            .neighbors(NodeId::from(atom))
+            .neighbors(NodeId::from(id))
             .iter()
             .map(move |n| NeighborView::new(AtomId::from(n.node), BondId::from(n.edge), self))
     }
@@ -464,7 +292,7 @@ impl Molecule {
     }
 
     pub fn dative_bonds(&self) -> DativeBondViews<'_> {
-        DativeBondViews::new(self, &self.dative_bonds)
+        DativeBondViews::new(self)
     }
 
     /// View of the dative bond with `id`.
@@ -478,7 +306,7 @@ impl Molecule {
     }
 
     pub fn aromatic_systems(&self) -> AromaticSystemViews<'_> {
-        AromaticSystemViews::new(self, &self.aromatic_systems)
+        AromaticSystemViews::new(self)
     }
 
     /// View of the aromatic system with `id`.
@@ -492,7 +320,7 @@ impl Molecule {
     }
 
     pub fn multicenter_bonds(&self) -> MulticenterBondViews<'_> {
-        MulticenterBondViews::new(self, &self.multicenter_bonds)
+        MulticenterBondViews::new(self)
     }
 
     /// View of the multicenter bond with `id`.
@@ -506,7 +334,7 @@ impl Molecule {
     }
 
     pub fn noncovalent_bonds(&self) -> NoncovalentBondViews<'_> {
-        NoncovalentBondViews::new(self, &self.noncovalent_bonds)
+        NoncovalentBondViews::new(self)
     }
 
     /// View of the noncovalent bond with `id`.
@@ -520,7 +348,7 @@ impl Molecule {
     }
 
     pub fn stereo_atoms(&self) -> StereoAtomViews<'_> {
-        StereoAtomViews::new(self, &self.stereo_atoms)
+        StereoAtomViews::new(self)
     }
 
     /// View of the stereo atom with `id`.
@@ -534,7 +362,7 @@ impl Molecule {
     }
 
     pub fn stereo_bonds(&self) -> StereoBondViews<'_> {
-        StereoBondViews::new(self, &self.stereo_bonds)
+        StereoBondViews::new(self)
     }
 
     /// View of the stereo bond with `id`.
@@ -566,25 +394,25 @@ impl Molecule {
                 let [a, b_end] = b.atom_ids();
                 atom_set.contains(&a) && atom_set.contains(&b_end)
             })
-            .map(|b| b.id)
+            .map(|b| b.id())
             .collect();
         let host_dative_bonds: Vec<DativeBondId> = self
             .dative_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_aromatic_systems: Vec<AromaticSystemId> = self
             .aromatic_systems()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_multicenter_bonds: Vec<MulticenterBondId> = self
             .multicenter_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_noncovalent_bonds: Vec<NoncovalentBondId> = self
             .noncovalent_bonds()
@@ -593,19 +421,19 @@ impl Molecule {
                 let [a, b] = v.atom_ids();
                 atom_set.contains(&a) && atom_set.contains(&b)
             })
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_stereo_atoms: Vec<StereoAtomId> = self
             .stereo_atoms()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_stereo_bonds: Vec<StereoBondId> = self
             .stereo_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
 
         MoleculeCorrespondence::new(
@@ -622,7 +450,7 @@ impl Molecule {
 
     /// Materialize an induced-subgraph correspondence `sub` (over `self` as host) as a standalone
     /// molecule: drop every host atom/bond absent from `sub`. Host order preserved, gaps compacted;
-    /// overlay drops cascade through the builder.
+    /// removals cascade to dependent overlays and molecule-level constraints.
     pub fn extract(&self, sub: &MoleculeCorrespondence) -> Molecule {
         self.tracked_extract(sub).0
     }
@@ -650,11 +478,16 @@ impl Molecule {
                 let [a, b_end] = b.atom_ids();
                 !kept.contains(&a) || !kept.contains(&b_end)
             })
-            .map(|b| b.id)
+            .map(|b| b.id())
             .collect();
-        let mut builder = self.edit();
-        let compaction = builder.tracked_remove(&remove_atoms, &remove_bonds);
-        (builder.build(), compaction)
+        let mut builder = self.clone().edit();
+        let compaction = builder.tracked_remove_topology(&remove_atoms, &remove_bonds);
+        (
+            builder
+                .finish()
+                .expect("extraction preserves molecule integrity"),
+            compaction,
+        )
     }
 
     /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the
@@ -721,356 +554,171 @@ impl Molecule {
     }
 
     /// Rings selected by `model` and computed using `config`.
+    ///
+    /// Each call enumerates an owned ring set while borrowing this molecule.
+    /// Extract it with [`RingViews::into_ring_set`] and reuse it through
+    /// [`RingViews::from_ring_set`] while covalent topology and ids are unchanged.
     pub fn rings(&self, model: RingModel, config: RingConfig) -> RingViews<'_> {
         RingViews::new(self, RingSet::enumerate(&self.graph, model, config))
     }
 
+    /// Borrow atom attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
     pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_> {
         let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
-        AtomViewMut { id, attributes }
+        AtomViewMut::new(id, attributes)
     }
 
-    /// Replace every atom with `f(atom)` in place (owned in, owned out — no
-    /// `&mut AtomForm` escapes, so the container controls any re-interning).
-    pub fn modify_atoms(&mut self, mut f: impl FnMut(AtomForm) -> AtomForm) {
-        for atom in Arc::make_mut(&mut self.atoms).iter_mut() {
-            *atom = f(mem::take(atom));
-        }
+    pub(crate) fn atom_view_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
+        let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
+        AtomEditorViewMut::new(id, attributes)
     }
 
+    /// Borrow bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
     pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_> {
         let [s, t] = self.graph.edge_endpoints(id.into());
         let atoms = [AtomId::from(s), AtomId::from(t)];
         let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
-        BondViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+        BondViewMut::new(id, atoms, attributes)
     }
 
-    /// Replace every bond with `f(bond)` in place.
-    pub fn modify_bonds(&mut self, mut f: impl FnMut(BondForm) -> BondForm) {
-        for bond in Arc::make_mut(&mut self.bonds).iter_mut() {
-            *bond = f(mem::take(bond));
-        }
+    pub(crate) fn bond_view_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
+        let [s, t] = self.graph.edge_endpoints(id.into());
+        let atoms = [AtomId::from(s), AtomId::from(t)];
+        let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
+        BondEditorViewMut::new(id, atoms, attributes)
     }
 
+    /// Borrow dative bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
-        let acceptor = self.dative_bonds.acceptor(id);
-        let donors = self.dative_bonds.donors(id).collect();
-        let attributes = self.dative_bonds.attributes_mut(id);
-        DativeBondViewMut {
-            id,
-            donors,
-            acceptor,
-            attributes,
-        }
+        assert!(self.dative_bonds.contains(id), "invalid dative bond id");
+        DativeBondViewMut::new(&mut self.dative_bonds, id)
     }
 
-    /// Replace every dative bond with `f(bond)` in place.
-    pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondForm) -> DativeBondForm) {
-        for dative_bond in self.dative_bonds.attributes_iter_mut() {
-            *dative_bond = f(mem::take(dative_bond));
-        }
+    pub(crate) fn dative_bond_view_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
+        assert!(self.dative_bonds.contains(id), "invalid dative bond id");
+        DativeBondEditorViewMut::new(&mut self.dative_bonds, id)
     }
 
-    pub(crate) fn aromatic_system_mut(
+    /// Borrow aromatic system attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_> {
+        assert!(
+            self.aromatic_systems.contains(id),
+            "invalid aromatic system id"
+        );
+        AromaticSystemViewMut::new(&mut self.aromatic_systems, id)
+    }
+
+    pub(crate) fn aromatic_system_view_mut(
         &mut self,
         id: AromaticSystemId,
-    ) -> AromaticSystemViewMut<'_> {
-        let atoms = self.aromatic_systems.atoms(id).collect();
-        let attributes = self.aromatic_systems.attributes_mut(id);
-        AromaticSystemViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+    ) -> AromaticSystemEditorViewMut<'_> {
+        assert!(
+            self.aromatic_systems.contains(id),
+            "invalid aromatic system id"
+        );
+        AromaticSystemEditorViewMut::new(&mut self.aromatic_systems, id)
     }
 
-    /// Replace every aromatic system with `f(system)` in place.
-    pub(crate) fn modify_aromatic_systems(
-        &mut self,
-        mut f: impl FnMut(AromaticSystemForm) -> AromaticSystemForm,
-    ) {
-        for aromatic_system in self.aromatic_systems.attributes_iter_mut() {
-            *aromatic_system = f(mem::take(aromatic_system));
-        }
+    /// Borrow multicenter bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
+        assert!(
+            self.multicenter_bonds.contains(id),
+            "invalid multicenter bond id"
+        );
+        MulticenterBondViewMut::new(&mut self.multicenter_bonds, id)
     }
 
-    /// Transactionally modify one aromatic-system form.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_aromatic_system(
-        &mut self,
-        id: AromaticSystemId,
-        f: impl FnOnce(&mut AromaticSystemForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.aromatic_systems.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::AromaticSystem(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.aromatic_systems.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every aromatic-system form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_aromatic_systems(
-        &mut self,
-        mut f: impl FnMut(&mut AromaticSystemForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for aromatic_system in candidate.aromatic_systems.attributes_iter_mut() {
-                f(aromatic_system);
-            }
-        })
-    }
-
-    pub(crate) fn multicenter_bond_mut(
+    pub(crate) fn multicenter_bond_view_mut(
         &mut self,
         id: MulticenterBondId,
-    ) -> MulticenterBondViewMut<'_> {
-        let atoms = self.multicenter_bonds.atoms(id).collect();
-        let attributes = self.multicenter_bonds.attributes_mut(id);
-        MulticenterBondViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+    ) -> MulticenterBondEditorViewMut<'_> {
+        assert!(
+            self.multicenter_bonds.contains(id),
+            "invalid multicenter bond id"
+        );
+        MulticenterBondEditorViewMut::new(&mut self.multicenter_bonds, id)
     }
 
-    /// Replace every multicenter bond with `f(bond)` in place.
-    pub(crate) fn modify_multicenter_bonds(
-        &mut self,
-        mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
-    ) {
-        for multicenter_bond in self.multicenter_bonds.attributes_iter_mut() {
-            *multicenter_bond = f(mem::take(multicenter_bond));
-        }
-    }
-
-    /// Transactionally modify one multicenter-bond form.
+    /// Borrow noncovalent bond attributes for mutation.
     ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
+    /// # Panics
     ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_multicenter_bond(
-        &mut self,
-        id: MulticenterBondId,
-        f: impl FnOnce(&mut MulticenterBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.multicenter_bonds.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::MulticenterBond(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.multicenter_bonds.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every multicenter-bond form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_multicenter_bonds(
-        &mut self,
-        mut f: impl FnMut(&mut MulticenterBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for multicenter_bond in candidate.multicenter_bonds.attributes_iter_mut() {
-                f(multicenter_bond);
-            }
-        })
-    }
-
+    /// Panics if `id` is out of range.
     pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
-        let atoms = self.noncovalent_bonds.atoms(id);
-        let attributes = self.noncovalent_bonds.attributes_mut(id);
-        NoncovalentBondViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+        assert!(
+            self.noncovalent_bonds.contains(id),
+            "invalid noncovalent bond id"
+        );
+        NoncovalentBondViewMut::new(&mut self.noncovalent_bonds, id)
     }
 
-    /// Replace every noncovalent bond with `f(bond)` in place.
-    pub fn modify_noncovalent_bonds(
+    pub(crate) fn noncovalent_bond_view_mut(
         &mut self,
-        mut f: impl FnMut(NoncovalentBondForm) -> NoncovalentBondForm,
-    ) {
-        for noncovalent_bond in self.noncovalent_bonds.attributes_iter_mut() {
-            *noncovalent_bond = f(mem::take(noncovalent_bond));
-        }
+        id: NoncovalentBondId,
+    ) -> NoncovalentBondEditorViewMut<'_> {
+        assert!(
+            self.noncovalent_bonds.contains(id),
+            "invalid noncovalent bond id"
+        );
+        NoncovalentBondEditorViewMut::new(&mut self.noncovalent_bonds, id)
     }
 
-    pub(crate) fn stereo_atom_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
-        self.stereo_atoms.attributes_mut(id)
+    /// Borrow stereo atom attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
+        assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
+        StereoAtomViewMut::new(&mut self.stereo_atoms, id)
     }
 
-    /// Replace every stereo atom with `f(stereo_atom)` in place.
-    pub(crate) fn modify_stereo_atoms(
-        &mut self,
-        mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm,
-    ) {
-        for stereo_atom in self.stereo_atoms.attributes_iter_mut() {
-            *stereo_atom = f(mem::take(stereo_atom));
-        }
+    pub(crate) fn stereo_atom_view_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
+        assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
+        StereoAtomEditorViewMut::new(&mut self.stereo_atoms, id)
     }
 
-    /// Transactionally modify one stereo-atom form.
+    /// Borrow stereo bond attributes for mutation.
     ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
+    /// # Panics
     ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_stereo_atom(
-        &mut self,
-        id: StereoAtomId,
-        f: impl FnOnce(&mut StereoAtomForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.stereo_atoms.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::StereoAtom(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.stereo_atoms.attributes_mut(id)))
+    /// Panics if `id` is out of range.
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
+        assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
+        StereoBondViewMut::new(&mut self.stereo_bonds, id)
     }
 
-    /// Transactionally modify every stereo-atom form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_stereo_atoms(
-        &mut self,
-        mut f: impl FnMut(&mut StereoAtomForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for stereo_atom in candidate.stereo_atoms.attributes_iter_mut() {
-                f(stereo_atom);
-            }
-        })
-    }
-
-    pub(crate) fn stereo_bond_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
-        self.stereo_bonds.attributes_mut(id)
-    }
-
-    /// Replace every stereo bond with `f(stereo_bond)` in place.
-    pub(crate) fn modify_stereo_bonds(
-        &mut self,
-        mut f: impl FnMut(StereoBondForm) -> StereoBondForm,
-    ) {
-        for stereo_bond in self.stereo_bonds.attributes_iter_mut() {
-            *stereo_bond = f(mem::take(stereo_bond));
-        }
-    }
-
-    /// Transactionally modify one stereo-bond form.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_stereo_bond(
-        &mut self,
-        id: StereoBondId,
-        f: impl FnOnce(&mut StereoBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.stereo_bonds.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::StereoBond(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.stereo_bonds.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every stereo-bond form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_stereo_bonds(
-        &mut self,
-        mut f: impl FnMut(&mut StereoBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for stereo_bond in candidate.stereo_bonds.attributes_iter_mut() {
-                f(stereo_bond);
-            }
-        })
+    pub(crate) fn stereo_bond_view_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
+        assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
+        StereoBondEditorViewMut::new(&mut self.stereo_bonds, id)
     }
 
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
     }
 
-    #[cfg(test)]
     pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
-        &mut self.constraints
-    }
-
-    /// Transactionally modify the molecule-level constraint tree.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// all constraint references and stereo wrapper domains remain valid.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_constraints(
-        &mut self,
-        f: impl FnOnce(&mut Constraints),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| f(&mut candidate.constraints))
-    }
-
-    fn try_modify_checked(
-        &mut self,
-        f: impl FnOnce(&mut Self),
-    ) -> Result<(), MoleculeIntegrityError> {
-        let mut candidate = self.clone();
-        f(&mut candidate);
-        candidate.check_integrity()?;
-        *self = candidate;
-        Ok(())
+        Arc::make_mut(&mut self.constraints)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1112,7 +760,7 @@ impl Molecule {
     /// `MulticenterBond` / `NoncovalentBond` / `StereoAtom` / `StereoBond`
     /// entries. The order of inserted
     /// entries in `self.constraints` is unspecified.
-    pub fn lift_constraints(&mut self) {
+    pub fn lift_constraints(mut self) -> Self {
         let atom_count = self.atoms().count();
         let bond_count = self.bonds().count();
         let dative_count = self.dative_bonds().count();
@@ -1125,37 +773,52 @@ impl Molecule {
         let mut additions: Vec<Constraint> = Vec::new();
         for i in 0..atom_count {
             let id = AtomId::from(i);
-            for c in self.atom_mut(id).attributes.constraints.take() {
+            for c in self.atom_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::Atom(id, c));
             }
         }
         for i in 0..bond_count {
             let id = BondId::from(i);
-            for c in self.bond_mut(id).attributes.constraints.take() {
+            for c in self.bond_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::Bond(id, c));
             }
         }
         for i in 0..dative_count {
             let id = DativeBondId::from(i);
-            for c in self.dative_bond_mut(id).attributes.constraints.take() {
+            for c in self.dative_bond_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::DativeBond(id, c));
             }
         }
         for i in 0..aromatic_count {
             let id = AromaticSystemId::from(i);
-            for c in self.aromatic_system_mut(id).attributes.constraints.take() {
+            for c in self
+                .aromatic_system_mut(id)
+                .attributes_mut()
+                .constraints
+                .take()
+            {
                 additions.push(Constraint::AromaticSystem(id, c));
             }
         }
         for i in 0..multicenter_count {
             let id = MulticenterBondId::from(i);
-            for c in self.multicenter_bond_mut(id).attributes.constraints.take() {
+            for c in self
+                .multicenter_bond_mut(id)
+                .attributes_mut()
+                .constraints
+                .take()
+            {
                 additions.push(Constraint::MulticenterBond(id, c));
             }
         }
         for i in 0..noncovalent_count {
             let id = NoncovalentBondId::from(i);
-            for c in self.noncovalent_bond_mut(id).attributes.constraints.take() {
+            for c in self
+                .noncovalent_bond_mut(id)
+                .attributes_mut()
+                .constraints
+                .take()
+            {
                 additions.push(Constraint::NoncovalentBond(id, c));
             }
         }
@@ -1163,10 +826,11 @@ impl Molecule {
             let id = StereoAtomId::from(i);
             let kind = self
                 .stereo_atom_mut(id)
+                .attributes_mut()
                 .configuration
                 .kind()
                 .expect("molecule stereo atom has a concrete kind");
-            for c in self.stereo_atom_mut(id).constraints.take() {
+            for c in self.stereo_atom_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
@@ -1174,189 +838,709 @@ impl Molecule {
             let id = StereoBondId::from(i);
             let kind = self
                 .stereo_bond_mut(id)
+                .attributes_mut()
                 .configuration
                 .kind()
                 .expect("molecule stereo bond has a concrete kind");
-            for c in self.stereo_bond_mut(id).constraints.take() {
+            for c in self.stereo_bond_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
-        for c in additions {
-            self.constraints.push(c);
-        }
+        self.extend_constraints(additions);
+        self
     }
 
-    /// Push every entity inline constraints from `self.constraints`
-    /// into the targeted entity's inline `constraints` store, removing it
-    /// from the molecule list. A leaf colliding with a stored entry of the
-    /// same key combines by meet; a meet to `⊥` is a contradiction and the
-    /// molecule is left unchanged. Combinator subtrees, `Relational`, and
-    /// `Molecule` entries are left in place.
-    pub fn inline_constraints(&mut self) -> Result<(), Contradiction> {
-        // Validate every collision before mutating anything.
-        let mut planned: Vec<Constraint> = Vec::with_capacity(self.constraints.iter().count());
-        for c in self.constraints.iter() {
-            let met = match c {
-                Constraint::Atom(id, inner) => {
-                    let met = match self.atom(*id).attributes.constraints.get(inner.key()) {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::Atom(*id, met)
-                }
-                Constraint::Bond(id, inner) => {
-                    let met = match self.bond(*id).attributes.constraints.get(inner.key()) {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::Bond(*id, met)
-                }
-                Constraint::DativeBond(id, inner) => {
-                    let met = match self
-                        .dative_bond(*id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                    {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::DativeBond(*id, met)
-                }
-                Constraint::AromaticSystem(id, inner) => {
-                    let met = match self
-                        .aromatic_system(*id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                    {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::AromaticSystem(*id, met)
-                }
-                Constraint::MulticenterBond(id, inner) => {
-                    let met = match self
-                        .multicenter_bond(*id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                    {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::MulticenterBond(*id, met)
-                }
-                Constraint::NoncovalentBond(id, inner) => {
-                    let met = match self
-                        .noncovalent_bond(*id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                    {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::NoncovalentBond(*id, met)
-                }
-                Constraint::StereoAtom(id, kind, inner) => {
-                    let met = match self
-                        .stereo_atom(*id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                    {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::StereoAtom(*id, *kind, met)
-                }
-                Constraint::StereoBond(id, kind, inner) => {
-                    let met = match self
-                        .stereo_bond(*id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                    {
-                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
-                        None => inner.clone(),
-                    };
-                    Constraint::StereoBond(*id, *kind, met)
-                }
-                c @ (Constraint::Relational(_)
-                | Constraint::Molecule(_)
-                | Constraint::And(_)
-                | Constraint::Or(_)
-                | Constraint::Not(_)) => c.clone(),
-            };
-            planned.push(met);
-        }
-
-        self.constraints.take();
-        for c in planned {
+    /// Push every entity constraint from `self.constraints` into the targeted
+    /// entity's inline `constraints` store, removing it from the molecule
+    /// list. A leaf colliding with a stored entry of the same key, including
+    /// one inlined earlier in the same pass, combines by meet; a meet to `⊥`
+    /// is a contradiction. Combinator subtrees, `Relational`, and `Molecule`
+    /// entries are left in place.
+    pub fn inline_constraints(mut self) -> Result<Self, Contradiction> {
+        for c in self.constraints_mut().take() {
             match c {
                 Constraint::Atom(id, inner) => {
-                    self.atom_mut(id).attributes.constraints.set(inner);
+                    let mut entity = self.atom_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 Constraint::Bond(id, inner) => {
-                    self.bond_mut(id).attributes.constraints.set(inner);
+                    let mut entity = self.bond_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 Constraint::DativeBond(id, inner) => {
-                    self.dative_bond_mut(id).attributes.constraints.set(inner);
+                    let mut entity = self.dative_bond_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 Constraint::AromaticSystem(id, inner) => {
-                    self.aromatic_system_mut(id)
-                        .attributes
-                        .constraints
-                        .set(inner);
+                    let mut entity = self.aromatic_system_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 Constraint::MulticenterBond(id, inner) => {
-                    self.multicenter_bond_mut(id)
-                        .attributes
-                        .constraints
-                        .set(inner);
+                    let mut entity = self.multicenter_bond_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 Constraint::NoncovalentBond(id, inner) => {
-                    self.noncovalent_bond_mut(id)
-                        .attributes
-                        .constraints
-                        .set(inner);
+                    let mut entity = self.noncovalent_bond_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {
-                    self.stereo_atom_mut(id).constraints.set(inner);
+                    let mut entity = self.stereo_atom_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 Constraint::StereoBond(id, _kind, inner) => {
-                    self.stereo_bond_mut(id).constraints.set(inner);
+                    let mut entity = self.stereo_bond_mut(id);
+                    let store = &mut entity.attributes_mut().constraints;
+                    let met = match store.get(inner.key()) {
+                        Some(existing) => existing.meet(&inner).ok_or(Contradiction)?,
+                        None => inner,
+                    };
+                    store.set(met);
                 }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)
                 | Constraint::And(_)
                 | Constraint::Or(_)
-                | Constraint::Not(_)) => self.constraints.push(c),
+                | Constraint::Not(_)) => self.constraints_mut().push(c),
             }
         }
-        Ok(())
+        Ok(self)
     }
 
-    pub fn edit(&self) -> MoleculeEditor {
-        MoleculeEditor::from_parts(
-            self.graph.clone(),
-            Arc::clone(&self.atoms),
-            Arc::clone(&self.bonds),
-            self.dative_bonds.clone(),
-            self.aromatic_systems.clone(),
-            self.multicenter_bonds.clone(),
-            self.noncovalent_bonds.clone(),
-            self.stereo_atoms.clone(),
-            self.stereo_bonds.clone(),
-            self.constraints.clone(),
+    pub(crate) fn add_atom(&mut self, attributes: AtomForm) -> AtomId {
+        let id = self.graph.add_node();
+        Arc::make_mut(&mut self.atoms).push(attributes);
+        AtomId::from(id)
+    }
+
+    pub(crate) fn add_atoms(&mut self, atoms: Vec<AtomForm>) -> IdRange<AtomId> {
+        self.add_topology(atoms, Vec::new()).0
+    }
+
+    pub(crate) fn add_bond(
+        &mut self,
+        first: AtomId,
+        second: AtomId,
+        attributes: BondForm,
+    ) -> BondId {
+        let id = self.graph.add_edge(first.into(), second.into());
+        Arc::make_mut(&mut self.bonds).push(attributes);
+        BondId::from(id)
+    }
+
+    pub(crate) fn add_bonds(&mut self, bonds: Vec<([AtomId; 2], BondForm)>) -> IdRange<BondId> {
+        self.add_topology(Vec::new(), bonds).1
+    }
+
+    pub(crate) fn add_topology(
+        &mut self,
+        atoms: Vec<AtomForm>,
+        bonds: Vec<([AtomId; 2], BondForm)>,
+    ) -> (IdRange<AtomId>, IdRange<BondId>) {
+        let edges: Vec<_> = bonds
+            .iter()
+            .map(|(atoms, _)| atoms.map(NodeId::from))
+            .collect();
+        let atom_start = self.atoms.len();
+        let bond_start = self.bonds.len();
+        self.graph.extend(atoms.len(), &edges);
+        if !atoms.is_empty() {
+            Arc::make_mut(&mut self.atoms).extend(atoms);
+        }
+        if !bonds.is_empty() {
+            Arc::make_mut(&mut self.bonds)
+                .extend(bonds.into_iter().map(|(_, attributes)| attributes));
+        }
+        (
+            IdRange::new(atom_start, self.atoms.len()),
+            IdRange::new(bond_start, self.bonds.len()),
         )
     }
 
-    /// Apply a checked edit batch to an immutable molecule, returning the modified molecule while
-    /// leaving `self` unchanged.
+    pub(crate) fn add_dative_bond(
+        &mut self,
+        donors: &[AtomId],
+        acceptor: AtomId,
+        attributes: DativeBondForm,
+    ) -> DativeBondId {
+        self.dative_bonds.add(donors, acceptor, attributes)
+    }
+
+    pub(crate) fn add_dative_bonds(
+        &mut self,
+        entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
+    ) -> IdRange<DativeBondId> {
+        self.dative_bonds.extend(entries)
+    }
+
+    pub(crate) fn add_aromatic_system(
+        &mut self,
+        atoms: &[AtomId],
+        attributes: AromaticSystemForm,
+    ) -> AromaticSystemId {
+        self.aromatic_systems.add(atoms, attributes)
+    }
+
+    pub(crate) fn add_aromatic_systems(
+        &mut self,
+        entries: Vec<(&[AtomId], AromaticSystemForm)>,
+    ) -> IdRange<AromaticSystemId> {
+        self.aromatic_systems.extend(entries)
+    }
+
+    pub(crate) fn add_multicenter_bond(
+        &mut self,
+        atoms: &[AtomId],
+        attributes: MulticenterBondForm,
+    ) -> MulticenterBondId {
+        self.multicenter_bonds.add(atoms, attributes)
+    }
+
+    pub(crate) fn add_multicenter_bonds(
+        &mut self,
+        entries: Vec<(&[AtomId], MulticenterBondForm)>,
+    ) -> IdRange<MulticenterBondId> {
+        self.multicenter_bonds.extend(entries)
+    }
+
+    pub(crate) fn add_noncovalent_bond(
+        &mut self,
+        atoms: [AtomId; 2],
+        attributes: NoncovalentBondForm,
+    ) -> NoncovalentBondId {
+        self.noncovalent_bonds.add(atoms, attributes)
+    }
+
+    pub(crate) fn add_noncovalent_bonds(
+        &mut self,
+        entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
+    ) -> IdRange<NoncovalentBondId> {
+        self.noncovalent_bonds.extend(entries)
+    }
+
+    pub(crate) fn add_stereo_atom(
+        &mut self,
+        site: AtomId,
+        ligands: &[StereoLigand],
+        attributes: StereoAtomForm,
+    ) -> StereoAtomId {
+        self.stereo_atoms.add(site, ligands, attributes)
+    }
+
+    pub(crate) fn add_stereo_atoms(
+        &mut self,
+        entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
+    ) -> IdRange<StereoAtomId> {
+        self.stereo_atoms.extend(entries)
+    }
+
+    pub(crate) fn add_stereo_bond(
+        &mut self,
+        site: BondId,
+        ligands: &[StereoLigand],
+        attributes: StereoBondForm,
+    ) -> StereoBondId {
+        self.stereo_bonds.add(site, ligands, attributes)
+    }
+
+    pub(crate) fn add_stereo_bonds(
+        &mut self,
+        entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
+    ) -> IdRange<StereoBondId> {
+        self.stereo_bonds.extend(entries)
+    }
+
+    /// Remove atoms, requested bonds, and incident bonds, compacting their attributes.
+    /// Overlays and constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an atom or bond id is outside the current topology.
+    pub(crate) fn remove_topology(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
+        self.tracked_remove_topology(atoms, bonds);
+    }
+
+    /// Remove topology and return its source-to-result compaction.
+    /// Overlays and constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an atom or bond id is outside the current topology.
+    pub(crate) fn tracked_remove_topology(
+        &mut self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> GraphCompaction {
+        let nodes: Vec<_> = atoms.iter().copied().map(NodeId::from).collect();
+        let edges: Vec<_> = bonds.iter().copied().map(EdgeId::from).collect();
+        let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
+        self.atoms = Arc::new(compaction.nodes().compact_vec(&self.atoms));
+        self.bonds = Arc::new(compaction.edges().compact_vec(&self.bonds));
+        compaction
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
+        self.dative_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_dative_bonds(
+        &mut self,
+        ids: &[DativeBondId],
+    ) -> Compaction<DativeBondId> {
+        self.dative_bonds.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
+        self.aromatic_systems.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_aromatic_systems(
+        &mut self,
+        ids: &[AromaticSystemId],
+    ) -> Compaction<AromaticSystemId> {
+        self.aromatic_systems.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
+        self.multicenter_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_multicenter_bonds(
+        &mut self,
+        ids: &[MulticenterBondId],
+    ) -> Compaction<MulticenterBondId> {
+        self.multicenter_bonds.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
+        self.noncovalent_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_noncovalent_bonds(
+        &mut self,
+        ids: &[NoncovalentBondId],
+    ) -> Compaction<NoncovalentBondId> {
+        self.noncovalent_bonds.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
+        self.stereo_atoms.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_stereo_atoms(
+        &mut self,
+        ids: &[StereoAtomId],
+    ) -> Compaction<StereoAtomId> {
+        self.stereo_atoms.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
+        self.stereo_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_stereo_bonds(
+        &mut self,
+        ids: &[StereoBondId],
+    ) -> Compaction<StereoBondId> {
+        self.stereo_bonds.tracked_remove(ids)
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn compact_dative_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<DativeBondId> {
+        let (entries, compaction) = self.dative_bonds.compact(topology);
+        self.dative_bonds = entries;
+        compaction
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn compact_aromatic_systems(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<AromaticSystemId> {
+        let (entries, compaction) = self.aromatic_systems.compact(topology);
+        self.aromatic_systems = entries;
+        compaction
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn compact_multicenter_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<MulticenterBondId> {
+        let (entries, compaction) = self.multicenter_bonds.compact(topology);
+        self.multicenter_bonds = entries;
+        compaction
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn compact_noncovalent_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<NoncovalentBondId> {
+        let (entries, compaction) = self.noncovalent_bonds.compact(topology);
+        self.noncovalent_bonds = entries;
+        compaction
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn compact_stereo_atoms(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<StereoAtomId> {
+        let (entries, compaction) = self.stereo_atoms.compact(topology);
+        self.stereo_atoms = entries;
+        compaction
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn compact_stereo_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<StereoBondId> {
+        let (entries, compaction) = self.stereo_bonds.compact(topology);
+        self.stereo_bonds = entries;
+        compaction
+    }
+
+    pub(crate) fn push_constraint(&mut self, constraint: Constraint) {
+        self.constraints_mut().push(constraint);
+    }
+
+    pub(crate) fn extend_constraints(&mut self, constraints: Vec<Constraint>) {
+        self.constraints_mut().extend(constraints);
+    }
+
+    /// Remove a constraint at its stored position.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the position is outside the current constraints.
+    pub(crate) fn remove_constraint_at(&mut self, position: usize) -> Constraint {
+        self.constraints_mut().remove_at(position)
+    }
+
+    pub(crate) fn compact_constraints(&mut self, compaction: &MoleculeCompaction) {
+        let constraints = self.constraints_mut();
+        *constraints = mem::take(constraints).compact(compaction);
+    }
+
+    pub(crate) fn tracked_compact_constraints(
+        &mut self,
+        compaction: &MoleculeCompaction,
+    ) -> CascadedConstraints {
+        let constraints = self.constraints_mut();
+        let (compacted, update) = mem::take(constraints).tracked_compact(compaction);
+        *constraints = compacted;
+        update
+    }
+
+    /// Restore graph topology and atom/bond attributes from matching removal data.
+    ///
+    /// Surviving attributes retain their current values. Overlays and constraints are unchanged.
+    /// Manipulated history does not panic; its resulting state is unspecified.
+    pub(crate) fn restore_topology(
+        &mut self,
+        compaction: &GraphCompaction,
+        mut atoms: Vec<RemovedAtom>,
+        mut bonds: Vec<RemovedBond>,
+    ) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        if self.atoms.len() != compaction.nodes().result_count()
+            || self.bonds.len() != compaction.edges().result_count()
+        {
+            return;
+        }
+        let endpoints: Vec<_> = bonds
+            .iter()
+            .map(|removed| {
+                (
+                    EdgeId::from(removed.id),
+                    removed.endpoints.map(NodeId::from),
+                )
+            })
+            .collect();
+        self.graph.restore(compaction, &endpoints);
+
+        if !compaction.nodes().removed().is_empty() {
+            atoms.sort_unstable_by_key(|entry| entry.id);
+            let storage = Arc::make_mut(&mut self.atoms);
+            let mut attributes = Vec::with_capacity(storage.len() + atoms.len());
+            let mut survivors = mem::take(storage).into_iter();
+            let mut removed = atoms.into_iter().peekable();
+            for index in 0..compaction.nodes().source_count() {
+                let Some(atom) = removed
+                    .next_if(|entry| entry.id.index() == index)
+                    .map(|entry| entry.attributes)
+                    .or_else(|| survivors.next())
+                else {
+                    break;
+                };
+                attributes.push(atom);
+            }
+            *storage = attributes;
+        }
+
+        if !compaction.edges().removed().is_empty() {
+            bonds.sort_unstable_by_key(|entry| entry.id);
+            let storage = Arc::make_mut(&mut self.bonds);
+            let mut attributes = Vec::with_capacity(storage.len() + bonds.len());
+            let mut survivors = mem::take(storage).into_iter();
+            let mut removed = bonds.into_iter().peekable();
+            for index in 0..compaction.edges().source_count() {
+                let Some(bond) = removed
+                    .next_if(|entry| entry.id.index() == index)
+                    .map(|entry| entry.attributes)
+                    .or_else(|| survivors.next())
+                else {
+                    break;
+                };
+                attributes.push(bond);
+            }
+            *storage = attributes;
+        }
+    }
+
+    /// Reinsert saved dative bonds at their original ids.
+    pub(crate) fn restore_dative_bonds(
+        &mut self,
+        rows: &Compaction<DativeBondId>,
+        removed: Vec<(DativeBondId, Vec<AtomId>, AtomId, DativeBondForm)>,
+    ) {
+        self.dative_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving dative bonds.
+    pub(crate) fn restore_dative_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.dative_bonds.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved aromatic systems at their original ids.
+    pub(crate) fn restore_aromatic_systems(
+        &mut self,
+        rows: &Compaction<AromaticSystemId>,
+        removed: Vec<(AromaticSystemId, Vec<AtomId>, AromaticSystemForm)>,
+    ) {
+        self.aromatic_systems.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving aromatic systems.
+    pub(crate) fn restore_aromatic_system_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.aromatic_systems.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved multicenter bonds at their original ids.
+    pub(crate) fn restore_multicenter_bonds(
+        &mut self,
+        rows: &Compaction<MulticenterBondId>,
+        removed: Vec<(MulticenterBondId, Vec<AtomId>, MulticenterBondForm)>,
+    ) {
+        self.multicenter_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving multicenter bonds.
+    pub(crate) fn restore_multicenter_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.multicenter_bonds.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved noncovalent bonds at their original ids.
+    pub(crate) fn restore_noncovalent_bonds(
+        &mut self,
+        rows: &Compaction<NoncovalentBondId>,
+        removed: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondForm)>,
+    ) {
+        self.noncovalent_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving noncovalent bonds.
+    pub(crate) fn restore_noncovalent_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.noncovalent_bonds.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved stereo atoms at their original ids.
+    pub(crate) fn restore_stereo_atoms(
+        &mut self,
+        rows: &Compaction<StereoAtomId>,
+        removed: Vec<(StereoAtomId, AtomId, Vec<StereoLigand>, StereoAtomForm)>,
+    ) {
+        self.stereo_atoms.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving stereo atoms.
+    pub(crate) fn restore_stereo_atom_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_atoms.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved stereo bonds at their original ids.
+    pub(crate) fn restore_stereo_bonds(
+        &mut self,
+        rows: &Compaction<StereoBondId>,
+        removed: Vec<(StereoBondId, BondId, Vec<StereoLigand>, StereoBondForm)>,
+    ) {
+        self.stereo_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving stereo bonds.
+    pub(crate) fn restore_stereo_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_bonds.restore_topology_ids(topology);
+    }
+
+    /// Restore molecule constraints from their saved positions and values.
+    pub(crate) fn restore_constraints(&mut self, changes: &CascadedConstraints) {
+        self.constraints_mut().restore(changes);
+    }
+
+    /// Consume the molecule and move its storage into an editor.
+    ///
+    /// Direct changes and edit batches may be interleaved. Use MoleculeEditor::probe
+    /// for checked read access and MoleculeEditor::finish to publish the result.
+    /// Editing has no rollback guarantee; clone explicitly to retain an independent input.
+    pub fn edit(self) -> MoleculeEditor {
+        MoleculeEditor::from_parts(
+            self.graph,
+            self.atoms,
+            self.bonds,
+            self.dative_bonds,
+            self.aromatic_systems,
+            self.multicenter_bonds,
+            self.noncovalent_bonds,
+            self.stereo_atoms,
+            self.stereo_bonds,
+            self.constraints,
+        )
+    }
+
+    /// Edit a working copy and install it after successful callback return and publication.
+    ///
+    /// Clones the receiver once and lends its editor to the callback without recording undo.
+    /// After the callback returns Ok, checks molecule integrity and installs the result before
+    /// returning the callback's value. The callback does not call MoleculeEditor::finish.
+    ///
+    /// # Errors
+    ///
+    /// Returns callback errors unchanged. Converts publication failure through
+    /// MoleculeApplyError::Integrity and E.
+    ///
+    /// # Semantic properties
+    ///
+    /// Error or callback unwinding preserves the receiver under structural equality (`==`).
+    /// Success establishes the same integrity contract as construction. Editor application
+    /// errors retain their completed prefix without aborting the scope: the callback may catch
+    /// an error, repair the working state, and return Ok for publication.
+    pub fn edit_into<T, E>(
+        &mut self,
+        f: impl FnOnce(&mut MoleculeEditor) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<MoleculeApplyError>,
+    {
+        let mut editor = self.clone().edit();
+        let value = f(&mut editor)?;
+        *self = editor.finish().map_err(MoleculeApplyError::from)?;
+        Ok(value)
+    }
+
+    /// Consume the molecule, apply an edit batch, and publish the checked result.
     ///
     /// # Errors
     ///
@@ -1366,28 +1550,48 @@ impl Molecule {
     ///
     /// # Semantic properties
     ///
-    /// On success, the returned molecule satisfies all molecule integrity requirements. On either
-    /// failure, `self` remains unchanged and no partially modified molecule is returned.
-    pub fn apply(&self, edits: Edits) -> Result<Molecule, MoleculeApplyError> {
-        let editor = self.edit().apply(edits)?;
-        Ok(editor.try_build()?)
+    /// Success establishes the same integrity contract as construction. Failure drops the input
+    /// and any applied changes. No molecule copy or undo journal is created for recovery.
+    pub fn apply(self, edits: Edits) -> Result<Self, MoleculeApplyError> {
+        let mut editor = self.edit();
+        editor.apply(edits)?;
+        Ok(editor.finish()?)
+    }
+
+    /// Apply a batch to a working copy and install the checked result in this molecule.
+    ///
+    /// Uses Self::edit_into with one receiver clone and no undo journal.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same transaction or integrity error as Self::apply. The batch is consumed
+    /// on either outcome.
+    ///
+    /// # Semantic properties
+    ///
+    /// Success installs the same molecule as consuming Self::apply on an equal input.
+    /// Failure preserves the receiver under structural equality (`==`).
+    pub fn apply_into(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
+        self.edit_into(|editor| editor.apply(edits))
     }
 
     /// Apply a batch and return the resulting molecule with its source-to-result correspondence.
     ///
     /// # Errors
     ///
-    /// Returns the same transaction or integrity error as [`Self::apply`]. The source is unchanged.
+    /// Returns the same transaction or integrity error as Self::apply, consuming the input
+    /// on failure.
     ///
     /// # Semantic properties
     ///
     /// Discarding the correspondence gives the same molecule as the plain operation.
     pub fn tracked_apply(
-        &self,
+        self,
         edits: Edits,
-    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeApplyError> {
-        let editor = self.edit().apply(edits)?;
-        Ok(editor.try_tracked_build()?)
+    ) -> Result<(Self, MoleculeCorrespondence), MoleculeApplyError> {
+        let mut editor = self.edit();
+        let correspondence = editor.tracked_apply(edits)?;
+        Ok((editor.finish()?, correspondence))
     }
 
     /// Combine molecules by disjoint concatenation. Input order determines each entity kind's
@@ -1441,24 +1645,27 @@ impl Molecule {
             let molecule_stereo_bond_count = molecule.stereo_bonds().count();
             let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-            entries
-                .atoms
-                .extend(molecule.atoms().iter().map(|atom| atom.attributes.clone()));
+            entries.atoms.extend(
+                molecule
+                    .atoms()
+                    .iter()
+                    .map(|atom| atom.attributes().clone()),
+            );
             entries.bonds.extend(molecule.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
                 (
                     shift_atom(first),
                     shift_atom(second),
-                    bond.attributes.clone(),
+                    bond.attributes().clone(),
                 )
             }));
             entries
                 .dative
                 .extend(molecule.dative_bonds().iter().map(|bond| {
                     (
-                        bond.donors().map(|donor| shift_atom(donor.id)).collect(),
+                        bond.donors().map(|donor| shift_atom(donor.id())).collect(),
                         shift_atom(bond.acceptor_id()),
-                        bond.attributes.clone(),
+                        bond.attributes().clone(),
                     )
                 }));
             entries
@@ -1466,7 +1673,7 @@ impl Molecule {
                 .extend(molecule.aromatic_systems().iter().map(|system| {
                     (
                         system.atom_ids().map(shift_atom).collect(),
-                        system.attributes.clone(),
+                        system.attributes().clone(),
                     )
                 }));
             entries
@@ -1474,7 +1681,7 @@ impl Molecule {
                 .extend(molecule.multicenter_bonds().iter().map(|bond| {
                     (
                         bond.atom_ids().map(shift_atom).collect(),
-                        bond.attributes.clone(),
+                        bond.attributes().clone(),
                     )
                 }));
             entries
@@ -1483,7 +1690,7 @@ impl Molecule {
                     let [first, second] = bond.atom_ids();
                     (
                         [shift_atom(first), shift_atom(second)],
-                        bond.attributes.clone(),
+                        bond.attributes().clone(),
                     )
                 }));
             for id in molecule.stereo_atoms.ids() {
@@ -1562,8 +1769,9 @@ impl Molecule {
 
     /// Combine `self` and `other` by disjoint concatenation. For every entity kind,
     /// `self` keeps its ids as the prefix and `other` follows in its original order.
-    pub fn combine(&self, other: &Molecule) -> Molecule {
-        Self::combine_all([self, other])
+    pub fn combine(mut self, other: &Molecule) -> Molecule {
+        self.combine_from(other);
+        self
     }
 
     /// Append `other` by disjoint concatenation. For every entity kind, existing ids remain
@@ -1579,68 +1787,82 @@ impl Molecule {
         let stereo_bond_offset = self.stereo_bonds().count();
         let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-        let Molecule {
-            graph,
-            atoms,
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-            constraints,
-        } = mem::take(self);
-        let mut editor = MoleculeEditor::from_parts(
-            graph,
-            atoms,
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-            constraints,
+        self.add_topology(
+            other
+                .atoms()
+                .iter()
+                .map(|atom| atom.attributes().clone())
+                .collect(),
+            other
+                .bonds()
+                .iter()
+                .map(|bond| {
+                    let [first, second] = bond.atom_ids();
+                    (
+                        [shift_atom(first), shift_atom(second)],
+                        bond.attributes().clone(),
+                    )
+                })
+                .collect(),
         );
-
-        for atom in other.atoms().iter() {
-            editor.add_atom(atom.attributes.clone());
-        }
-        for bond in other.bonds().iter() {
-            let [first, second] = bond.atom_ids();
-            editor.add_bond(
-                shift_atom(first),
-                shift_atom(second),
-                bond.attributes.clone(),
-            );
-        }
-        for bond in other.dative_bonds().iter() {
-            editor.add_dative_bond(
-                bond.donors().map(|donor| shift_atom(donor.id)).collect(),
-                shift_atom(bond.acceptor_id()),
-                bond.attributes.clone(),
-            );
-        }
-        for system in other.aromatic_systems().iter() {
-            editor.add_aromatic_system(
-                system.atom_ids().map(shift_atom).collect(),
-                system.attributes.clone(),
-            );
-        }
-        for bond in other.multicenter_bonds().iter() {
-            editor.add_multicenter_bond(
-                bond.atom_ids().map(shift_atom).collect(),
-                bond.attributes.clone(),
-            );
-        }
-        for bond in other.noncovalent_bonds().iter() {
-            let [first, second] = bond.atom_ids();
-            editor.add_noncovalent_bond(
-                [shift_atom(first), shift_atom(second)],
-                bond.attributes.clone(),
-            );
-        }
+        let donors: Vec<Vec<AtomId>> = other
+            .dative_bonds()
+            .iter()
+            .map(|bond| bond.donors().map(|donor| shift_atom(donor.id())).collect())
+            .collect();
+        self.add_dative_bonds(
+            other
+                .dative_bonds()
+                .iter()
+                .zip(&donors)
+                .map(|(bond, donors)| {
+                    (
+                        donors.as_slice(),
+                        shift_atom(bond.acceptor_id()),
+                        bond.attributes().clone(),
+                    )
+                })
+                .collect(),
+        );
+        let aromatic_atoms: Vec<Vec<AtomId>> = other
+            .aromatic_systems()
+            .iter()
+            .map(|system| system.atom_ids().map(shift_atom).collect())
+            .collect();
+        self.add_aromatic_systems(
+            other
+                .aromatic_systems()
+                .iter()
+                .zip(&aromatic_atoms)
+                .map(|(system, atoms)| (atoms.as_slice(), system.attributes().clone()))
+                .collect(),
+        );
+        let multicenter_atoms: Vec<Vec<AtomId>> = other
+            .multicenter_bonds()
+            .iter()
+            .map(|bond| bond.atom_ids().map(shift_atom).collect())
+            .collect();
+        self.add_multicenter_bonds(
+            other
+                .multicenter_bonds()
+                .iter()
+                .zip(&multicenter_atoms)
+                .map(|(bond, atoms)| (atoms.as_slice(), bond.attributes().clone()))
+                .collect(),
+        );
+        self.add_noncovalent_bonds(
+            other
+                .noncovalent_bonds()
+                .iter()
+                .map(|bond| {
+                    let [first, second] = bond.atom_ids();
+                    (
+                        [shift_atom(first), shift_atom(second)],
+                        bond.attributes().clone(),
+                    )
+                })
+                .collect(),
+        );
 
         let participant_correspondence = GraphCorrespondence::new(
             offset_correspondence(
@@ -1654,26 +1876,58 @@ impl Molecule {
                 bond_offset + other.bonds().count(),
             ),
         );
-        for id in other.stereo_atoms.ids() {
-            let site = shift_atom(other.stereo_atoms.site(id));
-            let ligands = other
+        let stereo_atom_ligands: Vec<Vec<StereoLigand>> = other
+            .stereo_atoms
+            .ids()
+            .map(|id| {
+                other
+                    .stereo_atoms
+                    .ligands(id)
+                    .iter()
+                    .map(|ligand| ligand.map(&participant_correspondence))
+                    .collect()
+            })
+            .collect();
+        self.add_stereo_atoms(
+            other
                 .stereo_atoms
-                .ligands(id)
-                .iter()
-                .map(|ligand| ligand.map(&participant_correspondence))
-                .collect();
-            editor.add_stereo_atom(site, ligands, other.stereo_atoms.attributes(id).clone());
-        }
-        for id in other.stereo_bonds.ids() {
-            let site = BondId(other.stereo_bonds.site(id).0 + bond_offset as u32);
-            let ligands = other
+                .ids()
+                .zip(&stereo_atom_ligands)
+                .map(|(id, ligands)| {
+                    (
+                        shift_atom(other.stereo_atoms.site(id)),
+                        ligands.as_slice(),
+                        other.stereo_atoms.attributes(id).clone(),
+                    )
+                })
+                .collect(),
+        );
+        let stereo_bond_ligands: Vec<Vec<StereoLigand>> = other
+            .stereo_bonds
+            .ids()
+            .map(|id| {
+                other
+                    .stereo_bonds
+                    .ligands(id)
+                    .iter()
+                    .map(|ligand| ligand.map(&participant_correspondence))
+                    .collect()
+            })
+            .collect();
+        self.add_stereo_bonds(
+            other
                 .stereo_bonds
-                .ligands(id)
-                .iter()
-                .map(|ligand| ligand.map(&participant_correspondence))
-                .collect();
-            editor.add_stereo_bond(site, ligands, other.stereo_bonds.attributes(id).clone());
-        }
+                .ids()
+                .zip(&stereo_bond_ligands)
+                .map(|(id, ligands)| {
+                    (
+                        BondId(other.stereo_bonds.site(id).0 + bond_offset as u32),
+                        ligands.as_slice(),
+                        other.stereo_bonds.attributes(id).clone(),
+                    )
+                })
+                .collect(),
+        );
 
         let correspondence = MoleculeCorrespondence::new(
             offset_correspondence(
@@ -1717,12 +1971,15 @@ impl Molecule {
                 stereo_bond_offset + other.stereo_bonds().count(),
             ),
         );
-        for constraint in other.constraints.iter() {
-            editor
-                .constraints_mut()
-                .push(constraint.clone().map(&correspondence));
-        }
-        *self = editor.build();
+        self.extend_constraints(
+            other
+                .constraints
+                .iter()
+                .map(|constraint| constraint.clone().map(&correspondence))
+                .collect(),
+        );
+        self.check_integrity()
+            .expect("disjoint combination preserves molecule integrity");
     }
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
@@ -1777,46 +2034,55 @@ impl Molecule {
             union_participants(&mut uf, self.constraint_atoms(constraint));
         }
 
-        let mut atom_component = vec![0usize; atom_count];
+        // Each atom's component and its id within that component.
         let mut component_atoms: Vec<Vec<AtomId>> = Vec::new();
         let mut index_of_root: HashMap<usize, usize> = HashMap::new();
-        for (idx, assigned_component) in atom_component.iter_mut().enumerate() {
-            let root = uf.find(idx);
-            let component = *index_of_root.entry(root).or_insert_with(|| {
-                component_atoms.push(Vec::new());
-                component_atoms.len() - 1
-            });
-            *assigned_component = component;
-            component_atoms[component].push(AtomId(idx as u32));
-        }
-        let component_of = |a: AtomId| atom_component[a.index()];
+        let atom_placements: Vec<(usize, AtomId)> = (0..atom_count)
+            .map(|idx| {
+                let root = uf.find(idx);
+                let component = *index_of_root.entry(root).or_insert_with(|| {
+                    component_atoms.push(Vec::new());
+                    component_atoms.len() - 1
+                });
+                let component_atom = AtomId::from(component_atoms[component].len());
+                component_atoms[component].push(AtomId(idx as u32));
+                (component, component_atom)
+            })
+            .collect();
+        let component_of = |a: AtomId| atom_placements[a.index()].0;
+        let map_atom = |a: AtomId| atom_placements[a.index()].1;
 
         component_atoms
             .iter()
             .enumerate()
             .map(|(component, atoms)| {
                 let mut editor = Molecule::new().edit();
-                let mut atom_pairs = Vec::new();
-                for atom in atoms {
-                    let added = editor.add_atom(self.atom(*atom).attributes.clone());
-                    atom_pairs.push((*atom, added));
-                }
+                let bonds: Vec<_> = self
+                    .bonds()
+                    .iter()
+                    .filter(|bond| component_of(bond.atom_ids()[0]) == component)
+                    .collect();
+                let (added_atoms, added_bonds) = editor.add_topology(
+                    atoms
+                        .iter()
+                        .map(|atom| self.atom(*atom).attributes().clone())
+                        .collect(),
+                    bonds
+                        .iter()
+                        .map(|bond| {
+                            let [a, b] = bond.atom_ids();
+                            ([map_atom(a), map_atom(b)], bond.attributes().clone())
+                        })
+                        .collect(),
+                );
+                let atom_pairs = atoms.iter().copied().zip(added_atoms).collect();
                 let atom_correspondence = Correspondence::new(atom_pairs, atom_count, atoms.len())
                     .expect("split assigns each selected source atom a component id");
-                let map_atom = |id: AtomId| {
-                    atom_correspondence
-                        .right_of(id)
-                        .expect("the component contains every routed atom reference")
-                };
-                let mut bond_pairs = Vec::new();
-                for bond in self.bonds().iter() {
-                    let [a, b] = bond.atom_ids();
-                    if component_of(a) == component {
-                        let new_bond =
-                            editor.add_bond(map_atom(a), map_atom(b), bond.attributes.clone());
-                        bond_pairs.push((bond.id, new_bond));
-                    }
-                }
+                let bond_pairs: Vec<_> = bonds
+                    .iter()
+                    .map(|bond| bond.id())
+                    .zip(added_bonds)
+                    .collect();
                 let component_bond_count = bond_pairs.len();
                 let bond_correspondence =
                     Correspondence::new(bond_pairs, self.bonds().count(), component_bond_count)
@@ -1843,97 +2109,177 @@ impl Molecule {
                     )
                     .expect("component edge pairs are injective"),
                 );
-                let mut dative_pairs = Vec::new();
-                for dative in self.dative_bonds().iter() {
-                    if component_of(dative.acceptor_id()) == component {
-                        let donors = dative.donors().map(|d| map_atom(d.id)).collect();
-                        let added = editor.add_dative_bond(
-                            donors,
-                            map_atom(dative.acceptor_id()),
-                            dative.attributes.clone(),
-                        );
-                        dative_pairs.push((dative.id, added));
-                    }
-                }
-                let mut aromatic_pairs = Vec::new();
-                for system in self.aromatic_systems().iter() {
-                    let members: Vec<AtomId> = system.atom_ids().collect();
-                    if members
-                        .first()
-                        .is_some_and(|a| component_of(*a) == component)
-                    {
-                        let added = editor.add_aromatic_system(
-                            members.iter().map(|a| map_atom(*a)).collect(),
-                            system.attributes.clone(),
-                        );
-                        aromatic_pairs.push((system.id, added));
-                    }
-                }
-                let mut multicenter_pairs = Vec::new();
-                for bond in self.multicenter_bonds().iter() {
-                    let members: Vec<AtomId> = bond.atom_ids().collect();
-                    if members
-                        .first()
-                        .is_some_and(|a| component_of(*a) == component)
-                    {
-                        let added = editor.add_multicenter_bond(
-                            members.iter().map(|a| map_atom(*a)).collect(),
-                            bond.attributes.clone(),
-                        );
-                        multicenter_pairs.push((bond.id, added));
-                    }
-                }
-                let mut noncovalent_pairs = Vec::new();
-                for bond in self.noncovalent_bonds().iter() {
-                    let [a, b] = bond.atom_ids();
-                    if component_of(a) == component {
-                        let added = editor.add_noncovalent_bond(
-                            [map_atom(a), map_atom(b)],
-                            bond.attributes.clone(),
-                        );
-                        noncovalent_pairs.push((bond.id, added));
-                    }
-                }
-                let mut stereo_atom_pairs = Vec::new();
-                for rid in self.stereo_atoms.ids() {
-                    let site = self.stereo_atoms.site(rid);
-                    if component_of(site) == component {
-                        let ligands: Vec<StereoLigand> = self
-                            .stereo_atoms
+                let datives: Vec<_> = self
+                    .dative_bonds()
+                    .iter()
+                    .filter(|dative| component_of(dative.acceptor_id()) == component)
+                    .collect();
+                let dative_donors: Vec<Vec<AtomId>> = datives
+                    .iter()
+                    .map(|dative| dative.donors().map(|d| map_atom(d.id())).collect())
+                    .collect();
+                let added_datives = editor.add_dative_bonds(
+                    datives
+                        .iter()
+                        .zip(&dative_donors)
+                        .map(|(dative, donors)| {
+                            (
+                                donors.as_slice(),
+                                map_atom(dative.acceptor_id()),
+                                dative.attributes().clone(),
+                            )
+                        })
+                        .collect(),
+                );
+                let dative_pairs = datives
+                    .iter()
+                    .map(|dative| dative.id())
+                    .zip(added_datives)
+                    .collect();
+                let systems: Vec<_> = self
+                    .aromatic_systems()
+                    .iter()
+                    .filter(|system| {
+                        system
+                            .atom_ids()
+                            .next()
+                            .is_some_and(|a| component_of(a) == component)
+                    })
+                    .collect();
+                let system_atoms: Vec<Vec<AtomId>> = systems
+                    .iter()
+                    .map(|system| system.atom_ids().map(map_atom).collect())
+                    .collect();
+                let added_systems = editor.add_aromatic_systems(
+                    systems
+                        .iter()
+                        .zip(&system_atoms)
+                        .map(|(system, members)| (members.as_slice(), system.attributes().clone()))
+                        .collect(),
+                );
+                let aromatic_pairs = systems
+                    .iter()
+                    .map(|system| system.id())
+                    .zip(added_systems)
+                    .collect();
+                let multicenters: Vec<_> = self
+                    .multicenter_bonds()
+                    .iter()
+                    .filter(|bond| {
+                        bond.atom_ids()
+                            .next()
+                            .is_some_and(|a| component_of(a) == component)
+                    })
+                    .collect();
+                let multicenter_atoms: Vec<Vec<AtomId>> = multicenters
+                    .iter()
+                    .map(|bond| bond.atom_ids().map(map_atom).collect())
+                    .collect();
+                let added_multicenters = editor.add_multicenter_bonds(
+                    multicenters
+                        .iter()
+                        .zip(&multicenter_atoms)
+                        .map(|(bond, members)| (members.as_slice(), bond.attributes().clone()))
+                        .collect(),
+                );
+                let multicenter_pairs = multicenters
+                    .iter()
+                    .map(|bond| bond.id())
+                    .zip(added_multicenters)
+                    .collect();
+                let noncovalents: Vec<_> = self
+                    .noncovalent_bonds()
+                    .iter()
+                    .filter(|bond| component_of(bond.atom_ids()[0]) == component)
+                    .collect();
+                let added_noncovalents = editor.add_noncovalent_bonds(
+                    noncovalents
+                        .iter()
+                        .map(|bond| {
+                            let [a, b] = bond.atom_ids();
+                            ([map_atom(a), map_atom(b)], bond.attributes().clone())
+                        })
+                        .collect(),
+                );
+                let noncovalent_pairs = noncovalents
+                    .iter()
+                    .map(|bond| bond.id())
+                    .zip(added_noncovalents)
+                    .collect();
+                let stereo_atoms: Vec<StereoAtomId> = self
+                    .stereo_atoms
+                    .ids()
+                    .filter(|&rid| component_of(self.stereo_atoms.site(rid)) == component)
+                    .collect();
+                let stereo_atom_ligands: Vec<Vec<StereoLigand>> = stereo_atoms
+                    .iter()
+                    .map(|&rid| {
+                        self.stereo_atoms
                             .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.map(&participant_correspondence))
-                            .collect();
-                        let added = editor.add_stereo_atom(
-                            map_atom(site),
-                            ligands,
-                            self.stereo_atoms.attributes(rid).clone(),
-                        );
-                        stereo_atom_pairs.push((rid, added));
-                    }
-                }
-                let mut stereo_bond_pairs = Vec::new();
-                for rid in self.stereo_bonds.ids() {
-                    let bond = BondId(self.stereo_bonds.site(rid).0);
-                    let [a, _] = self.bond(bond).atom_ids();
-                    if component_of(a) == component {
-                        let ligands: Vec<StereoLigand> = self
-                            .stereo_bonds
+                            .collect()
+                    })
+                    .collect();
+                let added_stereo_atoms = editor.add_stereo_atoms(
+                    stereo_atoms
+                        .iter()
+                        .zip(&stereo_atom_ligands)
+                        .map(|(&rid, ligands)| {
+                            (
+                                map_atom(self.stereo_atoms.site(rid)),
+                                ligands.as_slice(),
+                                self.stereo_atoms.attributes(rid).clone(),
+                            )
+                        })
+                        .collect(),
+                );
+                let stereo_atom_pairs = stereo_atoms
+                    .iter()
+                    .copied()
+                    .zip(added_stereo_atoms)
+                    .collect();
+                let stereo_bonds: Vec<StereoBondId> = self
+                    .stereo_bonds
+                    .ids()
+                    .filter(|&rid| {
+                        let [a, _] = self.bond(BondId(self.stereo_bonds.site(rid).0)).atom_ids();
+                        component_of(a) == component
+                    })
+                    .collect();
+                let stereo_bond_ligands: Vec<Vec<StereoLigand>> = stereo_bonds
+                    .iter()
+                    .map(|&rid| {
+                        self.stereo_bonds
                             .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.map(&participant_correspondence))
-                            .collect();
-                        let added = editor.add_stereo_bond(
-                            bond_correspondence
-                                .right_of(bond)
-                                .expect("the component contains the routed stereo-bond site"),
-                            ligands,
-                            self.stereo_bonds.attributes(rid).clone(),
-                        );
-                        stereo_bond_pairs.push((rid, added));
-                    }
-                }
-                let entities = editor.build();
+                            .collect()
+                    })
+                    .collect();
+                let added_stereo_bonds = editor.add_stereo_bonds(
+                    stereo_bonds
+                        .iter()
+                        .zip(&stereo_bond_ligands)
+                        .map(|(&rid, ligands)| {
+                            (
+                                bond_correspondence
+                                    .right_of(BondId(self.stereo_bonds.site(rid).0))
+                                    .expect("the component contains the routed stereo-bond site"),
+                                ligands.as_slice(),
+                                self.stereo_bonds.attributes(rid).clone(),
+                            )
+                        })
+                        .collect(),
+                );
+                let stereo_bond_pairs = stereo_bonds
+                    .iter()
+                    .copied()
+                    .zip(added_stereo_bonds)
+                    .collect();
+                let entities = editor
+                    .finish()
+                    .expect("component extraction preserves molecule integrity");
 
                 let correspondence = MoleculeCorrespondence::new(
                     atom_correspondence,
@@ -1985,10 +2331,14 @@ impl Molecule {
                         .first()
                         .is_some_and(|a| component_of(*a) == component)
                     {
-                        editor.push_constraint(constraint.clone().map(&correspondence));
+                        editor
+                            .constraints_mut()
+                            .push(constraint.clone().map(&correspondence));
                     }
                 }
-                let entities = editor.build();
+                let entities = editor
+                    .finish()
+                    .expect("component extraction preserves molecule integrity");
                 (entities, correspondence)
             })
             .collect()
@@ -2183,7 +2533,8 @@ impl Normalize for Molecule {
         self.noncovalent_bonds = mem::take(&mut self.noncovalent_bonds).normalize()?;
         self.stereo_atoms = mem::take(&mut self.stereo_atoms).normalize()?;
         self.stereo_bonds = mem::take(&mut self.stereo_bonds).normalize()?;
-        self.constraints = mem::take(&mut self.constraints).normalize()?;
+        let constraints = self.constraints_mut();
+        *constraints = mem::take(constraints).normalize()?;
         Ok(self)
     }
 }
@@ -2204,7 +2555,7 @@ impl FrameTransport for Molecule {
             .reframe_by(actions.noncovalent_bonds())?;
         self.stereo_atoms = self.stereo_atoms.reframe_by(actions.stereo_atoms())?;
         self.stereo_bonds = self.stereo_bonds.reframe_by(actions.stereo_bonds())?;
-        self.constraints = self.constraints.reframe_by(actions)?;
+        self.constraints = Arc::new(Arc::unwrap_or_clone(self.constraints).reframe_by(actions)?);
         Some(self)
     }
 }
@@ -2229,7 +2580,7 @@ impl Reframe for Molecule {
         for attributes in Arc::make_mut(&mut self.bonds) {
             *attributes = mem::take(attributes).normalize()?;
         }
-        self.constraints = mem::take(&mut self.constraints).normalize()?;
+        let constraints = Arc::unwrap_or_clone(self.constraints).normalize()?;
 
         let mut actions = ConstraintFrameActionMap::default();
         self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
@@ -2286,11 +2637,12 @@ impl Reframe for Molecule {
                 }
             })?
         };
-        self.constraints = self
-            .constraints
-            .reframe_by_actions(&actions)
-            .map_err(|_| Contradiction)?
-            .normalize()?;
+        self.constraints = Arc::new(
+            constraints
+                .reframe_by_actions(&actions)
+                .map_err(|_| Contradiction)?
+                .normalize()?,
+        );
         Ok(self)
     }
 }

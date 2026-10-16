@@ -1,11 +1,19 @@
 # 192 — Python API type roles
 
-Status: Proposed
+Status: Superseded
 Date: 2026-08-09
 Relates: [139](139-mutability-hashability-equality-2026-07-09.md),
 [176](176-ast-naming-2026-07-31.md), [178](178-python-lattice-ops-2026-08-01.md),
 [179](179-python-editing-and-transactions-2026-08-02.md),
-[181](181-python-boundary-ownership-2026-08-03.md)
+[181](181-python-boundary-ownership-2026-08-03.md),
+[231](231-python-api-parity-2026-09-21.md)
+
+## Superseded by 231 — 2026-10-08
+
+[231](231-python-api-parity-2026-09-21.md#type-role-review-consolidated-from-192--2026-10-08)
+owns the remaining type-role review. The inventory and proposals below are
+historical; they are not a separate worklist or current API specification.
+This consolidation does not declare the full review complete.
 
 ## Purpose
 

@@ -1,8 +1,9 @@
 //! Composite resolver: chains the per-entity resolvers (isotope, valence,
 //! aromaticity, stereo, bonds, multicenter bonds) on a single `Molecule`.
 //!
-//! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
-//! systems, multicenter bonds, noncovalent bonds) to be ground.
+//! A determined result satisfies [`Molecule::is_concrete`]. Consuming operations
+//! use an editor; borrowed operations use a transaction and retain changes only
+//! on a determined result.
 
 pub mod aromaticity;
 pub mod bonds;
@@ -12,12 +13,11 @@ pub mod stereo;
 pub mod valence;
 
 use std::any::Any;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use aromaticity::AromaticityProjectError;
 pub use aromaticity::{
-    AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
-    AromaticityResolveConfig, AromaticityResolver,
+    AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver, AtomSelectionAlgorithm,
 };
 use bitflags::bitflags;
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
@@ -28,24 +28,12 @@ pub use multicenter::{
 };
 use stereo::StereoProjectError;
 pub use stereo::{
-    StereoContradiction, StereoError, StereoFailurePolicy, StereoMismatchPolicy,
-    StereoResolveConfig, StereoResolver,
+    StereoContradiction, StereoError, StereoFailurePolicy, StereoResolveConfig, StereoResolver,
 };
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemForm,
-    AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate, AromaticValenceForm,
-    AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate, BondConstraintForm,
-    BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, CisTransStereoForm, Constraint,
-    ConstraintEdit, DativeBondConstraintForm, DativeBondConstraintKey, DativeBondHandle,
-    DativeBondId, DativeBondUpdate, Edits, Entity, Lattice, Molecule,
-    MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondHandle,
-    MulticenterBondId, MulticenterBondUpdate, NoncovalentBondConstraintForm,
-    NoncovalentBondConstraintKey, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondUpdate,
-    Normalize, NumForm, RingModel, RingSetKind, StereoAtomConstraintForm, StereoAtomConstraintKey,
-    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
-    StereoBondConstraintKey, StereoBondHandle, StereoBondId, StereoBondUpdate, StereoKind,
-    TetrahedralStereoForm, TransactionError, UnpairedElectronsForm,
+    AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Molecule,
+    MoleculeApplyError, Normalize, NumForm, RollbackMethod, Transaction, UnpairedElectronsForm,
 };
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
@@ -56,10 +44,6 @@ use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::model::{ChemistryModel, ValenceTieBreak};
 use crate::ops::valence::compare::compare_by_key;
 use crate::ops::valence::{AtomCompletions, ResolveReport};
-use crate::ops::validate::{
-    ConstraintInvariantsContradiction, ConstraintInvariantsError, ConstraintInvariantsValidator,
-    ConstraintValidateConfig, DerivedKind,
-};
 
 /// Operational policies for resolution; unspecified isotope composition remains unresolved by default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -87,17 +71,16 @@ bitflags! {
 
 /// Solver state threaded through the constitution round: the per-atom
 /// candidate sets, the accepted aromatic systems pending materialization, and
-/// the atoms selected by the tie-break key.
+/// optional tie-break information.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ResolveState {
     pub completions: AtomCompletions,
-    pub systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+    pub aromatic_systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     pub tie_breaks: Vec<AtomId>,
 }
 
 impl ResolveState {
-    /// The report projection: the plural survivors and the recorded
-    /// tie-break uses.
+    /// Returns the plural surviving completions and tie-break uses.
     pub fn to_report(&self) -> ResolveReport {
         let mut unresolved = AtomCompletions::new();
         for (atom, disjuncts) in self.completions.iter() {
@@ -112,6 +95,23 @@ impl ResolveState {
     }
 }
 
+/// Resolves or projects a molecule using the configured chemistry model and policies.
+///
+/// # Semantic properties
+///
+/// resolve and project consume the input and return a molecule only on Determined.
+/// resolve_into and project_into retain changes only on Determined; other outcomes
+/// restore the receiver under Molecule::normalized_eq, preserving participant order.
+/// Every phase plan applies to its input and preserves molecule integrity. Both routes
+/// check that invariant before publishing and agree on chemistry outcomes and determined
+/// molecules for the same input and configuration.
+/// Each phase discharges only the entity assertions its results realize.
+/// Other assertions and the molecule-level constraint list are preserved,
+/// except for removals requested by failure policies and their reference compaction.
+/// Resolution does not normalize, inline, or evaluate the molecule-level list.
+/// Constraint validation and Molecule::inline_constraints are explicit operations.
+/// The with_report methods additionally collect unresolved candidates and tie-break
+/// uses; omitting that report preserves the outcome, errors, and resulting molecule.
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {
     pub isotope: IsotopeResolver,
@@ -127,8 +127,6 @@ pub struct Resolver<'a> {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ResolveContradiction {
     #[error(transparent)]
-    Placement(#[from] PlacementContradiction),
-    #[error(transparent)]
     Valence(#[from] ValenceContradiction),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
@@ -138,34 +136,10 @@ pub enum ResolveContradiction {
     Bonds(#[from] BondsContradiction),
     #[error(transparent)]
     MulticenterBonds(#[from] MulticenterBondsContradiction),
-    #[error(transparent)]
-    Discharge(#[from] DischargeContradiction),
-}
-
-/// Opening placement stage contradiction: an unsatisfiable molecule-scope
-/// assertion, or colliding assertions whose meet is `⊥`.
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum PlacementContradiction {
-    #[error("placement: molecule constraint is unsatisfiable: {constraint:?}")]
-    Normalize { constraint: Constraint },
-    #[error("placement: colliding assertions meet to bottom: {constraint:?}")]
-    Collision { constraint: Constraint },
-}
-
-/// Closing discharge pass contradiction: a stored assertion irreconcilable
-/// with its derived value, or a molecule-scope constraint decided false.
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum DischargeContradiction {
-    #[error("discharge: assertion contradicts the derived value: {constraint:?}")]
-    Assertion { constraint: Constraint },
-    #[error("discharge: {0}")]
-    Molecule(#[from] ConstraintInvariantsContradiction),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ResolveError {
-    #[error("isotope commit failed: {0}")]
-    Isotope(TransactionError),
     #[error(transparent)]
     Valence(#[from] ValenceError),
     #[error(transparent)]
@@ -176,14 +150,6 @@ pub enum ResolveError {
     Bonds(#[from] BondsError),
     #[error(transparent)]
     MulticenterBonds(#[from] MulticenterBondsError),
-    #[error("constitution commit failed: {0}")]
-    Commit(TransactionError),
-    #[error("placement commit failed: {0}")]
-    Placement(TransactionError),
-    #[error("discharge evaluation failed: {0}")]
-    DischargeEvaluation(#[from] ConstraintInvariantsError),
-    #[error("discharge commit failed: {0}")]
-    Discharge(TransactionError),
 }
 
 impl UmolError for ResolveError {
@@ -243,12 +209,10 @@ impl UmolError for ProjectContradiction {
 
 /// Resolution left the molecule underdetermined (no contradiction, but not
 /// concrete). Surfaced as an error only at boundaries that require a
-/// determined result; carries the report for inspection.
+/// determined result.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Error)]
 #[error("resolution underdetermined")]
-pub struct ResolveUnderdetermined {
-    pub report: ResolveReport,
-}
+pub struct ResolveUnderdetermined;
 
 impl UmolError for ResolveUnderdetermined {
     fn as_any(&self) -> &dyn Any {
@@ -277,33 +241,155 @@ impl<'a> Resolver<'a> {
     /// Resolves isotope composition before valence and aromaticity, then stereo and bonds.
     ///
     /// An unresolved isotope does not stop later phases. Only a completely determined
-    /// result replaces the caller's molecule; every other outcome preserves it exactly.
+    /// result returns the molecule. Every other outcome drops the consumed input.
+    /// Uses one editor without copying the molecule or recording undo.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning phase's planning error.
     pub fn resolve(
         &self,
-        molecule: &mut Molecule,
-    ) -> Result<Solution<ResolveReport, ResolveContradiction>, ResolveError> {
-        // Opening placement stage: normalize the molecule-scope list and
-        // inline bare entity leaves, collisions combining by meet.
-        let placement = match plan_placement(molecule) {
-            Ok(edits) => edits,
-            Err(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction.into()));
-            }
-        };
-        let editor = molecule
-            .edit()
-            .apply(placement)
-            .map_err(ResolveError::Placement)?;
-        // Placement changes assertions only, so the isotope fields still match this plan.
-        let isotope_edits = match self.isotope.plan(molecule) {
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, ResolveContradiction, ()>, ResolveError> {
+        let isotope_edits = match self.isotope.plan_resolve(&molecule) {
             Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
             Solution::Contradictory(contradiction) => match contradiction {},
         };
-        let editor = editor.apply(isotope_edits).map_err(ResolveError::Isotope)?;
-        let placed = editor.build();
-        let editor = placed.edit();
+        let mut editor = molecule.edit();
+        editor
+            .apply(isotope_edits)
+            .expect("isotope resolve plan applies to its input");
+        let isotopic = editor
+            .probe()
+            .expect("resolver phase plans preserve molecule integrity");
 
-        let state = match self.valence.admit(&placed).map_err(ResolveError::Valence)? {
+        let state = match self
+            .valence
+            .admit(isotopic)
+            .map_err(ResolveError::Valence)?
+        {
+            Solution::Determined(state) => state,
+            Solution::Underdetermined(_) => {
+                return Ok(Solution::Underdetermined(()));
+            }
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolveContradiction::from(contradiction);
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        let outcome = self
+            .aromaticity
+            .select(isotopic, state, self.tie_break)
+            .map_err(ResolveError::Aromaticity)?;
+        let mut state = match outcome {
+            Solution::Determined(state) => state,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolveContradiction::from(contradiction);
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+
+        self.select_atom_completions(&mut state, false);
+
+        if state
+            .completions
+            .iter()
+            .any(|(_, candidates)| candidates.len() > 1)
+        {
+            return Ok(Solution::Underdetermined(()));
+        }
+
+        let edits = self.plan_constitution(isotopic, &state);
+        editor
+            .apply(edits)
+            .expect("constitution plan applies to its input");
+        let working = editor
+            .probe()
+            .expect("resolver phase plans preserve molecule integrity");
+
+        let outcome = self
+            .stereo
+            .plan_resolve(working)
+            .map_err(ResolveError::Stereo)?;
+        let edits = match outcome {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => {
+                return Ok(Solution::Underdetermined(()));
+            }
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolveContradiction::Stereo(contradiction);
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        // Plan stereo and bond defaults from the same post-constitution molecule.
+        let bond_edits = self.bonds.plan_resolve(working);
+        let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
+        editor
+            .apply(edits)
+            .expect("stereo resolve plan applies to its input");
+        editor
+            .apply(bond_edits)
+            .expect("bond resolve plan applies to its input");
+
+        let edits = match multicenter_outcome {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => {
+                return Ok(Solution::Underdetermined(()));
+            }
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        editor
+            .apply(edits)
+            .expect("multicenter-bond resolve plan applies to its input");
+
+        let molecule = editor
+            .finish()
+            .expect("resolver phase plans preserve molecule integrity");
+        if molecule.is_concrete() {
+            Ok(Solution::Determined(molecule))
+        } else {
+            Ok(Solution::Underdetermined(()))
+        }
+    }
+
+    /// Resolves a consumed molecule and reports unresolved candidates and tie-break uses.
+    ///
+    /// An unresolved isotope does not stop later phases. Only a completely determined
+    /// result returns the molecule. Every other outcome drops the consumed input.
+    /// Underdetermined returns the report alone. Uses one editor without copying
+    /// the molecule or recording undo.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning phase's planning error.
+    pub fn resolve_with_report(
+        &self,
+        molecule: Molecule,
+    ) -> Result<
+        Solution<(Molecule, ResolveReport), ResolveContradiction, ResolveReport>,
+        ResolveError,
+    > {
+        let isotope_edits = match self.isotope.plan_resolve(&molecule) {
+            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Contradictory(contradiction) => match contradiction {},
+        };
+        let mut editor = molecule.edit();
+        editor
+            .apply(isotope_edits)
+            .expect("isotope resolve plan applies to its input");
+        let isotopic = editor
+            .probe()
+            .expect("resolver phase plans preserve molecule integrity");
+
+        let state = match self
+            .valence
+            .admit(isotopic)
+            .map_err(ResolveError::Valence)?
+        {
             Solution::Determined(state) => state,
             Solution::Underdetermined(_) => {
                 return Ok(Solution::Underdetermined(ResolveReport::default()));
@@ -315,13 +401,12 @@ impl<'a> Resolver<'a> {
         };
         let outcome = self
             .aromaticity
-            .select(&placed, state, self.tie_break)
+            .select_with_report(isotopic, state, self.tie_break)
             .map_err(ResolveError::Aromaticity)?;
         let mut state = match outcome {
             Solution::Determined(state) => state,
             Solution::Underdetermined(state) => {
-                let report = state.to_report();
-                return Ok(Solution::Underdetermined(report));
+                return Ok(Solution::Underdetermined(state.to_report()));
             }
             Solution::Contradictory(contradiction) => {
                 let contradiction = ResolveContradiction::from(contradiction);
@@ -329,85 +414,34 @@ impl<'a> Resolver<'a> {
             }
         };
 
-        // Finalization: the tie-break on plural atoms outside any candidate
-        // system; a tie surviving the key stays plural.
-        let key = self.tie_break.key();
-        if !key.is_empty() {
-            let plural: Vec<AtomId> = state
-                .completions
-                .iter()
-                .filter_map(|(atom, disjuncts)| (disjuncts.len() > 1).then_some(atom))
-                .collect();
-            for atom in plural {
-                let disjuncts = state.completions.get(atom).expect("plural atom").to_vec();
-                let best = disjuncts
-                    .iter()
-                    .max_by(|a, b| compare_by_key(key, a, b))
-                    .expect("non-empty entry")
-                    .clone();
-                let unique = disjuncts
-                    .iter()
-                    .filter(|form| compare_by_key(key, form, &best).is_eq())
-                    .count()
-                    == 1;
-                if unique {
-                    state.completions.insert(atom, smallvec::smallvec![best]);
-                    state.tie_breaks.push(atom);
-                }
-            }
-            state.tie_breaks.sort_unstable();
-            state.tie_breaks.dedup();
-        }
+        self.select_atom_completions(&mut state, true);
 
-        let report = state.to_report();
-        if !report.unresolved.is_empty() {
-            return Ok(Solution::Underdetermined(report));
-        }
-
-        // The single commit of the constitution round.
-        let mut edits = Edits::new();
-        for (atom, disjuncts) in state.completions.iter() {
-            let current = placed.atom(atom).attributes;
-            // The constraint channel holds assertions only: the commit
-            // narrows fields; candidate constraints stay solver state.
-            let mut selected = disjuncts[0].clone();
-            selected.constraints = current.constraints.clone();
-            let update = current.difference_to(&selected);
-            edits.update_atom(AtomHandle::Id(atom), current, &update);
-        }
-        let existing: BTreeSet<Vec<AtomId>> = placed
-            .aromatic_systems()
+        if state
+            .completions
             .iter()
-            .map(|system| {
-                let mut atoms: Vec<AtomId> = system.atom_ids().collect();
-                atoms.sort_unstable();
-                atoms
-            })
-            .collect();
-        for (atoms, system) in &state.systems {
-            let mut key = atoms.clone();
-            key.sort_unstable();
-            if existing.contains(&key) {
-                continue;
-            }
-            for edit in self
-                .aromaticity
-                .plan_system(&placed, atoms.clone(), system.clone())
-            {
-                edits.push(edit);
-            }
+            .any(|(_, candidates)| candidates.len() > 1)
+        {
+            return Ok(Solution::Underdetermined(state.to_report()));
         }
-        let editor = editor.apply(edits).map_err(ResolveError::Commit)?;
-        let working = editor.build();
-        let editor = working.edit();
 
-        let outcome = self.stereo.plan(&working).map_err(ResolveError::Stereo)?;
+        let edits = self.plan_constitution(isotopic, &state);
+        editor
+            .apply(edits)
+            .expect("constitution plan applies to its input");
+        let working = editor
+            .probe()
+            .expect("resolver phase plans preserve molecule integrity");
+
+        let outcome = self
+            .stereo
+            .plan_resolve(working)
+            .map_err(ResolveError::Stereo)?;
         let edits = match outcome {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => {
                 return Ok(Solution::Underdetermined(ResolveReport {
                     unresolved: AtomCompletions::new(),
-                    tie_breaks: state.tie_breaks.clone(),
+                    tie_breaks: state.tie_breaks,
                 }));
             }
             Solution::Contradictory(contradiction) => {
@@ -415,23 +449,22 @@ impl<'a> Resolver<'a> {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        // These plans read independent domains of the same post-constitution snapshot. Apply
-        // them in phase order without publishing between them.
-        let bond_edits = self.bonds.plan(&working);
-        let multicenter_outcome = self.multicenter_bonds.plan(&working);
-        let editor = editor
+        // Plan stereo and bond defaults from the same post-constitution molecule.
+        let bond_edits = self.bonds.plan_resolve(working);
+        let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
+        editor
             .apply(edits)
-            .map_err(|error| ResolveError::Stereo(StereoError::Transaction(error)))?;
-        let editor = editor
+            .expect("stereo resolve plan applies to its input");
+        editor
             .apply(bond_edits)
-            .map_err(|error| ResolveError::Bonds(BondsError::Transaction(error)))?;
+            .expect("bond resolve plan applies to its input");
 
         let edits = match multicenter_outcome {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => {
                 return Ok(Solution::Underdetermined(ResolveReport {
                     unresolved: AtomCompletions::new(),
-                    tie_breaks: state.tie_breaks.clone(),
+                    tie_breaks: state.tie_breaks,
                 }));
             }
             Solution::Contradictory(contradiction) => {
@@ -439,42 +472,294 @@ impl<'a> Resolver<'a> {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let editor = editor.apply(edits).map_err(|error| {
-            ResolveError::MulticenterBonds(MulticenterBondsError::Transaction(error))
-        })?;
+        editor
+            .apply(edits)
+            .expect("multicenter-bond resolve plan applies to its input");
 
-        // Closing discharge pass: remove determined-redundant assertions,
-        // evaluate the remaining molecule-scope list.
-        let working = editor.build();
-        let editor = working.edit();
-        let outcome = self
-            .plan_discharge(&working)
-            .map_err(ResolveError::DischargeEvaluation)?;
-        let edits = match outcome {
-            Ok(edits) => edits,
-            Err(contradiction) => {
-                let contradiction = ResolveContradiction::Discharge(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
+        let molecule = editor
+            .finish()
+            .expect("resolver phase plans preserve molecule integrity");
+        let report = ResolveReport {
+            unresolved: AtomCompletions::new(),
+            tie_breaks: state.tie_breaks,
         };
-        let editor = editor.apply(edits).map_err(ResolveError::Discharge)?;
-
-        let resolved = editor.build();
-        if resolved.is_concrete() {
-            *molecule = resolved;
-            Ok(Solution::Determined(ResolveReport {
-                unresolved: AtomCompletions::new(),
-                tie_breaks: state.tie_breaks,
-            }))
+        if molecule.is_concrete() {
+            Ok(Solution::Determined((molecule, report)))
         } else {
-            Ok(Solution::Underdetermined(ResolveReport {
-                unresolved: AtomCompletions::new(),
-                tie_breaks: state.tie_breaks,
-            }))
+            Ok(Solution::Underdetermined(report))
         }
     }
 
-    /// Projects selected stages within graph IR atomically.
+    /// Resolves isotope composition before valence and aromaticity, then stereo and bonds.
+    ///
+    /// An unresolved isotope does not stop later phases. Only a completely determined
+    /// result retains the changes; every other outcome preserves the caller's molecule.
+    /// All phases share one transaction using the selected rollback method.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning phase's planning error.
+    pub fn resolve_into(
+        &self,
+        molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
+    ) -> Result<Solution<(), ResolveContradiction>, ResolveError> {
+        let isotope_edits = match self.isotope.plan_resolve(molecule) {
+            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Contradictory(contradiction) => match contradiction {},
+        };
+        Transaction::run::<_, MoleculeApplyError>(molecule, rollback_method, |mut transaction| {
+            Ok((|| {
+                transaction
+                    .apply(isotope_edits)
+                    .expect("isotope resolve plan applies to its input");
+                let isotopic = transaction
+                    .probe()
+                    .expect("resolver phase plans preserve molecule integrity");
+
+                let state = match self
+                    .valence
+                    .admit(isotopic)
+                    .map_err(ResolveError::Valence)?
+                {
+                    Solution::Determined(state) => state,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(()));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::from(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                let outcome = self
+                    .aromaticity
+                    .select(isotopic, state, self.tie_break)
+                    .map_err(ResolveError::Aromaticity)?;
+                let mut state = match outcome {
+                    Solution::Determined(state) => state,
+                    Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::from(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+
+                self.select_atom_completions(&mut state, false);
+
+                if state
+                    .completions
+                    .iter()
+                    .any(|(_, candidates)| candidates.len() > 1)
+                {
+                    return Ok(Solution::Underdetermined(()));
+                }
+
+                let edits = self.plan_constitution(isotopic, &state);
+                transaction
+                    .apply(edits)
+                    .expect("constitution plan applies to its input");
+                let working = transaction
+                    .probe()
+                    .expect("resolver phase plans preserve molecule integrity");
+
+                let outcome = self
+                    .stereo
+                    .plan_resolve(working)
+                    .map_err(ResolveError::Stereo)?;
+                let edits = match outcome {
+                    Solution::Determined(edits) => edits,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(()));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::Stereo(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                // Plan stereo and bond defaults from the same post-constitution molecule.
+                let bond_edits = self.bonds.plan_resolve(working);
+                let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
+                transaction
+                    .apply(edits)
+                    .expect("stereo resolve plan applies to its input");
+                transaction
+                    .apply(bond_edits)
+                    .expect("bond resolve plan applies to its input");
+
+                let edits = match multicenter_outcome {
+                    Solution::Determined(edits) => edits,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(()));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                transaction
+                    .apply(edits)
+                    .expect("multicenter-bond resolve plan applies to its input");
+
+                if transaction
+                    .probe()
+                    .expect("resolver phase plans preserve molecule integrity")
+                    .is_concrete()
+                {
+                    transaction
+                        .commit()
+                        .expect("resolver phase plans preserve molecule integrity");
+                    Ok(Solution::Determined(()))
+                } else {
+                    Ok(Solution::Underdetermined(()))
+                }
+            })())
+        })
+        .expect("resolver applies and commits only its own valid plans")
+    }
+
+    /// Resolves a borrowed molecule and reports unresolved candidates and tie-break uses.
+    ///
+    /// An unresolved isotope does not stop later phases. Only a completely determined
+    /// result retains the changes; every other outcome preserves the caller's molecule.
+    /// All phases share one transaction using the selected rollback method.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning phase's planning error.
+    pub fn resolve_into_with_report(
+        &self,
+        molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
+    ) -> Result<Solution<ResolveReport, ResolveContradiction>, ResolveError> {
+        let isotope_edits = match self.isotope.plan_resolve(molecule) {
+            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Contradictory(contradiction) => match contradiction {},
+        };
+        Transaction::run::<_, MoleculeApplyError>(molecule, rollback_method, |mut transaction| {
+            Ok((|| {
+                transaction
+                    .apply(isotope_edits)
+                    .expect("isotope resolve plan applies to its input");
+                let isotopic = transaction
+                    .probe()
+                    .expect("resolver phase plans preserve molecule integrity");
+
+                let state = match self
+                    .valence
+                    .admit(isotopic)
+                    .map_err(ResolveError::Valence)?
+                {
+                    Solution::Determined(state) => state,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(ResolveReport::default()));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::from(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                let outcome = self
+                    .aromaticity
+                    .select_with_report(isotopic, state, self.tie_break)
+                    .map_err(ResolveError::Aromaticity)?;
+                let mut state = match outcome {
+                    Solution::Determined(state) => state,
+                    Solution::Underdetermined(state) => {
+                        let report = state.to_report();
+                        return Ok(Solution::Underdetermined(report));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::from(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+
+                self.select_atom_completions(&mut state, true);
+
+                if state
+                    .completions
+                    .iter()
+                    .any(|(_, candidates)| candidates.len() > 1)
+                {
+                    return Ok(Solution::Underdetermined(state.to_report()));
+                }
+
+                let edits = self.plan_constitution(isotopic, &state);
+                transaction
+                    .apply(edits)
+                    .expect("constitution plan applies to its input");
+                let working = transaction
+                    .probe()
+                    .expect("resolver phase plans preserve molecule integrity");
+
+                let outcome = self
+                    .stereo
+                    .plan_resolve(working)
+                    .map_err(ResolveError::Stereo)?;
+                let edits = match outcome {
+                    Solution::Determined(edits) => edits,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(ResolveReport {
+                            unresolved: AtomCompletions::new(),
+                            tie_breaks: state.tie_breaks,
+                        }));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::Stereo(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                // Plan stereo and bond defaults from the same post-constitution molecule.
+                let bond_edits = self.bonds.plan_resolve(working);
+                let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
+                transaction
+                    .apply(edits)
+                    .expect("stereo resolve plan applies to its input");
+                transaction
+                    .apply(bond_edits)
+                    .expect("bond resolve plan applies to its input");
+
+                let edits = match multicenter_outcome {
+                    Solution::Determined(edits) => edits,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(ResolveReport {
+                            unresolved: AtomCompletions::new(),
+                            tie_breaks: state.tie_breaks,
+                        }));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                transaction
+                    .apply(edits)
+                    .expect("multicenter-bond resolve plan applies to its input");
+
+                if transaction
+                    .probe()
+                    .expect("resolver phase plans preserve molecule integrity")
+                    .is_concrete()
+                {
+                    transaction
+                        .commit()
+                        .expect("resolver phase plans preserve molecule integrity");
+                    Ok(Solution::Determined(ResolveReport {
+                        unresolved: AtomCompletions::new(),
+                        tie_breaks: state.tie_breaks,
+                    }))
+                } else {
+                    Ok(Solution::Underdetermined(ResolveReport {
+                        unresolved: AtomCompletions::new(),
+                        tie_breaks: state.tie_breaks,
+                    }))
+                }
+            })())
+        })
+        .expect("resolver applies and commits only its own valid plans")
+    }
+
+    /// Projects selected stages within graph IR, consuming the molecule.
     ///
     /// Recovers fixed-frame #T/#C assertions, writes member-aligned #a contributions and
     /// aromatic bond assertions, runs the no-op valence projection, then elides isotope
@@ -486,9 +771,10 @@ impl<'a> Resolver<'a> {
     ///
     /// # Semantic properties
     ///
-    /// Only Determined publishes the candidate. Errors, contradictions, and underdetermination
-    /// leave the caller's molecule unchanged. Projection does not invoke resolution or recovery
-    /// comparisons. Implicit-H counts, atom electron fields, and localized charge are preserved.
+    /// Determined returns the molecule with checked integrity. Rejection drops the input.
+    /// Execution uses one editor without copying the molecule or recording undo.
+    /// Projection does not invoke resolution or recovery comparisons. Implicit-H counts,
+    /// atom electron fields, and localized charge are preserved.
     /// For inputs meeting the bond charge/spin requirements, the result agrees with executing
     /// the selected standalone projections in order. Empty flags leave such inputs unchanged.
     ///
@@ -499,24 +785,24 @@ impl<'a> Resolver<'a> {
     /// or isotopes. No charge/spin localization or unsupported-structure removal is implicit.
     pub fn project(
         &self,
-        molecule: &mut Molecule,
+        molecule: Molecule,
         flags: ProjectFlags,
-    ) -> Result<Solution<(), ProjectContradiction>, ProjectError> {
+    ) -> Result<Solution<Molecule, ProjectContradiction, ()>, ProjectError> {
         let bonds = molecule
             .bonds()
             .iter()
             .map(|bond| {
                 (
-                    Entity::Bond(bond.id),
-                    &bond.attributes.charge,
-                    &bond.attributes.unpaired_electrons,
+                    Entity::Bond(bond.id()),
+                    &bond.attributes().charge,
+                    &bond.attributes().unpaired_electrons,
                 )
             })
             .chain(molecule.multicenter_bonds().iter().map(|bond| {
                 (
-                    Entity::MulticenterBond(bond.id),
-                    &bond.attributes.charge,
-                    &bond.attributes.unpaired_electrons,
+                    Entity::MulticenterBond(bond.id()),
+                    &bond.attributes().charge,
+                    &bond.attributes().unpaired_electrons,
                 )
             }));
         for (entity, charge, spin) in bonds {
@@ -540,631 +826,333 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let mut candidate = molecule.clone();
+        let mut first_edits = if flags.contains(ProjectFlags::STEREO) {
+            Some(self.stereo.plan_project(&molecule)?)
+        } else if flags.contains(ProjectFlags::AROMATICITY) {
+            Some(self.aromaticity.plan_project(&molecule)?)
+        } else if flags.contains(ProjectFlags::ISOTOPE) {
+            Some(self.isotope.plan_project(&molecule)?)
+        } else {
+            None
+        };
+
+        let mut editor = molecule.edit();
         if flags.contains(ProjectFlags::STEREO) {
-            match self.stereo.project(&mut candidate)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction.into()))
-                }
-            }
+            let edits = match first_edits.take() {
+                Some(edits) => edits,
+                None => self.stereo.plan_project(
+                    editor
+                        .probe()
+                        .expect("resolver phase plans preserve molecule integrity"),
+                )?,
+            };
+            editor
+                .apply(edits)
+                .expect("stereo project plan applies to its input");
         }
         if flags.contains(ProjectFlags::AROMATICITY) {
-            match self.aromaticity.project(&mut candidate)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction.into()))
-                }
-            }
+            let edits = match first_edits.take() {
+                Some(edits) => edits,
+                None => self.aromaticity.plan_project(
+                    editor
+                        .probe()
+                        .expect("resolver phase plans preserve molecule integrity"),
+                )?,
+            };
+            editor
+                .apply(edits)
+                .expect("aromaticity project plan applies to its input");
         }
-        if flags.contains(ProjectFlags::VALENCE) {
-            match self.valence.project(&mut candidate, self.tie_break)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction.into()))
-                }
-            }
-        }
+        // Valence projection preserves all fields and requires no edits.
         if flags.contains(ProjectFlags::ISOTOPE) {
-            match self.isotope.project(&mut candidate)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => match contradiction {},
-            }
+            let edits = match first_edits.take() {
+                Some(edits) => edits,
+                None => self.isotope.plan_project(
+                    editor
+                        .probe()
+                        .expect("resolver phase plans preserve molecule integrity"),
+                )?,
+            };
+            editor
+                .apply(edits)
+                .expect("isotope project plan applies to its input");
         }
-        *molecule = candidate;
-        Ok(Solution::Determined(()))
+        let molecule = editor
+            .finish()
+            .expect("resolver phase plans preserve molecule integrity");
+        Ok(Solution::Determined(molecule))
     }
 
-    /// Plan the closing discharge pass: a stored assertion whose ground
-    /// derived value refines it is redundant and removed; a meet to `⊥`
-    /// contradicts unless the key's resolve failure policy tolerates the
-    /// unrealized assertion; the remaining molecule-scope list is evaluated
-    /// with the validator machinery (decided-true removed, decided-false
-    /// contradictory, undecided kept).
-    fn plan_discharge(
+    /// Projects selected stages, retaining changes only on Determined.
+    ///
+    /// See [Resolver::project] for phase order, preserved fields, and preconditions.
+    /// All phases share one transaction using the selected rollback method.
+    ///
+    /// # Semantic properties
+    ///
+    /// Errors, contradictions, and underdetermination restore the receiver under
+    /// Molecule::normalized_eq, preserving participant order. The result agrees with
+    /// consuming projection of the same input under the same configuration and flags.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same bond charge/spin and phase errors as [Resolver::project].
+    pub fn project_into(
         &self,
-        molecule: &Molecule,
-    ) -> Result<Result<Edits, DischargeContradiction>, ConstraintInvariantsError> {
-        let mut edits = Edits::new();
-
-        let needs_rings = molecule.atoms().iter().any(|atom| {
-            atom.attributes.constraints.iter().any(|c| {
-                matches!(
-                    c,
-                    AtomConstraintForm::RingDegree(_)
-                        | AtomConstraintForm::RingValence(_)
-                        | AtomConstraintForm::RingMembership(_)
+        molecule: &mut Molecule,
+        flags: ProjectFlags,
+        rollback_method: RollbackMethod,
+    ) -> Result<Solution<(), ProjectContradiction>, ProjectError> {
+        let bonds = molecule
+            .bonds()
+            .iter()
+            .map(|bond| {
+                (
+                    Entity::Bond(bond.id()),
+                    &bond.attributes().charge,
+                    &bond.attributes().unpaired_electrons,
                 )
             })
-        }) || molecule.bonds().iter().any(|bond| {
-            bond.attributes
-                .constraints
-                .iter()
-                .any(|c| matches!(c, BondConstraintForm::RingMembership(_)))
-        });
-        let rings = needs_rings.then(|| {
-            molecule
-                .rings(
-                    RingModel {
-                        kind: RingSetKind::Relevant,
-                        max_ring_size: 22,
-                    },
-                    self.config.aromaticity.perception.ring_config,
+            .chain(molecule.multicenter_bonds().iter().map(|bond| {
+                (
+                    Entity::MulticenterBond(bond.id()),
+                    &bond.attributes().charge,
+                    &bond.attributes().unpaired_electrons,
                 )
-                .into_ring_set()
-        });
-
-        for id in molecule.atoms().ids() {
-            for asserted in molecule.atom(id).attributes.constraints.iter() {
-                let mut reading = molecule.atom(id).constraints();
-                if let Some(rings) = rings.as_ref() {
-                    reading = reading.with_rings(rings);
-                }
-                let Some(derived) = reading.derived_complete(asserted.key()) else {
-                    continue;
-                };
-                match asserted.meet(&derived) {
-                    None => {
-                        // The closure's negative reading marks the failure
-                        // family (nothing was realized); a positive derived
-                        // value marks the mismatch family (the realized
-                        // entity disagrees).
-                        let tolerated = match &derived {
-                            AtomConstraintForm::AromaticValence(
-                                AromaticValenceForm::NotAromatic,
-                            ) => {
-                                self.config.aromaticity.aromatic_valence_failure
-                                    != AromaticityFailurePolicy::Error
-                            }
-                            AtomConstraintForm::AromaticValence(_) => {
-                                self.config.aromaticity.aromatic_valence_mismatch
-                                    != AromaticityMismatchPolicy::Error
-                            }
-                            AtomConstraintForm::TetrahedralStereo(
-                                TetrahedralStereoForm::NotStereo,
-                            ) => {
-                                self.config.stereo.tetrahedral_stereo_failure
-                                    != StereoFailurePolicy::Error
-                            }
-                            AtomConstraintForm::TetrahedralStereo(_) => {
-                                self.config.stereo.tetrahedral_stereo_mismatch
-                                    != StereoMismatchPolicy::Error
-                            }
-                            _ => false,
-                        };
-                        if !tolerated {
-                            return Ok(Err(DischargeContradiction::Assertion {
-                                constraint: Constraint::Atom(id, asserted.clone()),
-                            }));
-                        }
-                    }
-                    Some(_) if derived.is_ground() => {
-                        let mut update = AtomUpdate::default();
-                        update.constraints.set(asserted.as_undetermined());
-                        edits.update_atom(
-                            AtomHandle::Id(id),
-                            molecule.atom(id).attributes,
-                            &update,
-                        );
-                    }
-                    Some(_) => {}
-                }
+            }));
+        for (entity, charge, spin) in bonds {
+            if !matches!(charge, NumForm::Lit(0)) {
+                return Err(ProjectError::BondCharge {
+                    entity,
+                    charge: charge.clone(),
+                });
             }
-        }
-        for id in molecule.bonds().ids() {
-            for asserted in molecule.bond(id).attributes.constraints.iter() {
-                let mut reading = molecule.bond(id).constraints();
-                if let Some(rings) = rings.as_ref() {
-                    reading = reading.with_rings(rings);
+            if !matches!(
+                spin,
+                UnpairedElectronsForm {
+                    count: NumForm::Lit(0),
+                    multiplicity: NumForm::Lit(1)
                 }
-                let Some(derived) = reading.derived_complete(asserted.key()) else {
-                    continue;
-                };
-                match asserted.meet(&derived) {
-                    None => {
-                        let tolerated = match &derived {
-                            BondConstraintForm::Aromatic(BooleanForm::Lit(false)) => {
-                                self.config.aromaticity.aromatic_valence_failure
-                                    != AromaticityFailurePolicy::Error
-                            }
-                            BondConstraintForm::Aromatic(_) => {
-                                self.config.aromaticity.aromatic_bond_constraint_mismatch
-                                    != AromaticBondConstraintMismatchPolicy::Error
-                            }
-                            BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo) => {
-                                self.config.stereo.cis_trans_stereo_failure
-                                    != StereoFailurePolicy::Error
-                            }
-                            BondConstraintForm::CisTransStereo(_) => {
-                                self.config.stereo.cis_trans_stereo_mismatch
-                                    != StereoMismatchPolicy::Error
-                            }
-                            _ => false,
-                        };
-                        if !tolerated {
-                            return Ok(Err(DischargeContradiction::Assertion {
-                                constraint: Constraint::Bond(id, asserted.clone()),
-                            }));
-                        }
-                    }
-                    Some(_) if derived.is_ground() => {
-                        let mut update = BondUpdate::default();
-                        update.constraints.set(asserted.as_undetermined());
-                        edits.update_bond(
-                            BondHandle::Id(id),
-                            molecule.bond(id).attributes,
-                            &update,
-                        );
-                    }
-                    Some(_) => {}
-                }
-            }
-        }
-        for id in molecule.dative_bonds().ids() {
-            for asserted in molecule.dative_bond(id).attributes.constraints.iter() {
-                let Some(derived) = molecule
-                    .dative_bond(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                else {
-                    continue;
-                };
-                match asserted.meet(&derived) {
-                    None => {
-                        let tolerated = match &derived {
-                            DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)) => {
-                                self.config.aromaticity.aromatic_valence_failure
-                                    != AromaticityFailurePolicy::Error
-                            }
-                            DativeBondConstraintForm::Aromatic(_) => {
-                                self.config.aromaticity.aromatic_bond_constraint_mismatch
-                                    != AromaticBondConstraintMismatchPolicy::Error
-                            }
-                            _ => false,
-                        };
-                        if !tolerated {
-                            return Ok(Err(DischargeContradiction::Assertion {
-                                constraint: Constraint::DativeBond(id, asserted.clone()),
-                            }));
-                        }
-                    }
-                    Some(_) if derived.is_ground() => {
-                        let mut update = DativeBondUpdate::default();
-                        update.constraints.set(asserted.as_undetermined());
-                        edits.update_dative_bond(
-                            DativeBondHandle::Id(id),
-                            molecule.dative_bond(id).attributes,
-                            &update,
-                        );
-                    }
-                    Some(_) => {}
-                }
-            }
-        }
-        for id in molecule.aromatic_systems().ids() {
-            for asserted in molecule.aromatic_system(id).attributes.constraints.iter() {
-                let Some(derived) = molecule
-                    .aromatic_system(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                else {
-                    continue;
-                };
-                match asserted.meet(&derived) {
-                    None => {
-                        return Ok(Err(DischargeContradiction::Assertion {
-                            constraint: Constraint::AromaticSystem(id, asserted.clone()),
-                        }));
-                    }
-                    Some(_) if derived.is_ground() => {
-                        let mut update = AromaticSystemUpdate::default();
-                        update.constraints.set(asserted.as_undetermined());
-                        edits.update_aromatic_system(
-                            AromaticSystemHandle::Id(id),
-                            molecule.aromatic_system(id).attributes,
-                            &update,
-                        );
-                    }
-                    Some(_) => {}
-                }
-            }
-        }
-        for id in molecule.multicenter_bonds().ids() {
-            for asserted in molecule.multicenter_bond(id).attributes.constraints.iter() {
-                let Some(derived) = molecule
-                    .multicenter_bond(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                else {
-                    continue;
-                };
-                match asserted.meet(&derived) {
-                    None => {
-                        return Ok(Err(DischargeContradiction::Assertion {
-                            constraint: Constraint::MulticenterBond(id, asserted.clone()),
-                        }));
-                    }
-                    Some(_) if derived.is_ground() => {
-                        let mut update = MulticenterBondUpdate::default();
-                        update.constraints.set(asserted.as_undetermined());
-                        edits.update_multicenter_bond(
-                            MulticenterBondHandle::Id(id),
-                            molecule.multicenter_bond(id).attributes,
-                            &update,
-                        );
-                    }
-                    Some(_) => {}
-                }
-            }
-        }
-        for id in molecule.noncovalent_bonds().ids() {
-            for asserted in molecule.noncovalent_bond(id).attributes.constraints.iter() {
-                let Some(derived) = molecule
-                    .noncovalent_bond(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                else {
-                    continue;
-                };
-                match asserted.meet(&derived) {
-                    None => {
-                        return Ok(Err(DischargeContradiction::Assertion {
-                            constraint: Constraint::NoncovalentBond(id, asserted.clone()),
-                        }));
-                    }
-                    Some(_) if derived.is_ground() => {
-                        let mut update = NoncovalentBondUpdate::default();
-                        update.constraints.set(asserted.as_undetermined());
-                        edits.update_noncovalent_bond(
-                            NoncovalentBondHandle::Id(id),
-                            molecule.noncovalent_bond(id).attributes,
-                            &update,
-                        );
-                    }
-                    Some(_) => {}
-                }
-            }
-        }
-        // Stereo entity constraint keys derive vacuous, so their assertions
-        // are always kept; the loops exist for the uniform surface.
-        for id in molecule.stereo_atoms().ids() {
-            for asserted in molecule.stereo_atom(id).attributes.constraints.iter() {
-                if molecule
-                    .stereo_atom(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                    .is_some()
-                {
-                    unreachable!("stereo atom constraint keys have no projection");
-                }
-            }
-        }
-        for id in molecule.stereo_bonds().ids() {
-            for asserted in molecule.stereo_bond(id).attributes.constraints.iter() {
-                if molecule
-                    .stereo_bond(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                    .is_some()
-                {
-                    unreachable!("stereo bond constraint keys have no projection");
-                }
+            ) {
+                return Err(ProjectError::BondSpin {
+                    entity,
+                    spin: spin.clone(),
+                });
             }
         }
 
-        let validator = ConstraintInvariantsValidator::new(ConstraintValidateConfig {
-            relevant_cycle_algorithm: self
-                .config
-                .aromaticity
-                .perception
-                .ring_config
-                .relevant_cycle_algorithm,
-            connected_components_algorithm: self
-                .config
-                .aromaticity
-                .perception
-                .connected_components_algorithm,
-            derived_kind: DerivedKind::DerivedComplete,
-        });
-        for constraint in molecule.constraints().iter() {
-            match validator.evaluate(molecule, constraint)? {
-                Solution::Determined(()) => {
-                    edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-                }
-                Solution::Underdetermined(()) => {}
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Err(DischargeContradiction::Molecule(contradiction)));
-                }
-            }
-        }
+        let mut first_edits = if flags.contains(ProjectFlags::STEREO) {
+            Some(self.stereo.plan_project(molecule)?)
+        } else if flags.contains(ProjectFlags::AROMATICITY) {
+            Some(self.aromaticity.plan_project(molecule)?)
+        } else if flags.contains(ProjectFlags::ISOTOPE) {
+            Some(self.isotope.plan_project(molecule)?)
+        } else {
+            None
+        };
 
-        Ok(Ok(edits))
+        Transaction::run::<_, MoleculeApplyError>(molecule, rollback_method, |mut transaction| {
+            Ok((|| {
+                if flags.contains(ProjectFlags::STEREO) {
+                    let edits = match first_edits.take() {
+                        Some(edits) => edits,
+                        None => self.stereo.plan_project(
+                            transaction
+                                .probe()
+                                .expect("resolver phase plans preserve molecule integrity"),
+                        )?,
+                    };
+                    transaction
+                        .apply(edits)
+                        .expect("stereo project plan applies to its input");
+                }
+                if flags.contains(ProjectFlags::AROMATICITY) {
+                    let edits = match first_edits.take() {
+                        Some(edits) => edits,
+                        None => self.aromaticity.plan_project(
+                            transaction
+                                .probe()
+                                .expect("resolver phase plans preserve molecule integrity"),
+                        )?,
+                    };
+                    transaction
+                        .apply(edits)
+                        .expect("aromaticity project plan applies to its input");
+                }
+                // Valence projection preserves all fields and requires no edits.
+                if flags.contains(ProjectFlags::ISOTOPE) {
+                    let edits = match first_edits.take() {
+                        Some(edits) => edits,
+                        None => self.isotope.plan_project(
+                            transaction
+                                .probe()
+                                .expect("resolver phase plans preserve molecule integrity"),
+                        )?,
+                    };
+                    transaction
+                        .apply(edits)
+                        .expect("isotope project plan applies to its input");
+                }
+                transaction
+                    .commit()
+                    .expect("resolver phase plans preserve molecule integrity");
+                Ok(Solution::Determined(()))
+            })())
+        })
+        .expect("resolver applies and commits only its own valid plans")
     }
-}
 
-/// Plan the opening placement stage: normalize every molecule-scope
-/// constraint (trivial wrappers reduce to their element) and move bare
-/// entity leaves into the targeted entity's store, collisions combining by
-/// meet.
-fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> {
-    let mut edits = Edits::new();
-    let mut atoms: BTreeMap<(AtomId, AtomConstraintKey), AtomConstraintForm> = BTreeMap::new();
-    let mut bonds: BTreeMap<(BondId, BondConstraintKey), BondConstraintForm> = BTreeMap::new();
-    let mut dative: BTreeMap<(DativeBondId, DativeBondConstraintKey), DativeBondConstraintForm> =
-        BTreeMap::new();
-    let mut aromatic: BTreeMap<
-        (AromaticSystemId, AromaticSystemConstraintKey),
-        AromaticSystemConstraintForm,
-    > = BTreeMap::new();
-    let mut multicenter: BTreeMap<
-        (MulticenterBondId, MulticenterBondConstraintKey),
-        MulticenterBondConstraintForm,
-    > = BTreeMap::new();
-    let mut noncovalent: BTreeMap<
-        (NoncovalentBondId, NoncovalentBondConstraintKey),
-        NoncovalentBondConstraintForm,
-    > = BTreeMap::new();
-    let mut stereo_atoms: BTreeMap<
-        (StereoAtomId, StereoKind, StereoAtomConstraintKey),
-        StereoAtomConstraintForm,
-    > = BTreeMap::new();
-    let mut stereo_bonds: BTreeMap<
-        (StereoBondId, StereoKind, StereoBondConstraintKey),
-        StereoBondConstraintForm,
-    > = BTreeMap::new();
-
-    for constraint in molecule.constraints().iter() {
-        let normalized =
-            constraint
-                .clone()
-                .normalize()
-                .map_err(|_| PlacementContradiction::Normalize {
-                    constraint: constraint.clone(),
-                })?;
-        let collision = |constraint: Constraint| PlacementContradiction::Collision { constraint };
-        match normalized {
-            Constraint::Atom(id, inner) => {
-                let stored = atoms.remove(&(id, inner.key())).or_else(|| {
-                    molecule
-                        .atom(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored
-                        .meet(&inner)
-                        .ok_or_else(|| collision(Constraint::Atom(id, inner.clone())))?,
-                    None => inner,
-                };
-                atoms.insert((id, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::Bond(id, inner) => {
-                let stored = bonds.remove(&(id, inner.key())).or_else(|| {
-                    molecule
-                        .bond(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored
-                        .meet(&inner)
-                        .ok_or_else(|| collision(Constraint::Bond(id, inner.clone())))?,
-                    None => inner,
-                };
-                bonds.insert((id, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::DativeBond(id, inner) => {
-                let stored = dative.remove(&(id, inner.key())).or_else(|| {
-                    molecule
-                        .dative_bond(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored
-                        .meet(&inner)
-                        .ok_or_else(|| collision(Constraint::DativeBond(id, inner.clone())))?,
-                    None => inner,
-                };
-                dative.insert((id, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::AromaticSystem(id, inner) => {
-                let stored = aromatic.remove(&(id, inner.key())).or_else(|| {
-                    molecule
-                        .aromatic_system(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored
-                        .meet(&inner)
-                        .ok_or_else(|| collision(Constraint::AromaticSystem(id, inner.clone())))?,
-                    None => inner,
-                };
-                aromatic.insert((id, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::MulticenterBond(id, inner) => {
-                let stored = multicenter.remove(&(id, inner.key())).or_else(|| {
-                    molecule
-                        .multicenter_bond(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored
-                        .meet(&inner)
-                        .ok_or_else(|| collision(Constraint::MulticenterBond(id, inner.clone())))?,
-                    None => inner,
-                };
-                multicenter.insert((id, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::NoncovalentBond(id, inner) => {
-                let stored = noncovalent.remove(&(id, inner.key())).or_else(|| {
-                    molecule
-                        .noncovalent_bond(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored
-                        .meet(&inner)
-                        .ok_or_else(|| collision(Constraint::NoncovalentBond(id, inner.clone())))?,
-                    None => inner,
-                };
-                noncovalent.insert((id, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::StereoAtom(id, kind, inner) => {
-                let stored = stereo_atoms.remove(&(id, kind, inner.key())).or_else(|| {
-                    molecule
-                        .stereo_atom(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored.meet(&inner).ok_or_else(|| {
-                        collision(Constraint::StereoAtom(id, kind, inner.clone()))
-                    })?,
-                    None => inner,
-                };
-                stereo_atoms.insert((id, kind, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            Constraint::StereoBond(id, kind, inner) => {
-                let stored = stereo_bonds.remove(&(id, kind, inner.key())).or_else(|| {
-                    molecule
-                        .stereo_bond(id)
-                        .attributes
-                        .constraints
-                        .get(inner.key())
-                        .cloned()
-                });
-                let met = match stored {
-                    Some(stored) => stored.meet(&inner).ok_or_else(|| {
-                        collision(Constraint::StereoBond(id, kind, inner.clone()))
-                    })?,
-                    None => inner,
-                };
-                stereo_bonds.insert((id, kind, met.key()), met);
-                edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-            }
-            normalized => {
-                if normalized != *constraint {
-                    edits.remove_molecule_constraint(ConstraintEdit::from(constraint.clone()));
-                    edits.add_molecule_constraint(ConstraintEdit::from(normalized));
+    fn select_atom_completions(&self, state: &mut ResolveState, report: bool) {
+        let key = self.tie_break.key();
+        if !key.is_empty() {
+            let plural: Vec<AtomId> = state
+                .completions
+                .iter()
+                .filter_map(|(atom, disjuncts)| (disjuncts.len() > 1).then_some(atom))
+                .collect();
+            for atom in plural {
+                let disjuncts = state.completions.get(atom).expect("plural atom").to_vec();
+                let best = disjuncts
+                    .iter()
+                    .max_by(|a, b| compare_by_key(key, a, b))
+                    .expect("non-empty entry")
+                    .clone();
+                let unique = disjuncts
+                    .iter()
+                    .filter(|form| compare_by_key(key, form, &best).is_eq())
+                    .count()
+                    == 1;
+                if unique {
+                    state.completions.insert(atom, smallvec::smallvec![best]);
+                    if report {
+                        state.tie_breaks.push(atom);
+                    }
                 }
+            }
+            if report {
+                state.tie_breaks.sort_unstable();
+                state.tie_breaks.dedup();
             }
         }
     }
 
-    for ((id, _), form) in atoms {
-        let mut update = AtomUpdate::default();
-        update.constraints.set(form);
-        edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes, &update);
+    fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> Edits {
+        let mut edits = self
+            .aromaticity
+            .plan_bond_discharge(molecule, &state.aromatic_systems);
+        let mut elements = Vec::new();
+        let mut isotope_masses = Vec::new();
+        let mut charges = Vec::new();
+        let mut implicit_hydrogens = Vec::new();
+        let mut lone_pairs = Vec::new();
+        let mut unpaired_electrons = Vec::new();
+        let mut valences = Vec::new();
+        for (atom, disjuncts) in state.completions.iter() {
+            let current = molecule.atom(atom).attributes();
+            let selected = &disjuncts[0];
+            if !current.element.normalized_eq(&selected.element) {
+                elements.push((
+                    AtomHandle::Id(atom),
+                    current.element.clone(),
+                    selected.element.clone(),
+                ));
+            }
+            if !current.isotope_mass.normalized_eq(&selected.isotope_mass) {
+                isotope_masses.push((
+                    AtomHandle::Id(atom),
+                    current.isotope_mass.clone(),
+                    selected.isotope_mass.clone(),
+                ));
+            }
+            if !current.charge.normalized_eq(&selected.charge) {
+                charges.push((
+                    AtomHandle::Id(atom),
+                    current.charge.clone(),
+                    selected.charge.clone(),
+                ));
+            }
+            if !current
+                .implicit_hydrogens
+                .normalized_eq(&selected.implicit_hydrogens)
+            {
+                implicit_hydrogens.push((
+                    AtomHandle::Id(atom),
+                    current.implicit_hydrogens.clone(),
+                    selected.implicit_hydrogens.clone(),
+                ));
+            }
+            if !current.lone_pairs.normalized_eq(&selected.lone_pairs) {
+                lone_pairs.push((
+                    AtomHandle::Id(atom),
+                    current.lone_pairs.clone(),
+                    selected.lone_pairs.clone(),
+                ));
+            }
+            let selected_unpaired_electrons = current.unpaired_electrons.update(
+                &current
+                    .unpaired_electrons
+                    .difference_to(&selected.unpaired_electrons),
+            );
+            if !current
+                .unpaired_electrons
+                .normalized_eq(&selected_unpaired_electrons)
+            {
+                unpaired_electrons.push((
+                    AtomHandle::Id(atom),
+                    current.unpaired_electrons.clone(),
+                    selected_unpaired_electrons,
+                ));
+            }
+            if let Some(asserted) = current.constraints.get(AtomConstraintKey::Valence) {
+                valences.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
+            }
+        }
+        if !elements.is_empty() {
+            edits.modify_atom_elements(elements);
+        }
+        if !isotope_masses.is_empty() {
+            edits.modify_atom_isotope_masses(isotope_masses);
+        }
+        if !charges.is_empty() {
+            edits.modify_atom_charges(charges);
+        }
+        if !implicit_hydrogens.is_empty() {
+            edits.modify_atom_implicit_hydrogens(implicit_hydrogens);
+        }
+        if !lone_pairs.is_empty() {
+            edits.modify_atom_lone_pairs(lone_pairs);
+        }
+        if !unpaired_electrons.is_empty() {
+            edits.modify_atom_unpaired_electrons(unpaired_electrons);
+        }
+        if !valences.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::Valence, valences);
+        }
+        let existing: BTreeSet<Vec<AtomId>> = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|aromatic_system| {
+                let mut atoms: Vec<AtomId> = aromatic_system.atom_ids().collect();
+                atoms.sort_unstable();
+                atoms
+            })
+            .collect();
+        for (atoms, aromatic_system) in &state.aromatic_systems {
+            let mut key = atoms.clone();
+            key.sort_unstable();
+            if existing.contains(&key) {
+                continue;
+            }
+            for edit in self.aromaticity.perception.plan_aromatic_system(
+                molecule,
+                atoms.clone(),
+                aromatic_system.clone(),
+            ) {
+                edits.push(edit);
+            }
+        }
+        edits
     }
-    for ((id, _), form) in bonds {
-        let mut update = BondUpdate::default();
-        update.constraints.set(form);
-        edits.update_bond(BondHandle::Id(id), molecule.bond(id).attributes, &update);
-    }
-    for ((id, _), form) in dative {
-        let mut update = DativeBondUpdate::default();
-        update.constraints.set(form);
-        edits.update_dative_bond(
-            DativeBondHandle::Id(id),
-            molecule.dative_bond(id).attributes,
-            &update,
-        );
-    }
-    for ((id, _), form) in aromatic {
-        let mut update = AromaticSystemUpdate::default();
-        update.constraints.set(form);
-        edits.update_aromatic_system(
-            AromaticSystemHandle::Id(id),
-            molecule.aromatic_system(id).attributes,
-            &update,
-        );
-    }
-    for ((id, _), form) in multicenter {
-        let mut update = MulticenterBondUpdate::default();
-        update.constraints.set(form);
-        edits.update_multicenter_bond(
-            MulticenterBondHandle::Id(id),
-            molecule.multicenter_bond(id).attributes,
-            &update,
-        );
-    }
-    for ((id, _), form) in noncovalent {
-        let mut update = NoncovalentBondUpdate::default();
-        update.constraints.set(form);
-        edits.update_noncovalent_bond(
-            NoncovalentBondHandle::Id(id),
-            molecule.noncovalent_bond(id).attributes,
-            &update,
-        );
-    }
-    for ((id, _, _), form) in stereo_atoms {
-        let mut update = StereoAtomUpdate::default();
-        update.constraints.set(form);
-        edits.update_stereo_atom(
-            StereoAtomHandle::Id(id),
-            molecule.stereo_atom(id).attributes,
-            &update,
-        );
-    }
-    for ((id, _, _), form) in stereo_bonds {
-        let mut update = StereoBondUpdate::default();
-        update.constraints.set(form);
-        edits.update_stereo_bond(
-            StereoBondHandle::Id(id),
-            molecule.stereo_bond(id).attributes,
-            &update,
-        );
-    }
-    Ok(edits)
 }
 
 #[cfg(test)]
@@ -1172,13 +1160,18 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
+    use smallvec::smallvec;
     use umol_chem::element::Element;
+    use umol_graph_core::Correspondence;
     use umol_graph_ir::ir::{
-        AtomConstraintForm, AtomForm, AtomId, IsotopeMassForm, MoleculeConstraint, MoleculeEntries,
-        MulticenterValenceForm, NumForm, StereoConfigurationForm, StereoCoset, StereoLigand,
-        StereoLigandKind,
+        AromaticSystemConstraintForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId,
+        BondId, Constraint, Edit, IsotopeMassForm, MoleculeConstraint, MoleculeCorrespondence,
+        MoleculeEntries, MulticenterBondId, MulticenterValenceForm, NumForm,
+        StereoAtomConstraintForm, StereoAtomId, StereoBondId, StereoConfigurationForm, StereoCoset,
+        StereoKind, StereoLigand, StereoLigandKind, Stereogenicity, StereogenicityForm,
+        TetrahedralStereoForm,
     };
-    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
+    use umol_graph_ir::{atom_dsl, bond_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ingest::ingest_smiles;
@@ -1188,7 +1181,7 @@ mod tests {
         RingLimits, StereoModel, ValenceModel,
     };
     use crate::ops::stereo::{StereoInconsistency, StereoPerception};
-    use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
+    use crate::ops::valence::{AtomTypeRegistry, CountsError, ValenceTable};
     use crate::ops::validate::{ConnectivityModel, IncidenceConstraintInvariantsContradiction};
 
     #[fixture]
@@ -1223,20 +1216,27 @@ mod tests {
         )
     }
 
+    #[fixture]
+    fn indole_skeleton() -> Molecule {
+        mol_dsl!(
+            r#"{
+            :atoms ["N#i=#c0#u0#s#a+" "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a"
+                    "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a"
+                    "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a" "C#i=#c0#u0#s#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]
+                    [3 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 4 "1"]]
+        }"#
+        )
+    }
+
     #[rstest]
     fn test_resolve_config_default() {
         assert_eq!(
             ResolveConfig::default(),
             ResolveConfig {
                 isotope: IsotopePolicy::Strict,
-                aromaticity: AromaticityResolveConfig {
-                    reset_aromatic_valence: false,
-                    ..AromaticityResolveConfig::default()
-                },
-                stereo: StereoResolveConfig {
-                    reset_stereo_constraints: false,
-                    ..StereoResolveConfig::default()
-                },
+                aromaticity: AromaticityResolveConfig::default(),
+                stereo: StereoResolveConfig::default(),
             }
         );
     }
@@ -1251,62 +1251,290 @@ mod tests {
         let explicit = Resolver::with_config(&chemistry_model, ResolveConfig::default());
 
         assert_eq!(
-            resolver.aromaticity.plan(&aromatic_molecule),
-            explicit.aromaticity.plan(&aromatic_molecule)
+            resolver.aromaticity.plan_resolve(&aromatic_molecule),
+            explicit.aromaticity.plan_resolve(&aromatic_molecule)
         );
         assert_eq!(
-            resolver.stereo.plan(&stereo_molecule),
-            explicit.stereo.plan(&stereo_molecule)
+            resolver.stereo.plan_resolve(&stereo_molecule),
+            explicit.stereo.plan_resolve(&stereo_molecule)
         );
     }
 
     #[rstest]
-    #[case::reset_aromatic_valence(ResolveConfig {
-        isotope: IsotopePolicy::Strict,
-        aromaticity: AromaticityResolveConfig {
-            reset_aromatic_valence: true,
-            ..AromaticityResolveConfig::default()
+    #[case::keep_stereo_failure(
+        ResolveConfig {
+            isotope: IsotopePolicy::Strict,
+            aromaticity: AromaticityResolveConfig::default(),
+            stereo: StereoResolveConfig {
+                tetrahedral_stereo_failure: StereoFailurePolicy::Keep,
+                ..StereoResolveConfig::default()
+            },
         },
-        stereo: StereoResolveConfig::default(),
-    })]
-    #[case::reset_stereo_constraints(ResolveConfig {
-        isotope: IsotopePolicy::Strict,
-        aromaticity: AromaticityResolveConfig::default(),
-        stereo: StereoResolveConfig {
-            reset_stereo_constraints: true,
-            ..StereoResolveConfig::default()
-        },
-    })]
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#T1"]}"#)
+    )]
     fn test_resolver_with_config(
         chemistry_model: ChemistryModel,
         aromatic_molecule: Molecule,
-        stereo_molecule: Molecule,
         #[case] config: ResolveConfig,
+        #[case] stereo_molecule: Molecule,
     ) {
         let resolver = Resolver::with_config(&chemistry_model, config);
         let expected_aromaticity =
             AromaticityResolver::with_config(&chemistry_model.aromaticity, config.aromaticity)
-                .plan(&aromatic_molecule);
+                .plan_resolve(&aromatic_molecule);
         let expected_stereo = StereoResolver::with_config(&chemistry_model.stereo, config.stereo)
-            .plan(&stereo_molecule);
+            .plan_resolve(&stereo_molecule);
 
         assert_eq!(
-            resolver.aromaticity.plan(&aromatic_molecule),
+            resolver.aromaticity.plan_resolve(&aromatic_molecule),
             expected_aromaticity
         );
-        assert_eq!(resolver.stereo.plan(&stereo_molecule), expected_stereo);
-        if config.aromaticity != AromaticityResolveConfig::default() {
-            assert_ne!(
-                expected_aromaticity,
-                AromaticityResolver::new(&chemistry_model.aromaticity).plan(&aromatic_molecule)
-            );
-        }
+        assert_eq!(
+            resolver.stereo.plan_resolve(&stereo_molecule),
+            expected_stereo
+        );
         if config.stereo != StereoResolveConfig::default() {
             assert_ne!(
                 expected_stereo,
-                StereoResolver::new(&chemistry_model.stereo).plan(&stereo_molecule)
+                StereoResolver::new(&chemistry_model.stereo).plan_resolve(&stereo_molecule)
             );
         }
+    }
+
+    #[rstest]
+    #[case::selected(
+        mol_dsl!(r#"{:atoms ["C#i=#c0"]}"#),
+        ValenceTieBreak::MostSaturated,
+        Solution::Determined((
+            mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#),
+            ResolveReport { unresolved: AtomCompletions::new(), tie_breaks: vec![AtomId(0)] },
+        ))
+    )]
+    #[case::plural(
+        mol_dsl!(r#"{:atoms ["C#i=#c0"]}"#),
+        ValenceTieBreak::Strict,
+        Solution::Underdetermined(ResolveReport {
+            unresolved: AtomCompletions::from_iter([(AtomId(0), vec![
+                atom_dsl!("C#i=#c0#h4#n0#u0#s"),
+                atom_dsl!("C#i=#c0#h3#n0#u1#s2"),
+            ].into())]),
+            tie_breaks: Vec::new(),
+        })
+    )]
+    #[case::isotope(
+        mol_dsl!(r#"{:atoms ["C#c0"]}"#),
+        ValenceTieBreak::MostSaturated,
+        Solution::Underdetermined(ResolveReport {
+            unresolved: AtomCompletions::new(), tie_breaks: vec![AtomId(0)],
+        })
+    )]
+    #[case::element(
+        mol_dsl!(r#"{:atoms ["{C,N}#c0"]}"#),
+        ValenceTieBreak::MostSaturated,
+        Solution::Underdetermined(ResolveReport::default())
+    )]
+    fn test_resolver_resolve_with_report(
+        #[case] molecule: Molecule,
+        #[case] tie_break: ValenceTieBreak,
+        #[case] expected: Solution<(Molecule, ResolveReport), ResolveContradiction, ResolveReport>,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                tie_break,
+                ..ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
+                    atom_dsl!("C#c0#h4#n0#u0#s"),
+                    atom_dsl!("C#c0#h3#n0#u1#s2"),
+                ])))
+            },
+            ..ChemistryModel::default()
+        };
+        let resolver = Resolver::new(&model);
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Ok(expected.clone())
+        );
+        let (expected_molecule, expected_report, expected_owned) = match expected {
+            Solution::Determined((resolved, report)) => (
+                resolved.clone(),
+                Solution::Determined(report),
+                Solution::Determined(resolved),
+            ),
+            Solution::Underdetermined(report) => (
+                molecule.clone(),
+                Solution::Underdetermined(report),
+                Solution::Underdetermined(()),
+            ),
+            Solution::Contradictory(contradiction) => (
+                molecule.clone(),
+                Solution::Contradictory(contradiction.clone()),
+                Solution::Contradictory(contradiction),
+            ),
+        };
+        assert_eq!(resolver.resolve(molecule.clone()), Ok(expected_owned));
+        let mut with_report = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut with_report, rollback_method),
+            Ok(expected_report.clone())
+        );
+        assert_eq!(with_report, expected_molecule);
+        let mut without_report = molecule;
+        assert_eq!(
+            resolver.resolve_into(&mut without_report, rollback_method),
+            Ok(expected_report.map(|_| ()))
+        );
+        assert_eq!(without_report, expected_molecule);
+    }
+
+    #[rstest]
+    #[case::higher_threshold(0.2)]
+    #[case::lower_threshold(0.1)]
+    fn test_resolver_resolve_with_report_hmo_error(
+        indole_skeleton: Molecule,
+        #[case] stabilization_threshold: f64,
+        #[values(
+            AtomSelectionAlgorithm::FullDfs,
+            AtomSelectionAlgorithm::BacktrackingDfs
+        )]
+        atom_selection_algorithm: AtomSelectionAlgorithm,
+    ) {
+        let model = ChemistryModel {
+            aromaticity: AromaticityModel {
+                scope: ElementScope::Any,
+                rule: AromaticityRule::Hmo {
+                    stabilization_threshold,
+                },
+                tie_break: AromaticityTieBreak::MinElectronCount,
+            },
+            ..ChemistryModel::default()
+        };
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    atom_selection_algorithm,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        assert_eq!(
+            resolver.resolve_with_report(indole_skeleton),
+            Ok(Solution::Contradictory(ResolveContradiction::Aromaticity(
+                AromaticityContradiction::HmoInvalidInput(
+                    "open-shell pi-system (odd electron count) not supported by HMO".to_owned(),
+                ),
+            ))),
+        );
+    }
+
+    #[rstest]
+    #[case::full_at_bound(
+        12,
+        AtomSelectionAlgorithm::FullDfs,
+        AromaticityFailurePolicy::Error,
+        true
+    )]
+    #[case::full_above_bound(
+        13,
+        AtomSelectionAlgorithm::FullDfs,
+        AromaticityFailurePolicy::Error,
+        false
+    )]
+    #[case::pruned_above_product_bound(
+        13,
+        AtomSelectionAlgorithm::BacktrackingDfs,
+        AromaticityFailurePolicy::Error,
+        true
+    )]
+    #[case::keep_full(
+        13,
+        AtomSelectionAlgorithm::FullDfs,
+        AromaticityFailurePolicy::Keep,
+        false
+    )]
+    #[case::keep_backtracking(
+        13,
+        AtomSelectionAlgorithm::BacktrackingDfs,
+        AromaticityFailurePolicy::Keep,
+        false
+    )]
+    fn test_resolver_resolve_search_bound(
+        #[case] nitrogen_count: usize,
+        #[case] atom_selection_algorithm: AtomSelectionAlgorithm,
+        #[case] aromatic_valence_failure: AromaticityFailurePolicy,
+        #[case] determined: bool,
+    ) {
+        let bonds: Vec<_> = (0..14)
+            .map(|atom| {
+                (
+                    AtomId(atom),
+                    AtomId((atom + 1) % 14),
+                    bond_dsl!("1#c0#u0#s"),
+                )
+            })
+            .collect();
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: (0..14)
+                .map(|atom| {
+                    if atom < nitrogen_count {
+                        atom_dsl!("N#i=#c0#u0#s#a+")
+                    } else {
+                        atom_dsl!("C#i=#c0#u0#s#a")
+                    }
+                })
+                .collect(),
+            bonds: bonds.clone(),
+            ..MoleculeEntries::default()
+        });
+        let mut model = ChemistryModel::default();
+        model.aromaticity.tie_break = AromaticityTieBreak::MinElectronCount;
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    atom_selection_algorithm,
+                    aromatic_valence_failure,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        let Solution::Determined(admitted) = resolver.valence.admit(&molecule).unwrap() else {
+            panic!("the ring has complete valence candidates");
+        };
+        assert_eq!(
+            admitted
+                .completions
+                .iter()
+                .map(|(_, forms)| forms.len())
+                .product::<usize>(),
+            1 << nitrogen_count
+        );
+        let expected = if determined {
+            Solution::Determined(Molecule::from_entries(MoleculeEntries {
+                atoms: (0..14)
+                    .map(|atom| {
+                        if atom < nitrogen_count {
+                            atom_dsl!("N#i=#c0#h0#n1#u0#s")
+                        } else {
+                            atom_dsl!("C#i=#c0#h1#n0#u0#s")
+                        }
+                    })
+                    .collect(),
+                bonds,
+                aromatic: vec![(
+                    (0..14).map(AtomId).collect(),
+                    AromaticSystemForm::from_electrons(vec![1; 14])
+                        .with_charge(0)
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+                )],
+                ..MoleculeEntries::default()
+            }))
+        } else {
+            Solution::Underdetermined(())
+        };
+        assert_eq!(resolver.resolve(molecule), Ok(expected));
     }
 
     #[rstest]
@@ -1314,7 +1542,10 @@ mod tests {
     #[case::atom_typing(ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
             "C#c0#h4#n0#u0#s#v0#a!"
         )]))))]
-    fn test_resolver_resolve(#[case] valence: ValenceModel) {
+    fn test_resolver_resolve_into(
+        #[case] valence: ValenceModel,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let model = ChemistryModel {
             connectivity: ConnectivityModel::default(),
             valence,
@@ -1329,10 +1560,10 @@ mod tests {
         };
         let mut molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#v0#a!"]}"#);
         assert_eq!(
-            Resolver::new(&model).resolve(&mut molecule),
-            Ok(Solution::Determined(ResolveReport::default()))
+            Resolver::new(&model).resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Determined(()))
         );
-        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
+        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}"#));
     }
 
     #[rstest]
@@ -1350,12 +1581,13 @@ mod tests {
     #[case::sulfane(atom_dsl!("S#i=#c0#h2#n2#u0#s"), atom_dsl!("S#i=#c0#h2"))]
     #[case::borane(atom_dsl!("B#i=#c0#h3#n0#u0#s"), atom_dsl!("B#i=#c0#h3"))]
     #[case::silane(atom_dsl!("Si#i=#c0#h4#n0#u0#s"), atom_dsl!("Si#i=#c0#h4"))]
-    fn test_resolver_resolve_atoms(
+    fn test_resolver_resolve_into_atoms(
         #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
         #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
         tie_break: ValenceTieBreak,
         #[case] expected: AtomForm,
         #[case] input: AtomForm,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         valence.tie_break = tie_break;
         let model = ChemistryModel {
@@ -1367,8 +1599,8 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            Resolver::new(&model).resolve(&mut molecule),
-            Ok(Solution::Determined(ResolveReport::default()))
+            Resolver::new(&model).resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Determined(()))
         );
         assert_eq!(
             molecule,
@@ -1380,9 +1612,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_resolver_resolve_overlap(
+    fn test_resolver_resolve_into_overlap(
         #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
         tie_break: ValenceTieBreak,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let model = ChemistryModel {
             valence: ValenceModel {
@@ -1398,10 +1631,69 @@ mod tests {
         let resolver = Resolver::new(&model);
         let mut molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4"]}"#);
         assert_eq!(
-            resolver.resolve(&mut molecule),
-            Ok(Solution::Determined(ResolveReport::default()))
+            resolver.resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
+    }
+
+    #[rstest]
+    #[case::tetrahedral(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]
+        }"#),
+        StereoInconsistency::TetrahedralStereoMismatch {
+            atom: AtomId(0), stereo_atom: StereoAtomId(0),
+        },
+    )]
+    #[case::cis_trans(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
+            :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]
+        }"#),
+        StereoInconsistency::CisTransStereoMismatch {
+            bond: BondId(0), stereo_bond: StereoBondId(0),
+        },
+    )]
+    fn test_resolver_resolve_stereo_mismatch(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: Molecule,
+        #[case] inconsistency: StereoInconsistency,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                stereo: StereoResolveConfig {
+                    tetrahedral_stereo_failure: failure,
+                    stereo_atom_failure: failure,
+                    cis_trans_stereo_failure: failure,
+                    stereo_bond_failure: failure,
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        let expected =
+            ResolveContradiction::Stereo(StereoContradiction::Inconsistency(inconsistency));
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Contradictory(expected))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -1469,19 +1761,31 @@ mod tests {
         chemistry_model: ChemistryModel,
         #[case] mut molecule: Molecule,
         #[case] expected: Molecule,
+        #[values(false, true)] consuming: bool,
+        #[values(false, true)] shared: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
-        assert_eq!(
-            Resolver::with_config(
-                &chemistry_model,
-                ResolveConfig {
-                    isotope: IsotopePolicy::Natural,
-                    ..Default::default()
-                }
-            )
-            .resolve(&mut molecule),
-            Ok(Solution::Determined(ResolveReport::default()))
+        let retained = shared.then(|| molecule.clone());
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                isotope: IsotopePolicy::Natural,
+                ..Default::default()
+            },
         );
-        assert_eq!(molecule, expected);
+        if consuming {
+            assert_eq!(
+                resolver.resolve(molecule),
+                Ok(Solution::Determined(expected))
+            );
+        } else {
+            assert_eq!(
+                resolver.resolve_into(&mut molecule, rollback_method),
+                Ok(Solution::Determined(()))
+            );
+            assert_eq!(molecule, expected);
+        }
+        drop(retained);
     }
 
     #[rstest]
@@ -1496,6 +1800,7 @@ mod tests {
         #[case] mut molecule: Molecule,
         #[case] expected: Molecule,
         #[case] omitted: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         valence.tie_break = tie_break;
         let model = ChemistryModel {
@@ -1510,15 +1815,15 @@ mod tests {
             },
         );
         let original = molecule.clone();
-        let actual = resolver.resolve(&mut molecule);
+        let consumed = resolver.resolve(molecule.clone());
+        let actual = resolver.resolve_into(&mut molecule, rollback_method);
         if omitted && isotope == IsotopePolicy::Strict {
-            assert_eq!(
-                actual,
-                Ok(Solution::Underdetermined(ResolveReport::default()))
-            );
+            assert_eq!(consumed, Ok(Solution::Underdetermined(())));
+            assert_eq!(actual, Ok(Solution::Underdetermined(())));
             assert_eq!(molecule, original);
         } else {
-            assert_eq!(actual, Ok(Solution::Determined(ResolveReport::default())));
+            assert_eq!(consumed, Ok(Solution::Determined(expected.clone())));
+            assert_eq!(actual, Ok(Solution::Determined(())));
             assert_eq!(molecule, expected);
         }
     }
@@ -1530,6 +1835,7 @@ mod tests {
         #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
         #[case] mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let model = ChemistryModel {
             valence,
@@ -1544,8 +1850,19 @@ mod tests {
                     ..Default::default()
                 }
             )
-            .resolve(&mut molecule),
-            Ok(Solution::Underdetermined(ResolveReport::default()))
+            .resolve(molecule.clone()),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(
+            Resolver::with_config(
+                &model,
+                ResolveConfig {
+                    isotope,
+                    ..Default::default()
+                }
+            )
+            .resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, original);
     }
@@ -1553,10 +1870,11 @@ mod tests {
     #[rstest]
     #[case::undetermined(mol_dsl!(r#"{:atoms ["C#c0#h4#T1"]}"#))]
     #[case::variable(mol_dsl!(r#"{:atoms ["C#i?mass#c0#h4#T1"]}"#))]
-    fn test_resolver_resolve_isotope_stereo(
+    fn test_resolver_resolve_into_isotope_stereo(
         #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
         #[case] mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let model = ChemistryModel {
             valence,
@@ -1571,7 +1889,7 @@ mod tests {
                     ..Default::default()
                 }
             )
-            .resolve(&mut molecule),
+            .resolve_into(&mut molecule, rollback_method),
             Ok(Solution::Contradictory(ResolveContradiction::Stereo(
                 StereoContradiction::Inconsistency(StereoInconsistency::TetrahedralStereoFailure {
                     atom: AtomId(0)
@@ -1582,140 +1900,144 @@ mod tests {
     }
 
     #[rstest]
-    #[case::leaf(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(0)),))]
-    #[case::singleton_wrapper(Constraint::Or(vec![Constraint::Atom(
-        AtomId(0),
-        AtomConstraintForm::Valence(NumForm::Lit(0)),
-    )]))]
-    fn test_resolver_resolve_placement(
+    #[case::atom(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]
+    }"#))]
+    #[case::bond(mol_dsl_concrete!(r#"{
+        :atoms ["C" "C" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1#o(0,1)="}]
+    }"#))]
+    fn test_resolver_resolve_stereo_assertions(
         chemistry_model: ChemistryModel,
-        #[case] constraint: Constraint,
+        #[case] molecule: Molecule,
     ) {
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint))
-            .expect("the test constraint references the molecule");
-
         assert_eq!(
-            Resolver::with_config(
-                &chemistry_model,
-                ResolveConfig {
-                    isotope: IsotopePolicy::Natural,
-                    ..Default::default()
-                }
-            )
-            .resolve(&mut molecule),
+            Resolver::new(&chemistry_model).resolve(molecule.clone()),
+            Ok(Solution::Determined(molecule))
+        );
+    }
+
+    #[rstest]
+    #[case::matching_degree(mol_dsl_concrete!(r#"{:atoms ["C#h4#D0"]}"#))]
+    #[case::conflicting_degree(mol_dsl_concrete!(r#"{:atoms ["C#h4#D1"]}"#))]
+    #[case::uncompleted_valence(mol_dsl_concrete!(r#"{:atoms ["C#h4#v0"]}"#))]
+    #[case::bond_ring(mol_dsl_concrete!(r#"{
+        :atoms ["C#h3" "C#h3"] :bonds [[0 1 "1#R!"]]
+    }"#))]
+    #[case::stored_aromatic(mol_dsl_concrete!(r#"{
+        :atoms ["C#h#a1" "C#h" "C#h" "C#h" "C#h" "C#h"]
+        :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+    }"#))]
+    #[case::stored_tetrahedral(mol_dsl_concrete!(r#"{
+        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]
+    }"#))]
+    #[case::stored_cis_trans(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]
+    }"#))]
+    fn test_resolver_resolve_constraints_identity(
+        chemistry_model: ChemistryModel,
+        #[case] molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let resolver = Resolver::new(&chemistry_model);
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Determined(molecule.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Ok(Solution::Determined((
+                molecule.clone(),
+                ResolveReport::default()
+            )))
+        );
+        let mut actual = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into(&mut actual, rollback_method),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(actual, molecule);
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut actual, rollback_method),
             Ok(Solution::Determined(ResolveReport::default()))
         );
-        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
+        assert_eq!(actual, molecule);
     }
 
     #[rstest]
-    fn test_resolver_resolve_placement_collision(chemistry_model: ChemistryModel) {
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(Constraint::Atom(
-                    AtomId(0),
-                    AtomConstraintForm::Valence(NumForm::Lit(3)),
-                ));
-            })
-            .expect("the test constraint references the molecule");
-        let before = molecule.clone();
-
-        assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
-            Ok(Solution::Contradictory(ResolveContradiction::Placement(
-                PlacementContradiction::Collision {
-                    constraint: Constraint::Atom(
-                        AtomId(0),
-                        AtomConstraintForm::Valence(NumForm::Lit(3)),
-                    ),
-                },
-            )))
-        );
-        assert_eq!(molecule, before);
-    }
-
-    #[rstest]
-    fn test_resolver_resolve_discharge_error(chemistry_model: ChemistryModel) {
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#D5"]}"#);
-        let before = molecule.clone();
-
-        assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
-            Ok(Solution::Contradictory(ResolveContradiction::Discharge(
-                DischargeContradiction::Assertion {
-                    constraint: Constraint::Atom(
-                        AtomId(0),
-                        AtomConstraintForm::Degree(NumForm::Lit(5)),
-                    ),
-                },
-            )))
-        );
-        assert_eq!(molecule, before);
-    }
-
-    #[rstest]
-    #[case::decided_true(
-        MoleculeConstraint::ChargeSum {
-            atoms: None,
-            sum: NumForm::Lit(0),
-        },
-        Ok(Solution::Determined(ResolveReport::default()))
-    )]
-    fn test_resolver_resolve_discharge_molecule_scope(
+    #[case::true_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+        atoms: None, sum: NumForm::Lit(0),
+    }))]
+    #[case::false_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+        atoms: None, sum: NumForm::Lit(1),
+    }))]
+    #[case::open_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+        atoms: None, sum: NumForm::LitSet(Box::new(BTreeSet::from([0, 1]))),
+    }))]
+    #[case::entity(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(0))))]
+    #[case::collision(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(3))))]
+    #[case::singleton(Constraint::Or(vec![Constraint::Atom(
+        AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(0)),
+    )]))]
+    #[case::conjunction(Constraint::And(vec![
+        Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(0))),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(3))),
+    ]))]
+    #[case::disjunction(Constraint::Or(vec![
+        Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(0))),
+        Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(3))),
+    ]))]
+    #[case::negation(Constraint::Not(Box::new(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::Lit(0)),
+    ))))]
+    fn test_resolver_resolve_molecule_constraints_identity(
         chemistry_model: ChemistryModel,
-        #[case] constraint: MoleculeConstraint,
-        #[case] expected: Result<Solution<ResolveReport, ResolveContradiction>, ResolveError>,
+        #[case] constraint: Constraint,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(Constraint::Molecule(constraint));
-            })
-            .expect("the test constraint references the molecule");
-
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0")],
+            constraints: vec![constraint].into(),
+            ..MoleculeEntries::default()
+        });
+        let resolver = Resolver::new(&chemistry_model);
         assert_eq!(
-            Resolver::with_config(
-                &chemistry_model,
-                ResolveConfig {
-                    isotope: IsotopePolicy::Natural,
-                    ..Default::default()
-                }
-            )
-            .resolve(&mut molecule),
-            expected
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Determined(molecule.clone()))
         );
-        assert!(molecule.constraints().is_empty());
-        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
-    }
-
-    #[rstest]
-    fn test_resolver_resolve_discharge_molecule_scope_error(chemistry_model: ChemistryModel) {
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-                    atoms: None,
-                    sum: NumForm::Lit(5),
-                }));
-            })
-            .expect("the test constraint references the molecule");
-        let before = molecule.clone();
-
-        let outcome = Resolver::new(&chemistry_model).resolve(&mut molecule);
-        assert!(matches!(
-            outcome,
-            Ok(Solution::Contradictory(ResolveContradiction::Discharge(
-                DischargeContradiction::Molecule(_)
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Ok(Solution::Determined((
+                molecule.clone(),
+                ResolveReport::default()
             )))
-        ));
-        assert_eq!(molecule, before);
+        );
+        let mut actual = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into(&mut actual, rollback_method),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(actual, molecule);
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut actual, rollback_method),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(actual, molecule);
     }
 
     #[rstest]
-    fn test_resolver_resolve_pyrrolyl() {
+    fn test_resolver_resolve_into_pyrrolyl(
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let model = ChemistryModel {
             valence: ValenceModel {
                 tie_break: ValenceTieBreak::MostSaturated,
@@ -1734,8 +2056,8 @@ mod tests {
         );
 
         assert_eq!(
-            Resolver::new(&model).resolve(&mut molecule),
-            Ok(Solution::Determined(ResolveReport::default()))
+            Resolver::new(&model).resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Determined(()))
         );
         assert_eq!(
             molecule,
@@ -1752,7 +2074,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_resolver_resolve_underdetermined(chemistry_model: ChemistryModel) {
+    fn test_resolver_resolve_underdetermined(
+        chemistry_model: ChemistryModel,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut molecule = mol_dsl!(
             r#"{
             :atoms ["C#i*#c0#h4#n0#u0#s#v0#a!" "C#i=#c0#h4#n0#u0#s"]
@@ -1767,8 +2092,19 @@ mod tests {
                     ..Default::default()
                 }
             )
-            .resolve(&mut molecule),
-            Ok(Solution::Underdetermined(ResolveReport::default()))
+            .resolve(molecule.clone()),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Underdetermined(()))
         );
         assert_eq!(
             molecule,
@@ -1786,7 +2122,10 @@ mod tests {
     #[case::atom_typing(ValenceModel::atom_typing(Cow::Borrowed(
         AtomTypeRegistry::default_registry()
     )))]
-    fn test_resolver_resolve_partial(#[case] valence: ValenceModel) {
+    fn test_resolver_resolve_partial(
+        #[case] valence: ValenceModel,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let model = ChemistryModel {
             valence,
             ..ChemistryModel::default()
@@ -1795,21 +2134,40 @@ mod tests {
         let original = molecule.clone();
 
         assert_eq!(
-            Resolver::new(&model).resolve(&mut molecule),
-            Ok(Solution::Underdetermined(ResolveReport::default()))
+            Resolver::new(&model).resolve(molecule.clone()),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(
+            Resolver::new(&model).resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, original);
     }
 
     #[rstest]
-    fn test_resolver_resolve_later_underdetermined(chemistry_model: ChemistryModel) {
-        let mut molecule = mol_dsl!(
-            r#"{
+    #[case::isotope_and_hydrogen_completion(mol_dsl!(r#"{
             :atoms ["C#i*#c0#h*#n0#u0#s#T+" "F#i=#c0#h0#n0#u0#s"
                     "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"]
             :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
-        }"#
-        );
+        }"#))]
+    #[case::tetrahedral_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h#T+" "F#n3" "Cl#n3" "Br#n3"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+    }"#))]
+    #[case::cis_trans_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "F#n3" "Cl#n3"]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+    }"#))]
+    #[case::stored_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "F#n3" "Cl#n3"]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]
+    }"#))]
+    fn test_resolver_resolve_later_underdetermined(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let original = molecule.clone();
 
         assert_eq!(
@@ -1820,8 +2178,19 @@ mod tests {
                     ..Default::default()
                 }
             )
-            .resolve(&mut molecule),
-            Ok(Solution::Underdetermined(ResolveReport::default()))
+            .resolve(molecule.clone()),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, original);
     }
@@ -1849,11 +2218,25 @@ mod tests {
         #[case] model: ChemistryModel,
         #[case] mut molecule: Molecule,
         #[case] expected: ResolveError,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let original = molecule.clone();
         let resolver = Resolver::new(&model);
 
-        assert_eq!(resolver.resolve(&mut molecule), Err(expected));
+        assert_eq!(resolver.resolve(molecule.clone()), Err(expected.clone()));
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Err(expected.clone())
+        );
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut molecule, rollback_method),
+            Err(expected.clone())
+        );
+        assert_eq!(molecule, original);
+        assert_eq!(
+            resolver.resolve_into(&mut molecule, rollback_method),
+            Err(expected)
+        );
         assert_eq!(molecule, original);
     }
 
@@ -1865,7 +2248,7 @@ mod tests {
                     "C#i=#c0#h0#n0#u0#s#v0#a!#m1"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]
         }"#),
-        Solution::Underdetermined(ResolveReport::default())
+        Solution::Underdetermined(())
     )]
     #[case::contradiction(
         mol_dsl!(r#"{
@@ -1884,7 +2267,8 @@ mod tests {
     )]
     fn test_resolver_resolve_multicenter_constraint_precondition(
         #[case] mut molecule: Molecule,
-        #[case] expected: Solution<ResolveReport, ResolveContradiction>,
+        #[case] expected: Solution<(), ResolveContradiction>,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let model = ChemistryModel {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
@@ -1893,8 +2277,75 @@ mod tests {
             ..ChemistryModel::default()
         };
         let original = molecule.clone();
+        let consumed = Resolver::new(&model).resolve(molecule.clone());
+        assert_eq!(
+            consumed,
+            Ok(match &expected {
+                Solution::Determined(_) => Solution::Determined(molecule.clone()),
+                Solution::Underdetermined(_) => Solution::Underdetermined(()),
+                Solution::Contradictory(contradiction) =>
+                    Solution::Contradictory(contradiction.clone()),
+            })
+        );
 
-        assert_eq!(Resolver::new(&model).resolve(&mut molecule), Ok(expected));
+        assert_eq!(
+            Resolver::new(&model).resolve_into(&mut molecule, rollback_method),
+            Ok(expected)
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::atom_aromatic_system(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a2" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        ResolveContradiction::Valence(ValenceContradiction::Counts(CountsError::NoMatch)),
+    )]
+    #[case::atom_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h3#a!" "C#h3#a"] :bonds [[0 1 "1#a"]]}"#),
+        ResolveContradiction::Valence(ValenceContradiction::Counts(CountsError::NoMatch)),
+    )]
+    #[case::bond_aromatic_system(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        ResolveContradiction::Aromaticity(AromaticityInconsistency::AromaticBondConstraintMismatch {
+            bond: BondId(0), aromatic_system: AromaticSystemId(0),
+        }.into()),
+    )]
+    fn test_resolver_resolve_aromatic_mismatch(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: Molecule,
+        #[case] expected: ResolveContradiction,
+        #[values(AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep)]
+        failure: AromaticityFailurePolicy,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = molecule.clone();
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    aromatic_valence_failure: failure,
+                    aromatic_system_failure: failure,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Contradictory(expected))
+        );
         assert_eq!(molecule, original);
     }
 
@@ -1944,18 +2395,26 @@ mod tests {
         #[case] aromaticity: AromaticityModel,
         #[case] mut molecule: Molecule,
         #[case] expected: ResolveContradiction,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         chemistry_model.aromaticity = aromaticity;
         let original = molecule.clone();
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Resolver::new(&chemistry_model).resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve_into(&mut molecule, rollback_method),
             Ok(Solution::Contradictory(expected))
         );
         assert_eq!(molecule, original);
     }
 
     #[rstest]
-    fn test_resolver_resolve_identity(chemistry_model: ChemistryModel) {
+    fn test_resolver_resolve_identity(
+        chemistry_model: ChemistryModel,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let mut molecule = mol_dsl_concrete!(
             r#"{
             :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
@@ -1966,8 +2425,12 @@ mod tests {
         );
         let expected = molecule.clone();
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
-            Ok(Solution::Determined(ResolveReport::default()))
+            Resolver::new(&chemistry_model).resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve_into(&mut molecule, rollback_method),
+            Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
     }
@@ -1976,7 +2439,32 @@ mod tests {
     #[case::natural(
         mol_dsl_concrete!(r#"{:atoms ["C#h3#u1#s2" "C#i13#c-#h3#n1"]}"#),
         mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u1#s2" "C#i13#c-#h3#n1#u0#s"]}"#))]
-    fn test_resolver_project(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
+    #[case::all_stages(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#i13#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [6 8 "1"] [6 9 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+            :stereo-atoms [{:site 6 :ligands [7 8 9 [:h 6]] :attrs "Th0"}]}"#),
+        mol_dsl!(r#"{
+            :atoms ["C#i13#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
+                    "C#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
+                    "C#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
+                    "C#c0#h#n0#u0#s#T0" "F#c0#h0#n0#u0#s"
+                    "Cl#c0#h0#n0#u0#s" "Br#c0#h0#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"]
+                    [3 4 "1#c0#u0#s#a"] [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]
+                    [6 7 "1#c0#u0#s"] [6 8 "1#c0#u0#s"] [6 9 "1#c0#u0#s"]]}"#),
+    )]
+    fn test_resolver_project(
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+        #[values(false, true)] consuming: bool,
+        #[values(false, true)] shared: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let original = Molecule::combine_all([&molecule]);
+        let retained = shared.then(|| molecule.clone());
         let model = ChemistryModel::default();
         let resolver = Resolver::with_config(
             &model,
@@ -1985,11 +2473,21 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(
-            resolver.project(&mut molecule, ProjectFlags::all()),
-            Ok(Solution::Determined(()))
-        );
-        assert_eq!(molecule, expected);
+        if consuming {
+            assert_eq!(
+                resolver.project(molecule, ProjectFlags::all()),
+                Ok(Solution::Determined(expected))
+            );
+        } else {
+            assert_eq!(
+                resolver.project_into(&mut molecule, ProjectFlags::all(), rollback_method),
+                Ok(Solution::Determined(()))
+            );
+            assert_eq!(molecule, expected);
+        }
+        if let Some(retained) = retained {
+            assert_eq!(retained, original);
+        }
     }
 
     #[rstest]
@@ -2013,11 +2511,12 @@ mod tests {
         IsotopePolicy::Strict,
         r#"{:atoms ["C#i=#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#i=#c0#h1#n3#u0#s"]}"#
     )]
-    fn test_resolver_project_valence(
+    fn test_resolver_project_into_valence(
         #[case] policy: ValenceTieBreak,
         #[case] isotope: IsotopePolicy,
         #[case] expected: &str,
         #[values(false, true)] typing: bool,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let mut model = ChemistryModel {
             valence: if typing {
@@ -2037,7 +2536,7 @@ mod tests {
                     ..Default::default()
                 }
             )
-            .project(&mut molecule, ProjectFlags::all()),
+            .project_into(&mut molecule, ProjectFlags::all(), rollback_method),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, mol_dsl!(expected));
@@ -2062,12 +2561,13 @@ mod tests {
         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
         StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
     ])]
-    fn test_resolver_project_stereo(
+    fn test_resolver_project_into_stereo(
         #[case] input: &str,
         #[case] hydrogens: i64,
         #[case] ligands: Vec<StereoLigand>,
         #[values(false, true)] typing: bool,
         #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let mut model = ChemistryModel {
             valence: if typing {
@@ -2084,7 +2584,11 @@ mod tests {
         };
         let mut molecule = ingest_smiles(input).unwrap();
         assert_eq!(
-            Resolver::with_config(&model, config).project(&mut molecule, ProjectFlags::all()),
+            Resolver::with_config(&model, config).project_into(
+                &mut molecule,
+                ProjectFlags::all(),
+                rollback_method
+            ),
             Ok(Solution::Determined(()))
         );
         assert_eq!(
@@ -2093,7 +2597,7 @@ mod tests {
         );
         assert_eq!(
             molecule.atom(AtomId(1)).constraints().tetrahedral_stereo(),
-            Some(&TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))
+            &TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
         );
         assert_eq!(
             StereoPerception::new(&model.stereo)
@@ -2111,11 +2615,18 @@ mod tests {
         :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]
         :multicenter-bonds [{:atoms [1 2 3] :attrs "[1,0,1]#c0#u0#s"}]
         :noncovalent-bonds [{:atoms [0 3] :attrs "*"}]}"#))]
-    fn test_resolver_project_identity(#[case] mut molecule: Molecule) {
+    fn test_resolver_project_identity(
+        #[case] mut molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
         let model = ChemistryModel::default();
         let original = molecule.clone();
         assert_eq!(
-            Resolver::new(&model).project(&mut molecule, ProjectFlags::all()),
+            Resolver::new(&model).project(molecule.clone(), ProjectFlags::all()),
+            Ok(Solution::Determined(original.clone()))
+        );
+        assert_eq!(
+            Resolver::new(&model).project_into(&mut molecule, ProjectFlags::all(), rollback_method),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, original);
@@ -2139,8 +2650,10 @@ mod tests {
     #[case::multicenter_spin(mol_dsl_concrete!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,0,1]#u1#s2"}]}"#),
         ProjectError::BondSpin { entity: Entity::MulticenterBond(MulticenterBondId(0)), spin: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) } })]
     fn test_resolver_project_bond_error(
+        #[values(ProjectFlags::all(), ProjectFlags::empty())] flags: ProjectFlags,
         #[case] mut molecule: Molecule,
         #[case] expected: ProjectError,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let model = ChemistryModel::default();
         let resolver = Resolver::with_config(
@@ -2152,7 +2665,11 @@ mod tests {
         );
         let original = molecule.clone();
         assert_eq!(
-            resolver.project(&mut molecule, ProjectFlags::all()),
+            resolver.project(molecule.clone(), flags),
+            Err(expected.clone())
+        );
+        assert_eq!(
+            resolver.project_into(&mut molecule, flags, rollback_method),
             Err(expected)
         );
         assert_eq!(molecule, original);
@@ -2162,9 +2679,9 @@ mod tests {
     #[case::stereo(StereoConfigurationForm::Undetermined, NumForm::Lit(0), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Natural,
         ProjectError::Stereo(StereoProjectError::UnsupportedStereoAtom { stereo_atom: StereoAtomId(0) }))]
     #[case::aromatic_charge(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(1), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Natural,
-        ProjectError::Aromaticity(AromaticityProjectError::ChargedSystem { system: AromaticSystemId(0) }))]
+        ProjectError::Aromaticity(AromaticityProjectError::ChargedAromaticSystem { aromatic_system: AromaticSystemId(0) }))]
     #[case::aromatic_spin(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(0), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, IsotopeMassForm::Natural,
-        ProjectError::Aromaticity(AromaticityProjectError::SystemSpin { system: AromaticSystemId(0) }))]
+        ProjectError::Aromaticity(AromaticityProjectError::AromaticSystemSpin { aromatic_system: AromaticSystemId(0) }))]
     #[case::isotope(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(0), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Undetermined,
         ProjectError::Isotope(IsotopeProjectError::NonGroundIsotope { atom: AtomId(0) }))]
     fn test_resolver_project_phase_error(
@@ -2175,7 +2692,17 @@ mod tests {
         #[case] expected: ProjectError,
         #[values(ProjectFlags::all(), ProjectFlags::all() - ProjectFlags::VALENCE)]
         flags: ProjectFlags,
+        #[values(
+            (None, false),
+            (None, true),
+            (Some(RollbackMethod::Clone), false),
+            (Some(RollbackMethod::Clone), true),
+            (Some(RollbackMethod::Journal), false),
+            (Some(RollbackMethod::Journal), true)
+        )]
+        execution: (Option<RollbackMethod>, bool),
     ) {
+        let (rollback_method, shared) = execution;
         let source = mol_dsl_concrete!(
             r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"]]
@@ -2185,19 +2712,33 @@ mod tests {
         let mut editor = source.edit();
         editor
             .stereo_atom_mut(StereoAtomId(0))
-            .attributes
+            .attributes_mut()
             .configuration = stereo;
         editor
             .aromatic_system_mut(AromaticSystemId(0))
-            .attributes
+            .attributes_mut()
             .charge = charge;
         editor
             .aromatic_system_mut(AromaticSystemId(0))
-            .attributes
+            .attributes_mut()
             .unpaired_electrons = spin;
-        editor.atom_mut(AtomId(0)).attributes.isotope_mass = isotope;
-        let mut molecule = editor.build();
-        let original = molecule.clone();
+        editor.atom_mut(AtomId(0)).attributes_mut().isotope_mass = isotope;
+        editor.constraints_mut().push(Constraint::And(vec![
+            Constraint::AromaticSystem(
+                AromaticSystemId(0),
+                AromaticSystemConstraintForm::electron_count(6_i64),
+            ),
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ]));
+        let mut molecule = editor.finish().unwrap();
+        let original = Molecule::combine_all([&molecule]);
+        let retained = shared.then(|| molecule.clone());
         let model = ChemistryModel::default();
         let resolver = Resolver::with_config(
             &model,
@@ -2206,7 +2747,201 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(resolver.project(&mut molecule, flags), Err(expected));
-        assert_eq!(molecule, original);
+        if let Some(rollback_method) = rollback_method {
+            assert_eq!(
+                resolver.project_into(&mut molecule, flags, rollback_method),
+                Err(expected)
+            );
+            assert_eq!(molecule, original);
+        } else {
+            assert_eq!(resolver.project(molecule, flags), Err(expected));
+        }
+        if let Some(retained) = retained {
+            assert_eq!(retained, original);
+        }
+    }
+
+    #[rstest]
+    #[case::literal(Some(NumForm::Lit(0)))]
+    #[case::set(Some(NumForm::LitSet(Box::new(BTreeSet::from([0, 1])))))]
+    #[case::vacuous(Some(NumForm::Undetermined))]
+    #[case::absent(None)]
+    fn test_resolver_plan_constitution(
+        chemistry_model: ChemistryModel,
+        #[case] valence: Option<NumForm>,
+    ) {
+        let mut atom = atom_dsl!("C#i=#c0#h4#u0#s#a!#T*");
+        if let Some(valence) = valence {
+            atom.constraints.set(AtomConstraintForm::Valence(valence));
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom, atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!")],
+            ..MoleculeEntries::default()
+        });
+        let state = ResolveState {
+            completions: [(AtomId(0), smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!")])]
+                .into_iter()
+                .collect(),
+            ..ResolveState::default()
+        };
+        let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        let mut editor = molecule.edit();
+        editor.apply(edits).unwrap();
+        assert_eq!(
+            editor.finish().unwrap(),
+            mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!#T*" "C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
+        );
+    }
+
+    #[rstest]
+    #[case::undetermined(NumForm::Undetermined, NumForm::Lit(0))]
+    #[case::singleton(
+        NumForm::LitSet(Box::new(BTreeSet::from([0]))),
+        NumForm::LitSet(Box::new(BTreeSet::from([0]))),
+    )]
+    fn test_resolver_plan_constitution_fields(
+        chemistry_model: ChemistryModel,
+        #[case] count: NumForm,
+        #[case] expected_count: NumForm,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let mut carbon = atom_dsl!("C#i=#v0#a!#T*");
+        carbon.unpaired_electrons.count = count.clone();
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![carbon, atom_dsl!("N#i=#v0#a!")],
+            ..MoleculeEntries::default()
+        });
+        let state = ResolveState {
+            completions: [
+                (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s")]),
+                (AtomId(1), smallvec![atom_dsl!("N#i=#c0#h3#n1#u0#s")]),
+            ]
+            .into_iter()
+            .collect(),
+            ..ResolveState::default()
+        };
+        let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        assert_eq!(
+            edits,
+            Edits::from_iter([
+                Edit::ModifyAtomCharges {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(0)
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(0)
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomImplicitHydrogens {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(4)
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(3)
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomLonePairs {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(0)
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            NumForm::Undetermined,
+                            NumForm::Lit(1)
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomUnpairedElectrons {
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            UnpairedElectronsForm {
+                                count,
+                                multiplicity: NumForm::Undetermined,
+                            },
+                            UnpairedElectronsForm {
+                                count: expected_count.clone(),
+                                multiplicity: NumForm::Lit(1),
+                            }
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            UnpairedElectronsForm::default(),
+                            UnpairedElectronsForm::closed_shell()
+                        ),
+                    ]
+                },
+                Edit::ModifyAtomConstraints {
+                    key: AtomConstraintKey::Valence,
+                    changes: vec![
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            Some(AtomConstraintForm::Valence(NumForm::Lit(0))),
+                            None
+                        ),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            Some(AtomConstraintForm::Valence(NumForm::Lit(0))),
+                            None
+                        ),
+                    ],
+                },
+            ])
+        );
+        let mut carbon = atom_dsl!("C#i=#c0#h4#n0#u0#s#a!#T*");
+        carbon.unpaired_electrons.count = expected_count;
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![carbon, atom_dsl!("N#i=#c0#h3#n1#u0#s#a!")],
+            ..MoleculeEntries::default()
+        });
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::identity(2),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+        );
+        assert_eq!(molecule.clone().apply(edits.clone()), Ok(expected.clone()));
+        assert_eq!(
+            molecule.clone().tracked_apply(edits.clone()),
+            Ok((expected.clone(), correspondence.clone()))
+        );
+        assert_eq!(
+            molecule.tracked_transact([edits], rollback),
+            Ok(correspondence)
+        );
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::empty(Molecule::new())]
+    #[case::complete(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#))]
+    #[case::uncompleted(mol_dsl!(r#"{:atoms ["C#i=#v0#a!"]}"#))]
+    fn test_resolver_plan_constitution_identity(
+        chemistry_model: ChemistryModel,
+        #[case] molecule: Molecule,
+    ) {
+        assert_eq!(
+            Resolver::new(&chemistry_model).plan_constitution(&molecule, &ResolveState::default()),
+            Edits::new()
+        );
     }
 }

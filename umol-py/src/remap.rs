@@ -10,6 +10,7 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::MoleculeRemapping as GraphIrMoleculeRemapping;
 
+use crate::convert::TupleItems;
 use crate::correspondence::{Correspondence, MoleculeCorrespondence};
 
 /// A read-only permutation of a dense integer id space.
@@ -42,10 +43,12 @@ impl Remapping {
 
     /// Images in source-id order.
     #[getter]
-    fn images(&self) -> Vec<u32> {
-        (0..self.0.len())
-            .map(|idx| self.0.map(NodeId::from(idx)).0)
-            .collect()
+    fn images(&self) -> TupleItems<Vec<u32>> {
+        TupleItems(
+            (0..self.0.len())
+                .map(|idx| self.0.map(NodeId::from(idx)).0)
+                .collect(),
+        )
     }
 
     fn __len__(&self) -> usize {
@@ -96,6 +99,7 @@ impl Remapping {
     ) -> GraphCoreRemapping<Id> {
         GraphCoreRemapping::new(
             self.images()
+                .0
                 .into_iter()
                 .map(|idx| Id::from(idx as usize))
                 .collect(),

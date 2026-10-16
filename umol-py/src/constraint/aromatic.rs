@@ -2,17 +2,18 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
     AromaticSystemConstraintForm as GraphIrAromaticSystemConstraintForm,
     AromaticSystemConstraintKey as GraphIrAromaticSystemConstraintKey,
     AromaticSystemConstraintsForm as GraphIrAromaticSystemConstraintsForm,
+    AromaticSystemConstraintsView as GraphIrAromaticSystemConstraintsView,
     AromaticSystemId as GraphIrAromaticSystemId,
 };
 
-use crate::aromatic::AromaticSystemForm;
+use crate::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
@@ -306,6 +307,32 @@ impl AromaticSystemConstraintsForm {
         aromatic_system_constraint_items(py, &self.0)
     }
 
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.0
+            .asserted(key)
+            .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.0
+            .asserted_complete(key)
+            .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
     /// The constraint with the given key, or `default` (`None`) if absent.
     #[pyo3(signature = (key, default=None))]
     pub(crate) fn get(
@@ -365,7 +392,7 @@ impl AromaticSystemConstraintsForm {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.electron_count())
+        NumForm::from_rust(py, self.0.electron_count())
     }
 
     #[setter]
@@ -390,17 +417,19 @@ impl AromaticSystemConstraintsForm {
     }
 
     /// Wrap owned IR constraints.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
         AromaticSystemConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
+    borrowed,
     AromaticSystemConstraintsForm,
     GraphIrAromaticSystemConstraintsForm,
-    |value: &AromaticSystemConstraintsForm,
-     _py: Python<'_>|
-     -> PyResult<GraphIrAromaticSystemConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrAromaticSystemConstraintsForm|
      -> PyResult<AromaticSystemConstraintsForm> { Ok(AromaticSystemConstraintsForm(value)) }
@@ -480,69 +509,75 @@ pub(crate) fn aromatic_system_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What an `AromaticSystemConstraintsView` writes through to: an aromatic system
-/// within a molecule (by index) or a standalone `AromaticSystemForm`.
-pub(crate) enum AromaticSystemConstraintsBacking {
+/// Owner of the constraints exposed by AromaticSystemConstraintsView.
+pub(crate) enum AromaticSystemConstraintsStorage {
+    Update(Py<AromaticSystemUpdate>),
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrAromaticSystemId,
     },
     AromaticSystem(Py<AromaticSystemForm>),
 }
 
-/// A live handle onto one aromatic system's constraints, backed by either a
-/// molecule-system or a standalone `AromaticSystemForm`. Reads borrow the constraints
-/// and read only the item they need. Mutators on a molecule-backed view publish atomically through
-/// the molecule integrity gate; standalone forms mutate directly.
+/// A view of one aromatic system's constraints, retaining its molecule, AromaticSystemForm,
+/// or AromaticSystemUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
+/// Semantic readings return independent normal values; None is bottom.
+/// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from AromaticSystemUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct AromaticSystemConstraintsView {
-    pub(crate) backing: AromaticSystemConstraintsBacking,
+    pub(crate) storage: AromaticSystemConstraintsStorage,
 }
 
 impl AromaticSystemConstraintsView {
+    fn read_view<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(GraphIrAromaticSystemConstraintsView<'_>) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let AromaticSystemConstraintsStorage::Molecule { owner, counter, id } = &self.storage
+        else {
+            return Err(PyValueError::new_err(
+                "AromaticSystemConstraintsView requires molecule context",
+            ));
+        };
+        let molecule = owner.try_borrow(py)?;
+        molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
+        let entity = molecule
+            .to_rust()
+            .aromatic_systems()
+            .get(*id)
+            .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
+        let view = entity.constraints();
+        f(view)
+    }
+
     /// Borrow the backing system's constraints and read one item through `f` — no clone.
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
         f: impl FnOnce(&GraphIrAromaticSystemConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .aromatic_systems()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
-            AromaticSystemConstraintsBacking::AromaticSystem(system) => {
+            AromaticSystemConstraintsStorage::AromaticSystem(system) => {
                 let system = system.bind(py).borrow();
                 f(&system.to_rust().constraints)
-            }
-        }
-    }
-
-    /// Mutate the backing system's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrAromaticSystemConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
-                let mut output = None;
-                owner
-                    .borrow_mut(py)
-                    .to_rust_mut()
-                    .try_modify_aromatic_system(*id, |system| {
-                        output = Some(f(&mut system.constraints));
-                    })
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
-                Ok(output.expect("a successful checked mutation invokes its callback"))
-            }
-            AromaticSystemConstraintsBacking::AromaticSystem(system) => {
-                Ok(f(&mut system.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }
@@ -553,7 +588,28 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         constraint: GraphIrAromaticSystemConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "AromaticSystemUpdate constraints are read-only",
+            )),
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
+                if !molecule.to_rust().aromatic_systems().contains(*id) {
+                    return Err(PyIndexError::new_err("aromatic system id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().aromatic_system_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            AromaticSystemConstraintsStorage::AromaticSystem(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing system in place, returning the removed entry.
@@ -562,12 +618,135 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         key: GraphIrAromaticSystemConstraintKey,
     ) -> PyResult<Option<GraphIrAromaticSystemConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "AromaticSystemUpdate constraints are read-only",
+            )),
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
+                if !molecule.to_rust().aromatic_systems().contains(*id) {
+                    return Err(PyIndexError::new_err("aromatic system id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().aromatic_system_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            AromaticSystemConstraintsStorage::AromaticSystem(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
 #[pymethods]
 impl AromaticSystemConstraintsView {
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.read(py, |view| {
+            view.asserted(key)
+                .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.read(py, |view| {
+            view.asserted_complete(key)
+                .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection; None is bottom and undetermined is top.
+    /// Raises ValueError without molecule context.
+    fn derived(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.derived(key)
+                .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection with closure; None remains bottom.
+    /// Raises ValueError without molecule context.
+    fn derived_complete(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.derived_complete(key)
+                .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Meet the own assertion with derived and additional evidence; None is bottom.
+    /// Raises ValueError without molecule context.
+    fn evidenced(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.evidenced(key)
+                .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read combined evidence with relation closure; None remains bottom.
+    /// Raises ValueError without molecule context.
+    fn evidenced_complete(
+        &self,
+        py: Python<'_>,
+        key: &AromaticSystemConstraintKey,
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.evidenced_complete(key)
+                .map(|value| AromaticSystemConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Whether complete evidence satisfies every pattern entry.
+    /// Raises ValueError without molecule context, including for empty inputs.
+    fn satisfies(&self, py: Python<'_>, pattern: &AromaticSystemConstraintsForm) -> PyResult<bool> {
+        self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+    }
+
+    /// Whether open evidence is compatible with every entry of other.
+    /// Raises ValueError without molecule context, including for empty inputs.
+    fn is_compatible(
+        &self,
+        py: Python<'_>,
+        other: &AromaticSystemConstraintsForm,
+    ) -> PyResult<bool> {
+        self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+    }
+
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let count = self.read(py, |cs| Ok(cs.len()))?;
         Ok(format!("AromaticSystemConstraintsView({count} entries)"))
@@ -619,7 +798,28 @@ impl AromaticSystemConstraintsView {
         other: AromaticSystemConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "AromaticSystemUpdate constraints are read-only",
+            )),
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
+                if !molecule.to_rust().aromatic_systems().contains(*id) {
+                    return Err(PyIndexError::new_err("aromatic system id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().aromatic_system_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            AromaticSystemConstraintsStorage::AromaticSystem(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -699,7 +899,7 @@ impl AromaticSystemConstraintsView {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
-        self.read(py, |cs| NumForm::from_rust(py, &cs.electron_count()))
+        self.read(py, |cs| NumForm::from_rust(py, cs.electron_count()))
     }
 
     #[setter]

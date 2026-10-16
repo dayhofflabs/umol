@@ -1,0 +1,1 @@
+{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}}]}

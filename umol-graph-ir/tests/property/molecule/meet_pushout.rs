@@ -28,7 +28,7 @@ proptest! {
             Correspondence::new(vec![], left.atoms().count(), right.atoms().count()).unwrap(),
             Correspondence::new(vec![], left.bonds().count(), right.bonds().count()).unwrap(),
         );
-        let expected = left.combine(&right);
+        let expected = left.clone().combine(&right);
         let expected_left = MoleculeCorrespondence::new(
             Correspondence::from_images(
                 &(0..left.atoms().count())

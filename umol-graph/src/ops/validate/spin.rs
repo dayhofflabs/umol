@@ -62,7 +62,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::MoleculeAtom {
-                            atom: atom.id,
+                            atom: atom.id(),
                             error,
                         },
                     ));
@@ -75,7 +75,7 @@ impl SpinInvariantsValidator {
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(SpinInvariantsContradiction::Bond {
-                        bond: bond.id,
+                        bond: bond.id(),
                         error,
                     }));
                 }
@@ -88,7 +88,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::AromaticSystem {
-                            system: system.id,
+                            system: system.id(),
                             error,
                         },
                     ));
@@ -102,7 +102,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::MulticenterBond {
-                            bond: bond.id,
+                            bond: bond.id(),
                             error,
                         },
                     ));

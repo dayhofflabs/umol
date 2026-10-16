@@ -5,13 +5,15 @@
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
 //! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `Molecule::edit`.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, ElementForm, Molecule, RingId, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AtomId, ElementForm, Molecule, RingId, RingSet,
+    UnpairedElectronsForm,
 };
 
+use super::{bond_exclusions, ring_components};
 use crate::ops::model::{ElementScope, RingLimits};
 
 #[derive(Clone, Debug)]
@@ -28,29 +30,113 @@ impl HueckelAromaticity {
         }
     }
 
-    /// Whether some total contribution reachable from the members' ranges is
-    /// perceived as aromatic by the rule: a candidate whose range admits no
-    /// 4n+2 value is settled early.
-    pub fn accepts_range(&self, members: &[(u32, u32)]) -> bool {
-        let lower: u32 = members.iter().map(|&(lower, _)| lower).sum();
-        let upper: u32 = members.iter().map(|&(_, upper)| upper).sum();
-        let lower = lower.max(2);
-        let first = lower + ((2 + 4 - lower % 4) % 4);
-        first <= upper
+    pub(super) fn candidate_components(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        ring_components(rings, can_contribute)
     }
 
-    pub fn find_from_rings<F>(
+    pub(super) fn candidate_aromatic_systems(
+        &self,
+        _molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        let eligible: Vec<RingId> = rings
+            .ids()
+            .filter(|&id| {
+                rings
+                    .get(id)
+                    .expect("ring id from this set")
+                    .atoms()
+                    .iter()
+                    .all(|&atom| can_contribute(atom))
+            })
+            .collect();
+        let mut candidates: Vec<BTreeSet<AtomId>> = eligible
+            .iter()
+            .filter_map(|&id| rings.get(id))
+            .filter(|ring| ring.atoms().contains(&atom))
+            .map(|ring| ring.atoms().iter().copied().collect())
+            .collect();
+        if self.ring_limits.include_unions {
+            candidates.extend(
+                self.enumerate_unions(rings, &eligible)
+                    .into_iter()
+                    .filter(|members| members.contains(&atom))
+                    .map(|members| members.into_iter().collect()),
+            );
+        }
+        candidates.sort();
+        candidates.dedup();
+        candidates
+    }
+
+    /// Some choice of one aromatic contribution per member totals 4n+2, with n >= 0.
+    /// For each residue, only the greatest reachable total is needed.
+    pub(super) fn accepts_contributions(&self, members: &[&[AromaticValence]]) -> bool {
+        let mut totals = [Some(0), None, None, None];
+        for member in members {
+            let mut next = [None; 4];
+            for &value in *member {
+                let AromaticValence::Aromatic(value) = value else {
+                    continue;
+                };
+                for total in totals.into_iter().flatten() {
+                    let sum = total + value;
+                    let best = &mut next[sum.rem_euclid(4) as usize];
+                    *best = Some(best.map_or(sum, |previous: i64| previous.max(sum)));
+                }
+            }
+            totals = next;
+        }
+        totals[2].is_some_and(|total| total >= 2)
+    }
+
+    /// Perceive systems from the supplied rings and aromatic contributions.
+    /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
+    /// Non-aromatic bonds exclude rings and unions containing both endpoints.
+    /// A conflicting merged candidate is rejected without searching for another partition.
+    ///
+    /// # Assumes
+    ///
+    /// The ring set is contextually valid for the molecule: its atom and bond ids
+    /// and ring incidence agree with the molecule.
+    pub(crate) fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
         electrons_at: &F,
     ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
+    {
+        self.find_with_exclusions(molecule, rings, &bond_exclusions(molecule), electrons_at)
+    }
+
+    pub(super) fn find_with_exclusions<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        excluded_bonds: &[[AtomId; 2]],
+        electrons_at: &F,
+    ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
+    where
+        F: Fn(AtomId) -> AromaticValence,
     {
         let eligible_cycles: Vec<RingId> = rings
             .ids()
             .filter(|&i| self.filter_ring(molecule, rings, i, electrons_at))
+            .filter(|&i| {
+                let atoms = rings.get(i).expect("ring id from this set").atoms();
+                !excluded_bonds
+                    .iter()
+                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+            })
             .collect();
 
         let mut aromatic_atom_sets: Vec<HashSet<AtomId>> = Vec::new();
@@ -68,8 +154,14 @@ impl HueckelAromaticity {
         }
 
         if self.ring_limits.include_unions {
-            let fused_systems = self.enumerate_unions(rings, &eligible_cycles);
-            for atoms in fused_systems {
+            let fused_aromatic_systems = self.enumerate_unions(rings, &eligible_cycles);
+            for atoms in fused_aromatic_systems {
+                if excluded_bonds
+                    .iter()
+                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+                {
+                    continue;
+                }
                 let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
                 if let Some(electrons) = ring_electron_count(&atom_vec, electrons_at) {
                     if check_4n_plus_2(electrons) {
@@ -79,18 +171,24 @@ impl HueckelAromaticity {
             }
         }
 
-        let merged = merge_overlapping_systems(aromatic_atom_sets);
+        let merged = merge_overlapping_aromatic_systems(aromatic_atom_sets);
 
         let mut candidates = Vec::new();
         for atom_set in merged {
+            if excluded_bonds
+                .iter()
+                .any(|[a, b]| atom_set.contains(a) && atom_set.contains(b))
+            {
+                continue;
+            }
             let mut atoms: Vec<AtomId> = atom_set.into_iter().collect();
             atoms.sort_unstable();
 
             let mut electrons: Vec<i64> = Vec::with_capacity(atoms.len());
             let mut valid = true;
             for &atom in &atoms {
-                if let Some(e) = electrons_at(atom) {
-                    electrons.push(i64::from(e));
+                if let AromaticValence::Aromatic(e) = electrons_at(atom) {
+                    electrons.push(e);
                 } else {
                     valid = false;
                     break;
@@ -113,17 +211,17 @@ impl HueckelAromaticity {
 
     fn is_atom_eligible<F>(&self, molecule: &Molecule, id: AtomId, electrons_at: &F) -> bool
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let view = molecule.atom(id);
-        let element = match view.attributes.element {
+        let element = match view.attributes().element {
             ElementForm::Lit(e) => e,
             _ => return false,
         };
         if !self.element_scope.contains(element) {
             return false;
         }
-        electrons_at(id).is_some()
+        matches!(electrons_at(id), AromaticValence::Aromatic(_))
     }
 
     fn filter_ring<F>(
@@ -134,7 +232,7 @@ impl HueckelAromaticity {
         electrons_at: &F,
     ) -> bool
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let Some(ring) = rings.get(ring) else {
             return false;
@@ -226,16 +324,21 @@ fn check_4n_plus_2(electron_count: u32) -> bool {
 
 fn ring_electron_count<F>(ids: &[AtomId], electrons_at: &F) -> Option<u32>
 where
-    F: Fn(AtomId) -> Option<u8>,
+    F: Fn(AtomId) -> AromaticValence,
 {
     let mut total: u32 = 0;
     for &id in ids {
-        total += electrons_at(id)? as u32;
+        let AromaticValence::Aromatic(electrons) = electrons_at(id) else {
+            return None;
+        };
+        total += electrons as u32;
     }
     Some(total)
 }
 
-fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<HashSet<AtomId>> {
+fn merge_overlapping_aromatic_systems(
+    aromatic_systems: Vec<HashSet<AtomId>>,
+) -> Vec<HashSet<AtomId>> {
     if aromatic_systems.len() < 2 {
         return aromatic_systems;
     }
@@ -244,30 +347,30 @@ fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<Hash
     let mut components = UnionFind::new(n);
     let atom_capacity = aromatic_systems
         .iter()
-        .flat_map(|system| system.iter())
+        .flat_map(|aromatic_system| aromatic_system.iter())
         .map(|atom| atom.index() + 1)
         .max()
         .unwrap_or(0);
     let mut owner = vec![None; atom_capacity];
 
-    for (system_index, system) in aromatic_systems.iter().enumerate() {
-        for atom in system {
+    for (aromatic_system_index, aromatic_system) in aromatic_systems.iter().enumerate() {
+        for atom in aromatic_system {
             match owner[atom.index()] {
-                Some(previous) => components.union(system_index, previous),
-                None => owner[atom.index()] = Some(system_index),
+                Some(previous) => components.union(aromatic_system_index, previous),
+                None => owner[atom.index()] = Some(aromatic_system_index),
             }
         }
     }
 
     let mut result: Vec<HashSet<AtomId>> = Vec::new();
     let mut output_for_root: Vec<Option<usize>> = vec![None; n];
-    for (system_index, system) in aromatic_systems.into_iter().enumerate() {
-        let root = components.find(system_index);
+    for (aromatic_system_index, aromatic_system) in aromatic_systems.into_iter().enumerate() {
+        let root = components.find(aromatic_system_index);
         match output_for_root[root] {
-            Some(output) => result[output].extend(system),
+            Some(output) => result[output].extend(aromatic_system),
             None => {
                 output_for_root[root] = Some(result.len());
-                result.push(system);
+                result.push(aromatic_system);
             }
         }
     }
@@ -279,6 +382,7 @@ fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<Hash
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_ir::ir::AromaticValence::{Aromatic, NotAromatic};
     use umol_graph_ir::ir::{
         AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, ElectronCountsForm,
         ElementForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
@@ -534,26 +638,79 @@ mod tests {
         ])
     }
 
-    fn electron_total(system: &(Vec<AtomId>, AromaticSystemForm)) -> i64 {
-        match &system.1.electrons {
+    fn electron_total(aromatic_system: &(Vec<AtomId>, AromaticSystemForm)) -> i64 {
+        match &aromatic_system.1.electrons {
             ElectronCountsForm::Lit(counts) => counts.iter().sum(),
             ElectronCountsForm::Undetermined => 0,
         }
     }
 
     #[rstest]
-    #[case::point_accepted(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1)], true)]
-    #[case::point_rejected(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)], false)]
-    #[case::span_accepted(&[(0, 3), (1, 1), (1, 1), (1, 1), (1, 1)], true)]
-    #[case::span_rejected(&[(3, 4), (1, 1), (1, 1), (1, 1), (1, 1)], false)]
-    #[case::two_electrons(&[(2, 2)], true)]
-    #[case::below_two(&[(0, 1)], false)]
-    #[case::empty(&[], false)]
-    fn test_hueckel_aromaticity_aromaticity_accepts_range(
-        #[case] members: &[(u32, u32)],
+    #[case::six_electrons(vec![vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)]], true)]
+    #[case::five_electrons(vec![vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)], vec![Aromatic(1)]], false)]
+    #[case::alternatives(vec![vec![Aromatic(0), Aromatic(2)], vec![Aromatic(4)]], true)]
+    #[case::unreachable_residue(vec![vec![Aromatic(0), Aromatic(4)]], false)]
+    #[case::aromatic_zero(vec![vec![Aromatic(0)], vec![Aromatic(2)]], true)]
+    #[case::non_aromatic_member(vec![vec![NotAromatic], vec![Aromatic(2)]], false)]
+    #[case::mixed_membership(vec![vec![NotAromatic, Aromatic(2)]], true)]
+    #[case::two_electrons(vec![vec![Aromatic(2)]], true)]
+    #[case::below_two(vec![vec![Aromatic(0), Aromatic(1)]], false)]
+    #[case::empty_member(vec![vec![]], false)]
+    #[case::empty(vec![], false)]
+    fn test_hueckel_aromaticity_accepts_contributions(
+        #[case] members: Vec<Vec<AromaticValence>>,
         #[case] expected: bool,
     ) {
-        assert_eq!(daylight_model().accepts_range(members), expected);
+        let members: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+        assert_eq!(daylight_model().accepts_contributions(&members), expected);
+    }
+
+    #[rstest]
+    #[case(0)]
+    #[case(1)]
+    #[case(2)]
+    #[case(3)]
+    fn test_hueckel_aromaticity_accepts_contributions_combinations(#[case] count: u32) {
+        let choices = [
+            NotAromatic,
+            Aromatic(0),
+            Aromatic(1),
+            Aromatic(2),
+            Aromatic(4),
+        ];
+        let model = daylight_model();
+        for encoding in 0..32usize.pow(count) {
+            let members: Vec<Vec<AromaticValence>> = (0..count)
+                .map(|position| {
+                    let mask = (encoding >> (5 * position)) & 31;
+                    choices
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| mask & (1 << index) != 0)
+                        .map(|(_, &value)| value)
+                        .collect()
+                })
+                .collect();
+            let mut totals = vec![0];
+            for member in &members {
+                totals = totals
+                    .iter()
+                    .flat_map(|total| {
+                        member.iter().filter_map(move |value| match value {
+                            Aromatic(value) => Some(total + value),
+                            NotAromatic => None,
+                        })
+                    })
+                    .collect();
+            }
+            let expected = totals.iter().any(|&total| total >= 2 && total % 4 == 2);
+            let slices: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+            assert_eq!(
+                model.accepts_contributions(&slices),
+                expected,
+                "{members:?}"
+            );
+        }
     }
 
     #[rstest]
@@ -583,19 +740,20 @@ mod tests {
             )
             .into_ring_set();
         let model = daylight_model();
-        let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+        let aromatic_systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
-            .attributes
+            .attributes()
             .constraints
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined)
         {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                AromaticValence::Aromatic(*n)
+            }
+            _ => AromaticValence::NotAromatic,
         });
-        assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].0.len(), expected_atoms);
-        assert_eq!(electron_total(&systems[0]), expected_electrons);
+        assert_eq!(aromatic_systems.len(), 1);
+        assert_eq!(aromatic_systems[0].0.len(), expected_atoms);
+        assert_eq!(electron_total(&aromatic_systems[0]), expected_electrons);
     }
 
     #[rstest]
@@ -617,17 +775,18 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+        let aromatic_systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
-            .attributes
+            .attributes()
             .constraints
             .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined)
         {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                AromaticValence::Aromatic(*n)
+            }
+            _ => AromaticValence::NotAromatic,
         });
-        assert!(systems.is_empty());
+        assert!(aromatic_systems.is_empty());
     }
 
     #[rstest]
@@ -650,19 +809,21 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
-            .atom(v)
-            .attributes
-            .constraints
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined)
-        {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
-        });
+        let aromatic_systems =
+            daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
+                .atom(v)
+                .attributes()
+                .constraints
+                .aromatic_valence()
+            {
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
+            });
 
         assert_eq!(
-            systems,
+            aromatic_systems,
             vec![(
                 (0..7).map(AtomId).collect::<Vec<_>>(),
                 AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 0, 1, 1])
@@ -683,19 +844,21 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
-            .atom(v)
-            .attributes
-            .constraints
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined)
-        {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
-        });
-        assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].0.len(), 6);
-        assert_eq!(electron_total(&systems[0]), 6);
+        let aromatic_systems =
+            permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
+                .atom(v)
+                .attributes()
+                .constraints
+                .aromatic_valence()
+            {
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
+            });
+        assert_eq!(aromatic_systems.len(), 1);
+        assert_eq!(aromatic_systems[0].0.len(), 6);
+        assert_eq!(electron_total(&aromatic_systems[0]), 6);
     }
 
     #[rstest]
@@ -746,14 +909,14 @@ mod tests {
             vec![AtomId(5), AtomId(6), AtomId(7)],
         ]
     )]
-    fn test_merge_overlapping_systems(
+    fn test_merge_overlapping_aromatic_systems(
         #[case] aromatic_systems: Vec<HashSet<AtomId>>,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
-        let mut merged: Vec<Vec<AtomId>> = merge_overlapping_systems(aromatic_systems)
+        let mut merged: Vec<Vec<AtomId>> = merge_overlapping_aromatic_systems(aromatic_systems)
             .into_iter()
-            .map(|system| {
-                let mut atoms: Vec<AtomId> = system.into_iter().collect();
+            .map(|aromatic_system| {
+                let mut atoms: Vec<AtomId> = aromatic_system.into_iter().collect();
                 atoms.sort_unstable();
                 atoms
             })

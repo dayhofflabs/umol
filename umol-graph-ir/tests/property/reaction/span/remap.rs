@@ -169,14 +169,14 @@ proptest! {
             .unwrap(),
         );
 
-        prop_assert_eq!(scenario.span.remap(&identity), scenario.span);
+        prop_assert_eq!(scenario.span.clone().remap(&identity), scenario.span);
     }
 
     #[test]
     fn test_reaction_span_remap_inverse(
         scenario in reaction_span_scenario_strategy(),
     ) {
-        let remapped = scenario.span.remap(&scenario.first);
+        let remapped = scenario.span.clone().remap(&scenario.first);
         let restored = remapped.remap(&MoleculeRemapping::new(
             GraphRemapping::new(
                 Remapping::new(inverse_images(scenario.first.graph().nodes())).unwrap(),
@@ -197,7 +197,7 @@ proptest! {
     fn test_reaction_span_remap_composition(
         scenario in reaction_span_scenario_strategy(),
     ) {
-        let sequential = scenario.span.remap(&scenario.first).remap(&scenario.second);
+        let sequential = scenario.span.clone().remap(&scenario.first).remap(&scenario.second);
         let direct = scenario.span.remap(&MoleculeRemapping::new(
             GraphRemapping::new(
                 Remapping::new(composed_images(
@@ -250,7 +250,7 @@ proptest! {
     fn test_reaction_span_remap_projection(
         scenario in reaction_span_scenario_strategy(),
     ) {
-        let remapped = scenario.span.remap(&scenario.first);
+        let remapped = scenario.span.clone().remap(&scenario.first);
         for side in [Side::Left, Side::Right] {
             let source = projection(&scenario.span, side);
             let target = projection(&remapped, side);

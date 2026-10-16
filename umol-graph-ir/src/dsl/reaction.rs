@@ -713,7 +713,7 @@ impl ReactionInput {
                     }
                     resolved.push(Delta::Atom(AtomDelta::Remove {
                         id,
-                        attributes: lhs.atom(id).attributes.clone(),
+                        attributes: lhs.atom(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::AtomModify(r, update) => {
@@ -725,7 +725,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in AtomDelta::for_update(id, lhs.atom(id).attributes, &update) {
+                    for d in AtomDelta::for_update(id, lhs.atom(id).attributes(), &update) {
                         resolved.push(Delta::Atom(d));
                     }
                 }
@@ -751,7 +751,7 @@ impl ReactionInput {
                     resolved.push(Delta::Bond(BondDelta::Remove {
                         id,
                         atoms: lhs.bond(id).atom_ids(),
-                        attributes: lhs.bond(id).attributes.clone(),
+                        attributes: lhs.bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::BondModify(r, update) => {
@@ -763,7 +763,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in BondDelta::for_update(id, lhs.bond(id).attributes, &update) {
+                    for d in BondDelta::for_update(id, lhs.bond(id).attributes(), &update) {
                         resolved.push(Delta::Bond(d));
                     }
                 }
@@ -796,7 +796,7 @@ impl ReactionInput {
                         id,
                         donors: view.donor_ids().collect(),
                         acceptor: view.acceptor_id(),
-                        attributes: lhs.dative_bond(id).attributes.clone(),
+                        attributes: lhs.dative_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::DativeBondModify(r, update) => {
@@ -809,7 +809,7 @@ impl ReactionInput {
                         });
                     }
                     for d in
-                        DativeBondDelta::for_update(id, lhs.dative_bond(id).attributes, &update)
+                        DativeBondDelta::for_update(id, lhs.dative_bond(id).attributes(), &update)
                     {
                         resolved.push(Delta::DativeBond(d));
                     }
@@ -840,7 +840,7 @@ impl ReactionInput {
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
                         id,
                         atoms: view.atom_ids().collect(),
-                        attributes: lhs.aromatic_system(id).attributes.clone(),
+                        attributes: lhs.aromatic_system(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
@@ -854,7 +854,7 @@ impl ReactionInput {
                     }
                     for d in AromaticSystemDelta::for_update(
                         id,
-                        lhs.aromatic_system(id).attributes,
+                        lhs.aromatic_system(id).attributes(),
                         &rhs,
                     ) {
                         resolved.push(Delta::AromaticSystem(d));
@@ -886,7 +886,7 @@ impl ReactionInput {
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
                         id,
                         atoms: view.atom_ids().collect(),
-                        attributes: lhs.multicenter_bond(id).attributes.clone(),
+                        attributes: lhs.multicenter_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
@@ -900,7 +900,7 @@ impl ReactionInput {
                     }
                     for d in MulticenterBondDelta::for_update(
                         id,
-                        lhs.multicenter_bond(id).attributes,
+                        lhs.multicenter_bond(id).attributes(),
                         &rhs,
                     ) {
                         resolved.push(Delta::MulticenterBond(d));
@@ -928,7 +928,7 @@ impl ReactionInput {
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id,
                         atoms: lhs.noncovalent_bond(id).atom_ids(),
-                        attributes: lhs.noncovalent_bond(id).attributes.clone(),
+                        attributes: lhs.noncovalent_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
@@ -942,7 +942,7 @@ impl ReactionInput {
                     }
                     for d in NoncovalentBondDelta::for_update(
                         id,
-                        lhs.noncovalent_bond(id).attributes,
+                        lhs.noncovalent_bond(id).attributes(),
                         &rhs,
                     ) {
                         resolved.push(Delta::NoncovalentBond(d));
@@ -980,7 +980,7 @@ impl ReactionInput {
                             .ligands()
                             .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                             .collect(),
-                        attributes: lhs.stereo_atom(id).attributes.clone(),
+                        attributes: lhs.stereo_atom(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::StereoAtomModify(r, rhs) => {
@@ -992,7 +992,8 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in StereoAtomDelta::for_update(id, lhs.stereo_atom(id).attributes, &rhs) {
+                    for d in StereoAtomDelta::for_update(id, lhs.stereo_atom(id).attributes(), &rhs)
+                    {
                         resolved.push(Delta::StereoAtom(d));
                     }
                 }
@@ -1028,7 +1029,7 @@ impl ReactionInput {
                             .ligands()
                             .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                             .collect(),
-                        attributes: lhs.stereo_bond(id).attributes.clone(),
+                        attributes: lhs.stereo_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
@@ -1040,7 +1041,8 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in StereoBondDelta::for_update(id, lhs.stereo_bond(id).attributes, &rhs) {
+                    for d in StereoBondDelta::for_update(id, lhs.stereo_bond(id).attributes(), &rhs)
+                    {
                         resolved.push(Delta::StereoBond(d));
                     }
                 }
@@ -2514,7 +2516,7 @@ mod tests {
     use crate::ir::num::NumForm;
     use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
     use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, Stereogenicity};
-    use crate::ir::{MoleculeEntries, MoleculeIntegrityError, ReactionIntegrityError};
+    use crate::ir::{MoleculeEntries, ReactionIntegrityError};
     use crate::mol_dsl;
 
     #[fixture]
@@ -3155,33 +3157,33 @@ mod tests {
     #[rstest]
     #[case::atom_repeated_virtual(
         r##"{:lhs {:atoms ["C" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 [:h 0] [:h 0]] :attrs "Th0"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::DuplicateStereoLigand {
+        ReactionIntegrityError::DuplicateStereoLigand {
             entity: Entity::StereoAtom(StereoAtomId(0)),
             ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-        }),
+        },
     )]
     #[case::atom_oversized(
         r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I" "N" "O" "S"]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4 5 6 7] :attrs "*"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        ReactionIntegrityError::StereoFrameDegreeTooLarge {
             entity: Entity::StereoAtom(StereoAtomId(0)),
             degree: 7,
             maximum: 6,
-        }),
+        },
     )]
     #[case::bond_repeated_virtual(
         r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 [:h 1] 3 [:h 1]] :attrs "Ct0"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::DuplicateStereoLigand {
+        ReactionIntegrityError::DuplicateStereoLigand {
             entity: Entity::StereoBond(StereoBondId(0)),
             ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-        }),
+        },
     )]
     #[case::bond_oversized(
         r##"{:lhs {:atoms ["C" "C" "F" "Cl" "Br" "I" "N" "O" "S"] :bonds [[0 1 "2"]]} :deltas [{:stereo-bond {:add {:site 0 :ligands [2 3 4 5 6 7 8] :attrs "*"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        ReactionIntegrityError::StereoFrameDegreeTooLarge {
             entity: Entity::StereoBond(StereoBondId(0)),
             degree: 7,
             maximum: 6,
-        }),
+        },
     )]
     fn test_reaction_input_into_ir_integrity(
         #[case] source: &str,
@@ -4091,7 +4093,7 @@ mod tests {
     #[case::noncovalent_constraint_removal(r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd#I"}]} :deltas [{:noncovalent-bond {:modify [0 "#I*"]}}]}"##)]
     #[case::stereo_atom_add(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :attrs "Th1"}}}]}"##)]
     #[case::stereo_atom_remove(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:remove 0}}]}"##)]
-    #[case::stereo_atom_modify(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th2"]}}]}"##)]
+    #[case::stereo_atom_modify(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th0"]}}]}"##)]
     #[case::stereo_atom_modify_undetermined(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "*"]}}]}"##)]
     #[case::stereo_bond_add(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}}}]}"##)]
     #[case::stereo_bond_remove(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]} :deltas [{:stereo-bond {:remove 0}}]}"##)]

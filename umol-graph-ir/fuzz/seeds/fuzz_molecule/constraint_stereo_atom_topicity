@@ -1,0 +1,1 @@
+{:atoms ["Co" "N" "N" "N" "N" "N" "N"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4 5 6] :attrs "Oh0"}] :constraints [{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation [:enantiotopic :diastereotopic]}}]]}]}

@@ -166,17 +166,20 @@ impl MoleculeCorrespondence {
             lhs.stereo_atoms().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     map_atom(&atoms, stereo.site_id()),
-                    map_ligands(&atoms, stereo.ligand_frame()),
+                    map_ligands(&atoms, stereo.ligand_ids()),
                 ) else {
                     return None;
                 };
-                Some((stereo.id, (site, sorted_ligands(ligands))))
+                Some((stereo.id(), (site, sorted_ligands(ligands))))
             }),
             lhs.stereo_atoms().count(),
             rhs.stereo_atoms().iter().map(|stereo| {
                 (
-                    stereo.id,
-                    (stereo.site_id(), sorted_ligands(stereo.ligand_frame())),
+                    stereo.id(),
+                    (
+                        stereo.site_id(),
+                        sorted_ligands(stereo.ligand_ids().iter().copied()),
+                    ),
                 )
             }),
             rhs.stereo_atoms().count(),
@@ -188,10 +191,10 @@ impl MoleculeCorrespondence {
                 .copied()
                 .filter(|&(left, right)| {
                     lhs.stereo_atom(left)
-                        .attributes
+                        .attributes()
                         .configuration
                         .kind()
-                        .zip(rhs.stereo_atom(right).attributes.configuration.kind())
+                        .zip(rhs.stereo_atom(right).attributes().configuration.kind())
                         .is_none_or(|(left, right)| left == right)
                 })
                 .collect(),
@@ -204,17 +207,20 @@ impl MoleculeCorrespondence {
             lhs.stereo_bonds().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     bonds.right_of(stereo.site_id()),
-                    map_ligands(&atoms, stereo.ligand_frame()),
+                    map_ligands(&atoms, stereo.ligand_ids()),
                 ) else {
                     return None;
                 };
-                Some((stereo.id, (site, sorted_ligands(ligands))))
+                Some((stereo.id(), (site, sorted_ligands(ligands))))
             }),
             lhs.stereo_bonds().count(),
             rhs.stereo_bonds().iter().map(|stereo| {
                 (
-                    stereo.id,
-                    (stereo.site_id(), sorted_ligands(stereo.ligand_frame())),
+                    stereo.id(),
+                    (
+                        stereo.site_id(),
+                        sorted_ligands(stereo.ligand_ids().iter().copied()),
+                    ),
                 )
             }),
             rhs.stereo_bonds().count(),
@@ -226,10 +232,10 @@ impl MoleculeCorrespondence {
                 .copied()
                 .filter(|&(left, right)| {
                     lhs.stereo_bond(left)
-                        .attributes
+                        .attributes()
                         .configuration
                         .kind()
-                        .zip(rhs.stereo_bond(right).attributes.configuration.kind())
+                        .zip(rhs.stereo_bond(right).attributes().configuration.kind())
                         .is_none_or(|(left, right)| left == right)
                 })
                 .collect(),
@@ -251,24 +257,17 @@ impl MoleculeCorrespondence {
     }
 
     /// Append unmatched ids to one right-hand entity domain, retaining all pair vectors.
-    pub fn extend_right(mut self, kind: EntityKind, count: usize) -> Self {
+    pub fn extend_right(&mut self, kind: EntityKind, count: usize) {
         match kind {
-            EntityKind::Atom => self.atoms = self.atoms.extend_right(count),
-            EntityKind::Bond => self.bonds = self.bonds.extend_right(count),
-            EntityKind::DativeBond => self.dative_bonds = self.dative_bonds.extend_right(count),
-            EntityKind::AromaticSystem => {
-                self.aromatic_systems = self.aromatic_systems.extend_right(count)
-            }
-            EntityKind::MulticenterBond => {
-                self.multicenter_bonds = self.multicenter_bonds.extend_right(count)
-            }
-            EntityKind::NoncovalentBond => {
-                self.noncovalent_bonds = self.noncovalent_bonds.extend_right(count)
-            }
-            EntityKind::StereoAtom => self.stereo_atoms = self.stereo_atoms.extend_right(count),
-            EntityKind::StereoBond => self.stereo_bonds = self.stereo_bonds.extend_right(count),
+            EntityKind::Atom => self.atoms.extend_right(count),
+            EntityKind::Bond => self.bonds.extend_right(count),
+            EntityKind::DativeBond => self.dative_bonds.extend_right(count),
+            EntityKind::AromaticSystem => self.aromatic_systems.extend_right(count),
+            EntityKind::MulticenterBond => self.multicenter_bonds.extend_right(count),
+            EntityKind::NoncovalentBond => self.noncovalent_bonds.extend_right(count),
+            EntityKind::StereoAtom => self.stereo_atoms.extend_right(count),
+            EntityKind::StereoBond => self.stereo_bonds.extend_right(count),
         }
-        self
     }
 
     /// Compact every right-hand entity domain, reusing its pair vector.
@@ -278,15 +277,68 @@ impl MoleculeCorrespondence {
     ///
     /// # Errors
     ///
-    /// Returns the first source-count mismatch in entity-kind order. Consumes the receiver.
+    /// Returns the first source-count mismatch in entity-kind order. The receiver is unchanged
+    /// on failure.
     ///
     /// # Semantic properties
     ///
     /// Equivalent to composition with the compaction's correspondence.
     pub fn compact_right(
-        self,
+        &mut self,
         compaction: &MoleculeCompaction,
-    ) -> Result<Self, MoleculeCorrespondenceComposeError> {
+    ) -> Result<(), MoleculeCorrespondenceComposeError> {
+        for (kind, right_count, next_left_count) in [
+            (
+                EntityKind::Atom,
+                self.atoms.right_count(),
+                compaction.graph().nodes().source_count(),
+            ),
+            (
+                EntityKind::Bond,
+                self.bonds.right_count(),
+                compaction.graph().edges().source_count(),
+            ),
+            (
+                EntityKind::DativeBond,
+                self.dative_bonds.right_count(),
+                compaction.dative_bonds().source_count(),
+            ),
+            (
+                EntityKind::AromaticSystem,
+                self.aromatic_systems.right_count(),
+                compaction.aromatic_systems().source_count(),
+            ),
+            (
+                EntityKind::MulticenterBond,
+                self.multicenter_bonds.right_count(),
+                compaction.multicenter_bonds().source_count(),
+            ),
+            (
+                EntityKind::NoncovalentBond,
+                self.noncovalent_bonds.right_count(),
+                compaction.noncovalent_bonds().source_count(),
+            ),
+            (
+                EntityKind::StereoAtom,
+                self.stereo_atoms.right_count(),
+                compaction.stereo_atoms().source_count(),
+            ),
+            (
+                EntityKind::StereoBond,
+                self.stereo_bonds.right_count(),
+                compaction.stereo_bonds().source_count(),
+            ),
+        ] {
+            if right_count != next_left_count {
+                return Err(MoleculeCorrespondenceComposeError {
+                    kind,
+                    source: CorrespondenceComposeError {
+                        right_count,
+                        next_left_count,
+                    },
+                });
+            }
+        }
         let atoms = Compaction::new(
             compaction.graph().nodes().source_count(),
             compaction
@@ -311,56 +363,55 @@ impl MoleculeCorrespondence {
                 .collect(),
         )
         .expect("typed bond ids preserve the graph compaction");
-        Ok(Self::new(
-            self.atoms.compact_right(&atoms).map_err(|source| {
-                MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::Atom,
-                    source,
-                }
-            })?,
-            self.bonds.compact_right(&bonds).map_err(|source| {
-                MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::Bond,
-                    source,
-                }
-            })?,
-            self.dative_bonds
-                .compact_right(compaction.dative_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::DativeBond,
-                    source,
-                })?,
-            self.aromatic_systems
-                .compact_right(compaction.aromatic_systems())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::AromaticSystem,
-                    source,
-                })?,
-            self.multicenter_bonds
-                .compact_right(compaction.multicenter_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::MulticenterBond,
-                    source,
-                })?,
-            self.noncovalent_bonds
-                .compact_right(compaction.noncovalent_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::NoncovalentBond,
-                    source,
-                })?,
-            self.stereo_atoms
-                .compact_right(compaction.stereo_atoms())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::StereoAtom,
-                    source,
-                })?,
-            self.stereo_bonds
-                .compact_right(compaction.stereo_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::StereoBond,
-                    source,
-                })?,
-        ))
+        self.atoms
+            .compact_right(&atoms)
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::Atom,
+                source,
+            })?;
+        self.bonds
+            .compact_right(&bonds)
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::Bond,
+                source,
+            })?;
+        self.dative_bonds
+            .compact_right(compaction.dative_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::DativeBond,
+                source,
+            })?;
+        self.aromatic_systems
+            .compact_right(compaction.aromatic_systems())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::AromaticSystem,
+                source,
+            })?;
+        self.multicenter_bonds
+            .compact_right(compaction.multicenter_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::MulticenterBond,
+                source,
+            })?;
+        self.noncovalent_bonds
+            .compact_right(compaction.noncovalent_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::NoncovalentBond,
+                source,
+            })?;
+        self.stereo_atoms
+            .compact_right(compaction.stereo_atoms())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::StereoAtom,
+                source,
+            })?;
+        self.stereo_bonds
+            .compact_right(compaction.stereo_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::StereoBond,
+                source,
+            })?;
+        Ok(())
     }
 
     /// Expand every right-hand entity domain through the inverse compaction.
@@ -370,15 +421,68 @@ impl MoleculeCorrespondence {
     ///
     /// # Errors
     ///
-    /// Returns the first result-count mismatch in entity-kind order. Consumes the receiver.
+    /// Returns the first result-count mismatch in entity-kind order. The receiver is unchanged
+    /// on failure.
     ///
     /// # Semantic properties
     ///
     /// Equivalent to composition with the reversed compaction correspondence.
     pub fn uncompact_right(
-        self,
+        &mut self,
         compaction: &MoleculeCompaction,
-    ) -> Result<Self, MoleculeCorrespondenceComposeError> {
+    ) -> Result<(), MoleculeCorrespondenceComposeError> {
+        for (kind, right_count, next_left_count) in [
+            (
+                EntityKind::Atom,
+                self.atoms.right_count(),
+                compaction.graph().nodes().result_count(),
+            ),
+            (
+                EntityKind::Bond,
+                self.bonds.right_count(),
+                compaction.graph().edges().result_count(),
+            ),
+            (
+                EntityKind::DativeBond,
+                self.dative_bonds.right_count(),
+                compaction.dative_bonds().result_count(),
+            ),
+            (
+                EntityKind::AromaticSystem,
+                self.aromatic_systems.right_count(),
+                compaction.aromatic_systems().result_count(),
+            ),
+            (
+                EntityKind::MulticenterBond,
+                self.multicenter_bonds.right_count(),
+                compaction.multicenter_bonds().result_count(),
+            ),
+            (
+                EntityKind::NoncovalentBond,
+                self.noncovalent_bonds.right_count(),
+                compaction.noncovalent_bonds().result_count(),
+            ),
+            (
+                EntityKind::StereoAtom,
+                self.stereo_atoms.right_count(),
+                compaction.stereo_atoms().result_count(),
+            ),
+            (
+                EntityKind::StereoBond,
+                self.stereo_bonds.right_count(),
+                compaction.stereo_bonds().result_count(),
+            ),
+        ] {
+            if right_count != next_left_count {
+                return Err(MoleculeCorrespondenceComposeError {
+                    kind,
+                    source: CorrespondenceComposeError {
+                        right_count,
+                        next_left_count,
+                    },
+                });
+            }
+        }
         let atoms = Compaction::new(
             compaction.graph().nodes().source_count(),
             compaction
@@ -403,56 +507,55 @@ impl MoleculeCorrespondence {
                 .collect(),
         )
         .expect("typed bond ids preserve the graph compaction");
-        Ok(Self::new(
-            self.atoms.uncompact_right(&atoms).map_err(|source| {
-                MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::Atom,
-                    source,
-                }
-            })?,
-            self.bonds.uncompact_right(&bonds).map_err(|source| {
-                MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::Bond,
-                    source,
-                }
-            })?,
-            self.dative_bonds
-                .uncompact_right(compaction.dative_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::DativeBond,
-                    source,
-                })?,
-            self.aromatic_systems
-                .uncompact_right(compaction.aromatic_systems())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::AromaticSystem,
-                    source,
-                })?,
-            self.multicenter_bonds
-                .uncompact_right(compaction.multicenter_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::MulticenterBond,
-                    source,
-                })?,
-            self.noncovalent_bonds
-                .uncompact_right(compaction.noncovalent_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::NoncovalentBond,
-                    source,
-                })?,
-            self.stereo_atoms
-                .uncompact_right(compaction.stereo_atoms())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::StereoAtom,
-                    source,
-                })?,
-            self.stereo_bonds
-                .uncompact_right(compaction.stereo_bonds())
-                .map_err(|source| MoleculeCorrespondenceComposeError {
-                    kind: EntityKind::StereoBond,
-                    source,
-                })?,
-        ))
+        self.atoms.uncompact_right(&atoms).map_err(|source| {
+            MoleculeCorrespondenceComposeError {
+                kind: EntityKind::Atom,
+                source,
+            }
+        })?;
+        self.bonds.uncompact_right(&bonds).map_err(|source| {
+            MoleculeCorrespondenceComposeError {
+                kind: EntityKind::Bond,
+                source,
+            }
+        })?;
+        self.dative_bonds
+            .uncompact_right(compaction.dative_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::DativeBond,
+                source,
+            })?;
+        self.aromatic_systems
+            .uncompact_right(compaction.aromatic_systems())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::AromaticSystem,
+                source,
+            })?;
+        self.multicenter_bonds
+            .uncompact_right(compaction.multicenter_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::MulticenterBond,
+                source,
+            })?;
+        self.noncovalent_bonds
+            .uncompact_right(compaction.noncovalent_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::NoncovalentBond,
+                source,
+            })?;
+        self.stereo_atoms
+            .uncompact_right(compaction.stereo_atoms())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::StereoAtom,
+                source,
+            })?;
+        self.stereo_bonds
+            .uncompact_right(compaction.stereo_bonds())
+            .map_err(|source| MoleculeCorrespondenceComposeError {
+                kind: EntityKind::StereoBond,
+                source,
+            })?;
+        Ok(())
     }
 
     /// Relational composition, per entity kind: `self` (lhs↔middle) followed by `other`
@@ -701,9 +804,10 @@ impl MoleculeCorrespondence {
             right.sort_unstable();
             mapped == right
         };
-        let same_ligand_set = |left: Vec<StereoLigand>, mut right: Vec<StereoLigand>| {
+        let same_ligand_set = |left: &[StereoLigand], right: &[StereoLigand]| {
+            let mut right = right.to_vec();
             let Some(mut mapped): Option<Vec<_>> = left
-                .into_iter()
+                .iter()
                 .map(|ligand| {
                     atoms
                         .right_of(ligand.atom_id)
@@ -791,7 +895,7 @@ impl MoleculeCorrespondence {
                 let lhs = lhs.stereo_atom(left);
                 let rhs = rhs.stereo_atom(right);
                 atoms.right_of(lhs.site_id()) == Some(rhs.site_id())
-                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+                    && same_ligand_set(lhs.ligand_ids(), rhs.ligand_ids())
             })
         {
             return false;
@@ -804,7 +908,7 @@ impl MoleculeCorrespondence {
                 let lhs = lhs.stereo_bond(left);
                 let rhs = rhs.stereo_bond(right);
                 correspondence.bonds().right_of(lhs.site_id()) == Some(rhs.site_id())
-                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+                    && same_ligand_set(lhs.ligand_ids(), rhs.ligand_ids())
             })
     }
 
@@ -879,7 +983,7 @@ pub(crate) fn induced_bonds(
         left.bonds().iter().filter_map(|bond| {
             let [first, second] = bond.atom_ids();
             Some((
-                bond.id,
+                bond.id(),
                 ordered_pair(atoms.right_of(first)?, atoms.right_of(second)?),
             ))
         }),
@@ -887,7 +991,7 @@ pub(crate) fn induced_bonds(
         right
             .bonds()
             .iter()
-            .map(|bond| (bond.id, ordered_pair_from(bond.atom_ids()))),
+            .map(|bond| (bond.id(), ordered_pair_from(bond.atom_ids()))),
         right.bonds().count(),
     )
 }
@@ -907,12 +1011,12 @@ pub(crate) fn induced_dative_bonds(
             ) else {
                 return None;
             };
-            Some((dative.id, (acceptor, sorted_atoms(donors))))
+            Some((dative.id(), (acceptor, sorted_atoms(donors))))
         }),
         left.dative_bonds().count(),
         right.dative_bonds().iter().map(|dative| {
             (
-                dative.id,
+                dative.id(),
                 (dative.acceptor_id(), sorted_atoms(dative.donor_ids())),
             )
         }),
@@ -930,7 +1034,7 @@ pub(crate) fn induced_aromatic_systems(
     induce_by_key(
         left.aromatic_systems().iter().filter_map(|aromatic| {
             Some((
-                aromatic.id,
+                aromatic.id(),
                 sorted_atoms(map_atoms(atoms, aromatic.atom_ids())?),
             ))
         }),
@@ -938,7 +1042,7 @@ pub(crate) fn induced_aromatic_systems(
         right
             .aromatic_systems()
             .iter()
-            .map(|aromatic| (aromatic.id, sorted_atoms(aromatic.atom_ids()))),
+            .map(|aromatic| (aromatic.id(), sorted_atoms(aromatic.atom_ids()))),
         right.aromatic_systems().count(),
     )
 }
@@ -953,7 +1057,7 @@ pub(crate) fn induced_multicenter_bonds(
     induce_by_key(
         left.multicenter_bonds().iter().filter_map(|multicenter| {
             Some((
-                multicenter.id,
+                multicenter.id(),
                 sorted_atoms(map_atoms(atoms, multicenter.atom_ids())?),
             ))
         }),
@@ -961,7 +1065,7 @@ pub(crate) fn induced_multicenter_bonds(
         right
             .multicenter_bonds()
             .iter()
-            .map(|multicenter| (multicenter.id, sorted_atoms(multicenter.atom_ids()))),
+            .map(|multicenter| (multicenter.id(), sorted_atoms(multicenter.atom_ids()))),
         right.multicenter_bonds().count(),
     )
 }
@@ -977,7 +1081,7 @@ pub(crate) fn induced_noncovalent_bonds(
         left.noncovalent_bonds().iter().filter_map(|noncovalent| {
             let [first, second] = noncovalent.atom_ids();
             Some((
-                noncovalent.id,
+                noncovalent.id(),
                 ordered_pair(map_atom(atoms, first)?, map_atom(atoms, second)?),
             ))
         }),
@@ -985,7 +1089,7 @@ pub(crate) fn induced_noncovalent_bonds(
         right
             .noncovalent_bonds()
             .iter()
-            .map(|noncovalent| (noncovalent.id, ordered_pair_from(noncovalent.atom_ids()))),
+            .map(|noncovalent| (noncovalent.id(), ordered_pair_from(noncovalent.atom_ids()))),
         right.noncovalent_bonds().count(),
     )
 }
@@ -1007,10 +1111,10 @@ fn map_atoms(
 /// atom is unmatched.
 pub(crate) fn map_ligands(
     atoms: &Correspondence<AtomId>,
-    ligands: Vec<StereoLigand>,
+    ligands: &[StereoLigand],
 ) -> Option<Vec<StereoLigand>> {
     ligands
-        .into_iter()
+        .iter()
         .map(|ligand| {
             map_atom(atoms, ligand.atom_id).map(|atom| StereoLigand::new(atom, ligand.kind))
         })
@@ -1100,16 +1204,16 @@ mod tests {
                 editor.add_bond(AtomId(base + a), AtomId(base + b), BondForm::from_order(1));
             }
             editor.add_dative_bond(
-                vec![AtomId(base)],
+                &[AtomId(base)],
                 AtomId(base + 1),
                 DativeBondForm::from_order(1),
             );
             editor.add_aromatic_system(
-                vec![AtomId(base), AtomId(base + 1), AtomId(base + 2)],
+                &[AtomId(base), AtomId(base + 1), AtomId(base + 2)],
                 AromaticSystemForm::from_electrons(vec![1, 2, 1]),
             );
             editor.add_multicenter_bond(
-                vec![AtomId(base), AtomId(base + 1), AtomId(base + 3)],
+                &[AtomId(base), AtomId(base + 1), AtomId(base + 3)],
                 MulticenterBondForm::from_electrons(vec![1, 0, 1]),
             );
             editor.add_noncovalent_bond(
@@ -1118,20 +1222,18 @@ mod tests {
             );
             editor.add_stereo_atom(
                 AtomId(base),
-                [1, 2, 3, 4]
-                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom))
-                    .to_vec(),
+                &[1, 2, 3, 4]
+                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom)),
                 StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             );
             editor.add_stereo_bond(
                 BondId(base),
-                [2, 3, 4, 5]
-                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom))
-                    .to_vec(),
+                &[2, 3, 4, 5]
+                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom)),
                 StereoBondForm::default(),
             );
         }
-        editor.build()
+        editor.finish().unwrap()
     }
 
     #[rstest]
@@ -1148,11 +1250,11 @@ mod tests {
         let removed = (removed_start..removed_start + 6)
             .map(AtomId)
             .collect::<Vec<_>>();
-        let compaction = editor.tracked_remove(&removed, &[]);
-        let result = editor.build();
-        let mut plain = source.edit();
-        plain.remove(&removed, &[]);
-        assert_eq!(plain.build(), result);
+        let compaction = editor.tracked_remove_topology(&removed, &[]);
+        let result = editor.finish().unwrap();
+        let mut plain = source.clone().edit();
+        plain.remove_topology(&removed, &[]);
+        assert_eq!(plain.finish().unwrap(), result);
         let expected_compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::new(12, (removed_start..removed_start + 6).map(NodeId).collect())
@@ -1278,8 +1380,8 @@ mod tests {
         } else {
             Vec::new()
         };
-        let compaction = editor.tracked_remove(&removed, &[]);
-        let result = editor.build();
+        let compaction = editor.tracked_remove_topology(&removed, &[]);
+        let result = editor.finish().unwrap();
         assert_eq!(
             result,
             if remove_all {
@@ -1563,7 +1665,8 @@ mod tests {
             .stereo_bonds()
             .matched_pairs()
             .as_ptr();
-        let result = update_correspondence.extend_right(kind, 2);
+        let mut result = update_correspondence;
+        result.extend_right(kind, 2);
         assert_eq!(result.atoms().matched_pairs().as_ptr(), atoms_ptr);
         assert_eq!(result.bonds().matched_pairs().as_ptr(), bonds_ptr);
         assert_eq!(
@@ -1693,7 +1796,8 @@ mod tests {
             .stereo_bonds()
             .matched_pairs()
             .as_ptr();
-        let result = update_correspondence.compact_right(&compaction).unwrap();
+        let mut result = update_correspondence;
+        result.compact_right(&compaction).unwrap();
         assert_eq!(result.atoms().matched_pairs().as_ptr(), atoms_ptr);
         assert_eq!(result.bonds().matched_pairs().as_ptr(), bonds_ptr);
         assert_eq!(
@@ -1733,22 +1837,49 @@ mod tests {
     #[case::stereo_atoms(EntityKind::StereoAtom, 10)]
     #[case::stereo_bonds(EntityKind::StereoBond, 11)]
     fn test_molecule_correspondence_compact_right_error(
-        update_correspondence: MoleculeCorrespondence,
+        mut update_correspondence: MoleculeCorrespondence,
         #[case] kind: EntityKind,
         #[case] right_count: usize,
     ) {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
-                Compaction::identity(4 + usize::from(kind == EntityKind::Atom)),
-                Compaction::identity(5 + usize::from(kind == EntityKind::Bond)),
+                Compaction::new(4 + usize::from(kind == EntityKind::Atom), vec![NodeId(0)])
+                    .unwrap(),
+                Compaction::new(5 + usize::from(kind == EntityKind::Bond), vec![EdgeId(0)])
+                    .unwrap(),
             ),
-            Compaction::identity(6 + usize::from(kind == EntityKind::DativeBond)),
-            Compaction::identity(7 + usize::from(kind == EntityKind::AromaticSystem)),
-            Compaction::identity(8 + usize::from(kind == EntityKind::MulticenterBond)),
-            Compaction::identity(9 + usize::from(kind == EntityKind::NoncovalentBond)),
-            Compaction::identity(10 + usize::from(kind == EntityKind::StereoAtom)),
-            Compaction::identity(11 + usize::from(kind == EntityKind::StereoBond)),
+            Compaction::new(
+                6 + usize::from(kind == EntityKind::DativeBond),
+                vec![DativeBondId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                7 + usize::from(kind == EntityKind::AromaticSystem),
+                vec![AromaticSystemId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                8 + usize::from(kind == EntityKind::MulticenterBond),
+                vec![MulticenterBondId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                9 + usize::from(kind == EntityKind::NoncovalentBond),
+                vec![NoncovalentBondId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                10 + usize::from(kind == EntityKind::StereoAtom),
+                vec![StereoAtomId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                11 + usize::from(kind == EntityKind::StereoBond),
+                vec![StereoBondId(0)],
+            )
+            .unwrap(),
         );
+        let original = update_correspondence.clone();
         assert_eq!(
             update_correspondence.compact_right(&compaction),
             Err(MoleculeCorrespondenceComposeError {
@@ -1759,6 +1890,7 @@ mod tests {
                 },
             })
         );
+        assert_eq!(update_correspondence, original);
     }
 
     #[rstest]
@@ -1861,7 +1993,8 @@ mod tests {
             .stereo_bonds()
             .matched_pairs()
             .as_ptr();
-        let result = update_correspondence.uncompact_right(&compaction).unwrap();
+        let mut result = update_correspondence;
+        result.uncompact_right(&compaction).unwrap();
         assert_eq!(result.atoms().matched_pairs().as_ptr(), atoms_ptr);
         assert_eq!(result.bonds().matched_pairs().as_ptr(), bonds_ptr);
         assert_eq!(
@@ -1901,22 +2034,49 @@ mod tests {
     #[case::stereo_atoms(EntityKind::StereoAtom, 10)]
     #[case::stereo_bonds(EntityKind::StereoBond, 11)]
     fn test_molecule_correspondence_uncompact_right_error(
-        update_correspondence: MoleculeCorrespondence,
+        mut update_correspondence: MoleculeCorrespondence,
         #[case] kind: EntityKind,
         #[case] right_count: usize,
     ) {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
-                Compaction::identity(4 + usize::from(kind == EntityKind::Atom)),
-                Compaction::identity(5 + usize::from(kind == EntityKind::Bond)),
+                Compaction::new(5 + usize::from(kind == EntityKind::Atom), vec![NodeId(0)])
+                    .unwrap(),
+                Compaction::new(6 + usize::from(kind == EntityKind::Bond), vec![EdgeId(0)])
+                    .unwrap(),
             ),
-            Compaction::identity(6 + usize::from(kind == EntityKind::DativeBond)),
-            Compaction::identity(7 + usize::from(kind == EntityKind::AromaticSystem)),
-            Compaction::identity(8 + usize::from(kind == EntityKind::MulticenterBond)),
-            Compaction::identity(9 + usize::from(kind == EntityKind::NoncovalentBond)),
-            Compaction::identity(10 + usize::from(kind == EntityKind::StereoAtom)),
-            Compaction::identity(11 + usize::from(kind == EntityKind::StereoBond)),
+            Compaction::new(
+                7 + usize::from(kind == EntityKind::DativeBond),
+                vec![DativeBondId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                8 + usize::from(kind == EntityKind::AromaticSystem),
+                vec![AromaticSystemId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                9 + usize::from(kind == EntityKind::MulticenterBond),
+                vec![MulticenterBondId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                10 + usize::from(kind == EntityKind::NoncovalentBond),
+                vec![NoncovalentBondId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                11 + usize::from(kind == EntityKind::StereoAtom),
+                vec![StereoAtomId(0)],
+            )
+            .unwrap(),
+            Compaction::new(
+                12 + usize::from(kind == EntityKind::StereoBond),
+                vec![StereoBondId(0)],
+            )
+            .unwrap(),
         );
+        let original = update_correspondence.clone();
         assert_eq!(
             update_correspondence.uncompact_right(&compaction),
             Err(MoleculeCorrespondenceComposeError {
@@ -1927,6 +2087,7 @@ mod tests {
                 },
             })
         );
+        assert_eq!(update_correspondence, original);
     }
 
     #[rstest]
@@ -1943,10 +2104,9 @@ mod tests {
             EntityKind::StereoAtom,
             EntityKind::StereoBond,
         ] {
-            assert_eq!(
-                update_correspondence.clone().extend_right(kind, 0),
-                update_correspondence
-            );
+            let mut result = update_correspondence.clone();
+            result.extend_right(kind, 0);
+            assert_eq!(result, update_correspondence);
         }
     }
 
@@ -1963,15 +2123,13 @@ mod tests {
             Compaction::identity(10),
             Compaction::identity(11),
         );
-        assert_eq!(
-            update_correspondence.clone().compact_right(&compaction),
-            Ok(update_correspondence)
-        );
+        let mut result = update_correspondence.clone();
+        result.compact_right(&compaction).unwrap();
+        assert_eq!(result, update_correspondence);
         let empty = MoleculeCorrespondence::empty();
-        assert_eq!(
-            empty.clone().compact_right(&MoleculeCompaction::empty()),
-            Ok(empty)
-        );
+        let mut result = empty.clone();
+        result.compact_right(&MoleculeCompaction::empty()).unwrap();
+        assert_eq!(result, empty);
     }
 
     #[rstest]
@@ -1987,15 +2145,15 @@ mod tests {
             Compaction::identity(10),
             Compaction::identity(11),
         );
-        assert_eq!(
-            update_correspondence.clone().uncompact_right(&compaction),
-            Ok(update_correspondence)
-        );
+        let mut result = update_correspondence.clone();
+        result.uncompact_right(&compaction).unwrap();
+        assert_eq!(result, update_correspondence);
         let empty = MoleculeCorrespondence::empty();
-        assert_eq!(
-            empty.clone().uncompact_right(&MoleculeCompaction::empty()),
-            Ok(empty)
-        );
+        let mut result = empty.clone();
+        result
+            .uncompact_right(&MoleculeCompaction::empty())
+            .unwrap();
+        assert_eq!(result, empty);
     }
 
     #[fixture]

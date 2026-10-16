@@ -16,6 +16,7 @@ use umol_graph_ir::ir::{
     StereoAtomId, StereoBondId,
 };
 
+use crate::convert::TupleItems;
 use crate::correspondence::{Correspondence, MoleculeCorrespondence};
 
 trait CompactionId:
@@ -84,8 +85,8 @@ impl Compaction {
 
     /// Removed ids in ascending order, without repetitions.
     #[getter]
-    fn removed(&self) -> Vec<u32> {
-        self.0.removed().iter().map(|id| id.0).collect()
+    fn removed(&self) -> TupleItems<Vec<u32>> {
+        TupleItems(self.0.removed().iter().map(|id| id.0).collect())
     }
 
     /// Return the survivor's result id, or `None` when it was removed or is out of range.
@@ -113,7 +114,7 @@ impl Compaction {
         format!(
             "Compaction(source_count={}, removed={:?})",
             self.source_count(),
-            self.removed()
+            self.removed().0
         )
     }
 }
@@ -307,7 +308,7 @@ mod tests {
     fn test_compaction_new(compaction: Compaction) {
         assert_eq!(compaction.source_count(), 5);
         assert_eq!(compaction.result_count(), 3);
-        assert_eq!(compaction.removed(), vec![1, 3]);
+        assert_eq!(compaction.removed().0, vec![1, 3]);
         assert_eq!(
             compaction.__repr__(),
             "Compaction(source_count=5, removed=[1, 3])"

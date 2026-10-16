@@ -566,10 +566,19 @@ impl Normalize for Constraint {
 }
 
 impl Normalize for Constraints {
-    /// The store is an implicit conjunction, so it canonicalizes like an `And`:
-    /// flatten top-level `And` entries, drop empty `And`/`Or`, sort + dedup.
+    /// Normalize each stored constraint on its own: a top-level `And` stays one constraint, as an
+    /// `Or` does. Drop empty `And`/`Or`, then sort + dedup.
     fn normalize(self) -> Result<Self, Contradiction> {
-        Ok(Self(normalize_logical_constraints(self.0, true)?))
+        let mut constraints = Vec::with_capacity(self.0.len());
+        for constraint in self.0 {
+            match constraint.normalize()? {
+                Constraint::And(inner) | Constraint::Or(inner) if inner.is_empty() => {}
+                other => constraints.push(other),
+            }
+        }
+        constraints.sort();
+        constraints.dedup();
+        Ok(Self(constraints))
     }
 }
 
@@ -603,8 +612,7 @@ impl Constraints {
 
 /// Normalize each child, splice same-combinator children (flatten), drop
 /// empty `And`/`Or`, then sort + dedup. `is_and` selects which combinator is the
-/// parent: `true` flattens nested `And` (and the conjunctive top-level store),
-/// `false` flattens nested `Or`.
+/// parent: `true` flattens nested `And`, `false` flattens nested `Or`.
 fn normalize_logical_constraints(
     constraints: Vec<Constraint>,
     is_and: bool,
@@ -655,6 +663,14 @@ impl Constraints {
         self.0.push(c);
     }
 
+    /// Append constraints in order, preserving duplicates and raw forms.
+    ///
+    /// Entries move into storage without normalization or reference checks.
+    /// Empty input leaves the collection unchanged.
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = Constraint>) {
+        self.0.extend(constraints);
+    }
+
     pub fn remove_at(&mut self, position: usize) -> Constraint {
         self.0.remove(position)
     }
@@ -673,19 +689,28 @@ impl Constraints {
 
     /// Remap entity indices. Entries that reference a removed entity (directly
     /// or via a combinator subtree) are dropped.
-    pub fn compact(&mut self, compaction: &MoleculeCompaction) {
-        self.0 = mem::take(&mut self.0)
-            .into_iter()
-            .filter_map(|c| c.compact(compaction))
-            .collect();
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Self {
+        Self(
+            self.0
+                .into_iter()
+                .filter_map(|c| c.compact(compaction))
+                .collect(),
+        )
     }
 
-    /// Remap entity indices and return the patch needed to restore or inspect
-    /// constraints that were dropped or rewritten by the compaction.
-    pub fn compact_with_update(&mut self, compaction: &MoleculeCompaction) -> CascadedConstraints {
+    /// Remap entity ids and record removed or rewritten constraints at their original positions.
+    ///
+    /// Entries referencing a removed entity are dropped, including compound entries
+    /// with such a reference in a subtree. Surviving entries retain their order.
+    ///
+    /// # Semantic properties
+    ///
+    /// Produces the same constraints as [`Self::compact`]. Restoring the returned
+    /// changes recovers the original list, including its order and duplicates.
+    pub fn tracked_compact(self, compaction: &MoleculeCompaction) -> (Self, CascadedConstraints) {
         let mut update = CascadedConstraints::default();
         let mut next = Vec::new();
-        for (position, constraint) in mem::take(&mut self.0).into_iter().enumerate() {
+        for (position, constraint) in self.0.into_iter().enumerate() {
             match constraint.clone().compact(compaction) {
                 Some(mapped) => {
                     if mapped != constraint {
@@ -703,8 +728,43 @@ impl Constraints {
                 }),
             }
         }
-        self.0 = next;
-        update
+        (Self(next), update)
+    }
+
+    /// Restore removed entries and rewritten values at their recorded positions.
+    ///
+    /// Changes must describe the removal or compaction being undone. Saved values
+    /// are cloned; surviving entries move without normalization or reference checks.
+    /// Manipulated or mismatched history does not panic; its result is unspecified.
+    ///
+    /// # Semantic properties
+    ///
+    /// Matching history recovers the original list with its order and duplicates.
+    /// Entries not recorded as modified retain their current values. Empty changes
+    /// leave storage unchanged. Public-API properties in `tests/property/constraint.rs`
+    /// exercise compaction/restoration and manipulated-history panic freedom.
+    pub fn restore(&mut self, changes: &CascadedConstraints) {
+        if changes.is_empty() {
+            return;
+        }
+        let mut restored = vec![None; self.0.len() + changes.removed.len()];
+        for entry in &changes.removed {
+            if let Some(slot) = restored.get_mut(entry.position) {
+                *slot = Some(entry.constraint.clone());
+            }
+        }
+        let mut current = mem::take(&mut self.0).into_iter();
+        for slot in &mut restored {
+            if slot.is_none() {
+                *slot = current.next();
+            }
+        }
+        for entry in &changes.modified {
+            if let Some(slot) = restored.get_mut(entry.position) {
+                *slot = Some(entry.old.clone());
+            }
+        }
+        self.0 = restored.into_iter().flatten().collect();
     }
 }
 
@@ -1747,6 +1807,46 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::unchanged(vec![Constraint::And(vec![])], vec![], vec![Constraint::And(vec![])])]
+    #[case::raw_duplicates(
+        vec![Constraint::And(vec![])],
+        vec![Constraint::Or(vec![]), Constraint::And(vec![])],
+        vec![Constraint::And(vec![]), Constraint::Or(vec![]), Constraint::And(vec![])],
+    )]
+    fn test_constraints_extend(
+        #[case] initial: Vec<Constraint>,
+        #[case] added: Vec<Constraint>,
+        #[case] expected: Vec<Constraint>,
+    ) {
+        let mut constraints = Constraints::from(initial);
+        constraints.extend(added);
+        assert_eq!(constraints, Constraints::from(expected));
+    }
+
+    #[rstest]
+    #[case::first(0)]
+    #[case::middle(1)]
+    #[case::last(2)]
+    fn test_constraints_remove_at_roundtrip(#[case] position: usize) {
+        let original = Constraints::from(vec![
+            Constraint::Atom(AtomId(1), AtomConstraintForm::valence(4)),
+            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(2)),
+            Constraint::Atom(AtomId(1), AtomConstraintForm::valence(4)),
+        ]);
+        let mut constraints = original.clone();
+        let constraint = constraints.remove_at(position);
+        constraints.restore(&CascadedConstraints {
+            removed: vec![RemovedConstraint {
+                position,
+                constraint,
+            }],
+            modified: vec![],
+        });
+        assert_eq!(constraints, original);
+    }
+
+    #[rstest]
     fn test_constraints_retain() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -1844,12 +1944,12 @@ mod tests {
         for c in items {
             cs.push(c);
         }
-        cs.compact(&compaction);
+        let cs = cs.compact(&compaction);
         assert_eq!(cs.as_slice(), expected.as_slice());
     }
 
     #[rstest]
-    fn test_constraints_compact_with_update() {
+    fn test_constraints_tracked_compact() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)));
         cs.push(Constraint::Atom(AtomId(1), AtomConstraintForm::degree(3)));
@@ -1861,7 +1961,7 @@ mod tests {
             atoms: Some(vec![AtomId(0), AtomId(2)]),
         }));
 
-        let update = cs.compact_with_update(&id_compaction(vec![1], vec![1]));
+        let (cs, update) = cs.tracked_compact(&id_compaction(vec![1], vec![1]));
 
         assert_eq!(
             cs.as_slice(),
@@ -1909,9 +2009,87 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::ordered(false)]
+    #[case::reversed(true)]
+    fn test_constraints_restore(#[case] reverse: bool) {
+        let first = Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4));
+        let removed = Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2));
+        let old = Constraint::Atom(AtomId(3), AtomConstraintForm::valence(3));
+        let new = Constraint::Atom(AtomId(2), AtomConstraintForm::valence(3));
+        let last = Constraint::Or(vec![first.clone()]);
+        let mut constraints = Constraints::from(vec![first.clone(), new.clone(), last.clone()]);
+        let mut changes = CascadedConstraints {
+            removed: vec![
+                RemovedConstraint {
+                    position: 1,
+                    constraint: removed.clone(),
+                },
+                RemovedConstraint {
+                    position: 3,
+                    constraint: removed.clone(),
+                },
+            ],
+            modified: vec![ModifiedConstraint {
+                position: 2,
+                old: old.clone(),
+                new,
+            }],
+        };
+        if reverse {
+            changes.removed.reverse();
+        }
+        constraints.restore(&changes);
+        assert_eq!(
+            constraints,
+            Constraints::from(vec![first, removed.clone(), old, removed, last])
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![])]
+    #[case::raw(vec![Constraint::Or(vec![]), Constraint::And(vec![]), Constraint::Or(vec![])])]
+    fn test_constraints_restore_identity(#[case] entries: Vec<Constraint>) {
+        let original = Constraints::from(entries);
+        let mut restored = original.clone();
+        restored.restore(&CascadedConstraints::default());
+        assert_eq!(restored, original);
+    }
+
+    #[rstest]
+    #[case::modified(0)]
+    #[case::outside(7)]
+    fn test_constraints_restore_history(#[case] position: usize) {
+        let mut constraints = Constraints::from(vec![Constraint::And(vec![])]);
+        constraints.restore(&CascadedConstraints {
+            removed: vec![
+                RemovedConstraint {
+                    position,
+                    constraint: Constraint::Or(vec![]),
+                },
+                RemovedConstraint {
+                    position,
+                    constraint: Constraint::And(vec![]),
+                },
+            ],
+            modified: vec![
+                ModifiedConstraint {
+                    position,
+                    old: Constraint::Or(vec![]),
+                    new: Constraint::Not(Box::new(Constraint::And(vec![]))),
+                },
+                ModifiedConstraint {
+                    position: 5,
+                    old: Constraint::And(vec![]),
+                    new: Constraint::Or(vec![]),
+                },
+            ],
+        });
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::flattens_top_level_and_then_sorts(
+    #[case::unwraps_single_conjunct_then_sorts(
         Constraints::from(vec![
             Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))]),
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
@@ -1919,6 +2097,22 @@ mod tests {
         Ok(Constraints::from(vec![
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
             Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        ])),
+    )]
+    #[case::keeps_top_level_and(
+        Constraints::from(vec![
+            Constraint::And(vec![
+                Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
+            ]),
+            Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2)),
+        ]),
+        Ok(Constraints::from(vec![
+            Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2)),
+            Constraint::And(vec![
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
+                Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+            ]),
         ])),
     )]
     #[case::drops_empty_or_and_dedups(

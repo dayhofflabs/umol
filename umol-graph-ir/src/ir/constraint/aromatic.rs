@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use umol_perm::DynPermutation;
 
 use super::super::compact::MoleculeCompaction;
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
@@ -26,6 +26,15 @@ impl AromaticSystemConstraintForm {
         Self::ElectronCount(v.into())
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: AromaticSystemConstraintKey) -> Self {
+        match key {
+            AromaticSystemConstraintKey::ElectronCount => {
+                Self::ElectronCount(NumForm::Undetermined)
+            }
+        }
+    }
+
     /// Aromatic-system constraint key, unique within an `AromaticSystemConstraintsForm` container.
     pub fn key(&self) -> AromaticSystemConstraintKey {
         match self {
@@ -35,9 +44,7 @@ impl AromaticSystemConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::ElectronCount(_) => Self::ElectronCount(NumForm::Undetermined),
-        }
+        Self::undetermined(self.key())
     }
 
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
@@ -90,7 +97,7 @@ impl Lattice for AromaticSystemConstraintForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         match (self, other) {
             (Self::ElectronCount(a), Self::ElectronCount(b)) => Ok(Self::ElectronCount(a.join(b)?)),
         }
@@ -124,11 +131,32 @@ impl AromaticSystemConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(
+        &self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<AromaticSystemConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(AromaticSystemConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// The normalized own assertion. This entity kind has no closure negative,
+    /// so this agrees with [`Self::asserted`]. Reads no molecule context.
+    pub fn asserted_complete(
+        &self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<AromaticSystemConstraintForm> {
+        self.asserted(key)
+    }
+
     /// The system's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
-    pub fn electron_count(&self) -> NumForm {
+    pub fn electron_count(&self) -> &NumForm {
         match self.get(AromaticSystemConstraintKey::ElectronCount) {
-            Some(AromaticSystemConstraintForm::ElectronCount(v)) => v.clone(),
-            _ => NumForm::Undetermined,
+            Some(AromaticSystemConstraintForm::ElectronCount(v)) => v,
+            _ => &NumForm::Undetermined,
         }
     }
 
@@ -323,7 +351,7 @@ impl Lattice for AromaticSystemConstraintsForm {
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`AromaticSystemConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: Vec<AromaticSystemConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
@@ -350,7 +378,7 @@ impl Lattice for AromaticSystemConstraintsForm {
     /// Pattern-driven: the electron-count value is matched on its own lattice; an empty
     /// pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
-        self.electron_count().matches(&target.electron_count())
+        self.electron_count().matches(target.electron_count())
     }
 
     /// Sorted merge, short-circuit: only shared keys can conflict; non-shared keys are always
@@ -426,6 +454,14 @@ mod tests {
         #[case] expected: AromaticSystemConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraint_form_undetermined() {
+        assert_eq!(
+            AromaticSystemConstraintForm::undetermined(AromaticSystemConstraintKey::ElectronCount),
+            AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)
+        );
     }
 
     #[rstest]
@@ -518,7 +554,7 @@ mod tests {
     #[rstest]
     #[case::same_value(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(6), Ok(AromaticSystemConstraintForm::electron_count(6)))]
     #[case::widens(AromaticSystemConstraintForm::electron_count(1), AromaticSystemConstraintForm::electron_count(2), Ok(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([1, 2]))))]
-    fn test_aromatic_system_constraint_form_join(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: Result<AromaticSystemConstraintForm, NoJoin>) {
+    fn test_aromatic_system_constraint_form_join(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: Result<AromaticSystemConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 
@@ -535,6 +571,39 @@ mod tests {
         let cs = AromaticSystemConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absent(None, AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)))]
+    #[case::top(Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)))]
+    #[case::literal(Some(AromaticSystemConstraintForm::electron_count(NumForm::Lit(2))), AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(2)), Some(AromaticSystemConstraintForm::electron_count(2)))]
+    #[case::singleton(Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([2]))), AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(2)), Some(AromaticSystemConstraintForm::electron_count(2)))]
+    #[case::bottom(Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([]))), AromaticSystemConstraintKey::ElectronCount, None, None)]
+    fn test_aromatic_system_constraints_form_asserted(
+        #[case] source: Option<AromaticSystemConstraintForm>,
+        #[case] key: AromaticSystemConstraintKey,
+        #[case] expected: Option<AromaticSystemConstraintForm>,
+        #[case] complete: Option<AromaticSystemConstraintForm>,
+    ) {
+        let constraints: AromaticSystemConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
+    }
+
+    #[rstest]
+    #[case::stored(
+        AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)),
+        NumForm::Lit(6)
+    )]
+    #[case::absent(AromaticSystemConstraintsForm::new(), NumForm::Undetermined)]
+    fn test_aromatic_system_constraints_form_electron_count(
+        #[case] cs: AromaticSystemConstraintsForm,
+        #[case] expected: NumForm,
+    ) {
+        assert_eq!(cs.electron_count(), &expected);
     }
 
     #[rstest]

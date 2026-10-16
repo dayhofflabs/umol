@@ -129,7 +129,9 @@ proptest! {
             (0..right_count).map(|idx| (NodeId::from(idx), NodeId::from(idx))).collect(),
             right_count, right_count + added,
         ).unwrap();
-        prop_assert_eq!(correspondence.clone().extend_right(added), correspondence.compose(&step).unwrap());
+        let mut extended = correspondence.clone();
+        extended.extend_right(added);
+        prop_assert_eq!(extended, correspondence.compose(&step).unwrap());
     }
 
     #[test]
@@ -141,12 +143,15 @@ proptest! {
             .filter_map(|(idx, remove)| remove.then_some(NodeId::from(idx))).collect();
         let compaction = Compaction::new(correspondence.right_count(), removed).unwrap();
         let step = Correspondence::from(&compaction);
+        let mut compacted = correspondence.clone();
+        compacted.compact_right(&compaction).unwrap();
         prop_assert_eq!(
-            correspondence.clone().compact_right(&compaction).unwrap(),
-            correspondence.compose(&step).unwrap(),
+            &compacted,
+            &correspondence.compose(&step).unwrap(),
         );
+        compacted.uncompact_right(&compaction).unwrap();
         prop_assert_eq!(
-            correspondence.clone().compact_right(&compaction).unwrap().uncompact_right(&compaction).unwrap(),
+            compacted,
             correspondence.compose(&step).unwrap().compose(&step.reverse()).unwrap(),
         );
     }
@@ -162,9 +167,11 @@ proptest! {
             }),
     ) {
         let step = Correspondence::from(&compaction).reverse();
-        let expanded = correspondence.clone().uncompact_right(&compaction).unwrap();
+        let mut expanded = correspondence.clone();
+        expanded.uncompact_right(&compaction).unwrap();
         prop_assert_eq!(&expanded, &correspondence.compose(&step).unwrap());
-        prop_assert_eq!(expanded.compact_right(&compaction).unwrap(), correspondence);
+        expanded.compact_right(&compaction).unwrap();
+        prop_assert_eq!(expanded, correspondence);
     }
     #[test]
     fn test_correspondence_from_images(

@@ -324,6 +324,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::convert::TupleItems;
 
     #[rstest]
     #[case::default(
@@ -440,14 +441,14 @@ mod tests {
             AromaticityModel::daylight(),
             AromaticityModel {
                 scope: ElementScope::AllowList {
-                    elements: vec![
+                    elements: TupleItems(vec![
                         ChemElement::C.into(),
                         ChemElement::N.into(),
                         ChemElement::O.into(),
                         ChemElement::S.into(),
                         ChemElement::Se.into(),
                         ChemElement::As.into(),
-                    ],
+                    ]),
                 },
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::new(3, 22, true, 6, 10_000)
@@ -463,7 +464,7 @@ mod tests {
             AromaticityModel::mdl(),
             AromaticityModel {
                 scope: ElementScope::AllowList {
-                    elements: vec![ChemElement::C.into(), ChemElement::N.into()],
+                    elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
                 },
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::new(6, 22, true, 6, 10_000)
@@ -494,13 +495,13 @@ mod tests {
     )]
     #[case::hmo(
         AromaticityModel { scope: ElementScope::AllowList {
-                elements: vec![ChemElement::C.into(), ChemElement::N.into()],
+                elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
             }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MinElectronCount },
         "AromaticityModel(scope=ElementScope.AllowList([Element('C'), Element('N')]), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.MinElectronCount)"
     )]
     #[case::clar(
         AromaticityModel { scope: ElementScope::AllowList {
-                elements: vec![ChemElement::C.into()],
+                elements: TupleItems(vec![ChemElement::C.into()]),
             }, rule: AromaticityRule::Clar {}, tie_break: AromaticityTieBreak::Strict },
         "AromaticityModel(scope=ElementScope.AllowList([Element('C')]), rule=AromaticityRule.Clar(), tie_break=AromaticityTieBreak.Strict)"
     )]
@@ -522,13 +523,13 @@ mod tests {
     #[case::hmo(
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::MinElectronCount },
         AromaticityModel { scope: ElementScope::AllowList {
-                elements: vec![ChemElement::C.into(), ChemElement::N.into()],
+                elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
             }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MinElectronCount }
     )]
     #[case::clar(
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar, tie_break: GraphAromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::AllowList {
-                elements: vec![ChemElement::C.into()],
+                elements: TupleItems(vec![ChemElement::C.into()]),
             }, rule: AromaticityRule::Clar {}, tie_break: AromaticityTieBreak::Strict }
     )]
     fn test_aromaticity_model_from_rust(
@@ -551,13 +552,13 @@ mod tests {
     )]
     #[case::hmo(
         AromaticityModel { scope: ElementScope::AllowList {
-                elements: vec![ChemElement::C.into(), ChemElement::N.into()],
+                elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
             }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MinElectronCount },
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::MinElectronCount }
     )]
     #[case::clar(
         AromaticityModel { scope: ElementScope::AllowList {
-                elements: vec![ChemElement::C.into()],
+                elements: TupleItems(vec![ChemElement::C.into()]),
             }, rule: AromaticityRule::Clar {}, tie_break: AromaticityTieBreak::Strict },
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar, tie_break: GraphAromaticityTieBreak::Strict }
     )]

@@ -272,7 +272,7 @@ proptest! {
     fn test_molecule_remap_framed_eq_under(
         (source, remapping, _) in remapping_scenario_strategy(),
     ) {
-        let remapped = source.remap(&remapping);
+        let remapped = source.clone().remap(&remapping);
 
         prop_assert!(source.framed_eq_under(&remapped, &remapping));
     }
@@ -283,14 +283,14 @@ proptest! {
     ) {
         let identity = identity_remapping(&source);
 
-        prop_assert_eq!(source.remap(&identity), source);
+        prop_assert_eq!(source.clone().remap(&identity), source);
     }
 
     #[test]
     fn test_molecule_remap_inverse(
         (source, remapping, _) in remapping_scenario_strategy(),
     ) {
-        let remapped = source.remap(&remapping);
+        let remapped = source.clone().remap(&remapping);
         let restored = remapped.remap(&MoleculeRemapping::new(
             GraphRemapping::new(
                 Remapping::new(inverse_images(remapping.graph().nodes())).unwrap(),
@@ -311,7 +311,7 @@ proptest! {
     fn test_molecule_remap_composition(
         (source, first, second) in remapping_scenario_strategy(),
     ) {
-        let sequential = source.remap(&first).remap(&second);
+        let sequential = source.clone().remap(&first).remap(&second);
         let direct = source.remap(&MoleculeRemapping::new(
             GraphRemapping::new(
                 Remapping::new(composed_images(

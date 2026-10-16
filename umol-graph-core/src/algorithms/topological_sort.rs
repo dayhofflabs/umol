@@ -8,7 +8,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 use crate::digraph::DiGraph;
-use crate::graph::NodeId;
+use crate::id::NodeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TopologicalSortAlgorithm {

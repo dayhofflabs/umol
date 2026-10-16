@@ -2620,7 +2620,9 @@ mod tests {
     #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
     #[case::modify(r#"{:atoms ["C" "C"] :bonds [{:modify [0 1 [:single :double]]}]}"#)]
     #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
-    #[case::constraint(r#"{:atoms ["C"] :constraints [{:connected {}} {:add {:connected {}}}]}"#)]
+    #[case::constraint(
+        r#"{:atoms ["C"] :constraints [{:connected {}} {:add {:connected {:atoms [0]}}}]}"#
+    )]
     #[case::aliases(r#"{:atoms [:nu {:add "O"}] :atom-aliases [:nu "C"]}"#)]
     #[case::atom_keyword(r#"{:atoms [[:c "C"]]}"#)]
     #[case::bond_keyword(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :attrs :single}]}"#)]
