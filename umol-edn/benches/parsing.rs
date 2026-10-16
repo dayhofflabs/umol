@@ -177,6 +177,36 @@ fn bench_display(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_nested_ordering(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nested_ordering");
+    let flat_map = read_string("{:a 0 :b 1 :c 2 :d 3}").unwrap();
+    let flat_map_equal = flat_map.clone();
+    group.bench_function("flat_map", |b| {
+        b.iter(|| black_box(&flat_map).cmp(black_box(&flat_map_equal)))
+    });
+    let flat_set = read_string("#{0 1 2 3}").unwrap();
+    let flat_set_equal = flat_set.clone();
+    group.bench_function("flat_set", |b| {
+        b.iter(|| black_box(&flat_set).cmp(black_box(&flat_set_equal)))
+    });
+    let mut input = String::from("{0 1}");
+    for depth in 1..=12 {
+        input = format!("{{{{3 0}} 3 {{1 0}} 1 {input} 0 0 0}}");
+        if matches!(depth, 4 | 8 | 12) {
+            let value = read_string(&input).unwrap();
+            group.bench_function(format!("map_keys/{depth}"), |b| {
+                b.iter(|| black_box(&value).to_string())
+            });
+        }
+    }
+    let input = format!("#{{{{3 0}} {input}}}");
+    let value = read_string(&input).unwrap();
+    group.bench_function("set_elements/12", |b| {
+        b.iter(|| black_box(&value).to_string())
+    });
+    group.finish();
+}
+
 fn bench_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("roundtrip");
     group.bench_function("molecule_large", |b| {
@@ -496,6 +526,7 @@ criterion_group!(
     bench_parse_collections,
     bench_read_all,
     bench_display,
+    bench_nested_ordering,
     bench_roundtrip,
     bench_deserialize,
     bench_serialize,

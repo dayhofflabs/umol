@@ -128,6 +128,7 @@ mod tests {
 
     use crate::collections::{EdnMap, EdnSet};
     use crate::edn::{Edn, EdnKeyword, EdnSymbol};
+    use crate::reader::read_string;
 
     #[rstest]
     #[case::nil(Edn::Nil, "nil")]
@@ -214,6 +215,26 @@ mod tests {
     #[test]
     fn test_display_map_empty() {
         assert_eq!(Edn::Map(EdnMap::new()).to_string(), "{}");
+    }
+
+    #[rstest]
+    #[case::map_keys(24, false)]
+    #[case::set_elements(24, true)]
+    fn test_display_nested_collections(#[case] depth: usize, #[case] in_set: bool) {
+        let mut input = String::from("{0 1}");
+        let mut expected = input.clone();
+        for _ in 0..depth {
+            input = format!("{{{{3 0}} 3 {{1 0}} 1 {input} 0 0 0}}");
+            expected = format!("{{0 0 {expected} 0 {{1 0}} 1 {{3 0}} 3}}");
+        }
+        if in_set {
+            input = format!("#{{{{3 0}} {input}}}");
+            expected = format!("#{{{expected} {{3 0}}}}");
+        }
+
+        let value = read_string(&input).unwrap();
+        assert_eq!(value.to_string(), expected);
+        assert_eq!(read_string(&expected).unwrap(), value);
     }
 
     #[test]
