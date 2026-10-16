@@ -2,22 +2,24 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
     BondConstraintForm as GraphIrBondConstraintForm, BondConstraintKey as GraphIrBondConstraintKey,
-    BondConstraintsForm as GraphIrBondConstraintsForm, BondId as GraphIrBondId,
+    BondConstraintsForm as GraphIrBondConstraintsForm,
+    BondConstraintsView as GraphIrBondConstraintsView, BondId as GraphIrBondId,
     RingScope as GraphIrRingScope,
 };
 
 use super::ring::{RingMembershipForm, RingScope};
-use crate::bond::BondForm;
+use crate::bond::{BondForm, BondUpdate};
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
+use crate::ring::RingSet;
 use crate::stereo::{CisTransStereoForm, CisTransStereoLike};
 
 /// The key (identity) of a bond constraint, for keyed lookup. The ring-membership
@@ -303,6 +305,32 @@ impl BondConstraintsForm {
         bond_constraint_items(py, &self.0)
     }
 
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted(key)
+            .map(|value| BondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted_complete(key)
+            .map(|value| BondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
     /// The constraint with the given key, or `default` (`None`) if absent.
     #[pyo3(signature = (key, default=None))]
     pub(crate) fn get(
@@ -356,7 +384,7 @@ impl BondConstraintsForm {
     /// (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn aromatic(&self) -> BooleanForm {
-        BooleanForm::from_rust(&self.0.aromatic())
+        BooleanForm::from_rust(self.0.aromatic())
     }
 
     #[setter]
@@ -365,13 +393,10 @@ impl BondConstraintsForm {
             .set(GraphIrBondConstraintForm::aromatic(value.to_rust(py)));
     }
 
-    /// The cis/trans-stereo state, or `None`.
+    /// The cis/trans-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<Option<CisTransStereoForm>> {
-        self.0
-            .cis_trans_stereo()
-            .map(|c| CisTransStereoForm::from_rust(py, c))
-            .transpose()
+    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<CisTransStereoForm> {
+        CisTransStereoForm::from_rust(py, self.0.cis_trans_stereo())
     }
 
     #[setter]
@@ -386,13 +411,18 @@ impl BondConstraintsForm {
         Ok(())
     }
 
-    /// The all-rings membership count, or `None`.
-    #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+    /// The ring-membership constraints.
+    pub(crate) fn ring_memberships(&self, py: Python<'_>) -> PyResult<Vec<RingMembershipForm>> {
         self.0
-            .ring_count()
-            .map(|v| NumForm::from_rust(py, v))
-            .transpose()
+            .ring_memberships()
+            .map(|m| RingMembershipForm::from_rust(py, m))
+            .collect()
+    }
+
+    /// The all-rings membership count (undetermined if absent).
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        NumForm::from_rust(py, self.0.ring_count())
     }
 
     #[setter]
@@ -408,7 +438,7 @@ impl BondConstraintsForm {
     #[getter]
     pub(crate) fn ring_size_count(slf: Py<Self>) -> BondRingSizeCounts {
         BondRingSizeCounts {
-            backing: BondRingSizeBacking::Value(slf),
+            storage: BondRingSizeStorage::Value(slf),
         }
     }
 
@@ -433,17 +463,19 @@ impl BondConstraintsForm {
 
     /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `BondConstraintsForm(..)` directly.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrBondConstraintsForm) -> Self {
         BondConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
+    borrowed,
     BondConstraintsForm,
     GraphIrBondConstraintsForm,
-    |value: &BondConstraintsForm, _py: Python<'_>| -> PyResult<GraphIrBondConstraintsForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrBondConstraintsForm| -> PyResult<BondConstraintsForm> {
         Ok(BondConstraintsForm(value))
     }
@@ -524,64 +556,89 @@ pub(crate) fn bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What a `BondConstraintsView` writes through to: a bond within a molecule (by
-/// index) or a standalone `BondForm`.
-pub(crate) enum BondConstraintsBacking {
+/// Owner of the constraints exposed by BondConstraintsView.
+pub(crate) enum BondConstraintsStorage {
+    Update(Py<BondUpdate>),
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),
 }
 
-/// A live handle onto one bond's constraints, backed by either a molecule-bond or a
-/// standalone `BondForm`. Reads borrow the bond's constraints and read only the item
-/// they need (no whole-container clone); mutators write through to the bond in place,
-/// without a clone-and-writeback.
+/// A view of one bond's constraints, retaining its molecule, BondForm,
+/// or BondUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
+/// Semantic readings return independent normal values; None is bottom.
+/// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from BondUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct BondConstraintsView {
-    pub(crate) backing: BondConstraintsBacking,
+    pub(crate) storage: BondConstraintsStorage,
+    pub(crate) rings: Option<Py<RingSet>>,
 }
 
 impl BondConstraintsView {
+    fn read_view<R>(
+        &self,
+        py: Python<'_>,
+        keys: impl IntoIterator<Item = GraphIrBondConstraintKey>,
+        f: impl FnOnce(GraphIrBondConstraintsView<'_>) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let BondConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "BondConstraintsView requires molecule context",
+            ));
+        };
+        let molecule = owner.try_borrow(py)?;
+        molecule.check_access(*counter, stringify!(BondConstraintsView))?;
+        let entity = molecule
+            .to_rust()
+            .bonds()
+            .get(*id)
+            .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
+        let view = entity.constraints();
+        if let Some(rings) = &self.rings {
+            let rings = rings.try_borrow(py)?;
+            f(view.with_rings(rings.to_rust()))
+        } else {
+            if keys
+                .into_iter()
+                .any(|key| matches!(key, GraphIrBondConstraintKey::RingMembership(_)))
+            {
+                return Err(PyValueError::new_err(
+                    "BondConstraintsView requires ring context; use with_rings",
+                ));
+            }
+            f(view)
+        }
+    }
+
     /// Borrow the backing bond's constraints and read one item through `f` — no clone.
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
         f: impl FnOnce(&GraphIrBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            BondConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
-            BondConstraintsBacking::Bond(bond) => {
+            BondConstraintsStorage::Bond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.to_rust().constraints)
-            }
-        }
-    }
-
-    /// Mutate the backing bond's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrBondConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .bond_mut(*id)
-                .attributes
-                .constraints)),
-            BondConstraintsBacking::Bond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }
@@ -592,7 +649,28 @@ impl BondConstraintsView {
         py: Python<'_>,
         constraint: GraphIrBondConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.storage {
+            BondConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
+                if !molecule.to_rust().bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            BondConstraintsStorage::Bond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -601,12 +679,163 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: GraphIrBondConstraintKey,
     ) -> PyResult<Option<GraphIrBondConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.storage {
+            BondConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
+                if !molecule.to_rust().bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            BondConstraintsStorage::Bond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
 #[pymethods]
 impl BondConstraintsView {
+    /// Return a view of the same molecule entity with borrowed ring context.
+    /// Retains rings without copying; topology must agree for meaningful readings.
+    /// Raises ValueError on a standalone form. The source view is unchanged.
+    fn with_rings(&self, py: Python<'_>, rings: Py<RingSet>) -> PyResult<Self> {
+        let BondConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "BondConstraintsView requires molecule context",
+            ));
+        };
+        owner
+            .try_borrow(py)?
+            .check_access(*counter, stringify!(BondConstraintsView))?;
+        Ok(Self {
+            storage: BondConstraintsStorage::Molecule {
+                owner: owner.clone_ref(py),
+                counter: *counter,
+                id: *id,
+            },
+            rings: Some(rings),
+        })
+    }
+
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted_complete(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection; None is bottom and undetermined is top.
+    /// Raises ValueError without molecule context or required ring context.
+    fn derived(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.derived(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection with closure; None remains bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn derived_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.derived_complete(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Meet the own assertion with derived and additional evidence; None is bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn evidenced(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.evidenced(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read combined evidence with relation closure; None remains bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn evidenced_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.evidenced_complete(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Whether complete evidence satisfies every pattern entry.
+    /// Requires molecule context even for empty inputs. Missing molecule or required
+    /// ring context raises ValueError.
+    fn satisfies(&self, py: Python<'_>, pattern: &BondConstraintsForm) -> PyResult<bool> {
+        self.read_view(
+            py,
+            pattern.0.iter().map(GraphIrBondConstraintForm::key),
+            |view| Ok(view.satisfies(&pattern.0)),
+        )
+    }
+
+    /// Whether open evidence is compatible with every entry of other.
+    /// Requires molecule context even for empty inputs. Missing molecule or required
+    /// ring context raises ValueError.
+    fn is_compatible(&self, py: Python<'_>, other: &BondConstraintsForm) -> PyResult<bool> {
+        self.read_view(
+            py,
+            other.0.iter().map(GraphIrBondConstraintForm::key),
+            |view| Ok(view.is_compatible(&other.0)),
+        )
+    }
+
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let count = self.read(py, |cs| Ok(cs.len()))?;
         Ok(format!("BondConstraintsView({count} entries)"))
@@ -650,7 +879,28 @@ impl BondConstraintsView {
     /// view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.storage {
+            BondConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
+                if !molecule.to_rust().bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            BondConstraintsStorage::Bond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -730,7 +980,7 @@ impl BondConstraintsView {
     /// (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn aromatic(&self, py: Python<'_>) -> PyResult<BooleanForm> {
-        self.read(py, |cs| Ok(BooleanForm::from_rust(&cs.aromatic())))
+        self.read(py, |cs| Ok(BooleanForm::from_rust(cs.aromatic())))
     }
 
     #[setter]
@@ -738,13 +988,11 @@ impl BondConstraintsView {
         self.set_form(py, GraphIrBondConstraintForm::aromatic(value.to_rust(py)))
     }
 
-    /// The cis/trans-stereo state, or `None`.
+    /// The cis/trans-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<Option<CisTransStereoForm>> {
+    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<CisTransStereoForm> {
         self.read(py, |cs| {
-            cs.cis_trans_stereo()
-                .map(|c| CisTransStereoForm::from_rust(py, c))
-                .transpose()
+            CisTransStereoForm::from_rust(py, cs.cis_trans_stereo())
         })
     }
 
@@ -760,14 +1008,19 @@ impl BondConstraintsView {
         )
     }
 
-    /// The all-rings membership count, or `None`.
-    #[getter]
-    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+    /// The ring-membership constraints.
+    pub(crate) fn ring_memberships(&self, py: Python<'_>) -> PyResult<Vec<RingMembershipForm>> {
         self.read(py, |cs| {
-            cs.ring_count()
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
+            cs.ring_memberships()
+                .map(|m| RingMembershipForm::from_rust(py, m))
+                .collect()
         })
+    }
+
+    /// The all-rings membership count (undetermined if absent).
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_count()))
     }
 
     #[setter]
@@ -781,15 +1034,24 @@ impl BondConstraintsView {
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
     /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
     #[getter]
-    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> BondRingSizeCounts {
-        let backing = match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => BondRingSizeBacking::Molecule {
-                owner: owner.clone_ref(py),
-                id: *id,
-            },
-            BondConstraintsBacking::Bond(bond) => BondRingSizeBacking::Bond(bond.clone_ref(py)),
+    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> PyResult<BondRingSizeCounts> {
+        let storage = match &self.storage {
+            BondConstraintsStorage::Update(owner) => {
+                BondRingSizeStorage::Update(owner.clone_ref(py))
+            }
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                owner
+                    .try_borrow(py)?
+                    .check_access(*counter, stringify!(BondConstraintsView))?;
+                BondRingSizeStorage::Molecule {
+                    owner: owner.clone_ref(py),
+                    counter: *counter,
+                    id: *id,
+                }
+            }
+            BondConstraintsStorage::Bond(bond) => BondRingSizeStorage::Bond(bond.clone_ref(py)),
         };
-        BondRingSizeCounts { backing }
+        Ok(BondRingSizeCounts { storage })
     }
 
     /// The present constraints as a dict keyed by snake_case name.
@@ -798,24 +1060,24 @@ impl BondConstraintsView {
     }
 }
 
-/// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
-/// molecule, a standalone `BondForm`, or a standalone `BondConstraintsForm` value.
-pub(crate) enum BondRingSizeBacking {
+/// Owner of the constraints exposed by BondRingSizeCounts.
+pub(crate) enum BondRingSizeStorage {
+    Update(Py<BondUpdate>),
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),
     Value(Py<BondConstraintsForm>),
 }
 
-/// A subscriptable proxy over the sized-ring membership counts of a bond, keyed by
-/// ring size: `proxy[size]` reads, `proxy[size] = count` sets, `del proxy[size]`
-/// removes. Backs onto whichever container produced it (dual-backing, like
-/// `BondConstraintsView`).
+/// A subscriptable view of a bond's sized-ring membership counts.
+/// `proxy[size]` reads, `proxy[size] = count` sets, and `del proxy[size]` removes.
+/// The proxy retains its owner. Writes raise TypeError for BondUpdate owners.
 #[pyclass]
 pub struct BondRingSizeCounts {
-    pub(crate) backing: BondRingSizeBacking,
+    pub(crate) storage: BondRingSizeStorage,
 }
 
 impl BondRingSizeCounts {
@@ -825,18 +1087,20 @@ impl BondRingSizeCounts {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            BondRingSizeBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            BondRingSizeStorage::Update(owner) => f(&owner.try_borrow(py)?.to_rust().constraints),
+            BondRingSizeStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
                 let view = molecule
                     .to_rust()
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
-            BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().to_rust().constraints),
-            BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),
+            BondRingSizeStorage::Bond(bond) => f(&bond.bind(py).borrow().to_rust().constraints),
+            BondRingSizeStorage::Value(value) => f(value.bind(py).borrow().to_rust()),
         }
     }
 
@@ -846,17 +1110,23 @@ impl BondRingSizeCounts {
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrBondConstraintsForm),
     ) -> PyResult<()> {
-        match &self.backing {
-            BondRingSizeBacking::Molecule { owner, id } => f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .bond_mut(*id)
-                .attributes
-                .constraints),
-            BondRingSizeBacking::Bond(bond) => {
+        match &self.storage {
+            BondRingSizeStorage::Update(_) => {
+                return Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
+            BondRingSizeStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
+                f(&mut molecule
+                    .to_rust_mut()
+                    .bond_mut(*id)
+                    .attributes_mut()
+                    .constraints);
+            }
+            BondRingSizeStorage::Bond(bond) => {
                 f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints)
             }
-            BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
+            BondRingSizeStorage::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
         }
         Ok(())
     }
@@ -864,13 +1134,9 @@ impl BondRingSizeCounts {
 
 #[pymethods]
 impl BondRingSizeCounts {
-    /// The membership count for rings of `size`, or `None`.
-    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<NumForm>> {
-        self.read(py, |cs| {
-            cs.ring_size_count(size)
-                .map(|v| NumForm::from_rust(py, v))
-                .transpose()
-        })
+    /// The membership count for rings of `size` (undetermined if absent).
+    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<NumForm> {
+        self.read(py, |cs| NumForm::from_rust(py, cs.ring_size_count(size)))
     }
 
     /// The number of distinct ring sizes with a membership constraint.
@@ -879,7 +1145,11 @@ impl BondRingSizeCounts {
     }
 
     pub(crate) fn __contains__(&self, py: Python<'_>, size: u8) -> PyResult<bool> {
-        self.read(py, |cs| Ok(cs.ring_size_count(size).is_some()))
+        self.read(py, |cs| {
+            Ok(cs.contains(GraphIrBondConstraintKey::RingMembership(
+                GraphIrRingScope::Size(size),
+            )))
+        })
     }
 
     /// Iterate the present ring sizes (as ints).

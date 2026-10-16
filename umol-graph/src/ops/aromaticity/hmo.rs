@@ -4,17 +4,19 @@
 //! and compares the delocalization energy per π-electron to a configured threshold.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_core::ConnectedComponentsAlgorithm;
+use umol_graph_core::{ConnectedComponentsAlgorithm, Graph};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, ElementForm, Molecule, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AtomId, BooleanForm, ElementForm, Molecule, RingSet,
+    UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
+use super::bond_exclusions;
 use crate::ops::model::ElementScope;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -54,13 +56,78 @@ impl HmoAromaticity {
         }
     }
 
+    pub(super) fn candidate_components(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        let pi_atoms: BTreeSet<AtomId> = molecule
+            .atoms()
+            .iter()
+            .filter(|atom| {
+                matches!(atom.attributes().element,
+                ElementForm::Lit(element) if self.is_element_supported(element))
+            })
+            .filter(|atom| can_contribute(atom.id()))
+            .map(|atom| atom.id())
+            .collect();
+        let edges: Vec<[u32; 2]> = molecule
+            .bonds()
+            .iter()
+            .filter(|bond| {
+                !matches!(
+                    bond.attributes().constraints.aromatic(),
+                    BooleanForm::Lit(false)
+                )
+            })
+            .map(|bond| bond.atom_ids())
+            .filter(|atoms| atoms.iter().all(|atom| pi_atoms.contains(atom)))
+            .map(|atoms| atoms.map(|atom| atom.0))
+            .collect();
+        let mut components: Vec<BTreeSet<AtomId>> = Graph::new(molecule.atoms().count(), &edges)
+            .enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs)
+            .into_iter()
+            .map(|atoms| atoms.into_iter().map(AtomId::from).collect::<BTreeSet<_>>())
+            .filter(|atoms| {
+                atoms
+                    .iter()
+                    .any(|atom| pi_atoms.contains(atom) && rings.contains_atom(*atom))
+            })
+            .collect();
+        components.sort();
+        components
+    }
+
+    pub(super) fn candidate_aromatic_systems(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        atom: AtomId,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<BTreeSet<AtomId>> {
+        self.candidate_components(molecule, rings, can_contribute)
+            .into_iter()
+            .filter(|members| members.len() >= 3 && members.contains(&atom))
+            .collect()
+    }
+
     /// The HMO rule supplies no usable contribution bound: no candidate is
     /// settled early.
-    pub fn accepts_range(&self, _members: &[(u32, u32)]) -> bool {
+    pub(super) fn accepts_contributions(&self, _members: &[&[AromaticValence]]) -> bool {
         true
     }
 
-    pub fn find_from_rings<F>(
+    /// Perceive systems from the supplied rings and aromatic contributions.
+    /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
+    /// Non-aromatic bonds separate components or restrict them to admissible rings.
+    /// A recovered region still containing both endpoints is rejected before evaluation.
+    ///
+    /// # Assumes
+    ///
+    /// The ring set is contextually valid for the molecule: its atom and bond ids
+    /// and ring incidence agree with the molecule.
+    pub(crate) fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -68,20 +135,40 @@ impl HmoAromaticity {
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
+    {
+        self.find_with_exclusions(
+            molecule,
+            rings,
+            connected_components_algorithm,
+            &bond_exclusions(molecule),
+            electrons_at,
+        )
+    }
+
+    pub(super) fn find_with_exclusions<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        connected_components_algorithm: ConnectedComponentsAlgorithm,
+        excluded_bonds: &[[AtomId; 2]],
+        electrons_at: &F,
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
+    where
+        F: Fn(AtomId) -> AromaticValence,
     {
         let pi_atoms: Vec<AtomId> = molecule
             .atoms()
             .iter()
             .filter_map(|view| {
-                let element = match view.attributes.element {
+                let element = match view.attributes().element {
                     ElementForm::Lit(e) => e,
                     _ => return None,
                 };
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                electrons_at(view.id).map(|_| view.id)
+                matches!(electrons_at(view.id()), AromaticValence::Aromatic(_)).then_some(view.id())
             })
             .collect();
 
@@ -89,24 +176,75 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let subgraph = molecule.induced_subgraph(&pi_atoms);
-        let extracted = molecule.extract(&subgraph);
-        let mut sorted_host: Vec<AtomId> = subgraph
-            .atoms()
-            .matched_pairs()
+        let mut positions = vec![None; molecule.atoms().count()];
+        for (index, atom) in pi_atoms.iter().enumerate() {
+            positions[atom.index()] = Some(index as u32);
+        }
+        let edges: Vec<[u32; 2]> = molecule
+            .bonds()
             .iter()
-            .map(|&(_, host)| host)
+            .filter_map(|bond| {
+                let [a, b] = bond.atom_ids();
+                let pair = [positions[a.index()]?, positions[b.index()]?];
+                (!excluded_bonds
+                    .iter()
+                    .any(|&pair| pair == [a, b] || pair == [b, a]))
+                .then_some(pair)
+            })
             .collect();
-        sorted_host.sort_unstable();
-        let components: Vec<Vec<AtomId>> = extracted
-            .graph()
-            .enumerate_connected_components(connected_components_algorithm)
-            .into_iter()
-            .map(|c| c.into_iter().map(|sub| sorted_host[sub.index()]).collect())
-            .collect();
+        let components = Graph::new(pi_atoms.len(), &edges)
+            .enumerate_connected_components(connected_components_algorithm);
+        let mut regions = Vec::new();
+        for component in components {
+            let atoms: Vec<_> = component
+                .into_iter()
+                .map(|atom| pi_atoms[atom.index()])
+                .collect();
+            if !excluded_bonds
+                .iter()
+                .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+            {
+                regions.push(atoms);
+                continue;
+            }
+            let edges: Vec<[u32; 2]> = rings
+                .iter()
+                .filter(|ring| {
+                    ring.atoms().iter().all(|atom| atoms.contains(atom))
+                        && !excluded_bonds
+                            .iter()
+                            .any(|[a, b]| ring.atoms().contains(a) && ring.atoms().contains(b))
+                })
+                .flat_map(|ring| {
+                    ring.bonds().iter().map(|&bond| {
+                        molecule.bond(bond).atom_ids().map(|atom| {
+                            positions[atom.index()].expect("ring is inside the pi component")
+                        })
+                    })
+                })
+                .collect();
+            regions.extend(
+                Graph::new(pi_atoms.len(), &edges)
+                    .enumerate_connected_components(connected_components_algorithm)
+                    .into_iter()
+                    .filter(|component| component.len() >= 3)
+                    .map(|component| {
+                        component
+                            .into_iter()
+                            .map(|atom| pi_atoms[atom.index()])
+                            .collect::<Vec<_>>()
+                    }),
+            );
+        }
 
         let mut candidates = Vec::new();
-        for component in &components {
+        for component in &regions {
+            if excluded_bonds
+                .iter()
+                .any(|[a, b]| component.contains(a) && component.contains(b))
+            {
+                continue;
+            }
             let has_ring_atom = component.iter().any(|a| rings.contains_atom(*a));
             if !has_ring_atom || component.len() < 3 {
                 continue;
@@ -128,7 +266,7 @@ impl HmoAromaticity {
 
                 let electrons: Vec<i64> = atoms
                     .iter()
-                    .map(|&id| electrons_at(id).unwrap_or(0) as i64)
+                    .map(|&id| electrons_at(id).valence_count())
                     .collect();
 
                 candidates.push((
@@ -150,7 +288,7 @@ impl HmoAromaticity {
         electrons_at: &F,
     ) -> Result<HmoCalculator, HmoError>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let subgraph = molecule.induced_subgraph(pi_atoms);
         let n = pi_atoms.len();
@@ -159,7 +297,7 @@ impl HmoAromaticity {
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(n);
         for (i, &atom) in pi_atoms.iter().enumerate() {
             let view = molecule.atom(atom);
-            let element = match view.attributes.element {
+            let element = match view.attributes().element {
                 ElementForm::Lit(e) => e,
                 _ => {
                     return Err(HmoError::UndeterminedAtom(
@@ -167,9 +305,12 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = electrons_at(view.id).ok_or_else(|| {
-                HmoError::UndeterminedAtom("undetermined aromatic valence".to_string())
-            })?;
+            let AromaticValence::Aromatic(valence) = electrons_at(view.id()) else {
+                return Err(HmoError::InvalidInput(
+                    "non-aromatic atom in pi-system".to_string(),
+                ));
+            };
+            let valence = valence as u8;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
                 HmoError::MissingParameters(format!(
                     "no Van-Catledge parameters for {:?} with {} pi-electrons",
@@ -374,13 +515,14 @@ mod tests {
         model
             .build_calculator(molecule, &atoms, &|v| match molecule
                 .atom(v)
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence()
-                .unwrap_or(&AromaticValenceForm::Undetermined)
             {
-                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
             })
             .unwrap()
             .solve()
@@ -452,10 +594,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_bound(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])]
-    fn test_hmo_aromaticity_accepts_range(#[case] members: &[(u32, u32)]) {
-        // No usable bound: every range is accepted, nothing settles early.
-        assert!(HmoAromaticity::new(ElementScope::Any, 0.0).accepts_range(members));
+    #[case::no_bound(vec![vec![AromaticValence::Aromatic(1)]; 5])]
+    #[case::non_aromatic(vec![vec![AromaticValence::NotAromatic]])]
+    #[case::empty_member(vec![vec![]])]
+    #[case::empty(vec![])]
+    fn test_hmo_aromaticity_accepts_contributions(#[case] members: Vec<Vec<AromaticValence>>) {
+        let members: Vec<&[AromaticValence]> = members.iter().map(Vec::as_slice).collect();
+        assert!(HmoAromaticity::new(ElementScope::Any, 0.0).accepts_contributions(&members));
     }
 
     #[rstest]
@@ -511,7 +656,7 @@ mod tests {
     fn test_hmo_aromaticity_find_from_rings(
         hmo_model: HmoAromaticity,
         #[case] molecule: Molecule,
-        #[case] expected_systems: usize,
+        #[case] expected_aromatic_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
         let ring_info = molecule
@@ -523,25 +668,21 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = hmo_model
+        let aromatic_systems = hmo_model
             .find_from_rings(
                 &molecule,
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,
-                &|v| match molecule
-                    .atom(v)
-                    .attributes
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceForm::Undetermined)
-                {
-                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                    _ => None,
+                &|v| match molecule.atom(v).attributes().constraints.aromatic_valence() {
+                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                        AromaticValence::Aromatic(*n)
+                    }
+                    _ => AromaticValence::NotAromatic,
                 },
             )
             .unwrap();
-        assert_eq!(systems.len(), expected_systems);
-        assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
+        assert_eq!(aromatic_systems.len(), expected_aromatic_systems);
+        assert_eq!(aromatic_systems.first().map(|s| s.0.len()), expected_atoms);
     }
 
     #[rstest]
@@ -576,13 +717,14 @@ mod tests {
         let calc = hmo_model
             .build_calculator(&pyridine, &atoms, &|v| match pyridine
                 .atom(v)
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence()
-                .unwrap_or(&AromaticValenceForm::Undetermined)
             {
-                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
             })
             .unwrap();
         let h = &calc.hamiltonian;

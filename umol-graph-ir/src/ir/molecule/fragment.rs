@@ -131,7 +131,9 @@ impl Fragment {
             let wildcard = editor.add_atom(AtomForm::new(ElementForm::undetermined()));
             editor.add_bond(port.atom, wildcard, port.bond);
         }
-        editor.build()
+        editor
+            .finish()
+            .expect("fragment assembly preserves molecule integrity")
     }
 
     /// Attach `self`'s `self_port` to `other`'s `other_port` — the operadic composition (the only
@@ -164,7 +166,9 @@ impl Fragment {
         let other_atom = AtomId(other_port_atom.0 + atom_offset);
         let mut editor = body.edit();
         editor.add_bond(self_atom, other_atom, bond);
-        let body = editor.build();
+        let body = editor
+            .finish()
+            .expect("fragment assembly preserves molecule integrity");
 
         let mut ports: Vec<Port> = self
             .ports
@@ -309,11 +313,14 @@ mod tests {
         // the free port became a wildcard atom double-bonded to the carbon
         assert_eq!(pattern.atoms().count(), 2);
         assert_eq!(
-            pattern.atom(AtomId(1)).attributes,
+            pattern.atom(AtomId(1)).attributes(),
             &AtomForm::new(ElementForm::undetermined())
         );
         assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
-        assert_eq!(pattern.bond(BondId(0)).attributes, &BondForm::from_order(2));
+        assert_eq!(
+            pattern.bond(BondId(0)).attributes(),
+            &BondForm::from_order(2)
+        );
     }
 
     #[rstest]
@@ -386,7 +393,7 @@ mod tests {
         assert_eq!(joined.body().atoms().count(), 2);
         assert_eq!(joined.body().bonds().count(), 1);
         assert_eq!(
-            joined.body().bond(BondId(0)).attributes,
+            joined.body().bond(BondId(0)).attributes(),
             &BondForm::from_order(1)
         );
         assert_eq!(
@@ -414,7 +421,7 @@ mod tests {
 
         let body = left.attach("a", right, "b").finish();
 
-        assert_eq!(body.bond(BondId(0)).attributes, &BondForm::from_order(2));
+        assert_eq!(body.bond(BondId(0)).attributes(), &BondForm::from_order(2));
     }
 
     #[rstest]

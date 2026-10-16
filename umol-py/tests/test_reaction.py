@@ -17,6 +17,7 @@ from umol import (
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
     ContradictionError,
+    Edits,
     Delta,
     Deltas,
     Element,
@@ -315,6 +316,44 @@ def test_reaction_components():
     assert reaction.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]
     )
+
+
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_reaction_lhs_edit(method):
+    reaction = Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
+    lhs = reaction.lhs
+    view = lhs.atoms[0]
+    if method == "edit":
+        product = lhs.edit().finish()
+    else:
+        result = getattr(lhs, method)(Edits())
+        product = result[0] if method == "tracked_apply" else result
+
+    assert product == lhs
+    product.atoms[0].charge = 1
+    assert reaction.lhs is lhs
+    assert reaction == Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
+    assert view.id == 0
+    view.charge = -1
+    assert reaction.lhs == Molecule.parse('{:atoms ["C#c-1"]}')
+    assert product == Molecule.parse('{:atoms ["C#c1"]}')
+
+
+@pytest.mark.parametrize("method", ["resolve", "resolve_with_report"])
+def test_reaction_lhs_resolve(method):
+    reaction = Reaction(lhs=Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}'))
+    lhs = reaction.lhs
+    view = lhs.atoms[0]
+    expected = lhs.copy()
+    result = getattr(lhs, method)()
+    solution = result[0] if method == "resolve_with_report" else result
+
+    assert reaction.lhs is lhs
+    assert reaction == Reaction(lhs=expected)
+    assert solution.molecule == expected
+    solution.molecule.atoms[0].charge = 1
+    assert reaction == Reaction(lhs=expected)
+    assert view.charge == NumForm.Lit(0)
 
 
 def test_reaction_component_replacement():
@@ -855,9 +894,7 @@ def test_reaction_from_reaction_smiles_resolve_config():
     reaction = Reaction.from_reaction_smiles(
         "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
         resolve_config=ResolveConfig(
-            aromaticity=AromaticityResolveConfig(
-                reset_aromatic_valence=False,
-            ),
+            aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(),
         ),
     )
@@ -947,10 +984,10 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
         pytest.param(
             "C[S@]C>>",
             {},
-            ModelConversionError,
-            "reactants: stereo atom 0: stereo frame has 2 ligands, "
-            "expected 4 for Tetrahedral",
-            id="model-conversion",
+            ContradictionError,
+            "reactants: stereo inconsistency: stereo atom StereoAtomId(0) "
+            "cannot be realized",
+            id="stereo-frame",
         ),
         pytest.param(
             "[nH]1cccc1>>",
@@ -1110,6 +1147,13 @@ def test_reaction_from_reaction_smiles_ownership():
         chemistry_model=chemistry_model,
         resolve_config=resolve_config,
     )
+    assert Reaction.from_reaction_smiles(
+        source,
+        io_config=io_config,
+        chemistry_model=chemistry_model,
+        resolve_config=resolve_config,
+    ) == reaction
+    assert chemistry_model.valence == ValenceModel.smiles()
 
     del source, io_config, chemistry_model, resolve_config
 
@@ -1219,7 +1263,7 @@ def test_reaction_tracked_canonicalize():
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
     assert remapping.to_correspondence().is_total()
-    assert remapping.atoms.images == [1, 0]
+    assert remapping.atoms.images == (1, 0)
 
 
 def test_reaction_canonicalize_error():

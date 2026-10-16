@@ -1,16 +1,17 @@
 //! Policy-free structural stereo perception.
 //!
 //! [`StereoPerception`] derives tetrahedral atom and cis-trans bond relations
-//! from `#T` and `#C` projections and compares them with existing relations.
+//! from complete `#T` and `#C` evidence and checks existing relations.
 //! Resolver inconsistency policy and edit construction remain separate.
 
 use std::collections::BTreeSet;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, Molecule, RingConfig, RingModel,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+    AsLit, AtomConstraintForm, AtomConstraintKey, AtomId, BondConstraintForm, BondConstraintKey,
+    BondId, CisTransStereoForm, Molecule, RingConfig, RingModel, StereoAtomForm, StereoAtomId,
+    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    TetrahedralStereoForm,
 };
 
 use crate::ops::model::StereoModel;
@@ -69,8 +70,6 @@ impl StereoPerception {
         }
     }
 
-    // TODO: fold this back into `derive` once the resolver accepts undetermined inputs and the
-    // partial-constraint gate in `StereoResolver::plan` is gone; it is separate only for that gate.
     /// Sites of cis-trans assertions the model does not realize: double bonds whose smallest
     /// ring is below `stereo_bond_minimum_ring_size`. Empty when the threshold is zero or no bond
     /// carries an assertion, without enumerating rings.
@@ -82,10 +81,10 @@ impl StereoPerception {
             .filter(|bond| {
                 matches!(
                     bond.constraints().cis_trans_stereo(),
-                    Some(CisTransStereoForm::Stereo(_))
+                    CisTransStereoForm::Stereo(_)
                 )
             })
-            .map(|bond| bond.id)
+            .map(|bond| bond.id())
             .collect();
         if minimum_ring_size == 0 || asserted.is_empty() {
             return BTreeSet::new();
@@ -102,166 +101,124 @@ impl StereoPerception {
             .collect()
     }
 
-    /// Derive stereo relations and compare them with every existing relation.
+    /// Derive stereo relations from complete evidence and check existing relations.
+    /// Positive evidence supplies the candidate configuration; negative evidence supplies none.
+    /// Contradictory evidence between realizable sources is a mismatch. Independent constraint
+    /// and entity realizability failures retain their separate diagnostics.
     pub fn derive(&self, molecule: &Molecule) -> StereoDerivation {
         let mut stereo_atoms = Vec::new();
         let mut stereo_bonds = Vec::new();
         let mut inconsistencies = BTreeSet::new();
         let skipped = self.skipped_stereo_bonds(molecule);
 
-        for atom in molecule.atoms().ids() {
-            let relations: Vec<_> = molecule
-                .stereo_atoms()
-                .iter()
-                .filter(|relation| relation.site_id() == atom)
-                .collect();
-            let assertion = molecule
-                .atom(atom)
-                .attributes
-                .constraints
-                .tetrahedral_stereo()
-                .unwrap_or(&TetrahedralStereoForm::Undetermined);
-
-            let constraint_candidate = match assertion {
-                TetrahedralStereoForm::Stereo(coset) => {
-                    let candidate = self.derive_stereo_atom(molecule, atom, coset);
-                    if candidate.is_none() {
-                        inconsistencies
-                            .insert(StereoInconsistency::TetrahedralStereoFailure { atom });
-                    }
-                    candidate
-                }
-                TetrahedralStereoForm::NotStereo => None,
-                TetrahedralStereoForm::Undetermined => None,
-            };
-
-            if let Some((ligands, stereo)) = &constraint_candidate {
-                stereo_atoms.push((atom, ligands.clone(), stereo.clone()));
+        for view in molecule.atoms().iter() {
+            let atom = view.id();
+            let relation = molecule.stereo_atoms().at(atom);
+            let constraints = view.constraints();
+            let asserted = constraints.tetrahedral_stereo();
+            if relation.is_none() && !matches!(asserted, TetrahedralStereoForm::Stereo(_)) {
+                continue;
             }
-            for relation in relations {
-                let entity_candidate =
-                    if relation.attributes.configuration.kind() == Some(StereoKind::Tetrahedral) {
-                        self.derive_stereo_atom(molecule, atom, &StereoCoset::Undetermined)
-                            .and_then(|(ligands, _)| {
-                                let coset = relation.coset_for(ligands.iter().copied())?;
-                                Some((ligands, StereoAtomForm::new(StereoKind::Tetrahedral, coset)))
-                            })
-                    } else {
-                        None
-                    };
-                let Some((entity_ligands, entity_stereo)) = entity_candidate else {
+            let evidence = constraints.evidenced_complete(AtomConstraintKey::TetrahedralStereo);
+            let coset = match &evidence {
+                Some(AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
+                    coset,
+                ))) => Some(coset),
+                _ => None,
+            };
+            let candidate = if coset.is_some() || relation.is_some() {
+                self.derive_stereo_atom(molecule, atom, coset.unwrap_or(&StereoCoset::Undetermined))
+            } else {
+                None
+            };
+            if candidate.is_none()
+                && (matches!(asserted, TetrahedralStereoForm::Stereo(_))
+                    || evidence.is_none() && relation.is_none())
+            {
+                inconsistencies.insert(StereoInconsistency::TetrahedralStereoFailure { atom });
+            }
+            if let Some(relation) = relation {
+                let realizable = relation.attributes().configuration.kind()
+                    == Some(StereoKind::Tetrahedral)
+                    && candidate.as_ref().is_some_and(|(ligands, _)| {
+                        // Evidence already transports the configuration; tetrahedral permits
+                        // every permutation of the same distinct ligands.
+                        (evidence.is_some()
+                            && relation.ligand_ids().len() == ligands.len()
+                            && relation
+                                .ligand_ids()
+                                .iter()
+                                .all(|ligand| ligands.contains(ligand)))
+                            || relation.coset_for(ligands.iter().copied()).is_some()
+                    });
+                if !realizable {
                     inconsistencies.insert(StereoInconsistency::StereoAtomFailure {
-                        stereo_atom: relation.id,
+                        stereo_atom: relation.id(),
                     });
                     continue;
-                };
-
-                if constraint_candidate.is_none()
-                    && matches!(assertion, TetrahedralStereoForm::Undetermined)
-                {
-                    stereo_atoms.push((atom, entity_ligands.clone(), entity_stereo.clone()));
-                }
-                let mismatch =
-                    match assertion {
-                        TetrahedralStereoForm::Stereo(_) => constraint_candidate
-                            .as_ref()
-                            .is_some_and(|(_, constraint_stereo)| {
-                                let Some(expected) = constraint_stereo.configuration.coset() else {
-                                    return false;
-                                };
-                                let Some(actual) = entity_stereo.configuration.coset() else {
-                                    return false;
-                                };
-                                !TetrahedralStereoForm::Stereo(expected.clone())
-                                    .matches(&TetrahedralStereoForm::Stereo(actual.clone()))
-                            }),
-                        TetrahedralStereoForm::NotStereo => true,
-                        TetrahedralStereoForm::Undetermined => false,
-                    };
-                if mismatch {
+                } else if evidence.is_none() {
                     inconsistencies.insert(StereoInconsistency::TetrahedralStereoMismatch {
                         atom,
-                        stereo_atom: relation.id,
+                        stereo_atom: relation.id(),
                     });
+                }
+            }
+            if coset.is_some() {
+                if let Some((ligands, stereo)) = candidate {
+                    stereo_atoms.push((atom, ligands, stereo));
                 }
             }
         }
 
-        for bond in molecule.bonds().ids() {
-            let relations: Vec<_> = molecule
-                .stereo_bonds()
-                .iter()
-                .filter(|relation| relation.site_id() == bond)
-                .collect();
-            let assertion = molecule
-                .bond(bond)
-                .attributes
-                .constraints
-                .cis_trans_stereo()
-                .unwrap_or(&CisTransStereoForm::Undetermined);
-
-            let constraint_candidate = match assertion {
-                CisTransStereoForm::Stereo(_) if skipped.contains(&bond) => None,
-                CisTransStereoForm::Stereo(coset) => {
-                    let candidate = self.derive_stereo_bond(molecule, bond, coset);
-                    if candidate.is_none() {
-                        inconsistencies.insert(StereoInconsistency::CisTransStereoFailure { bond });
-                    }
-                    candidate
-                }
-                CisTransStereoForm::NotStereo => None,
-                CisTransStereoForm::Undetermined => None,
-            };
-
-            if let Some((ligands, stereo)) = &constraint_candidate {
-                stereo_bonds.push((bond, ligands.clone(), stereo.clone()));
+        for view in molecule.bonds().iter() {
+            let bond = view.id();
+            let relation = molecule.stereo_bonds().at(bond);
+            let constraints = view.constraints();
+            let asserted = constraints.cis_trans_stereo();
+            if relation.is_none() && !matches!(asserted, CisTransStereoForm::Stereo(_)) {
+                continue;
             }
-            for relation in relations {
-                let entity_candidate =
-                    if relation.attributes.configuration.kind() == Some(StereoKind::CisTrans) {
-                        self.derive_stereo_bond(molecule, bond, &StereoCoset::Undetermined)
-                            .and_then(|(ligands, _)| {
-                                let coset = relation.coset_for(ligands.iter().copied())?;
-                                Some((ligands, StereoBondForm::new(StereoKind::CisTrans, coset)))
-                            })
-                    } else {
-                        None
-                    };
-                let Some((entity_ligands, entity_stereo)) = entity_candidate else {
+            let evidence = constraints.evidenced_complete(BondConstraintKey::CisTransStereo);
+            let coset = match &evidence {
+                Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset))) => {
+                    Some(coset)
+                }
+                _ => None,
+            };
+            let candidate = if coset.is_some() && !skipped.contains(&bond) || relation.is_some() {
+                self.derive_stereo_bond(molecule, bond, coset.unwrap_or(&StereoCoset::Undetermined))
+            } else {
+                None
+            };
+            if candidate.is_none()
+                && !skipped.contains(&bond)
+                && (matches!(asserted, CisTransStereoForm::Stereo(_))
+                    || evidence.is_none() && relation.is_none())
+            {
+                inconsistencies.insert(StereoInconsistency::CisTransStereoFailure { bond });
+            }
+            if let Some(relation) = relation {
+                let realizable = relation.attributes().configuration.kind()
+                    == Some(StereoKind::CisTrans)
+                    && candidate.as_ref().is_some_and(|(ligands, _)| {
+                        (evidence.is_some() && relation.ligand_ids() == ligands.as_slice())
+                            || relation.coset_for(ligands.iter().copied()).is_some()
+                    });
+                if !realizable {
                     inconsistencies.insert(StereoInconsistency::StereoBondFailure {
-                        stereo_bond: relation.id,
+                        stereo_bond: relation.id(),
                     });
                     continue;
-                };
-
-                if constraint_candidate.is_none()
-                    && matches!(assertion, CisTransStereoForm::Undetermined)
-                {
-                    stereo_bonds.push((bond, entity_ligands.clone(), entity_stereo.clone()));
-                }
-                let mismatch = match assertion {
-                    CisTransStereoForm::Stereo(_) => {
-                        constraint_candidate
-                            .as_ref()
-                            .is_some_and(|(_, constraint_stereo)| {
-                                let Some(expected) = constraint_stereo.configuration.coset() else {
-                                    return false;
-                                };
-                                let Some(actual) = entity_stereo.configuration.coset() else {
-                                    return false;
-                                };
-                                !CisTransStereoForm::Stereo(expected.clone())
-                                    .matches(&CisTransStereoForm::Stereo(actual.clone()))
-                            })
-                    }
-                    CisTransStereoForm::NotStereo => true,
-                    CisTransStereoForm::Undetermined => false,
-                };
-                if mismatch {
+                } else if evidence.is_none() {
                     inconsistencies.insert(StereoInconsistency::CisTransStereoMismatch {
                         bond,
-                        stereo_bond: relation.id,
+                        stereo_bond: relation.id(),
                     });
+                }
+            }
+            if coset.is_some() && !skipped.contains(&bond) {
+                if let Some((ligands, stereo)) = candidate {
+                    stereo_bonds.push((bond, ligands, stereo));
                 }
             }
         }
@@ -488,26 +445,8 @@ mod tests {
             }]
         }"#),
         StereoDerivation {
-            stereo_atoms: vec![(
-                AtomId(1),
-                vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-            )],
-            stereo_bonds: vec![(
-                BondId(4),
-                vec![
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
-                ],
-                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-            )],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
             skipped_stereo_bonds: vec![],
             inconsistencies: vec![
                 StereoInconsistency::TetrahedralStereoMismatch {
@@ -543,6 +482,28 @@ mod tests {
                 },
             ],
         },
+    )]
+    #[case::virtual_ligand_failures(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "F" "Cl" "Br" "C#h" "C#h" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2"] [4 6 "1"] [5 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th1"}]
+            :stereo-bonds [{:site 3 :ligands [6 [:lp 4] 7 [:h 5]] :attrs "Ct1"}]
+        }"#),
+        StereoDerivation {
+            inconsistencies: vec![
+                StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) },
+                StereoInconsistency::StereoBondFailure { stereo_bond: StereoBondId(0) },
+            ],
+            ..StereoDerivation::default()
+        },
+    )]
+    #[case::negative_evidence(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#T!" "F" "Cl" "Br" "C#h" "C#h" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2#C!"] [4 6 "1"] [5 7 "1"]]
+        }"#),
+        StereoDerivation::default(),
     )]
     #[case::not_stereo_mismatches(
         mol_dsl_concrete!(r#"{
@@ -600,6 +561,57 @@ mod tests {
         assert_eq!(
             StereoPerception::new(&StereoModel::default()).derive(&molecule),
             expected
+        );
+    }
+
+    #[rstest]
+    #[case::tetrahedral_refinement(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#T+" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+        }"#),
+        StereoDerivation {
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+            ..StereoDerivation::default()
+        },
+    )]
+    #[case::cis_trans_refinement(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"}]
+        }"#),
+        StereoDerivation {
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            )],
+            ..StereoDerivation::default()
+        },
+    )]
+    fn test_stereo_perception_derive_evidence(
+        #[case] molecule: Molecule,
+        #[case] expected: StereoDerivation,
+    ) {
+        assert_eq!(
+            StereoPerception::new(&StereoModel::default()).derive(&molecule),
+            expected,
         );
     }
 

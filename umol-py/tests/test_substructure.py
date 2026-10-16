@@ -98,21 +98,22 @@ def test_molecule_substructure_matches():
 
     assert isinstance(matches, list)
     assert [match.atoms.matched_pairs for match in matches] == [
-        [(0, 0), (1, 1)],
-        [(0, 1), (1, 0)],
+        ((0, 0), (1, 1)),
+        ((0, 1), (1, 0)),
     ]
-    assert [match.bonds.matched_pairs for match in matches] == [[(0, 0)], [(0, 0)]]
-    assert [match.dative_bonds.matched_pairs for match in matches] == [[], []]
-    assert [match.aromatic_systems.matched_pairs for match in matches] == [[], []]
-    assert [match.multicenter_bonds.matched_pairs for match in matches] == [[], []]
-    assert [match.noncovalent_bonds.matched_pairs for match in matches] == [[], []]
-    assert [match.stereo_atoms.matched_pairs for match in matches] == [[], []]
-    assert [match.stereo_bonds.matched_pairs for match in matches] == [[], []]
+    assert [match.bonds.matched_pairs for match in matches] == [((0, 0),), ((0, 0),)]
+    assert [match.dative_bonds.matched_pairs for match in matches] == [(), ()]
+    assert [match.aromatic_systems.matched_pairs for match in matches] == [(), ()]
+    assert [match.multicenter_bonds.matched_pairs for match in matches] == [(), ()]
+    assert [match.noncovalent_bonds.matched_pairs for match in matches] == [(), ()]
+    assert [match.stereo_atoms.matched_pairs for match in matches] == [(), ()]
+    assert [match.stereo_bonds.matched_pairs for match in matches] == [(), ()]
     assert pattern == pattern_before
     assert host == host_before
 
-    matches[0].atoms.matched_pairs.append((1, 2))
-    assert matches[0].atoms.matched_pairs == [(0, 0), (1, 1)]
+    with pytest.raises(AttributeError):
+        matches[0].atoms.matched_pairs.append((1, 2))
+    assert matches[0].atoms.matched_pairs == ((0, 0), (1, 1))
 
 
 def test_molecule_substructure_matches_overlay():
@@ -139,14 +140,14 @@ def test_molecule_substructure_matches_overlay():
 
     assert len(matches) == 1
     match = matches[0]
-    assert match.atoms.matched_pairs == [(0, 0), (1, 1)]
-    assert match.bonds.matched_pairs == []
-    assert match.dative_bonds.matched_pairs == [(0, 0)]
-    assert match.aromatic_systems.matched_pairs == []
-    assert match.multicenter_bonds.matched_pairs == []
-    assert match.noncovalent_bonds.matched_pairs == []
-    assert match.stereo_atoms.matched_pairs == []
-    assert match.stereo_bonds.matched_pairs == []
+    assert match.atoms.matched_pairs == ((0, 0), (1, 1))
+    assert match.bonds.matched_pairs == ()
+    assert match.dative_bonds.matched_pairs == ((0, 0),)
+    assert match.aromatic_systems.matched_pairs == ()
+    assert match.multicenter_bonds.matched_pairs == ()
+    assert match.noncovalent_bonds.matched_pairs == ()
+    assert match.stereo_atoms.matched_pairs == ()
+    assert match.stereo_bonds.matched_pairs == ()
 
 
 def test_molecule_substructure_matches_empty():

@@ -453,6 +453,17 @@ proptest! {
         prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
+    /// The same update law holds on normalizable raw forms, including vacuous payloads.
+    #[test]
+    fn test_stereo_atom_form_difference_to_raw(
+        source in raw_stereo_atom_form_strategy(),
+        target in raw_stereo_atom_form_strategy(),
+    ) {
+        if source.clone().normalize().is_ok() && target.clone().normalize().is_ok() {
+            prop_assert!(source.update(&source.difference_to(&target)).normalized_eq(&target));
+        }
+    }
+
     #[test]
     fn test_stereo_bond_delta_diff_apply(
         lhs in stereo_bond_form_strategy(),
@@ -476,5 +487,16 @@ proptest! {
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).normalized_eq(&rhs));
+    }
+
+    /// The same update law holds on normalizable raw forms, including vacuous payloads.
+    #[test]
+    fn test_stereo_bond_form_difference_to_raw(
+        source in raw_stereo_bond_form_strategy(),
+        target in raw_stereo_bond_form_strategy(),
+    ) {
+        if source.clone().normalize().is_ok() && target.clone().normalize().is_ok() {
+            prop_assert!(source.update(&source.difference_to(&target)).normalized_eq(&target));
+        }
     }
 }

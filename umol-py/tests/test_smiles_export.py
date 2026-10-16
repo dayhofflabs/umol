@@ -8,6 +8,7 @@ from umol import (
     ModelConversionError,
     Molecule,
     Reaction,
+    ValenceModel,
 )
 
 
@@ -24,15 +25,36 @@ from umol import (
     ],
 )
 def test_molecule_to_smiles(source, expected):
-    assert Molecule.from_smiles(source).to_smiles() == expected
+    molecule = Molecule.from_smiles(source)
+    before = molecule.render()
+
+    assert molecule.to_smiles() == expected
+    assert molecule.render() == before
 
 
-def test_molecule_to_smiles_chemistry_model():
+@pytest.mark.parametrize(
+    ("valence", "expected"),
+    [
+        (ChemistryModel.default().valence, "[CH3][CH2]O"),
+        (ValenceModel.smiles(), "CCO"),
+    ],
+)
+def test_molecule_to_smiles_chemistry_model(valence, expected):
     molecule = Molecule.from_smiles("CCO")
-    assert molecule.to_smiles() == "CCO"
-    assert (
-        molecule.to_smiles(chemistry_model=ChemistryModel.default()) == "[CH3][CH2]O"
+    original = molecule.copy()
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=valence,
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
     )
+
+    assert molecule.to_smiles() == "CCO"
+    for _ in range(2):
+        assert molecule.to_smiles(chemistry_model=model) == expected
+        assert molecule == original
+        assert model.valence == valence
 
 
 @pytest.mark.parametrize(
@@ -56,8 +78,12 @@ def test_molecule_to_smiles_chemistry_model():
     ],
 )
 def test_molecule_to_smiles_error(source, message):
+    molecule = Molecule.parse(source)
+    before = molecule.render()
+
     with pytest.raises(ModelConversionError, match=f"^{re.escape(message)}$"):
-        Molecule.parse(source).to_smiles()
+        molecule.to_smiles()
+    assert molecule.render() == before
 
 
 @pytest.mark.parametrize(
@@ -73,6 +99,31 @@ def test_molecule_to_smiles_error(source, message):
 )
 def test_reaction_to_reaction_smiles(source, expected):
     assert Reaction.from_reaction_smiles(source).to_reaction_smiles() == expected
+
+
+@pytest.mark.parametrize(
+    ("valence", "expected"),
+    [
+        (ChemistryModel.default().valence, "[CH3][CH2]O>>[CH3][CH2]O"),
+        (ValenceModel.smiles(), "CCO>>CCO"),
+    ],
+)
+def test_reaction_to_reaction_smiles_chemistry_model(valence, expected):
+    reaction = Reaction.from_reaction_smiles("CCO>>CCO")
+    original = reaction.render()
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=valence,
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
+
+    assert reaction.to_reaction_smiles() == "CCO>>CCO"
+    for _ in range(2):
+        assert reaction.to_reaction_smiles(chemistry_model=model) == expected
+        assert reaction.render() == original
+        assert model.valence == valence
 
 
 def test_reaction_to_reaction_smiles_from_sides():

@@ -12,7 +12,7 @@ use super::error::{PResult, ParseError};
 use crate::ir::electrons::ElectronCountsForm;
 
 /// The mandatory per-atom electron counts at the head of an aromatic-system /
-/// multicenter-bond string: `*` (undetermined) or a non-empty `[n,n,…]` vector
+/// multicenter-bond string: `*` (undetermined) or a `[n,n,…]` vector, including `[]`
 /// (whitespace ignored). Leading and unprefixed, before any `#` predicate.
 pub(crate) fn electron_counts(i: &mut &str) -> PResult<ElectronCountsForm> {
     if opt('*').parse_next(i)?.is_some() {
@@ -33,7 +33,7 @@ fn electron_counts_vector(i: &mut &str) -> PResult<Vec<i64>> {
         delimited(
             multispace0,
             separated(
-                1..,
+                0..,
                 dec_int::<_, i64, _>,
                 delimited(multispace0, ',', multispace0),
             ),
@@ -72,6 +72,8 @@ mod tests {
 
     #[rstest]
     #[case::undetermined("*", ElectronCountsForm::Undetermined)]
+    #[case::empty_vector("[]", ElectronCountsForm::Lit(vec![]))]
+    #[case::empty_vector_whitespace("[ ]", ElectronCountsForm::Lit(vec![]))]
     #[case::single("[1]", ElectronCountsForm::Lit(vec![1]))]
     #[case::triple("[1,1,1]", ElectronCountsForm::Lit(vec![1, 1, 1]))]
     #[case::mixed("[2,0,2]", ElectronCountsForm::Lit(vec![2, 0, 2]))]
@@ -88,7 +90,6 @@ mod tests {
     #[case::missing("#c0", ParseError::ExpectedElectronCounts)]
     #[case::empty_input("", ParseError::ExpectedElectronCounts)]
     #[case::no_bracket("1,2", ParseError::ExpectedElectronCounts)]
-    #[case::empty_vector("[]", ParseError::MalformedElectronCounts("[]".to_string()))]
     #[case::unmatched_open("[1,2", ParseError::MalformedElectronCounts("[1,2".to_string()))]
     #[case::non_numeric("[a]", ParseError::MalformedElectronCounts("[a]".to_string()))]
     #[case::trailing_comma("[1,2,]", ParseError::MalformedElectronCounts("[1,2,]".to_string()))]

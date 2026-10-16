@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python API Review"
+  short_description: "Audit Python semantics against owning Rust APIs"
+  default_prompt: "Use $python-api-review to review this Python API family against its Rust owners, including lifecycle, ownership, copying, and reference semantics."

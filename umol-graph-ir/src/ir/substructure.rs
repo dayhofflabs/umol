@@ -22,6 +22,7 @@ use super::correspondence::{
     induced_aromatic_systems, induced_bonds, induced_dative_bonds, induced_multicenter_bonds,
     induced_noncovalent_bonds, map_atom, map_ligands, MoleculeCorrespondence,
 };
+use super::electrons::ElectronCountsForm;
 use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::{Incidence, IncidenceLevel};
@@ -75,7 +76,9 @@ impl Molecule {
     /// evaluated per key against the host's constraint reading under the closure
     /// (`constraints().satisfies`); ring keys use the fixed Relevant projection
     /// through size 22. Traversal is deterministic for a fixed representation,
-    /// but its order is not a canonical ordering contract.
+    /// but its order is not a canonical ordering contract. A matched aromatic or
+    /// multicenter overlay whose literal electron-count length disagrees with its
+    /// atom list rejects that candidate, on either the pattern or host side.
     ///
     /// # Errors
     ///
@@ -143,7 +146,7 @@ impl Molecule {
         let needs_rings = self
             .atoms()
             .iter()
-            .flat_map(|atom| atom.attributes.constraints.iter())
+            .flat_map(|atom| atom.attributes().constraints.iter())
             .any(|constraint| {
                 matches!(
                     constraint,
@@ -155,7 +158,7 @@ impl Molecule {
             || self
                 .bonds()
                 .iter()
-                .flat_map(|bond| bond.attributes.constraints.iter())
+                .flat_map(|bond| bond.attributes().constraints.iter())
                 .any(|constraint| matches!(constraint, BondConstraintForm::RingMembership(_)));
         needs_rings.then(|| {
             host.rings(
@@ -185,11 +188,11 @@ impl Molecule {
         let atoms = self
             .atoms()
             .iter()
-            .any(|a| !a.attributes.constraints.is_empty())
+            .any(|a| !a.attributes().constraints.is_empty())
             .then(|| {
                 let mut table = vec![true; self.atoms().count() * host_atom_count];
                 for p in self.atoms().iter() {
-                    if p.attributes.constraints.is_empty() {
+                    if p.attributes().constraints.is_empty() {
                         continue;
                     }
                     for h in host.atoms().iter() {
@@ -197,8 +200,8 @@ impl Molecule {
                         if let Some(rings) = rings {
                             reading = reading.with_rings(rings);
                         }
-                        table[p.id.index() * host_atom_count + h.id.index()] =
-                            reading.satisfies(&p.attributes.constraints);
+                        table[p.id().index() * host_atom_count + h.id().index()] =
+                            reading.satisfies(&p.attributes().constraints);
                     }
                 }
                 table
@@ -207,11 +210,11 @@ impl Molecule {
         let bonds = self
             .bonds()
             .iter()
-            .any(|b| !b.attributes.constraints.is_empty())
+            .any(|b| !b.attributes().constraints.is_empty())
             .then(|| {
                 let mut table = vec![true; self.bonds().count() * host_bond_count];
                 for p in self.bonds().iter() {
-                    if p.attributes.constraints.is_empty() {
+                    if p.attributes().constraints.is_empty() {
                         continue;
                     }
                     for h in host.bonds().iter() {
@@ -219,8 +222,8 @@ impl Molecule {
                         if let Some(rings) = rings {
                             reading = reading.with_rings(rings);
                         }
-                        table[p.id.index() * host_bond_count + h.id.index()] =
-                            reading.satisfies(&p.attributes.constraints);
+                        table[p.id().index() * host_bond_count + h.id().index()] =
+                            reading.satisfies(&p.attributes().constraints);
                     }
                 }
                 table
@@ -249,7 +252,7 @@ impl Molecule {
             &mut |query_node, host_node| {
                 let pa = AtomId::from(query_node);
                 let ha = AtomId::from(host_node);
-                atom_fields_match(pattern.atom(pa).attributes, host.atom(ha).attributes)
+                atom_fields_match(pattern.atom(pa).attributes(), host.atom(ha).attributes())
                     && atom_table
                         .as_ref()
                         .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])
@@ -257,7 +260,7 @@ impl Molecule {
             &mut |query_edge, host_edge| {
                 let pb = BondId::from(query_edge);
                 let hb = BondId::from(host_edge);
-                bond_fields_match(pattern.bond(pb).attributes, host.bond(hb).attributes)
+                bond_fields_match(pattern.bond(pb).attributes(), host.bond(hb).attributes())
                     && bond_table
                         .as_ref()
                         .is_none_or(|table| table[pb.index() * host_bond_count + hb.index()])
@@ -284,12 +287,10 @@ impl Molecule {
         )
     }
 
-    /// Match on the incidence (Levi) graph: relations become pseudonodes wired to
-    /// their participant atoms, so overlay-only connectivity (a 3c-2e bond, an H-bond
-    /// that is the sole link) constrains placement — the case `GraphAndOverlays`
-    /// degrades on. The Levi subiso supplies only the atom correspondence; the same
-    /// exact `verify_overlays` then filters and builds the embedding, so this returns
-    /// the identical match set as `GraphAndOverlays`.
+    /// Match the incidence graph, using overlay connectivity and electron contributions
+    /// from owning forms to prune incompatible atom pairings. The atom correspondence
+    /// is then checked by `verify_overlays`, including transported attributes, giving
+    /// the same match set as `GraphAndOverlays`.
     fn visit_substructure_matches_incidence<B>(
         &self,
         host: &Molecule,
@@ -315,29 +316,77 @@ impl Molecule {
             // kind only (the exact form/participation check is `verify_overlays`).
             &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
                 (Entity::Atom(pa), Entity::Atom(ha)) => {
-                    atom_fields_match(pattern.atom(pa).attributes, host.atom(ha).attributes)
+                    atom_fields_match(pattern.atom(pa).attributes(), host.atom(ha).attributes())
                         && atom_table
                             .as_ref()
                             .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])
                 }
                 (Entity::Bond(pb), Entity::Bond(hb)) => {
-                    bond_fields_match(pattern.bond(pb).attributes, host.bond(hb).attributes)
+                    bond_fields_match(pattern.bond(pb).attributes(), host.bond(hb).attributes())
                         && bond_table
                             .as_ref()
                             .is_none_or(|table| table[pb.index() * host_bond_count + hb.index()])
                 }
                 (pe, he) => pe.kind() == he.kind(),
             },
-            &mut |pattern_edge, host_edge| match (
-                pattern_levi.incidence(pattern_edge),
-                host_levi.incidence(host_edge),
-            ) {
-                (Incidence::AromaticParticipant(pattern), Incidence::AromaticParticipant(host))
-                | (
-                    Incidence::MulticenterParticipant(pattern),
-                    Incidence::MulticenterParticipant(host),
-                ) => pattern.matches(host),
-                (pattern, host) => pattern == host,
+            &mut |pattern_edge, host_edge| {
+                let role = pattern_levi.incidence(pattern_edge);
+                if role != host_levi.incidence(host_edge) {
+                    return false;
+                }
+                if !matches!(role, Incidence::AromaticAtom | Incidence::MulticenterAtom) {
+                    return true;
+                }
+                let contributions = [
+                    (pattern, &pattern_levi, pattern_edge),
+                    (host, &host_levi, host_edge),
+                ]
+                .map(|(molecule, incidence, edge)| {
+                    let [first, second] = incidence.graph().edge_endpoints(edge);
+                    let (owner, atom) = match (incidence.entity(first), incidence.entity(second)) {
+                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                        _ => unreachable!("an overlay incidence connects to an atom"),
+                    };
+                    match owner {
+                        Entity::AromaticSystem(id) => {
+                            let system = molecule.aromatic_system(id);
+                            match system.electrons() {
+                                ElectronCountsForm::Undetermined => Some(None),
+                                ElectronCountsForm::Lit(counts)
+                                    if counts.len() == system.atom_ids().len() =>
+                                {
+                                    system
+                                        .atom_ids()
+                                        .position(|id| id == atom)
+                                        .map(|position| Some(counts[position]))
+                                }
+                                ElectronCountsForm::Lit(_) => None,
+                            }
+                        }
+                        Entity::MulticenterBond(id) => {
+                            let bond = molecule.multicenter_bond(id);
+                            match bond.electrons() {
+                                ElectronCountsForm::Undetermined => Some(None),
+                                ElectronCountsForm::Lit(counts)
+                                    if counts.len() == bond.atom_ids().len() =>
+                                {
+                                    bond.atom_ids()
+                                        .position(|id| id == atom)
+                                        .map(|position| Some(counts[position]))
+                                }
+                                ElectronCountsForm::Lit(_) => None,
+                            }
+                        }
+                        _ => unreachable!(
+                            "electron contributions belong to aromatic or multicenter entities"
+                        ),
+                    }
+                });
+                match contributions {
+                    [Some(None), Some(_)] => true,
+                    [Some(Some(pattern)), Some(Some(host))] => pattern == host,
+                    _ => false,
+                }
             },
             subiso,
             |embedding| {
@@ -383,8 +432,8 @@ impl Molecule {
         for &(p, h) in dative_bonds.matched_pairs() {
             if !pattern
                 .dative_bond(p)
-                .attributes
-                .matches(host.dative_bond(h).attributes)
+                .attributes()
+                .matches(host.dative_bond(h).attributes())
             {
                 return None;
             }
@@ -397,6 +446,13 @@ impl Molecule {
         for &(p, h) in aromatic_systems.matched_pairs() {
             let p_view = pattern.aromatic_system(p);
             let h_view = host.aromatic_system(h);
+            if matches!(p_view.electrons(), ElectronCountsForm::Lit(counts)
+                if counts.len() != p_view.atom_ids().len())
+                || matches!(h_view.electrons(), ElectronCountsForm::Lit(counts)
+                    if counts.len() != h_view.atom_ids().len())
+            {
+                return None;
+            }
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
             // The host frame named in the pattern's own atom ids, so the pattern form can be
             // restated into it before the two are compared.
@@ -410,10 +466,10 @@ impl Molecule {
                 .collect();
             let action = DynPermutation::between(&pat_atoms, &host_frame)?;
             if !p_view
-                .attributes
+                .attributes()
                 .clone()
                 .reframe_by(&action)?
-                .matches(h_view.attributes)
+                .matches(h_view.attributes())
             {
                 return None;
             }
@@ -426,6 +482,13 @@ impl Molecule {
         for &(p, h) in multicenter_bonds.matched_pairs() {
             let p_view = pattern.multicenter_bond(p);
             let h_view = host.multicenter_bond(h);
+            if matches!(p_view.electrons(), ElectronCountsForm::Lit(counts)
+                if counts.len() != p_view.atom_ids().len())
+                || matches!(h_view.electrons(), ElectronCountsForm::Lit(counts)
+                    if counts.len() != h_view.atom_ids().len())
+            {
+                return None;
+            }
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
             // The host frame named in the pattern's own atom ids, so the pattern form can be
             // restated into it before the two are compared.
@@ -439,10 +502,10 @@ impl Molecule {
                 .collect();
             let action = DynPermutation::between(&pat_atoms, &host_frame)?;
             if !p_view
-                .attributes
+                .attributes()
                 .clone()
                 .reframe_by(&action)?
-                .matches(h_view.attributes)
+                .matches(h_view.attributes())
             {
                 return None;
             }
@@ -455,8 +518,8 @@ impl Molecule {
         for &(p, h) in noncovalent_bonds.matched_pairs() {
             if !pattern
                 .noncovalent_bond(p)
-                .attributes
-                .matches(host.noncovalent_bond(h).attributes)
+                .attributes()
+                .matches(host.noncovalent_bond(h).attributes())
             {
                 return None;
             }
@@ -472,12 +535,12 @@ impl Molecule {
             let host_site =
                 map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is matched");
             let sh = host.atom(host_site).stereo_atom()?;
-            let frame = map_ligands(&atoms, sp.ligand_frame())
-                .expect("matched pattern ligands are matched");
-            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
-            let restated = sh.attributes.clone().reframe_by(&action)?;
-            sp.attributes.matches(&restated).then_some(())?;
-            stereo_atom.push((sp.id, sh.id));
+            let frame =
+                map_ligands(&atoms, sp.ligand_ids()).expect("matched pattern ligands are matched");
+            let action = Permutation::between(sh.ligand_ids(), &frame)?;
+            let restated = sh.attributes().clone().reframe_by(&action)?;
+            sp.attributes().matches(&restated).then_some(())?;
+            stereo_atom.push((sp.id(), sh.id()));
         }
         let stereo_atoms = Correspondence::new(
             stereo_atom,
@@ -492,12 +555,12 @@ impl Molecule {
                 .right_of(sp.site_id())
                 .expect("a matched pattern bond is matched");
             let sh = host.bond(host_site).stereo_bond()?;
-            let frame = map_ligands(&atoms, sp.ligand_frame())
-                .expect("matched pattern ligands are matched");
-            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
-            let restated = sh.attributes.clone().reframe_by(&action)?;
-            sp.attributes.matches(&restated).then_some(())?;
-            stereo_bond.push((sp.id, sh.id));
+            let frame =
+                map_ligands(&atoms, sp.ligand_ids()).expect("matched pattern ligands are matched");
+            let action = Permutation::between(sh.ligand_ids(), &frame)?;
+            let restated = sh.attributes().clone().reframe_by(&action)?;
+            sp.attributes().matches(&restated).then_some(())?;
+            stereo_bond.push((sp.id(), sh.id()));
         }
         let stereo_bonds = Correspondence::new(
             stereo_bond,
@@ -563,6 +626,7 @@ mod tests {
     use std::ops::ControlFlow;
 
     use rstest::rstest;
+    use umol_chem::element::Element;
     use umol_graph_core::SubgraphIsomorphismAlgorithm::{
         ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
     };
@@ -575,6 +639,10 @@ mod tests {
     use super::super::molecule::Molecule;
     use super::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
     use super::{SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError};
+    use crate::ir::{
+        AromaticSystemForm, AtomForm, ElectronCountsForm, EntityKind, MoleculeEntries,
+        MulticenterBondForm,
+    };
     use crate::mol_dsl;
 
     const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
@@ -795,15 +863,15 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
         vec![vec![AtomId(0)], vec![AtomId(1)]]
     )]
-    #[case::atom_aromatic_bond_marked_unresolved(
+    #[case::atom_aromatic_bond_evidence(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C#a+"] :bonds []}"#),
-        vec![]
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
     )]
-    #[case::atom_not_aromatic_bond_marked_unresolved(
+    #[case::atom_not_aromatic_bond_evidence(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
-        vec![vec![AtomId(0)], vec![AtomId(1)]]
+        vec![]
     )]
     #[case::atom_multicenter_valence(
         mol_dsl!(r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#),
@@ -840,10 +908,10 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*#a"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
-    #[case::bond_aromatic_asserted_conflict(
+    #[case::bond_aromatic_asserted_without_overlay(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*#a"]]}"#),
-        vec![]
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
     #[case::bond_not_cis_trans(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
@@ -940,6 +1008,141 @@ mod tests {
                     .iter()
                     .map(|c| {
                         c.atoms()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, host)| host)
+                            .collect()
+                    })
+                    .collect();
+                occurrences.sort();
+                assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::ordered(
+        [Element::C, Element::N, Element::O],
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)]],
+    )]
+    #[case::reordered(
+        [Element::C, Element::N, Element::O],
+        vec![AtomId(2), AtomId(0), AtomId(1)],
+        ElectronCountsForm::Lit(vec![0, 2, 1]),
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)]],
+    )]
+    #[case::different_association(
+        [Element::C, Element::N, Element::O],
+        vec![AtomId(2), AtomId(0), AtomId(1)],
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        vec![],
+    )]
+    #[case::undetermined_pattern(
+        [Element::C, Element::N, Element::O],
+        vec![AtomId(2), AtomId(0), AtomId(1)],
+        ElectronCountsForm::Undetermined,
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)]],
+    )]
+    #[case::undetermined_host(
+        [Element::C, Element::N, Element::O],
+        vec![AtomId(2), AtomId(0), AtomId(1)],
+        ElectronCountsForm::Lit(vec![0, 2, 1]),
+        ElectronCountsForm::Undetermined,
+        vec![],
+    )]
+    #[case::symmetric_nonuniform(
+        [Element::C; 3],
+        vec![AtomId(2), AtomId(0), AtomId(1)],
+        ElectronCountsForm::Lit(vec![0, 2, 1]),
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)]],
+    )]
+    #[case::symmetric_repeated_counts(
+        [Element::C; 3],
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        ElectronCountsForm::Lit(vec![1, 1, 0]),
+        ElectronCountsForm::Lit(vec![1, 1, 0]),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)],
+             vec![AtomId(1), AtomId(0), AtomId(2)]],
+    )]
+    #[case::symmetric_uniform(
+        [Element::C; 3],
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        ElectronCountsForm::Lit(vec![1, 1, 1]),
+        ElectronCountsForm::Lit(vec![1, 1, 1]),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)],
+             vec![AtomId(0), AtomId(2), AtomId(1)],
+             vec![AtomId(1), AtomId(0), AtomId(2)],
+             vec![AtomId(1), AtomId(2), AtomId(0)],
+             vec![AtomId(2), AtomId(0), AtomId(1)],
+             vec![AtomId(2), AtomId(1), AtomId(0)]],
+    )]
+    #[case::symmetric_undetermined(
+        [Element::C; 3],
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        ElectronCountsForm::Undetermined,
+        ElectronCountsForm::Undetermined,
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)],
+             vec![AtomId(0), AtomId(2), AtomId(1)],
+             vec![AtomId(1), AtomId(0), AtomId(2)],
+             vec![AtomId(1), AtomId(2), AtomId(0)],
+             vec![AtomId(2), AtomId(0), AtomId(1)],
+             vec![AtomId(2), AtomId(1), AtomId(0)]],
+    )]
+    fn test_molecule_substructure_matches_electrons(
+        #[values(EntityKind::AromaticSystem, EntityKind::MulticenterBond)] kind: EntityKind,
+        #[case] elements: [Element; 3],
+        #[case] atoms: Vec<AtomId>,
+        #[case] pattern_counts: ElectronCountsForm,
+        #[case] host_counts: ElectronCountsForm,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        let [pattern, host] = [
+            (atoms, pattern_counts),
+            (vec![AtomId(0), AtomId(1), AtomId(2)], host_counts),
+        ]
+        .map(|(atoms, electrons)| {
+            let mut entries = MoleculeEntries {
+                atoms: elements.map(AtomForm::from_element).to_vec(),
+                ..Default::default()
+            };
+            match kind {
+                EntityKind::AromaticSystem => {
+                    entries
+                        .aromatic
+                        .push((atoms, AromaticSystemForm::new(electrons)));
+                }
+                EntityKind::MulticenterBond => {
+                    entries
+                        .multicenter
+                        .push((atoms, MulticenterBondForm::new(electrons)));
+                }
+                _ => unreachable!(),
+            }
+            Molecule::from_entries(entries)
+        });
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let mut occurrences: Vec<Vec<AtomId>> = pattern
+                    .substructure_matches(
+                        &host,
+                        SubstructureMatchConfig {
+                            match_algorithm: strategy,
+                            subgraph_isomorphism_algorithm: subiso,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                        },
+                    )
+                    .unwrap()
+                    .iter()
+                    .map(|correspondence| {
+                        correspondence
+                            .atoms()
                             .matched_pairs()
                             .iter()
                             .map(|&(_, host)| host)

@@ -8,7 +8,8 @@
 
 use std::ops::ControlFlow;
 
-use crate::graph::{EdgeId, Graph};
+use crate::graph::Graph;
+use crate::id::EdgeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubgraphEnumerationAlgorithm {

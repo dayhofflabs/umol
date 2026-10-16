@@ -9,7 +9,8 @@ use std::ops::ControlFlow;
 
 use super::maximum::{GeneralMaximumMatchingAlgorithm, Matching};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatchingEnumerationAlgorithm {

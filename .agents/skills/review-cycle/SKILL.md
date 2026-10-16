@@ -30,6 +30,9 @@ living guides and skills relevant to the reviewed area.
   nomenclature, module structure and visibility, tests and generators, documentation); a small
   target may merge areas. Review agents read code, run tests, and sample generators in their own
   worktree only.
+- Assign the production-use and method-boundary checks below to the structure/visibility area,
+  and the name/behavior checks to nomenclature. Include their evidence in refutation; these
+  checks do not require additional agents.
 - Each review agent's instructions include: the must-read set (`code-reviews.md`, the guides and
   skills for its area, the governing discussion documents located through
   `discussion/000-status.md`, and `docs/umol-whitepaper.pdf` for design intent); the
@@ -50,6 +53,51 @@ living guides and skills relevant to the reviewed area.
 - The orchestrating session synthesizes the surviving findings into the review document under
   the `discussion-doc-writing` skill and registers it as Proposed in
   `discussion/000-status.md`.
+
+## Production use, names, and method boundaries
+
+Apply these checks to private functions and methods as well as public APIs.
+
+**Production callers.** Trace callers to production entry points across crates, bindings, trait
+implementations, callbacks, macros, and relevant feature configurations. A wrapper counts only
+when its own call chain has a production consumer. Separate this evidence from calls in tests,
+benchmarks, fuzz targets, examples, and documentation; those calls do not establish production
+use. Search hits and compiler dead-code warnings alone are insufficient.
+
+For methods with no identified production caller, examine why they exist and whether removal
+or inlining at the remaining callers would simplify the API. Tests alone do not justify a
+production method or widened visibility. An intentionally supported external API or required
+trait implementation can justify retention without an in-repository caller: cite its contract
+and governing decision, and report unknown external use honestly. Do not invent future consumers.
+
+**Names and behavior.** Compare each name with its implementation, inputs, output, mutation,
+ownership, and failure behavior. Check the nomenclature guide and equivalent operations across
+the repository, not just nearby spellings. Flag confusing names, misleading verbs or qualifiers,
+and terms used outside their defined meaning even when there is no synonym or collision. For
+example, normalization does not justify naming an operation canonical. Existing names, private
+visibility, and historical usage are not defenses for a current rule violation. Propose a name
+for the actual operation rather than a comment explaining away the mismatch.
+
+**Methods split too finely.** Look for chains of small methods that production callers always
+invoke together in the same order. Trace the intermediate values and obligations: does the split
+expose a meaningless partial operation, force callers to coordinate invariants, or repeat
+allocation, validation, or traversal? Consider one coherent operation where it removes that
+burden. Co-use alone does not justify merging independent storage primitives or other methods
+with a distinct semantic purpose.
+
+**Methods combining unrelated work.** Examine large methods and shared helpers for independent
+responsibilities bundled only to avoid duplication. Caller-specific flags, optional arguments,
+discarded outputs, unrelated storage updates, and names listing several operations are evidence
+to investigate, not automatic findings. Trace which responsibilities each caller actually needs.
+Compare separating them and using direct caller composition, including modest duplication,
+against keeping the bundle. Sharing or fewer lines is not a sufficient justification; a real
+atomicity or invariant boundary can be. Preserve the semantics of one operation when proposing
+a split, including its failure and rollback boundary.
+
+For each finding, record the relevant production call chains, the claimed semantic boundary,
+the concrete cost or caller burden, and the proposed removal, inline, merge, split, or rename.
+The refutation pass verifies both caller classifications and the strongest reason to retain the
+existing boundary. A long method or short helper is not a defect merely because of its size.
 
 ## Output
 

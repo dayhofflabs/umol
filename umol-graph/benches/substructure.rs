@@ -6,6 +6,10 @@
 //! corpus, patterns, and matching semantics (element-only atoms, any-bonds,
 //! all-embeddings enumeration) mirror `scripts/rdkit_substructure_baseline.py`
 //! so the timings are directly comparable to the actual-RDKit baseline.
+//!
+//! Small aromatic-ring and multicenter cases separately measure matching when
+//! nonuniform electron counts distinguish otherwise interchangeable atoms, with
+//! uniform and undetermined counts as controls.
 
 use std::fs::read_to_string;
 use std::hint::black_box;
@@ -21,8 +25,8 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, Molecule, MoleculeEntries, NumForm, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig,
+    AromaticSystemForm, AtomForm, AtomId, BondForm, ElectronCountsForm, Molecule, MoleculeEntries,
+    MulticenterBondForm, NumForm, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 use walkdir::WalkDir;
 
@@ -205,5 +209,71 @@ fn substructure_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, substructure_benchmark);
+fn overlay_substructure_benchmark(c: &mut Criterion) {
+    let aromatic = MoleculeEntries {
+        atoms: vec![carbon(); 6],
+        bonds: (0..6)
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), any_bond()))
+            .collect(),
+        aromatic: vec![(
+            (0..6).map(AtomId).collect(),
+            AromaticSystemForm::from_electrons(vec![2, 1, 0, 1, 0, 1]),
+        )],
+        ..Default::default()
+    };
+    let multicenter = MoleculeEntries {
+        atoms: vec![carbon(); 3],
+        multicenter: vec![(
+            (0..3).map(AtomId).collect(),
+            MulticenterBondForm::from_electrons(vec![2, 0, 1]),
+        )],
+        ..Default::default()
+    };
+    let mut cases = Vec::new();
+    for (name, source) in [("aromatic_ring", aromatic), ("multicenter", multicenter)] {
+        for (suffix, electrons) in [
+            (
+                "uniform",
+                ElectronCountsForm::Lit(vec![1; source.atoms.len()]),
+            ),
+            ("undetermined", ElectronCountsForm::Undetermined),
+        ] {
+            let mut entries = source.clone();
+            for (_, attributes) in &mut entries.aromatic {
+                attributes.electrons = electrons.clone();
+            }
+            for (_, attributes) in &mut entries.multicenter {
+                attributes.electrons = electrons.clone();
+            }
+            cases.push((format!("{name}_{suffix}"), Molecule::from_entries(entries)));
+        }
+        cases.push((name.to_owned(), Molecule::from_entries(source)));
+    }
+    let mut group = c.benchmark_group("substructure/overlay_counts");
+    for (name, molecule) in cases {
+        for strategy in STRATEGIES {
+            let config = SubstructureMatchConfig {
+                match_algorithm: strategy,
+                subgraph_isomorphism_algorithm: Vf2,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            };
+            group.bench_function(format!("{name}/{}", strategy_name(strategy)), |b| {
+                b.iter(|| {
+                    black_box(
+                        molecule
+                            .substructure_matches(black_box(&molecule), config)
+                            .unwrap(),
+                    )
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    substructure_benchmark,
+    overlay_substructure_benchmark
+);
 criterion_main!(benches);

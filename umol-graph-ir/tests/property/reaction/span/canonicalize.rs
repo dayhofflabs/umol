@@ -5,8 +5,6 @@
 //! complete equality and canonical-hash relations, LHS anchoring, reaction-normal-form convergence,
 //! integrity, and the documented weakened reversal law.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
@@ -15,7 +13,7 @@ use umol_graph_ir::ir::{
     ReactionSpanCanonicalizeError, Reframe,
 };
 
-use super::reaction_span_scenario_strategy;
+use super::{reaction_span_canonical_pair_strategy, reaction_span_scenario_strategy};
 use crate::strategies::{
     intrinsic_contradiction_scenario_strategy, standardization_scenario_strategy,
 };
@@ -25,12 +23,6 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
-}
-
-fn structural_hash<T: Hash>(value: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn reaction_normal_form(span: &ReactionSpan) -> ReactionSpan {
@@ -62,7 +54,7 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
+        let renumbered = scenario.span.clone().remap(&scenario.first);
         let canonical = scenario.span.clone().canonicalize(&context);
         let renumbered_canonical = renumbered.canonicalize(&context);
 
@@ -106,7 +98,7 @@ proptest! {
         let canonical = source.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated reaction span did not canonicalize: {error}"))
         })?;
-        let renumbered = source.remap(&scenario.remapping);
+        let renumbered = source.clone().remap(&scenario.remapping);
 
         prop_assert_eq!(normalized.clone().normalize(), Ok(normalized.clone()));
         prop_assert_eq!(reframed.clone().reframe(), Ok(reframed.clone()));
@@ -148,16 +140,16 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
+        let renumbered = scenario.span.clone().remap(&scenario.first);
 
         prop_assert_eq!(
-            scenario.span.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            scenario.span.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         if let Ok(canonical) = scenario.span.clone().canonicalize(&context) {
             prop_assert_eq!(
                 scenario.span.canonical_hash(&context),
-                Ok(structural_hash(&canonical)),
+                canonical.canonical_hash(&context),
             );
         }
     }
@@ -167,7 +159,7 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
+        let renumbered = scenario.span.clone().remap(&scenario.first);
         let canonical = scenario.span.clone().canonicalize(&context);
 
         prop_assert!(scenario.span.canonical_eq(&scenario.span, &context));
@@ -179,6 +171,29 @@ proptest! {
         if let Ok(canonical) = canonical {
             prop_assert!(renumbered.canonical_eq(&canonical, &context));
             prop_assert!(scenario.span.canonical_eq(&canonical, &context));
+        }
+    }
+
+    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    #[test]
+    fn test_reaction_span_canonical_eq_contract(
+        (left, right) in reaction_span_canonical_pair_strategy(),
+    ) {
+        let context = context();
+        let expected = match (
+            left.clone().canonicalize(&context),
+            right.clone().canonicalize(&context),
+        ) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => true,
+            _ => false,
+        };
+
+        prop_assert_eq!(left.canonical_eq(&right, &context), expected);
+        match (left.canonical_hash(&context), right.canonical_hash(&context)) {
+            (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
+            (Err(_), Err(_)) => prop_assert!(expected),
+            _ => prop_assert!(!expected),
         }
     }
 

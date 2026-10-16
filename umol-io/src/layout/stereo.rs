@@ -22,7 +22,7 @@ pub(crate) fn cis_trans_site(
     molecule: &Molecule,
     stereo: StereoBondView<'_>,
 ) -> Option<CisTransSite> {
-    if stereo.attributes.configuration.kind() != Some(StereoKind::CisTrans) {
+    if stereo.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
         return None;
     }
     let ligands = stereo

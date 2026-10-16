@@ -1,11 +1,11 @@
-{:input {:atoms ["O#i=#c0#u0#a!"
+{:input {:atoms ["O#i=#c0#u0"
                  "C#i=#c0#u0#a+"
                  "C#i=#c0#u0#a+"
                  "C#i=#c0#u0#a+"
                  "C#i=#c0#u0#a+"
                  "C#i=#c0#u0#a+"
                  "C#i=#c0#u0#a+"
-                 "O#i=#c0#u0#a!"
+                 "O#i=#c0#u0"
                  "C#i=#c0#u0#a+"]
          :bonds [[0 1 :double]
                  [1 8 :aromatic]

@@ -18,8 +18,9 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::noncovalent::{
-    noncovalent_bond_constraints_asdict, NoncovalentBondConstraintsBacking,
-    NoncovalentBondConstraintsForm, NoncovalentBondConstraintsLike, NoncovalentBondConstraintsView,
+    noncovalent_bond_constraints_asdict, NoncovalentBondConstraintsForm,
+    NoncovalentBondConstraintsLike, NoncovalentBondConstraintsStorage,
+    NoncovalentBondConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::noncovalent::{
@@ -159,14 +160,15 @@ impl NoncovalentBondUpdate {
     fn new(
         py: Python<'_>,
         kind: Option<NoncovalentBondKindLike>,
-        constraints: Option<Py<NoncovalentBondConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrNoncovalentBondUpdate {
+        constraints: Option<NoncovalentBondConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrNoncovalentBondUpdate {
             kind: kind.map(|value| value.to_rust(py)),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a noncovalent-bond-update DSL string into a `NoncovalentBondUpdate`.
@@ -198,9 +200,12 @@ impl NoncovalentBondUpdate {
         self.0.kind.as_ref().map(NoncovalentBondKindForm::from_rust)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> NoncovalentBondConstraintsForm {
-        NoncovalentBondConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> NoncovalentBondConstraintsView {
+        NoncovalentBondConstraintsView {
+            storage: NoncovalentBondConstraintsStorage::Update(slf),
+        }
     }
 }
 
@@ -282,7 +287,7 @@ impl NoncovalentBondForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> NoncovalentBondConstraintsView {
         NoncovalentBondConstraintsView {
-            backing: NoncovalentBondConstraintsBacking::Noncovalent(slf),
+            storage: NoncovalentBondConstraintsStorage::Noncovalent(slf),
         }
     }
 
@@ -364,11 +369,9 @@ impl EntityForm for NoncovalentBondForm {
 }
 
 impl_py_lattice!(
+    borrowed,
     NoncovalentBondForm,
     GraphIrNoncovalentBondForm,
-    |value: &NoncovalentBondForm, _py: Python<'_>| -> PyResult<GraphIrNoncovalentBondForm> {
-        Ok(value.to_rust().clone())
-    },
     |_py: Python<'_>, value: GraphIrNoncovalentBondForm| -> PyResult<NoncovalentBondForm> {
         Ok(NoncovalentBondForm::from_rust(value))
     }
@@ -378,9 +381,11 @@ impl_py_lattice!(
 /// bond's index. Field reads rebuild the transient Rust view; the molecule is never
 /// copied. The two endpoint atom indices are read-only topology; the kind and
 /// constraints are the mutable bond value.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct NoncovalentBondView {
     owner: Py<Molecule>,
+    counter: u64,
     id: GraphIrNoncovalentBondId,
 }
 
@@ -399,52 +404,64 @@ impl NoncovalentBondView {
 #[pymethods]
 impl NoncovalentBondView {
     #[getter]
-    fn id(&self) -> u32 {
-        self.id.0
+    fn id(&self, py: Python<'_>) -> PyResult<u32> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        Ok(self.id.0)
     }
 
     /// The two endpoint atom indices (read-only — participants are topology, not part of
     /// the bond value; the pair is unordered).
     #[getter]
     fn atom_ids(&self, py: Python<'_>) -> PyResult<(u32, u32)> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
         let [first, second] = self.noncovalent_bond(molecule.to_rust())?.atom_ids();
         Ok((first.0, second.0))
     }
 
-    fn __repr__(&self) -> String {
-        format!("NoncovalentBondView(id={})", self.id.0)
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        Ok(format!("NoncovalentBondView(id={})", self.id.0))
     }
 
     /// The interaction kind.
     #[getter]
     fn kind(&self, py: Python<'_>) -> PyResult<NoncovalentBondKindForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
         Ok(NoncovalentBondKindForm::from_rust(
-            &self.noncovalent_bond(molecule.to_rust())?.attributes.kind,
+            &self.noncovalent_bond(molecule.to_rust())?.attributes().kind,
         ))
     }
 
     #[setter]
-    fn set_kind(&self, py: Python<'_>, value: NoncovalentBondKindLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_kind(&self, py: Python<'_>, value: NoncovalentBondKindLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        molecule
             .to_rust_mut()
             .noncovalent_bond_mut(self.id)
-            .attributes
-            .kind = value.to_rust(py);
+            .attributes_mut()
+            .kind = value;
+        Ok(())
     }
 
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
     /// current state, mutators write through to the bond in place.
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> NoncovalentBondConstraintsView {
-        NoncovalentBondConstraintsView {
-            backing: NoncovalentBondConstraintsBacking::Molecule {
+    fn constraints(&self, py: Python<'_>) -> PyResult<NoncovalentBondConstraintsView> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        Ok(NoncovalentBondConstraintsView {
+            storage: NoncovalentBondConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id: self.id,
             },
-        }
+        })
     }
 
     /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
@@ -455,20 +472,23 @@ impl NoncovalentBondView {
         py: Python<'_>,
         value: NoncovalentBondConstraintsLike,
     ) -> PyResult<()> {
-        self.owner
-            .borrow_mut(py)
+        let value = value.to_rust(py)?;
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        molecule
             .to_rust_mut()
             .noncovalent_bond_mut(self.id)
-            .attributes
-            .constraints = value.to_rust(py)?;
+            .attributes_mut()
+            .constraints = value;
         Ok(())
     }
 
     /// The value fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `NoncovalentBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let molecule = self.owner.bind(py).borrow();
-        let bond = self.noncovalent_bond(molecule.to_rust())?.attributes;
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        let bond = self.noncovalent_bond(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("kind", NoncovalentBondKindForm::from_rust(&bond.kind))?;
         dict.set_item(
@@ -504,39 +524,37 @@ fn resolve_noncovalent_bond_index(
 }
 
 /// The noncovalent bonds of a molecule, indexed by integer position.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct NoncovalentBondViews {
     owner: Py<Molecule>,
+    counter: u64,
 }
 
 #[pymethods]
 impl NoncovalentBondViews {
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner
-            .bind(py)
-            .borrow()
-            .to_rust()
-            .noncovalent_bonds()
-            .count()
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
+        Ok(molecule.to_rust().noncovalent_bonds().count())
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
-        format!(
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
+        Ok(format!(
             "NoncovalentBondViews(len={})",
-            self.owner
-                .bind(py)
-                .borrow()
-                .to_rust()
-                .noncovalent_bonds()
-                .count()
-        )
+            molecule.to_rust().noncovalent_bonds().count()
+        ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<NoncovalentBondView> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
         let id = resolve_noncovalent_bond_index(molecule.to_rust(), index)?;
         Ok(NoncovalentBondView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
         })
     }
@@ -548,79 +566,95 @@ impl NoncovalentBondViews {
         index: isize,
         bond: PyRef<'_, NoncovalentBondForm>,
     ) -> PyResult<()> {
-        let mut molecule = self.owner.borrow_mut(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
         let id = resolve_noncovalent_bond_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().noncovalent_bond_mut(id).attributes = bond.to_rust().clone();
+        *molecule
+            .to_rust_mut()
+            .noncovalent_bond_mut(id)
+            .attributes_mut() = bond.to_rust().clone();
         Ok(())
     }
 
     /// The noncovalent bond between atoms `first` and `second`, or `None`.
-    fn of(&self, py: Python<'_>, first: u32, second: u32) -> Option<NoncovalentBondView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn of(&self, py: Python<'_>, first: u32, second: u32) -> PyResult<Option<NoncovalentBondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
+        Ok(molecule
             .to_rust()
             .noncovalent_bonds()
             .of_id(GraphIrAtomId(first), GraphIrAtomId(second))
             .map(|id| NoncovalentBondView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
-            })
+            }))
     }
 
     /// The noncovalent bonds `atom` is an endpoint of.
-    fn incident(&self, py: Python<'_>, atom: u32) -> Vec<NoncovalentBondView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn incident(&self, py: Python<'_>, atom: u32) -> PyResult<Vec<NoncovalentBondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
+        Ok(molecule
             .to_rust()
             .noncovalent_bonds()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| NoncovalentBondView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
             })
-            .collect()
+            .collect())
     }
 
-    fn __iter__(&self, py: Python<'_>) -> NoncovalentBondViewIter {
-        let ids = self
-            .owner
-            .bind(py)
-            .borrow()
+    fn __iter__(&self, py: Python<'_>) -> PyResult<NoncovalentBondViewIter> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViews))?;
+        let ids = molecule
             .to_rust()
             .noncovalent_bonds()
             .ids()
             .collect::<Vec<_>>();
-        NoncovalentBondViewIter {
+        Ok(NoncovalentBondViewIter {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             ids: ids.into_iter(),
-        }
+        })
     }
 }
 
 impl NoncovalentBondViews {
     /// Build the noncovalent-bond-views handle for `owner` (the `.noncovalent_bonds` accessor).
-    pub(crate) fn new(owner: Py<Molecule>) -> NoncovalentBondViews {
-        NoncovalentBondViews { owner }
+    pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<NoncovalentBondViews> {
+        let counter = owner.try_borrow(py)?.view_counter();
+        Ok(NoncovalentBondViews { owner, counter })
     }
 }
 
 #[pyclass]
 struct NoncovalentBondViewIter {
     owner: Py<Molecule>,
+    counter: u64,
     ids: IntoIter<GraphIrNoncovalentBondId>,
 }
 
 #[pymethods]
 impl NoncovalentBondViewIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+        slf.owner
+            .try_borrow(slf.py())?
+            .check_access(slf.counter, stringify!(NoncovalentBondViewIter))?;
+        Ok(slf)
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> Option<NoncovalentBondView> {
-        self.ids.next().map(|id| NoncovalentBondView {
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<NoncovalentBondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondViewIter))?;
+        Ok(self.ids.next().map(|id| NoncovalentBondView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
-        })
+        }))
     }
 }
 
@@ -1014,7 +1048,7 @@ mod tests {
             );
             assert_eq!(
                 bond.to_rust().constraints.intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1081,7 +1115,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1114,7 +1148,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1148,7 +1182,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1166,7 +1200,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1196,12 +1230,12 @@ mod tests {
         Python::attach(|py| {
             let bond = hbond(py);
             let view = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond.clone_ref(py)),
             };
             view.set(py, intramolecular(py, true)).unwrap();
             // a fresh view proves the write hit the standalone bond, not a copy
             let fresh = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
@@ -1225,7 +1259,7 @@ mod tests {
             )
             .unwrap();
             let view = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond.clone_ref(py)),
             };
             let removed = view.pop(py, intramolecular_key(py)).unwrap();
             match removed {
@@ -1235,7 +1269,7 @@ mod tests {
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
             }
             let fresh = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
         });
@@ -1246,7 +1280,7 @@ mod tests {
         Python::attach(|py| {
             let bond = hbond(py);
             let view = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond.clone_ref(py)),
             };
             view.update(
                 py,
@@ -1259,7 +1293,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(false)
+                &GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1281,10 +1315,10 @@ mod tests {
             )
             .unwrap();
             let view = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond.clone_ref(py)),
             };
             let other = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond.clone_ref(py)),
             };
             view.update(
                 py,
@@ -1297,7 +1331,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1307,7 +1341,7 @@ mod tests {
         Python::attach(|py| {
             let bond = hbond(py);
             let view = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+                storage: NoncovalentBondConstraintsStorage::Noncovalent(bond.clone_ref(py)),
             };
             view.set_intramolecular(py, BooleanLike::Lit(true)).unwrap();
             assert_eq!(
@@ -1316,7 +1350,7 @@ mod tests {
                     .to_rust()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1343,11 +1377,12 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner,
+                counter: 0,
                 id: GraphIrNoncovalentBondId(0),
             };
-            assert_eq!(view.id(), 0);
+            assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
-            assert_eq!(view.__repr__(), "NoncovalentBondView(id=0)");
+            assert_eq!(view.__repr__(py).unwrap(), "NoncovalentBondView(id=0)");
         });
     }
 
@@ -1357,6 +1392,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrNoncovalentBondId(0),
             };
             assert_eq!(
@@ -1366,10 +1402,12 @@ mod tests {
             view.set_kind(
                 py,
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::Ionic),
-            );
+            )
+            .unwrap();
             // a fresh read proves the write hit the molecule
             let fresh = NoncovalentBondView {
                 owner,
+                counter: 0,
                 id: GraphIrNoncovalentBondId(0),
             };
             assert_eq!(
@@ -1385,10 +1423,12 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrNoncovalentBondId(0),
             };
             // the constraints handle is molecule-backed; a write goes through to the bond
             view.constraints(py)
+                .unwrap()
                 .set_intramolecular(py, BooleanLike::Lit(true))
                 .unwrap();
             assert_eq!(
@@ -1397,10 +1437,10 @@ mod tests {
                     .borrow()
                     .to_rust()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .attributes
+                    .attributes()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1411,6 +1451,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrNoncovalentBondId(0),
             };
             let constraints = Py::new(
@@ -1426,10 +1467,10 @@ mod tests {
                     .borrow()
                     .to_rust()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .attributes
+                    .attributes()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(false)
+                &GraphIrBooleanForm::Lit(false)
             );
         });
     }
@@ -1445,20 +1486,22 @@ mod tests {
                 .borrow_mut()
                 .to_rust_mut()
                 .noncovalent_bond_mut(GraphIrNoncovalentBondId(0))
-                .attributes
+                .attributes_mut()
                 .constraints
                 .set(GraphIrNoncovalentBondConstraintForm::intramolecular(true));
             let view = NoncovalentBondConstraintsView {
-                backing: NoncovalentBondConstraintsBacking::Molecule {
+                storage: NoncovalentBondConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrNoncovalentBondId(0),
                 },
             };
             let other = Py::new(
                 py,
                 NoncovalentBondConstraintsView {
-                    backing: NoncovalentBondConstraintsBacking::Molecule {
+                    storage: NoncovalentBondConstraintsStorage::Molecule {
                         owner: owner.clone_ref(py),
+                        counter: 0,
                         id: GraphIrNoncovalentBondId(0),
                     },
                 },
@@ -1472,10 +1515,10 @@ mod tests {
                     .borrow()
                     .to_rust()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .attributes
+                    .attributes()
                     .constraints
                     .intramolecular(),
-                GraphIrBooleanForm::Lit(true)
+                &GraphIrBooleanForm::Lit(true)
             );
         });
     }
@@ -1486,6 +1529,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let view = NoncovalentBondView {
                 owner,
+                counter: 0,
                 id: GraphIrNoncovalentBondId(0),
             };
             let dict = view.asdict(py).unwrap();
@@ -1529,12 +1573,13 @@ mod tests {
         Python::attach(|py| {
             let views = NoncovalentBondViews {
                 owner: molecule_with_hbond(py),
+                counter: 0,
             };
-            assert_eq!(views.__len__(py), 1);
-            assert_eq!(views.__repr__(py), "NoncovalentBondViews(len=1)");
-            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            assert_eq!(views.__len__(py).unwrap(), 1);
+            assert_eq!(views.__repr__(py).unwrap(), "NoncovalentBondViews(len=1)");
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(py).unwrap(), 0);
             // negative index counts from the end
-            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(py).unwrap(), 0);
             assert!(views.__getitem__(py, 1).is_err());
             assert!(views.__getitem__(py, -2).is_err());
         });
@@ -1546,6 +1591,7 @@ mod tests {
             let owner = molecule_with_hbond(py);
             let views = NoncovalentBondViews {
                 owner: owner.clone_ref(py),
+                counter: 0,
             };
             let replacement = Py::new(
                 py,
@@ -1572,6 +1618,7 @@ mod tests {
         Python::attach(|py| {
             let views = NoncovalentBondViews {
                 owner: molecule_with_hbond(py),
+                counter: 0,
             };
             let bond = Py::new(
                 py,
@@ -1589,10 +1636,11 @@ mod tests {
         Python::attach(|py| {
             let views = NoncovalentBondViews {
                 owner: molecule_with_hbond(py),
+                counter: 0,
             };
-            let mut iter = views.__iter__(py);
-            assert_eq!(iter.__next__(py).unwrap().id(), 0);
-            assert!(iter.__next__(py).is_none());
+            let mut iter = views.__iter__(py).unwrap();
+            assert_eq!(iter.__next__(py).unwrap().unwrap().id(py).unwrap(), 0);
+            assert!(iter.__next__(py).unwrap().is_none());
         });
     }
 
@@ -1601,12 +1649,13 @@ mod tests {
         Python::attach(|py| {
             let views = NoncovalentBondViews {
                 owner: molecule_with_hbond_and_isolated(py),
+                counter: 0,
             };
             // unordered pair — both orders find the same bond
-            assert_eq!(views.of(py, 0, 1).unwrap().id(), 0);
-            assert_eq!(views.of(py, 1, 0).unwrap().id(), 0);
+            assert_eq!(views.of(py, 0, 1).unwrap().unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.of(py, 1, 0).unwrap().unwrap().id(py).unwrap(), 0);
             // no bond between 0 and the isolated atom 2
-            assert!(views.of(py, 0, 2).is_none());
+            assert!(views.of(py, 0, 2).unwrap().is_none());
         });
     }
 
@@ -1615,16 +1664,18 @@ mod tests {
         Python::attach(|py| {
             let views = NoncovalentBondViews {
                 owner: molecule_with_hbond_and_isolated(py),
+                counter: 0,
             };
             assert_eq!(
                 views
                     .incident(py, 0)
+                    .unwrap()
                     .iter()
-                    .map(|v| v.id())
+                    .map(|v| v.id(py).unwrap())
                     .collect::<Vec<_>>(),
                 vec![0]
             );
-            assert!(views.incident(py, 2).is_empty());
+            assert!(views.incident(py, 2).unwrap().is_empty());
         });
     }
 }

@@ -134,8 +134,8 @@ impl MoleculeMetadata {
     }
 
     /// Move entity keywords through a molecule correspondence.
-    fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
-        Self(self.0.clone().remap(correspondence.to_rust()))
+    fn map(&self, correspondence: &MoleculeCorrespondence) -> Self {
+        Self(self.0.clone().map(correspondence.to_rust()))
     }
 
     fn __repr__(&self) -> String {
@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_metadata_remap() {
+    fn test_molecule_metadata_map() {
         let mut metadata = GraphIrMoleculeMetadata::new();
         for (entity, keyword) in [
             (GraphIrEntity::Atom(AtomId(0)), "atom"),
@@ -387,7 +387,7 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         ));
 
-        let remapped = MoleculeMetadata::from_rust(metadata).remap(&correspondence);
+        let remapped = MoleculeMetadata::from_rust(metadata).map(&correspondence);
 
         for (entity, keyword) in [
             (Entity::Atom(1), "atom"),

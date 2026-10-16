@@ -3,8 +3,7 @@
 use thiserror::Error;
 
 use super::entity::Entity;
-use super::molecule::transact::TransactionError;
-use super::molecule::MoleculeIntegrityError;
+use super::molecule::{MoleculeIntegrityError, TransactionError};
 use super::reaction::DpoContradiction;
 use super::substructure::SubstructureMatchError;
 
@@ -16,9 +15,9 @@ pub struct Contradiction;
 /// No join: elements have no least upper bound (meet-semilattice).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 #[error("no join: elements have no least upper bound")]
-pub struct NoJoin;
+pub struct NoJoinError;
 
-/// Error from applying an edit batch to an immutable molecule.
+/// Failure of molecule edit application or the integrity check on its result.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeApplyError {
     /// The edit batch could not be applied to the evolving draft.
@@ -35,7 +34,7 @@ pub enum ApplyError {
     /// The reaction's deltas are inconsistent (normalization failed).
     #[error("inconsistent reaction deltas")]
     Inconsistent,
-    /// The lowered edit transaction failed against the host.
+    /// The lowered edits could not be applied to the host.
     #[error("apply transaction failed: {0}")]
     Transaction(#[from] TransactionError),
     /// The supplied or matcher-produced correspondence does not map an entity consistently into

@@ -2,19 +2,80 @@
 
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::{array, mem};
 
 use umol_graph_core::{
-    FixedRelationSet, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition, RelationId,
+    Compaction, FixedRelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange,
+    NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::delta::EntitySpan;
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
+
+/// A noncovalent bond's atom pair and attributes.
+///
+/// Normalization preserves atom order. Reframing sorts the pair.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NoncovalentBondEntry<'a> {
+    pub(crate) atoms: [AtomId; 2],
+    pub(crate) attributes: Cow<'a, NoncovalentBondForm>,
+}
+
+impl Normalize for NoncovalentBondEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => Cow::Owned(attributes.clone().normalize()?),
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for NoncovalentBondEntry<'_> {
+    type Action = DynPermutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        if action.degree() != self.atoms.len() {
+            return None;
+        }
+        self.atoms = array::from_fn(|i| self.atoms[action.image()[i]]);
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        Some(self)
+    }
+}
+
+impl Reframe for NoncovalentBondEntry<'_> {
+    fn representative_action(&self) -> Self::Action {
+        noncovalent_bond_representative_action(self.atoms)
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = self.representative_action();
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        if DynPermutation::between(&other.atoms, &self.atoms)
+            .and_then(|action| other.attributes.as_ref().clone().reframe_by(&action))
+            .is_some_and(|attributes| self.attributes.normalized_eq(&attributes))
+        {
+            return true;
+        }
+        self.clone().reframe() == other.clone().reframe()
+    }
+}
 
 /// The molecule's noncovalent bonds.
 ///
@@ -33,10 +94,6 @@ impl NoncovalentBonds {
                 .map(|(atoms, attributes)| (atoms.map(NodeId::from), attributes))
                 .collect(),
         )))
-    }
-
-    pub(crate) fn from_arc(set: Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>) -> Self {
-        Self(set)
     }
 
     pub fn count(&self) -> usize {
@@ -60,8 +117,16 @@ impl NoncovalentBonds {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    /// The complete bond value, copying its atom pair and borrowing its attributes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a bond in this set.
+    pub(crate) fn entry(&self, id: NoncovalentBondId) -> NoncovalentBondEntry<'_> {
+        NoncovalentBondEntry {
+            atoms: self.atoms(id),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     /// Ids of the noncovalent bonds `atom` takes part in. Integrity rejects a parallel pair, so an
@@ -71,69 +136,13 @@ impl NoncovalentBonds {
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + '_ {
         self.0
-            .incident(NodeId::from(atom))
+            .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| NoncovalentBondId::from(id))
     }
 
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.0.has_incident(NodeId::from(atom))
-    }
-
-    pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(atoms, attributes)| (atoms.map(AtomId::from), attributes))
-            .collect()
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, attributes)| attributes)
-    }
-
-    /// Map participant references, preserving entity ids, row order, attributes, and frames.
-    ///
-    /// # Panics
-    /// Panics if a referenced node or edge has no image in `correspondence`.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
-        self.try_map(correspondence)
-            .expect("correspondence must cover every participant reference")
-    }
-
-    /// Map participant references, or return `None` if any reference has no image.
-    /// Unreferenced nodes and edges need not have images. No entity is dropped.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
-    }
-
-    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
-        Self(Arc::new(self.0.remap(remapping)))
-    }
-
-    pub(crate) fn into_arc(self) -> Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>> {
-        self.0
-    }
-
-    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
-    /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        self.0
-            .pushout(
-                &right.map(correspondence).0,
-                // Either endpoint anchors a noncovalent bond: the node index.
-                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
-                |(_, left), (_, right)| {
-                    // The payload is frame-invariant, so the pair's presentation cannot affect it.
-                    right.clone().meet(left)
-                },
-            )
-            .map(|object| Self(Arc::new(object)))
+        self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     /// Whether bond `id` is the one between `first` and `second` — the known-id sibling of
@@ -151,18 +160,216 @@ impl NoncovalentBonds {
         // A noncovalent bond anchors on either endpoint atom; the first narrows as well as the
         // second.
         self.0
-            .coincident(
+            .coincident_to_node(
                 NodeId::from(first),
                 &[NodeId::from(first), NodeId::from(second)],
             )
             .map(NoncovalentBondId::from)
     }
+
+    pub(crate) fn attributes_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, attributes)| attributes)
+    }
+
+    pub(crate) fn add(
+        &mut self,
+        atoms: [AtomId; 2],
+        attributes: NoncovalentBondForm,
+    ) -> NoncovalentBondId {
+        Arc::make_mut(&mut self.0)
+            .add(atoms.map(NodeId::from), attributes)
+            .into()
+    }
+
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
+    ) -> IdRange<NoncovalentBondId> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let entries = entries
+                .into_iter()
+                .map(|(atoms, attributes)| (atoms.map(NodeId::from), attributes))
+                .collect();
+            Arc::make_mut(&mut self.0).extend(entries);
+        }
+        IdRange::new(start, self.count())
+    }
+
+    pub(crate) fn remove(&mut self, ids: &[NoncovalentBondId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        Arc::make_mut(&mut self.0).remove(&ids);
+    }
+
+    pub(crate) fn tracked_remove(
+        &mut self,
+        ids: &[NoncovalentBondId],
+    ) -> Compaction<NoncovalentBondId> {
+        if ids.is_empty() {
+            return Compaction::identity(self.count());
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid noncovalent bond ids")
+    }
+
+    /// Reinsert saved entries at their original ids after restoring surviving topology ids.
+    pub(crate) fn restore(
+        &mut self,
+        compaction: &Compaction<NoncovalentBondId>,
+        removed: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondForm)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let relations = Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(RelationId::from)
+                .collect(),
+        )
+        .expect("noncovalent bond compaction contains valid relation ids");
+        let removed = removed
+            .into_iter()
+            .map(|(id, atoms, attributes)| {
+                (RelationId::from(id), atoms.map(NodeId::from), attributes)
+            })
+            .collect();
+        Arc::make_mut(&mut self.0).restore(&relations, removed);
+    }
+
+    /// Restore the original atom ids in surviving entries, preserving entry ids and attributes.
+    pub(crate) fn restore_topology_ids(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        Arc::make_mut(&mut self.0).restore_participants(compaction);
+    }
+
+    pub(crate) fn replace_atoms(&mut self, id: NoncovalentBondId, atoms: [AtomId; 2]) {
+        Arc::make_mut(&mut self.0).replace_participants(id.into(), atoms.map(NodeId::from));
+    }
+
+    pub(crate) fn replace_atom(&mut self, id: NoncovalentBondId, position: usize, atom: AtomId) {
+        let position = ParticipantPosition(position as u32);
+        Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
+    }
+
+    pub(crate) fn compact(
+        &self,
+        compaction: &GraphCompaction,
+    ) -> (Self, Compaction<NoncovalentBondId>) {
+        let (set, relations) = self.0.tracked_compact(compaction);
+        let relations = Compaction::new(
+            relations.source_count(),
+            relations
+                .removed()
+                .iter()
+                .copied()
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid noncovalent bond ids");
+        (Self(Arc::new(set)), relations)
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
+    }
+
+    pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
+    /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
+    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        self.0
+            .pushout(
+                &right.clone().map(correspondence).0,
+                // Either endpoint anchors a noncovalent bond: the node index.
+                |set, atoms| {
+                    atoms
+                        .first()
+                        .and_then(|&node| set.coincident_to_node(node, atoms))
+                },
+                |(_, left), (_, right)| {
+                    // The payload is frame-invariant, so the pair's presentation cannot affect it.
+                    right.clone().meet(left)
+                },
+            )
+            .map(|object| Self(Arc::new(object)))
+    }
+
+    pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| (atoms.map(AtomId::from), attributes))
+            .collect()
+    }
+}
+
+pub(crate) fn reframe_noncovalent_bonds_with(
+    mut noncovalent_bonds: NoncovalentBonds,
+    mut visit: impl FnMut(NoncovalentBondId, &DynPermutation),
+) -> Result<NoncovalentBonds, Contradiction> {
+    let set = Arc::make_mut(&mut noncovalent_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = NoncovalentBondId::from(relation_id);
+        let stored = set.participants(relation_id).map(AtomId::from);
+        let action = noncovalent_bond_representative_action(stored);
+        let attributes = mem::take(set.data_mut(relation_id)).normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(noncovalent_bonds)
 }
 
 impl Normalize for NoncovalentBonds {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for attributes in self.attributes_iter_mut() {
-            *attributes = attributes.clone().normalize()?;
+            *attributes = mem::take(attributes).normalize()?;
         }
         Ok(self)
     }
@@ -178,8 +385,8 @@ impl FrameTransport for NoncovalentBonds {
             if action.degree() != 2 {
                 return None;
             }
-            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
-            set.permute_with(relation_id, &participant_order(action));
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
+            set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -200,35 +407,21 @@ impl Reframe for NoncovalentBonds {
     }
 }
 
-pub(crate) fn reframe_noncovalent_bonds_with(
-    mut noncovalent_bonds: NoncovalentBonds,
-    mut visit: impl FnMut(NoncovalentBondId, &DynPermutation),
-) -> Result<NoncovalentBonds, Contradiction> {
-    let set = Arc::make_mut(&mut noncovalent_bonds.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = NoncovalentBondId::from(relation_id);
-        let stored = set.participants(relation_id).map(AtomId::from);
-        let action = noncovalent_bond_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_with(relation_id, &participant_order(&action));
-        visit(id, &action);
-    }
-    Ok(noncovalent_bonds)
-}
-
 /// The reaction span's noncovalent bonds, one [`EntitySpan`] per entity against a single
 /// participant frame. The `Molecule` peer is [`NoncovalentBonds`]. Values are issued by
 /// [`ReactionSpan`](super::reaction_span::ReactionSpan).
+///
+/// Clones share storage until mutation.
+///
+/// # Semantic properties
+///
+/// Transforming one clone leaves the other unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct NoncovalentBondSpans(FixedRelationSet<NodeId, EntitySpan<NoncovalentBondForm>, 2>);
+pub struct NoncovalentBondSpans(Arc<FixedRelationSet<NodeId, EntitySpan<NoncovalentBondForm>, 2>>);
 
 impl NoncovalentBondSpans {
     pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)> {
-        self.0
+        Arc::unwrap_or_clone(self.0)
             .into_entries()
             .into_iter()
             .map(|(atoms, span)| (atoms.map(AtomId::from), span))
@@ -236,12 +429,12 @@ impl NoncovalentBondSpans {
     }
 
     pub(crate) fn new(entries: Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)>) -> Self {
-        Self(FixedRelationSet::new(
+        Self(Arc::new(FixedRelationSet::new(
             entries
                 .into_iter()
                 .map(|(atoms, span)| (atoms.map(NodeId::from), span))
                 .collect(),
-        ))
+        )))
     }
 
     pub fn count(&self) -> usize {
@@ -269,26 +462,27 @@ impl NoncovalentBondSpans {
     ///
     /// # Panics
     /// Panics if a referenced node or edge has no image in `correspondence`.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
         self.try_map(correspondence)
             .expect("correspondence must cover every participant reference")
     }
 
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        self.0.try_map(correspondence).map(Self)
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
-    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
-        Self(self.0.remap(remapping))
+    pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
     }
 }
 
 impl Normalize for NoncovalentBondSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
-        for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+        let set = Arc::make_mut(&mut self.0);
+        for id in set.ids().collect::<Vec<_>>() {
+            *set.data_mut(id) = mem::take(set.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -298,13 +492,14 @@ impl FrameTransport for NoncovalentBondSpans {
     type Action = NoncovalentBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
             let action = actions.action(NoncovalentBondId::from(relation_id))?;
             if action.degree() != 2 {
                 return None;
             }
-            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
-            self.0.permute_with(relation_id, &participant_order(action));
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
+            set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -329,19 +524,14 @@ pub(crate) fn reframe_noncovalent_bond_spans_with(
     mut noncovalent_bonds: NoncovalentBondSpans,
     mut visit: impl FnMut(NoncovalentBondId, &DynPermutation),
 ) -> Result<NoncovalentBondSpans, Contradiction> {
-    for relation_id in noncovalent_bonds.0.ids().collect::<Vec<_>>() {
+    let set = Arc::make_mut(&mut noncovalent_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
         let id = NoncovalentBondId::from(relation_id);
-        let stored = noncovalent_bonds
-            .0
-            .participants(relation_id)
-            .map(AtomId::from);
+        let stored = set.participants(relation_id).map(AtomId::from);
         let action = noncovalent_bond_representative_action(stored);
-        let span = noncovalent_bonds.0.data(relation_id).clone().normalize()?;
-        *noncovalent_bonds.0.data_mut(relation_id) =
-            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-        noncovalent_bonds
-            .0
-            .permute_with(relation_id, &participant_order(&action));
+        let span = mem::take(set.data_mut(relation_id)).normalize()?;
+        *set.data_mut(relation_id) = span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        set.permute_participants(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(noncovalent_bonds)
@@ -439,7 +629,7 @@ impl NoncovalentBondForm {
     }
 
     /// Apply an attribute update, leaving an omitted kind and constraint keys unchanged.
-    pub fn update(&self, update: &NoncovalentBondUpdate) -> NoncovalentBondForm {
+    pub fn update(&self, update: &NoncovalentBondUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
         NoncovalentBondForm {
@@ -516,8 +706,8 @@ impl Normalize for NoncovalentBondKindForm {
         Ok(self)
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Borrowed(self))
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -558,7 +748,7 @@ impl Lattice for NoncovalentBondKindForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         Ok(match (self, other) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
@@ -579,7 +769,7 @@ pub enum NoncovalentBondKind {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
+    use std::{iter, ptr};
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -587,6 +777,387 @@ mod tests {
 
     use super::*;
     use crate::ir::boolean::BooleanForm;
+
+    #[rstest]
+    fn test_noncovalent_bond_entry_normalize_identity(#[values(false, true)] owned: bool) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+                BooleanForm::Lit(true),
+            ));
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        let expected = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        assert_eq!(entry.clone(), expected);
+        assert_eq!(entry.normalize(), Ok(expected.clone()));
+        assert_eq!(
+            expected.clone().normalize().unwrap().normalize(),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::swap(vec![1, 0], [AtomId(0), AtomId(2)])]
+    fn test_noncovalent_bond_entry_reframe_by(
+        #[case] image: Vec<usize>,
+        #[case] atoms: [AtomId; 2],
+    ) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+                BooleanForm::Lit(true),
+            ));
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(image).unwrap();
+        assert_eq!(
+            entry.clone().reframe_by(&DynPermutation::identity(2)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(
+            transformed,
+            NoncovalentBondEntry {
+                atoms,
+                attributes: Cow::Borrowed(&attributes)
+            }
+        );
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = DynPermutation::try_from(vec![1, 0]).unwrap();
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(&second).unwrap()),
+        );
+    }
+
+    #[rstest]
+    #[case::short(1)]
+    #[case::long(3)]
+    fn test_noncovalent_bond_entry_reframe_by_error(#[case] degree: usize) {
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: Cow::Owned(NoncovalentBondForm::default()),
+        };
+        assert_eq!(entry.reframe_by(&DynPermutation::identity(degree)), None);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_entry_reframe() {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = NoncovalentBondEntry {
+            atoms: [AtomId(0), AtomId(2)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(vec![1, 0]).unwrap();
+        assert_eq!(entry.representative_action(), action);
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(entry.tracked_reframe(), Ok((expected.clone(), action)));
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::stored([AtomId(0), AtomId(1)], NoncovalentBondKind::HydrogenBond, true, true, true)]
+    #[case::reversed([AtomId(1), AtomId(0)], NoncovalentBondKind::HydrogenBond, true, false, true)]
+    #[case::different_pair([AtomId(0), AtomId(2)], NoncovalentBondKind::HydrogenBond, true, false, false)]
+    #[case::kind([AtomId(0), AtomId(1)], NoncovalentBondKind::Ionic, true, false, false)]
+    #[case::constraint([AtomId(0), AtomId(1)], NoncovalentBondKind::HydrogenBond, false, false, false)]
+    fn test_noncovalent_bond_entry_framed_eq(
+        #[case] atoms: [AtomId; 2],
+        #[case] kind: NoncovalentBondKind,
+        #[case] intramolecular: bool,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+                BooleanForm::Lit(true),
+            ));
+        let left = NoncovalentBondEntry {
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let right = NoncovalentBondEntry {
+            atoms,
+            attributes: Cow::Owned(NoncovalentBondForm::from_kind(kind).with_constraint(
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(intramolecular)),
+            )),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+        assert_eq!(
+            left.framed_eq(&right),
+            left == right || left.reframe() == right.reframe()
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_entry() {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let bonds = NoncovalentBonds::new(vec![([AtomId(2), AtomId(0)], attributes.clone())]);
+        let before = bonds.clone();
+        let entry = bonds.entry(NoncovalentBondId(0));
+        assert_eq!(
+            entry,
+            NoncovalentBondEntry {
+                atoms: [AtomId(2), AtomId(0)],
+                attributes: Cow::Borrowed(&attributes)
+            }
+        );
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, bonds.attributes(NoncovalentBondId(0))))
+        );
+        assert_eq!(
+            entry.reframe(),
+            Ok(NoncovalentBondEntry {
+                atoms: [AtomId(0), AtomId(2)],
+                attributes: Cow::Borrowed(&attributes)
+            })
+        );
+        assert_eq!(bonds, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_noncovalent_bonds_entry_error() {
+        NoncovalentBonds::default().entry(NoncovalentBondId(0));
+    }
+
+    #[rstest]
+    #[case::ordered([AtomId(4), AtomId(1)])]
+    #[case::repeated([AtomId(4), AtomId(4)])]
+    fn test_noncovalent_bonds_add(#[case] atoms: [AtomId; 2]) {
+        let mut bonds = NoncovalentBonds::default();
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let id = bonds.add(atoms, attributes.clone());
+
+        assert_eq!(id, NoncovalentBondId(0));
+        assert_eq!(bonds.atoms(id), atoms);
+        assert_eq!(bonds.attributes(id), &attributes);
+        assert_eq!(bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(), vec![id]);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
+    #[case::populated(vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())], vec![NoncovalentBondId(1), NoncovalentBondId(2), NoncovalentBondId(3)])]
+    fn test_noncovalent_bonds_extend(
+        #[case] initial: Vec<([AtomId; 2], NoncovalentBondForm)>,
+        #[case] expected_ids: Vec<NoncovalentBondId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut bonds = NoncovalentBonds::new(initial.clone());
+        let original = shared.then(|| bonds.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                [AtomId(4), AtomId(1)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(4), AtomId(4)], NoncovalentBondForm::default()),
+            ([AtomId(4), AtomId(1)], NoncovalentBondForm::default()),
+        ]);
+        let mut ids = bonds.extend(vec![
+            (
+                [AtomId(4), AtomId(1)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(4), AtomId(4)], NoncovalentBondForm::default()),
+            ([AtomId(4), AtomId(1)], NoncovalentBondForm::default()),
+        ]);
+
+        assert_eq!(bonds, NoncovalentBonds::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (atoms, _))| atoms.contains(&atom))
+                .map(|(index, _)| NoncovalentBondId::from(index))
+                .collect();
+            assert_eq!(bonds.incident_ids(atom).collect::<Vec<_>>(), expected_ids);
+            assert_eq!(bonds.has_incident(atom), !expected_ids.is_empty());
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, NoncovalentBonds::new(initial));
+        }
+        drop(bonds);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(NoncovalentBonds::default())]
+    #[case::populated(NoncovalentBonds::new(vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())]))]
+    fn test_noncovalent_bonds_extend_identity(#[case] original: NoncovalentBonds) {
+        let mut bonds = original.clone();
+        let mut ids = bonds.extend(vec![]);
+
+        assert_eq!(bonds, original);
+        assert!(Arc::ptr_eq(&bonds.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_tracked_remove() {
+        let original = NoncovalentBonds::new(vec![
+            ([AtomId(2), AtomId(0)], NoncovalentBondForm::default()),
+            (
+                [AtomId(3), AtomId(4)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(5), AtomId(1)], NoncovalentBondForm::default()),
+        ]);
+        let mut bonds = original.clone();
+        let compaction = bonds.tracked_remove(&[NoncovalentBondId(2), NoncovalentBondId(0)]);
+        let mut plain = original.clone();
+        plain.remove(&[NoncovalentBondId(0), NoncovalentBondId(2)]);
+
+        assert_eq!(
+            compaction,
+            Compaction::new(3, vec![NoncovalentBondId(0), NoncovalentBondId(2)]).unwrap()
+        );
+        assert_eq!(bonds, plain);
+        assert_eq!(
+            bonds,
+            NoncovalentBonds::new(vec![(
+                [AtomId(3), AtomId(4)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            ),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        bonds.restore(
+            &compaction,
+            vec![
+                (
+                    NoncovalentBondId(2),
+                    [AtomId(5), AtomId(1)],
+                    NoncovalentBondForm::default(),
+                ),
+                (
+                    NoncovalentBondId(0),
+                    [AtomId(2), AtomId(0)],
+                    NoncovalentBondForm::default(),
+                ),
+            ],
+        );
+        assert_eq!(bonds, original);
+    }
+
+    #[rstest]
+    #[case::ordered([AtomId(4), AtomId(1)])]
+    #[case::repeated([AtomId(4), AtomId(4)])]
+    fn test_noncovalent_bonds_replace_atoms(#[case] atoms: [AtomId; 2]) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let original = NoncovalentBonds::new(vec![
+            ([AtomId(1), AtomId(2)], attributes.clone()),
+            ([AtomId(3), AtomId(5)], NoncovalentBondForm::default()),
+        ]);
+        let mut bonds = original.clone();
+        bonds.replace_atoms(NoncovalentBondId(0), atoms);
+
+        assert_eq!(
+            bonds,
+            NoncovalentBonds::new(vec![
+                (atoms, attributes),
+                ([AtomId(3), AtomId(5)], NoncovalentBondForm::default()),
+            ])
+        );
+        assert_eq!(original.atoms(NoncovalentBondId(0)), [AtomId(1), AtomId(2)]);
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    #[case::first(0, [AtomId(4), AtomId(2)])]
+    #[case::second(1, [AtomId(1), AtomId(4)])]
+    fn test_noncovalent_bonds_replace_atom(#[case] position: usize, #[case] expected: [AtomId; 2]) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let mut bonds = NoncovalentBonds::new(vec![([AtomId(1), AtomId(2)], attributes.clone())]);
+        bonds.replace_atom(NoncovalentBondId(0), position, AtomId(4));
+
+        assert_eq!(bonds, NoncovalentBonds::new(vec![(expected, attributes)]));
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        assert!(!bonds.has_incident([AtomId(1), AtomId(2)][position]));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_compact() {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let original = NoncovalentBonds::new(vec![
+            ([AtomId(3), AtomId(2)], attributes.clone()),
+            ([AtomId(1), AtomId(4)], NoncovalentBondForm::default()),
+        ]);
+        let graph = GraphCompaction::new(
+            Compaction::new(5, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
+        let (mut compacted, rows) = original.compact(&graph);
+
+        assert_eq!(
+            rows,
+            Compaction::new(2, vec![NoncovalentBondId(1)]).unwrap()
+        );
+        assert_eq!(
+            compacted,
+            NoncovalentBonds::new(vec![([AtomId(2), AtomId(1)], attributes.clone()),])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(1)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+
+        compacted.restore_topology_ids(&graph);
+        assert_eq!(
+            compacted,
+            NoncovalentBonds::new(vec![([AtomId(3), AtomId(2)], attributes),])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(3)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        assert!(!compacted.has_incident(AtomId(1)));
+        compacted.restore(
+            &rows,
+            vec![(
+                NoncovalentBondId(1),
+                [AtomId(1), AtomId(4)],
+                NoncovalentBondForm::default(),
+            )],
+        );
+        assert_eq!(compacted, original);
+    }
 
     #[rstest]
     #[case::covered(None, None)]
@@ -648,7 +1219,7 @@ mod tests {
         } else {
             None
         };
-        assert_eq!(input.try_map(&correspondence), expected);
+        assert_eq!(input.clone().try_map(&correspondence), expected);
         if let Some(expected) = expected {
             assert_eq!(input.map(&correspondence), expected);
         }
@@ -743,7 +1314,7 @@ mod tests {
         } else {
             None
         };
-        assert_eq!(input.try_map(&correspondence), expected);
+        assert_eq!(input.clone().try_map(&correspondence), expected);
         if let Some(expected) = expected {
             assert_eq!(input.map(&correspondence), expected);
         }
@@ -784,11 +1355,12 @@ mod tests {
         };
         let mut spans =
             NoncovalentBondSpans::new(vec![([AtomId(2), AtomId(5)], span.clone())]);
-        spans
-            .0
-            .permute_with(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
+        Arc::make_mut(&mut spans.0)
+            .permute_participants(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
 
+        let original = NoncovalentBondSpans::new(spans.clone().into_entries());
         let source = spans.clone();
+        assert!(Arc::ptr_eq(&spans.0, &source.0));
         let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
 
         assert_eq!(reframed.atoms(NoncovalentBondId(0)), [AtomId(2), AtomId(5)]);
@@ -797,26 +1369,31 @@ mod tests {
             actions.action(NoncovalentBondId(0)),
             Some(&DynPermutation::try_from(vec![1, 0]).expect("expected action is valid")),
         );
-        assert_eq!(source.reframe_by(&actions), Some(reframed));
+        assert_eq!(source.clone().reframe(), Ok(reframed.clone()));
+        assert_eq!(source.clone().reframe_by(&actions), Some(reframed));
+        assert_eq!(source, original);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_spans_normalize() {
+    fn test_noncovalent_bond_spans_normalize(#[values(false, true)] shared: bool) {
         let form = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
-        let spans = NoncovalentBondSpans::new(vec![(
+        let entries = vec![(
             [AtomId(2), AtomId(5)],
             EntitySpan::Modified {
                 lhs: form.clone(),
                 rhs: form.clone(),
             },
-        )]);
+        )];
+        let spans = NoncovalentBondSpans::new(entries.clone());
+        let retained = shared.then(|| spans.clone());
 
         let normalized = spans.normalize().expect("the forms are satisfiable");
 
         assert_eq!(
-            normalized.attributes(NoncovalentBondId(0)),
-            &EntitySpan::Unchanged(form),
+            normalized,
+            NoncovalentBondSpans::new(vec![([AtomId(2), AtomId(5)], EntitySpan::Unchanged(form),)]),
         );
+        assert_eq!(retained, shared.then(|| NoncovalentBondSpans::new(entries)));
     }
 
     #[rstest]
@@ -841,7 +1418,7 @@ mod tests {
             [AtomId(2), AtomId(5)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
-        Arc::make_mut(&mut bonds.0).permute_with(
+        Arc::make_mut(&mut bonds.0).permute_participants(
             RelationId(0),
             &[ParticipantPosition(1), ParticipantPosition(0)],
         );
@@ -1129,6 +1706,15 @@ mod tests {
     #[case::lit(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_kind_form_normalize_identity(#[case] input: NoncovalentBondKindForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_noncovalent_bond_kind_form_normalized_eq_default(
+        #[values(NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindForm::Lit(NoncovalentBondKind::HalogenBond))] left: NoncovalentBondKindForm,
+        #[values(NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindForm::Lit(NoncovalentBondKind::HalogenBond))] right: NoncovalentBondKindForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

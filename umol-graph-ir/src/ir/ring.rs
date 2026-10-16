@@ -102,6 +102,11 @@ impl Default for RingConfig {
 /// Collection of rings enumerated from a parent molecule, with atom/bond →
 /// ring reverse indices and a `RingGraph` describing pairwise relations
 /// between rings.
+///
+/// Owns its topology data independently of the source molecule. The set stays
+/// applicable while the molecule's covalent topology and atom/bond ids are
+/// unchanged; attribute-only mutations do not require new enumeration.
+/// Use [`super::view::RingViews::from_ring_set`] for readings with molecule context.
 #[derive(Debug, Clone)]
 pub struct RingSet {
     kind: RingSetKind,

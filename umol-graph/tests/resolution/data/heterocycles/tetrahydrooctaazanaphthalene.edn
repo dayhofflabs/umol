@@ -1,13 +1,13 @@
-{:input {:atoms ["N#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"
-                 "C#i=#c0#u0#a!"
-                 "C#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"
-                 "N#i=#c0#u0#a!"]
+{:input {:atoms ["N#i=#c0#u0"
+                 "N#i=#c0#u0"
+                 "N#i=#c0#u0"
+                 "N#i=#c0#u0"
+                 "C#i=#c0#u0"
+                 "C#i=#c0#u0"
+                 "N#i=#c0#u0"
+                 "N#i=#c0#u0"
+                 "N#i=#c0#u0"
+                 "N#i=#c0#u0"]
          :bonds [[0 5 :single]
                  [0 1 :single]
                  [1 2 :double]

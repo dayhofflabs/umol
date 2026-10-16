@@ -1,3 +1,5 @@
+import pytest
+
 from umol import (
     AromaticSystemConstraintForm,
     AromaticSystemDelta,
@@ -22,6 +24,7 @@ from umol import (
     ElectronCountsForm,
     Element,
     ElementForm,
+    Molecule,
     MoleculeConstraint,
     MulticenterBondConstraintForm,
     MulticenterBondDelta,
@@ -80,6 +83,26 @@ def test_constraint_pattern_match():
             assert (bond, atom, atoms) == (3, 5, None)
         case _:
             raise AssertionError("constraint tree did not match its structural variants")
+
+
+@pytest.mark.parametrize("borrowed", [False, True], ids=["owned", "borrowed"])
+def test_constraint_pattern_match_nested(borrowed):
+    constraint = Constraint.And([
+        Constraint.Atom(0, AtomConstraintForm.Degree(NumForm.Lit(2))),
+        Constraint.Not(Constraint.Or([])),
+    ])
+    if borrowed:
+        molecule = Molecule.from_entries(
+            [AtomForm(Element("C"))], constraints=[constraint]
+        )
+        constraint = molecule.constraints[0]
+
+    match constraint:
+        case Constraint.And([Constraint.Atom(atom_id, predicate), Constraint.Not(Constraint.Or([]))]):
+            assert atom_id == 0
+            assert predicate == AtomConstraintForm.Degree(NumForm.Lit(2))
+        case _:
+            pytest.fail("nested constraint pattern did not match")
 
 
 def test_atomfieldchange_match_scalar():
@@ -407,7 +430,7 @@ def test_dativebonddelta_add_match():
     match delta:
         case DativeBondDelta.Add(id=id, donors=donors, acceptor=acceptor, attributes=attributes):
             assert id == 1
-            assert donors == [4, 2, 4]
+            assert donors == (4, 2, 4)
             assert acceptor == 3
             assert attributes == DativeBondForm(1)
         case _:
@@ -416,7 +439,7 @@ def test_dativebonddelta_add_match():
     inverse = delta.inverse()
     assert isinstance(inverse, DativeBondDelta.Remove)
     assert inverse.id == 1
-    assert inverse.donors == [4, 2, 4]
+    assert inverse.donors == (4, 2, 4)
     assert inverse.acceptor == 3
     assert inverse.attributes == DativeBondForm(1)
     assert inverse.inverse() == delta
@@ -476,7 +499,7 @@ def test_aromaticsystemdelta_add_match():
     match delta:
         case AromaticSystemDelta.Add(id=id, atoms=atoms, attributes=attributes):
             assert id == 2
-            assert atoms == [4, 2, 4]
+            assert atoms == (4, 2, 4)
             assert attributes == AromaticSystemForm([1, 1, 1])
         case _:
             raise AssertionError("aromatic system delta did not match its add variant")
@@ -484,7 +507,7 @@ def test_aromaticsystemdelta_add_match():
     inverse = delta.inverse()
     assert isinstance(inverse, AromaticSystemDelta.Remove)
     assert inverse.id == 2
-    assert inverse.atoms == [4, 2, 4]
+    assert inverse.atoms == (4, 2, 4)
     assert inverse.attributes == AromaticSystemForm([1, 1, 1])
     assert inverse.inverse() == delta
 
@@ -545,7 +568,7 @@ def test_multicenterbonddelta_add_match():
     match delta:
         case MulticenterBondDelta.Add(id=id, atoms=atoms, attributes=attributes):
             assert id == 3
-            assert atoms == [4, 2, 4]
+            assert atoms == (4, 2, 4)
             assert attributes == MulticenterBondForm([1, 1, 1])
         case _:
             raise AssertionError("multicenter bond delta did not match its add variant")
@@ -553,7 +576,7 @@ def test_multicenterbonddelta_add_match():
     inverse = delta.inverse()
     assert isinstance(inverse, MulticenterBondDelta.Remove)
     assert inverse.id == 3
-    assert inverse.atoms == [4, 2, 4]
+    assert inverse.atoms == (4, 2, 4)
     assert inverse.attributes == MulticenterBondForm([1, 1, 1])
     assert inverse.inverse() == delta
 
@@ -698,10 +721,10 @@ def test_stereoatomdelta_add_match():
         case StereoAtomDelta.Add(id=id, site=site, ligands=ligands, attributes=attributes):
             assert id == 5
             assert site == 3
-            assert ligands == [
+            assert ligands == (
                 StereoLigand(4, StereoLigandKind.Atom),
                 StereoLigand(2, StereoLigandKind.LonePair),
-            ]
+            )
             assert attributes.configuration == StereoConfigurationForm.Kinded(
                 StereoKind.Tetrahedral, StereoCoset.Lit(0)
             )
@@ -796,10 +819,10 @@ def test_stereobonddelta_add_match():
         case StereoBondDelta.Add(id=id, site=site, ligands=ligands, attributes=attributes):
             assert id == 5
             assert site == 3
-            assert ligands == [
+            assert ligands == (
                 StereoLigand(4, StereoLigandKind.Atom),
                 StereoLigand(2, StereoLigandKind.LonePair),
-            ]
+            )
             assert attributes.configuration == StereoConfigurationForm.Kinded(
                 StereoKind.CisTrans, StereoCoset.Lit(0)
             )
@@ -1030,17 +1053,17 @@ def test_delta_match():
             case Delta.DativeBond(
                 DativeBondDelta.Add(id=1, donors=donors, acceptor=3, attributes=attributes)
             ):
-                assert (donors, attributes) == ([4, 2], DativeBondForm(1))
+                assert (donors, attributes) == ((4, 2), DativeBondForm(1))
                 seen.append("dative-bond")
             case Delta.AromaticSystem(
                 AromaticSystemDelta.Add(id=2, atoms=atoms, attributes=attributes)
             ):
-                assert (atoms, attributes) == ([4, 2], AromaticSystemForm([1, 1]))
+                assert (atoms, attributes) == ((4, 2), AromaticSystemForm([1, 1]))
                 seen.append("aromatic-system")
             case Delta.MulticenterBond(
                 MulticenterBondDelta.Add(id=3, atoms=atoms, attributes=attributes)
             ):
-                assert (atoms, attributes) == ([4, 2], MulticenterBondForm([1, 1]))
+                assert (atoms, attributes) == ((4, 2), MulticenterBondForm([1, 1]))
                 seen.append("multicenter-bond")
             case Delta.NoncovalentBond(
                 NoncovalentBondDelta.Add(id=4, atoms=atoms, attributes=attributes)
@@ -1053,7 +1076,7 @@ def test_delta_match():
             case Delta.StereoAtom(
                 StereoAtomDelta.Add(id=5, site=3, ligands=ligands, attributes=attributes)
             ):
-                assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
+                assert ligands == (StereoLigand(4, StereoLigandKind.Atom),)
                 assert attributes.configuration == StereoConfigurationForm.Kinded(
                     StereoKind.Tetrahedral,
                     StereoCoset.Lit(0),
@@ -1062,7 +1085,7 @@ def test_delta_match():
             case Delta.StereoBond(
                 StereoBondDelta.Add(id=5, site=3, ligands=ligands, attributes=attributes)
             ):
-                assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
+                assert ligands == (StereoLigand(4, StereoLigandKind.Atom),)
                 assert attributes.configuration == StereoConfigurationForm.Kinded(
                     StereoKind.CisTrans,
                     StereoCoset.Lit(0),

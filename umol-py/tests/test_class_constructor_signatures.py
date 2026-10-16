@@ -68,21 +68,16 @@ import umol
         ),
         (
             umol.AromaticityResolveConfig,
-            "(*, perception=Ellipsis, aromatic_valence_failure=Ellipsis, "
-            "aromatic_system_failure=Ellipsis, "
-            "aromatic_valence_mismatch=Ellipsis, "
-            "aromatic_bond_constraint_mismatch=Ellipsis, "
-            "reset_aromatic_valence=False)",
+            "(*, perception=Ellipsis, atom_selection_algorithm=Ellipsis, "
+            "aromatic_valence_failure=Ellipsis, "
+            "aromatic_system_failure=Ellipsis)",
         ),
         (
             umol.StereoResolveConfig,
             "(*, tetrahedral_stereo_failure=Ellipsis, "
             "stereo_atom_failure=Ellipsis, "
-            "tetrahedral_stereo_mismatch=Ellipsis, "
             "cis_trans_stereo_failure=Ellipsis, "
-            "stereo_bond_failure=Ellipsis, "
-            "cis_trans_stereo_mismatch=Ellipsis, "
-            "reset_stereo_constraints=False)",
+            "stereo_bond_failure=Ellipsis)",
         ),
         (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis)"),
         (

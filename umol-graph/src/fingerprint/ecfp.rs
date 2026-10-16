@@ -78,9 +78,18 @@ fn atom_components(mol: &Molecule, rings: &RingSet, id: AtomId) -> Vec<u32> {
     };
     vec![
         u32::from(element.atomic_number()),
-        atom.heavy_atom_degree().as_lit().expect("ground atom") as u32,
-        atom.heavy_atom_valence().as_lit().expect("ground atom") as u32,
-        atom.total_hydrogens().as_lit().expect("ground atom") as u32,
+        atom.heavy_atom_degree()
+            .expect("concrete molecule")
+            .as_lit()
+            .expect("ground atom") as u32,
+        atom.heavy_atom_valence()
+            .expect("concrete molecule")
+            .as_lit()
+            .expect("ground atom") as u32,
+        atom.total_hydrogens()
+            .expect("concrete molecule")
+            .as_lit()
+            .expect("ground atom") as u32,
         atom.charge().as_lit().expect("ground atom") as i32 as u32,
         isotope_mass,
         u32::from(rings.contains_atom(id)),

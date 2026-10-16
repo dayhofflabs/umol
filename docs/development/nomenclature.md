@@ -164,9 +164,10 @@ groups the per-relation accessors — `count`, `ids`, `iter`, `get`, `Index` —
 be buried on `Molecule` itself. Adding an entity kind therefore adds a `*Views` namespace rather
 than five more methods on the molecule.
 
-`*ViewMut` is the mutable form; `*EditorView` and `*EditorViewMut` are the editor-scope bundles used
-inside an edit session. Views also exist over derived things, not only entities: `GraphView`,
-`RingView`, `RingViews`, `NeighborView`, `StereoLigandView`.
+`*ViewMut` provides mutable entity access on a molecule; `*EditorViewMut` provides it
+inside an edit session. `*EditorView` provides read-only local access inside an edit session.
+Shared molecule/editor view methods have the same signatures and semantics. Views also exist
+over derived things: `GraphView`, `RingView`, `RingViews`, `NeighborView`, `StereoLigandView`.
 
 **Views are receivers, never arguments.** A function takes ids and the molecule, or takes the owned
 `*Form`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
@@ -179,7 +180,7 @@ facade's implementation never builds another facade. Accessor chains that *retur
 in the receiver, not in name prefixes.
 
 **Not:** the owned representation, which is the `*Form` type. A view does not survive its molecule.
-**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.
+**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`.
 
 ### Delta and Update
 
@@ -243,6 +244,7 @@ spelling.
 | `*Selection` for nested structural layers | `*Level` | selection does not state that the alternatives form an ordered, nested hierarchy |
 | `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
 | `try_*` solely because an operation returns `Option` or `Result` | the ordinary operation name | fallibility is part of the signature; `try_*` distinguishes a checked counterpart or restricted dispatch |
+| `uncompact_participants` for a storage mutation | `restore_participants` | uncompaction returns translated ids or participant values without mutating storage |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
 | operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
 | `CanonicalizeLevel`, `CanonicalizationLevel` | private `DescriptionLevel` | the internal hierarchy describes represented prefixes; public canonicalization is complete-only |
@@ -275,7 +277,8 @@ higher layers follow the same suffix.
 
 **Not:** config (which may *contain* an algorithm selection), model, policy.
 **In code:** `*Algorithm` enums in `umol-graph-core`, e.g. `CommonSubgraphEnumerationAlgorithm`,
-`RelevantCycleEnumerationAlgorithm`; also higher-layer selectors such as `SubstructureMatchAlgorithm`.
+`RelevantCycleEnumerationAlgorithm`; also higher-layer selectors such as `SubstructureMatchAlgorithm`
+and `AtomSelectionAlgorithm`.
 
 ### Application
 
@@ -346,6 +349,10 @@ Named families: `Symmetric(n)`, `Alternating(n)`, `Cyclic(n)`, `Dihedral(n)`. Ge
 
 **Combine** forms the disjoint union of two structures, yielding one structure with two components.
 
+Molecule::combine consumes its receiver and borrows the other molecule. It extends the receiver,
+reusing its storage, and returns it. combine_from performs the same append in place; combine_all
+borrows every input and builds one result without a receiver.
+
 Named `join` originally; renamed to avoid collision with the lattice join. Implemented and unlikely
 to gain analogues, so it is recorded rather than generative.
 
@@ -369,6 +376,12 @@ compaction per entity kind so every stale reference can be updated or discarded 
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
 them.
+
+**Uncompaction** translates surviving ids from the result space back to the source space without
+mutating storage. For a participant value, it returns a value with translated references and
+preserves its other data. Applying those translated values to storage is a separate mutation
+operation; do not name that operation `uncompact_participants`. Uncompaction does not reinsert
+removed entities; that operation is restoration.
 
 **Not:** a correspondence, whose unmatched ids remain members of their respective carriers; not a
 remapping, which gives every source id an image and never expresses removal.
@@ -397,7 +410,8 @@ primitive fields.
 An entity is **concrete** when its chemical attributes — the inherent fields — are determined;
 a molecule is concrete when every entity form is. The constraint channel does not bear on
 concreteness: assertions are not attributes, so a concrete molecule may carry non-ground
-assertions until discharge removes the determined-redundant ones. Concreteness is the
+or unsatisfied assertions. Resolution discharges assertions according to each phase's contract;
+validation checks the remaining assertions explicitly. Concreteness is the
 chemistry-level determinedness of a structure; lattice groundness is the algebraic notion over
 the full product including the constraint coordinates, and the two decompose per form as
 `is_ground() == is_concrete() && constraints.is_ground()`. The pattern/concrete asymmetry names
@@ -465,12 +479,12 @@ operation over it. Not an inherent field, which does contribute to identity.
 A **constraints view** is the constraint reading of one entity, reached by accessor chaining
 (`molecule.atom(id).constraints()`): the stored container's read API with its meanings intact —
 the typed getters, `iter`, and `is_empty` read the asserted side — plus the keyed accessors
-`asserted`, `derived`, and `derived_complete` and the comparisons `satisfies` and
+`asserted`, `derived`, `evidenced`, their `_complete` counterparts, and the comparisons `satisfies` and
 `is_compatible`. Scope lives in the receiver, not in name prefixes: `atom(i).valence()` is the
-derived quantity, `atom(i).constraints().valence()` the asserted payload. Mutation never routes
-through a constraints view; it belongs to the stored container.
+derived quantity, `atom(i).constraints().valence()` the asserted payload. These entity constraint
+views are read-only.
 
-**Not:** the container (`*ConstraintsForm`), which is the storage the view reads; like every view
+**Not:** the container (`Constraints` or `*ConstraintsForm`), which holds the stored values; like every view
 it is a receiver, never an argument.
 **In code:** `AtomConstraintsView`, `BondConstraintsView`, and the views for every entity kind, from
 `AtomView::constraints` and its peers.
@@ -590,27 +604,39 @@ would be the one to rename if either were.
 
 ### Derived and asserted
 
-A derivable constraint has an **asserted side** — the stored value, open-world by definition:
-absence is the vacuous constraint — and a **derived side**, obtained by projection from the
-relations the entity takes part in. The constraints views name the readings: `asserted(key)`
-reads storage; `asserted_complete(key)` reads storage under resolution's closed-world claim —
-absence of a constraint is actual absence, so the absence cell of an entity-creating overlay
-key closes to its definite negative, and aromatic evidence merges both dialect placements
-(the atom's own assertion or an incident bond's mark) without ever reading relations;
-`derived(key)` reads present relations only and is vacuous on absence;
-`derived_complete(key)` adds the closure — under the caller's claim that the relation set is
-complete, absence of a resolution-written overlay closes to its definite negative. Topology keys
-(valence, degree, the totals, the ring keys) read identically under both derived accessors and
-have no absence cell on the asserted side; only the overlay-incidence keys have one. The two
-closures are justified by different claims, so the four readings stay four flat accessors —
-each consumer picks exactly one statically: matching reads `asserted` (open-world — a pattern
-constrains only what it mentions), resolution's admission reads `asserted_complete`.
+A derivable constraint has an **asserted side**, read from its own stored assertion,
+and a **derived side**, projected from the relations the entity takes part in.
+The six keyed readings return normalized owned forms with meet's result semantics:
+`None` is bottom; `Some(undetermined(key))` is top, including absent evidence.
+Typed storage getters and iterators retain the stored forms and borrow them.
+
+`asserted(key)` reads the own assertion; `derived(key)` reads present relations.
+`evidenced(key)` meets those readings with applicable additional evidence: an
+incident bond's positive aromatic assertion contributes aromatic atom evidence.
+Contradictory contributing evidence yields bottom.
+
+The eight entity constraint containers supply `asserted` and `asserted_complete`
+without molecule or ring context. Their molecule-backed views delegate these
+own-assertion readings to the containers.
+
+`asserted_complete(key)` closes top own assertions to the definite negative for
+overlay keys, without reading incident bond assertions or relations.
+`derived_complete(key)` closes absent overlays under the caller's claim that
+relations are complete. Topology keys agree with `derived`.
+`evidenced_complete(key)` uses complete derivation only when the combined evidence
+is top; it preserves non-vacuous evidence and bottom. Host-side `satisfies` reads
+`evidenced_complete`; `is_compatible` reads `evidenced`.
+Pattern entries are own assertions; resolution admission and matching hosts use
+complete evidence, while aromatization uses open evidence.
+
+These readings do not rewrite storage or change mutation fallibility. Successfully
+normalizing a molecule preserves its readings in the same context.
 
 **Not:** `projected` for the reading — *projection* names the operation yielding the derived
-side; not a mode parameter or stored molecule state — the closure choice is per call; no
-parameterized accessor unifying the readings.
-**In code:** `asserted`, `asserted_complete`, `derived`, `derived_complete` on the
-constraints views.
+side; not a mode parameter or stored molecule state — the closure choice is per call.
+**In code:** `asserted`, `asserted_complete`, `derived`, `derived_complete`,
+`evidenced`, `evidenced_complete` on the constraints views; `asserted` and
+`asserted_complete` on the eight entity constraint containers.
 
 ### Description level
 
@@ -642,17 +668,20 @@ return `Determined` with a payload that is not ground if the operation's own con
 
 ### Discharge
 
-**Discharge** is the closing pass of the resolve pipeline that removes stored assertions the
-structure has come to determine: per key, a ground derived value under the closure that refines
-the assertion makes it redundant and removes it; a meet of `⊥` is a contradiction; a non-ground
-derived value keeps the assertion. Discharge is the only removal concept for the constraint
-channel. An operation that realizes an assertion may remove it early in its own transaction as an
-implementation liberty; a transform that deletes a relation removes the assertions its output no
-longer satisfies, which is the separate emit-compliance policy.
+**Discharge** removes stored assertions realized by an operation's own results.
+It belongs to each resolver's plan: valence discharges `#v` on completed atoms;
+aromaticity discharges member aromatic-valence assertions when adding a system and confirmed
+bond-aromaticity assertions outside stored systems; stereo discharges the site assertion when
+adding a stereo entity. Each plan checks the assertions it discharges before applying its edits.
 
-**Not:** cache invalidation — nothing derivable from structure is ever stored; not *consume* or a
-per-operation contract.
-**In code:** — (the planned closing `Resolver` stage).
+Resolution has no general closing discharge pass. Other assertions and molecule-level logical
+constraints remain unevaluated; explicit validators check them. Failure policies may separately
+request removal of inconsistent assertions or entities, with the usual reference compaction.
+A transform that deletes a relation removes assertions its output no longer satisfies under the
+separate emit-compliance policy.
+
+**Not:** cache invalidation, constraint placement, normalization, or general constraint validation.
+**In code:** ValenceResolver, AromaticityResolver, StereoResolver, Resolver::plan_constitution.
 
 ### Donor and acceptor
 
@@ -675,18 +704,19 @@ acceptor.
 ### Edit and undo
 
 An **`Edit`** is caller-facing mutation data: the symbolic vocabulary handed to
-`MoleculeEditor::apply` or `MoleculeEditor::transact`. An **`Undo`** is realized rollback data
+MoleculeEditor::apply or Transaction::apply. An **`Undo`** is realized rollback data
 produced by the transaction path. The two are not two views of one thing — an edit says what was
 asked for, an undo says what actually has to be reversed.
 
 The symbolic references (`AtomHandle`, `BondHandle`, …) appear only inside `Edit`. `Id(_)` names an
-existing entity, `New(n)` names the entity created by the nth edit earlier in the same batch, which
-is why a handle is meaningless outside its batch.
+entity at batch entry; `New(n)` names the nth entity created in that batch's entity-kind namespace.
+One edit may create several entities. Edits::push appends to the current namespace; separate apply
+calls start separate namespaces. Independent batches are submitted separately to a transaction.
 
 **Not:** *delta*, which is the reaction-side change encoding, nor `*Update`, which is a field-level
-change to one entity. Edits are molecule-level application data; only `transact` realizes undos.
-**In code:** `Edit`, `Undo`, `UndoCompaction`, `MoleculeEditor::apply`,
-`MoleculeEditor::transact`.
+change to one entity. Edits are molecule-level application data; the transaction records undos.
+**In code:** `Edit`, `Edits`, `Undo`, `UndoCompaction`; MoleculeEditor::apply,
+Transaction::apply, Molecule::transact.
 
 ### Electron counts
 
@@ -980,6 +1010,18 @@ public validator or `*Checker` object.
 **In code:** crate-private `Molecule::check_integrity`, `Reaction::check_integrity`, and
 `ReactionSpan::check_integrity`; the public corresponding `*IntegrityError` types.
 
+### Into suffix
+
+The **`_into` suffix** names the in-place counterpart of a consuming operation. It mutably borrows
+the value being transformed and preserves its entry state on rejection under the operation's
+documented equivalence. The bare verb consumes that value. Recovery may use a transaction or
+complete planning before mutation; the suffix does not require a rollback journal.
+
+**Not:** the `into_` conversion prefix; the `_from` or `_with` names of in-place two-operand
+operations.
+**In code:** Resolver::resolve_into, Resolver::project_into, Resolver::resolve_into_with_report,
+Transformer::transform_into.
+
 ### Invariant
 
 An **invariant** is a model-independent physical or mathematical condition over an otherwise
@@ -1061,6 +1103,10 @@ A ligand need not be an atom of the graph. A **virtual ligand** occupies a coord
 without a corresponding node — an implicit hydrogen or a lone pair, each borne by a named atom. This
 is how a sulfoxide or a pyramidal amine is expressed without materializing the hydrogen or inventing
 an atom for the lone pair.
+
+Stereo views expose the ordered compound ligand identifiers through `ligand_ids()` as a borrowed
+`&[StereoLigand]`. Each value identifies a ligand by its atom id and kind. `atom_ligand_ids()`
+selects actual-atom ligands and yields their `AtomId` values.
 
 A published stereo frame contains pairwise-distinct complete ligand values and at most
 `MAX_DEGREE` ligands. Two equal virtual ligands with the same anchor and kind are therefore
@@ -1161,7 +1207,7 @@ name with its `AtomForm` parameter already carries it.
 
 **Narrowing** moves a value down the attribute lattice and **widening** moves it up: the in-place
 meet and the in-place join. Narrowing is what resolution does, and it returns whether the value
-actually changed; widening returns `Err(NoJoin)` where no join exists.
+actually changed; widening returns `Err(NoJoinError)` where no join exists.
 
 These are the plain English words for descending and ascending an order of admitted-value sets, and
 they are the right ones. `meet_with` and `join_with` would name the operation rather than its effect;
@@ -1213,8 +1259,7 @@ semantic deduplication.
 
 **Not:** aggregate canonicalization, which selects an entity and participant frame and requires an
 explicit context. Not chemical standardization, resolution, validation, or repair.
-**In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`,
-`Normalize::normalized_eq`.
+**In code:** `Normalize`, `normalize`, `Normalized<T>`, `Normalize::normalized_eq`.
 
 ### Normalizer
 
@@ -1395,10 +1440,12 @@ a standardized span.
 
 A correspondence with values and a direction added is what lifts it to a span.
 
-The materialized union is lhs-anchored: preserved entities retain lhs ids and rhs-only entities are
-appended. Its lhs projection is structurally identical to the source lhs. Its rhs projection is the
-source rhs reindexed into that reaction frame and is compared under the induced total
-correspondence, not by structural equality when the source correspondence crosses entity order.
+Raw span construction permits any valid dense union order. Spans derived by `superimpose` or from a
+reaction are lhs anchored: lhs-present entities retain lhs ids and rhs-only entities are appended.
+For these derived spans, the lhs projection is structurally identical to the source lhs. The rhs
+projection is the source rhs reindexed into that reaction frame and is compared under the induced
+total correspondence, not by structural equality when the source correspondence crosses entity
+order.
 
 **Not:** a correspondence, which is valueless pairing; not a reaction, which is the rule itself.
 **In code:** `ReactionSpan`, `lhs()`, `rhs()`.
@@ -1451,7 +1498,7 @@ participant-frame action between two supplied frames, then applies it through
 Integrity prohibits repeated complete participant values, so equal structured incidence determines
 one action. `FrameTransport` is the transport-only operation for forms, form spans, delta payloads,
 and constraints that can consume an action but do not select a frame. `Reframe` extends `Normalize`
-for a frame-owning aggregate, derives its representative action, and selects the frame. A reaction
+for a frame-owning value, derives its representative action, and selects the frame. A reaction
 removal may carry another explicit local ordering of its source incidence: reaction transport
 conjugates the owning action by the derived local-to-owner alignment, preserving the relation
 between the removal frame and its owner. Normalization instead aligns the removal directly with the
@@ -1533,13 +1580,6 @@ payload stays aligned without being touched.
 expresses removal by leaving removed source ids without images.
 **In code:** `Remapping`, `GraphRemapping`, `MoleculeRemapping`, `remap`.
 
-### Reset
-
-**Reset** clears a constraint by setting it to its undetermined form.
-
-**Not:** a general synonym for removing an entity or replacing determined structural information.
-**In code:** `reset_aromatic_valence`, `reset_stereo_constraints`.
-
 ### Resolution
 
 **Resolution** applies configured recovery policy, constructs edit plans against private drafts,
@@ -1549,6 +1589,19 @@ resolution leaves its source unchanged.
 **Not:** transformation (which rewrites determined representation), validation (which does not
 mutate), perception (which is policy-free).
 **In code:** `Resolver`, `resolve`, `ResolveConfig`.
+
+### Restoration
+
+**Restoration** reinstates removed entities from saved entries at their original ids, returning
+survivors to their original positions. Relation restoration preserves surviving participant
+values and attributes. Uncompaction translates participant references without mutating storage;
+applying those translated references to storage is participant-reference restoration.
+
+**Not:** uncompaction alone, which recovers surviving ids without reconstructing removed entries;
+transaction rollback, which coordinates restoration with other recorded changes.
+**In code:** `Graph::restore` and relation-set `restore`/`restore_participants`; editor
+`restore_topology`, `restore_atoms`, `restore_bonds`, and overlay `restore_*` methods coordinate
+molecular restoration.
 
 ### Result delivery
 
@@ -1593,9 +1646,9 @@ relevant-cycle enumeration algorithm is operational configuration.
 
 ### Solution
 
-**`Solution<T, C>`** is the three-valued outcome of an engine pass: `Determined`, `Underdetermined`,
-or `Contradictory(C)` with a typed diagnostic payload. Setup and parameter failures travel separately
-in `Result` and never collapse into it, so every umol engine returns `Result<Solution<_, _>, _>`.
+**`Solution<T, C, U = T>`** is the three-valued outcome of an engine pass: `Determined(T)`,
+`Underdetermined(U)`, or `Contradictory(C)`. The two-parameter form uses T for both
+non-contradictory outcomes. Setup and parameter failures travel separately in Result.
 
 An operation must decide which outcomes it treats as success, and the two reasonable answers differ
 precisely on `Underdetermined`: a validator accepts it (only `Contradictory` fails), a transformer
@@ -1606,17 +1659,6 @@ the two, but with 4 and 1 call sites they are conveniences rather than establish
 **Not:** `Result`. `Solution` carries the semantic verdict; `Result` carries operational success.
 Both appear in one signature and mean different things.
 **In code:** `Solution`, `umol_utils::solution`.
-
-### Snapshot
-
-A **snapshot** is a non-consuming materialization of transient working state whose ordinary
-finalization would consume the working object. Taking a snapshot preserves that object so subsequent
-operations can continue from the same transient state. The implementation may clone, but the name
-describes the lifecycle operation rather than the copying mechanism.
-
-**Not:** ordinary finalization, which consumes the working object; transaction rollback, which
-replays a realized undo journal; a general synonym for `clone`.
-**In code:** planned `MoleculeEditor::snapshot`.
 
 ### Split
 
@@ -1700,34 +1742,49 @@ transformation is directly recoverable from an append layout. `tracked_` names r
 not an audit journal or a promise to preserve an internal action history. For categorical operations,
 the returned mappings retain their categorical direction; the prefix does not imply covariance.
 
-**Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
+**Not:** a transaction, which scopes edits and recovery; a result-delivery prefix; a general marker for
 any method returning more than one value.
 **In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
-`tracked_rollback`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`, `try_tracked_build`.
+`tracked_transact`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`.
 
 ### Transaction
 
-A **transaction** is the journal of realized undos for one batch of edits. `transact` applies a batch
-and returns it; `rollback` consumes it to restore the prior state; `append` concatenates two so a
-multi-stage operation can be reversed as a unit.
+A **transaction** scopes one or more edit batches against a mutably borrowed molecule, with
+an explicit RollbackMethod. Clone edits one working copy; Journal edits the receiver and records
+undo. Transaction::run and TrackedTransaction::run lend their respective handles
+to callbacks and own restoration guards. Each apply executes immediately in a separate handle
+namespace. Commit checks integrity and requests acceptance; the callback must also return Ok.
+Application or commit failure aborts the transaction and restores its entry state. Explicit
+rollback, cancellation, and callback unwinding between completed edits also restore that state.
 
-`transact` borrows an editor mutably, restores it on application failure, and returns a journal on
-success. Editor `apply` consumes the editor and returns its modified state without producing a
-journal; on failure, the consumed partial state is dropped. Molecule `apply` additionally publishes
-the modified state as a checked `Molecule` while leaving its source unchanged, and distinguishes
-transaction failure from failure of the molecule-integrity publication gate.
+Tracking is selected at entry by the handle type. Transaction constructs no aggregate
+correspondence and its commit returns unit. TrackedTransaction initializes an identity mapping,
+updates it after each successful batch independently of recovery storage, and returns it from commit.
+Both run methods return the callback's value. The handles expose no conversion or mutable access
+to one another.
 
-**Not:** *application*, which executes a plan and publishes only on success; a transaction is the
-rollback mechanism for callers that retain an editor. Not *patch algebra*, which is the entity-level
-`apply`/`diff` pair.
-**In code:** `Transaction`, `transact`, `rollback`, `append`, `TransactionError`;
-`MoleculeEditor::apply`, `Molecule::apply`.
+Molecule::transact applies prepared batches and commits once through Transaction. Its tracked
+counterpart uses TrackedTransaction and returns the whole transaction's entity correspondence.
+Both conveniences require an explicit RollbackMethod. Python exposes these prepared-batch
+operations with keyword-only rollback_method defaulting to Journal; scoped callback handles
+are Rust-only. Recovery storage is private; Undo remains a public data type.
+
+**Not:** a detached journal container; *patch algebra*, which is the entity-level `apply`/`diff` pair.
+**In code:** `Transaction`, `TrackedTransaction`, `RollbackMethod`, `TransactionError`; both handles expose run,
+apply, probe, commit and rollback; Molecule::transact, Molecule::tracked_transact.
 
 ### Transformation
 
 A **transformation** explicitly rewrites one valid representation into another. Kekulization,
 aromatization, and charge delocalization are transformations because they alter determined
 representation rather than fill undetermined state.
+
+Transformer::transform consumes its molecule and returns the result; failure drops the input.
+Both transform and transform_into derive a complete plan before mutation. Planning reports every
+rejection, including representation-integrity failures; application of that plan to its unchanged
+input must succeed. Transformer::transform_into applies the plan in place without a transaction
+or rollback and leaves the molecule unchanged on rejection.
+Transformer::transform_iter borrows its source and lazily produces independent transformed copies.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.
@@ -1738,7 +1795,7 @@ The **`try_*` prefix** distinguishes a checked operation from an unprefixed asse
 counterpart, or marks an attempt at a restricted input-domain dispatch for which the caller may use
 a fallback. It does not merely announce that a method returns `Option` or `Result`. An operation
 whose ordinary contract is fallible keeps its ordinary verb and expresses failure in its return
-type, as `apply`, `parse`, `rollback`, `reverse`, and `to_reaction_span` do. Standard trait names
+type, as `apply`, `parse`, `reverse`, and `to_reaction_span` do. Standard trait names
 such as `TryFrom` and `TryInto` are unaffected.
 
 Use checked/asserted pairs only when both public routes are useful. An internal producer that knows
@@ -1764,6 +1821,17 @@ absent or undetermined constraint is vacuous and does not assert that an entity 
 
 **Not:** *underdetermined*, which is an operation outcome. Do not use the two interchangeably.
 **In code:** `NumForm::Undetermined` and the per-type equivalents.
+
+### Update
+
+An entity form's **update** borrows the form and an update record and returns a new form. Omitted
+fields and constraint keys retain their existing values. A per-entity constraint container's
+update instead merges a borrowed same-type container into its receiver in place by key. Supplied
+entries replace the corresponding entries; an undetermined entry removes its key.
+
+**Not:** normalization or lattice meet.
+**In code:** AtomForm::update with AtomUpdate; AtomConstraintsForm::update with AtomConstraintsForm,
+and the corresponding operations for the other entity kinds.
 
 ### Valence
 

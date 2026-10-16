@@ -237,7 +237,8 @@ impl Reaction {
         deltas: Option<Py<Deltas>>,
     ) -> PyResult<Self> {
         let reaction = GraphIrReaction::try_new(
-            lhs.map(|value| value.bind(py).borrow().to_rust().clone())
+            lhs.map(|value| -> PyResult<_> { Ok(value.try_borrow(py)?.to_rust().clone()) })
+                .transpose()?
                 .unwrap_or_default(),
             deltas
                 .map(|value| value.bind(py).borrow().to_rust().clone())
@@ -315,8 +316,8 @@ impl Reaction {
         rhs: Py<Molecule>,
         atom_correspondence: &PyCorrespondence,
     ) -> PyResult<Self> {
-        let lhs = lhs.bind(py).borrow().to_rust().clone();
-        let rhs = rhs.bind(py).borrow().to_rust().clone();
+        let lhs = lhs.try_borrow(py)?.to_rust().clone();
+        let rhs = rhs.try_borrow(py)?.to_rust().clone();
         let atom_correspondence = atom_correspondence.to_rust::<AtomId>();
 
         let reaction =
@@ -344,18 +345,22 @@ impl Reaction {
         py: Python<'_>,
         source: &str,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -364,7 +369,7 @@ impl Reaction {
             ResolveConfig::to_rust,
         );
         let reaction =
-            ingest_reaction_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
+            ingest_reaction_smiles_with(source, &io_config, chemistry_model, &resolve_config)
                 .map_err(reaction_smiles_input_error)?;
         let (lhs, deltas) = reaction.into_parts();
         let reaction = GraphIrReaction::try_new(lhs, deltas).map_err(reaction_integrity_error)?;
@@ -381,18 +386,22 @@ impl Reaction {
         &self,
         py: Python<'_>,
         io_config: Option<SmilesIoConfig>,
-        chemistry_model: Option<ChemistryModel>,
+        chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<String> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model = chemistry_model.map_or_else(
-            || GraphChemistryModel {
-                valence: GraphValenceModel::smiles(),
-                ..GraphChemistryModel::default()
-            },
-            |model| model.to_rust(),
-        );
+        let default_model;
+        let chemistry_model = match &chemistry_model {
+            Some(model) => model.to_rust(),
+            None => {
+                default_model = GraphChemistryModel {
+                    valence: GraphValenceModel::smiles(),
+                    ..GraphChemistryModel::default()
+                };
+                &default_model
+            }
+        };
         let resolve_config = resolve_config.map_or_else(
             || GraphResolveConfig {
                 isotope: GraphIsotopePolicy::Natural,
@@ -404,7 +413,7 @@ impl Reaction {
         export_reaction_smiles_with(
             &self.to_rust(py)?,
             &io_config,
-            &chemistry_model,
+            chemistry_model,
             &resolve_config,
         )
         .map_err(reaction_smiles_output_error)
@@ -421,7 +430,7 @@ impl Reaction {
     fn set_lhs(slf: Py<Self>, py: Python<'_>, value: Py<Molecule>) -> PyResult<()> {
         let resolved = Py::new(
             py,
-            Molecule::from_rust(value.bind(py).borrow().to_rust().clone()),
+            Molecule::from_rust(value.try_borrow(py)?.to_rust().clone()),
         )?;
         slf.borrow_mut(py).lhs = resolved;
         Ok(())
@@ -494,7 +503,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.bind(py).borrow().to_rust().clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let config = config.unwrap_or_default().to_rust();
         let application = reaction
             .apply(&host, config)
@@ -514,7 +523,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<TrackedReactionApplicationIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.bind(py).borrow().to_rust().clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let applications = reaction
             .tracked_apply(&host, config.unwrap_or_default().to_rust())
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
@@ -532,7 +541,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationToReactionIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.bind(py).borrow().to_rust().clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let applications = reaction
             .apply_to_reaction(&host, config.unwrap_or_default().to_rust())
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
@@ -553,7 +562,7 @@ impl Reaction {
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationToReactionSpanIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.bind(py).borrow().to_rust().clone();
+        let host = host.try_borrow(py)?.to_rust().clone();
         let applications = reaction
             .apply_to_reaction_span(&host, config.unwrap_or_default().to_rust())
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
@@ -604,7 +613,7 @@ impl Reaction {
     /// Snapshot and validate the current Python-owned components as a Rust reaction.
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrReaction> {
         GraphIrReaction::try_new(
-            self.lhs.bind(py).borrow().to_rust().clone(),
+            self.lhs.try_borrow(py)?.to_rust().clone(),
             self.deltas.bind(py).borrow().to_rust().clone(),
         )
         .map_err(reaction_integrity_error)
@@ -757,9 +766,10 @@ impl ReactionProductsIter {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::iter;
 
-    use pyo3::exceptions::{PyStopIteration, PyTypeError, PyValueError};
+    use pyo3::exceptions::{PyAttributeError, PyStopIteration, PyTypeError, PyValueError};
     use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -1189,10 +1199,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
                         attributes: GraphIrAtomForm::from_element(ChemElement::N),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -1299,7 +1309,7 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 concat!(
-                    "EDN parse: invalid value: reaction stereo representation is invalid: ",
+                    "EDN parse: invalid value: ",
                     "stereo atom 0: stereo ligand StereoLigand { atom_id: AtomId(0), ",
                     "kind: ImplicitHydrogen } is duplicated in the frame"
                 )
@@ -1847,10 +1857,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
                         attributes: GraphIrAtomForm::from_element(ChemElement::O),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -1916,10 +1926,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(2),
                         attributes: GraphIrAtomForm::from_element(ChemElement::N),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -2313,7 +2323,7 @@ mod tests {
 
             let first = application.borrow_mut(py).__next__().unwrap().unwrap();
             let second = application.borrow_mut(py).__next__().unwrap().unwrap();
-            assert_eq!(application.borrow_mut(py).__next__().unwrap(), None);
+            assert!(application.borrow_mut(py).__next__().unwrap().is_none());
             assert_eq!(
                 [first.to_rust().clone(), second.to_rust().clone()],
                 [
@@ -2504,8 +2514,8 @@ mod tests {
     #[fixture]
     fn ethanol_deoxygenation() -> GraphIrReaction {
         let ethanol = ingest_smiles("CCO").unwrap();
-        let oxygen = ethanol.atom(GraphIrAtomId(2)).attributes.clone();
-        let bond = ethanol.bond(GraphIrBondId(1)).attributes.clone();
+        let oxygen = ethanol.atom(GraphIrAtomId(2)).attributes().clone();
+        let bond = ethanol.bond(GraphIrBondId(1)).attributes().clone();
         GraphIrReaction::new(
             ethanol,
             GraphIrDeltas::from_iter([
@@ -2614,11 +2624,11 @@ mod tests {
                 entries.extract::<Vec<(u128, i32)>>().unwrap(),
                 expected_entries
             );
-            entries
-                .cast::<PyList>()
-                .unwrap()
-                .append((9u128, 3i32))
-                .unwrap();
+
+            assert!(entries
+                .call_method1("append", ((9u128, 3i32),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("features")
@@ -2729,10 +2739,11 @@ mod tests {
                 ids.extract::<Vec<(ReactionSide, u128)>>().unwrap(),
                 expected_ids
             );
-            ids.cast::<PyList>()
-                .unwrap()
-                .append((ReactionSide::Product, 9u128))
-                .unwrap();
+
+            assert!(ids
+                .call_method1("append", ((ReactionSide::Product, 9u128),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("features")
@@ -2994,10 +3005,10 @@ mod tests {
                 py,
                 Delta::from_rust(
                     py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                    Cow::Owned(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
                         id: GraphIrAtomId(1),
                         attributes: GraphIrAtomForm::from_element(ChemElement::O),
-                    }),
+                    })),
                 )
                 .unwrap(),
             )
@@ -3225,14 +3236,16 @@ mod tests {
                 }),
             ]
         );
-        assert_eq!(application.__next__().unwrap(), None);
-        assert_eq!(application.__next__().unwrap(), None);
+        assert!(application.__next__().unwrap().is_none());
+        assert!(application.__next__().unwrap().is_none());
 
         let expected_first = first.to_rust();
         let expected_second = second.to_rust();
-        let mut detached = first.clone();
-        *detached.to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
-            GraphIrAtomForm::from_element(ChemElement::F);
+        let mut detached = Molecule::from_rust(first.to_rust().clone());
+        *detached
+            .to_rust_mut()
+            .atom_mut(GraphIrAtomId(0))
+            .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(first.to_rust(), expected_first);
         assert_eq!(second.to_rust(), expected_second);
     }
@@ -3256,8 +3269,8 @@ mod tests {
                 .unwrap(),
         );
 
-        assert_eq!(application.__next__().unwrap(), None);
-        assert_eq!(application.__next__().unwrap(), None);
+        assert!(application.__next__().unwrap().is_none());
+        assert!(application.__next__().unwrap().is_none());
     }
 
     #[rstest]
@@ -3296,8 +3309,8 @@ mod tests {
                 "missing constraint entry on remove"
             );
         });
-        assert_eq!(application.__next__().unwrap(), None);
-        assert_eq!(application.__next__().unwrap(), None);
+        assert!(application.__next__().unwrap().is_none());
+        assert!(application.__next__().unwrap().is_none());
     }
 
     #[rstest]
@@ -3420,11 +3433,13 @@ mod tests {
                 }),
             ]
         );
-        assert_eq!(products.__next__().unwrap(), None);
-        assert_eq!(products.__next__().unwrap(), None);
+        assert!(products.__next__().unwrap().is_none());
+        assert!(products.__next__().unwrap().is_none());
 
-        *first[0].to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
-            GraphIrAtomForm::from_element(ChemElement::F);
+        *first[0]
+            .to_rust_mut()
+            .atom_mut(GraphIrAtomId(0))
+            .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(host, expected_host);
         assert_eq!(
             second[0].to_rust(),
@@ -3453,8 +3468,8 @@ mod tests {
                 .unwrap(),
         );
 
-        assert_eq!(products.__next__().unwrap(), None);
-        assert_eq!(products.__next__().unwrap(), None);
+        assert!(products.__next__().unwrap().is_none());
+        assert!(products.__next__().unwrap().is_none());
     }
 
     #[rstest]
@@ -3492,7 +3507,7 @@ mod tests {
                 "missing constraint entry on remove"
             );
         });
-        assert_eq!(products.__next__().unwrap(), None);
-        assert_eq!(products.__next__().unwrap(), None);
+        assert!(products.__next__().unwrap().is_none());
+        assert!(products.__next__().unwrap().is_none());
     }
 }

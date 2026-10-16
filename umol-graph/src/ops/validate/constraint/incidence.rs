@@ -136,8 +136,9 @@ impl IncidenceConstraintInvariantsValidator {
                     entity: Entity::Atom(atom_id),
                 })?;
         Ok(atom
-            .constraints()
-            .asserted(key)
+            .attributes()
+            .constraints
+            .get(key)
             .map_or(Solution::Determined(()), |constraint| {
                 validate_atom_constraint(molecule, atom_id, constraint, reading)
             }))
@@ -180,8 +181,9 @@ impl IncidenceConstraintInvariantsValidator {
                     entity: Entity::Bond(bond_id),
                 })?;
         Ok(bond
-            .constraints()
-            .asserted(key)
+            .attributes()
+            .constraints
+            .get(key)
             .and_then(|constraint| validate_bond_constraint(molecule, bond_id, constraint, reading))
             .unwrap_or(Solution::Determined(())))
     }
@@ -292,12 +294,12 @@ pub fn validate_atom_constraint(
     // Multi-donor dative incidence has no defined per-atom projection pending
     // the coordination/haptic entity split in discussion doc 117.
     let unsupported = match constraint {
-        AtomConstraintForm::DonatedPairs(_) => atom
-            .dative_bonds()
-            .any(|bond| bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id)),
+        AtomConstraintForm::DonatedPairs(_) => atom.dative_bonds().any(|bond| {
+            bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id())
+        }),
         AtomConstraintForm::AcceptedPairs(_) => atom
             .dative_bonds()
-            .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id),
+            .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id()),
         _ => false,
     };
     if unsupported {
@@ -309,7 +311,7 @@ pub fn validate_atom_constraint(
             &derived,
             atom_contradiction(atom_id, constraint),
         ),
-        None => Solution::Underdetermined(()),
+        None => Solution::Contradictory(atom_contradiction(atom_id, constraint)),
     }
 }
 
@@ -383,7 +385,7 @@ pub fn validate_bond_constraint(
             &derived,
             bond_contradiction(bond_id, constraint),
         ),
-        None => Solution::Underdetermined(()),
+        None => Solution::Contradictory(bond_contradiction(bond_id, constraint)),
     })
 }
 
@@ -399,9 +401,7 @@ pub fn validate_dative_bond_constraint(
     if constraint.is_undetermined() {
         return Some(Solution::Determined(()));
     }
-    // The views' derivation yields no value for multi-donor incidence,
-    // pending the coordination/haptic entity split in discussion doc 117;
-    // the `None` fallthrough reads it as undecided.
+    // Multi-donor incidence has no defined projection and reads as top.
     let constraints = molecule.dative_bond(bond_id).constraints();
     let derived = match reading {
         DerivedKind::Derived => constraints.derived(constraint.key()),
@@ -416,7 +416,10 @@ pub fn validate_dative_bond_constraint(
                 constraint: constraint.clone(),
             },
         ),
-        None => Solution::Underdetermined(()),
+        None => Solution::Contradictory(IncidenceConstraintInvariantsContradiction::DativeBond {
+            bond: bond_id,
+            constraint: constraint.clone(),
+        }),
     })
 }
 
@@ -443,7 +446,12 @@ pub fn validate_aromatic_system_constraint(
                 constraint: constraint.clone(),
             },
         ),
-        None => Solution::Underdetermined(()),
+        None => {
+            Solution::Contradictory(IncidenceConstraintInvariantsContradiction::AromaticSystem {
+                system: system_id,
+                constraint: constraint.clone(),
+            })
+        }
     }
 }
 
@@ -470,7 +478,12 @@ pub fn validate_multicenter_bond_constraint(
                 constraint: constraint.clone(),
             },
         ),
-        None => Solution::Underdetermined(()),
+        None => Solution::Contradictory(
+            IncidenceConstraintInvariantsContradiction::MulticenterBond {
+                bond: bond_id,
+                constraint: constraint.clone(),
+            },
+        ),
     }
 }
 
@@ -516,6 +529,9 @@ fn evaluate<C>(
 where
     C: Lattice,
 {
+    let Ok(asserted) = asserted.clone().normalize() else {
+        return Solution::Contradictory(contradiction);
+    };
     if asserted.is_undetermined() {
         Solution::Determined(())
     } else if !derived.is_ground() {

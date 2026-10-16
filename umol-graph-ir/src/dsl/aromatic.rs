@@ -433,7 +433,7 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
     }
 }
 
-fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
+pub(crate) fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
     let AromaticSystemForm {
         charge,
         unpaired_electrons,
@@ -450,7 +450,7 @@ fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDe
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-fn lower_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
+pub(crate) fn lower_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
     let AromaticSystemForm {
         charge,
         unpaired_electrons,
@@ -557,6 +557,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined("*", AromaticSystemDsl(AromaticSystemForm::default()))]
+    #[case::empty_counts("[]", AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![]), ..Default::default() }))]
     #[case::whitespace("  [1,1,1]  #c+1  ", AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: AromaticSystemConstraintsForm::new() }))]
     #[case::charge_pos("[1,1,1]#c+1", AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: AromaticSystemConstraintsForm::new() }))]
     #[case::charge_neg("[1,1,1]#c-2", AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(-2), unpaired_electrons: UnpairedElectronsForm::default(), constraints: AromaticSystemConstraintsForm::new() }))]
@@ -589,6 +590,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined(AromaticSystemDsl::default(), "*")]
+    #[case::empty_counts(AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![]), ..Default::default() }), "[]")]
     #[case::charge_one(AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::default(), constraints: AromaticSystemConstraintsForm::new() }), "[1,1,1]#c+")]
     #[case::charge_neg_two(AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Lit(-2), unpaired_electrons: UnpairedElectronsForm::default(), constraints: AromaticSystemConstraintsForm::new() }), "[1,1,1]#c-2")]
     #[case::electron_count_six(AromaticSystemDsl(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 1, 1]), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6))) }), "[1,1,1]#e6")]

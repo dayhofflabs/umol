@@ -3,7 +3,8 @@
 //! [`Graph::maximum_independent_set`] currently uses exact branch-and-bound with
 //! a greedy cardinality bound and deterministic tie-breaking.
 
-use crate::graph::{Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::NodeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaximumIndependentSetAlgorithm {
@@ -90,7 +91,8 @@ mod tests {
     use rstest::*;
 
     use super::MaximumIndependentSetAlgorithm::BranchAndBound;
-    use crate::graph::{Graph, NodeId};
+    use crate::graph::Graph;
+    use crate::id::NodeId;
 
     fn n(i: u32) -> NodeId {
         NodeId(i)

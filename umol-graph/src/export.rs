@@ -1,7 +1,7 @@
 //! Conversion of graph models into external-format boundary values and text.
 //!
 //! [`Convey`] constructs a resolver from the supplied chemistry model and resolve configuration,
-//! projects a private GraphIR copy, and converts it to the output boundary. The boundary's renderer
+//! projects an owned GraphIR molecule, and converts it to the output boundary. The boundary's renderer
 //! then formats its table. [`export_smiles`] and [`export_reaction_smiles`] compose those operations
 //! with the same OpenSMILES, SMILES-valence, and Natural-isotope defaults as ingestion. Their
 //! `_with` variants take `(input, io_config, model, resolve_config)`, matching ingestion.
@@ -141,8 +141,6 @@ pub enum ReactionConveyError {
     Reactants(#[source] ConveyError),
     #[error("products: {0}")]
     Products(#[source] ConveyError),
-    #[error("atom correspondence pair {index} has no representable one-based map label")]
-    AtomMapLabel { index: usize },
 }
 
 impl UmolError for ReactionConveyError {
@@ -216,7 +214,7 @@ impl Convey for Smiles {
         _io_config: &SmilesIoConfig,
     ) -> Result<Self, ConveyError> {
         let resolver = Resolver::with_config(model, *resolve_config);
-        convey_molecule(input, &resolver, iter::empty()).map(Self::from_table_ir)
+        convey_molecule(input.clone(), &resolver, iter::empty()).map(Self::from_table_ir)
     }
 }
 
@@ -227,7 +225,7 @@ impl Convey for ReactionSmiles {
 
     /// Materialize and project both reaction sides, retaining H counts for atom-map labels.
     ///
-    /// Constructs one resolver for both sides and runs all projection stages on private copies.
+    /// Constructs one resolver and runs all projection stages on both materialized sides.
     /// Surviving atom pairs receive one-based labels in the materialized correspondence's order.
     /// Unmatched atoms remain unlabeled. The atom_mapping index is populated alongside the
     /// Atom.class labels.
@@ -245,8 +243,7 @@ impl Convey for ReactionSmiles {
     ///
     /// # Errors
     ///
-    /// Reports materialization failures, side-specific projection or conversion failures, and
-    /// map labels that exceed TableIR's capacity.
+    /// Reports materialization failures and side-specific projection or conversion failures.
     fn convey(
         input: &Reaction,
         model: &ChemistryModel,
@@ -256,13 +253,11 @@ impl Convey for ReactionSmiles {
         let span = input.to_reaction_span()?;
         let correspondence = span.correspondence();
         let pairs = correspondence.atoms().matched_pairs();
-        let count = u32::try_from(pairs.len()).map_err(|_| ReactionConveyError::AtomMapLabel {
-            index: u32::MAX as usize,
-        })?;
+        let count = pairs.len() as u32;
         let labels = 1..=count;
         let resolver = Resolver::with_config(model, *resolve_config);
         let reactants = convey_molecule(
-            &span.lhs(),
+            span.lhs(),
             &resolver,
             pairs
                 .iter()
@@ -271,7 +266,7 @@ impl Convey for ReactionSmiles {
         )
         .map_err(ReactionConveyError::Reactants)?;
         let products = convey_molecule(
-            &span.rhs(),
+            span.rhs(),
             &resolver,
             pairs
                 .iter()
@@ -381,24 +376,23 @@ pub fn export_reaction_smiles_with(
 }
 
 fn convey_molecule(
-    input: &Molecule,
+    input: Molecule,
     resolver: &Resolver<'_>,
     labels: impl Iterator<Item = (AtomId, u32)>,
 ) -> Result<TableMolecule, ConveyError> {
-    let mut projected = input.clone();
-    match resolver.project(&mut projected, ProjectFlags::all())? {
-        Solution::Determined(()) => {}
+    let projected = match resolver.project(input, ProjectFlags::all())? {
+        Solution::Determined(molecule) => molecule,
         Solution::Underdetermined(()) => return Err(ConveyError::Underdetermined),
         Solution::Contradictory(error) => return Err(error.into()),
-    }
+    };
     let molecule = &projected;
     let mut table = TableMolecule::empty();
     table.atoms.reserve(molecule.atoms().count());
     table.bonds.reserve(molecule.bonds().count());
     let mut labels = labels.peekable();
     for atom in molecule.atoms().iter() {
-        let entity = Entity::Atom(atom.id);
-        let form = atom.attributes;
+        let entity = Entity::Atom(atom.id());
+        let form = atom.attributes();
         let mut lowered = match &form.element {
             ElementForm::Undetermined => Atom::wildcard(),
             ElementForm::Lit(element) => Atom::from_element(*element),
@@ -443,36 +437,36 @@ fn convey_molecule(
                 AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(coset)) => {
                     table
                         .stereo_atoms
-                        .push(lower_stereo_atom(molecule, atom.id, coset)?);
+                        .push(lower_stereo_atom(molecule, atom.id(), coset)?);
                 }
                 value if value.is_undetermined() => {}
                 value => {
                     return Err(ConveyError::Constraint(Constraint::Atom(
-                        atom.id,
+                        atom.id(),
                         value.clone(),
                     )))
                 }
             }
         }
-        if labels.peek().is_some_and(|&(id, _)| id == atom.id) {
+        if labels.peek().is_some_and(|&(id, _)| id == atom.id()) {
             lowered.class = labels.next().map(|(_, class)| class);
         }
-        elide_implicit_hydrogens(molecule, atom.id, resolver, &mut lowered);
+        elide_implicit_hydrogens(molecule, atom.id(), resolver, &mut lowered);
         table.atoms.push(lowered);
     }
     for bond in molecule.bonds().iter() {
-        let entity = Entity::Bond(bond.id);
+        let entity = Entity::Bond(bond.id());
         let [first, second] = bond.atom_ids();
         let mut lowered = Bond::new(first.0, second.0, lower_order(bond.order(), entity)?);
-        lowered.charge = lower_number(&bond.attributes.charge, entity, "charge")?;
+        lowered.charge = lower_number(&bond.attributes().charge, entity, "charge")?;
         lowered.unpaired_electrons = lower_number(
-            &bond.attributes.unpaired_electrons.count,
+            &bond.attributes().unpaired_electrons.count,
             entity,
             "unpaired electrons",
         )?;
         lowered.multiplicity =
-            lower_multiplicity(&bond.attributes.unpaired_electrons.multiplicity, entity)?;
-        for constraint in bond.attributes.constraints.iter() {
+            lower_multiplicity(&bond.attributes().unpaired_electrons.multiplicity, entity)?;
+        for constraint in bond.attributes().constraints.iter() {
             match constraint {
                 BondConstraintForm::Aromatic(BooleanForm::Lit(true)) => {
                     lowered.order = BondOrder::Aromatic
@@ -481,12 +475,12 @@ fn convey_molecule(
                 BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset)) => {
                     table
                         .stereo_bonds
-                        .push(lower_stereo_bond(molecule, bond.id, coset)?);
+                        .push(lower_stereo_bond(molecule, bond.id(), coset)?);
                 }
                 value if value.is_undetermined() => {}
                 value => {
                     return Err(ConveyError::Constraint(Constraint::Bond(
-                        bond.id,
+                        bond.id(),
                         value.clone(),
                     )))
                 }
@@ -495,7 +489,7 @@ fn convey_molecule(
         table.bonds.push(lowered);
     }
     for bond in molecule.dative_bonds().iter() {
-        let entity = Entity::DativeBond(bond.id);
+        let entity = Entity::DativeBond(bond.id());
         let mut donors = bond.donor_ids();
         let Some(donor) = donors.next() else {
             return Err(ConveyError::Entity { entity });
@@ -503,10 +497,10 @@ fn convey_molecule(
         if donors.next().is_some() {
             return Err(ConveyError::Entity { entity });
         }
-        for constraint in bond.attributes.constraints.iter() {
+        for constraint in bond.attributes().constraints.iter() {
             if !constraint.is_undetermined() {
                 return Err(ConveyError::Constraint(Constraint::DativeBond(
-                    bond.id,
+                    bond.id(),
                     constraint.clone(),
                 )));
             }
@@ -514,24 +508,24 @@ fn convey_molecule(
         table.bonds.push(Bond::new_dative(
             donor.0,
             bond.acceptor_id().0,
-            lower_order(&bond.attributes.order, entity)?,
+            lower_order(&bond.attributes().order, entity)?,
             BondDonation::Donating,
         ));
     }
     if let Some(bond) = molecule.multicenter_bonds().iter().next() {
         return Err(ConveyError::Entity {
-            entity: Entity::MulticenterBond(bond.id),
+            entity: Entity::MulticenterBond(bond.id()),
         });
     }
     for bond in molecule.noncovalent_bonds().iter() {
-        let entity = Entity::NoncovalentBond(bond.id);
+        let entity = Entity::NoncovalentBond(bond.id());
         if bond.kind() != &NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond) {
             return Err(ConveyError::Entity { entity });
         }
-        for constraint in bond.attributes.constraints.iter() {
+        for constraint in bond.attributes().constraints.iter() {
             if !constraint.is_undetermined() {
                 return Err(ConveyError::Constraint(Constraint::NoncovalentBond(
-                    bond.id,
+                    bond.id(),
                     constraint.clone(),
                 )));
             }
@@ -559,14 +553,16 @@ fn elide_implicit_hydrogens(
         return;
     };
     let atom = molecule.atom(atom_id);
-    if !matches!(atom.attributes.isotope_mass, IsotopeMassForm::Undetermined)
-        || lowered.charge != Some(0)
+    if !matches!(
+        atom.attributes().isotope_mass,
+        IsotopeMassForm::Undetermined
+    ) || lowered.charge != Some(0)
         || lowered.unpaired_electrons != Some(0)
         || (lowered.aromatic == Some(true) && lowered.element != Some(Element::C))
         || lowered.class.is_some()
         || matches!(
             atom.constraints().tetrahedral_stereo(),
-            Some(TetrahedralStereoForm::Stereo(_))
+            TetrahedralStereoForm::Stereo(_)
         )
         || !matches!(
             lowered.element,

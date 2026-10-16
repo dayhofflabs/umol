@@ -611,7 +611,7 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 2);
         assert_eq!(mol.bonds().count(), 1);
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(2));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -621,7 +621,7 @@ mod tests {
         let spec = atoms([Element::C, Element::O]) + single(0, 1);
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(1));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(1));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -654,7 +654,7 @@ mod tests {
         let spec = atoms([Element::C, Element::C]) + bond_term;
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).attributes, &expected);
+        assert_eq!(mol.bond(BondId(0)).attributes(), &expected);
     }
 
     #[rstest]
@@ -685,7 +685,7 @@ mod tests {
 
         assert_eq!(mol.dative_bonds().count(), 1);
         assert_eq!(
-            mol.dative_bond(DativeBondId(0)).attributes,
+            mol.dative_bond(DativeBondId(0)).attributes(),
             &DativeBondForm::default()
         );
     }
@@ -700,7 +700,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.aromatic_system(AromaticSystemId(0)).attributes,
+            mol.aromatic_system(AromaticSystemId(0)).attributes(),
             &AromaticSystemForm::from_electrons(vec![1, 1])
         );
     }
@@ -715,7 +715,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.multicenter_bond(MulticenterBondId(0)).attributes,
+            mol.multicenter_bond(MulticenterBondId(0)).attributes(),
             &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }
@@ -731,7 +731,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.noncovalent_bond(NoncovalentBondId(0)).attributes,
+            mol.noncovalent_bond(NoncovalentBondId(0)).attributes(),
             &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }
@@ -743,7 +743,7 @@ mod tests {
             + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2));
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -774,7 +774,7 @@ mod tests {
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]
         );
         assert_eq!(
-            mol.stereo_atom(StereoAtomId(0)).attributes,
+            mol.stereo_atom(StereoAtomId(0)).attributes(),
             &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
@@ -807,7 +807,7 @@ mod tests {
             vec![AtomId(0), AtomId(1)]
         );
         assert_eq!(
-            mol.stereo_bond(StereoBondId(0)).attributes,
+            mol.stereo_bond(StereoBondId(0)).attributes(),
             &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }
@@ -818,6 +818,6 @@ mod tests {
     fn test_molecule_spec_concrete(#[case] spec: MoleculeSpec, #[case] expected_charge: NumForm) {
         let mol = spec.build();
 
-        assert_eq!(mol.atom(AtomId(0)).attributes.charge, expected_charge);
+        assert_eq!(mol.atom(AtomId(0)).attributes().charge, expected_charge);
     }
 }

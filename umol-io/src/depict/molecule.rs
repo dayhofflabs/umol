@@ -67,8 +67,8 @@ pub(crate) fn depict(
             continue;
         };
         let [first, second] = bond.atom_ids();
-        let bond_reference = DepictionReference::Molecule(Entity::Bond(bond.id));
-        if let Some(wedge) = wedges[bond.id.index()] {
+        let bond_reference = DepictionReference::Molecule(Entity::Bond(bond.id()));
+        if let Some(wedge) = wedges[bond.id().index()] {
             items.push(DepictionItem::Wedge(WedgeItem {
                 tip: position(layout, wedge.tip),
                 base: position(layout, wedge.base),
@@ -93,9 +93,9 @@ pub(crate) fn depict(
             continue;
         };
         items.push(DepictionItem::Atom(AtomItem {
-            position: position(layout, atom.id),
+            position: position(layout, atom.id()),
             label,
-            references: vec![DepictionReference::Molecule(Entity::Atom(atom.id))],
+            references: vec![DepictionReference::Molecule(Entity::Atom(atom.id()))],
         }));
     }
 
@@ -193,7 +193,7 @@ pub(super) fn tetrahedral_wedges(
         .iter()
         .filter(|stereo| {
             stereo
-                .attributes
+                .attributes()
                 .configuration
                 .as_lit()
                 .is_some_and(|configuration| configuration.kind == StereoKind::Tetrahedral)
@@ -278,7 +278,7 @@ fn tetrahedral_candidates(
             }
             let kind = wedge_kind(layout, stereo.site_id(), &ligands, *ligand, coset)?;
             Some(WedgeCandidate {
-                bond: bond.id,
+                bond: bond.id(),
                 base: ligand.atom_id,
                 kind,
             })
@@ -287,7 +287,7 @@ fn tetrahedral_candidates(
     wedges.sort_by_key(|wedge| (tetrahedral_sites[wedge.base.index()], wedge.bond.index()));
 
     TetrahedralCandidates {
-        stereo_atom: stereo.id,
+        stereo_atom: stereo.id(),
         site: stereo.site_id(),
         wedges,
     }
@@ -499,7 +499,7 @@ fn aromatic_contour(
         points,
         closed: true,
         references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
-            system.id,
+            system.id(),
         ))],
     })
 }
@@ -558,7 +558,7 @@ fn aromatic_annotation(
         position,
         text,
         references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
-            system.id,
+            system.id(),
         ))],
     })
 }
@@ -621,7 +621,7 @@ fn annotation_position_is_clear(
 ) -> bool {
     let clearance_squared = AROMATIC_ANNOTATION_CLEARANCE.powi(2);
     if molecule.atoms().iter().any(|atom| {
-        squared_length(difference(candidate, position(layout, atom.id))) < clearance_squared
+        squared_length(difference(candidate, position(layout, atom.id()))) < clearance_squared
     }) {
         return false;
     }
@@ -1601,13 +1601,13 @@ mod tests {
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let mut editor = molecule.edit();
         editor.add_aromatic_system(
-            (0..60).map(AtomId).collect(),
+            &(0..60).map(AtomId).collect::<Vec<_>>(),
             AromaticSystemForm {
                 electrons: ElectronCountsForm::Lit(vec![1; 60]),
                 ..Default::default()
             },
         );
-        let molecule = editor.build();
+        let molecule = editor.finish().unwrap();
 
         let depiction = depict(&molecule, &layout).unwrap();
 

@@ -5,7 +5,8 @@
 use std::ops::ControlFlow;
 
 use crate::algorithms::traversal::BreadthFirstEvent;
-use crate::graph::{Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::NodeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConnectedComponentsAlgorithm {
@@ -82,7 +83,8 @@ mod tests {
     use rstest::rstest;
 
     use super::ConnectedComponentsAlgorithm::Bfs;
-    use crate::graph::{Graph, NodeId};
+    use crate::graph::Graph;
+    use crate::id::NodeId;
 
     fn n(i: u32) -> NodeId {
         NodeId(i)

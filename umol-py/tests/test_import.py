@@ -7,7 +7,6 @@ import umol._native as native
 
 PUBLIC_EXPORTS = frozenset(
     """
-    AromaticBondConstraintMismatchPolicy
     AromaticSystemForm
     AromaticSystemUpdate
     AromaticSystemConstraintForm
@@ -22,7 +21,6 @@ PUBLIC_EXPORTS = frozenset(
     AromaticValenceForm
     AromaticityConfig
     AromaticityFailurePolicy
-    AromaticityMismatchPolicy
     AromaticityModel
     AromaticityRule
     AromaticityTieBreak
@@ -37,6 +35,7 @@ PUBLIC_EXPORTS = frozenset(
     AtomDelta
     AtomFieldChange
     AtomRingSizeCounts
+    AtomSelectionAlgorithm
     AtomTypeRegistry
     AtomView
     AtomViews
@@ -69,6 +68,8 @@ PUBLIC_EXPORTS = frozenset(
     Constraints
     ConstraintsView
     ContradictionError
+    NoJoinError
+    ConsumedError
     Correspondence
     CountedHashedFeatureSet
     DativeBondForm
@@ -97,6 +98,7 @@ PUBLIC_EXPORTS = frozenset(
     HashedFeatureSet
     HashedFingerprintConfig
     InvalidStructureError
+    InvalidatedViewError
     IsotopeMass
     IsotopeMassForm
     IsotopePolicy
@@ -161,11 +163,22 @@ PUBLIC_EXPORTS = frozenset(
     ResolveConfig
     ResolveContradiction
     ResolveReport
+    RingAtomView
+    RingBondView
     RingConfig
+    RingConnection
+    RingGraph
     RingLimits
     RingMembershipForm
+    RingModel
+    RingRelation
     RingScope
+    RingSet
+    RingSetKind
+    RingView
+    RingViews
     RoleTaggedHashedFeatureSet
+    RollbackMethod
     SignedHashedFeatureSet
     SimpleCycleEnumerationAlgorithm
     SmilesIoConfig
@@ -202,7 +215,6 @@ PUBLIC_EXPORTS = frozenset(
     StereoLigandKind
     StereoLigandPair
     StereoModel
-    StereoMismatchPolicy
     StereoResolveConfig
     StereoTerm
     Stereogenicity
@@ -219,7 +231,6 @@ PUBLIC_EXPORTS = frozenset(
     Topicity
     TopicityForm
     TopicityRelationForm
-    Transaction
     TransactionError
     UnpairedElectrons
     UnpairedElectronsForm
@@ -373,6 +384,8 @@ def test_deferred_member(owner, name):
         (umol.Molecule.edit, "(self, /)"),
         (umol.Molecule.apply, "(self, /, edits)"),
         (umol.Molecule.tracked_apply, "(self, /, edits)"),
+        (umol.Molecule.transact, "(self, /, batches, *, rollback_method=Ellipsis)"),
+        (umol.Molecule.tracked_transact, "(self, /, batches, *, rollback_method=Ellipsis)"),
         (umol.Molecule.combine, "(self, /, other)"),
         (umol.Molecule.combine_from, "(self, /, other)"),
         (umol.Molecule.combine_all, "(molecules)"),
@@ -402,28 +415,17 @@ def test_deferred_member(owner, name):
         (umol.Molecule.counted_hashed_fingerprint, "(self, /, *, config)"),
         (umol.Molecule.pattern_fingerprint, "(self, /, *, config=None)"),
         (umol.Molecule.structural_fingerprint, "(self, /, *, config)"),
-        (umol.MoleculeEditor.snapshot, "(self, /)"),
-        (umol.MoleculeEditor.tracked_snapshot, "(self, /)"),
-        (umol.MoleculeEditor.build, "(self, /)"),
-        (umol.MoleculeEditor.tracked_build, "(self, /)"),
+        (umol.Molecule.copy, "(self, /)"),
+        (umol.MoleculeEditor.finish, "(self, /)"),
         (umol.MoleculeEditor.apply, "(self, /, edits)"),
         (umol.MoleculeEditor.tracked_apply, "(self, /, edits)"),
-        (umol.MoleculeEditor.transact, "(self, /, edits)"),
-        (umol.MoleculeEditor.tracked_transact, "(self, /, edits)"),
-        (umol.MoleculeEditor.remove, "(self, /, atoms, bonds)"),
-        (umol.MoleculeEditor.tracked_remove, "(self, /, atoms, bonds)"),
+        (umol.MoleculeEditor.remove_topology, "(self, /, atoms, bonds)"),
         (umol.MoleculeEditor.remove_dative_bonds, "(self, /, ids)"),
-        (umol.MoleculeEditor.tracked_remove_dative_bonds, "(self, /, ids)"),
         (umol.MoleculeEditor.remove_aromatic_systems, "(self, /, ids)"),
-        (umol.MoleculeEditor.tracked_remove_aromatic_systems, "(self, /, ids)"),
         (umol.MoleculeEditor.remove_multicenter_bonds, "(self, /, ids)"),
-        (umol.MoleculeEditor.tracked_remove_multicenter_bonds, "(self, /, ids)"),
         (umol.MoleculeEditor.remove_noncovalent_bonds, "(self, /, ids)"),
-        (umol.MoleculeEditor.tracked_remove_noncovalent_bonds, "(self, /, ids)"),
         (umol.MoleculeEditor.remove_stereo_atoms, "(self, /, ids)"),
-        (umol.MoleculeEditor.tracked_remove_stereo_atoms, "(self, /, ids)"),
         (umol.MoleculeEditor.remove_stereo_bonds, "(self, /, ids)"),
-        (umol.MoleculeEditor.tracked_remove_stereo_bonds, "(self, /, ids)"),
         (
             umol.Reaction.from_reaction_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
@@ -465,8 +467,6 @@ def test_deferred_member(owner, name):
             umol.ReactionSpan.canonical_eq,
             "(self, /, other, *, stereo_model=None, config=None)",
         ),
-        (umol.Transaction.rollback, "(self, /, editor)"),
-        (umol.Transaction.tracked_rollback, "(self, /, editor)"),
     ],
 )
 def test_public_operation_signature(operation, expected):
@@ -489,6 +489,9 @@ def test_public_constructor_method_signature(constructor, expected):
     "error_type",
     [
         umol.ContradictionError,
+        umol.NoJoinError,
+        umol.ConsumedError,
+        umol.InvalidatedViewError,
         umol.InvalidStructureError,
         umol.ModelConversionError,
         umol.ParseError,
@@ -502,3 +505,8 @@ def test_error_import(error_type):
     assert getattr(umol, error_type.__name__) is error_type
     assert isinstance(error, Exception)
     assert str(error) == "diagnostic"
+
+
+@pytest.mark.parametrize("error_type", [umol.ConsumedError, umol.InvalidatedViewError])
+def test_lifecycle_error_import(error_type):
+    assert error_type.__bases__ == (RuntimeError,)

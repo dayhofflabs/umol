@@ -47,10 +47,10 @@ pub fn parse_mol_bytes_with(
     resolve_config: &ResolveConfig,
 ) -> Result<Molecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
-        Solution::Determined(_) => Ok(molecule),
-        Solution::Underdetermined(report) => Err(Box::new(ResolveUnderdetermined { report })),
+    let molecule: Molecule = (&table_mol).try_into_ir(&())?;
+    match Resolver::with_config(model, *resolve_config).resolve(molecule)? {
+        Solution::Determined(molecule) => Ok(molecule),
+        Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),
         Solution::Contradictory(c) => Err(Box::new(c)),
     }
 }
@@ -61,7 +61,7 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AromaticValenceForm, AtomId};
+    use umol_graph_ir::ir::{AromaticValenceForm, AtomId, RollbackMethod};
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ir;
 
@@ -70,9 +70,7 @@ mod tests {
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
         RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
     };
-    use crate::ops::resolve::{
-        AromaticityResolveConfig, ResolveConfig, Resolver, StereoResolveConfig,
-    };
+    use crate::ops::resolve::{ResolveConfig, ResolveUnderdetermined, Resolver};
     use crate::ops::valence::ValenceTable;
     use crate::ops::validate::ConnectivityModel;
 
@@ -102,11 +100,13 @@ mod tests {
             },
             ..ChemistryModel::default()
         };
-        Resolver::new(&model).resolve(&mut molecule).unwrap();
+        Resolver::new(&model)
+            .resolve_into(&mut molecule, RollbackMethod::Journal)
+            .unwrap();
         assert_eq!(molecule.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(
-                molecule.atom(AtomId(i)).attributes.to_string(),
+                molecule.atom(AtomId(i)).attributes().to_string(),
                 expected_atom
             );
         }
@@ -154,34 +154,42 @@ mod tests {
         let molecule =
             parse_mol_bytes_with(METHANE_MOL.as_bytes(), &io_config, &model, &resolve_config)
                 .unwrap();
-        assert_eq!(molecule.atom(AtomId(0)).attributes.to_string(), expected);
+        assert_eq!(molecule.atom(AtomId(0)).attributes().to_string(), expected);
+        assert_eq!(molecule.clone().edit().finish(), Ok(molecule));
     }
 
     #[rstest]
-    #[case::retained(
+    #[case::counts(METHANE_MOL)]
+    fn test_parse_mol_bytes_with_underdetermined(#[case] input: &str) {
+        let model = ChemistryModel {
+            valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            ..ChemistryModel::default()
+        };
+        let error = parse_mol_bytes_with(
+            input.as_bytes(),
+            &CtfileIoConfig::basic(),
+            &model,
+            &ResolveConfig::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.as_any().downcast_ref::<ResolveUnderdetermined>(),
+            Some(&ResolveUnderdetermined)
+        );
+    }
+
+    #[rstest]
+    #[case::default(
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![None; 6]
-    )]
-    #[case::reset(
-        CtfileIoConfig::basic(),
-        ChemistryModel::default(),
-        ResolveConfig {
-            isotope: Default::default(),
-            aromaticity: AromaticityResolveConfig {
-                reset_aromatic_valence: true,
-                ..AromaticityResolveConfig::default()
-            },
-            stereo: StereoResolveConfig::default(),
-        },
-        vec![None; 6]
+        vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_parse_mol_bytes_with_aromatic_valence(
         #[case] io_config: CtfileIoConfig,
         #[case] model: ChemistryModel,
         #[case] resolve_config: ResolveConfig,
-        #[case] expected: Vec<Option<AromaticValenceForm>>,
+        #[case] expected: Vec<AromaticValenceForm>,
     ) {
         let molecule = parse_mol_bytes_with(
             BENZENE_AROMATIC_MOL.as_bytes(),
@@ -195,9 +203,10 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
                 .collect::<Vec<_>>(),
             expected
         );
+        assert_eq!(molecule.clone().edit().finish(), Ok(molecule));
     }
 }

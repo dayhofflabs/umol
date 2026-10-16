@@ -1,11 +1,9 @@
 import pytest
 
 from umol import (
-    AromaticBondConstraintMismatchPolicy,
     AromaticValenceForm,
     AromaticityConfig,
     AromaticityFailurePolicy,
-    AromaticityMismatchPolicy,
     AromaticityResolveConfig,
     AtomForm,
     AtomFieldChange,
@@ -66,13 +64,8 @@ def test_resolved_smiles_workflow():
             ),
             aromatic_valence_failure=AromaticityFailurePolicy.Error,
             aromatic_system_failure=AromaticityFailurePolicy.Error,
-            aromatic_valence_mismatch=AromaticityMismatchPolicy.Error,
-            aromatic_bond_constraint_mismatch=(
-                AromaticBondConstraintMismatchPolicy.Error
-            ),
-            reset_aromatic_valence=False,
         ),
-        stereo=StereoResolveConfig(reset_stereo_constraints=False),
+        stereo=StereoResolveConfig(),
     )
 
     molecule = Molecule.from_smiles(
@@ -93,7 +86,9 @@ def test_resolved_smiles_workflow():
         NumForm.Lit(0),
         NumForm.Lit(0),
     ]
-    assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [None] * 3
+    assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
+        AromaticValenceForm.Undetermined()
+    ] * 3
     assert [
         (system.atom_ids, system.charge) for system in molecule.aromatic_systems
     ] == [((0, 1, 2), NumForm.Lit(0))]
@@ -140,7 +135,6 @@ def test_molecule_editing_workflow():
 
     rendered = edits.render()
     parsed = Edits.parse(rendered)
-    applied = molecule.apply(parsed)
 
     assert rendered == (
         '[{:atom {:modify [0 {:expect "#h3" :update "#h2"}]}} '
@@ -149,19 +143,8 @@ def test_molecule_editing_workflow():
     )
     assert parsed == edits
     assert parsed.render() == rendered
+    applied = molecule.apply(parsed)
     assert applied == expected
-    assert molecule == original
-
-    editor = molecule.edit()
-    transaction = editor.transact(parsed)
-
-    assert editor.snapshot() == expected
-    assert molecule == original
-
-    transaction.rollback(editor)
-
-    assert editor.snapshot() == original
-    assert editor.build() == original
     assert molecule == original
 
     failing = Edits()
@@ -178,9 +161,15 @@ def test_molecule_editing_workflow():
 
     with pytest.raises(
         TransactionError,
-        match="^atom handle 7 is out of range for 1 entries$",
+        match="^atom handle 7 is out of range for 2 entries$",
     ):
-        molecule.apply(failing)
+        molecule.transact([edits, failing])
+
+    assert molecule == original
+
+    molecule.transact([Edits.parse(rendered)])
+
+    assert molecule == expected
 
     conflicting = Edits()
     conflicting.add_bond(0, 1, BondForm(1))
@@ -189,10 +178,9 @@ def test_molecule_editing_workflow():
         InvalidStructureError,
         match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
     ):
-        expected.apply(conflicting)
+        molecule.transact([conflicting])
 
-    assert molecule == original
-    assert expected == applied
+    assert molecule == expected == applied
 
 
 def test_fingerprint_workflow():
@@ -226,8 +214,8 @@ def test_fingerprint_workflow():
         config=ReactionCombinedFingerprintConfig.Difference(molecule=hashed_config)
     )
 
-    assert hashed.ids == [864662311, 2246728737]
-    assert counted.entries == [(864662311, 1), (2246728737, 1)]
+    assert hashed.ids == (864662311, 2246728737)
+    assert counted.entries == ((864662311, 1), (2246728737, 1))
     assert [bit for bit in range(pattern.width) if pattern[bit]] == [
         4,
         5,
@@ -238,36 +226,40 @@ def test_fingerprint_workflow():
         14,
         15,
     ]
-    assert structural.keys == [
+    assert structural.keys == (
         bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
         bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
-    ]
-    assert combined.features.entries == [
+    )
+    assert combined.features.entries == (
         (864662311, -1),
         (2246728737, -1),
         (2246733040, 1),
-    ]
+    )
     assert molecule == molecule_snapshot
     assert product == product_snapshot
     assert reaction == reaction_snapshot
 
-    hashed.ids.append(7)
-    counted.entries.append((7, 2))
-    structural.keys.append(b"detached")
+    with pytest.raises(AttributeError):
+        hashed.ids.append(7)
+    with pytest.raises(AttributeError):
+        counted.entries.append((7, 2))
+    with pytest.raises(AttributeError):
+        structural.keys.append(b"detached")
     combined_features = combined.features
-    combined_features.entries.append((7, 2))
+    with pytest.raises(AttributeError):
+        combined_features.entries.append((7, 2))
 
-    assert hashed.ids == [864662311, 2246728737]
-    assert counted.entries == [(864662311, 1), (2246728737, 1)]
-    assert structural.keys == [
+    assert hashed.ids == (864662311, 2246728737)
+    assert counted.entries == ((864662311, 1), (2246728737, 1))
+    assert structural.keys == (
         bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
         bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
-    ]
-    assert combined.features.entries == [
+    )
+    assert combined.features.entries == (
         (864662311, -1),
         (2246728737, -1),
         (2246733040, 1),
-    ]
+    )
 
     with pytest.raises(
         UnderdeterminedError,
@@ -291,24 +283,25 @@ def test_substructure_workflow():
     matches = pattern.substructure_matches(host, config=config)
 
     assert len(matches) == 1
-    assert matches[0].atoms.matched_pairs == [(0, 1), (1, 2)]
-    assert matches[0].bonds.matched_pairs == [(0, 1)]
-    assert matches[0].dative_bonds.matched_pairs == []
-    assert matches[0].aromatic_systems.matched_pairs == []
-    assert matches[0].multicenter_bonds.matched_pairs == []
-    assert matches[0].noncovalent_bonds.matched_pairs == []
-    assert matches[0].stereo_atoms.matched_pairs == []
-    assert matches[0].stereo_bonds.matched_pairs == []
+    assert matches[0].atoms.matched_pairs == ((0, 1), (1, 2))
+    assert matches[0].bonds.matched_pairs == ((0, 1),)
+    assert matches[0].dative_bonds.matched_pairs == ()
+    assert matches[0].aromatic_systems.matched_pairs == ()
+    assert matches[0].multicenter_bonds.matched_pairs == ()
+    assert matches[0].noncovalent_bonds.matched_pairs == ()
+    assert matches[0].stereo_atoms.matched_pairs == ()
+    assert matches[0].stereo_bonds.matched_pairs == ()
     assert pattern == pattern_snapshot
     assert host == host_snapshot
 
     atom_matched_pairs = matches[0].atoms.matched_pairs
-    atom_matched_pairs.append((0, 0))
+    with pytest.raises(AttributeError):
+        atom_matched_pairs.append((0, 0))
     pattern.atoms[0].charge = 2
     host.atoms[0].charge = 3
 
-    assert matches[0].atoms.matched_pairs == [(0, 1), (1, 2)]
-    assert matches[0].bonds.matched_pairs == [(0, 1)]
+    assert matches[0].atoms.matched_pairs == ((0, 1), (1, 2))
+    assert matches[0].bonds.matched_pairs == ((0, 1),)
 
     with pytest.raises(
         TypeError,
@@ -339,16 +332,16 @@ def test_reaction_application_workflow():
     assert len(applications) == 1
     product, correspondence = applications[0]
     assert product == Molecule.from_smiles("CC")
-    assert correspondence.atoms.matched_pairs == [(0, 0), (1, 1)]
+    assert correspondence.atoms.matched_pairs == ((0, 0), (1, 1))
     assert correspondence.atoms.left_count == 3
     assert correspondence.atoms.right_count == 2
-    assert correspondence.bonds.matched_pairs == [(0, 0)]
+    assert correspondence.bonds.matched_pairs == ((0, 0),)
     assert reaction == reaction_snapshot
     assert host == host_snapshot
     assert list(reaction.apply(host, config=config)) == [product]
     assert product.hashed_fingerprint(
         config=HashedFingerprintConfig.Morgan(radius=0)
-    ).ids == [2246728737]
+    ).ids == (2246728737,)
 
     product.atoms[0].charge = 5
     assert host == host_snapshot

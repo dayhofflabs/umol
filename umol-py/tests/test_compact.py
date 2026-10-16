@@ -13,11 +13,15 @@ def test_compaction_identity(source_count):
 
 
 def test_compaction_constructor():
-    compaction = Compaction(5, [3, 1, 3])
+    removed = [3, 1, 3]
+    compaction = Compaction(5, removed)
+    removed.clear()
+    assert type(compaction.removed) is tuple
+    assert Compaction(compaction.source_count, compaction.removed) == compaction
 
     assert compaction.source_count == 5
     assert compaction.result_count == 3
-    assert compaction.removed == [1, 3]
+    assert compaction.removed == (1, 3)
     assert repr(compaction) == "Compaction(source_count=5, removed=[1, 3])"
 
 
@@ -62,9 +66,10 @@ def test_compaction_to_correspondence():
 def test_compaction_frozen():
     compaction = Compaction(3, [1])
     removed = compaction.removed
-    removed.append(2)
+    with pytest.raises(AttributeError):
+        removed.append(2)
 
-    assert compaction.removed == [1]
+    assert compaction.removed == (1,)
     with pytest.raises(AttributeError):
         compaction.removed = []
 

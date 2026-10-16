@@ -2,20 +2,21 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
     MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
     MulticenterBondConstraintKey as GraphIrMulticenterBondConstraintKey,
     MulticenterBondConstraintsForm as GraphIrMulticenterBondConstraintsForm,
+    MulticenterBondConstraintsView as GraphIrMulticenterBondConstraintsView,
     MulticenterBondId as GraphIrMulticenterBondId,
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
-use crate::multicenter::MulticenterBondForm;
+use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use crate::num::{NumForm, NumLike};
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
@@ -309,6 +310,32 @@ impl MulticenterBondConstraintsForm {
         multicenter_bond_constraint_items(py, &self.0)
     }
 
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.0
+            .asserted(key)
+            .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.0
+            .asserted_complete(key)
+            .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
     /// The constraint with the given key, or `default` (`None`) if absent.
     #[pyo3(signature = (key, default=None))]
     pub(crate) fn get(
@@ -368,7 +395,7 @@ impl MulticenterBondConstraintsForm {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.electron_count())
+        NumForm::from_rust(py, self.0.electron_count())
     }
 
     #[setter]
@@ -394,17 +421,19 @@ impl MulticenterBondConstraintsForm {
 
     /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `MulticenterBondConstraintsForm(..)` directly.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrMulticenterBondConstraintsForm) -> Self {
         MulticenterBondConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
+    borrowed,
     MulticenterBondConstraintsForm,
     GraphIrMulticenterBondConstraintsForm,
-    |value: &MulticenterBondConstraintsForm,
-     _py: Python<'_>|
-     -> PyResult<GraphIrMulticenterBondConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrMulticenterBondConstraintsForm|
      -> PyResult<MulticenterBondConstraintsForm> { Ok(MulticenterBondConstraintsForm(value)) }
@@ -490,69 +519,75 @@ pub(crate) fn multicenter_bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What a `MulticenterBondConstraintsView` writes through to: a multicenter bond
-/// within a molecule (by index) or a standalone `MulticenterBondForm`.
-pub(crate) enum MulticenterBondConstraintsBacking {
+/// Owner of the constraints exposed by MulticenterBondConstraintsView.
+pub(crate) enum MulticenterBondConstraintsStorage {
+    Update(Py<MulticenterBondUpdate>),
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrMulticenterBondId,
     },
     MulticenterBond(Py<MulticenterBondForm>),
 }
 
-/// A live handle onto one multicenter bond's constraints, backed by either a
-/// molecule-bond or a standalone `MulticenterBondForm`. Reads borrow the constraints
-/// and read only the item they need. Mutators on a molecule-backed view publish atomically through
-/// the molecule integrity gate; standalone forms mutate directly.
+/// A view of one multicenter bond's constraints, retaining its molecule, MulticenterBondForm,
+/// or MulticenterBondUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
+/// Semantic readings return independent normal values; None is bottom.
+/// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from MulticenterBondUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct MulticenterBondConstraintsView {
-    pub(crate) backing: MulticenterBondConstraintsBacking,
+    pub(crate) storage: MulticenterBondConstraintsStorage,
 }
 
 impl MulticenterBondConstraintsView {
+    fn read_view<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(GraphIrMulticenterBondConstraintsView<'_>) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let MulticenterBondConstraintsStorage::Molecule { owner, counter, id } = &self.storage
+        else {
+            return Err(PyValueError::new_err(
+                "MulticenterBondConstraintsView requires molecule context",
+            ));
+        };
+        let molecule = owner.try_borrow(py)?;
+        molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
+        let entity = molecule
+            .to_rust()
+            .multicenter_bonds()
+            .get(*id)
+            .ok_or_else(|| PyIndexError::new_err("multicenter bond id out of range"))?;
+        let view = entity.constraints();
+        f(view)
+    }
+
     /// Borrow the backing bond's constraints and read one item through `f` — no clone.
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
         f: impl FnOnce(&GraphIrMulticenterBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .multicenter_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("multicenter bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
-            MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
+            MulticenterBondConstraintsStorage::MulticenterBond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.to_rust().constraints)
-            }
-        }
-    }
-
-    /// Mutate the backing bond's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrMulticenterBondConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
-                let mut output = None;
-                owner
-                    .borrow_mut(py)
-                    .to_rust_mut()
-                    .try_modify_multicenter_bond(*id, |bond| {
-                        output = Some(f(&mut bond.constraints));
-                    })
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
-                Ok(output.expect("a successful checked mutation invokes its callback"))
-            }
-            MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }
@@ -563,7 +598,28 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         constraint: GraphIrMulticenterBondConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "MulticenterBondUpdate constraints are read-only",
+            )),
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
+                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("multicenter bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            MulticenterBondConstraintsStorage::MulticenterBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -572,12 +628,139 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: GraphIrMulticenterBondConstraintKey,
     ) -> PyResult<Option<GraphIrMulticenterBondConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "MulticenterBondUpdate constraints are read-only",
+            )),
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
+                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("multicenter bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            MulticenterBondConstraintsStorage::MulticenterBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
 #[pymethods]
 impl MulticenterBondConstraintsView {
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.read(py, |view| {
+            view.asserted(key)
+                .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.read(py, |view| {
+            view.asserted_complete(key)
+                .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection; None is bottom and undetermined is top.
+    /// Raises ValueError without molecule context.
+    fn derived(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.derived(key)
+                .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection with closure; None remains bottom.
+    /// Raises ValueError without molecule context.
+    fn derived_complete(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.derived_complete(key)
+                .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Meet the own assertion with derived and additional evidence; None is bottom.
+    /// Raises ValueError without molecule context.
+    fn evidenced(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.evidenced(key)
+                .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read combined evidence with relation closure; None remains bottom.
+    /// Raises ValueError without molecule context.
+    fn evidenced_complete(
+        &self,
+        py: Python<'_>,
+        key: &MulticenterBondConstraintKey,
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
+        let key = key.to_rust();
+        self.read_view(py, |view| {
+            view.evidenced_complete(key)
+                .map(|value| MulticenterBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Whether complete evidence satisfies every pattern entry.
+    /// Raises ValueError without molecule context, including for empty inputs.
+    fn satisfies(
+        &self,
+        py: Python<'_>,
+        pattern: &MulticenterBondConstraintsForm,
+    ) -> PyResult<bool> {
+        self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+    }
+
+    /// Whether open evidence is compatible with every entry of other.
+    /// Raises ValueError without molecule context, including for empty inputs.
+    fn is_compatible(
+        &self,
+        py: Python<'_>,
+        other: &MulticenterBondConstraintsForm,
+    ) -> PyResult<bool> {
+        self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+    }
+
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let count = self.read(py, |cs| Ok(cs.len()))?;
         Ok(format!("MulticenterBondConstraintsView({count} entries)"))
@@ -629,7 +812,28 @@ impl MulticenterBondConstraintsView {
         other: MulticenterBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "MulticenterBondUpdate constraints are read-only",
+            )),
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
+                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("multicenter bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            MulticenterBondConstraintsStorage::MulticenterBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -709,7 +913,7 @@ impl MulticenterBondConstraintsView {
     /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<NumForm> {
-        self.read(py, |cs| NumForm::from_rust(py, &cs.electron_count()))
+        self.read(py, |cs| NumForm::from_rust(py, cs.electron_count()))
     }
 
     #[setter]

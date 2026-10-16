@@ -1,0 +1,8 @@
+[
+ {:stereo-bond {:modify-configuration [[0 {:expect "*" :update "Ct0"}] [{:new 0} {:expect "Ct0" :update "Ct{0,1}"}]]}}
+ {:stereo-bond {:modify-constraints {:kind :cis-trans :key :stereogenicity :changes [[0 {:expect nil :update {:stereogenicity {:relation :stereogenic}}}] [0 {:expect {:stereogenicity {:relation :stereogenic}} :update nil}]]}}}
+ {:stereo-bond {:modify-constraints {:kind :cis-trans :key {:topicity {:pair [0 1]}} :changes [[0 {:expect nil :update {:topicity {:pair [0 1] :relation :homotopic}}}] [0 {:expect {:topicity {:pair [0 1] :relation :homotopic}} :update nil}]]}}}
+ {:stereo-bond {:modify-constraints {:kind :cis-trans :key {:fluxionality {:permutation [[0 1]]}} :changes [[0 {:expect nil :update {:fluxionality {:permutation [[0 1]] :active false}}}] [0 {:expect {:fluxionality {:permutation [[0 1]] :active false}} :update nil}]]}}}
+ {:stereo-bond {:modify-constraints {:kind :cis-trans :key {:ligand-symmetry {:permutation [[0 1]] :orientation :improper}} :changes [[0 {:expect nil :update {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}}] [0 {:expect {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}} :update nil}]]}}}
+ {:stereo-bond {:modify-constraints {:kind :cis-trans :key {:fluxionality {:permutation []}} :changes []}}}
+]

@@ -4,7 +4,7 @@
 //! externally, indexed by `NodeId`. Minimal by design — predecessors, edge identity,
 //! and copy-on-write are added when a directed algorithm needs them.
 
-use crate::graph::NodeId;
+use crate::id::NodeId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiGraph {

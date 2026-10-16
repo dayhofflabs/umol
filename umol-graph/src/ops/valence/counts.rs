@@ -5,6 +5,8 @@
 //! constrain each step; singleton candidate sets become edits, plural sets
 //! become completions.
 
+use std::fmt;
+
 use smallvec::SmallVec;
 use thiserror::Error;
 use umol_chem::element::Element;
@@ -33,11 +35,25 @@ pub enum CountsError {
 
 /// Atom that no valence-table state admits.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-#[error("no valence-table state: element {element}, charge {charge}, valence {valence}")]
 pub struct CountsMismatch {
     pub element: Element,
     pub charge: i64,
-    pub valence: i64,
+    /// Localized valence when a literal is available for this diagnostic.
+    pub valence: Option<i64>,
+}
+
+impl fmt::Display for CountsMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "no valence-table state: element {}, charge {}, valence ",
+            self.element, self.charge
+        )?;
+        match self.valence {
+            Some(valence) => write!(f, "{valence}"),
+            None => f.write_str("unavailable"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,27 +64,27 @@ struct CountsInput {
 }
 
 impl CountsInput {
-    fn for_molecule_atom(molecule: &Molecule, atom_id: AtomId) -> Self {
+    fn for_molecule_atom(
+        molecule: &Molecule,
+        atom_id: AtomId,
+        is_aromatic: bool,
+    ) -> Result<Self, CountsError> {
         let atom = molecule.atom(atom_id);
         let constraints = atom.constraints();
-        Self {
-            valence: atom.valence().as_lit().unwrap_or(0),
-            accepted_pairs: atom.accepted_pairs().as_lit().unwrap_or(0),
-            // Aromatic evidence: membership in a stored system (a relation
-            // fact, read derived) or the closed-world assertion reading,
-            // which merges both mark placements and closes to `NotAromatic`.
-            is_aromatic: matches!(
-                constraints.derived(AtomConstraintKey::AromaticValence),
-                Some(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(_)
-                ))
-            ) || matches!(
-                constraints.asserted_complete(AtomConstraintKey::AromaticValence),
-                Some(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(_)
-                ))
-            ),
-        }
+        let Some(AtomConstraintForm::Valence(valence)) =
+            constraints.evidenced_complete(AtomConstraintKey::Valence)
+        else {
+            return Err(CountsError::NoMatch);
+        };
+        Ok(Self {
+            valence: valence.as_lit().unwrap_or(0),
+            accepted_pairs: atom
+                .accepted_pairs()
+                .ok_or(CountsError::NoMatch)?
+                .as_lit()
+                .unwrap_or(0),
+            is_aromatic,
+        })
     }
 }
 
@@ -111,6 +127,10 @@ impl<'a> CountsValence<'a> {
         atom_id: AtomId,
     ) -> Result<Option<SmallVec<[AtomForm; 1]>>, CountsError> {
         let atom = molecule.atom(atom_id);
+        let aromatic = atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AromaticValence)
+            .ok_or(CountsError::NoMatch)?;
         if atom.is_ground() {
             // A field-ground atom whose aromatic evidence is present but
             // whose contribution is undetermined is still under resolution:
@@ -118,18 +138,21 @@ impl<'a> CountsValence<'a> {
             // stored system determines the contribution, so those atoms are
             // complete.
             let contribution_open = matches!(
-                atom.constraints()
-                    .asserted_complete(AtomConstraintKey::AromaticValence),
-                Some(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(NumForm::Undetermined)
+                aromatic,
+                AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(
+                    NumForm::Undetermined
                 ))
-            ) && !atom.is_in_aromatic_system();
+            );
             if !contribution_open {
                 return Ok(None);
             }
             let element = atom.element().as_lit().expect("ground element");
             let charge = atom.charge().as_lit().expect("ground charge");
-            let accepted_pairs = atom.accepted_pairs().as_lit().unwrap_or(0);
+            let accepted_pairs = atom
+                .accepted_pairs()
+                .ok_or(CountsError::NoMatch)?
+                .as_lit()
+                .unwrap_or(0);
             let Some(entry) = element
                 .shift((2 * accepted_pairs - charge) as i8)
                 .and_then(|shifted| self.table.entry(shifted))
@@ -141,7 +164,7 @@ impl<'a> CountsValence<'a> {
             }
             let mut candidates = SmallVec::new();
             for &aromatic_valence in &entry.aromatic_valences {
-                let mut candidate = atom.attributes.clone();
+                let mut candidate = atom.attributes().clone();
                 candidate
                     .constraints
                     .set(AtomConstraintForm::aromatic_valence(
@@ -158,11 +181,23 @@ impl<'a> CountsValence<'a> {
             return Ok(None);
         };
 
-        if atom.valence().as_lit().is_none() {
+        if atom
+            .valence()
+            .ok_or(CountsError::NoMatch)?
+            .as_lit()
+            .is_none()
+        {
             return Ok(None);
         }
-        let input = CountsInput::for_molecule_atom(molecule, atom_id);
-        let candidates = self.candidate_states(atom.attributes, input)?;
+        let input = CountsInput::for_molecule_atom(
+            molecule,
+            atom_id,
+            matches!(
+                aromatic,
+                AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(_))
+            ),
+        )?;
+        let candidates = self.candidate_states(atom.attributes(), input)?;
         Ok(Some(candidates))
     }
 
@@ -187,10 +222,7 @@ impl<'a> CountsValence<'a> {
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.table.entry(shifted));
 
-        let aromatic_constraint = atom
-            .constraints
-            .aromatic_valence()
-            .unwrap_or(&AromaticValenceForm::Undetermined);
+        let aromatic_constraint = atom.constraints.aromatic_valence();
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
@@ -299,19 +331,42 @@ impl<'a> CountsValence<'a> {
             return Solution::Underdetermined(());
         };
         let charge = atom.charge().as_lit().unwrap_or(0);
-        let input = CountsInput::for_molecule_atom(molecule, atom_id);
-        match self.candidate_states(atom.attributes, input) {
+        let input = atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AromaticValence)
+            .ok_or(CountsError::NoMatch)
+            .and_then(|aromatic| {
+                CountsInput::for_molecule_atom(
+                    molecule,
+                    atom_id,
+                    matches!(
+                        aromatic,
+                        AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(_))
+                    ),
+                )
+            });
+        let input = match input {
+            Ok(input) => input,
+            Err(_) => {
+                return Solution::Contradictory(CountsMismatch {
+                    element,
+                    charge,
+                    valence: atom.valence().and_then(|v| v.as_lit()),
+                })
+            }
+        };
+        match self.candidate_states(atom.attributes(), input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,
                 charge,
-                valence: input.valence,
+                valence: Some(input.valence),
             }),
         }
     }
 
     /// Infer implicit H under the valence policy, ignoring stored H and lone pairs.
-    /// Stored #v and #a take precedence over derivation from bonds and aromatic systems.
+    /// Complete constraint readings meet stored #v and #a with relation evidence.
     /// Uses the first table covalence at or above #v and retains charge/spin evidence.
     /// Returns None for missing concrete evidence, no admissible H count, or distinct H
     /// counts under Strict. MostSaturated selects the greatest admissible count.
@@ -326,15 +381,19 @@ impl<'a> CountsValence<'a> {
         let element = atom.element().as_lit()?;
         let charge = atom.charge().as_lit()?;
         let constraints = atom.constraints();
-        let valence = match constraints.valence() {
-            Some(asserted) => asserted.as_lit()?,
-            None => atom.valence().as_lit()?,
+        let AtomConstraintForm::Valence(valence) =
+            constraints.evidenced_complete(AtomConstraintKey::Valence)?
+        else {
+            unreachable!()
         };
-        let aromatic = match constraints.aromatic_valence() {
-            Some(asserted) => asserted.as_lit()?.valence_count(),
-            None => atom.aromatic_valence().as_lit()?,
+        let valence = valence.as_lit()?;
+        let AtomConstraintForm::AromaticValence(aromatic) =
+            constraints.evidenced_complete(AtomConstraintKey::AromaticValence)?
+        else {
+            unreachable!()
         };
-        let accepted_pairs = atom.accepted_pairs().as_lit()?;
+        let aromatic = aromatic.as_lit()?.valence_count();
+        let accepted_pairs = atom.accepted_pairs()?.as_lit()?;
         let shifted_number = i64::from(element.atomic_number())
             .checked_add(accepted_pairs.checked_mul(2)?)?
             .checked_sub(charge)?;
@@ -525,11 +584,27 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsForm, count: i64) -
 mod tests {
     use rstest::rstest;
     use smallvec::smallvec;
-    use umol_graph_ir::ir::{AromaticSystemForm, IsotopeMassForm};
+    use umol_graph_ir::ir::{AromaticSystemForm, BondForm, IsotopeMassForm};
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::valence::ValenceTable;
+
+    #[rstest]
+    #[case::available(Some(2), "no valence-table state: element C, charge 0, valence 2")]
+    #[case::zero(Some(0), "no valence-table state: element C, charge 0, valence 0")]
+    #[case::unavailable(
+        None,
+        "no valence-table state: element C, charge 0, valence unavailable"
+    )]
+    fn test_counts_mismatch_fmt(#[case] valence: Option<i64>, #[case] expected: &str) {
+        let mismatch = CountsMismatch {
+            element: Element::C,
+            charge: 0,
+            valence,
+        };
+        assert_eq!(mismatch.to_string(), expected);
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -651,6 +726,44 @@ mod tests {
     }
 
     #[rstest]
+    #[case::literal(NumForm::Lit(1), NumForm::Undetermined, Some(true))]
+    #[case::singleton(NumForm::lit_set([1]), NumForm::lit_set([1]), Some(true))]
+    #[case::set_assertion(NumForm::Lit(1), NumForm::lit_set([0, 1]), Some(true))]
+    #[case::conflict(NumForm::Lit(1), NumForm::Lit(2), None)]
+    #[case::asserted_bottom(NumForm::Lit(1), NumForm::lit_set([]), None)]
+    #[case::derived_bottom(NumForm::lit_set([]), NumForm::Undetermined, None)]
+    #[case::unknown_derivation(NumForm::Undetermined, NumForm::Lit(1), Some(false))]
+    #[case::unknown_with_bottom_assertion(NumForm::Undetermined, NumForm::lit_set([]), Some(false))]
+    #[case::set_derivation(NumForm::lit_set([1, 2]), NumForm::Lit(1), Some(false))]
+    fn test_counts_valence_admit_valence(
+        #[case] order: NumForm,
+        #[case] assertion: NumForm,
+        #[case] admitted: Option<bool>,
+    ) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                atom_dsl!("C#c0#h3#n0#u0#s")
+                    .with_constraint(AtomConstraintForm::Valence(assertion)),
+                atom_dsl!("C#i=#c0#h3#n0#u0#s"),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::new(order))],
+            ..Default::default()
+        });
+        let expected = match admitted {
+            Some(true) => Solution::Determined(AtomCompletions::from_iter([(
+                AtomId(0),
+                smallvec![atom_dsl!("C#c0#h3#n0#u0#s#v1#a!")],
+            )])),
+            Some(false) => Solution::Determined(AtomCompletions::new()),
+            None => Solution::Contradictory(CountsError::NoMatch),
+        };
+        assert_eq!(
+            CountsValence::new(ValenceTable::default_table()).admit(&molecule),
+            expected
+        );
+    }
+
+    #[rstest]
     #[case::undetermined(IsotopeMassForm::Undetermined)]
     #[case::natural(IsotopeMassForm::Natural)]
     #[case::mass(IsotopeMassForm::Lit(13))]
@@ -704,7 +817,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::contribution_asserted(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#a2"]}"#))]
-    #[case::in_system(
+    #[case::in_aromatic_system(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!("C#i=#c0#h1#n0#u0#s")],
             aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::from_electrons(vec![1]))],
@@ -741,6 +854,7 @@ mod tests {
 
     #[rstest]
     #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0#h4" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
+    #[case::ground_aromatic_conflict(mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u0#s#a!" "C"] :bonds [[0 1 "1#a"]]}"#), CountsError::NoMatch)]
     fn test_counts_valence_admit_error(#[case] molecule: Molecule, #[case] expected: CountsError) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.admit(&molecule), Solution::Contradictory(expected));
@@ -760,21 +874,61 @@ mod tests {
     #[case::anion(r#"{:atoms ["C#c-#h3#u0#s"]}"#, None, Some(3))]
     #[case::cation(r#"{:atoms ["C#c+#h3#u0#s"]}"#, None, Some(3))]
     #[case::derived_valence(r#"{:atoms ["C#c0#h3#u0#s" "C"] :bonds [[0 1 "1"]]}"#, None, Some(3))]
-    #[case::stored_valence(r#"{:atoms ["C#c0#h1#u0#s#v3"]}"#, Some(1), Some(1))]
+    #[case::stored_valence(r#"{:atoms ["C#c0#h1#u0#s#v3"]}"#, None, None)]
     #[case::other_constraints(r#"{:atoms ["C#c0#h4#u0#s#x2#y3#V8#H6#D7"]}"#, None, Some(4))]
-    #[case::aromatic_carbon(r#"{:atoms ["C#c0#u0#s#v2#a1"]}"#, Some(1), Some(1))]
-    #[case::pyridine_nitrogen(r#"{:atoms ["N#c0#u0#s#v2#a1"]}"#, Some(0), Some(0))]
-    #[case::pyrrole_nitrogen(r#"{:atoms ["N#c0#u0#s#v2#a2"]}"#, Some(1), Some(1))]
-    #[case::aromatic_zero(r#"{:atoms ["C#c0#u0#s#v4#a0"]}"#, Some(0), Some(0))]
-    #[case::aromatic_zero_h(r#"{:atoms ["C#c0#u0#s#v2#a0"]}"#, None, Some(2))]
-    #[case::aromatic_budget(r#"{:atoms ["C#c0#u0#s#v4#a1"]}"#, None, None)]
+    #[case::aromatic_carbon(
+        r#"{:atoms ["C#c0#u0#s#v2#a1" "C"] :bonds [[0 1 "2"]]}"#,
+        Some(1),
+        Some(1)
+    )]
+    #[case::pyridine_nitrogen(
+        r#"{:atoms ["N#c0#u0#s#v2#a1" "C"] :bonds [[0 1 "2"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::pyrrole_nitrogen(
+        r#"{:atoms ["N#c0#u0#s#v2#a2" "C"] :bonds [[0 1 "2"]]}"#,
+        Some(1),
+        Some(1)
+    )]
+    #[case::aromatic_zero(
+        r#"{:atoms ["C#c0#u0#s#v4#a0" "C"] :bonds [[0 1 "4"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::aromatic_zero_h(
+        r#"{:atoms ["C#c0#u0#s#v2#a0" "C"] :bonds [[0 1 "2"]]}"#,
+        None,
+        Some(2)
+    )]
+    #[case::aromatic_budget(r#"{:atoms ["C#c0#u0#s#v4#a1" "C"] :bonds [[0 1 "4"]]}"#, None, None)]
     #[case::first_target(r#"{:atoms ["S#c0#u0#s#v0"]}"#, None, Some(2))]
-    #[case::at_first_target(r#"{:atoms ["S#c0#u0#s#v2"]}"#, Some(0), Some(0))]
-    #[case::between_targets(r#"{:atoms ["S#c0#u0#s#v3"]}"#, Some(1), Some(1))]
-    #[case::at_second_target(r#"{:atoms ["S#c0#u0#s#v4"]}"#, Some(0), Some(0))]
-    #[case::last_target(r#"{:atoms ["S#c0#u0#s#v5"]}"#, Some(1), Some(1))]
-    #[case::above_targets(r#"{:atoms ["Cl#c0#u0#s#v3"]}"#, Some(0), Some(0))]
-    #[case::no_electron_budget(r#"{:atoms ["C#c0#u0#s#v5"]}"#, None, None)]
+    #[case::at_first_target(
+        r#"{:atoms ["S#c0#u0#s#v2" "C"] :bonds [[0 1 "2"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::between_targets(
+        r#"{:atoms ["S#c0#u0#s#v3" "C"] :bonds [[0 1 "3"]]}"#,
+        Some(1),
+        Some(1)
+    )]
+    #[case::at_second_target(
+        r#"{:atoms ["S#c0#u0#s#v4" "C"] :bonds [[0 1 "4"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::last_target(
+        r#"{:atoms ["S#c0#u0#s#v5" "C"] :bonds [[0 1 "5"]]}"#,
+        Some(1),
+        Some(1)
+    )]
+    #[case::above_targets(
+        r#"{:atoms ["Cl#c0#u0#s#v3" "C"] :bonds [[0 1 "3"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::no_electron_budget(r#"{:atoms ["C#c0#u0#s#v5" "C"] :bonds [[0 1 "5"]]}"#, None, None)]
     #[case::no_table_entry(r#"{:atoms ["Fe#c0#u0#s"]}"#, Some(0), Some(0))]
     #[case::lone_pair_capacity(r#"{:atoms ["O#c-4#u0#s"]}"#, Some(2), Some(2))]
     #[case::excess_lone_pairs(r#"{:atoms ["O#c-8#u0#s"]}"#, None, None)]
@@ -784,7 +938,6 @@ mod tests {
         Some(2)
     )]
     #[case::open_charge(r#"{:atoms ["C#u0#s"]}"#, None, None)]
-    #[case::open_valence(r#"{:atoms ["C#c0#u0#s#v*"]}"#, None, None)]
     #[case::open_aromatic(r#"{:atoms ["C#c0#u0#s#a+"]}"#, None, None)]
     #[case::aromatic_system(
         r#"{:atoms ["C#c0#h1#u0#s" "C" "C" "C" "C" "C"]
@@ -798,7 +951,7 @@ mod tests {
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#,
         None,
-        Some(2)
+        None
     )]
     fn test_counts_valence_infer_implicit_hydrogens(
         #[case] input: &str,
@@ -833,7 +986,7 @@ mod tests {
         #[case] most_saturated: Option<i64>,
         #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
     ) {
-        let molecule = mol_dsl!(r#"{:atoms ["Cl#c0#u0#s#v2"]}"#);
+        let molecule = mol_dsl!(r#"{:atoms ["Cl#c0#u0#s#v2" "C"] :bonds [[0 1 "2"]]}"#);
         let expected = match policy {
             ValenceTieBreak::Strict => strict,
             ValenceTieBreak::MostSaturated => most_saturated,
@@ -975,7 +1128,7 @@ mod tests {
 
     #[rstest]
     #[case::methane_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
-    #[case::excess_lone_pairs("C#i=#c0#h4#n2#u0#s#v0#a!", Solution::Contradictory(CountsMismatch { element: Element::C, charge: 0, valence: 0, }))]
+    #[case::excess_lone_pairs("C#i=#c0#h4#n2#u0#s#v0#a!", Solution::Contradictory(CountsMismatch { element: Element::C, charge: 0, valence: Some(0), }))]
     #[case::not_ground("C", Solution::Underdetermined(()))]
     fn test_counts_valence_classify_molecule_atom(
         #[case] input: &str,
@@ -984,6 +1137,43 @@ mod tests {
         let resolver = CountsValence::new(ValenceTable::default_table());
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![atom_dsl!(input)],
+            ..Default::default()
+        });
+        assert_eq!(
+            resolver.classify_molecule_atom(&molecule, AtomId(0)),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::admitted(NumForm::Lit(1), Solution::Determined(()))]
+    #[case::mismatch(
+        NumForm::Lit(2),
+        Solution::Contradictory(CountsMismatch {
+            element: Element::C, charge: 0, valence: Some(2),
+        }),
+    )]
+    #[case::bottom(
+        NumForm::lit_set([]),
+        Solution::Contradictory(CountsMismatch {
+            element: Element::C, charge: 0, valence: None,
+        }),
+    )]
+    fn test_counts_valence_classify_molecule_atom_projection(
+        #[case] order: NumForm,
+        #[case] expected: Solution<(), CountsMismatch>,
+    ) {
+        let resolver = CountsValence::new(ValenceTable::default_table());
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom_dsl!("C#i=#c0#h3#n0#u0#s"); 2],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                BondForm {
+                    order,
+                    ..Default::default()
+                },
+            )],
             ..Default::default()
         });
         assert_eq!(

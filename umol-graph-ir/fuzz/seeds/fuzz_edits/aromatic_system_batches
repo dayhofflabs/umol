@@ -1,0 +1,6 @@
+[
+ {:aromatic-system {:modify-electrons [[0 {:expect "*" :update "[]"}] [{:new 0} {:expect "[]" :update "*"}]]}}
+ {:aromatic-system {:modify-charge [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}
+ {:aromatic-system {:modify-unpaired-electrons [[0 {:expect {:count :undetermined :multiplicity :undetermined} :update {:count 0 :multiplicity 1}}] [{:new 0} {:expect {:count 0 :multiplicity 1} :update {:count :undetermined :multiplicity :undetermined}}]]}}
+ {:aromatic-system {:modify-constraints {:key :electron-count :changes [[0 {:expect nil :update {:electron-count 2}}] [0 {:expect {:electron-count 2} :update nil}]]}}}
+]

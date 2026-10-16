@@ -1,3 +1,5 @@
+import pytest
+
 from umol import MemOp, RelOp, NumForm, PredExpr, ArithExpr
 
 
@@ -17,6 +19,29 @@ def test_memop_eq():
 
 def test_memop_hashable():
     assert len({MemOp.In, MemOp.In, MemOp.NotIn}) == 2
+
+
+@pytest.mark.parametrize(
+    ("variant", "values"),
+    [
+        (ArithExpr.Sum, []),
+        (ArithExpr.Sum, [ArithExpr.Lit(1), ArithExpr.Lit(1)]),
+        (ArithExpr.Product, [ArithExpr.Lit(2), ArithExpr.Var("n")]),
+        (PredExpr.And, [PredExpr.Rel(ArithExpr.Lit(1), RelOp.Eq, ArithExpr.Lit(1))]),
+        (PredExpr.Or, [PredExpr.Mem(ArithExpr.Var("n"), MemOp.In, {1, 2})]),
+    ],
+)
+def test_expression_sequence(variant, values):
+    expected = tuple(values)
+    form = variant(values)
+    values.clear()
+    assert type(form._0) is tuple
+    assert form._0 == expected
+    assert variant(form._0) == form
+    with pytest.raises(TypeError):
+        form._0[0] = None
+    with pytest.raises(AttributeError):
+        form._0 = ()
 
 
 def test_arith_expr_lit():
@@ -55,6 +80,18 @@ def test_pred_expr_mem():
     assert pred._2 == {1, 2, 3}
 
 
+def test_pred_expr_mem_members():
+    values = {1, 2}
+    form = PredExpr.Mem(ArithExpr.Var("n"), MemOp.In, values)
+    values.clear()
+    assert type(form._2) is frozenset
+    assert form._2 == frozenset({1, 2})
+    assert PredExpr.Mem(form._0, form._1, form._2) == form
+    assert type(NumForm.PredExpr(form)._0._2) is frozenset
+    with pytest.raises(AttributeError):
+        form._2.add(3)
+
+
 def test_pred_expr_and():
     pred = PredExpr.And(
         [PredExpr.Rel(ArithExpr.Lit(1), RelOp.Lt, ArithExpr.Lit(2))]
@@ -73,6 +110,18 @@ def test_num_form_lit():
 
 def test_num_form_undetermined_match():
     assert NumForm.Undetermined() == NumForm.Undetermined()
+
+
+@pytest.mark.parametrize("values", [set(), {1, 2}])
+def test_num_form_litset_members(values):
+    expected = frozenset(values)
+    form = NumForm.LitSet(values)
+    values.clear()
+    assert type(form._0) is frozenset
+    assert form._0 == expected
+    assert NumForm.LitSet(form._0) == form
+    with pytest.raises(AttributeError):
+        form._0.add(3)
 
 
 def test_num_form_litset():
@@ -111,7 +160,7 @@ def test_arith_expr_eq_repr():
     assert ArithExpr.Lit(1) == ArithExpr.Lit(1)
     assert ArithExpr.Lit(1) != ArithExpr.Var("x")
     assert repr(ArithExpr.Sum([ArithExpr.Lit(1), ArithExpr.Lit(2)])) == (
-        "ArithExpr.Sum([ArithExpr.Lit(1), ArithExpr.Lit(2)])"
+        'ArithExpr.Sum((ArithExpr.Lit(1), ArithExpr.Lit(2)))'
     )
 
 

@@ -1,6 +1,7 @@
 //! Property-based tests for Edn.
 
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
@@ -176,6 +177,58 @@ fn hash_of(v: &Edn<'_>) -> u64 {
     h.finish()
 }
 
+// Definition-level ordering reference: sort unordered collections recursively.
+fn reference_cmp(left: &Edn<'_>, right: &Edn<'_>) -> Ordering {
+    match (left, right) {
+        (Edn::List(a) | Edn::Vector(a), Edn::List(b) | Edn::Vector(b)) => {
+            reference_sequence_cmp(a.iter(), b.iter())
+        }
+        (Edn::Map(a), Edn::Map(b)) => {
+            let mut a: Vec<_> = a.iter().collect();
+            let mut b: Vec<_> = b.iter().collect();
+            let compare = |a: &(&Edn<'_>, &Edn<'_>), b: &(&Edn<'_>, &Edn<'_>)| {
+                reference_cmp(a.0, b.0).then_with(|| reference_cmp(a.1, b.1))
+            };
+            a.sort_by(compare);
+            b.sort_by(compare);
+            reference_sequence_cmp(
+                a.into_iter().flat_map(|(key, value)| [key, value]),
+                b.into_iter().flat_map(|(key, value)| [key, value]),
+            )
+        }
+        (Edn::Set(a), Edn::Set(b)) => {
+            let mut a: Vec<_> = a.iter().collect();
+            let mut b: Vec<_> = b.iter().collect();
+            a.sort_by(|a, b| reference_cmp(a, b));
+            b.sort_by(|a, b| reference_cmp(a, b));
+            reference_sequence_cmp(a, b)
+        }
+        (Edn::Tagged(a_tag, a), Edn::Tagged(b_tag, b)) => {
+            a_tag.cmp(b_tag).then_with(|| reference_cmp(a, b))
+        }
+        _ => left.cmp(right),
+    }
+}
+
+fn reference_sequence_cmp<'a>(
+    left: impl IntoIterator<Item = &'a Edn<'a>>,
+    right: impl IntoIterator<Item = &'a Edn<'a>>,
+) -> Ordering {
+    let mut left = left.into_iter();
+    let mut right = right.into_iter();
+    loop {
+        match (left.next(), right.next()) {
+            (Some(a), Some(b)) => match reference_cmp(a, b) {
+                Ordering::Equal => {}
+                order => return order,
+            },
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (None, None) => return Ordering::Equal,
+        }
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
 
@@ -198,6 +251,21 @@ proptest! {
     #[test]
     fn test_eq_reflexive(edn in edn_strategy()) {
         prop_assert!(edn == edn);
+    }
+
+    #[test]
+    fn test_edn_cmp(a in edn_strategy(), b in edn_strategy()) {
+        let order = a.cmp(&b);
+        prop_assert_eq!(order, reference_cmp(&a, &b));
+        prop_assert_eq!(order, b.cmp(&a).reverse());
+        prop_assert_eq!(order == Ordering::Equal, a == b);
+    }
+
+    #[test]
+    fn test_edn_cmp_transitivity(a in edn_strategy(), b in edn_strategy(), c in edn_strategy()) {
+        if a <= b && b <= c {
+            prop_assert!(a <= c);
+        }
     }
 
     #[test]

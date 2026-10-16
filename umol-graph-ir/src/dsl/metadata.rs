@@ -135,7 +135,7 @@ impl MoleculeMetadata {
     /// `correspondence` to its matched right entities. Keywords on unmatched
     /// left entities are omitted; atom aliases are independent of molecule ids
     /// and remain unchanged.
-    pub fn remap(self, correspondence: &MoleculeCorrespondence) -> Self {
+    pub fn map(self, correspondence: &MoleculeCorrespondence) -> Self {
         let Self {
             keywords,
             atom_aliases,
@@ -658,7 +658,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_metadata_remap() {
+    fn test_molecule_metadata_map() {
         let input = MoleculeMetadata {
             keywords: [
                 (Entity::Atom(AtomId(0)), "atom".to_string()),
@@ -740,11 +740,11 @@ mod tests {
             .collect(),
         };
 
-        assert_eq!(input.remap(&correspondence), expected);
+        assert_eq!(input.map(&correspondence), expected);
     }
 
     #[rstest]
-    fn test_molecule_metadata_remap_identity() {
+    fn test_molecule_metadata_map_identity() {
         let input = MoleculeMetadata {
             keywords: [
                 (Entity::Atom(AtomId(0)), "atom".to_string()),
@@ -776,11 +776,11 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
 
-        assert_eq!(input.clone().remap(&correspondence), input);
+        assert_eq!(input.clone().map(&correspondence), input);
     }
 
     #[rstest]
-    fn test_molecule_metadata_remap_partial() {
+    fn test_molecule_metadata_map_partial() {
         let input = MoleculeMetadata {
             keywords: [
                 (Entity::Atom(AtomId(0)), "removed-atom".to_string()),
@@ -826,11 +826,11 @@ mod tests {
             .collect(),
         };
 
-        assert_eq!(input.remap(&correspondence), expected);
+        assert_eq!(input.map(&correspondence), expected);
     }
 
     #[rstest]
-    fn test_molecule_metadata_remap_roundtrip() {
+    fn test_molecule_metadata_map_roundtrip() {
         let input = MoleculeMetadata {
             keywords: [
                 (Entity::Atom(AtomId(0)), "first".to_string()),
@@ -866,14 +866,14 @@ mod tests {
         assert_eq!(
             input
                 .clone()
-                .remap(&correspondence)
-                .remap(&correspondence.reverse()),
+                .map(&correspondence)
+                .map(&correspondence.reverse()),
             input
         );
     }
 
     #[rstest]
-    fn test_molecule_metadata_remap_composition() {
+    fn test_molecule_metadata_map_composition() {
         let input = MoleculeMetadata {
             keywords: [(Entity::Atom(AtomId(0)), "atom".to_string())]
                 .into_iter()
@@ -922,8 +922,8 @@ mod tests {
                 .collect(),
             atom_aliases: BiBTreeMap::new(),
         };
-        let sequential = input.clone().remap(&first).remap(&second);
-        let composed = input.remap(&first.compose(&second).unwrap());
+        let sequential = input.clone().map(&first).map(&second);
+        let composed = input.map(&first.compose(&second).unwrap());
 
         assert_eq!(sequential, composed);
         assert_eq!(composed, expected);

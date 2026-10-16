@@ -32,9 +32,9 @@ pub(crate) use umol_graph_ir::ir::{
     AtomConstraintKey, AtomConstraintsForm, AtomDelta, AtomFieldChange, AtomForm, AtomHandle,
     AtomId, AtomUpdate, BondConstraintForm, BondConstraintKey, BondConstraintsForm, BondDelta,
     BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, CisTransStereoForm,
-    Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm, DativeBondConstraintKey,
-    DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange, DativeBondForm,
-    DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
+    Constraint, ConstraintDelta, ConstraintEdit, Constraints, DativeBondConstraintForm,
+    DativeBondConstraintKey, DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange,
+    DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
     ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, FluxionalityForm,
     FrameTransport, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
     LigandSymmetryForm, MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence,
@@ -199,9 +199,9 @@ pub(crate) fn raw_num_form_strategy() -> BoxedStrategy<NumForm> {
     .boxed()
 }
 
-// Raw (non-normal, satisfiable) generators for the remaining
-// `normalized()`-overriding leaves, to fuzz the *fold* path of the universal
-// lattice laws (the normalizing strategies only ever reach the borrow path).
+// Raw (non-normal, satisfiable) generators for the remaining leaves with a
+// fold path, to fuzz the *fold* path of the universal lattice laws (the
+// normalizing strategies only ever produce normal values).
 // Each mixes deliberately non-normal draws with the normalized strategy, then
 // filters to satisfiable values (the `matches` law's RHS only agrees with the
 // default on satisfiable targets).
@@ -291,6 +291,124 @@ pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<Stereogeni
     ]
     .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
+}
+
+// Raw constraint forms at every key of the eight constraint form types: payloads
+// from the raw leaf generators, plus the unsatisfiable empty set for counts, so a
+// draw may be non-normal or may not normalize at all.
+
+fn raw_count_strategy() -> BoxedStrategy<NumForm> {
+    prop_oneof![
+        4 => raw_num_form_strategy(),
+        1 => Just(NumForm::LitSet(Box::default())),
+    ]
+    .boxed()
+}
+
+fn ring_scope_strategy() -> impl Strategy<Value = RingScope> {
+    prop_oneof![Just(RingScope::All), (3u8..=10).prop_map(RingScope::Size)]
+}
+
+fn boolean_form_strategy() -> impl Strategy<Value = BooleanForm> {
+    prop_oneof![
+        Just(BooleanForm::Undetermined),
+        any::<bool>().prop_map(BooleanForm::Lit),
+    ]
+}
+
+pub(crate) fn raw_atom_constraint_strategy() -> BoxedStrategy<AtomConstraintForm> {
+    prop_oneof![
+        raw_count_strategy().prop_map(AtomConstraintForm::Valence),
+        raw_count_strategy().prop_map(AtomConstraintForm::DonatedPairs),
+        raw_count_strategy().prop_map(AtomConstraintForm::AcceptedPairs),
+        raw_aromatic_valence_form_strategy().prop_map(AtomConstraintForm::AromaticValence),
+        raw_multicenter_valence_form_strategy().prop_map(AtomConstraintForm::MulticenterValence),
+        raw_tetrahedral_stereo_strategy().prop_map(AtomConstraintForm::TetrahedralStereo),
+        raw_count_strategy().prop_map(AtomConstraintForm::Degree),
+        raw_count_strategy().prop_map(AtomConstraintForm::TotalDegree),
+        raw_count_strategy().prop_map(AtomConstraintForm::TotalValence),
+        raw_count_strategy().prop_map(AtomConstraintForm::RingDegree),
+        raw_count_strategy().prop_map(AtomConstraintForm::RingValence),
+        raw_count_strategy().prop_map(AtomConstraintForm::TotalHydrogens),
+        (ring_scope_strategy(), raw_count_strategy()).prop_map(|(scope, count)| {
+            AtomConstraintForm::RingMembership(RingMembershipForm::new(scope, count))
+        }),
+    ]
+    .boxed()
+}
+
+pub(crate) fn raw_bond_constraint_strategy() -> BoxedStrategy<BondConstraintForm> {
+    prop_oneof![
+        boolean_form_strategy().prop_map(BondConstraintForm::Aromatic),
+        raw_cis_trans_stereo_strategy().prop_map(BondConstraintForm::CisTransStereo),
+        (ring_scope_strategy(), raw_count_strategy()).prop_map(|(scope, count)| {
+            BondConstraintForm::RingMembership(RingMembershipForm::new(scope, count))
+        }),
+    ]
+    .boxed()
+}
+
+pub(crate) fn raw_dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintForm> {
+    prop_oneof![
+        boolean_form_strategy().prop_map(DativeBondConstraintForm::Aromatic),
+        (ring_scope_strategy(), raw_count_strategy()).prop_map(|(scope, count)| {
+            DativeBondConstraintForm::RingMembership(RingMembershipForm::new(scope, count))
+        }),
+    ]
+    .boxed()
+}
+
+pub(crate) fn raw_aromatic_system_constraint_strategy(
+) -> BoxedStrategy<AromaticSystemConstraintForm> {
+    raw_count_strategy()
+        .prop_map(AromaticSystemConstraintForm::ElectronCount)
+        .boxed()
+}
+
+pub(crate) fn raw_multicenter_bond_constraint_strategy(
+) -> BoxedStrategy<MulticenterBondConstraintForm> {
+    raw_count_strategy()
+        .prop_map(MulticenterBondConstraintForm::ElectronCount)
+        .boxed()
+}
+
+pub(crate) fn raw_noncovalent_bond_constraint_strategy(
+) -> BoxedStrategy<NoncovalentBondConstraintForm> {
+    boolean_form_strategy()
+        .prop_map(NoncovalentBondConstraintForm::Intramolecular)
+        .boxed()
+}
+
+/// Stereo constraints of every kind and key: the generated forms with raw topicity and
+/// stereogenicity relations added.
+macro_rules! raw_stereo_constraint_strategy {
+    ($name:ident, $strategy:ident, $constraint:ident) => {
+        pub(crate) fn $name() -> BoxedStrategy<$constraint> {
+            stereo_atom_kind_strategy()
+                .prop_flat_map(|kind| {
+                    prop_oneof![
+                        $strategy(kind),
+                        (
+                            ligand_pair_strategy(kind.degree()),
+                            raw_topicity_relation_strategy()
+                        )
+                            .prop_map(|(pair, relation)| {
+                                $constraint::Topicity(TopicityForm { pair, relation })
+                            }),
+                        raw_stereogenicity_relation_strategy()
+                            .prop_map($constraint::Stereogenicity),
+                    ]
+                })
+                .boxed()
+        }
+    };
+}
+
+raw_stereo_constraint_strategy! {
+    raw_stereo_atom_constraint_strategy, stereo_atom_constraint_strategy, StereoAtomConstraintForm
+}
+raw_stereo_constraint_strategy! {
+    raw_stereo_bond_constraint_strategy, stereo_bond_constraint_strategy, StereoBondConstraintForm
 }
 
 pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassForm> {
@@ -1163,7 +1281,7 @@ pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = Topicity
 
 /// Normalized, fiber-spanning `RingMembershipForm`: the `scope` varies (`All` and
 /// `Size(3..=10)`) so a value triple lands in different fibers, exercising the
-/// cross-scope `meet` → `None` / `join` → `Err(NoJoin)` path.
+/// cross-scope `meet` → `None` / `join` → `Err(NoJoinError)` path.
 pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMembershipForm> {
     prop_oneof![
         constraint_value_strategy(0..=6)
@@ -1207,11 +1325,6 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     if let Ok(j) = a.join(b) {
         prop_assert_eq!(j.clone().normalize(), Ok(j));
     }
-    // `normalized()` (the borrow fast-path) agrees with `normalize()`.
-    prop_assert_eq!(
-        a.normalized().map(|c| c.into_owned()),
-        a.clone().normalize()
-    );
     // `normalized_eq` is equality of normal forms.
     prop_assert_eq!(
         a.normalized_eq(b),
@@ -1360,6 +1473,99 @@ pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondFor
         .prop_map(|(coset, cs)| {
             StereoBondForm::new(StereoKind::CisTrans, coset).with_constraints(cs)
         })
+}
+
+/// Raw forms with optional kind and independently stored constraints, including bottom
+/// payloads. Neither the constraints nor the owning form are normalized by this strategy.
+macro_rules! raw_stereo_form_strategy {
+    ($name:ident, $form:ident, $constraint:ident, $constraint_strategy:ident, $kinds:expr) => {
+        pub(crate) fn $name() -> BoxedStrategy<$form> {
+            $kinds
+                .prop_flat_map(|kind| {
+                    (
+                        prop::option::of(stereo_coset_for_kind(kind)),
+                        prop::collection::vec(
+                            prop_oneof![
+                                $constraint_strategy(kind),
+                                (
+                                    ligand_pair_strategy(kind.degree()),
+                                    prop_oneof![
+                                        raw_topicity_relation_strategy(),
+                                        Just(TopicityRelationForm::lit_set([])),
+                                    ]
+                                )
+                                    .prop_map(|(pair, relation)| {
+                                        $constraint::Topicity(TopicityForm { pair, relation })
+                                    }),
+                                prop_oneof![
+                                    raw_stereogenicity_relation_strategy(),
+                                    Just(StereogenicityForm::lit_set([])),
+                                ]
+                                .prop_map($constraint::Stereogenicity),
+                            ],
+                            0..=4,
+                        ),
+                    )
+                        .prop_map(move |(coset, constraints)| $form {
+                            configuration: coset
+                                .map_or(StereoConfigurationForm::Undetermined, |coset| {
+                                    StereoConfigurationForm::kinded(kind, coset)
+                                }),
+                            constraints: constraints.into(),
+                        })
+                })
+                .boxed()
+        }
+    };
+}
+
+raw_stereo_form_strategy!(
+    raw_stereo_atom_form_strategy,
+    StereoAtomForm,
+    StereoAtomConstraintForm,
+    stereo_atom_constraint_strategy,
+    stereo_atom_kind_strategy()
+);
+raw_stereo_form_strategy!(
+    raw_stereo_bond_form_strategy,
+    StereoBondForm,
+    StereoBondConstraintForm,
+    stereo_bond_constraint_strategy,
+    Just(StereoKind::CisTrans)
+);
+
+/// Raw updates include context-free constraints and explicit kind assignment or clearing.
+pub(crate) fn raw_stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomUpdate> {
+    (raw_stereo_atom_form_strategy(), any::<bool>()).prop_map(|(form, explicit)| StereoAtomUpdate {
+        configuration: match form.configuration {
+            StereoConfigurationForm::Undetermined if explicit => {
+                StereoConfigurationUpdate::Undetermined
+            }
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Unchanged,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind,
+                coset: explicit.then_some(coset),
+            },
+        },
+        constraints: form.constraints,
+    })
+}
+
+/// Raw updates include context-free constraints and explicit kind assignment or clearing.
+pub(crate) fn raw_stereo_bond_update_strategy() -> impl Strategy<Value = StereoBondUpdate> {
+    (raw_stereo_bond_form_strategy(), any::<bool>()).prop_map(|(form, explicit)| StereoBondUpdate {
+        configuration: match form.configuration {
+            StereoConfigurationForm::Undetermined if explicit => {
+                StereoConfigurationUpdate::Undetermined
+            }
+            StereoConfigurationForm::Undetermined => StereoConfigurationUpdate::Unchanged,
+            StereoConfigurationForm::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                kind,
+                coset: explicit.then_some(coset),
+            },
+        },
+        constraints: form.constraints,
+    })
 }
 
 pub(crate) fn stereo_bond_update_constraints_strategy(
@@ -1741,6 +1947,21 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
         )
 }
 
+/// `molecule` with its molecule-level constraints in normal form, for comparisons under their
+/// set-like semantics.
+pub(crate) fn with_normalized_constraints(molecule: &Molecule) -> Molecule {
+    let mut editor = molecule.clone().edit();
+    let constraints = editor
+        .constraints()
+        .clone()
+        .normalize()
+        .expect("generated constraints are satisfiable");
+    *editor.constraints_mut() = constraints;
+    editor
+        .finish()
+        .expect("normalizing constraints preserves integrity")
+}
+
 pub(crate) fn molecule_strategy() -> impl Strategy<Value = Molecule> {
     molecule_entries_strategy().prop_map(Molecule::from_entries)
 }
@@ -1771,6 +1992,19 @@ impl ConstraintCounts {
             noncovalent: entries.noncovalent.len(),
             stereo_atom: entries.stereo_atoms.len(),
             stereo_bond: entries.stereo_bonds.len(),
+        }
+    }
+
+    pub(crate) fn from_reaction_span(span: &ReactionSpan) -> Self {
+        Self {
+            atom: span.atoms().len(),
+            bond: span.bonds().len(),
+            dative: span.dative_bonds().count(),
+            aromatic: span.aromatic_systems().count(),
+            multicenter: span.multicenter_bonds().count(),
+            noncovalent: span.noncovalent_bonds().count(),
+            stereo_atom: span.stereo_atoms().count(),
+            stereo_bond: span.stereo_bonds().count(),
         }
     }
 
@@ -2379,6 +2613,50 @@ pub(crate) fn molecule_dense_renumbering_strategy(
     })
 }
 
+/// A molecule and a molecule derived from it for the canonical equality contract: its
+/// renumbering, normal form, or reframing (equivalent), one atom's charge set to a drawn literal,
+/// or one added atom (usually not equivalent).
+pub(crate) fn molecule_canonical_pair_strategy() -> impl Strategy<Value = (Molecule, Molecule)> {
+    (
+        molecule_dense_renumbering_strategy(),
+        0u8..5,
+        -2i64..=2,
+        element_strategy(),
+        any::<prop::sample::Index>(),
+    )
+        .prop_map(
+            |((molecule, renumbering), transform, charge, element, index)| {
+                let derived = match transform {
+                    0 => molecule.clone().remap(&renumbering),
+                    1 => molecule
+                        .clone()
+                        .normalize()
+                        .unwrap_or_else(|_| molecule.clone()),
+                    2 => molecule
+                        .clone()
+                        .reframe()
+                        .unwrap_or_else(|_| molecule.clone()),
+                    3 if molecule.atoms().count() > 0 => {
+                        let id = AtomId(index.index(molecule.atoms().count()) as u32);
+                        let mut editor = molecule.clone().edit();
+                        editor.atom_mut(id).attributes_mut().charge = NumForm::Lit(charge);
+                        editor
+                            .finish()
+                            .expect("setting a charge preserves integrity")
+                    }
+                    _ => Molecule::combine_all([
+                        &molecule,
+                        &Molecule::from_entries(MoleculeEntries {
+                            atoms: vec![AtomForm::from_element(element)],
+                            ..Default::default()
+                        }),
+                    ]),
+                };
+                (molecule, derived)
+            },
+        )
+}
+
 /// Raw, satisfiable molecule/reaction/span values sharing all six overlay kinds. Singleton numeric
 /// sets make normalization observable, nonuniform positional payloads make frame transport
 /// observable, and distinct normalized atom charges keep canonicalization inexpensive.
@@ -2490,8 +2768,14 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
         };
         let first_remapping = remapping(&molecule, factor);
         let second_remapping = remapping(&molecule, ATOM_COUNT - factor);
-        let first_action = molecule.remap(&first_remapping).representative_action();
-        let second_action = molecule.remap(&second_remapping).representative_action();
+        let first_action = molecule
+            .clone()
+            .remap(&first_remapping)
+            .representative_action();
+        let second_action = molecule
+            .clone()
+            .remap(&second_remapping)
+            .representative_action();
         let covering_remapping = remapping(&covering_molecule, factor);
         let covering_action = covering_molecule
             .remap(&covering_remapping)
@@ -2501,7 +2785,7 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
             .remap(&incompatible_remapping)
             .representative_action();
 
-        let original_charge = molecule.atom(AtomId(10)).attributes.charge.clone();
+        let original_charge = molecule.atom(AtomId(10)).attributes().charge.clone();
         let erased_attributes = MulticenterBondForm::from_electrons(vec![10, 9, 8]);
         let reaction = Reaction::new(
             molecule.clone(),
@@ -2560,13 +2844,22 @@ pub(crate) fn intrinsic_contradiction_scenario_strategy(
 ) -> impl Strategy<Value = IntrinsicContradictionScenario> {
     standardization_scenario_strategy().prop_map(|scenario| {
         let mut first = scenario.molecule.clone();
-        first.atom_mut(AtomId(10)).attributes.charge = NumForm::lit_set([]);
-        first.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(0);
+        first.atom_mut(AtomId(10)).attributes_mut().charge = NumForm::lit_set([]);
+        first
+            .atom_mut(AtomId(10))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::Lit(0);
         let mut second = scenario.molecule;
-        second.atom_mut(AtomId(10)).attributes.charge = NumForm::lit_set([]);
-        second.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(1);
+        second.atom_mut(AtomId(10)).attributes_mut().charge = NumForm::lit_set([]);
+        second
+            .atom_mut(AtomId(10))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::Lit(1);
         let mut third = second.clone();
-        third.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(2);
+        third
+            .atom_mut(AtomId(10))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::Lit(2);
         let first_reaction = Reaction::new(first.clone(), Deltas::new());
         let second_reaction = Reaction::new(second.clone(), Deltas::new());
         let third_reaction = Reaction::new(third.clone(), Deltas::new());
@@ -2627,6 +2920,9 @@ pub(crate) fn molecule_with_atom_subset_strategy() -> impl Strategy<Value = (Mol
     })
 }
 
+/// Atom and bond removals that leave the molecule valid. Topology removal cascades a stereo entity
+/// only when one of its participants is removed, so the removed bonds exclude every bond that
+/// connects a stereo site to one of its atom ligands.
 pub(crate) fn molecule_with_removals_strategy(
 ) -> impl Strategy<Value = (Molecule, Vec<AtomId>, Vec<BondId>)> {
     molecule_strategy().prop_flat_map(|molecule| {
@@ -2638,6 +2934,29 @@ pub(crate) fn molecule_with_removals_strategy(
             prop::collection::vec(any::<bool>(), bond_count),
         )
             .prop_map(|(molecule, atom_mask, bond_mask)| {
+                let graph = molecule.raw_graph();
+                let ligand_bond = |sites: &[AtomId], ligand: &StereoLigand| {
+                    (ligand.kind == StereoLigandKind::Atom)
+                        .then(|| {
+                            sites.iter().find_map(|&site| {
+                                graph.find_edge(NodeId::from(site), NodeId::from(ligand.atom_id))
+                            })
+                        })
+                        .flatten()
+                };
+                let mut ligand_bonds = HashSet::new();
+                for view in molecule.stereo_atoms().iter() {
+                    for ligand in view.ligand_ids() {
+                        ligand_bonds.extend(ligand_bond(&[view.site_id()], ligand));
+                    }
+                }
+                for view in molecule.stereo_bonds().iter() {
+                    let [first, second] = graph.edge_endpoints(EdgeId::from(view.site_id()));
+                    let sites = [AtomId::from(first), AtomId::from(second)];
+                    for ligand in view.ligand_ids() {
+                        ligand_bonds.extend(ligand_bond(&sites, ligand));
+                    }
+                }
                 let atoms = atom_mask
                     .into_iter()
                     .enumerate()
@@ -2646,7 +2965,10 @@ pub(crate) fn molecule_with_removals_strategy(
                 let bonds = bond_mask
                     .into_iter()
                     .enumerate()
-                    .filter_map(|(index, remove)| remove.then_some(BondId(index as u32)))
+                    .filter(|&(index, remove)| {
+                        remove && !ligand_bonds.contains(&EdgeId(index as u32))
+                    })
+                    .map(|(index, _)| BondId(index as u32))
                     .collect();
                 (molecule, atoms, bonds)
             })
@@ -2695,12 +3017,12 @@ fn molecule_entity_incidence_is_unique(molecule: &Molecule) -> bool {
         molecule
             .stereo_atoms()
             .iter()
-            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_ids().to_vec()))),
     ) && all_unique(
         molecule
             .stereo_bonds()
             .iter()
-            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_ids().to_vec()))),
     )
 }
 
@@ -3377,10 +3699,8 @@ impl InvalidTransactionBatch {
                                     position as u32
                                 },
                             )),
-                            vec![
-                                AtomHandle::Id(AtomId((position * 2) as u32)),
-                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
-                            ],
+                            vec![AtomHandle::Id(AtomId((position * 2) as u32))],
+                            AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                             DativeBondForm::from_order(1),
                         )
                     })
@@ -3643,10 +3963,8 @@ impl TransactionCase {
                 }
                 let mut edits = Edits::new();
                 edits.add_dative_bond(
-                    vec![
-                        AtomHandle::Id(AtomId(donor as u32)),
-                        AtomHandle::Id(AtomId(acceptor as u32)),
-                    ],
+                    vec![AtomHandle::Id(AtomId(donor as u32))],
+                    AtomHandle::Id(AtomId(acceptor as u32)),
                     DativeBondForm::from_order(1),
                 );
                 edits
@@ -3944,7 +4262,8 @@ fn transaction_removal_cases() -> Vec<(Molecule, Edits)> {
         Edit::RemoveDativeBonds {
             removes: vec![(
                 DativeBondHandle::Id(DativeBondId(0)),
-                atom_handles(&[0, 1]),
+                atom_handles(&[0]),
+                AtomHandle::Id(AtomId(1)),
                 DativeBondForm::from_order(1),
             )],
         },
@@ -4017,7 +4336,8 @@ fn transaction_creation_case(include_created_constraint: bool) -> (Molecule, Edi
         BondForm::from_order(2),
     );
     let dative = edits.add_dative_bond(
-        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+        vec![AtomHandle::Id(AtomId(1))],
+        AtomHandle::Id(AtomId(2)),
         DativeBondForm::from_order(1),
     );
     let aromatic = edits.add_aromatic_system(
@@ -4132,7 +4452,7 @@ fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(Molecule
     cases.push((
         transaction_all_entities_molecule(),
         Edits::from_iter([Edit::AddMoleculeConstraint {
-            constraint: constraint.clone().into(),
+            constraint: Box::new(constraint.clone().into()),
         }]),
     ));
     cases.push((
@@ -4141,7 +4461,7 @@ fn complete_transaction_cases(include_created_constraint: bool) -> Vec<(Molecule
             constraint.clone(),
         ])),
         Edits::from_iter([Edit::RemoveMoleculeConstraint {
-            constraint: constraint.into(),
+            constraint: Box::new(constraint.into()),
         }]),
     ));
     cases
@@ -4305,7 +4625,8 @@ impl ConstraintCompactionCase {
             EntityKind::DativeBond => Edit::RemoveDativeBonds {
                 removes: vec![(
                     DativeBondHandle::Id(DativeBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    vec![AtomHandle::Id(AtomId(0))],
+                    AtomHandle::Id(AtomId(1)),
                     DativeBondForm::from_order(1),
                 )],
             },
@@ -4547,33 +4868,37 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (Molecule,
                 // removing a referenced overlay exercises constraint drop/remap + its rollback restore.
                 for i in (0..2).filter(|&i| con_ar[i]) {
                     edits.push(Edit::AddMoleculeConstraint {
-                        constraint: Constraint::AromaticSystem(
-                            AromaticSystemId(i as u32),
-                            AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
-                        )
-                        .into(),
+                        constraint: Box::new(
+                            Constraint::AromaticSystem(
+                                AromaticSystemId(i as u32),
+                                AromaticSystemConstraintForm::ElectronCount(NumForm::Lit(6)),
+                            )
+                            .into(),
+                        ),
                     });
                 }
                 for i in (0..2).filter(|&i| con_mc[i]) {
                     edits.push(Edit::AddMoleculeConstraint {
-                        constraint: Constraint::MulticenterBond(
-                            MulticenterBondId(i as u32),
-                            MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(4)),
-                        )
-                        .into(),
+                        constraint: Box::new(
+                            Constraint::MulticenterBond(
+                                MulticenterBondId(i as u32),
+                                MulticenterBondConstraintForm::ElectronCount(NumForm::Lit(4)),
+                            )
+                            .into(),
+                        ),
                     });
                 }
                 let dative: Vec<_> = (0..2)
                     .filter(|&i| rm_dv[i])
                     .map(|i| {
-                        let mut atoms: Vec<AtomHandle> = DATIVE_DONORS[i]
+                        let donors: Vec<AtomHandle> = DATIVE_DONORS[i]
                             .iter()
                             .map(|&a| AtomHandle::Id(AtomId(a)))
                             .collect();
-                        atoms.push(AtomHandle::Id(AtomId(DATIVE_ACCEPTORS[i])));
                         (
                             DativeBondHandle::Id(DativeBondId(i as u32)),
-                            atoms,
+                            donors,
+                            AtomHandle::Id(AtomId(DATIVE_ACCEPTORS[i])),
                             DativeBondForm::from_order(1),
                         )
                     })
@@ -4740,19 +5065,86 @@ pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<Reaction> {
         2 => overlay_reaction_strategy(),
         1 => replacement_reaction_strategy(),
     ]
+    .prop_flat_map(|reaction| sparsely_constrained_reaction(reaction, true))
     .boxed()
 }
 
+/// Materializable reactions whose lhs carries no molecule-scope constraints, which matching
+/// rejects until their evaluation is designed. Constraint additions remain.
+pub(crate) fn matchable_reaction_strategy() -> BoxedStrategy<Reaction> {
+    prop_oneof![
+        2 => overlay_reaction_strategy(),
+        1 => replacement_reaction_strategy(),
+    ]
+    .prop_flat_map(|reaction| sparsely_constrained_reaction(reaction, false))
+    .boxed()
+}
+
+/// Molecule-level constraints on about one in ten reactions: one or two lhs constraint trees when
+/// `lhs_constraints` holds, each removed by a constraint delta with probability one half, and
+/// independently one added tree. Trees range over the lhs entity counts. A choice that fails
+/// molecule integrity or materialization keeps the unconstrained reaction.
+fn sparsely_constrained_reaction(
+    reaction: Reaction,
+    lhs_constraints: bool,
+) -> impl Strategy<Value = Reaction> {
+    let counts = ConstraintCounts::from_ir(reaction.lhs());
+    (
+        prop::option::weighted(
+            0.05,
+            prop::collection::vec((constraint_strategy(counts), any::<bool>()), 1..=2),
+        ),
+        prop::option::weighted(0.05, constraint_strategy(counts)),
+    )
+        .prop_map(move |(drawn, added)| {
+            let lhs_constraints = drawn.filter(|_| lhs_constraints);
+            if lhs_constraints.is_none() && added.is_none() {
+                return reaction.clone();
+            }
+            let mut editor = reaction.lhs().clone().edit();
+            let mut deltas = reaction.deltas().clone();
+            for (constraint, removed) in lhs_constraints.into_iter().flatten() {
+                if removed {
+                    if let Ok(normalized) = constraint.clone().normalize() {
+                        deltas.push(Delta::Constraint(ConstraintDelta::Remove(normalized)));
+                    }
+                }
+                editor.constraints_mut().push(constraint);
+            }
+            if let Some(constraint) = added {
+                deltas.push(Delta::Constraint(ConstraintDelta::Add(constraint)));
+            }
+            editor
+                .finish()
+                .ok()
+                .map(|lhs| Reaction::new(lhs, deltas))
+                .filter(|candidate| candidate.to_reaction_span().is_ok())
+                .unwrap_or_else(|| reaction.clone())
+        })
+}
+
 /// Reactions whose delta collection materializes a reaction span by construction. The generated
-/// cases cover replacement reactions and reactions over every entity kind without filtering out
-/// failed materializations.
+/// cases cover replacement reactions, reactions over every entity kind, and molecule-level
+/// constraint deltas, without filtering out failed materializations.
 pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
     comprehensive_reaction_strategy()
 }
 
 pub(crate) fn reaction_application_strategy(
 ) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
-    (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
+    reaction_application_over(materializable_reaction_strategy())
+}
+
+/// Applications of reactions that matching accepts, for properties that enumerate matches.
+pub(crate) fn matchable_reaction_application_strategy(
+) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
+    reaction_application_over(matchable_reaction_strategy())
+}
+
+fn reaction_application_over(
+    reactions: impl Strategy<Value = Reaction>,
+) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
+    (reactions, molecule_strategy()).prop_map(|(reaction, extra)| {
         let host = Molecule::combine_all([reaction.lhs(), &extra]);
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::from_images(
@@ -5274,7 +5666,7 @@ fn build_reaction(
     for &id in &removed_atoms {
         deltas.push(Delta::Atom(AtomDelta::Remove {
             id,
-            attributes: lhs.atom(id).attributes.clone(),
+            attributes: lhs.atom(id).attributes().clone(),
         }));
     }
     for &id in &removed_bonds {
@@ -5282,7 +5674,7 @@ fn build_reaction(
         deltas.push(Delta::Bond(BondDelta::Remove {
             id,
             atoms: [AtomId::from(x), AtomId::from(y)],
-            attributes: lhs.bond(id).attributes.clone(),
+            attributes: lhs.bond(id).attributes().clone(),
         }));
     }
     // A removed atom also takes its incident overlays (DPO-valid; apply never dangles on overlays).
@@ -5305,7 +5697,7 @@ fn build_reaction(
             id,
             donors: view.donor_ids().collect(),
             acceptor: view.acceptor_id(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_aromatic {
@@ -5313,7 +5705,7 @@ fn build_reaction(
         deltas.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
             id,
             atoms: view.atom_ids().collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_multicenter {
@@ -5321,7 +5713,7 @@ fn build_reaction(
         deltas.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
             id,
             atoms: view.atom_ids().collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_noncovalent {
@@ -5329,17 +5721,17 @@ fn build_reaction(
         deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
             id,
             atoms: view.atom_ids(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     // A removed atom also takes its incident stereo entities (site OR ligand incidence), else
-    // apply and span materialization would otherwise leave dangling references. `incident_ids`
-    // covers both site and ligand incidence.
+    // apply and span materialization would otherwise leave dangling references. Both view queries
+    // cover site and ligand incidence.
     let mut removed_stereo_atom: HashSet<StereoAtomId> = HashSet::new();
     let mut removed_stereo_bond: HashSet<StereoBondId> = HashSet::new();
     for &id in &removed_atoms {
         removed_stereo_atom.extend(lhs.stereo_atoms().incident_ids(id));
-        removed_stereo_bond.extend(lhs.stereo_bonds().incident_ids(id));
+        removed_stereo_bond.extend(lhs.stereo_bonds().incident_to_atom_ids(id));
     }
     for &id in &removed_stereo_atom {
         let view = lhs.stereo_atom(id);
@@ -5350,7 +5742,7 @@ fn build_reaction(
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                 .collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_stereo_bond {
@@ -5362,7 +5754,7 @@ fn build_reaction(
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                 .collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for (index, new_charge) in charges.into_iter().enumerate() {
@@ -5371,7 +5763,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.atom(id).attributes.charge.clone();
+        let old = lhs.atom(id).attributes().charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::Atom(AtomDelta::ModifyField {
@@ -5386,7 +5778,7 @@ fn build_reaction(
             continue;
         }
         let Some(order) = new_order else { continue };
-        let old = lhs.bond(id).attributes.order.clone();
+        let old = lhs.bond(id).attributes().order.clone();
         let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::Bond(BondDelta::ModifyField {
@@ -5409,7 +5801,7 @@ fn build_reaction(
             continue;
         }
         let Some(order) = new_order else { continue };
-        let old = lhs.dative_bond(id).attributes.order.clone();
+        let old = lhs.dative_bond(id).attributes().order.clone();
         let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::DativeBond(DativeBondDelta::ModifyField {
@@ -5424,7 +5816,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.aromatic_system(id).attributes.charge.clone();
+        let old = lhs.aromatic_system(id).attributes().charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
@@ -5439,7 +5831,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.multicenter_bond(id).attributes.charge.clone();
+        let old = lhs.multicenter_bond(id).attributes().charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
@@ -5457,7 +5849,7 @@ fn build_reaction(
         }
         let has_aromatic = lhs
             .dative_bond(id)
-            .attributes
+            .attributes()
             .constraints
             .iter()
             .any(|c| matches!(c, DativeBondConstraintForm::Aromatic(_)));
@@ -5480,7 +5872,7 @@ fn build_reaction(
         }
         let Some(target) = target else { continue };
         let kind = lhs.stereo_atom(id).kind();
-        let old = lhs.stereo_atom(id).attributes.configuration.clone();
+        let old = lhs.stereo_atom(id).attributes().configuration.clone();
         let new = StereoConfigurationForm::kinded(kind, target);
         let delta = StereoAtomDelta::ModifyField {
             id,
@@ -5500,7 +5892,7 @@ fn build_reaction(
         }
         let Some(target) = target else { continue };
         let kind = lhs.stereo_bond(id).kind();
-        let old = lhs.stereo_bond(id).attributes.configuration.clone();
+        let old = lhs.stereo_bond(id).attributes().configuration.clone();
         let new = StereoConfigurationForm::kinded(kind, target);
         let delta = StereoBondDelta::ModifyField {
             id,

@@ -1,18 +1,23 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fs;
+use std::path::PathBuf;
 
 use rstest::rstest;
 use umol_chem::element::Element;
-use umol_graph::ops::aromaticity::AromaticityPerceiver;
+use umol_edn::FromEdn;
 use umol_graph::ops::invariant::ValenceMismatch;
-use umol_graph::ops::model::AromaticityModel;
+use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph::ops::transform::{KekulizeConfig, KekulizeError, Kekulizer, Transformer};
+use umol_graph::ops::valence::ValenceTable;
 use umol_graph::ops::validate::ValenceInvariantsValidator;
-use umol_graph::parse::parse_mol;
-use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
+use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
-    ElectronCountsForm, ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
+    ElementForm, IntoIr, Molecule, NumForm, UnpairedElectronsForm,
 };
+use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -73,7 +78,7 @@ struct KekulizationFixture {
             ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
-        nonzero_lone_pairs: vec![(AtomId(0), 1)],
+        nonzero_lone_pairs: vec![],
     }
 )]
 #[case::furan(
@@ -91,7 +96,7 @@ struct KekulizationFixture {
             ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
-        nonzero_lone_pairs: vec![(AtomId(0), 2)],
+        nonzero_lone_pairs: vec![(AtomId(0), 1)],
     }
 )]
 #[case::thiophene(
@@ -109,7 +114,7 @@ struct KekulizationFixture {
             ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
-        nonzero_lone_pairs: vec![(AtomId(0), 2)],
+        nonzero_lone_pairs: vec![(AtomId(0), 1)],
     }
 )]
 #[case::borepin(
@@ -206,48 +211,48 @@ struct KekulizationFixture {
             ElementForm::Lit(Element::C),
         ],
         nonzero_atom_charges: vec![],
-        nonzero_lone_pairs: vec![(AtomId(0), 1)],
+        nonzero_lone_pairs: vec![],
     }
 )]
-fn test_kekulization_fixture(#[case] source: &str, #[case] expected: KekulizationFixture) {
+fn test_kekulizer_transform_input(#[case] source: &str, #[case] expected: KekulizationFixture) {
     let dsl: MoleculeDsl = source.parse().unwrap();
     let molecule = dsl.into_ir(&MoleculeDefaults::concrete());
 
     assert!(molecule.is_concrete());
     assert_eq!(molecule.aromatic_systems().count(), 1);
 
-    let system = molecule.aromatic_systems().iter().next().unwrap();
-    let ElectronCountsForm::Lit(electrons) = system.electrons() else {
+    let aromatic_system = molecule.aromatic_systems().iter().next().unwrap();
+    let ElectronCountsForm::Lit(electrons) = aromatic_system.electrons() else {
         panic!("fixture aromatic electron contributions are undetermined");
     };
-    let NumForm::Lit(charge) = system.charge() else {
+    let NumForm::Lit(charge) = aromatic_system.charge() else {
         panic!("fixture aromatic charge is undetermined");
     };
     let actual = KekulizationFixture {
-        participants: system.atom_ids().collect(),
+        participants: aromatic_system.atom_ids().collect(),
         electrons: electrons.clone(),
         charge: *charge,
-        unpaired_electrons: system.unpaired_electrons().clone(),
+        unpaired_electrons: aromatic_system.unpaired_electrons().clone(),
         elements: molecule
             .atoms()
             .iter()
-            .map(|atom| atom.attributes.element.clone())
+            .map(|atom| atom.attributes().element.clone())
             .collect(),
         nonzero_atom_charges: molecule
             .atoms()
             .iter()
-            .filter_map(|atom| match atom.attributes.charge {
+            .filter_map(|atom| match atom.attributes().charge {
                 NumForm::Lit(0) => None,
-                NumForm::Lit(charge) => Some((atom.id, charge)),
+                NumForm::Lit(charge) => Some((atom.id(), charge)),
                 _ => panic!("fixture atom charge is undetermined"),
             })
             .collect(),
         nonzero_lone_pairs: molecule
             .atoms()
             .iter()
-            .filter_map(|atom| match atom.attributes.lone_pairs {
+            .filter_map(|atom| match atom.attributes().lone_pairs {
                 NumForm::Lit(0) => None,
-                NumForm::Lit(lone_pairs) => Some((atom.id, lone_pairs)),
+                NumForm::Lit(lone_pairs) => Some((atom.id(), lone_pairs)),
                 _ => panic!("fixture atom lone-pair count is undetermined"),
             })
             .collect(),
@@ -322,7 +327,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
     vec![BondId(1), BondId(3), BondId(6), BondId(8)],
     Some(AtomId(0))
 )]
-fn test_kekulization_fixture_output(
+fn test_kekulizer_transform(
     #[case] source: &str,
     #[case] expected_source: &str,
     #[case] expected_double_bonds: Vec<BondId>,
@@ -332,21 +337,25 @@ fn test_kekulization_fixture_output(
     let input = input_dsl.into_ir(&MoleculeDefaults::concrete());
     let expected_dsl: MoleculeDsl = expected_source.parse().unwrap();
     let expected = expected_dsl.into_ir(&MoleculeDefaults::concrete());
-    let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id).collect();
+    let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id()).collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
 
-    let first = kekulizer.transform(&input).unwrap();
-    let second = kekulizer.transform(&input).unwrap();
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&input),
+        Ok(Solution::Determined(()))
+    );
+    let first = kekulizer.transform(input.clone()).unwrap();
+    let second = kekulizer.transform(input.clone()).unwrap();
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
-        .map(|bond| bond.id)
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
+        .map(|bond| bond.id())
         .collect();
     let covered_atoms: HashSet<AtomId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
     let expected_covered_atoms: HashSet<AtomId> = first
@@ -357,34 +366,31 @@ fn test_kekulization_fixture_output(
     let input_total_charge: i64 = input
         .atoms()
         .iter()
-        .map(|atom| match atom.attributes.charge {
+        .map(|atom| match atom.attributes().charge {
             NumForm::Lit(charge) => charge,
             _ => panic!("input atom charge is undetermined"),
         })
-        .chain(
-            input
-                .aromatic_systems()
-                .iter()
-                .map(|system| match system.attributes.charge {
-                    NumForm::Lit(charge) => charge,
-                    _ => panic!("input aromatic-system charge is undetermined"),
-                }),
-        )
+        .chain(input.aromatic_systems().iter().map(|aromatic_system| {
+            match aromatic_system.attributes().charge {
+                NumForm::Lit(charge) => charge,
+                _ => panic!("input aromatic-system charge is undetermined"),
+            }
+        }))
         .sum();
     let output_total_charge: i64 = first
         .atoms()
         .iter()
-        .map(|atom| match atom.attributes.charge {
+        .map(|atom| match atom.attributes().charge {
             NumForm::Lit(charge) => charge,
             _ => panic!("output atom charge is undetermined"),
         })
         .sum();
-    let system_charge = match input
+    let aromatic_system_charge = match input
         .aromatic_systems()
         .iter()
         .next()
         .unwrap()
-        .attributes
+        .attributes()
         .charge
     {
         NumForm::Lit(charge) => charge,
@@ -402,29 +408,28 @@ fn test_kekulization_fixture_output(
     );
     assert_eq!(first.aromatic_systems().count(), 0);
     assert!(first.atoms().iter().all(|atom| !atom
-        .attributes
+        .attributes()
         .constraints
         .contains(AtomConstraintKey::AromaticValence)));
     assert!(first.bonds().iter().all(|bond| !bond
-        .attributes
+        .attributes()
         .constraints
         .contains(BondConstraintKey::Aromatic)));
 
     if let Some(exposed) = expected_exposed_atom {
-        let before = input.atom(exposed).attributes;
-        let after = first.atom(exposed).attributes;
+        let before = input.atom(exposed).attributes();
+        let after = first.atom(exposed).attributes();
         let NumForm::Lit(before_charge) = before.charge else {
             panic!("input exposed-atom charge is undetermined");
         };
-        assert_eq!(after.charge, NumForm::Lit(before_charge + system_charge));
-        let NumForm::Lit(before_lone_pairs) = before.lone_pairs else {
-            panic!("input exposed-atom lone pairs are undetermined");
-        };
-        let expected_lone_pairs = before_lone_pairs + i64::from(system_charge == -1);
-        assert_eq!(after.lone_pairs, NumForm::Lit(expected_lone_pairs));
+        assert_eq!(
+            after.charge,
+            NumForm::Lit(before_charge + aromatic_system_charge)
+        );
+        assert_eq!(after.lone_pairs, *expected.atom(exposed).lone_pairs());
         assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
         assert_eq!(after.unpaired_electrons, before.unpaired_electrons);
-        if system_charge != 0 {
+        if aromatic_system_charge != 0 {
             assert_eq!(
                 after.unpaired_electrons,
                 UnpairedElectronsForm::from((0, 1))
@@ -434,47 +439,36 @@ fn test_kekulization_fixture_output(
 }
 
 #[rstest]
-#[case::c60(include_str!(
-    "../../../umol-io/tests/mol_parsing/data/molecule/scifinder/99685-96-8.mol"
-))]
-fn test_kekulization_fixture_output_cage(#[case] source: &str) {
-    let mut input = parse_mol(source).unwrap();
-    let system_atoms: Vec<AtomId> = input.atoms().ids().collect();
-    let system_bonds: Vec<BondId> = input.bonds().ids().collect();
-    for bond in system_bonds {
-        input.bond_mut(bond).attributes.order = NumForm::Lit(1);
-    }
-    AromaticityPerceiver::new(&AromaticityModel::daylight()).add_systems(
-        &mut input,
-        vec![(
-            system_atoms.clone(),
-            AromaticSystemForm {
-                electrons: ElectronCountsForm::Lit(vec![1; 60]),
-                charge: NumForm::Lit(0),
-                unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-                ..Default::default()
-            },
-        )],
+#[case::c60(include_str!("data/c60_aromatic_input.edn"))]
+fn test_kekulizer_transform_cage(#[case] source: &str) {
+    let input = source
+        .parse::<MoleculeDsl>()
+        .unwrap()
+        .into_ir(&MoleculeDefaults::concrete());
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&input),
+        Ok(Solution::Determined(()))
     );
+    let aromatic_system_atoms: Vec<AtomId> = input.atoms().ids().collect();
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
 
-    let first = kekulizer.transform(&input).unwrap();
-    let second = kekulizer.transform(&input).unwrap();
+    let first = kekulizer.transform(input.clone()).unwrap();
+    let second = kekulizer.transform(input.clone()).unwrap();
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
-        .map(|bond| bond.id)
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
+        .map(|bond| bond.id())
         .collect();
     let covered_atoms: HashSet<AtomId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
-    let expected_covered_atoms: HashSet<AtomId> = system_atoms.into_iter().collect();
+    let expected_covered_atoms: HashSet<AtomId> = aromatic_system_atoms.into_iter().collect();
 
     assert_eq!(input, original);
     assert_eq!(first, second);
@@ -486,9 +480,9 @@ fn test_kekulization_fixture_output_cage(#[case] source: &str) {
     );
     assert_eq!(first.aromatic_systems().count(), 0);
     assert!(first.bonds().iter().all(|bond| {
-        matches!(bond.attributes.order, NumForm::Lit(1 | 2))
+        matches!(bond.attributes().order, NumForm::Lit(1 | 2))
             && !bond
-                .attributes
+                .attributes()
                 .constraints
                 .contains(BondConstraintKey::Aromatic)
     }));
@@ -496,46 +490,207 @@ fn test_kekulization_fixture_output_cage(#[case] source: &str) {
 
 #[rstest]
 #[case::localization(
-    NumForm::Undetermined,
-    NumForm::Lit(0),
+    {
+        let mut input = mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-#u0#s1"}]
+        }"#);
+        input.atom_mut(AtomId(4)).attributes_mut().charge = NumForm::Undetermined;
+        input
+    },
     KekulizeError::UndeterminedExposedAtomCharge {
-        system: AromaticSystemId(0),
+        aromatic_system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
 #[case::lone_pair_localization(
-    NumForm::Lit(0),
-    NumForm::Undetermined,
+    {
+        let mut input = mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-#u0#s1"}]
+        }"#);
+        input.atom_mut(AtomId(4)).attributes_mut().lone_pairs = NumForm::Undetermined;
+        input
+    },
     KekulizeError::UndeterminedExposedAtomLonePairs {
-        system: AromaticSystemId(0),
+        aromatic_system: AromaticSystemId(0),
         atom: AtomId(4),
     }
 )]
 #[case::valence_invariant(
-    NumForm::Lit(0),
-    NumForm::Lit(1),
-    KekulizeError::PostLocalizationValenceInvariant(ValenceMismatch::OrbitalCount {
-        atom_id: AtomId(4),
-        orbital_count: 10,
-        electron_count: 8,
-    })
+    mol_dsl_concrete!(r#"{
+        :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a#n"]
+        :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-#u0#s1"}]
+    }"#),
+    KekulizeError::ValenceInvariant {
+        aromatic_system: AromaticSystemId(0),
+        mismatch: ValenceMismatch::OrbitalCount {
+            atom_id: AtomId(4),
+            orbital_count: 10,
+            electron_count: 8,
+        },
+    }
 )]
-fn test_kekulization_fixture_output_error(
-    #[case] exposed_charge: NumForm,
-    #[case] exposed_lone_pairs: NumForm,
-    #[case] expected: KekulizeError,
-) {
-    let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")
-        .parse()
-        .unwrap();
-    let mut input = dsl.into_ir(&MoleculeDefaults::concrete());
-    input.atom_mut(AtomId(4)).attributes.charge = exposed_charge;
-    input.atom_mut(AtomId(4)).attributes.lone_pairs = exposed_lone_pairs;
+fn test_kekulizer_transform_error(#[case] mut input: Molecule, #[case] expected: KekulizeError) {
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
 
-    let result = Kekulizer::new(KekulizeConfig::default(), node_order).transform_into(&mut input);
+    let transformer = Kekulizer::new(KekulizeConfig::default(), node_order);
+    assert_eq!(transformer.transform(input.clone()), Err(expected.clone()));
+    assert_eq!(transformer.transform_iter(&input).next(), None);
+    let result = transformer.transform_into(&mut input);
 
     assert_eq!(result, Err(expected));
+    assert_eq!(input, original);
+}
+
+#[derive(FromEdn)]
+struct ResolutionFixture {
+    input: MoleculeDsl,
+    #[edn(default)]
+    config_overrides: MoleculeOverrides,
+}
+
+#[rstest]
+fn test_kekulizer_transform_corpus(
+    #[files("tests/resolution/data/aromatic/*.edn")] path: PathBuf,
+    #[values(false, true)] counts: bool,
+) {
+    let fixture = ResolutionFixture::from_edn_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let defaults = MoleculeDefaults::default().with_overrides(fixture.config_overrides);
+    let mut model = ChemistryModel {
+        valence: if counts {
+            ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
+        } else {
+            ValenceModel::default()
+        },
+        ..Default::default()
+    };
+    model.valence.tie_break = ValenceTieBreak::MostSaturated;
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
+    let solution = resolver.resolve(fixture.input.into_ir(&defaults)).unwrap();
+    let Solution::Determined(input) = solution else {
+        panic!("corpus resolution failed: {solution:?}");
+    };
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&input),
+        Ok(Solution::Determined(()))
+    );
+    let kekulizer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
+    let output = kekulizer.transform(input.clone());
+    let mut in_place = input.clone();
+    let result = kekulizer.transform_into(&mut in_place);
+    if path.file_stem().unwrap() == "f420" {
+        assert_eq!(output, Err(KekulizeError::NoMatching(AromaticSystemId(0))));
+        assert_eq!(result, Err(KekulizeError::NoMatching(AromaticSystemId(0))));
+        assert_eq!(in_place, input);
+        assert_eq!(kekulizer.transform_iter(&input).collect::<Vec<_>>(), vec![]);
+    } else {
+        let output = output.unwrap();
+        assert_eq!(result, Ok(()));
+        assert_eq!(in_place, output);
+        assert_eq!(
+            ValenceInvariantsValidator.validate(&output),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(output.aromatic_systems().count(), 0);
+        assert_eq!(output.atoms().count(), input.atoms().count());
+        assert_eq!(output.bonds().count(), input.bonds().count());
+        for atom in input.atoms().iter() {
+            let localized = output.atom(atom.id());
+            assert_eq!(localized.element(), atom.element());
+            assert_eq!(localized.charge(), atom.charge());
+            assert_eq!(localized.implicit_hydrogens(), atom.implicit_hydrogens());
+            assert_eq!(localized.unpaired_electrons(), atom.unpaired_electrons());
+        }
+    }
+}
+
+#[rstest]
+#[case::f420(include_str!("../resolution/data/aromatic/f420.edn"))]
+fn test_kekulizer_transform_hydrogens(#[case] source: &str, #[values(false, true)] counts: bool) {
+    let fixture = ResolutionFixture::from_edn_str(source).unwrap();
+    let defaults = MoleculeDefaults::default().with_overrides(fixture.config_overrides);
+    let mut input = fixture.input.into_ir(&defaults);
+    input
+        .atom_mut(AtomId(17))
+        .attributes_mut()
+        .implicit_hydrogens = NumForm::Lit(0);
+    input
+        .atom_mut(AtomId(20))
+        .attributes_mut()
+        .implicit_hydrogens = NumForm::Lit(1);
+    let mut model = ChemistryModel {
+        valence: if counts {
+            ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
+        } else {
+            ValenceModel::default()
+        },
+        ..Default::default()
+    };
+    model.valence.tie_break = ValenceTieBreak::MostSaturated;
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
+    let solution = resolver.resolve(input).unwrap();
+    let Solution::Determined(input) = solution else {
+        panic!("corpus resolution failed: {solution:?}");
+    };
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&input),
+        Ok(Solution::Determined(()))
+    );
+    assert_eq!(
+        input.aromatic_system(AromaticSystemId(0)).electrons(),
+        &ElectronCountsForm::Lit(vec![2, 1, 1, 0, 2, 0, 1, 1, 1, 1, 1, 1, 1, 1])
+    );
+    let kekulizer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
+    let output = kekulizer.transform(input.clone()).unwrap();
+    let mut in_place = input;
+    assert_eq!(kekulizer.transform_into(&mut in_place), Ok(()));
+    assert_eq!(in_place, output);
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&output),
+        Ok(Solution::Determined(()))
+    );
+    assert_eq!(output.aromatic_systems().count(), 0);
+    for atom in [AtomId(15), AtomId(17), AtomId(20)] {
+        assert_eq!(output.atom(atom).lone_pairs(), &NumForm::Lit(1));
+    }
+    for bond in [BondId(18), BondId(25), BondId(28), BondId(30), BondId(33)] {
+        assert_eq!(output.bond(bond).order(), &NumForm::Lit(2));
+    }
+}
+
+#[rstest]
+#[case::pyrrole(include_str!("data/pyrrole_aromatic_input.edn"))]
+#[case::furan(include_str!("data/furan_aromatic_input.edn"))]
+fn test_kekulizer_transform_donor_error(#[case] source: &str) {
+    let mut input = source
+        .parse::<MoleculeDsl>()
+        .unwrap()
+        .into_ir(&MoleculeDefaults::concrete());
+    input.atom_mut(AtomId(0)).attributes_mut().lone_pairs = NumForm::Undetermined;
+    let expected = KekulizeError::UndeterminedExposedAtomLonePairs {
+        aromatic_system: AromaticSystemId(0),
+        atom: AtomId(0),
+    };
+    let kekulizer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
+    assert_eq!(kekulizer.transform(input.clone()), Err(expected.clone()));
+    let original = input.clone();
+    assert_eq!(kekulizer.transform_into(&mut input), Err(expected));
     assert_eq!(input, original);
 }

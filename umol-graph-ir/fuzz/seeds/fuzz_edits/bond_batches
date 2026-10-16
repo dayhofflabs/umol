@@ -1,0 +1,7 @@
+[
+ {:bond {:modify-order [[0 {:expect 1 :update 2}] [{:new 0} {:expect 2 :update 1}]]}}
+ {:bond {:modify-charge [[0 {:expect 0 :update 1}]]}}
+ {:bond {:modify-unpaired-electrons [[0 {:expect {:count 0 :multiplicity 1} :update {:count 1 :multiplicity 2}}]]}}
+ {:bond {:modify-constraints {:key :aromatic :changes [[0 {:expect nil :update {:aromatic true}}] [0 {:expect {:aromatic true} :update nil}]]}}}
+ {:bond {:modify-constraints {:key {:ring-membership {:size 5}} :changes []}}}
+]

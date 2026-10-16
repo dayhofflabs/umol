@@ -9,10 +9,9 @@ use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, IsotopeResolver, ResolveConfig, Resolver};
-use umol_graph::ops::valence::ResolveReport;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
-    UnpairedElectronsForm,
+    RollbackMethod, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -20,7 +19,7 @@ proptest! {
     // Fixed-H carbon chains separate isotope policy from valence selection. Exact
     // publication/nonpublication and idempotence are checked for every policy/model pair.
     #[test]
-    fn test_resolver_resolve_isotope(
+    fn test_resolver_resolve_into_isotope(
         isotopes in prop::collection::vec(prop_oneof![
             Just(IsotopeMassForm::Undetermined), Just(IsotopeMassForm::Natural),
             (12u32..15).prop_map(IsotopeMassForm::Lit),
@@ -41,14 +40,15 @@ proptest! {
             ..Default::default()
         });
         let mut expected = source.clone();
-        expected.modify_atoms(|atom| AtomForm {
-            isotope_mass: match atom.isotope_mass {
-                IsotopeMassForm::Undetermined => IsotopeMassForm::Natural,
-                value => value,
-            },
-            lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-            ..atom
-        });
+        for index in 0..expected.atoms().count() {
+            let mut view = expected.atom_mut(AtomId(index as u32));
+            let atom = view.attributes_mut();
+            if atom.isotope_mass == IsotopeMassForm::Undetermined {
+                atom.isotope_mass = IsotopeMassForm::Natural;
+            }
+            atom.lone_pairs = NumForm::Lit(0);
+            atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
+        }
         for valence in [ValenceModel::smiles(), ValenceModel::default()] {
             for tie_break in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
                 let model = ChemistryModel {
@@ -57,16 +57,16 @@ proptest! {
                 for isotope in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
                     let resolver = Resolver::with_config(&model, ResolveConfig { isotope, ..Default::default() });
                     let mut molecule = source.clone();
-                    let result = resolver.resolve(&mut molecule).unwrap();
+                    let result = resolver.resolve_into(&mut molecule, RollbackMethod::Journal).unwrap();
                     if isotope == IsotopePolicy::Strict && omitted {
-                        prop_assert_eq!(&result, &Solution::Underdetermined(ResolveReport::default()));
+                        prop_assert_eq!(&result, &Solution::Underdetermined(()));
                         prop_assert_eq!(&molecule, &source);
                     } else {
-                        prop_assert_eq!(&result, &Solution::Determined(ResolveReport::default()));
+                        prop_assert_eq!(&result, &Solution::Determined(()));
                         prop_assert_eq!(&molecule, &expected);
                     }
                     let once = molecule.clone();
-                    prop_assert_eq!(resolver.resolve(&mut molecule), Ok(result));
+                    prop_assert_eq!(resolver.resolve_into(&mut molecule, RollbackMethod::Journal), Ok(result));
                     prop_assert_eq!(molecule, once);
                 }
             }
@@ -74,7 +74,7 @@ proptest! {
     }
 
     #[test]
-    fn test_isotope_resolver_project_roundtrip(
+    fn test_isotope_resolver_project_into_roundtrip(
         fields in prop::collection::vec((
             prop_oneof![Just(IsotopeMassForm::Natural), any::<u32>().prop_map(IsotopeMassForm::Lit)],
             -3i64..4,
@@ -95,23 +95,23 @@ proptest! {
             let mut projected = source.clone();
             let mut expected = source.clone();
             if policy == IsotopePolicy::Natural {
-                expected.modify_atoms(|atom| AtomForm {
-                    isotope_mass: match atom.isotope_mass {
-                        IsotopeMassForm::Natural => IsotopeMassForm::Undetermined,
-                        isotope => isotope,
-                    },
-                    ..atom
-                });
+                for index in 0..expected.atoms().count() {
+                    let mut view = expected.atom_mut(AtomId(index as u32));
+                    let atom = view.attributes_mut();
+                    if atom.isotope_mass == IsotopeMassForm::Natural {
+                        atom.isotope_mass = IsotopeMassForm::Undetermined;
+                    }
+                }
             }
-            prop_assert_eq!(resolver.project(&mut projected), Ok(Solution::Determined(())));
+            prop_assert_eq!(resolver.project_into(&mut projected), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &expected);
-            prop_assert_eq!(resolver.resolve(&mut projected), Ok(Solution::Determined(())));
+            prop_assert_eq!(resolver.resolve_into(&mut projected), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &source);
         }
     }
 
     #[test]
-    fn test_isotope_resolver_resolve_idempotence(
+    fn test_isotope_resolver_resolve_into_idempotence(
         isotopes in prop::collection::vec(prop_oneof![
             Just(IsotopeMassForm::Undetermined),
             Just(IsotopeMassForm::Natural),
@@ -130,12 +130,11 @@ proptest! {
         for policy in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
             let resolver = IsotopeResolver::new(policy);
             let mut resolved = source.clone();
-            let result = resolver.resolve(&mut resolved).unwrap();
-            match resolver.plan(&source) {
+            let result = resolver.resolve_into(&mut resolved).unwrap();
+            match resolver.plan_resolve(&source) {
                 Solution::Determined(edits) => {
-                    let mut editor = source.edit();
-                    editor.transact(edits).unwrap();
-                    prop_assert_eq!(&resolved, &editor.build());
+                    let expected = source.clone().apply(edits).unwrap();
+                    prop_assert_eq!(&resolved, &expected);
                     prop_assert_eq!(&result, &Solution::Determined(()));
                 }
                 Solution::Underdetermined(_) => {
@@ -145,7 +144,7 @@ proptest! {
                 Solution::Contradictory(contradiction) => match contradiction {},
             }
             let once = resolved.clone();
-            prop_assert_eq!(resolver.resolve(&mut resolved), Ok(result));
+            prop_assert_eq!(resolver.resolve_into(&mut resolved), Ok(result));
             prop_assert_eq!(resolved, once);
         }
     }

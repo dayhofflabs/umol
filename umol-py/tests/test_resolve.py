@@ -1,21 +1,28 @@
 import pytest
 
 from umol import (
-    AromaticBondConstraintMismatchPolicy,
     AromaticityConfig,
     AromaticityFailurePolicy,
-    AromaticityMismatchPolicy,
+    AromaticityModel,
+    AromaticityRule,
     AromaticityResolveConfig,
     AtomCompletions,
     AtomForm,
+    AtomSelectionAlgorithm,
+    AtomTypeRegistry,
     ChemistryModel,
+    ElementScope,
+    Edits,
+    InvalidatedViewError,
+    NumForm,
     IsotopePolicy,
     Molecule,
+    MoleculeDefaults,
     ResolveConfig,
     ResolveReport,
+    RollbackMethod,
     Solution,
     StereoFailurePolicy,
-    StereoMismatchPolicy,
     StereoResolveConfig,
     UnderdeterminedError,
     ValenceModel,
@@ -31,16 +38,6 @@ from umol import (
             AromaticityFailurePolicy.Keep,
             True,
         ),
-        (
-            AromaticityMismatchPolicy.ReplaceEntity,
-            AromaticityMismatchPolicy.ReplaceEntity,
-            True,
-        ),
-        (
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-            AromaticBondConstraintMismatchPolicy.Keep,
-            False,
-        ),
     ],
 )
 def test_aromaticity_policy_equality(left, right, expected):
@@ -50,13 +47,9 @@ def test_aromaticity_policy_equality(left, right, expected):
 def test_aromaticity_policy_hash():
     policies = {
         AromaticityFailurePolicy.Keep: "failure",
-        AromaticityMismatchPolicy.ReplaceEntity: "aromatic valence",
-        AromaticBondConstraintMismatchPolicy.RemoveConstraint: "bond",
     }
 
     assert policies[AromaticityFailurePolicy.Keep] == "failure"
-    assert policies[AromaticityMismatchPolicy.ReplaceEntity] == "aromatic valence"
-    assert policies[AromaticBondConstraintMismatchPolicy.RemoveConstraint] == "bond"
 
 
 @pytest.mark.parametrize(
@@ -65,14 +58,6 @@ def test_aromaticity_policy_hash():
         (
             AromaticityFailurePolicy.Keep,
             "AromaticityFailurePolicy.Keep",
-        ),
-        (
-            AromaticityMismatchPolicy.ReplaceEntity,
-            "AromaticityMismatchPolicy.ReplaceEntity",
-        ),
-        (
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-            "AromaticBondConstraintMismatchPolicy.RemoveConstraint",
         ),
     ],
 )
@@ -84,8 +69,6 @@ def test_aromaticity_policy_repr(policy, expected):
     "policy",
     [
         AromaticityFailurePolicy.Keep,
-        AromaticityMismatchPolicy.RemoveConstraint,
-        AromaticBondConstraintMismatchPolicy.RemoveConstraint,
     ],
 )
 def test_aromaticity_policy_mutation(policy):
@@ -98,8 +81,6 @@ def test_aromaticity_policy_mutation(policy):
     [
         (StereoFailurePolicy.Keep, StereoFailurePolicy.Keep, True),
         (StereoFailurePolicy.Remove, StereoFailurePolicy.Error, False),
-        (StereoMismatchPolicy.ReplaceEntity, StereoMismatchPolicy.ReplaceEntity, True),
-        (StereoMismatchPolicy.RemoveBoth, StereoMismatchPolicy.Keep, False),
     ],
 )
 def test_stereo_policy_equality(left, right, expected):
@@ -109,20 +90,15 @@ def test_stereo_policy_equality(left, right, expected):
 def test_stereo_policy_hash():
     policies = {
         StereoFailurePolicy.Remove: "failure",
-        StereoMismatchPolicy.RemoveConstraint: "mismatch",
     }
 
     assert policies[StereoFailurePolicy.Remove] == "failure"
-    assert policies[StereoMismatchPolicy.RemoveConstraint] == "mismatch"
 
 
 @pytest.mark.parametrize(
     ("policy", "expected"),
     [
         (StereoFailurePolicy.Remove, "StereoFailurePolicy.Remove"),
-        (StereoMismatchPolicy.RemoveConstraint, "StereoMismatchPolicy.RemoveConstraint"),
-        (StereoMismatchPolicy.ReplaceEntity, "StereoMismatchPolicy.ReplaceEntity"),
-        (StereoMismatchPolicy.RemoveBoth, "StereoMismatchPolicy.RemoveBoth"),
     ],
 )
 def test_stereo_policy_repr(policy, expected):
@@ -133,7 +109,6 @@ def test_stereo_policy_repr(policy, expected):
     "policy",
     [
         StereoFailurePolicy.Keep,
-        StereoMismatchPolicy.RemoveConstraint,
     ],
 )
 def test_stereo_policy_mutation(policy):
@@ -141,73 +116,74 @@ def test_stereo_policy_mutation(policy):
         policy.value = "changed"
 
 
+@pytest.mark.parametrize(
+    ("algorithm", "expected"),
+    [
+        (AtomSelectionAlgorithm.FullDfs, "AtomSelectionAlgorithm.FullDfs"),
+        (AtomSelectionAlgorithm.BacktrackingDfs, "AtomSelectionAlgorithm.BacktrackingDfs"),
+    ],
+)
+def test_atom_selection_algorithm_repr(algorithm, expected):
+    assert repr(algorithm) == expected
+
+
+def test_atom_selection_algorithm_hash():
+    algorithms = {
+        AtomSelectionAlgorithm.FullDfs: "full",
+        AtomSelectionAlgorithm.BacktrackingDfs: "pruned",
+    }
+
+    assert algorithms[AtomSelectionAlgorithm.FullDfs] == "full"
+    assert algorithms[AtomSelectionAlgorithm.BacktrackingDfs] == "pruned"
+
+
 def test_aromaticity_resolve_config_default():
     config = AromaticityResolveConfig()
 
     assert config.perception == AromaticityConfig()
+    assert config.atom_selection_algorithm == AtomSelectionAlgorithm.BacktrackingDfs
     assert config.aromatic_valence_failure == AromaticityFailurePolicy.Error
     assert config.aromatic_system_failure == AromaticityFailurePolicy.Error
-    assert config.aromatic_valence_mismatch == AromaticityMismatchPolicy.Error
-    assert (
-        config.aromatic_bond_constraint_mismatch
-        == AromaticBondConstraintMismatchPolicy.Error
-    )
-    assert config.reset_aromatic_valence is False
     assert config == AromaticityResolveConfig()
 
 
 @pytest.mark.parametrize(
     (
+        "atom_selection_algorithm",
         "aromatic_valence_failure",
         "aromatic_system_failure",
-        "aromatic_valence_mismatch",
-        "aromatic_bond_constraint_mismatch",
-        "reset_aromatic_valence",
     ),
     [
         (
+            AtomSelectionAlgorithm.BacktrackingDfs,
             AromaticityFailurePolicy.Error,
             AromaticityFailurePolicy.Error,
-            AromaticityMismatchPolicy.Error,
-            AromaticBondConstraintMismatchPolicy.Error,
-            False,
         ),
         (
+            AtomSelectionAlgorithm.FullDfs,
             AromaticityFailurePolicy.Keep,
             AromaticityFailurePolicy.Keep,
-            AromaticityMismatchPolicy.ReplaceEntity,
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-            True,
         ),
     ],
 )
 def test_aromaticity_resolve_config_new(
+    atom_selection_algorithm,
     aromatic_valence_failure,
     aromatic_system_failure,
-    aromatic_valence_mismatch,
-    aromatic_bond_constraint_mismatch,
-    reset_aromatic_valence,
 ):
     perception = AromaticityConfig()
     config = AromaticityResolveConfig(
         perception=perception,
+        atom_selection_algorithm=atom_selection_algorithm,
         aromatic_valence_failure=aromatic_valence_failure,
         aromatic_system_failure=aromatic_system_failure,
-        aromatic_valence_mismatch=aromatic_valence_mismatch,
-        aromatic_bond_constraint_mismatch=aromatic_bond_constraint_mismatch,
-        reset_aromatic_valence=reset_aromatic_valence,
     )
 
     assert config.perception == perception
     assert config.perception is not perception
+    assert config.atom_selection_algorithm == atom_selection_algorithm
     assert config.aromatic_valence_failure == aromatic_valence_failure
     assert config.aromatic_system_failure == aromatic_system_failure
-    assert config.aromatic_valence_mismatch == aromatic_valence_mismatch
-    assert (
-        config.aromatic_bond_constraint_mismatch
-        == aromatic_bond_constraint_mismatch
-    )
-    assert config.reset_aromatic_valence is reset_aromatic_valence
 
 
 def test_aromaticity_resolve_config_new_error():
@@ -228,22 +204,14 @@ def test_aromaticity_resolve_config_new_error():
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Error, "
-            "aromatic_system_failure=AromaticityFailurePolicy.Error, "
-            "aromatic_valence_mismatch=AromaticityMismatchPolicy.Error, "
-            "aromatic_bond_constraint_mismatch="
-            "AromaticBondConstraintMismatchPolicy.Error, "
-            "reset_aromatic_valence=False)",
+            "aromatic_system_failure=AromaticityFailurePolicy.Error)",
         ),
         (
             AromaticityResolveConfig(
                 aromatic_valence_failure=AromaticityFailurePolicy.Keep,
                 aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity,
-                aromatic_bond_constraint_mismatch=(
-                    AromaticBondConstraintMismatchPolicy.RemoveConstraint
-                ),
-                reset_aromatic_valence=True,
             ),
             "AromaticityResolveConfig(perception=AromaticityConfig("
             "ring_config=RingConfig(simple_cycle_algorithm="
@@ -253,13 +221,9 @@ def test_aromaticity_resolve_config_new_error():
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_system_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_valence_mismatch="
-            "AromaticityMismatchPolicy.ReplaceEntity, "
-            "aromatic_bond_constraint_mismatch="
-            "AromaticBondConstraintMismatchPolicy.RemoveConstraint, "
-            "reset_aromatic_valence=True)",
+            "aromatic_system_failure=AromaticityFailurePolicy.Keep)",
         ),
     ],
 )
@@ -271,14 +235,9 @@ def test_aromaticity_resolve_config_repr(config, expected):
     ("field", "value"),
     [
         ("perception", AromaticityConfig()),
+        ("atom_selection_algorithm", AtomSelectionAlgorithm.FullDfs),
         ("aromatic_valence_failure", AromaticityFailurePolicy.Keep),
         ("aromatic_system_failure", AromaticityFailurePolicy.Keep),
-        ("aromatic_valence_mismatch", AromaticityMismatchPolicy.ReplaceEntity),
-        (
-            "aromatic_bond_constraint_mismatch",
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-        ),
-        ("reset_aromatic_valence", True),
     ],
 )
 def test_aromaticity_resolve_config_mutation(field, value):
@@ -293,11 +252,8 @@ def test_stereo_resolve_config_default():
 
     assert config.tetrahedral_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_atom_failure == StereoFailurePolicy.Error
-    assert config.tetrahedral_stereo_mismatch == StereoMismatchPolicy.Error
     assert config.cis_trans_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_bond_failure == StereoFailurePolicy.Error
-    assert config.cis_trans_stereo_mismatch == StereoMismatchPolicy.Error
-    assert config.reset_stereo_constraints is False
     assert config == StereoResolveConfig()
 
 
@@ -305,59 +261,41 @@ def test_stereo_resolve_config_default():
     (
         "tetrahedral_stereo_failure",
         "stereo_atom_failure",
-        "tetrahedral_stereo_mismatch",
         "cis_trans_stereo_failure",
         "stereo_bond_failure",
-        "cis_trans_stereo_mismatch",
-        "reset_stereo_constraints",
     ),
     [
         (
             StereoFailurePolicy.Error,
             StereoFailurePolicy.Error,
-            StereoMismatchPolicy.Error,
             StereoFailurePolicy.Error,
             StereoFailurePolicy.Error,
-            StereoMismatchPolicy.Error,
-            False,
         ),
         (
             StereoFailurePolicy.Keep,
             StereoFailurePolicy.Remove,
-            StereoMismatchPolicy.RemoveConstraint,
             StereoFailurePolicy.Remove,
             StereoFailurePolicy.Keep,
-            StereoMismatchPolicy.ReplaceEntity,
-            True,
         ),
     ],
 )
 def test_stereo_resolve_config_new(
     tetrahedral_stereo_failure,
     stereo_atom_failure,
-    tetrahedral_stereo_mismatch,
     cis_trans_stereo_failure,
     stereo_bond_failure,
-    cis_trans_stereo_mismatch,
-    reset_stereo_constraints,
 ):
     config = StereoResolveConfig(
         tetrahedral_stereo_failure=tetrahedral_stereo_failure,
         stereo_atom_failure=stereo_atom_failure,
-        tetrahedral_stereo_mismatch=tetrahedral_stereo_mismatch,
         cis_trans_stereo_failure=cis_trans_stereo_failure,
         stereo_bond_failure=stereo_bond_failure,
-        cis_trans_stereo_mismatch=cis_trans_stereo_mismatch,
-        reset_stereo_constraints=reset_stereo_constraints,
     )
 
     assert config.tetrahedral_stereo_failure == tetrahedral_stereo_failure
     assert config.stereo_atom_failure == stereo_atom_failure
-    assert config.tetrahedral_stereo_mismatch == tetrahedral_stereo_mismatch
     assert config.cis_trans_stereo_failure == cis_trans_stereo_failure
     assert config.stereo_bond_failure == stereo_bond_failure
-    assert config.cis_trans_stereo_mismatch == cis_trans_stereo_mismatch
-    assert config.reset_stereo_constraints is reset_stereo_constraints
 
 
 def test_stereo_resolve_config_new_error():
@@ -372,29 +310,22 @@ def test_stereo_resolve_config_new_error():
             StereoResolveConfig(),
             "StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Error, stereo_atom_failure="
-            "StereoFailurePolicy.Error, tetrahedral_stereo_mismatch="
-            "StereoMismatchPolicy.Error, cis_trans_stereo_failure="
+            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
             "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_mismatch="
-            "StereoMismatchPolicy.Error, reset_stereo_constraints=False)",
+            "StereoFailurePolicy.Error)",
         ),
         (
             StereoResolveConfig(
                 tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 stereo_atom_failure=StereoFailurePolicy.Remove,
-                tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint,
                 cis_trans_stereo_failure=StereoFailurePolicy.Remove,
                 stereo_bond_failure=StereoFailurePolicy.Keep,
-                cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity,
-                reset_stereo_constraints=True,
             ),
             "StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch="
-            "StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure="
+            "StereoFailurePolicy.Remove, cis_trans_stereo_failure="
             "StereoFailurePolicy.Remove, stereo_bond_failure="
-            "StereoFailurePolicy.Keep, cis_trans_stereo_mismatch="
-            "StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True)",
+            "StereoFailurePolicy.Keep)",
         ),
     ],
 )
@@ -407,11 +338,8 @@ def test_stereo_resolve_config_repr(config, expected):
     [
         ("tetrahedral_stereo_failure", StereoFailurePolicy.Keep),
         ("stereo_atom_failure", StereoFailurePolicy.Remove),
-        ("tetrahedral_stereo_mismatch", StereoMismatchPolicy.RemoveConstraint),
         ("cis_trans_stereo_failure", StereoFailurePolicy.Remove),
         ("stereo_bond_failure", StereoFailurePolicy.Keep),
-        ("cis_trans_stereo_mismatch", StereoMismatchPolicy.RemoveBoth),
-        ("reset_stereo_constraints", True),
     ],
 )
 def test_stereo_resolve_config_mutation(field, value):
@@ -450,13 +378,12 @@ def test_resolve_config_default():
         (
             AromaticityResolveConfig(
                 aromatic_valence_failure=AromaticityFailurePolicy.Keep,
-                reset_aromatic_valence=True,
             ),
             StereoResolveConfig(),
         ),
         (
             AromaticityResolveConfig(),
-            StereoResolveConfig(reset_stereo_constraints=True),
+            StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep),
         ),
     ],
 )
@@ -480,14 +407,12 @@ def test_resolve_config_new_error():
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(
                 aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                reset_aromatic_valence=False,
             ),
             stereo=StereoResolveConfig(),
         ),
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                reset_stereo_constraints=True,
                 tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
             ),
         ),
@@ -506,16 +431,8 @@ def test_resolve_config_equality(other):
                 aromaticity=AromaticityResolveConfig(
                     aromatic_valence_failure=AromaticityFailurePolicy.Keep,
                     aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                    aromatic_valence_mismatch=(
-                        AromaticityMismatchPolicy.ReplaceEntity
-                    ),
-                    aromatic_bond_constraint_mismatch=(
-                        AromaticBondConstraintMismatchPolicy.RemoveConstraint
-                    ),
-                    reset_aromatic_valence=True,
                 ),
                 stereo=StereoResolveConfig(
-                    reset_stereo_constraints=True,
                     tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 ),
             ),
@@ -527,20 +444,14 @@ def test_resolve_config_equality(other):
             "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_system_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_valence_mismatch="
-            "AromaticityMismatchPolicy.ReplaceEntity, "
-            "aromatic_bond_constraint_mismatch="
-            "AromaticBondConstraintMismatchPolicy.RemoveConstraint, "
-            "reset_aromatic_valence=True), "
+            "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
             "stereo=StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Error, tetrahedral_stereo_mismatch="
-            "StereoMismatchPolicy.Error, cis_trans_stereo_failure="
+            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
             "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_mismatch="
-            "StereoMismatchPolicy.Error, reset_stereo_constraints=True))",
+            "StereoFailurePolicy.Error))",
         ),
     ],
 )
@@ -563,22 +474,85 @@ def test_resolve_config_mutation(field, value):
         setattr(config, field, value)
 
 
-def test_underdetermined_error_report():
+@pytest.mark.parametrize(
+    ("source", "valence"),
+    [
+        ("C", ValenceModel.counts(ValenceTable.default())),
+        ("*", ValenceModel.smiles()),
+    ],
+)
+def test_molecule_from_smiles_underdetermined(source, valence):
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=valence,
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
     with pytest.raises(UnderdeterminedError) as excinfo:
-        Molecule.from_smiles(
-            "C",
-            chemistry_model=ChemistryModel(
-                connectivity=ChemistryModel.default().connectivity,
-                valence=ValenceModel.counts(ValenceTable.default()),
-                aromaticity=ChemistryModel.default().aromaticity,
-                stereo=ChemistryModel.default().stereo,
-            ),
-        )
+        Molecule.from_smiles(source, chemistry_model=model)
 
     assert str(excinfo.value) == "resolution underdetermined"
-    report = excinfo.value.report
+    assert not hasattr(excinfo.value, "report")
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        pytest.param(
+            '{:atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}',
+            "stereo inconsistency: tetrahedral stereo constraint at atom AtomId(0) "
+            "disagrees with stereo atom StereoAtomId(0)",
+            id="tetrahedral",
+        ),
+        pytest.param(
+            '{:atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
+            ':bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+            ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}',
+            "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
+            "disagrees with stereo bond StereoBondId(0)",
+            id="cis_trans",
+        ),
+    ],
+)
+@pytest.mark.parametrize("failure", [StereoFailurePolicy.Error, StereoFailurePolicy.Keep, StereoFailurePolicy.Remove])
+def test_molecule_resolve_into_stereo_mismatch(source, expected, failure):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    result = molecule.resolve_into(
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(
+                tetrahedral_stereo_failure=failure,
+                stereo_atom_failure=failure,
+                cis_trans_stereo_failure=failure,
+                stereo_bond_failure=failure,
+            ),
+        ),
+    )
+    assert isinstance(result, Solution.Contradictory)
+    assert str(result.contradiction) == expected
+    assert molecule == original
+
+
+@pytest.mark.parametrize("method", ["resolve_with_report", "resolve_into_with_report"])
+def test_molecule_resolve_with_report(method):
+    source = Molecule.parse('{:atoms ["C#i=#c0#u0#s#v0#a!"]}')
+    default = ChemistryModel.default()
+    result, report = getattr(source, method)(
+        chemistry_model=ChemistryModel(
+            connectivity=default.connectivity,
+            valence=ValenceModel.counts(ValenceTable.default()),
+            aromaticity=default.aromaticity,
+            stereo=default.stereo,
+        ),
+    )
+    assert isinstance(result, Solution.Underdetermined)
     assert isinstance(report, ResolveReport)
-    assert report.tie_breaks == []
+    assert type(report.tie_breaks) is tuple
+    assert report.tie_breaks == ()
     completions = report.unresolved
     assert isinstance(completions, AtomCompletions)
     assert not completions.is_empty()
@@ -606,15 +580,22 @@ def test_underdetermined_error_report():
     )
 
 
-def test_underdetermined_error_report_empty():
-    with pytest.raises(UnderdeterminedError) as excinfo:
-        Molecule.from_smiles("*")
-
-    report = excinfo.value.report
+@pytest.mark.parametrize("method", ["resolve_with_report", "resolve_into_with_report"])
+def test_molecule_resolve_with_report_empty(method):
+    source = Molecule.parse('{:atoms ["C#c0#h4"]}')
+    result, report = getattr(source, method)(
+        resolve_config=ResolveConfig(
+            isotope=IsotopePolicy.Strict,
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(),
+        )
+    )
+    assert isinstance(result, Solution.Underdetermined)
     assert report.unresolved.is_empty()
     assert len(report.unresolved) == 0
     assert report.unresolved.items() == []
-    assert report.tie_breaks == []
+    assert type(report.tie_breaks) is tuple
+    assert report.tie_breaks == ()
     assert repr(report) == "ResolveReport(unresolved=AtomCompletions({}), tie_breaks=[])"
 
 
@@ -651,23 +632,313 @@ def test_molecule_from_smiles_isotope_default():
     assert Molecule.from_smiles("C") == expected
 
 
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report", "rollback_method"),
+    [
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, None),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
+    ],
+)
 @pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
-def test_molecule_resolve_isotope(isotope):
+@pytest.mark.parametrize("chemistry_model", [None, ChemistryModel.default()])
+def test_molecule_resolve_isotope(
+    method, copying, with_report, rollback_method, isotope, chemistry_model
+):
     source = Molecule.parse('{:atoms ["C#c0#h4"]}')
-    original = Molecule.parse('{:atoms ["C#c0#h4"]}')
+    alias = source
+    original = source.copy()
+    atoms = source.atoms
+    atom = atoms[0]
+    constraints = atom.constraints
+    atom_iter = iter(atoms)
+    molecule_constraints = source.constraints
+    constraint_iter = iter(molecule_constraints)
     config = ResolveConfig(
         isotope=isotope,
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
     )
-    result = source.resolve(resolve_config=config)
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
+    result = getattr(source, method)(
+        chemistry_model=chemistry_model, resolve_config=config, **kwargs
+    )
+    if chemistry_model is not None:
+        assert chemistry_model == ChemistryModel.default()
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ()
+    assert not hasattr(result, "report")
     if isotope == IsotopePolicy.Strict:
-        assert isinstance(result, Solution.Underdetermined)
-        assert result.report.unresolved.items() == []
-        assert result.report.tie_breaks == []
+        assert result == Solution.Underdetermined()
+        if not copying:
+            assert alias == original
     else:
+        expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
         assert isinstance(result, Solution.Determined)
-        assert result.molecule == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
-        assert result.report.unresolved.items() == []
-        assert result.report.tie_breaks == []
+        if copying:
+            assert result.molecule == expected
+            assert result.molecule.edit().finish() == expected
+            assert result.molecule == expected
+        else:
+            assert result == Solution.Determined()
+            assert result.molecule is None
+            assert alias == expected
+            assert source.edit().finish() == expected
+            assert source == expected
+    assert source.atoms[0].id == 0
+    if copying:
+        assert alias == original
+        assert len(atoms) == 1
+        assert atom.id == 0
+        assert atom.charge == NumForm.Lit(0)
+        assert len(constraints) == 0
+        assert next(atom_iter).id == 0
+        assert len(molecule_constraints) == 0
+        with pytest.raises(StopIteration):
+            next(constraint_iter)
+    else:
+        for access in (
+            lambda: len(atoms),
+            lambda: atom.id,
+            lambda: atom.charge,
+            lambda: len(constraints),
+            lambda: next(atom_iter),
+            lambda: len(molecule_constraints),
+            lambda: next(constraint_iter),
+        ):
+            with pytest.raises(InvalidatedViewError):
+                access()
+    assert original == Molecule.parse('{:atoms ["C#c0#h4"]}')
+
+
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report", "rollback_method"),
+    [
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, None),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
+    ],
+)
+def test_molecule_resolve_identity(method, copying, with_report, rollback_method):
+    source = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+    original = source.copy()
+    atom = source.atoms[0]
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
+    result = getattr(source, method)(**kwargs)
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ()
+    assert not hasattr(result, "report")
+    assert source == original
+    if copying:
+        assert result.molecule == original
+        assert result.molecule is not source
+        result.molecule.atoms[0].charge = 1
+        assert atom.charge == NumForm.Lit(0)
+        atom.charge = -1
+        assert result.molecule.atoms[0].charge == NumForm.Lit(1)
+        assert source.atoms[0].charge == NumForm.Lit(-1)
+    else:
+        assert result == Solution.Determined()
+        with pytest.raises(InvalidatedViewError):
+            atom.charge = 1
+
+
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report", "rollback_method"),
+    [
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, None),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
+    ],
+)
+def test_molecule_resolve_contradiction(method, copying, with_report, rollback_method):
+    source = Molecule.parse('{:atoms ["C#c0#h5"]}')
+    original = source.copy()
+    atom = source.atoms[0]
+    config = ResolveConfig(
+        isotope=IsotopePolicy.Natural,
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.smiles(),
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
+    result = getattr(source, method)(
+        chemistry_model=model, resolve_config=config, **kwargs
+    )
+    if with_report:
+        result, report = result
+        assert report is None
+    assert isinstance(result, Solution.Contradictory)
+    assert str(result.contradiction) == "no matching valence state"
+    assert not hasattr(result, "report")
+    assert source == original
+    assert source.atoms[0].implicit_hydrogens == NumForm.Lit(5)
+    if copying:
+        assert atom.id == 0
+        assert atom.implicit_hydrogens == NumForm.Lit(5)
+    else:
+        with pytest.raises(InvalidatedViewError):
+            atom.id
+
+
+@pytest.mark.parametrize(
+    ("method", "copying", "rollback_method"),
+    [
+        ("resolve", True, None),
+        ("resolve_with_report", True, None),
+        ("resolve_into", False, None),
+        ("resolve_into", False, RollbackMethod.Clone),
+        ("resolve_into", False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, None),
+        ("resolve_into_with_report", False, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, RollbackMethod.Journal),
+    ],
+)
+def test_molecule_resolve_error(method, copying, rollback_method):
+    source = Molecule.parse(
+        '{:atoms ["C#v2#a2" "C#v2#a2" "C#v2#a2" '
+        '"C#v2#a2" "C#v2#a2" "C#v2#a2"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] '
+        '[3 4 "1"] [4 5 "1"] [5 0 "1"]]}'
+    )
+    original = source.copy()
+    atom = source.atoms[0]
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.atom_typing(
+            AtomTypeRegistry.from_atoms(
+                [
+                    AtomForm.parse("C#c0#h0#n0#u0#s#v2#a2"),
+                ]
+            )
+        ),
+        aromaticity=AromaticityModel(
+            scope=ElementScope.Any(),
+            rule=AromaticityRule.Hmo(stabilization_threshold=0.5),
+        ),
+        stereo=default.stereo,
+    )
+    config = ResolveConfig(
+        isotope=IsotopePolicy.Natural,
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
+    with pytest.raises(
+        RuntimeError,
+        match="^hmo: missing parameters: no Van-Catledge parameters for C with 2 pi-electrons$",
+    ):
+        getattr(source, method)(chemistry_model=model, resolve_config=config, **kwargs)
+    assert source == original
+    assert source.atoms[0].id == 0
+    if copying:
+        assert atom.id == 0
+    else:
+        with pytest.raises(InvalidatedViewError):
+            atom.id
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["resolve", "resolve_with_report", "resolve_into", "resolve_into_with_report"],
+)
+@pytest.mark.parametrize("argument", ["chemistry_model", "resolve_config"])
+def test_molecule_resolve_arguments(method, argument):
+    source = Molecule.from_smiles("C")
+    original = source.copy()
+    atom = source.atoms[0]
+    with pytest.raises(TypeError):
+        getattr(source, method)(**{argument: object()})
+    assert source == original
+    assert atom.id == 0
+
+
+@pytest.mark.parametrize("method", ["resolve_into", "resolve_into_with_report"])
+def test_molecule_resolve_into_arguments(method):
+    source = Molecule.from_smiles("C")
+    original = source.copy()
+    atom = source.atoms[0]
+    with pytest.raises(TypeError):
+        getattr(source, method)(rollback_method=object())
+    with pytest.raises(TypeError):
+        getattr(source, method)(RollbackMethod.Journal)
+    assert source == original
+    assert atom.id == 0
+
+
+@pytest.mark.parametrize(
+    ("solution", "expected"),
+    [
+        (Solution.Determined(), "Solution.Determined(molecule=None)"),
+        (Solution.Underdetermined(), "Solution.Underdetermined()"),
+    ],
+)
+def test_solution_repr(solution, expected):
+    assert repr(solution) == expected
+    assert not hasattr(solution, "report")
+
+
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_solution_molecule(method):
+    source = Molecule.from_smiles("C")
+    original = source.copy()
+    result = source.resolve()
+    molecule = result.molecule
+    copied = molecule.copy()
+    same = Solution.Determined(molecule=molecule)
+    independent = Solution.Determined(molecule=copied)
+
+    assert repr(result) == "Solution.Determined(molecule=Molecule(atoms=1, bonds=0))"
+    assert result.molecule is molecule
+    assert same.molecule is molecule
+    assert result == independent
+    molecule.atoms[0].charge = 1
+    assert result.molecule.atoms[0].charge == NumForm.Lit(1)
+    assert same == result
+    assert independent != result
+    assert independent.molecule == original
+
+    view = molecule.atoms[0]
+    if method == "edit":
+        published = molecule.edit().finish()
+    else:
+        applied = getattr(molecule, method)(Edits())
+        published = applied[0] if method == "tracked_apply" else applied
+    assert published.atoms[0].charge == NumForm.Lit(1)
+    assert result.molecule is molecule
+    assert same == result
+    assert result != independent
+    assert independent != result
+    assert repr(result) == "Solution.Determined(molecule=Molecule(atoms=1, bonds=0))"
+    published.atoms[0].charge = -1
+    assert view.charge == NumForm.Lit(1)
+    assert same.molecule.atoms[0].charge == NumForm.Lit(1)
+    assert published.atoms[0].charge == NumForm.Lit(-1)
+    assert copied == original
     assert source == original

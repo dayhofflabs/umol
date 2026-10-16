@@ -6,7 +6,8 @@
 
 use std::ops::ControlFlow;
 
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathEnumerationAlgorithm {

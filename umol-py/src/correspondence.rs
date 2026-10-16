@@ -11,6 +11,8 @@ use umol_graph_ir::ir::{
     StereoAtomId, StereoBondId,
 };
 
+use crate::convert::TupleItems;
+
 /// An id that can cross the Python boundary as an integer index.
 pub(crate) trait CorrespondenceId: Copy + Debug + Ord + From<usize> {
     fn index(self) -> usize;
@@ -64,8 +66,8 @@ impl Correspondence {
 
     /// Matched `(left, right)` id pairs, ordered by left id.
     #[getter]
-    fn matched_pairs(&self) -> Vec<(usize, usize)> {
-        self.0.matched_pairs().to_vec()
+    fn matched_pairs(&self) -> TupleItems<Vec<(usize, usize)>> {
+        TupleItems(self.0.matched_pairs().to_vec())
     }
 
     /// Size of the left id space.
@@ -82,14 +84,14 @@ impl Correspondence {
 
     /// Left ids without a match.
     #[getter]
-    fn left_unmatched(&self) -> Vec<usize> {
-        self.0.left_unmatched()
+    fn left_unmatched(&self) -> TupleItems<Vec<usize>> {
+        TupleItems(self.0.left_unmatched())
     }
 
     /// Right ids without a match.
     #[getter]
-    fn right_unmatched(&self) -> Vec<usize> {
-        self.0.right_unmatched()
+    fn right_unmatched(&self) -> TupleItems<Vec<usize>> {
+        TupleItems(self.0.right_unmatched())
     }
 
     /// Number of matched pairs.
@@ -345,7 +347,8 @@ impl MoleculeCorrespondence {
 
 #[cfg(test)]
 mod tests {
-    use pyo3::types::PyList;
+    use pyo3::exceptions::PyAttributeError;
+    use pyo3::types::{PyList, PyTuple};
     use rstest::{fixture, rstest};
 
     use super::*;
@@ -458,6 +461,7 @@ mod tests {
             GraphCoreCorrespondence::new(
                 correspondence
                     .matched_pairs()
+                    .0
                     .into_iter()
                     .map(|(left, right)| (AtomId::from(left), AtomId::from(right)))
                     .collect(),
@@ -550,11 +554,11 @@ mod tests {
         #[case] matched_pair_count: usize,
     ) {
         let correspondence = Correspondence::from_rust(&correspondence);
-        assert_eq!(correspondence.matched_pairs(), matched_pairs);
+        assert_eq!(correspondence.matched_pairs().0, matched_pairs);
         assert_eq!(correspondence.left_count(), left_count);
         assert_eq!(correspondence.right_count(), right_count);
-        assert_eq!(correspondence.left_unmatched(), left_unmatched);
-        assert_eq!(correspondence.right_unmatched(), right_unmatched);
+        assert_eq!(correspondence.left_unmatched().0, left_unmatched);
+        assert_eq!(correspondence.right_unmatched().0, right_unmatched);
         assert_eq!(correspondence.__len__(), matched_pair_count);
     }
 
@@ -716,17 +720,17 @@ mod tests {
             &GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
-        let mut matched_pairs = correspondence.matched_pairs();
-        let mut left_unmatched = correspondence.left_unmatched();
-        let mut right_unmatched = correspondence.right_unmatched();
+        let mut matched_pairs = correspondence.matched_pairs().0;
+        let mut left_unmatched = correspondence.left_unmatched().0;
+        let mut right_unmatched = correspondence.right_unmatched().0;
 
         matched_pairs.push((1, 1));
         left_unmatched.clear();
         right_unmatched.clear();
 
-        assert_eq!(correspondence.matched_pairs(), vec![(0, 2)]);
-        assert_eq!(correspondence.left_unmatched(), vec![1]);
-        assert_eq!(correspondence.right_unmatched(), vec![0, 1]);
+        assert_eq!(correspondence.matched_pairs().0, vec![(0, 2)]);
+        assert_eq!(correspondence.left_unmatched().0, vec![1]);
+        assert_eq!(correspondence.right_unmatched().0, vec![0, 1]);
         assert_eq!(
             correspondence.__repr__(),
             "Correspondence(matched_pairs=[(0, 2)], left_count=2, right_count=3)"
@@ -988,9 +992,12 @@ mod tests {
             let first_matched_pairs = first
                 .getattr("matched_pairs")
                 .unwrap()
-                .cast_into::<PyList>()
+                .cast_into::<PyTuple>()
                 .unwrap();
-            first_matched_pairs.append((1, 2)).unwrap();
+            assert!(first_matched_pairs
+                .call_method1("append", ((1, 2),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
 
             assert!(!first.is(&second));
             assert_eq!(

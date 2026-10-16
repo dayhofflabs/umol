@@ -27,14 +27,14 @@ proptest! {
     #[test]
     fn test_molecule_stereo_frame_integrity(molecule in molecule_with_constraints_strategy()) {
         for stereo_atom in molecule.stereo_atoms().iter() {
-            let frame = stereo_atom.ligand_frame();
+            let frame = stereo_atom.ligand_ids();
             prop_assert!(frame.len() <= MAX_DEGREE);
             for (position, ligand) in frame.iter().enumerate() {
                 prop_assert!(!frame[..position].contains(ligand));
             }
         }
         for stereo_bond in molecule.stereo_bonds().iter() {
-            let frame = stereo_bond.ligand_frame();
+            let frame = stereo_bond.ligand_ids();
             prop_assert!(frame.len() <= MAX_DEGREE);
             for (position, ligand) in frame.iter().enumerate() {
                 prop_assert!(!frame[..position].contains(ligand));
@@ -209,7 +209,7 @@ proptest! {
         left in molecule_structurally_unambiguous_strategy(),
         right in molecule_structurally_unambiguous_strategy(),
     ) {
-        let combined = left.combine(&right);
+        let combined = left.clone().combine(&right);
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::from_images(
                 &(0..right.atoms().count())
@@ -268,7 +268,7 @@ proptest! {
         left in molecule_structurally_unambiguous_strategy(),
         right in molecule_structurally_unambiguous_strategy(),
     ) {
-        let expected = left.combine(&right);
+        let expected = left.clone().combine(&right);
         let mut combined = left;
         combined.combine_from(&right);
 

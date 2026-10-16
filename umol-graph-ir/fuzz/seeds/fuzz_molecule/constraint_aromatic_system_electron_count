@@ -1,0 +1,1 @@
+{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}] :constraints [{:aromatic-system [0 {:electron-count 6}]}]}

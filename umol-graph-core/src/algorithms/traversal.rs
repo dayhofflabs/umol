@@ -3,7 +3,8 @@
 use std::collections::VecDeque;
 use std::ops::ControlFlow;
 
-use crate::graph::{EdgeId, Graph, Neighbor, NodeId};
+use crate::graph::{Graph, Neighbor};
+use crate::id::{EdgeId, NodeId};
 
 /// An event in an undirected depth-first traversal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

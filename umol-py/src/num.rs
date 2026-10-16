@@ -14,7 +14,7 @@ use umol_graph_ir::ir::{
     PredExpr as GraphIrPredExpr, RelOp as GraphIrRelOp,
 };
 
-use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr, FrozenSetItems, TupleItems};
 use crate::lattice::{impl_py_lattice, impl_py_normalize};
 
 /// Relational operator in a numeric predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
@@ -83,8 +83,8 @@ pub enum ArithExpr {
     Lit(i64),
     Var(String),
     Neg(Py<ArithExpr>),
-    Sum(Vec<Py<ArithExpr>>),
-    Product(Vec<Py<ArithExpr>>),
+    Sum(TupleItems<Vec<Py<ArithExpr>>>),
+    Product(TupleItems<Vec<Py<ArithExpr>>>),
     Div(Py<ArithExpr>, Py<ArithExpr>),
     Rem(Py<ArithExpr>, Py<ArithExpr>),
 }
@@ -188,10 +188,10 @@ impl_py_normalize!(
 #[pyclass]
 pub enum PredExpr {
     Rel(Py<ArithExpr>, RelOp, Py<ArithExpr>),
-    Mem(Py<ArithExpr>, MemOp, BTreeSet<i64>),
+    Mem(Py<ArithExpr>, MemOp, FrozenSetItems<BTreeSet<i64>>),
     Not(Py<PredExpr>),
-    And(Vec<Py<PredExpr>>),
-    Or(Vec<Py<PredExpr>>),
+    And(TupleItems<Vec<Py<PredExpr>>>),
+    Or(TupleItems<Vec<Py<PredExpr>>>),
 }
 
 #[pymethods]
@@ -227,7 +227,7 @@ impl PredExpr {
             GraphIrPredExpr::Mem(t, op, members) => PredExpr::Mem(
                 into_py_variant(py, ArithExpr::from_rust(py, t)?)?,
                 MemOp::from_rust(*op),
-                members.clone(),
+                FrozenSetItems(members.clone()),
             ),
             GraphIrPredExpr::Not(p) => PredExpr::Not(into_py_variant(py, Self::from_rust(py, p)?)?),
             GraphIrPredExpr::And(ps) => PredExpr::And(
@@ -253,7 +253,7 @@ impl PredExpr {
             PredExpr::Mem(t, op, members) => GraphIrPredExpr::Mem(
                 t.bind(py).borrow().to_rust(py),
                 op.to_rust(),
-                members.clone(),
+                members.0.clone(),
             ),
             PredExpr::Not(p) => GraphIrPredExpr::Not(Box::new(p.bind(py).borrow().to_rust(py))),
             PredExpr::And(ps) => {
@@ -272,7 +272,7 @@ impl PredExpr {
 pub enum NumForm {
     Undetermined(),
     Lit(i64),
-    LitSet(BTreeSet<i64>),
+    LitSet(FrozenSetItems<BTreeSet<i64>>),
     RangeFrom(i64),
     RangeTo(i64),
     ArithExpr(Py<ArithExpr>),
@@ -314,7 +314,7 @@ impl NumForm {
         Ok(match form {
             GraphIrNumForm::Undetermined => NumForm::Undetermined(),
             GraphIrNumForm::Lit(n) => NumForm::Lit(*n),
-            GraphIrNumForm::LitSet(members) => NumForm::LitSet((**members).clone()),
+            GraphIrNumForm::LitSet(members) => NumForm::LitSet(FrozenSetItems((**members).clone())),
             GraphIrNumForm::RangeFrom(n) => NumForm::RangeFrom(*n),
             GraphIrNumForm::RangeTo(n) => NumForm::RangeTo(*n),
             GraphIrNumForm::ArithExpr(t) => {
@@ -330,7 +330,7 @@ impl NumForm {
         match self {
             NumForm::Undetermined() => GraphIrNumForm::Undetermined,
             NumForm::Lit(n) => GraphIrNumForm::Lit(*n),
-            NumForm::LitSet(members) => GraphIrNumForm::LitSet(Box::new(members.clone())),
+            NumForm::LitSet(members) => GraphIrNumForm::LitSet(Box::new(members.0.clone())),
             NumForm::RangeFrom(n) => GraphIrNumForm::RangeFrom(*n),
             NumForm::RangeTo(n) => GraphIrNumForm::RangeTo(*n),
             NumForm::ArithExpr(t) => {

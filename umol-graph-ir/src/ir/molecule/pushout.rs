@@ -3,6 +3,8 @@
 //! attribute layer over graph-core's structural `pushout`. A child of `molecule` so it reaches the
 //! private overlay relation-sets directly, without exposing raw accessors.
 
+use std::sync::Arc;
+
 use umol_graph_core::{Correspondence, EdgeId, GraphCorrespondence, NodeId};
 use umol_perm::{DynPermutation, Permutation};
 
@@ -69,10 +71,10 @@ impl Molecule {
             ) {
                 (Some(l), Some(r)) => self
                     .atom(AtomId::from(l))
-                    .attributes
-                    .meet(other.atom(AtomId::from(r)).attributes)?,
-                (Some(l), None) => self.atom(AtomId::from(l)).attributes.clone(),
-                (None, Some(r)) => other.atom(AtomId::from(r)).attributes.clone(),
+                    .attributes()
+                    .meet(other.atom(AtomId::from(r)).attributes())?,
+                (Some(l), None) => self.atom(AtomId::from(l)).attributes().clone(),
+                (None, Some(r)) => other.atom(AtomId::from(r)).attributes().clone(),
                 (None, None) => unreachable!("a glued node originates from a side"),
             };
             atoms.push(atom);
@@ -88,10 +90,10 @@ impl Molecule {
             ) {
                 (Some(l), Some(r)) => self
                     .bond(BondId::from(l))
-                    .attributes
-                    .meet(other.bond(BondId::from(r)).attributes)?,
-                (Some(l), None) => self.bond(BondId::from(l)).attributes.clone(),
-                (None, Some(r)) => other.bond(BondId::from(r)).attributes.clone(),
+                    .attributes()
+                    .meet(other.bond(BondId::from(r)).attributes())?,
+                (Some(l), None) => self.bond(BondId::from(l)).attributes().clone(),
+                (None, Some(r)) => other.bond(BondId::from(r)).attributes().clone(),
                 (None, None) => unreachable!("a glued edge originates from a side"),
             };
             bonds.push((AtomId::from(u), AtomId::from(v), bond));
@@ -180,7 +182,7 @@ impl Molecule {
         .into_iter()
         .all(|entity_kind| action_domain.count(entity_kind) == 0)
         {
-            other.constraints.clone()
+            other.constraints().clone()
         } else {
             let mut actions = ConstraintFrameActionMap::default();
 
@@ -292,7 +294,7 @@ impl Molecule {
             }
 
             other
-                .constraints
+                .constraints()
                 .clone()
                 .reframe_by_actions(&actions)
                 .ok()?
@@ -301,14 +303,14 @@ impl Molecule {
         // Molecule-level constraints: `self`'s hold in the glue as-is (it keeps `self`'s ids and
         // frames); `other`'s are first transported into the retained object frames, then
         // re-anchored through the `right` embedding. Conjunction, deduplicated.
-        let mut constraints = self.constraints.clone();
+        let mut constraints = self.constraints().clone();
         for constraint in right_constraints {
             let remapped = constraint.map(&right);
             if !constraints.iter().any(|existing| existing == &remapped) {
                 constraints.push(remapped);
             }
         }
-        object.constraints = constraints;
+        object.constraints = Arc::new(constraints);
 
         Some((object, MoleculePushoutCorrespondence { left, right }))
     }
