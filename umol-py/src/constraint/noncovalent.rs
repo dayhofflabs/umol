@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_graph_ir::ir::{
@@ -17,7 +17,7 @@ use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
-use crate::noncovalent::NoncovalentBondForm;
+use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
 
 /// The key (identity) of a noncovalent-bond constraint, for keyed lookup. The single
 /// key `Intramolecular` is the bare discriminant (no sub-key).
@@ -399,6 +399,10 @@ impl NoncovalentBondConstraintsForm {
 
     /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `NoncovalentBondConstraintsForm(..)` directly.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrNoncovalentBondConstraintsForm) -> Self {
         NoncovalentBondConstraintsForm(constraints)
     }
@@ -573,9 +577,9 @@ impl NoncovalentBondConstraintsLike {
     }
 }
 
-/// What a `NoncovalentBondConstraintsView` writes through to: a noncovalent bond within
-/// a molecule (by index) or a standalone `NoncovalentBondForm`.
+/// Owner of the constraints exposed by NoncovalentBondConstraintsView.
 pub(crate) enum NoncovalentBondConstraintsStorage {
+    Update(Py<NoncovalentBondUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -584,12 +588,13 @@ pub(crate) enum NoncovalentBondConstraintsStorage {
     Noncovalent(Py<NoncovalentBondForm>),
 }
 
-/// A live handle onto one noncovalent bond's constraints, backed by either a
-/// molecule-bond or a standalone `NoncovalentBondForm`. Reads borrow the constraints and
-/// read only the item they need (no whole-container clone); mutators write through to the
-/// bond in place, without a clone-and-writeback.
+/// A view of one noncovalent bond's constraints, retaining its molecule, NoncovalentBondForm,
+/// or NoncovalentBondUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
 /// Semantic readings return independent normal values; None is bottom.
 /// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from NoncovalentBondUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct NoncovalentBondConstraintsView {
     pub(crate) storage: NoncovalentBondConstraintsStorage,
@@ -625,6 +630,9 @@ impl NoncovalentBondConstraintsView {
         f: impl FnOnce(&GraphIrNoncovalentBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            NoncovalentBondConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
@@ -649,6 +657,9 @@ impl NoncovalentBondConstraintsView {
         constraint: GraphIrNoncovalentBondConstraintForm,
     ) -> PyResult<()> {
         match &self.storage {
+            NoncovalentBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "NoncovalentBondUpdate constraints are read-only",
+            )),
             NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
@@ -676,6 +687,9 @@ impl NoncovalentBondConstraintsView {
         key: GraphIrNoncovalentBondConstraintKey,
     ) -> PyResult<Option<GraphIrNoncovalentBondConstraintForm>> {
         match &self.storage {
+            NoncovalentBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "NoncovalentBondUpdate constraints are read-only",
+            )),
             NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
@@ -859,6 +873,9 @@ impl NoncovalentBondConstraintsView {
         // bond is unborrowed instead of self-aliasing into a double-borrow panic.
         let resolved = other.resolve(py)?;
         match &self.storage {
+            NoncovalentBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "NoncovalentBondUpdate constraints are read-only",
+            )),
             NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;

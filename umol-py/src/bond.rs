@@ -38,18 +38,19 @@ impl BondUpdate {
         order: Option<NumLike>,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<BondConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrBondUpdate {
+        constraints: Option<BondConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrBondUpdate {
             order: order.map(|value| value.to_rust(py)),
             charge: charge.map(|value| value.to_rust(py)),
             unpaired_electrons: unpaired_electrons
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a bond-update DSL string into a `BondUpdate`.
@@ -99,9 +100,13 @@ impl BondUpdate {
         UnpairedElectronsUpdate::from_rust(py, &self.0.unpaired_electrons)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> BondConstraintsForm {
-        BondConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> BondConstraintsView {
+        BondConstraintsView {
+            storage: BondConstraintsStorage::Update(slf),
+            rings: None,
+        }
     }
 }
 

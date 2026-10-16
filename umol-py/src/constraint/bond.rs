@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
 };
 
 use super::ring::{RingMembershipForm, RingScope};
-use crate::bond::BondForm;
+use crate::bond::{BondForm, BondUpdate};
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
@@ -463,6 +463,10 @@ impl BondConstraintsForm {
 
     /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `BondConstraintsForm(..)` directly.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrBondConstraintsForm) -> Self {
         BondConstraintsForm(constraints)
     }
@@ -552,9 +556,9 @@ pub(crate) fn bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What a `BondConstraintsView` writes through to: a bond within a molecule (by
-/// index) or a standalone `BondForm`.
+/// Owner of the constraints exposed by BondConstraintsView.
 pub(crate) enum BondConstraintsStorage {
+    Update(Py<BondUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -563,12 +567,13 @@ pub(crate) enum BondConstraintsStorage {
     Bond(Py<BondForm>),
 }
 
-/// A live handle onto one bond's constraints, backed by either a molecule-bond or a
-/// standalone `BondForm`. Reads borrow the bond's constraints and read only the item
-/// they need (no whole-container clone); mutators write through to the bond in place,
-/// without a clone-and-writeback.
+/// A view of one bond's constraints, retaining its molecule, BondForm,
+/// or BondUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
 /// Semantic readings return independent normal values; None is bottom.
 /// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from BondUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct BondConstraintsView {
     pub(crate) storage: BondConstraintsStorage,
@@ -618,6 +623,9 @@ impl BondConstraintsView {
         f: impl FnOnce(&GraphIrBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            BondConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
@@ -642,6 +650,9 @@ impl BondConstraintsView {
         constraint: GraphIrBondConstraintForm,
     ) -> PyResult<()> {
         match &self.storage {
+            BondConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
@@ -669,6 +680,9 @@ impl BondConstraintsView {
         key: GraphIrBondConstraintKey,
     ) -> PyResult<Option<GraphIrBondConstraintForm>> {
         match &self.storage {
+            BondConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
@@ -866,6 +880,9 @@ impl BondConstraintsView {
     pub(crate) fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
         match &self.storage {
+            BondConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondConstraintsView))?;
@@ -1019,6 +1036,9 @@ impl BondConstraintsView {
     #[getter]
     pub(crate) fn ring_size_count(&self, py: Python<'_>) -> PyResult<BondRingSizeCounts> {
         let storage = match &self.storage {
+            BondConstraintsStorage::Update(owner) => {
+                BondRingSizeStorage::Update(owner.clone_ref(py))
+            }
             BondConstraintsStorage::Molecule { owner, counter, id } => {
                 owner
                     .try_borrow(py)?
@@ -1040,9 +1060,9 @@ impl BondConstraintsView {
     }
 }
 
-/// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
-/// molecule, a standalone `BondForm`, or a standalone `BondConstraintsForm` value.
+/// Owner of the constraints exposed by BondRingSizeCounts.
 pub(crate) enum BondRingSizeStorage {
+    Update(Py<BondUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -1052,10 +1072,9 @@ pub(crate) enum BondRingSizeStorage {
     Value(Py<BondConstraintsForm>),
 }
 
-/// A subscriptable proxy over the sized-ring membership counts of a bond, keyed by
-/// ring size: `proxy[size]` reads, `proxy[size] = count` sets, `del proxy[size]`
-/// removes. Backs onto whichever container produced it (dual-backing, like
-/// `BondConstraintsView`).
+/// A subscriptable view of a bond's sized-ring membership counts.
+/// `proxy[size]` reads, `proxy[size] = count` sets, and `del proxy[size]` removes.
+/// The proxy retains its owner. Writes raise TypeError for BondUpdate owners.
 #[pyclass]
 pub struct BondRingSizeCounts {
     pub(crate) storage: BondRingSizeStorage,
@@ -1069,6 +1088,7 @@ impl BondRingSizeCounts {
         f: impl FnOnce(&GraphIrBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            BondRingSizeStorage::Update(owner) => f(&owner.try_borrow(py)?.to_rust().constraints),
             BondRingSizeStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
@@ -1091,6 +1111,9 @@ impl BondRingSizeCounts {
         f: impl FnOnce(&mut GraphIrBondConstraintsForm),
     ) -> PyResult<()> {
         match &self.storage {
+            BondRingSizeStorage::Update(_) => {
+                return Err(PyTypeError::new_err("BondUpdate constraints are read-only"))
+            }
             BondRingSizeStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;

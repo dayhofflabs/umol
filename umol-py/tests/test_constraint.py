@@ -1,4 +1,5 @@
 import pytest
+import umol
 
 from umol import (
     AromaticValence,
@@ -569,3 +570,125 @@ def test_ringsizecounts_len_iter_contains():
     assert sorted(rsc) == [5, 6]
     assert 6 in rsc
     assert 4 not in rsc
+
+
+@pytest.mark.parametrize(
+    ("entity", "entry", "property_name", "payload"),
+    [
+        (
+            "Atom",
+            umol.AtomConstraintForm.Valence(NumForm.LitSet({2, 3})),
+            "valence",
+            NumForm.LitSet({2, 3}),
+        ),
+        (
+            "Bond",
+            umol.BondConstraintForm.Aromatic(umol.BooleanForm.Lit(True)),
+            "aromatic",
+            umol.BooleanForm.Lit(True),
+        ),
+        (
+            "DativeBond",
+            umol.DativeBondConstraintForm.Aromatic(umol.BooleanForm.Lit(True)),
+            "aromatic",
+            umol.BooleanForm.Lit(True),
+        ),
+        (
+            "AromaticSystem",
+            umol.AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6)),
+            "electron_count",
+            NumForm.Lit(6),
+        ),
+        (
+            "MulticenterBond",
+            umol.MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(2)),
+            "electron_count",
+            NumForm.Lit(2),
+        ),
+        (
+            "NoncovalentBond",
+            umol.NoncovalentBondConstraintForm.Intramolecular(umol.BooleanForm.Lit(True)),
+            "intramolecular",
+            umol.BooleanForm.Lit(True),
+        ),
+        (
+            "StereoAtom",
+            umol.StereoAtomConstraintForm.Stereogenicity(
+                umol.StereogenicityForm.LitSet(
+                    {umol.Stereogenicity.Symmetric, umol.Stereogenicity.Prochiral}
+                )
+            ),
+            "stereogenicity",
+            umol.StereogenicityForm.LitSet(
+                {umol.Stereogenicity.Symmetric, umol.Stereogenicity.Prochiral}
+            ),
+        ),
+        (
+            "StereoBond",
+            umol.StereoBondConstraintForm.Stereogenicity(
+                umol.StereogenicityForm.Lit(umol.Stereogenicity.Symmetric)
+            ),
+            "stereogenicity",
+            umol.StereogenicityForm.Lit(umol.Stereogenicity.Symmetric),
+        ),
+    ],
+)
+def test_update_constraints(entity, entry, property_name, payload):
+    container_type = getattr(umol, entity + "ConstraintsForm")
+    update_type = getattr(umol, entity + "Update")
+    view_type = getattr(umol, entity + "ConstraintsView")
+    source = container_type([entry])
+    update = update_type(constraints=source)
+    view = update.constraints
+    assert type(view) is view_type
+    assert list(view.items()) == [(entry.key, entry)]
+    if entity.startswith("Stereo"):
+        assert view.stereogenicity() == payload
+    else:
+        assert getattr(view, property_name) == payload
+    source.pop(entry.key)
+    assert list(source.items()) == []
+    assert list(view.items()) == [(entry.key, entry)]
+    assert update_type(constraints=view) == update
+    del update
+    assert list(view.values()) == [entry]
+    with pytest.raises(TypeError):
+        view.set(entry)
+    with pytest.raises(TypeError):
+        view.pop(entry.key)
+    with pytest.raises(TypeError):
+        del view[entry.key]
+    with pytest.raises(TypeError):
+        view.update(container_type([]))
+    if not entity.startswith("Stereo"):
+        with pytest.raises(TypeError):
+            setattr(view, property_name, payload)
+    assert list(view.items()) == [(entry.key, entry)]
+    copied = container_type(list(view.values()))
+    copied.pop(entry.key)
+    assert list(copied.values()) == []
+    assert list(view.values()) == [entry]
+
+
+@pytest.mark.parametrize("entity", ["Atom", "Bond", "DativeBond"])
+def test_update_constraints_ring_size_count(entity):
+    entry_type = getattr(umol, entity + "ConstraintForm")
+    container_type = getattr(umol, entity + "ConstraintsForm")
+    update_type = getattr(umol, entity + "Update")
+    entry = entry_type.RingMembership(RingMembershipForm(RingScope.Size(6), 1))
+    update = update_type(constraints=container_type([entry]))
+    counts = update.constraints.ring_size_count
+    del update
+    assert counts[6] == NumForm.Lit(1)
+    assert counts[5] == NumForm.Undetermined()
+    assert list(counts) == [6]
+    with pytest.raises(TypeError):
+        counts[6] = 2
+    with pytest.raises(TypeError):
+        counts[5] = 1
+    with pytest.raises(TypeError):
+        del counts[6]
+    with pytest.raises(TypeError):
+        del counts[5]
+    assert counts[6] == NumForm.Lit(1)
+    assert counts[5] == NumForm.Undetermined()

@@ -409,7 +409,7 @@ def test_molecule_tracked_canonicalize():
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
     assert remapping.to_correspondence().is_total()
-    assert remapping.atoms.images == [1, 0]
+    assert remapping.atoms.images == (1, 0)
 
 
 def test_molecule_canonicalize_error():
@@ -606,7 +606,7 @@ def test_molecule_resolve_with_report(method, copying):
     else:
         assert solution.molecule is None
         assert molecule == expected
-    assert report.tie_breaks == [0]
+    assert report.tie_breaks == (0,)
     if copying:
         assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
@@ -1071,7 +1071,7 @@ def test_molecule_from_smiles_stereo_frame(source, site, ligands, coset):
     ] == [
         (
             site,
-            [StereoLigand(atom, kind) for atom, kind in ligands],
+            tuple(StereoLigand(atom, kind) for atom, kind in ligands),
             StereoKind.Tetrahedral,
             coset,
         )
@@ -1223,13 +1223,29 @@ def test_molecule_combine_all_empty():
 
 
 def test_correspondence_constructor():
-    correspondence = Correspondence([(2, 0), (0, 2)], 3, 3)
+    pairs = [(2, 0), (0, 2)]
+    correspondence = Correspondence(pairs, 3, 3)
+    pairs.clear()
+    for result in (
+        correspondence.matched_pairs,
+        correspondence.left_unmatched,
+        correspondence.right_unmatched,
+    ):
+        assert type(result) is tuple
+        with pytest.raises(TypeError):
+            result[0] = None
+    assert all(type(pair) is tuple for pair in correspondence.matched_pairs)
+    assert Correspondence(
+        correspondence.matched_pairs,
+        correspondence.left_count,
+        correspondence.right_count,
+    ) == correspondence
 
-    assert correspondence.matched_pairs == [(0, 2), (2, 0)]
+    assert correspondence.matched_pairs == ((0, 2), (2, 0))
     assert correspondence.left_count == 3
     assert correspondence.right_count == 3
-    assert correspondence.left_unmatched == [1]
-    assert correspondence.right_unmatched == [1]
+    assert correspondence.left_unmatched == (1,)
+    assert correspondence.right_unmatched == (1,)
     assert repr(correspondence) == (
         "Correspondence(matched_pairs=[(0, 2), (2, 0)], "
         "left_count=3, right_count=3)"
@@ -1290,11 +1306,11 @@ def test_correspondence_value():
 
     assert isinstance(correspondence, Correspondence)
     assert len(correspondence) == 2
-    assert correspondence.matched_pairs == [(0, 1), (1, 2)]
+    assert correspondence.matched_pairs == ((0, 1), (1, 2))
     assert correspondence.left_count == 2
     assert correspondence.right_count == 3
-    assert correspondence.left_unmatched == []
-    assert correspondence.right_unmatched == [0]
+    assert correspondence.left_unmatched == ()
+    assert correspondence.right_unmatched == (0,)
     assert correspondence.right_of(0) == 1
     assert correspondence.right_of(2) is None
     assert correspondence.left_of(2) == 1
@@ -1304,10 +1320,10 @@ def test_correspondence_value():
     reverse = correspondence.reverse()
     composite = correspondence.compose(reverse)
 
-    assert reverse.matched_pairs == [(1, 0), (2, 1)]
+    assert reverse.matched_pairs == ((1, 0), (2, 1))
     assert reverse.left_count == 3
     assert reverse.right_count == 2
-    assert composite.matched_pairs == [(0, 0), (1, 1)]
+    assert composite.matched_pairs == ((0, 0), (1, 1))
     assert composite.is_total()
     assert Correspondence.compose_all(
         item for item in [correspondence, reverse]
@@ -1367,11 +1383,11 @@ def test_molecule_correspondence_value():
     reverse = correspondence.reverse()
     composite = correspondence.compose(reverse)
 
-    assert reverse.atoms.matched_pairs == [(1, 0), (2, 1)]
-    assert reverse.bonds.matched_pairs == [(0, 0)]
+    assert reverse.atoms.matched_pairs == ((1, 0), (2, 1))
+    assert reverse.bonds.matched_pairs == ((0, 0),)
     assert not reverse.is_total()
-    assert composite.atoms.matched_pairs == [(0, 0), (1, 1)]
-    assert composite.bonds.matched_pairs == [(0, 0)]
+    assert composite.atoms.matched_pairs == ((0, 0), (1, 1))
+    assert composite.bonds.matched_pairs == ((0, 0),)
     assert composite.is_total()
     assert MoleculeCorrespondence.compose_all(
         item for item in [correspondence, reverse]
@@ -1500,8 +1516,8 @@ def test_molecule_tracked_extract():
     assert extracted == Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
-    assert compaction.atoms.removed == [1]
-    assert compaction.bonds.removed == [0, 1]
+    assert compaction.atoms.removed == (1,)
+    assert compaction.bonds.removed == (0, 1)
 
 
 def test_molecule_split():
@@ -1526,10 +1542,10 @@ def test_molecule_split():
     ]
     assert [
         correspondence.atoms.matched_pairs for _, correspondence in components
-    ] == [[(0, 0)], [(1, 0), (2, 1)]]
+    ] == [((0, 0),), ((1, 0), (2, 1))]
     assert [
         correspondence.bonds.matched_pairs for _, correspondence in components
-    ] == [[], [(0, 0)]]
+    ] == [(), ((0, 0),)]
     assert [
         (correspondence.atoms.left_count, correspondence.atoms.right_count)
         for _, correspondence in components

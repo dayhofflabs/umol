@@ -79,6 +79,11 @@ properties, annotations, representations, and structural pattern-matching fields
 The corresponding DSL map key is `:attrs`. Rust-side binding conversions use `from_rust`, `to_rust`,
 and `to_rust_mut`; graph-IR boundary conversions use the `*Ir` trait family.
 
+Named Rust variant fields retain their names in Python properties, constructor keywords,
+representations, and `__match_args__`. Genuine tuple fields use `_0`, `_1`, and so on.
+All payloads are accessible through properties on Python 3.9. Structural pattern matching is
+an optional convenience on Python 3.10 and later, never the only way to inspect a value.
+
 Recursive subpattern constraints are currently absent from both Rust and Python. They must not be
 reintroduced on only one side of the binding boundary.
 
@@ -145,6 +150,13 @@ operation: it does not normalize payloads or check applicability against a molec
 An immutable owned value represents data rather than a mutable identity. Its public fields cannot
 be assigned or deleted. Operations that change it return another value or an explicitly mutable
 counterpart.
+
+Collection payload properties use tuples for sequences and frozensets for sets, including
+nested restriction sets and participant rows. StereoModel.kind_models returns a mapping proxy
+over an independent dictionary of the existing model values. Constructors accept their ordinary
+list, set, and dictionary inputs as well as the corresponding immutable getter results.
+These observation containers preserve the stored contents, order, duplicates, and absence;
+they do not normalize the underlying values.
 
 Immutability applies transitively to the umol-owned objects exposed through its properties. An
 immutable `AtomForm` must not expose a mutable constraints container, for example. Returning an
@@ -360,7 +372,9 @@ constraints container or other umol object remains mutable.
 
 A value-backed entity `*ConstraintsForm` is an owned mutable container; an entity
 `*ConstraintsView` writes through to the stored entity constraints. These writes do not require
-an editor. Molecule-level `ConstraintsView` is a read-only sequence. Its iterator yields one
+an editor. A view obtained from an entity Update retains that immutable owner and borrows its
+constraints. All writes through that view, including indexed ring counts, raise TypeError.
+Molecule-level `ConstraintsView` is a read-only sequence. Its iterator yields one
 stored constraint per step, including an entire `And` or `Or` as one entry. Accessing a
 composition's children produces another read-only sequence; iteration never descends implicitly.
 

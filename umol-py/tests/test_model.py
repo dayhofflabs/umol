@@ -1,4 +1,5 @@
 import re
+from types import MappingProxyType
 
 import pytest
 
@@ -205,16 +206,27 @@ def test_valence_entry_properties():
         fallback_aromatic_valences=[1, 0],
     )
 
+    assert type(entry.target_covalences) is tuple
+    assert type(entry.aromatic_valences) is tuple
+    assert type(entry.fallback_aromatic_valences) is tuple
+    assert ValenceEntry(
+        target_covalences=entry.target_covalences,
+        aromatic_valences=entry.aromatic_valences,
+        fallback_aromatic_valences=entry.fallback_aromatic_valences,
+    ) == entry
     target_covalences = entry.target_covalences
     aromatic_valences = entry.aromatic_valences
     fallback_aromatic_valences = entry.fallback_aromatic_valences
-    target_covalences.append(8)
-    aromatic_valences.clear()
-    fallback_aromatic_valences.clear()
+    with pytest.raises(AttributeError):
+        target_covalences.append(8)
+    with pytest.raises(AttributeError):
+        aromatic_valences.clear()
+    with pytest.raises(AttributeError):
+        fallback_aromatic_valences.clear()
 
-    assert entry.target_covalences == [2, 4, 6]
-    assert entry.aromatic_valences == [2, 4]
-    assert entry.fallback_aromatic_valences == [0, 1]
+    assert entry.target_covalences == (2, 4, 6)
+    assert entry.aromatic_valences == (2, 4)
+    assert entry.fallback_aromatic_valences == (0, 1)
 
 
 @pytest.mark.parametrize(
@@ -295,8 +307,10 @@ def test_valence_table_entry():
     target_covalences = entry.target_covalences
     aromatic_valences = entry.aromatic_valences
 
-    target_covalences.append(6)
-    aromatic_valences.clear()
+    with pytest.raises(AttributeError):
+        target_covalences.append(6)
+    with pytest.raises(AttributeError):
+        aromatic_valences.clear()
 
     assert table.entry(Element("C")) == ValenceEntry(
         target_covalences=[2, 4], aromatic_valences=[2]
@@ -575,7 +589,9 @@ def test_element_scope_allow_list(elements, expected):
 
     assert isinstance(scope, ElementScope)
     assert isinstance(scope, ElementScope.AllowList)
-    assert scope.elements == expected
+    assert type(scope.elements) is tuple
+    assert ElementScope.AllowList(scope.elements) == scope
+    assert scope.elements == tuple(expected)
     assert scope == ElementScope.AllowList(expected)
 
 
@@ -583,9 +599,10 @@ def test_element_scope_elements():
     scope = ElementScope.AllowList([Element("C"), Element("N")])
     elements = scope.elements
 
-    elements.append(Element("O"))
+    with pytest.raises(AttributeError):
+        elements.append(Element("O"))
 
-    assert scope.elements == [Element("C"), Element("N")]
+    assert scope.elements == (Element("C"), Element("N"))
 
 
 @pytest.mark.parametrize(
@@ -1143,7 +1160,16 @@ def test_stereo_model_new():
 def test_stereo_model_kind_models():
     model = StereoModel.default()
     kind_models = model.kind_models
-    kind_models.clear()
+    assert type(kind_models) is MappingProxyType
+    assert StereoModel(
+        kind_models=kind_models,
+        para_stereo=model.para_stereo,
+        stereo_bond_minimum_ring_size=model.stereo_bond_minimum_ring_size,
+    ) == model
+    with pytest.raises(TypeError):
+        kind_models[StereoKind.Tetrahedral] = kind_models[StereoKind.CisTrans]
+    with pytest.raises(AttributeError):
+        kind_models.clear()
 
     assert model.kind_models == {
         StereoKind.Tetrahedral: StereoKindModel(

@@ -15,6 +15,7 @@ use self::aromaticity::AromaticityModel;
 use self::connectivity::ConnectivityModel;
 use self::stereo::StereoModel;
 use self::valence::ValenceModel;
+use crate::convert::TupleItems;
 use crate::element::Element;
 
 /// Semantic configuration for connectivity, valence, aromaticity, and stereo perception.
@@ -97,7 +98,7 @@ pub enum ElementScope {
     Any {},
     /// Only the listed elements are eligible.
     #[pyo3(constructor = (elements))]
-    AllowList { elements: Vec<Element> },
+    AllowList { elements: TupleItems<Vec<Element>> },
 }
 
 #[pymethods]
@@ -239,13 +240,13 @@ mod tests {
     #[case::any(ElementScope::Any {}, "ElementScope.Any()")]
     #[case::empty(
         ElementScope::AllowList {
-            elements: Vec::new(),
+            elements: TupleItems(Vec::new()),
         },
         "ElementScope.AllowList([])"
     )]
     #[case::populated(
         ElementScope::AllowList {
-            elements: vec![Element::from(ChemElement::C), Element::from(ChemElement::N)],
+            elements: TupleItems(vec![Element::from(ChemElement::C), Element::from(ChemElement::N)]),
         },
         "ElementScope.AllowList([Element('C'), Element('N')])"
     )]
@@ -258,17 +259,17 @@ mod tests {
     #[case::empty(
         GraphElementScope::AllowList(Vec::new()),
         ElementScope::AllowList {
-            elements: Vec::new(),
+            elements: TupleItems(Vec::new()),
         }
     )]
     #[case::populated(
         GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N, ChemElement::C]),
         ElementScope::AllowList {
-            elements: vec![
+            elements: TupleItems(vec![
                 Element::from(ChemElement::C),
                 Element::from(ChemElement::N),
                 Element::from(ChemElement::C),
-            ],
+            ]),
         }
     )]
     fn test_element_scope_from_rust(
@@ -282,17 +283,17 @@ mod tests {
     #[case::any(ElementScope::Any {}, GraphElementScope::Any)]
     #[case::empty(
         ElementScope::AllowList {
-            elements: Vec::new(),
+            elements: TupleItems(Vec::new()),
         },
         GraphElementScope::AllowList(Vec::new())
     )]
     #[case::populated(
         ElementScope::AllowList {
-            elements: vec![
+            elements: TupleItems(vec![
                 Element::from(ChemElement::C),
                 Element::from(ChemElement::N),
                 Element::from(ChemElement::C),
-            ],
+            ]),
         },
         GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N, ChemElement::C])
     )]

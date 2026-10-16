@@ -1263,7 +1263,7 @@ def test_reaction_tracked_canonicalize():
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
     assert remapping.to_correspondence().is_total()
-    assert remapping.atoms.images == [1, 0]
+    assert remapping.atoms.images == (1, 0)
 
 
 def test_reaction_canonicalize_error():

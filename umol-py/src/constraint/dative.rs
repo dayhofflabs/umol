@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -16,7 +16,7 @@ use umol_graph_ir::ir::{
 use super::ring::{RingMembershipForm, RingScope};
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
-use crate::dative::DativeBondForm;
+use crate::dative::{DativeBondForm, DativeBondUpdate};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
@@ -455,6 +455,10 @@ impl DativeBondConstraintsForm {
 
     /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `DativeBondConstraintsForm(..)` directly.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrDativeBondConstraintsForm) -> Self {
         DativeBondConstraintsForm(constraints)
     }
@@ -549,9 +553,9 @@ pub(crate) fn dative_bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What a `DativeBondConstraintsView` writes through to. Only the standalone
-/// `DativeBondForm` backing or a dative bond within a molecule (by index).
+/// Owner of the constraints exposed by DativeBondConstraintsView.
 pub(crate) enum DativeBondConstraintsStorage {
+    Update(Py<DativeBondUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -560,12 +564,13 @@ pub(crate) enum DativeBondConstraintsStorage {
     DativeBond(Py<DativeBondForm>),
 }
 
-/// A live handle onto one dative bond's constraints, backed by either a
-/// molecule-bond or a standalone `DativeBondForm`. Reads borrow the bond's
-/// constraints and read only the item they need (no whole-container clone);
-/// mutators write through to the bond in place, without a clone-and-writeback.
+/// A view of one dative bond's constraints, retaining its molecule, DativeBondForm,
+/// or DativeBondUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
 /// Semantic readings return independent normal values; None is bottom.
 /// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from DativeBondUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct DativeBondConstraintsView {
     pub(crate) storage: DativeBondConstraintsStorage,
@@ -600,6 +605,9 @@ impl DativeBondConstraintsView {
         f: impl FnOnce(&GraphIrDativeBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            DativeBondConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
@@ -624,6 +632,9 @@ impl DativeBondConstraintsView {
         constraint: GraphIrDativeBondConstraintForm,
     ) -> PyResult<()> {
         match &self.storage {
+            DativeBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "DativeBondUpdate constraints are read-only",
+            )),
             DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
@@ -651,6 +662,9 @@ impl DativeBondConstraintsView {
         key: GraphIrDativeBondConstraintKey,
     ) -> PyResult<Option<GraphIrDativeBondConstraintForm>> {
         match &self.storage {
+            DativeBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "DativeBondUpdate constraints are read-only",
+            )),
             DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
@@ -824,6 +838,9 @@ impl DativeBondConstraintsView {
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
         match &self.storage {
+            DativeBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "DativeBondUpdate constraints are read-only",
+            )),
             DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
@@ -963,6 +980,9 @@ impl DativeBondConstraintsView {
     #[getter]
     pub(crate) fn ring_size_count(&self, py: Python<'_>) -> PyResult<DativeBondRingSizeCounts> {
         let storage = match &self.storage {
+            DativeBondConstraintsStorage::Update(owner) => {
+                DativeBondRingSizeStorage::Update(owner.clone_ref(py))
+            }
             DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 owner
                     .try_borrow(py)?
@@ -986,10 +1006,9 @@ impl DativeBondConstraintsView {
     }
 }
 
-/// What a `DativeBondRingSizeCounts` proxy reads/writes through to: a dative bond
-/// within a molecule, a standalone `DativeBondForm`, or a standalone
-/// `DativeBondConstraintsForm` value.
+/// Owner of the constraints exposed by DativeBondRingSizeCounts.
 pub(crate) enum DativeBondRingSizeStorage {
+    Update(Py<DativeBondUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -999,10 +1018,9 @@ pub(crate) enum DativeBondRingSizeStorage {
     Value(Py<DativeBondConstraintsForm>),
 }
 
-/// A subscriptable proxy over the sized-ring membership counts of a dative bond,
-/// keyed by ring size: `proxy[size]` reads, `proxy[size] = count` sets, `del
-/// proxy[size]` removes. Backs onto whichever container produced it (dual-backing,
-/// like `DativeBondConstraintsView`).
+/// A subscriptable view of a dative bond's sized-ring membership counts.
+/// `proxy[size]` reads, `proxy[size] = count` sets, and `del proxy[size]` removes.
+/// The proxy retains its owner. Writes raise TypeError for DativeBondUpdate owners.
 #[pyclass]
 pub struct DativeBondRingSizeCounts {
     pub(crate) storage: DativeBondRingSizeStorage,
@@ -1016,6 +1034,9 @@ impl DativeBondRingSizeCounts {
         f: impl FnOnce(&GraphIrDativeBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            DativeBondRingSizeStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             DativeBondRingSizeStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(DativeBondRingSizeCounts))?;
@@ -1040,6 +1061,11 @@ impl DativeBondRingSizeCounts {
         f: impl FnOnce(&mut GraphIrDativeBondConstraintsForm),
     ) -> PyResult<()> {
         match &self.storage {
+            DativeBondRingSizeStorage::Update(_) => {
+                return Err(PyTypeError::new_err(
+                    "DativeBondUpdate constraints are read-only",
+                ))
+            }
             DativeBondRingSizeStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(DativeBondRingSizeCounts))?;

@@ -5599,11 +5599,11 @@ checks. Two new Python cases exercise failed editor publication after ordinary
 and tracked application, checking terminal editor consumption, consumed batches,
 and preserved source and nested views. Production behavior is unchanged.
 
-#### S11c — Align Rust-named Python payloads and immutable observations
+#### S11c — Align Rust-named Python payloads and immutable observations (done)
 
 **Modules:** umol-py value types and getters, their conversion callers and tests,
-and binding documentation. **Breaking getter/name changes, red→green with caller
-migration in this item.** [dep: S2a–S2h, S5a, S6c, S7b]
+and binding documentation. **Breaking getter/name changes with caller migration,
+green.** [dep: S2a–S2h, S5a, S6c, S7b]
 
 **Settled scope:** this is a bounded binding correction, not an instruction to
 redesign or certify the entire Python object graph. The changes below are already
@@ -5675,6 +5675,22 @@ completion means these changes and checks, not a claim that every Python object
 is transitively immutable. Migrate affected callers and tests in this item and
 run focused Rust/Python suites with a rebuilt extension. S12b remains the full
 workspace gate. S2a–S2h do not wait for this work.
+
+**Completed — 2026-10-15.** The listed variants expose their Rust field names in
+properties, constructor keywords, repr, and matching fields. The listed collection
+getters return tuple, frozenset, or mapping-proxy observations, preserving their
+contents and accepting those observations back into the existing constructors.
+All eight Update.constraints getters retain their Update through the existing
+ConstraintsView types, borrow its constraints for reads, and reject writes with
+TypeError, including indexed ring-count writes. Ordinary mutable forms and live
+views retain their mutation behavior. The binding guide and affected callers agree.
+
+Verification passed with Python 3.13 and a rebuilt extension: 1,708 Rust binding
+tests (2 ignored), 2,847 Python tests (2 skipped), strict umol-py Clippy across all
+targets, formatting of touched Rust files, and diff checks. Coverage includes
+named-property access without match, Rust roundtrips, exact immutable container
+types, input independence, reconstruction from getters, retained-owner lifetime,
+and mutation rejection. S12a measurements and the S12b workspace gate remain.
 
 ### S12 — Whole-operation comparison and final verification
 

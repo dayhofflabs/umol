@@ -551,7 +551,8 @@ def test_molecule_resolve_with_report(method):
     )
     assert isinstance(result, Solution.Underdetermined)
     assert isinstance(report, ResolveReport)
-    assert report.tie_breaks == []
+    assert type(report.tie_breaks) is tuple
+    assert report.tie_breaks == ()
     completions = report.unresolved
     assert isinstance(completions, AtomCompletions)
     assert not completions.is_empty()
@@ -593,7 +594,8 @@ def test_molecule_resolve_with_report_empty(method):
     assert report.unresolved.is_empty()
     assert len(report.unresolved) == 0
     assert report.unresolved.items() == []
-    assert report.tie_breaks == []
+    assert type(report.tie_breaks) is tuple
+    assert report.tie_breaks == ()
     assert repr(report) == "ResolveReport(unresolved=AtomCompletions({}), tie_breaks=[])"
 
 
@@ -671,7 +673,7 @@ def test_molecule_resolve_isotope(
     if with_report:
         result, report = result
         assert report.unresolved.items() == []
-        assert report.tie_breaks == []
+        assert report.tie_breaks == ()
     assert not hasattr(result, "report")
     if isotope == IsotopePolicy.Strict:
         assert result == Solution.Underdetermined()
@@ -738,7 +740,7 @@ def test_molecule_resolve_identity(method, copying, with_report, rollback_method
     if with_report:
         result, report = result
         assert report.unresolved.items() == []
-        assert report.tie_breaks == []
+        assert report.tie_breaks == ()
     assert not hasattr(result, "report")
     assert source == original
     if copying:

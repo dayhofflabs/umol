@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -17,7 +17,7 @@ use umol_graph_ir::ir::{
 };
 
 use super::ring::{RingMembershipForm, RingScope};
-use crate::atom::AtomForm;
+use crate::atom::{AtomForm, AtomUpdate};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
@@ -1015,6 +1015,10 @@ impl AtomConstraintsForm {
     }
 
     /// Wrap owned IR constraints.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrAtomConstraintsForm) -> Self {
         AtomConstraintsForm(constraints)
     }
@@ -1136,9 +1140,9 @@ pub(crate) fn atom_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What an `AtomConstraintsView` writes through to: an atom within a molecule
-/// (by index) or a standalone `AtomForm`.
+/// Owner of the constraints exposed by AtomConstraintsView.
 pub(crate) enum AtomConstraintsStorage {
+    Update(Py<AtomUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -1147,12 +1151,13 @@ pub(crate) enum AtomConstraintsStorage {
     Atom(Py<AtomForm>),
 }
 
-/// A live handle onto one atom's constraints, backed by either a molecule-atom or
-/// a standalone `AtomForm`. Reads borrow the atom's constraints and read only the
-/// item they need (no whole-container clone); mutators write through to the atom in
-/// place, without a clone-and-writeback.
+/// A view of one atom's constraints, retaining its molecule, AtomForm,
+/// or AtomUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
 /// Semantic readings return independent normal values; None is bottom.
 /// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from AtomUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct AtomConstraintsView {
     pub(crate) storage: AtomConstraintsStorage,
@@ -1206,6 +1211,9 @@ impl AtomConstraintsView {
         f: impl FnOnce(&GraphIrAtomConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            AtomConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
@@ -1230,6 +1238,9 @@ impl AtomConstraintsView {
         constraint: GraphIrAtomConstraintForm,
     ) -> PyResult<()> {
         match &self.storage {
+            AtomConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("AtomUpdate constraints are read-only"))
+            }
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
@@ -1257,6 +1268,9 @@ impl AtomConstraintsView {
         key: GraphIrAtomConstraintKey,
     ) -> PyResult<Option<GraphIrAtomConstraintForm>> {
         match &self.storage {
+            AtomConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("AtomUpdate constraints are read-only"))
+            }
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
@@ -1454,6 +1468,9 @@ impl AtomConstraintsView {
     pub(crate) fn update(&self, py: Python<'_>, other: AtomConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
         match &self.storage {
+            AtomConstraintsStorage::Update(_) => {
+                Err(PyTypeError::new_err("AtomUpdate constraints are read-only"))
+            }
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
@@ -1755,6 +1772,9 @@ impl AtomConstraintsView {
     #[getter]
     pub(crate) fn ring_size_count(&self, py: Python<'_>) -> PyResult<AtomRingSizeCounts> {
         let storage = match &self.storage {
+            AtomConstraintsStorage::Update(owner) => {
+                AtomRingSizeStorage::Update(owner.clone_ref(py))
+            }
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 owner
                     .try_borrow(py)?
@@ -1776,9 +1796,9 @@ impl AtomConstraintsView {
     }
 }
 
-/// What a `AtomRingSizeCounts` proxy reads/writes through to: an atom within a molecule,
-/// a standalone `AtomForm`, or a standalone `AtomConstraintsForm` value.
+/// Owner of the constraints exposed by AtomRingSizeCounts.
 pub(crate) enum AtomRingSizeStorage {
+    Update(Py<AtomUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -1788,10 +1808,9 @@ pub(crate) enum AtomRingSizeStorage {
     Value(Py<AtomConstraintsForm>),
 }
 
-/// A subscriptable proxy over the sized-ring membership counts of an atom, keyed by
-/// ring size: `proxy[size]` reads, `proxy[size] = count` sets, `del proxy[size]`
-/// removes. Backs onto whichever container produced it (dual-backing, like
-/// `AtomConstraintsView`).
+/// A subscriptable view of a atom's sized-ring membership counts.
+/// `proxy[size]` reads, `proxy[size] = count` sets, and `del proxy[size]` removes.
+/// The proxy retains its owner. Writes raise TypeError for AtomUpdate owners.
 #[pyclass]
 pub struct AtomRingSizeCounts {
     pub(crate) storage: AtomRingSizeStorage,
@@ -1805,6 +1824,7 @@ impl AtomRingSizeCounts {
         f: impl FnOnce(&GraphIrAtomConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            AtomRingSizeStorage::Update(owner) => f(&owner.try_borrow(py)?.to_rust().constraints),
             AtomRingSizeStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(AtomRingSizeCounts))?;
@@ -1827,6 +1847,9 @@ impl AtomRingSizeCounts {
         f: impl FnOnce(&mut GraphIrAtomConstraintsForm),
     ) -> PyResult<()> {
         match &self.storage {
+            AtomRingSizeStorage::Update(_) => {
+                return Err(PyTypeError::new_err("AtomUpdate constraints are read-only"))
+            }
             AtomRingSizeStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomRingSizeCounts))?;

@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -16,7 +16,7 @@ use umol_graph_ir::ir::{
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
-use crate::multicenter::MulticenterBondForm;
+use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use crate::num::{NumForm, NumLike};
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
@@ -421,6 +421,10 @@ impl MulticenterBondConstraintsForm {
 
     /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `MulticenterBondConstraintsForm(..)` directly.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrMulticenterBondConstraintsForm) -> Self {
         MulticenterBondConstraintsForm(constraints)
     }
@@ -515,9 +519,9 @@ pub(crate) fn multicenter_bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What a `MulticenterBondConstraintsView` writes through to: a multicenter bond
-/// within a molecule (by index) or a standalone `MulticenterBondForm`.
+/// Owner of the constraints exposed by MulticenterBondConstraintsView.
 pub(crate) enum MulticenterBondConstraintsStorage {
+    Update(Py<MulticenterBondUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -526,12 +530,13 @@ pub(crate) enum MulticenterBondConstraintsStorage {
     MulticenterBond(Py<MulticenterBondForm>),
 }
 
-/// A live handle onto one multicenter bond's constraints, backed by either a
-/// molecule-bond or a standalone `MulticenterBondForm`. Reads borrow the constraints
-/// and read only the item they need. Mutators write directly to the stored constraints.
-/// Whole-molecule mutation invalidates molecule-backed accessors.
+/// A view of one multicenter bond's constraints, retaining its molecule, MulticenterBondForm,
+/// or MulticenterBondUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
 /// Semantic readings return independent normal values; None is bottom.
 /// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from MulticenterBondUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct MulticenterBondConstraintsView {
     pub(crate) storage: MulticenterBondConstraintsStorage,
@@ -567,6 +572,9 @@ impl MulticenterBondConstraintsView {
         f: impl FnOnce(&GraphIrMulticenterBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            MulticenterBondConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
@@ -591,6 +599,9 @@ impl MulticenterBondConstraintsView {
         constraint: GraphIrMulticenterBondConstraintForm,
     ) -> PyResult<()> {
         match &self.storage {
+            MulticenterBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "MulticenterBondUpdate constraints are read-only",
+            )),
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
@@ -618,6 +629,9 @@ impl MulticenterBondConstraintsView {
         key: GraphIrMulticenterBondConstraintKey,
     ) -> PyResult<Option<GraphIrMulticenterBondConstraintForm>> {
         match &self.storage {
+            MulticenterBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "MulticenterBondUpdate constraints are read-only",
+            )),
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
@@ -799,6 +813,9 @@ impl MulticenterBondConstraintsView {
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
         match &self.storage {
+            MulticenterBondConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "MulticenterBondUpdate constraints are read-only",
+            )),
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;

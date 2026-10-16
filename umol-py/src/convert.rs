@@ -2,8 +2,106 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
 use pyo3::prelude::*;
+use pyo3::types::{PyFrozenSet, PyTuple};
+
+/// A collection extracted normally and exposed as a Python tuple.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, FromPyObject)]
+#[pyo3(transparent)]
+pub struct TupleItems<T>(pub T);
+
+impl<T> Deref for TupleItems<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T, C: FromIterator<T>> FromIterator<T> for TupleItems<C> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl<'a, 'py, T> IntoPyObject<'py> for &'a TupleItems<T>
+where
+    &'a T: IntoIterator,
+    <&'a T as IntoIterator>::IntoIter: ExactSizeIterator,
+    <&'a T as IntoIterator>::Item: IntoPyObject<'py>,
+{
+    type Target = PyTuple;
+    type Output = Bound<'py, PyTuple>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        PyTuple::new(py, &self.0)
+    }
+}
+
+impl<'py, T> IntoPyObject<'py> for TupleItems<T>
+where
+    T: IntoIterator,
+    T::IntoIter: ExactSizeIterator,
+    T::Item: IntoPyObject<'py>,
+{
+    type Target = PyTuple;
+    type Output = Bound<'py, PyTuple>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        PyTuple::new(py, self.0)
+    }
+}
+
+/// A collection extracted normally and exposed as a Python frozenset.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, FromPyObject)]
+#[pyo3(transparent)]
+pub struct FrozenSetItems<T>(pub T);
+
+impl<T> Deref for FrozenSetItems<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T, C: FromIterator<T>> FromIterator<T> for FrozenSetItems<C> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl<'a, 'py, T, E: 'a> IntoPyObject<'py> for &'a FrozenSetItems<T>
+where
+    &'a T: IntoIterator<Item = &'a E>,
+    E: Clone + IntoPyObject<'py>,
+{
+    type Target = PyFrozenSet;
+    type Output = Bound<'py, PyFrozenSet>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        PyFrozenSet::new(py, self.0.into_iter().cloned())
+    }
+}
+
+impl<'py, T> IntoPyObject<'py> for FrozenSetItems<T>
+where
+    T: IntoIterator,
+    T::Item: IntoPyObject<'py>,
+{
+    type Target = PyFrozenSet;
+    type Output = Bound<'py, PyFrozenSet>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        PyFrozenSet::new(py, self.0)
+    }
+}
 
 /// Hash a Rust value with the default hasher for a binding type's `__hash__`.
 pub(crate) fn hash_rust<T: Hash>(value: &T) -> u64 {
@@ -27,6 +125,21 @@ pub(crate) fn variant_repr(
                 .repr()?
                 .extract::<String>()?,
         );
+    }
+    Ok(format!("{type_name}.{variant}({})", parts.join(", ")))
+}
+
+/// The eval-able representation of a variant with Rust-named fields.
+pub(crate) fn named_variant_repr(
+    obj: &Bound<'_, PyAny>,
+    type_name: &str,
+    variant: &str,
+    fields: &[&str],
+) -> PyResult<String> {
+    let mut parts = Vec::with_capacity(fields.len());
+    for field in fields {
+        let value = obj.getattr(*field)?.repr()?.extract::<String>()?;
+        parts.push(format!("{field}={value}"));
     }
     Ok(format!("{type_name}.{variant}({})", parts.join(", ")))
 }

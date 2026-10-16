@@ -160,14 +160,15 @@ impl NoncovalentBondUpdate {
     fn new(
         py: Python<'_>,
         kind: Option<NoncovalentBondKindLike>,
-        constraints: Option<Py<NoncovalentBondConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrNoncovalentBondUpdate {
+        constraints: Option<NoncovalentBondConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrNoncovalentBondUpdate {
             kind: kind.map(|value| value.to_rust(py)),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a noncovalent-bond-update DSL string into a `NoncovalentBondUpdate`.
@@ -199,9 +200,12 @@ impl NoncovalentBondUpdate {
         self.0.kind.as_ref().map(NoncovalentBondKindForm::from_rust)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> NoncovalentBondConstraintsForm {
-        NoncovalentBondConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> NoncovalentBondConstraintsView {
+        NoncovalentBondConstraintsView {
+            storage: NoncovalentBondConstraintsStorage::Update(slf),
+        }
     }
 }
 

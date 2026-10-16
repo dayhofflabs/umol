@@ -20,6 +20,154 @@ from umol import (
 )
 
 
+@pytest.mark.parametrize(
+    ("variant", "fields", "expected"),
+    [
+        (RelationalConstraint.DativeBondDonors, ('bond', 'atoms'), (2, (3, 1, 3))),
+        (RelationalConstraint.DativeBondDonor, ('bond', 'atom'), (2, 3)),
+        (RelationalConstraint.DativeBondContainsAllDonors, ('bond', 'atoms'), (2, (3, 1, 3))),
+        (
+            RelationalConstraint.DativeBondAllDonors,
+            ('bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (
+            RelationalConstraint.DativeBondAnyDonor,
+            ('bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (RelationalConstraint.DativeBondAcceptor, ('bond', 'atom'), (2, 3)),
+        (
+            RelationalConstraint.DativeBondAcceptorSatisfies,
+            ('bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (RelationalConstraint.DativeBondParallels, ('dative', 'parallel'), (2, 3)),
+        (RelationalConstraint.AromaticSystemAtoms, ('system', 'atoms'), (2, (3, 1, 3))),
+        (RelationalConstraint.AromaticSystemContains, ('system', 'atom'), (2, 3)),
+        (RelationalConstraint.AromaticSystemContainsAll, ('system', 'atoms'), (2, (3, 1, 3))),
+        (
+            RelationalConstraint.AromaticSystemAllAtoms,
+            ('system', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (
+            RelationalConstraint.AromaticSystemAnyAtom,
+            ('system', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (RelationalConstraint.MulticenterBondAtoms, ('bond', 'atoms'), (2, (3, 1, 3))),
+        (RelationalConstraint.MulticenterBondContains, ('bond', 'atom'), (2, 3)),
+        (RelationalConstraint.MulticenterBondContainsAll, ('bond', 'atoms'), (2, (3, 1, 3))),
+        (
+            RelationalConstraint.MulticenterBondAllAtoms,
+            ('bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (
+            RelationalConstraint.MulticenterBondAnyAtom,
+            ('bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (RelationalConstraint.NoncovalentBondEnds, ('bond', 'atoms'), (2, (3, 1))),
+        (RelationalConstraint.NoncovalentBondContains, ('bond', 'atom'), (2, 3)),
+        (
+            RelationalConstraint.NoncovalentBondEndsSatisfy,
+            ('bond', 'predicates'),
+            (
+                2,
+                (
+                    AtomConstraintForm.Valence(NumForm.Lit(3)),
+                    AtomConstraintForm.Valence(NumForm.Lit(1)),
+                ),
+            ),
+        ),
+        (RelationalConstraint.StereoAtomSite, ('stereo_atom', 'atom'), (2, 3)),
+        (RelationalConstraint.StereoAtomContains, ('stereo_atom', 'atom'), (2, 3)),
+        (RelationalConstraint.StereoAtomLigands, ('stereo_atom', 'atoms'), (2, (3, 1, 3))),
+        (
+            RelationalConstraint.StereoAtomAllLigands,
+            ('stereo_atom', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (
+            RelationalConstraint.StereoAtomAnyLigand,
+            ('stereo_atom', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (RelationalConstraint.StereoBondSite, ('stereo_bond', 'bond'), (2, 3)),
+        (RelationalConstraint.StereoBondContains, ('stereo_bond', 'atom'), (2, 3)),
+        (RelationalConstraint.StereoBondLigands, ('stereo_bond', 'atoms'), (2, (3, 1, 3))),
+        (
+            RelationalConstraint.StereoBondAllLigands,
+            ('stereo_bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+        (
+            RelationalConstraint.StereoBondAnyLigand,
+            ('stereo_bond', 'predicate'),
+            (2, AtomConstraintForm.Valence(NumForm.Lit(3))),
+        ),
+    ],
+)
+def test_relational_constraint_fields(variant, fields, expected):
+    arguments = [list(value) if isinstance(value, tuple) else value for value in expected]
+    value = variant(*arguments)
+    for argument in arguments:
+        if isinstance(argument, list):
+            argument.clear()
+    assert value.__match_args__ == fields
+    assert tuple(getattr(value, field) for field in fields) == expected
+    assert variant(**dict(zip(fields, expected))) == value
+    assert variant(**{field: getattr(value, field) for field in fields}) == value
+    for field, payload in zip(fields, expected):
+        if isinstance(payload, tuple):
+            assert type(getattr(value, field)) is tuple
+        with pytest.raises(AttributeError):
+            setattr(value, field, None)
+    assert not hasattr(value, "_0")
+    expected_fields = ", ".join(
+        f"{field}={payload!r}" for field, payload in zip(fields, expected)
+    )
+    assert repr(value) == f"RelationalConstraint.{variant.__name__}({expected_fields})"
+
+
+@pytest.mark.parametrize(
+    ("variant", "fields", "expected"),
+    [
+        (MoleculeConstraint.ChargeSum, ("atoms", "sum"), ((3, 1, 3), NumForm.Lit(1))),
+        (MoleculeConstraint.ChargeSum, ("atoms", "sum"), (None, NumForm.Lit(0))),
+        (MoleculeConstraint.BondOrderSum, ("bonds", "sum"), ((2, 0, 2), NumForm.Lit(3))),
+        (MoleculeConstraint.Connected, ("atoms",), ((3, 1, 3),)),
+        (MoleculeConstraint.Connected, ("atoms",), (None,)),
+        (
+            MoleculeConstraint.UnpairedElectronCoupling,
+            ("atoms", "unpaired_electrons"),
+            ((3, 1, 3), UnpairedElectronsForm(1, 2)),
+        ),
+    ],
+)
+def test_molecule_constraint_fields(variant, fields, expected):
+    arguments = [list(value) if isinstance(value, tuple) else value for value in expected]
+    value = variant(*arguments)
+    for argument in arguments:
+        if isinstance(argument, list):
+            argument.clear()
+    assert value.__match_args__ == fields
+    assert tuple(getattr(value, field) for field in fields) == expected
+    assert variant(**dict(zip(fields, expected))) == value
+    assert variant(**{field: getattr(value, field) for field in fields}) == value
+    if expected[0] is not None:
+        assert type(getattr(value, fields[0])) is tuple
+    for field in fields:
+        with pytest.raises(AttributeError):
+            setattr(value, field, None)
+    expected_fields = ", ".join(
+        f"{field}={payload!r}" for field, payload in zip(fields, expected)
+    )
+    assert repr(value) == f"MoleculeConstraint.{variant.__name__}({expected_fields})"
+
+
 def connected_constraint():
     return Constraint.Molecule(MoleculeConstraint.Connected(None))
 
@@ -30,10 +178,10 @@ def test_moleculeconstraint_unpaired_electron_coupling():
         unpaired_electrons=UnpairedElectronsForm(1, 2),
     )
 
-    assert constraint.atoms == [2, 3]
+    assert constraint.atoms == (2, 3)
     assert constraint.unpaired_electrons == UnpairedElectronsForm(1, 2)
     assert repr(constraint) == (
-        "MoleculeConstraint.UnpairedElectronCoupling(atoms=[2, 3], "
+        "MoleculeConstraint.UnpairedElectronCoupling(atoms=(2, 3), "
         "unpaired_electrons=UnpairedElectronsForm(NumForm.Lit(1), NumForm.Lit(2)))"
     )
 
@@ -46,8 +194,8 @@ def test_constraints_sequence():
     assert constraints[-1] == entry
     assert list(constraints) == [entry, entry]
     assert repr(constraints) == (
-        "Constraints([Constraint.Molecule(MoleculeConstraint.Connected(None)), "
-        "Constraint.Molecule(MoleculeConstraint.Connected(None))])"
+        "Constraints([Constraint.Molecule(MoleculeConstraint.Connected(atoms=None)), "
+        "Constraint.Molecule(MoleculeConstraint.Connected(atoms=None))])"
     )
 
 

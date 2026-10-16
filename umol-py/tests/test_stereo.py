@@ -44,6 +44,54 @@ from umol import (
 
 
 @pytest.mark.parametrize(
+    ("variant", "members"),
+    [
+        (StereoTerm.LitSet, {0, 1}),
+        (StereoCoset.LitSet, {0, 1}),
+        (TopicityRelationForm.LitSet, {Topicity.Homotopic, Topicity.Enantiotopic}),
+        (TopicityRelationForm.NotSet, {Topicity.Homotopic}),
+        (StereogenicityForm.LitSet, {Stereogenicity.Prochiral, Stereogenicity.Symmetric}),
+        (StereogenicityForm.NotSet, {Stereogenicity.Symmetric}),
+    ],
+)
+def test_stereo_set_members(variant, members):
+    expected = frozenset(members)
+    form = variant(members)
+    members.clear()
+    assert type(form._0) is frozenset
+    assert form._0 == expected
+    assert variant(form._0) == form
+    with pytest.raises(AttributeError):
+        form._0.clear()
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_stereo_term_var_restriction(restricted):
+    members = {0, 1}
+    form = StereoTerm.Var("s", members if restricted else None)
+    members.clear()
+    assert form._1 == (frozenset({0, 1}) if restricted else None)
+    if restricted:
+        assert type(form._1) is frozenset
+    assert StereoTerm.Var(form._0, form._1) == form
+
+
+@pytest.mark.parametrize("coset", [None, StereoCoset.LitSet({0, 1})])
+def test_stereo_configuration_update_kinded(coset):
+    value = StereoConfigurationUpdate.Kinded(kind=StereoKind.Tetrahedral, coset=coset)
+    assert value.kind == StereoKind.Tetrahedral
+    assert value.coset == coset
+    assert value.__match_args__ == ("kind", "coset")
+    assert value == StereoConfigurationUpdate.Kinded(value.kind, value.coset)
+    assert repr(value) == (
+        f"StereoConfigurationUpdate.Kinded(kind=StereoKind.Tetrahedral, coset={coset!r})"
+    )
+    for field in ("kind", "coset"):
+        with pytest.raises(AttributeError):
+            setattr(value, field, None)
+
+
+@pytest.mark.parametrize(
     ("update", "expected"),
     [
         (StereoConfigurationUpdate.Unchanged(), StereoConfigurationUpdate.Unchanged()),
@@ -133,7 +181,8 @@ def test_stereo_configuration_update(update, expected):
     ],
 )
 def test_stereo_atom_update(update, expected):
-    assert (update.configuration, update.constraints) == expected
+    assert update.configuration == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -216,7 +265,8 @@ def test_stereo_atom_update_parse_error():
     ],
 )
 def test_stereo_bond_update(update, expected):
-    assert (update.configuration, update.constraints) == expected
+    assert update.configuration == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -238,6 +288,24 @@ def test_stereo_bond_update_parse(dsl, canonical):
 def test_stereo_bond_update_parse_error():
     with pytest.raises(ParseError):
         StereoBondUpdate.parse("*#g/")
+
+
+@pytest.mark.parametrize(
+    ("update_type", "container_type", "constraint_type", "kind"),
+    [
+        (StereoAtomUpdate, StereoAtomConstraintsForm, StereoAtomConstraintForm, StereoKind.Tetrahedral),
+        (StereoBondUpdate, StereoBondConstraintsForm, StereoBondConstraintForm, StereoKind.CisTrans),
+    ],
+)
+def test_stereo_update_constraints_asserted(update_type, container_type, constraint_type, kind):
+    entry = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral))
+    update = update_type(
+        configuration=StereoConfigurationUpdate.Kinded(kind, None),
+        constraints=container_type([entry]),
+    )
+    assert update.constraints.asserted(entry.key) == entry
+    assert update.constraints.asserted_complete(entry.key) == entry
+    assert update_type(configuration=update.configuration, constraints=update.constraints) == update
 
 
 @pytest.mark.parametrize(
@@ -268,7 +336,11 @@ def test_stereo_update_str_kindless(
     assert str(update) == head
     assert repr(update) == f"{update_type.__name__}.parse('{head}')"
     assert update_type.parse(str(update)) == update_type(configuration=configuration)
-    assert update.constraints == constraints
+    assert list(update.constraints.values()) == list(constraints.values())
+    key = constraint_type.Stereogenicity(payload).key
+    top = constraint_type.Stereogenicity(StereogenicityForm.Undetermined())
+    assert update.constraints.asserted(key) == top
+    assert update.constraints.asserted_complete(key) == top
     assert str(form) == "*"
     assert repr(form) == f"{form_type.__name__}.parse('*')"
     assert form.constraints.stereogenicity() == payload
@@ -542,7 +614,8 @@ def test_molecule_stereo_atoms_from_entries():
     view = views[0]
     assert view.id == 0
     assert view.site_id == 0
-    assert view.ligands == [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)]
+    assert view.ligands == tuple(StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5))
+    assert type(view.ligands) is tuple
     assert view.kind == StereoKind.Tetrahedral
     assert view.coset == StereoCoset.Lit(0)
     assert view.configuration == StereoConfigurationForm.Kinded(

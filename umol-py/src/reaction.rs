@@ -769,7 +769,7 @@ mod tests {
     use std::borrow::Cow;
     use std::iter;
 
-    use pyo3::exceptions::{PyStopIteration, PyTypeError, PyValueError};
+    use pyo3::exceptions::{PyAttributeError, PyStopIteration, PyTypeError, PyValueError};
     use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -2624,11 +2624,11 @@ mod tests {
                 entries.extract::<Vec<(u128, i32)>>().unwrap(),
                 expected_entries
             );
-            entries
-                .cast::<PyList>()
-                .unwrap()
-                .append((9u128, 3i32))
-                .unwrap();
+
+            assert!(entries
+                .call_method1("append", ((9u128, 3i32),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("features")
@@ -2739,10 +2739,11 @@ mod tests {
                 ids.extract::<Vec<(ReactionSide, u128)>>().unwrap(),
                 expected_ids
             );
-            ids.cast::<PyList>()
-                .unwrap()
-                .append((ReactionSide::Product, 9u128))
-                .unwrap();
+
+            assert!(ids
+                .call_method1("append", ((ReactionSide::Product, 9u128),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("features")

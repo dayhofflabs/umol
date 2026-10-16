@@ -38,7 +38,8 @@ from umol import (
     ],
 )
 def test_dative_bond_update(update, expected):
-    assert (update.order, update.constraints) == expected
+    assert update.order == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(
@@ -219,7 +220,8 @@ def test_dativebondview_fields():
     assert view.id == 0
     assert view.order == NumForm.Lit(1)
     assert view.acceptor == 0
-    assert view.donors == [1]
+    assert type(view.donors) is tuple
+    assert view.donors == (1,)
     # atom_ids is the donors followed by the acceptor
     assert view.atom_ids == (1, 0)
     assert repr(view) == "DativeBondView(id=0)"
@@ -300,7 +302,7 @@ def test_dativebondviews_setitem():
     # value replaced, participants preserved
     assert view.order == NumForm.Lit(2)
     assert view.acceptor == 0
-    assert view.donors == [1]
+    assert view.donors == (1,)
 
 
 def test_dativebondviews_setitem_out_of_range():

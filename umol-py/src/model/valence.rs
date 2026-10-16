@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::PyTuple;
 use umol_chem::element::{Element as ChemElement, MAX_ATOMIC_NUMBER};
 use umol_graph::ops::model::{
     ValenceCandidateSource as GraphValenceCandidateSource, ValenceModel as GraphValenceModel,
@@ -141,21 +141,21 @@ impl ValenceEntry {
 
     /// Lewis/Langmuir saturation targets, in ascending order.
     #[getter]
-    fn target_covalences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        PyList::new(py, &self.0.target_covalences)
+    fn target_covalences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, &self.0.target_covalences)
     }
 
     /// Admissible aromatic valences, in ascending order.
     #[getter]
-    fn aromatic_valences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        PyList::new(py, &self.0.aromatic_valences)
+    fn aromatic_valences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, &self.0.aromatic_valences)
     }
 
     /// Aromatic valences consulted only when `aromatic_valences` admits no
     /// candidate for the atom, in ascending order.
     #[getter]
-    fn fallback_aromatic_valences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        PyList::new(py, &self.0.fallback_aromatic_valences)
+    fn fallback_aromatic_valences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, &self.0.fallback_aromatic_valences)
     }
 
     fn __repr__(&self) -> String {

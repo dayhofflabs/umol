@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
     AromaticSystemId as GraphIrAromaticSystemId,
 };
 
-use crate::aromatic::AromaticSystemForm;
+use crate::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
@@ -417,6 +417,10 @@ impl AromaticSystemConstraintsForm {
     }
 
     /// Wrap owned IR constraints.
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion for standalone constraint values"
+    )]
     pub(crate) fn from_rust(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
         AromaticSystemConstraintsForm(constraints)
     }
@@ -505,9 +509,9 @@ pub(crate) fn aromatic_system_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What an `AromaticSystemConstraintsView` writes through to: an aromatic system
-/// within a molecule (by index) or a standalone `AromaticSystemForm`.
+/// Owner of the constraints exposed by AromaticSystemConstraintsView.
 pub(crate) enum AromaticSystemConstraintsStorage {
+    Update(Py<AromaticSystemUpdate>),
     Molecule {
         owner: Py<Molecule>,
         counter: u64,
@@ -516,12 +520,13 @@ pub(crate) enum AromaticSystemConstraintsStorage {
     AromaticSystem(Py<AromaticSystemForm>),
 }
 
-/// A live handle onto one aromatic system's constraints, backed by either a
-/// molecule-system or a standalone `AromaticSystemForm`. Reads borrow the constraints
-/// and read only the item they need. Mutators write directly to the stored constraints.
-/// Whole-molecule mutation invalidates molecule-backed accessors.
+/// A view of one aromatic system's constraints, retaining its molecule, AromaticSystemForm,
+/// or AromaticSystemUpdate owner. Reads borrow the stored constraints; mutations write
+/// through when the owner is mutable. Whole-molecule mutation invalidates
+/// molecule-backed views.
 /// Semantic readings return independent normal values; None is bottom.
 /// Derivation, evidence, and comparisons require molecule context.
+/// Views obtained from AromaticSystemUpdate are read-only; writes raise TypeError.
 #[pyclass]
 pub struct AromaticSystemConstraintsView {
     pub(crate) storage: AromaticSystemConstraintsStorage,
@@ -557,6 +562,9 @@ impl AromaticSystemConstraintsView {
         f: impl FnOnce(&GraphIrAromaticSystemConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.storage {
+            AromaticSystemConstraintsStorage::Update(owner) => {
+                f(&owner.try_borrow(py)?.to_rust().constraints)
+            }
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
@@ -581,6 +589,9 @@ impl AromaticSystemConstraintsView {
         constraint: GraphIrAromaticSystemConstraintForm,
     ) -> PyResult<()> {
         match &self.storage {
+            AromaticSystemConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "AromaticSystemUpdate constraints are read-only",
+            )),
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
@@ -608,6 +619,9 @@ impl AromaticSystemConstraintsView {
         key: GraphIrAromaticSystemConstraintKey,
     ) -> PyResult<Option<GraphIrAromaticSystemConstraintForm>> {
         match &self.storage {
+            AromaticSystemConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "AromaticSystemUpdate constraints are read-only",
+            )),
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
@@ -785,6 +799,9 @@ impl AromaticSystemConstraintsView {
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
         match &self.storage {
+            AromaticSystemConstraintsStorage::Update(_) => Err(PyTypeError::new_err(
+                "AromaticSystemUpdate constraints are read-only",
+            )),
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;

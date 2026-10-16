@@ -46,18 +46,19 @@ impl MulticenterBondUpdate {
         electrons: Option<ElectronCountsLike>,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<MulticenterBondConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrMulticenterBondUpdate {
+        constraints: Option<MulticenterBondConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrMulticenterBondUpdate {
             electrons: electrons.map(|value| value.to_rust(py)),
             charge: charge.map(|value| value.to_rust(py)),
             unpaired_electrons: unpaired_electrons
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a multicenter-bond-update DSL string into a `MulticenterBondUpdate`.
@@ -103,9 +104,12 @@ impl MulticenterBondUpdate {
         UnpairedElectronsUpdate::from_rust(py, &self.0.unpaired_electrons)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> MulticenterBondConstraintsForm {
-        MulticenterBondConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> MulticenterBondConstraintsView {
+        MulticenterBondConstraintsView {
+            storage: MulticenterBondConstraintsStorage::Update(slf),
+        }
     }
 }
 
@@ -686,7 +690,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::convert::into_py_variant;
+    use crate::convert::{into_py_variant, TupleItems};
 
     /// Three borons (atom ids 0–2) joined by one 3-center multicenter bond over all
     /// three (electrons `[1,1,1]`), multicenter bond id 0.
@@ -878,7 +882,8 @@ mod tests {
             let dict = bond.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
-            let expected = into_py_variant(py, ElectronCountsForm::Lit(vec![1, 1, 1])).unwrap();
+            let expected =
+                into_py_variant(py, ElectronCountsForm::Lit(TupleItems(vec![1, 1, 1]))).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("unpaired_electrons").unwrap());
@@ -1051,7 +1056,8 @@ mod tests {
             let dict = view.asdict(py).unwrap();
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
-            let expected = into_py_variant(py, ElectronCountsForm::Lit(vec![1, 1, 1])).unwrap();
+            let expected =
+                into_py_variant(py, ElectronCountsForm::Lit(TupleItems(vec![1, 1, 1]))).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("unpaired_electrons").unwrap());

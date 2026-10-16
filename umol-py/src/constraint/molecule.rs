@@ -20,7 +20,7 @@ use super::dative::DativeBondConstraintForm;
 use super::multicenter::MulticenterBondConstraintForm;
 use super::noncovalent::NoncovalentBondConstraintForm;
 use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
-use crate::convert::{into_py_variant, variant_repr};
+use crate::convert::{into_py_variant, named_variant_repr, TupleItems};
 use crate::error::{contradiction_error, InvalidatedViewError};
 use crate::lattice::impl_py_normalize;
 use crate::molecule::Molecule;
@@ -32,50 +32,153 @@ use crate::stereo::StereoKind;
 /// multicenter bonds, noncovalent bonds, stereo atoms, and stereo bonds.
 #[pyclass(frozen)]
 pub enum RelationalConstraint {
-    DativeBondDonors(u32, Vec<u32>),
-    DativeBondDonor(u32, u32),
-    DativeBondContainsAllDonors(u32, Vec<u32>),
-    DativeBondAllDonors(u32, Py<AtomConstraintForm>),
-    DativeBondAnyDonor(u32, Py<AtomConstraintForm>),
-    DativeBondAcceptor(u32, u32),
-    DativeBondAcceptorSatisfies(u32, Py<AtomConstraintForm>),
-    DativeBondParallels(u32, u32),
-    AromaticSystemAtoms(u32, Vec<u32>),
-    AromaticSystemContains(u32, u32),
-    AromaticSystemContainsAll(u32, Vec<u32>),
-    AromaticSystemAllAtoms(u32, Py<AtomConstraintForm>),
-    AromaticSystemAnyAtom(u32, Py<AtomConstraintForm>),
-    MulticenterBondAtoms(u32, Vec<u32>),
-    MulticenterBondContains(u32, u32),
-    MulticenterBondContainsAll(u32, Vec<u32>),
-    MulticenterBondAllAtoms(u32, Py<AtomConstraintForm>),
-    MulticenterBondAnyAtom(u32, Py<AtomConstraintForm>),
-    NoncovalentBondEnds(u32, [u32; 2]),
-    NoncovalentBondContains(u32, u32),
-    NoncovalentBondEndsSatisfy(u32, [Py<AtomConstraintForm>; 2]),
-    StereoAtomSite(u32, u32),
-    StereoAtomContains(u32, u32),
-    StereoAtomLigands(u32, Vec<u32>),
-    StereoAtomAllLigands(u32, Py<AtomConstraintForm>),
-    StereoAtomAnyLigand(u32, Py<AtomConstraintForm>),
-    StereoBondSite(u32, u32),
-    StereoBondContains(u32, u32),
-    StereoBondLigands(u32, Vec<u32>),
-    StereoBondAllLigands(u32, Py<AtomConstraintForm>),
-    StereoBondAnyLigand(u32, Py<AtomConstraintForm>),
+    #[pyo3(constructor = (bond, atoms))]
+    DativeBondDonors {
+        bond: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (bond, atom))]
+    DativeBondDonor { bond: u32, atom: u32 },
+    #[pyo3(constructor = (bond, atoms))]
+    DativeBondContainsAllDonors {
+        bond: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (bond, predicate))]
+    DativeBondAllDonors {
+        bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (bond, predicate))]
+    DativeBondAnyDonor {
+        bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (bond, atom))]
+    DativeBondAcceptor { bond: u32, atom: u32 },
+    #[pyo3(constructor = (bond, predicate))]
+    DativeBondAcceptorSatisfies {
+        bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (dative, parallel))]
+    DativeBondParallels { dative: u32, parallel: u32 },
+    #[pyo3(constructor = (system, atoms))]
+    AromaticSystemAtoms {
+        system: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (system, atom))]
+    AromaticSystemContains { system: u32, atom: u32 },
+    #[pyo3(constructor = (system, atoms))]
+    AromaticSystemContainsAll {
+        system: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (system, predicate))]
+    AromaticSystemAllAtoms {
+        system: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (system, predicate))]
+    AromaticSystemAnyAtom {
+        system: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (bond, atoms))]
+    MulticenterBondAtoms {
+        bond: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (bond, atom))]
+    MulticenterBondContains { bond: u32, atom: u32 },
+    #[pyo3(constructor = (bond, atoms))]
+    MulticenterBondContainsAll {
+        bond: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (bond, predicate))]
+    MulticenterBondAllAtoms {
+        bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (bond, predicate))]
+    MulticenterBondAnyAtom {
+        bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (bond, atoms))]
+    NoncovalentBondEnds {
+        bond: u32,
+        atoms: TupleItems<[u32; 2]>,
+    },
+    #[pyo3(constructor = (bond, atom))]
+    NoncovalentBondContains { bond: u32, atom: u32 },
+    #[pyo3(constructor = (bond, predicates))]
+    NoncovalentBondEndsSatisfy {
+        bond: u32,
+        predicates: TupleItems<[Py<AtomConstraintForm>; 2]>,
+    },
+    #[pyo3(constructor = (stereo_atom, atom))]
+    StereoAtomSite { stereo_atom: u32, atom: u32 },
+    #[pyo3(constructor = (stereo_atom, atom))]
+    StereoAtomContains { stereo_atom: u32, atom: u32 },
+    #[pyo3(constructor = (stereo_atom, atoms))]
+    StereoAtomLigands {
+        stereo_atom: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (stereo_atom, predicate))]
+    StereoAtomAllLigands {
+        stereo_atom: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (stereo_atom, predicate))]
+    StereoAtomAnyLigand {
+        stereo_atom: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (stereo_bond, bond))]
+    StereoBondSite { stereo_bond: u32, bond: u32 },
+    #[pyo3(constructor = (stereo_bond, atom))]
+    StereoBondContains { stereo_bond: u32, atom: u32 },
+    #[pyo3(constructor = (stereo_bond, atoms))]
+    StereoBondLigands {
+        stereo_bond: u32,
+        atoms: TupleItems<Vec<u32>>,
+    },
+    #[pyo3(constructor = (stereo_bond, predicate))]
+    StereoBondAllLigands {
+        stereo_bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
+    #[pyo3(constructor = (stereo_bond, predicate))]
+    StereoBondAnyLigand {
+        stereo_bond: u32,
+        predicate: Py<AtomConstraintForm>,
+    },
 }
 
 /// A molecule-scope predicate over values or connectivity.
 #[pyclass(frozen)]
 pub enum MoleculeConstraint {
-    ChargeSum(Option<Vec<u32>>, Py<NumForm>),
+    #[pyo3(constructor = (atoms, sum))]
+    ChargeSum {
+        atoms: Option<TupleItems<Vec<u32>>>,
+        sum: Py<NumForm>,
+    },
     #[pyo3(constructor = (atoms, unpaired_electrons))]
     UnpairedElectronCoupling {
-        atoms: Option<Vec<u32>>,
+        atoms: Option<TupleItems<Vec<u32>>>,
         unpaired_electrons: Py<UnpairedElectronsForm>,
     },
-    BondOrderSum(Option<Vec<u32>>, Py<NumForm>),
-    Connected(Option<Vec<u32>>),
+    #[pyo3(constructor = (bonds, sum))]
+    BondOrderSum {
+        bonds: Option<TupleItems<Vec<u32>>>,
+        sum: Py<NumForm>,
+    },
+    #[pyo3(constructor = (atoms))]
+    Connected { atoms: Option<TupleItems<Vec<u32>>> },
 }
 
 /// A constraint value or read-only access to a stored constraint.
@@ -1144,32 +1247,15 @@ impl MoleculeConstraint {
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        match &*slf.bind(py).borrow() {
-            Self::ChargeSum(_, _) => {
-                variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "ChargeSum", 2)
-            }
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::ChargeSum { .. } => ("ChargeSum", &["atoms", "sum"]),
             Self::UnpairedElectronCoupling { .. } => {
-                let object = slf.bind(py).as_any();
-                let atoms = object.getattr("atoms")?.repr()?.extract::<String>()?;
-                let unpaired_electrons = object
-                    .getattr("unpaired_electrons")?
-                    .repr()?
-                    .extract::<String>()?;
-                Ok(format!(
-                    "MoleculeConstraint.UnpairedElectronCoupling(atoms={atoms}, \
-                     unpaired_electrons={unpaired_electrons})"
-                ))
+                ("UnpairedElectronCoupling", &["atoms", "unpaired_electrons"])
             }
-            Self::BondOrderSum(_, _) => variant_repr(
-                slf.bind(py).as_any(),
-                "MoleculeConstraint",
-                "BondOrderSum",
-                2,
-            ),
-            Self::Connected(_) => {
-                variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "Connected", 1)
-            }
-        }
+            Self::BondOrderSum { .. } => ("BondOrderSum", &["bonds", "sum"]),
+            Self::Connected { .. } => ("Connected", &["atoms"]),
+        };
+        named_variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", variant, fields)
     }
 }
 
@@ -1190,12 +1276,12 @@ impl MoleculeConstraint {
         constraint: &GraphIrMoleculeConstraint,
     ) -> PyResult<Self> {
         Ok(match constraint {
-            GraphIrMoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum(
-                atoms
+            GraphIrMoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
+                atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-                into_py_variant(py, NumForm::from_rust(py, sum)?)?,
-            ),
+                sum: into_py_variant(py, NumForm::from_rust(py, sum)?)?,
+            },
             GraphIrMoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
                 unpaired_electrons,
@@ -1208,23 +1294,23 @@ impl MoleculeConstraint {
                     UnpairedElectronsForm::from_rust(py, unpaired_electrons)?,
                 )?,
             },
-            GraphIrMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
-                bonds
+            GraphIrMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
+                bonds: bonds
                     .as_ref()
                     .map(|bonds| bonds.iter().map(|bond| bond.0).collect()),
-                into_py_variant(py, NumForm::from_rust(py, sum)?)?,
-            ),
-            GraphIrMoleculeConstraint::Connected { atoms } => Self::Connected(
-                atoms
+                sum: into_py_variant(py, NumForm::from_rust(py, sum)?)?,
+            },
+            GraphIrMoleculeConstraint::Connected { atoms } => Self::Connected {
+                atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-            ),
+            },
         })
     }
 
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrMoleculeConstraint {
         match self {
-            Self::ChargeSum(atoms, sum) => GraphIrMoleculeConstraint::ChargeSum {
+            Self::ChargeSum { atoms, sum } => GraphIrMoleculeConstraint::ChargeSum {
                 atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
@@ -1239,13 +1325,13 @@ impl MoleculeConstraint {
                     .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
                 unpaired_electrons: unpaired_electrons.bind(py).borrow().to_rust(py),
             },
-            Self::BondOrderSum(bonds, sum) => GraphIrMoleculeConstraint::BondOrderSum {
+            Self::BondOrderSum { bonds, sum } => GraphIrMoleculeConstraint::BondOrderSum {
                 bonds: bonds
                     .as_ref()
                     .map(|bonds| bonds.iter().copied().map(GraphIrBondId).collect()),
                 sum: sum.bind(py).borrow().to_rust(py),
             },
-            Self::Connected(atoms) => GraphIrMoleculeConstraint::Connected {
+            Self::Connected { atoms } => GraphIrMoleculeConstraint::Connected {
                 atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
@@ -1261,40 +1347,71 @@ impl RelationalConstraint {
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let variant = match &*slf.bind(py).borrow() {
-            Self::DativeBondDonors(_, _) => "DativeBondDonors",
-            Self::DativeBondDonor(_, _) => "DativeBondDonor",
-            Self::DativeBondContainsAllDonors(_, _) => "DativeBondContainsAllDonors",
-            Self::DativeBondAllDonors(_, _) => "DativeBondAllDonors",
-            Self::DativeBondAnyDonor(_, _) => "DativeBondAnyDonor",
-            Self::DativeBondAcceptor(_, _) => "DativeBondAcceptor",
-            Self::DativeBondAcceptorSatisfies(_, _) => "DativeBondAcceptorSatisfies",
-            Self::DativeBondParallels(_, _) => "DativeBondParallels",
-            Self::AromaticSystemAtoms(_, _) => "AromaticSystemAtoms",
-            Self::AromaticSystemContains(_, _) => "AromaticSystemContains",
-            Self::AromaticSystemContainsAll(_, _) => "AromaticSystemContainsAll",
-            Self::AromaticSystemAllAtoms(_, _) => "AromaticSystemAllAtoms",
-            Self::AromaticSystemAnyAtom(_, _) => "AromaticSystemAnyAtom",
-            Self::MulticenterBondAtoms(_, _) => "MulticenterBondAtoms",
-            Self::MulticenterBondContains(_, _) => "MulticenterBondContains",
-            Self::MulticenterBondContainsAll(_, _) => "MulticenterBondContainsAll",
-            Self::MulticenterBondAllAtoms(_, _) => "MulticenterBondAllAtoms",
-            Self::MulticenterBondAnyAtom(_, _) => "MulticenterBondAnyAtom",
-            Self::NoncovalentBondEnds(_, _) => "NoncovalentBondEnds",
-            Self::NoncovalentBondContains(_, _) => "NoncovalentBondContains",
-            Self::NoncovalentBondEndsSatisfy(_, _) => "NoncovalentBondEndsSatisfy",
-            Self::StereoAtomSite(_, _) => "StereoAtomSite",
-            Self::StereoAtomContains(_, _) => "StereoAtomContains",
-            Self::StereoAtomLigands(_, _) => "StereoAtomLigands",
-            Self::StereoAtomAllLigands(_, _) => "StereoAtomAllLigands",
-            Self::StereoAtomAnyLigand(_, _) => "StereoAtomAnyLigand",
-            Self::StereoBondSite(_, _) => "StereoBondSite",
-            Self::StereoBondContains(_, _) => "StereoBondContains",
-            Self::StereoBondLigands(_, _) => "StereoBondLigands",
-            Self::StereoBondAllLigands(_, _) => "StereoBondAllLigands",
-            Self::StereoBondAnyLigand(_, _) => "StereoBondAnyLigand",
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::DativeBondDonors { .. } => ("DativeBondDonors", &["bond", "atoms"]),
+            Self::DativeBondDonor { .. } => ("DativeBondDonor", &["bond", "atom"]),
+            Self::DativeBondContainsAllDonors { .. } => {
+                ("DativeBondContainsAllDonors", &["bond", "atoms"])
+            }
+            Self::DativeBondAllDonors { .. } => ("DativeBondAllDonors", &["bond", "predicate"]),
+            Self::DativeBondAnyDonor { .. } => ("DativeBondAnyDonor", &["bond", "predicate"]),
+            Self::DativeBondAcceptor { .. } => ("DativeBondAcceptor", &["bond", "atom"]),
+            Self::DativeBondAcceptorSatisfies { .. } => {
+                ("DativeBondAcceptorSatisfies", &["bond", "predicate"])
+            }
+            Self::DativeBondParallels { .. } => ("DativeBondParallels", &["dative", "parallel"]),
+            Self::AromaticSystemAtoms { .. } => ("AromaticSystemAtoms", &["system", "atoms"]),
+            Self::AromaticSystemContains { .. } => ("AromaticSystemContains", &["system", "atom"]),
+            Self::AromaticSystemContainsAll { .. } => {
+                ("AromaticSystemContainsAll", &["system", "atoms"])
+            }
+            Self::AromaticSystemAllAtoms { .. } => {
+                ("AromaticSystemAllAtoms", &["system", "predicate"])
+            }
+            Self::AromaticSystemAnyAtom { .. } => {
+                ("AromaticSystemAnyAtom", &["system", "predicate"])
+            }
+            Self::MulticenterBondAtoms { .. } => ("MulticenterBondAtoms", &["bond", "atoms"]),
+            Self::MulticenterBondContains { .. } => ("MulticenterBondContains", &["bond", "atom"]),
+            Self::MulticenterBondContainsAll { .. } => {
+                ("MulticenterBondContainsAll", &["bond", "atoms"])
+            }
+            Self::MulticenterBondAllAtoms { .. } => {
+                ("MulticenterBondAllAtoms", &["bond", "predicate"])
+            }
+            Self::MulticenterBondAnyAtom { .. } => {
+                ("MulticenterBondAnyAtom", &["bond", "predicate"])
+            }
+            Self::NoncovalentBondEnds { .. } => ("NoncovalentBondEnds", &["bond", "atoms"]),
+            Self::NoncovalentBondContains { .. } => ("NoncovalentBondContains", &["bond", "atom"]),
+            Self::NoncovalentBondEndsSatisfy { .. } => {
+                ("NoncovalentBondEndsSatisfy", &["bond", "predicates"])
+            }
+            Self::StereoAtomSite { .. } => ("StereoAtomSite", &["stereo_atom", "atom"]),
+            Self::StereoAtomContains { .. } => ("StereoAtomContains", &["stereo_atom", "atom"]),
+            Self::StereoAtomLigands { .. } => ("StereoAtomLigands", &["stereo_atom", "atoms"]),
+            Self::StereoAtomAllLigands { .. } => {
+                ("StereoAtomAllLigands", &["stereo_atom", "predicate"])
+            }
+            Self::StereoAtomAnyLigand { .. } => {
+                ("StereoAtomAnyLigand", &["stereo_atom", "predicate"])
+            }
+            Self::StereoBondSite { .. } => ("StereoBondSite", &["stereo_bond", "bond"]),
+            Self::StereoBondContains { .. } => ("StereoBondContains", &["stereo_bond", "atom"]),
+            Self::StereoBondLigands { .. } => ("StereoBondLigands", &["stereo_bond", "atoms"]),
+            Self::StereoBondAllLigands { .. } => {
+                ("StereoBondAllLigands", &["stereo_bond", "predicate"])
+            }
+            Self::StereoBondAnyLigand { .. } => {
+                ("StereoBondAnyLigand", &["stereo_bond", "predicate"])
+            }
         };
-        variant_repr(slf.bind(py).as_any(), "RelationalConstraint", variant, 2)
+        named_variant_repr(
+            slf.bind(py).as_any(),
+            "RelationalConstraint",
+            variant,
+            fields,
+        )
     }
 }
 
@@ -1306,263 +1423,320 @@ impl RelationalConstraint {
     ) -> PyResult<Self> {
         Ok(match constraint {
             GraphIrRelationalConstraint::DativeBondDonors { bond, atoms } => {
-                Self::DativeBondDonors(bond.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::DativeBondDonors {
+                    bond: bond.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
-            GraphIrRelationalConstraint::DativeBondDonor { bond, atom } => {
-                Self::DativeBondDonor(bond.0, atom.0)
-            }
+            GraphIrRelationalConstraint::DativeBondDonor { bond, atom } => Self::DativeBondDonor {
+                bond: bond.0,
+                atom: atom.0,
+            },
             GraphIrRelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
-                Self::DativeBondContainsAllDonors(bond.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::DativeBondContainsAllDonors {
+                    bond: bond.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::DativeBondAllDonors { bond, predicate } => {
-                Self::DativeBondAllDonors(
-                    bond.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::DativeBondAllDonors {
+                    bond: bond.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
-                Self::DativeBondAnyDonor(
-                    bond.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::DativeBondAnyDonor {
+                    bond: bond.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::DativeBondAcceptor { bond, atom } => {
-                Self::DativeBondAcceptor(bond.0, atom.0)
+                Self::DativeBondAcceptor {
+                    bond: bond.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::DativeBondAcceptorSatisfies { bond, predicate } => {
-                Self::DativeBondAcceptorSatisfies(
-                    bond.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::DativeBondAcceptorSatisfies {
+                    bond: bond.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::DativeBondParallels { dative, parallel } => {
-                Self::DativeBondParallels(dative.0, parallel.0)
+                Self::DativeBondParallels {
+                    dative: dative.0,
+                    parallel: parallel.0,
+                }
             }
             GraphIrRelationalConstraint::AromaticSystemAtoms { system, atoms } => {
-                Self::AromaticSystemAtoms(system.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::AromaticSystemAtoms {
+                    system: system.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::AromaticSystemContains { system, atom } => {
-                Self::AromaticSystemContains(system.0, atom.0)
+                Self::AromaticSystemContains {
+                    system: system.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
-                Self::AromaticSystemContainsAll(system.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::AromaticSystemContainsAll {
+                    system: system.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::AromaticSystemAllAtoms { system, predicate } => {
-                Self::AromaticSystemAllAtoms(
-                    system.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::AromaticSystemAllAtoms {
+                    system: system.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
-                Self::AromaticSystemAnyAtom(
-                    system.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::AromaticSystemAnyAtom {
+                    system: system.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
-                Self::MulticenterBondAtoms(bond.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::MulticenterBondAtoms {
+                    bond: bond.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::MulticenterBondContains { bond, atom } => {
-                Self::MulticenterBondContains(bond.0, atom.0)
+                Self::MulticenterBondContains {
+                    bond: bond.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
-                Self::MulticenterBondContainsAll(bond.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::MulticenterBondContainsAll {
+                    bond: bond.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::MulticenterBondAllAtoms { bond, predicate } => {
-                Self::MulticenterBondAllAtoms(
-                    bond.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::MulticenterBondAllAtoms {
+                    bond: bond.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
-                Self::MulticenterBondAnyAtom(
-                    bond.0,
-                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-                )
+                Self::MulticenterBondAnyAtom {
+                    bond: bond.0,
+                    predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+                }
             }
             GraphIrRelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
-                Self::NoncovalentBondEnds(bond.0, [atoms[0].0, atoms[1].0])
+                Self::NoncovalentBondEnds {
+                    bond: bond.0,
+                    atoms: TupleItems([atoms[0].0, atoms[1].0]),
+                }
             }
             GraphIrRelationalConstraint::NoncovalentBondContains { bond, atom } => {
-                Self::NoncovalentBondContains(bond.0, atom.0)
+                Self::NoncovalentBondContains {
+                    bond: bond.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::NoncovalentBondEndsSatisfy { bond, predicates } => {
-                Self::NoncovalentBondEndsSatisfy(
-                    bond.0,
-                    [
+                Self::NoncovalentBondEndsSatisfy {
+                    bond: bond.0,
+                    predicates: TupleItems([
                         into_py_variant(py, AtomConstraintForm::from_rust(py, &predicates[0])?)?,
                         into_py_variant(py, AtomConstraintForm::from_rust(py, &predicates[1])?)?,
-                    ],
-                )
+                    ]),
+                }
             }
             GraphIrRelationalConstraint::StereoAtomSite { stereo_atom, atom } => {
-                Self::StereoAtomSite(stereo_atom.0, atom.0)
+                Self::StereoAtomSite {
+                    stereo_atom: stereo_atom.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
-                Self::StereoAtomContains(stereo_atom.0, atom.0)
+                Self::StereoAtomContains {
+                    stereo_atom: stereo_atom.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
-                Self::StereoAtomLigands(stereo_atom.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::StereoAtomLigands {
+                    stereo_atom: stereo_atom.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::StereoAtomAllLigands {
                 stereo_atom,
                 predicate,
-            } => Self::StereoAtomAllLigands(
-                stereo_atom.0,
-                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-            ),
+            } => Self::StereoAtomAllLigands {
+                stereo_atom: stereo_atom.0,
+                predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+            },
             GraphIrRelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
-            } => Self::StereoAtomAnyLigand(
-                stereo_atom.0,
-                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-            ),
+            } => Self::StereoAtomAnyLigand {
+                stereo_atom: stereo_atom.0,
+                predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+            },
             GraphIrRelationalConstraint::StereoBondSite { stereo_bond, bond } => {
-                Self::StereoBondSite(stereo_bond.0, bond.0)
+                Self::StereoBondSite {
+                    stereo_bond: stereo_bond.0,
+                    bond: bond.0,
+                }
             }
             GraphIrRelationalConstraint::StereoBondContains { stereo_bond, atom } => {
-                Self::StereoBondContains(stereo_bond.0, atom.0)
+                Self::StereoBondContains {
+                    stereo_bond: stereo_bond.0,
+                    atom: atom.0,
+                }
             }
             GraphIrRelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
-                Self::StereoBondLigands(stereo_bond.0, atoms.iter().map(|atom| atom.0).collect())
+                Self::StereoBondLigands {
+                    stereo_bond: stereo_bond.0,
+                    atoms: atoms.iter().map(|atom| atom.0).collect(),
+                }
             }
             GraphIrRelationalConstraint::StereoBondAllLigands {
                 stereo_bond,
                 predicate,
-            } => Self::StereoBondAllLigands(
-                stereo_bond.0,
-                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-            ),
+            } => Self::StereoBondAllLigands {
+                stereo_bond: stereo_bond.0,
+                predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+            },
             GraphIrRelationalConstraint::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
-            } => Self::StereoBondAnyLigand(
-                stereo_bond.0,
-                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
-            ),
+            } => Self::StereoBondAnyLigand {
+                stereo_bond: stereo_bond.0,
+                predicate: into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
+            },
         })
     }
 
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrRelationalConstraint {
         match self {
-            Self::DativeBondDonors(bond, atoms) => GraphIrRelationalConstraint::DativeBondDonors {
-                bond: GraphIrDativeBondId(*bond),
-                atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
-            },
-            Self::DativeBondDonor(bond, atom) => GraphIrRelationalConstraint::DativeBondDonor {
+            Self::DativeBondDonors { bond, atoms } => {
+                GraphIrRelationalConstraint::DativeBondDonors {
+                    bond: GraphIrDativeBondId(*bond),
+                    atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
+                }
+            }
+            Self::DativeBondDonor { bond, atom } => GraphIrRelationalConstraint::DativeBondDonor {
                 bond: GraphIrDativeBondId(*bond),
                 atom: GraphIrAtomId(*atom),
             },
-            Self::DativeBondContainsAllDonors(bond, atoms) => {
+            Self::DativeBondContainsAllDonors { bond, atoms } => {
                 GraphIrRelationalConstraint::DativeBondContainsAllDonors {
                     bond: GraphIrDativeBondId(*bond),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::DativeBondAllDonors(bond, predicate) => {
+            Self::DativeBondAllDonors { bond, predicate } => {
                 GraphIrRelationalConstraint::DativeBondAllDonors {
                     bond: GraphIrDativeBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::DativeBondAnyDonor(bond, predicate) => {
+            Self::DativeBondAnyDonor { bond, predicate } => {
                 GraphIrRelationalConstraint::DativeBondAnyDonor {
                     bond: GraphIrDativeBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::DativeBondAcceptor(bond, atom) => {
+            Self::DativeBondAcceptor { bond, atom } => {
                 GraphIrRelationalConstraint::DativeBondAcceptor {
                     bond: GraphIrDativeBondId(*bond),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::DativeBondAcceptorSatisfies(bond, predicate) => {
+            Self::DativeBondAcceptorSatisfies { bond, predicate } => {
                 GraphIrRelationalConstraint::DativeBondAcceptorSatisfies {
                     bond: GraphIrDativeBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::DativeBondParallels(dative, parallel) => {
+            Self::DativeBondParallels { dative, parallel } => {
                 GraphIrRelationalConstraint::DativeBondParallels {
                     dative: GraphIrDativeBondId(*dative),
                     parallel: GraphIrBondId(*parallel),
                 }
             }
-            Self::AromaticSystemAtoms(system, atoms) => {
+            Self::AromaticSystemAtoms { system, atoms } => {
                 GraphIrRelationalConstraint::AromaticSystemAtoms {
                     system: GraphIrAromaticSystemId(*system),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::AromaticSystemContains(system, atom) => {
+            Self::AromaticSystemContains { system, atom } => {
                 GraphIrRelationalConstraint::AromaticSystemContains {
                     system: GraphIrAromaticSystemId(*system),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::AromaticSystemContainsAll(system, atoms) => {
+            Self::AromaticSystemContainsAll { system, atoms } => {
                 GraphIrRelationalConstraint::AromaticSystemContainsAll {
                     system: GraphIrAromaticSystemId(*system),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::AromaticSystemAllAtoms(system, predicate) => {
+            Self::AromaticSystemAllAtoms { system, predicate } => {
                 GraphIrRelationalConstraint::AromaticSystemAllAtoms {
                     system: GraphIrAromaticSystemId(*system),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::AromaticSystemAnyAtom(system, predicate) => {
+            Self::AromaticSystemAnyAtom { system, predicate } => {
                 GraphIrRelationalConstraint::AromaticSystemAnyAtom {
                     system: GraphIrAromaticSystemId(*system),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::MulticenterBondAtoms(bond, atoms) => {
+            Self::MulticenterBondAtoms { bond, atoms } => {
                 GraphIrRelationalConstraint::MulticenterBondAtoms {
                     bond: GraphIrMulticenterBondId(*bond),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::MulticenterBondContains(bond, atom) => {
+            Self::MulticenterBondContains { bond, atom } => {
                 GraphIrRelationalConstraint::MulticenterBondContains {
                     bond: GraphIrMulticenterBondId(*bond),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::MulticenterBondContainsAll(bond, atoms) => {
+            Self::MulticenterBondContainsAll { bond, atoms } => {
                 GraphIrRelationalConstraint::MulticenterBondContainsAll {
                     bond: GraphIrMulticenterBondId(*bond),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::MulticenterBondAllAtoms(bond, predicate) => {
+            Self::MulticenterBondAllAtoms { bond, predicate } => {
                 GraphIrRelationalConstraint::MulticenterBondAllAtoms {
                     bond: GraphIrMulticenterBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::MulticenterBondAnyAtom(bond, predicate) => {
+            Self::MulticenterBondAnyAtom { bond, predicate } => {
                 GraphIrRelationalConstraint::MulticenterBondAnyAtom {
                     bond: GraphIrMulticenterBondId(*bond),
                     predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::NoncovalentBondEnds(bond, atoms) => {
+            Self::NoncovalentBondEnds { bond, atoms } => {
                 GraphIrRelationalConstraint::NoncovalentBondEnds {
                     bond: GraphIrNoncovalentBondId(*bond),
                     atoms: [GraphIrAtomId(atoms[0]), GraphIrAtomId(atoms[1])],
                 }
             }
-            Self::NoncovalentBondContains(bond, atom) => {
+            Self::NoncovalentBondContains { bond, atom } => {
                 GraphIrRelationalConstraint::NoncovalentBondContains {
                     bond: GraphIrNoncovalentBondId(*bond),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::NoncovalentBondEndsSatisfy(bond, predicates) => {
+            Self::NoncovalentBondEndsSatisfy { bond, predicates } => {
                 GraphIrRelationalConstraint::NoncovalentBondEndsSatisfy {
                     bond: GraphIrNoncovalentBondId(*bond),
                     predicates: [
@@ -1571,66 +1745,70 @@ impl RelationalConstraint {
                     ],
                 }
             }
-            Self::StereoAtomSite(stereo_atom, atom) => {
+            Self::StereoAtomSite { stereo_atom, atom } => {
                 GraphIrRelationalConstraint::StereoAtomSite {
                     stereo_atom: GraphIrStereoAtomId(*stereo_atom),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::StereoAtomContains(stereo_atom, atom) => {
+            Self::StereoAtomContains { stereo_atom, atom } => {
                 GraphIrRelationalConstraint::StereoAtomContains {
                     stereo_atom: GraphIrStereoAtomId(*stereo_atom),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::StereoAtomLigands(stereo_atom, atoms) => {
+            Self::StereoAtomLigands { stereo_atom, atoms } => {
                 GraphIrRelationalConstraint::StereoAtomLigands {
                     stereo_atom: GraphIrStereoAtomId(*stereo_atom),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::StereoAtomAllLigands(stereo_atom, predicate) => {
-                GraphIrRelationalConstraint::StereoAtomAllLigands {
-                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
-                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
-                }
-            }
-            Self::StereoAtomAnyLigand(stereo_atom, predicate) => {
-                GraphIrRelationalConstraint::StereoAtomAnyLigand {
-                    stereo_atom: GraphIrStereoAtomId(*stereo_atom),
-                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
-                }
-            }
-            Self::StereoBondSite(stereo_bond, bond) => {
+            Self::StereoAtomAllLigands {
+                stereo_atom,
+                predicate,
+            } => GraphIrRelationalConstraint::StereoAtomAllLigands {
+                stereo_atom: GraphIrStereoAtomId(*stereo_atom),
+                predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
+            },
+            Self::StereoAtomAnyLigand {
+                stereo_atom,
+                predicate,
+            } => GraphIrRelationalConstraint::StereoAtomAnyLigand {
+                stereo_atom: GraphIrStereoAtomId(*stereo_atom),
+                predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
+            },
+            Self::StereoBondSite { stereo_bond, bond } => {
                 GraphIrRelationalConstraint::StereoBondSite {
                     stereo_bond: GraphIrStereoBondId(*stereo_bond),
                     bond: GraphIrBondId(*bond),
                 }
             }
-            Self::StereoBondContains(stereo_bond, atom) => {
+            Self::StereoBondContains { stereo_bond, atom } => {
                 GraphIrRelationalConstraint::StereoBondContains {
                     stereo_bond: GraphIrStereoBondId(*stereo_bond),
                     atom: GraphIrAtomId(*atom),
                 }
             }
-            Self::StereoBondLigands(stereo_bond, atoms) => {
+            Self::StereoBondLigands { stereo_bond, atoms } => {
                 GraphIrRelationalConstraint::StereoBondLigands {
                     stereo_bond: GraphIrStereoBondId(*stereo_bond),
                     atoms: atoms.iter().copied().map(GraphIrAtomId).collect(),
                 }
             }
-            Self::StereoBondAllLigands(stereo_bond, predicate) => {
-                GraphIrRelationalConstraint::StereoBondAllLigands {
-                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
-                }
-            }
-            Self::StereoBondAnyLigand(stereo_bond, predicate) => {
-                GraphIrRelationalConstraint::StereoBondAnyLigand {
-                    stereo_bond: GraphIrStereoBondId(*stereo_bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
-                }
-            }
+            Self::StereoBondAllLigands {
+                stereo_bond,
+                predicate,
+            } => GraphIrRelationalConstraint::StereoBondAllLigands {
+                stereo_bond: GraphIrStereoBondId(*stereo_bond),
+                predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
+            },
+            Self::StereoBondAnyLigand {
+                stereo_bond,
+                predicate,
+            } => GraphIrRelationalConstraint::StereoBondAnyLigand {
+                stereo_bond: GraphIrStereoBondId(*stereo_bond),
+                predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
+            },
         }
     }
 }
@@ -1923,7 +2101,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "Constraint.And([Constraint.Atom(17, AtomConstraintForm.Valence(NumForm.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
+                "Constraint.And([Constraint.Atom(17, AtomConstraintForm.Valence(NumForm.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(bond=18, atom=19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected(atoms=(20, 21))))])])"
             );
 
             let children = value.bind(py).as_any().getattr("_0").unwrap();

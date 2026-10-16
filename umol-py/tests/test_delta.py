@@ -316,9 +316,8 @@ def test_aromaticsystemfieldchange_fields():
     assert change.old == ElectronCountsForm.Undetermined()
     assert change.new == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(change) == (
-        "AromaticSystemFieldChange.Electrons("
-        "old=ElectronCountsForm.Undetermined(), "
-        "new=ElectronCountsForm.Lit([1, 1, 1]))"
+        "AromaticSystemFieldChange.Electrons(old=ElectronCountsForm.Undetermined(), "
+        "new=ElectronCountsForm.Lit((1, 1, 1)))"
     )
 
 
@@ -591,9 +590,8 @@ def test_stereofieldchange_closure(change, expected_repr):
                 old=ElectronCountsForm.Undetermined(),
                 new=ElectronCountsForm.Lit([1, 1, 1]),
             ),
-            "AromaticSystemFieldChange.Electrons("
-            "old=ElectronCountsForm.Undetermined(), "
-            "new=ElectronCountsForm.Lit([1, 1, 1]))",
+            "AromaticSystemFieldChange.Electrons(old=ElectronCountsForm.Undetermined(),"
+            " new=ElectronCountsForm.Lit((1, 1, 1)))",
         ),
         (
             AromaticSystemFieldChange.Charge(
@@ -617,9 +615,8 @@ def test_stereofieldchange_closure(change, expected_repr):
                 old=ElectronCountsForm.Lit([1, 0, 1]),
                 new=ElectronCountsForm.Lit([2, 0, 1]),
             ),
-            "MulticenterBondFieldChange.Electrons("
-            "old=ElectronCountsForm.Lit([1, 0, 1]), "
-            "new=ElectronCountsForm.Lit([2, 0, 1]))",
+            "MulticenterBondFieldChange.Electrons(old=ElectronCountsForm.Lit((1, 0, "
+            "1)), new=ElectronCountsForm.Lit((2, 0, 1)))",
         ),
         (
             MulticenterBondFieldChange.Charge(
@@ -734,12 +731,12 @@ def test_dativebonddelta_fields():
     assert delta.id == 1
     assert source.readonly is False
     assert delta.attributes.readonly is True
-    assert delta.donors == [4, 2, 4]
-    assert isinstance(delta.donors, list)
+    assert delta.donors == (4, 2, 4)
+    assert isinstance(delta.donors, tuple)
     assert delta.acceptor == 3
     assert delta.attributes.order == NumForm.Lit(1)
     assert repr(delta) == (
-        "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, "
+        "DativeBondDelta.Add(id=1, donors=(4, 2, 4), acceptor=3, "
         "attributes=DativeBondForm.parse('1'))"
     )
     with pytest.raises(TypeError):
@@ -759,11 +756,11 @@ def test_aromaticsystemdelta_fields():
     assert delta.id == 2
     assert source.readonly is False
     assert delta.attributes.readonly is True
-    assert delta.atoms == [4, 2, 4]
-    assert isinstance(delta.atoms, list)
+    assert delta.atoms == (4, 2, 4)
+    assert isinstance(delta.atoms, tuple)
     assert delta.attributes.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(delta) == (
-        "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], "
+        "AromaticSystemDelta.Add(id=2, atoms=(4, 2, 4), "
         "attributes=AromaticSystemForm.parse('[1,1,1]'))"
     )
     with pytest.raises(TypeError):
@@ -783,11 +780,11 @@ def test_multicenterbonddelta_fields():
     assert delta.id == 3
     assert source.readonly is False
     assert delta.attributes.readonly is True
-    assert delta.atoms == [4, 2, 4]
-    assert isinstance(delta.atoms, list)
+    assert delta.atoms == (4, 2, 4)
+    assert isinstance(delta.atoms, tuple)
     assert delta.attributes.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert repr(delta) == (
-        "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], "
+        "MulticenterBondDelta.Add(id=3, atoms=(4, 2, 4), "
         "attributes=MulticenterBondForm.parse('[1,1,1]'))"
     )
     with pytest.raises(TypeError):
@@ -849,21 +846,20 @@ def test_stereoatomdelta_fields():
     assert source.readonly is False
     assert delta.attributes.readonly is True
     assert delta.site == 3
-    assert delta.ligands == [
+    assert delta.ligands == (
         StereoLigand(4, StereoLigandKind.Atom),
         StereoLigand(2, StereoLigandKind.LonePair),
         StereoLigand(4, StereoLigandKind.Atom),
-    ]
-    assert isinstance(delta.ligands, list)
+    )
+    assert isinstance(delta.ligands, tuple)
     assert delta.attributes.configuration == StereoConfigurationForm.Kinded(
         StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert repr(delta) == (
-        "StereoAtomDelta.Add(id=5, site=3, ligands=["
-        "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), "
-        "StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair), "
-        "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], "
-        "attributes=StereoAtomForm.parse('Th0'))"
+        "StereoAtomDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, "
+        "kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, "
+        "kind=StereoLigandKind.LonePair), StereoLigand(atom_id=4, "
+        "kind=StereoLigandKind.Atom)), attributes=StereoAtomForm.parse('Th0'))"
     )
     with pytest.raises(TypeError):
         delta.attributes.configuration = StereoConfigurationForm.Kinded(
@@ -920,21 +916,20 @@ def test_stereobonddelta_fields():
     assert source.readonly is False
     assert delta.attributes.readonly is True
     assert delta.site == 3
-    assert delta.ligands == [
+    assert delta.ligands == (
         StereoLigand(4, StereoLigandKind.Atom),
         StereoLigand(2, StereoLigandKind.LonePair),
         StereoLigand(4, StereoLigandKind.Atom),
-    ]
-    assert isinstance(delta.ligands, list)
+    )
+    assert isinstance(delta.ligands, tuple)
     assert delta.attributes.configuration == StereoConfigurationForm.Kinded(
         StereoKind.CisTrans, StereoCoset.Lit(0)
     )
     assert repr(delta) == (
-        "StereoBondDelta.Add(id=5, site=3, ligands=["
-        "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), "
-        "StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair), "
-        "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], "
-        "attributes=StereoBondForm.parse('Ct0'))"
+        "StereoBondDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, "
+        "kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, "
+        "kind=StereoLigandKind.LonePair), StereoLigand(atom_id=4, "
+        "kind=StereoLigandKind.Atom)), attributes=StereoBondForm.parse('Ct0'))"
     )
     with pytest.raises(TypeError):
         delta.attributes.configuration = StereoConfigurationForm.Kinded(
@@ -1061,7 +1056,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             DativeBondDelta.Add(
                 id=1, donors=[4, 2, 4], acceptor=3, attributes=DativeBondForm(1)
             ),
-            "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, "
+            "DativeBondDelta.Add(id=1, donors=(4, 2, 4), acceptor=3, "
             "attributes=DativeBondForm.parse('1'))",
             DativeBondDelta.Remove,
         ),
@@ -1069,7 +1064,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             DativeBondDelta.Remove(
                 id=1, donors=[2, 4, 2], acceptor=3, attributes=DativeBondForm(2)
             ),
-            "DativeBondDelta.Remove(id=1, donors=[2, 4, 2], acceptor=3, "
+            "DativeBondDelta.Remove(id=1, donors=(2, 4, 2), acceptor=3, "
             "attributes=DativeBondForm.parse('2'))",
             DativeBondDelta.Add,
         ),
@@ -1099,7 +1094,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             AromaticSystemDelta.Add(
                 id=2, atoms=[4, 2, 4], attributes=AromaticSystemForm([1, 1, 1])
             ),
-            "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], "
+            "AromaticSystemDelta.Add(id=2, atoms=(4, 2, 4), "
             "attributes=AromaticSystemForm.parse('[1,1,1]'))",
             AromaticSystemDelta.Remove,
         ),
@@ -1107,7 +1102,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             AromaticSystemDelta.Remove(
                 id=2, atoms=[2, 4, 2], attributes=AromaticSystemForm([2, 0, 1])
             ),
-            "AromaticSystemDelta.Remove(id=2, atoms=[2, 4, 2], "
+            "AromaticSystemDelta.Remove(id=2, atoms=(2, 4, 2), "
             "attributes=AromaticSystemForm.parse('[2,0,1]'))",
             AromaticSystemDelta.Add,
         ),
@@ -1137,7 +1132,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             MulticenterBondDelta.Add(
                 id=3, atoms=[4, 2, 4], attributes=MulticenterBondForm([1, 1, 1])
             ),
-            "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], "
+            "MulticenterBondDelta.Add(id=3, atoms=(4, 2, 4), "
             "attributes=MulticenterBondForm.parse('[1,1,1]'))",
             MulticenterBondDelta.Remove,
         ),
@@ -1145,7 +1140,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             MulticenterBondDelta.Remove(
                 id=3, atoms=[2, 4, 2], attributes=MulticenterBondForm([2, 0, 1])
             ),
-            "MulticenterBondDelta.Remove(id=3, atoms=[2, 4, 2], "
+            "MulticenterBondDelta.Remove(id=3, atoms=(2, 4, 2), "
             "attributes=MulticenterBondForm.parse('[2,0,1]'))",
             MulticenterBondDelta.Add,
         ),
@@ -1241,6 +1236,7 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
     ],
 )
 def test_overlaydelta_closure(delta, expected_repr, inverse_type):
+    assert type(delta)(**{field: getattr(delta, field) for field in delta.__match_args__}) == delta
     assert repr(delta) == expected_repr
     inverse = delta.inverse()
     assert type(inverse) is inverse_type
@@ -1262,7 +1258,8 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                     )
                 ),
             ),
-            "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoAtomForm.parse('Th0'))",
+            "StereoAtomDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, "
+            "kind=StereoLigandKind.Atom),), attributes=StereoAtomForm.parse('Th0'))",
             StereoAtomDelta.Remove,
             False,
         ),
@@ -1277,7 +1274,8 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                     )
                 ),
             ),
-            "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoAtomForm.parse('Th0'))",
+            "StereoAtomDelta.Remove(id=5, site=3, ligands=(StereoLigand(atom_id=4, "
+            "kind=StereoLigandKind.Atom),), attributes=StereoAtomForm.parse('Th0'))",
             StereoAtomDelta.Add,
             False,
         ),
@@ -1319,7 +1317,8 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                     )
                 ),
             ),
-            "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoBondForm.parse('Ct0'))",
+            "StereoBondDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, "
+            "kind=StereoLigandKind.Atom),), attributes=StereoBondForm.parse('Ct0'))",
             StereoBondDelta.Remove,
             False,
         ),
@@ -1334,7 +1333,8 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                     )
                 ),
             ),
-            "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoBondForm.parse('Ct0'))",
+            "StereoBondDelta.Remove(id=5, site=3, ligands=(StereoLigand(atom_id=4, "
+            "kind=StereoLigandKind.Atom),), attributes=StereoBondForm.parse('Ct0'))",
             StereoBondDelta.Add,
             False,
         ),
@@ -1378,6 +1378,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
     ],
 )
 def test_stereodelta_closure(delta, expected_repr, inverse_type, self_inverse):
+    assert type(delta)(**{field: getattr(delta, field) for field in delta.__match_args__}) == delta
     assert repr(delta) == expected_repr
     inverse = delta.inverse()
     assert type(inverse) is inverse_type
@@ -1483,7 +1484,8 @@ def test_delta_fields():
                     attributes=DativeBondForm(1),
                 )
             ),
-            "Delta.DativeBond(DativeBondDelta.Add(id=1, donors=[4, 2], acceptor=3, attributes=DativeBondForm.parse('1')))",
+            "Delta.DativeBond(DativeBondDelta.Add(id=1, donors=(4, 2), acceptor=3, "
+            "attributes=DativeBondForm.parse('1')))",
             Delta.DativeBond,
             DativeBondDelta.Remove,
         ),
@@ -1495,7 +1497,8 @@ def test_delta_fields():
                     attributes=AromaticSystemForm([1, 1]),
                 )
             ),
-            "Delta.AromaticSystem(AromaticSystemDelta.Add(id=2, atoms=[4, 2], attributes=AromaticSystemForm.parse('[1,1]')))",
+            "Delta.AromaticSystem(AromaticSystemDelta.Add(id=2, atoms=(4, 2), "
+            "attributes=AromaticSystemForm.parse('[1,1]')))",
             Delta.AromaticSystem,
             AromaticSystemDelta.Remove,
         ),
@@ -1507,7 +1510,8 @@ def test_delta_fields():
                     attributes=MulticenterBondForm([1, 1]),
                 )
             ),
-            "Delta.MulticenterBond(MulticenterBondDelta.Add(id=3, atoms=[4, 2], attributes=MulticenterBondForm.parse('[1,1]')))",
+            "Delta.MulticenterBond(MulticenterBondDelta.Add(id=3, atoms=(4, 2), "
+            "attributes=MulticenterBondForm.parse('[1,1]')))",
             Delta.MulticenterBond,
             MulticenterBondDelta.Remove,
         ),
@@ -1537,7 +1541,9 @@ def test_delta_fields():
                     ),
                 )
             ),
-            "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoAtomForm.parse('Th0')))",
+            "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, "
+            "ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom),), "
+            "attributes=StereoAtomForm.parse('Th0')))",
             Delta.StereoAtom,
             StereoAtomDelta.Remove,
         ),
@@ -1555,7 +1561,9 @@ def test_delta_fields():
                     ),
                 )
             ),
-            "Delta.StereoBond(StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoBondForm.parse('Ct0')))",
+            "Delta.StereoBond(StereoBondDelta.Add(id=5, site=3, "
+            "ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom),), "
+            "attributes=StereoBondForm.parse('Ct0')))",
             Delta.StereoBond,
             StereoBondDelta.Remove,
         ),

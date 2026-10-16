@@ -915,7 +915,7 @@ impl Molecule {
 mod tests {
     use std::borrow::Cow;
 
-    use pyo3::exceptions::PyRuntimeError;
+    use pyo3::exceptions::{PyAttributeError, PyRuntimeError};
     use pyo3::types::{PyBytes, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -1780,13 +1780,13 @@ mod tests {
         Python::attach(|py| {
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
-            fingerprint
+
+            assert!(fingerprint
                 .getattr("ids")
                 .unwrap()
-                .cast::<PyList>()
-                .unwrap()
-                .append(9u64)
-                .unwrap();
+                .call_method1("append", (9u64,))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("ids")
@@ -1868,13 +1868,13 @@ mod tests {
         Python::attach(|py| {
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
-            fingerprint
+
+            assert!(fingerprint
                 .getattr("entries")
                 .unwrap()
-                .cast::<PyList>()
-                .unwrap()
-                .append((9u64, 3u32))
-                .unwrap();
+                .call_method1("append", ((9u64, 3u32),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("entries")
@@ -2013,13 +2013,13 @@ mod tests {
         Python::attach(|py| {
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
-            fingerprint
+
+            assert!(fingerprint
                 .getattr("keys")
                 .unwrap()
-                .cast::<PyList>()
-                .unwrap()
-                .append(PyBytes::new(py, b"detached"))
-                .unwrap();
+                .call_method1("append", (PyBytes::new(py, b"detached"),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
             assert_eq!(
                 fingerprint
                     .getattr("keys")
@@ -2134,7 +2134,7 @@ mod tests {
                 resolved.borrow(py).to_rust(),
                 &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#)
             );
-            assert_eq!(report.unwrap().tie_breaks(), vec![0]);
+            assert_eq!(report.unwrap().tie_breaks().0, vec![0]);
             assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["C#c0"]}"#));
         });
     }

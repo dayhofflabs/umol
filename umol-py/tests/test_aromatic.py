@@ -17,6 +17,19 @@ from umol import (
 )
 
 
+@pytest.mark.parametrize("counts", [[], [2, 1, 2]])
+def test_electron_counts_form_payload(counts):
+    expected = tuple(counts)
+    form = ElectronCountsForm.Lit(counts)
+    counts.clear()
+    assert type(form._0) is tuple
+    assert form._0 == expected
+    assert ElectronCountsForm.Lit(form._0) == form
+    assert form.as_lit() == list(expected)
+    with pytest.raises(TypeError):
+        form._0[0] = 1
+
+
 @pytest.mark.parametrize(
     ("update", "expected"),
     [
@@ -73,8 +86,8 @@ def test_aromatic_system_update(update, expected):
         update.electrons,
         update.charge,
         update.unpaired_electrons,
-        update.constraints,
-    ) == expected
+    ) == expected[:-1]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(

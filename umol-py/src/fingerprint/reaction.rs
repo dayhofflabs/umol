@@ -10,6 +10,8 @@ use umol_graph::fingerprint::{
     ReactionSide as GraphReactionSide, SignedFeatureSet as GraphSignedFeatureSet,
 };
 
+use crate::convert::TupleItems;
+
 /// Side of a reaction from which a fingerprint feature originates.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -55,8 +57,8 @@ impl SignedHashedFeatureSet {
 
     /// Sorted `(identifier, signed_count)` snapshot using ordinary Python integers.
     #[getter]
-    fn entries(&self) -> Vec<(u128, i32)> {
-        match &self.data {
+    fn entries(&self) -> TupleItems<Vec<(u128, i32)>> {
+        TupleItems(match &self.data {
             SignedHashedFeatureSetData::U32(features) => features
                 .entries()
                 .iter()
@@ -68,7 +70,7 @@ impl SignedHashedFeatureSet {
                 .map(|(id, count)| (u128::from(*id), *count))
                 .collect(),
             SignedHashedFeatureSetData::U128(features) => features.entries().to_vec(),
-        }
+        })
     }
 
     /// Signed count of `id`, or zero when the identifier is absent.
@@ -94,14 +96,14 @@ impl SignedHashedFeatureSet {
 
     fn __iter__(&self) -> SignedHashedFeatureSetIter {
         SignedHashedFeatureSetIter {
-            entries: self.entries().into_iter(),
+            entries: self.entries().0.into_iter(),
         }
     }
 
     fn __repr__(&self) -> String {
         format!(
             "SignedHashedFeatureSet(entries={:?}, id_width={})",
-            self.entries(),
+            self.entries().0,
             self.id_width()
         )
     }
@@ -184,8 +186,8 @@ impl RoleTaggedHashedFeatureSet {
 
     /// Sorted `(reaction_side, identifier)` snapshot using ordinary Python integers.
     #[getter]
-    fn ids(&self) -> Vec<(ReactionSide, u128)> {
-        match &self.data {
+    fn ids(&self) -> TupleItems<Vec<(ReactionSide, u128)>> {
+        TupleItems(match &self.data {
             RoleTaggedHashedFeatureSetData::U32(features) => features
                 .ids()
                 .iter()
@@ -201,7 +203,7 @@ impl RoleTaggedHashedFeatureSet {
                 .iter()
                 .map(|(side, id)| (ReactionSide::from_rust(*side), *id))
                 .collect(),
-        }
+        })
     }
 
     fn __len__(&self) -> usize {
@@ -214,12 +216,12 @@ impl RoleTaggedHashedFeatureSet {
 
     fn __iter__(&self) -> RoleTaggedHashedFeatureSetIter {
         RoleTaggedHashedFeatureSetIter {
-            ids: self.ids().into_iter(),
+            ids: self.ids().0.into_iter(),
         }
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let ids = PyList::new(py, self.ids())?.repr()?.extract::<String>()?;
+        let ids = PyList::new(py, self.ids().0)?.repr()?.extract::<String>()?;
         Ok(format!(
             "RoleTaggedHashedFeatureSet(ids={ids}, id_width={})",
             self.id_width()
@@ -336,6 +338,7 @@ impl ReactionCombinedFingerprint {
 
 #[cfg(test)]
 mod tests {
+    use pyo3::exceptions::PyAttributeError;
     use pyo3::types::{PyInt, PyTuple};
     use rstest::rstest;
     use umol_graph::fingerprint::CountedFeatureSet as GraphCountedFeatureSet;
@@ -447,7 +450,7 @@ mod tests {
                 entries.extract::<Vec<(u128, i32)>>().unwrap(),
                 expected_entries
             );
-            assert!(entries.cast::<PyList>().unwrap().iter().all(|entry| {
+            assert!(entries.cast::<PyTuple>().unwrap().iter().all(|entry| {
                 let entry = entry.cast::<PyTuple>().unwrap();
                 entry.iter().all(|item| item.is_instance_of::<PyInt>())
             }));
@@ -574,11 +577,10 @@ mod tests {
             let features = features.bind(py).as_any();
             let entries = features.getattr("entries").unwrap();
 
-            entries
-                .cast::<PyList>()
-                .unwrap()
-                .append((9u128, -2i32))
-                .unwrap();
+            assert!(entries
+                .call_method1("append", ((9u128, -2i32),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
 
             assert_eq!(
                 features
@@ -696,7 +698,7 @@ mod tests {
                 ids.extract::<Vec<(ReactionSide, u128)>>().unwrap(),
                 expected_ids
             );
-            assert!(ids.cast::<PyList>().unwrap().iter().all(|id| {
+            assert!(ids.cast::<PyTuple>().unwrap().iter().all(|id| {
                 let id = id.cast::<PyTuple>().unwrap();
                 id.get_item(0).unwrap().is_instance_of::<ReactionSide>()
                     && id.get_item(1).unwrap().is_instance_of::<PyInt>()
@@ -748,10 +750,10 @@ mod tests {
             let features = features.bind(py).as_any();
             let ids = features.getattr("ids").unwrap();
 
-            ids.cast::<PyList>()
-                .unwrap()
-                .append((ReactionSide::Product, 9u128))
-                .unwrap();
+            assert!(ids
+                .call_method1("append", ((ReactionSide::Product, 9u128),))
+                .unwrap_err()
+                .is_instance_of::<PyAttributeError>(py));
 
             assert_eq!(
                 features

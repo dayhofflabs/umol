@@ -16,6 +16,7 @@ use umol_graph::ops::valence::{
 use umol_graph_ir::ir::AtomId as GraphIrAtomId;
 
 use crate::atom::AtomForm;
+use crate::convert::TupleItems;
 use crate::model::aromaticity::AromaticityConfig;
 use crate::molecule::Molecule;
 
@@ -859,15 +860,15 @@ impl ResolveReport {
     }
 
     #[getter]
-    pub(crate) fn tie_breaks(&self) -> Vec<u32> {
-        self.0.tie_breaks.iter().map(|atom| atom.0).collect()
+    pub(crate) fn tie_breaks(&self) -> TupleItems<Vec<u32>> {
+        TupleItems(self.0.tie_breaks.iter().map(|atom| atom.0).collect())
     }
 
     pub(crate) fn __repr__(&self) -> String {
         format!(
             "ResolveReport(unresolved={}, tie_breaks={:?})",
             self.unresolved().__repr__(),
-            self.tie_breaks(),
+            self.tie_breaks().0,
         )
     }
 }

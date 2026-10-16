@@ -61,8 +61,8 @@ def test_bond_update(update, expected):
         update.order,
         update.charge,
         update.unpaired_electrons,
-        update.constraints,
-    ) == expected
+    ) == expected[:-1]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(

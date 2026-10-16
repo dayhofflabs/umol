@@ -38,7 +38,7 @@ use crate::constraint::stereo::{
     StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
     StereoBondConstraintKey,
 };
-use crate::convert::into_py_variant;
+use crate::convert::{into_py_variant, TupleItems};
 use crate::dative::{DativeBondForm, DativeBondUpdate};
 use crate::defaults::MoleculeDefaults;
 use crate::delta::{
@@ -327,12 +327,20 @@ impl ConstraintEdit {
 type ReadonlyBondAddition = ((HandleLike, HandleLike), Readonly<BondForm>);
 type ReadonlyDativeBondRemoval = (
     HandleLike,
-    Vec<HandleLike>,
+    TupleItems<Vec<HandleLike>>,
     HandleLike,
     Readonly<DativeBondForm>,
 );
-type ReadonlyAromaticSystemRemoval = (HandleLike, Vec<HandleLike>, Readonly<AromaticSystemForm>);
-type ReadonlyMulticenterBondRemoval = (HandleLike, Vec<HandleLike>, Readonly<MulticenterBondForm>);
+type ReadonlyAromaticSystemRemoval = (
+    HandleLike,
+    TupleItems<Vec<HandleLike>>,
+    Readonly<AromaticSystemForm>,
+);
+type ReadonlyMulticenterBondRemoval = (
+    HandleLike,
+    TupleItems<Vec<HandleLike>>,
+    Readonly<MulticenterBondForm>,
+);
 type ReadonlyNoncovalentBondRemoval = (
     HandleLike,
     (HandleLike, HandleLike),
@@ -342,13 +350,13 @@ type StereoLigandInput = (HandleLike, StereoLigandKind);
 type ReadonlyStereoAtomRemoval = (
     HandleLike,
     HandleLike,
-    Vec<StereoLigandInput>,
+    TupleItems<Vec<StereoLigandInput>>,
     Readonly<StereoAtomForm>,
 );
 type ReadonlyStereoBondRemoval = (
     HandleLike,
     HandleLike,
-    Vec<StereoLigandInput>,
+    TupleItems<Vec<StereoLigandInput>>,
     Readonly<StereoBondForm>,
 );
 
@@ -408,7 +416,7 @@ impl<'py> IntoPyObject<'py> for &ReadonlyStereoAtomRemovals {
                 ))
             })
             .collect::<PyResult<Vec<_>>>()?;
-        entries.into_pyobject(py).map(Bound::into_any)
+        PyTuple::new(py, entries).map(Bound::into_any)
     }
 }
 
@@ -440,9 +448,11 @@ impl<'py> IntoPyObject<'py> for &ReadonlyStereoBondRemovals {
                 ))
             })
             .collect::<PyResult<Vec<_>>>()?;
-        entries.into_pyobject(py).map(Bound::into_any)
+        PyTuple::new(py, entries).map(Bound::into_any)
     }
 }
+
+type FieldChanges<T> = TupleItems<Vec<(HandleLike, Py<T>, Py<T>)>>;
 
 type AtomConstraintChange = (
     HandleLike,
@@ -492,32 +502,6 @@ type StereoBondConstraintChange = (
     Option<Py<StereoBondConstraintForm>>,
 );
 
-struct TupleItems<T>(Vec<T>);
-
-impl<'a, 'py, T> FromPyObject<'a, 'py> for TupleItems<T>
-where
-    Vec<T>: FromPyObject<'a, 'py, Error = PyErr>,
-{
-    type Error = PyErr;
-
-    fn extract(object: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-        object.extract().map(Self)
-    }
-}
-
-impl<'a, 'py, T> IntoPyObject<'py> for &'a TupleItems<T>
-where
-    &'a T: IntoPyObject<'py>,
-{
-    type Target = PyTuple;
-    type Output = Bound<'py, PyTuple>;
-    type Error = PyErr;
-
-    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
-        PyTuple::new(py, &self.0)
-    }
-}
-
 /// One immutable host-specific molecule edit.
 #[pyclass(frozen)]
 #[allow(
@@ -526,74 +510,66 @@ where
 )]
 pub enum Edit {
     AddAtoms {
-        atoms: Vec<Readonly<AtomForm>>,
+        atoms: TupleItems<Vec<Readonly<AtomForm>>>,
     },
     AddBonds {
-        bonds: Vec<ReadonlyBondAddition>,
+        bonds: TupleItems<Vec<ReadonlyBondAddition>>,
     },
     RemoveTopology {
-        atoms: Vec<HandleLike>,
-        bonds: Vec<HandleLike>,
+        atoms: TupleItems<Vec<HandleLike>>,
+        bonds: TupleItems<Vec<HandleLike>>,
     },
     ModifyAtomElements {
-        changes: TupleItems<(HandleLike, Py<ElementForm>, Py<ElementForm>)>,
+        changes: FieldChanges<ElementForm>,
     },
     ModifyAtomIsotopeMasses {
-        changes: TupleItems<(HandleLike, Py<IsotopeMassForm>, Py<IsotopeMassForm>)>,
+        changes: FieldChanges<IsotopeMassForm>,
     },
     ModifyAtomCharges {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyAtomImplicitHydrogens {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyAtomLonePairs {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyAtomUnpairedElectrons {
-        changes: TupleItems<(
-            HandleLike,
-            Py<UnpairedElectronsForm>,
-            Py<UnpairedElectronsForm>,
-        )>,
+        changes: FieldChanges<UnpairedElectronsForm>,
     },
     ModifyAtomConstraints {
         key: Py<AtomConstraintKey>,
-        changes: TupleItems<AtomConstraintChange>,
+        changes: TupleItems<Vec<AtomConstraintChange>>,
     },
     ModifyAtomField {
         id: HandleLike,
         change: Py<AtomFieldChange>,
     },
     ModifyBondOrders {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyBondCharges {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyBondUnpairedElectrons {
-        changes: TupleItems<(
-            HandleLike,
-            Py<UnpairedElectronsForm>,
-            Py<UnpairedElectronsForm>,
-        )>,
+        changes: FieldChanges<UnpairedElectronsForm>,
     },
     ModifyBondField {
         id: HandleLike,
         change: Py<BondFieldChange>,
     },
     AddDativeBond {
-        donors: Vec<HandleLike>,
+        donors: TupleItems<Vec<HandleLike>>,
         acceptor: HandleLike,
         attributes: Readonly<DativeBondForm>,
     },
     RemoveDativeBonds {
-        removes: Vec<ReadonlyDativeBondRemoval>,
+        removes: TupleItems<Vec<ReadonlyDativeBondRemoval>>,
     },
     ReplaceDativeBondDonors {
         id: HandleLike,
-        old: Vec<HandleLike>,
-        new: Vec<HandleLike>,
+        old: TupleItems<Vec<HandleLike>>,
+        new: TupleItems<Vec<HandleLike>>,
     },
     ReplaceDativeBondAcceptor {
         id: HandleLike,
@@ -601,65 +577,57 @@ pub enum Edit {
         new: HandleLike,
     },
     ModifyDativeBondOrders {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyDativeBondField {
         id: HandleLike,
         change: Py<DativeBondFieldChange>,
     },
     AddAromaticSystem {
-        atoms: Vec<HandleLike>,
+        atoms: TupleItems<Vec<HandleLike>>,
         attributes: Readonly<AromaticSystemForm>,
     },
     RemoveAromaticSystems {
-        removes: Vec<ReadonlyAromaticSystemRemoval>,
+        removes: TupleItems<Vec<ReadonlyAromaticSystemRemoval>>,
     },
     ReplaceAromaticSystemAtoms {
         id: HandleLike,
-        old: Vec<HandleLike>,
-        new: Vec<HandleLike>,
+        old: TupleItems<Vec<HandleLike>>,
+        new: TupleItems<Vec<HandleLike>>,
     },
     ModifyAromaticSystemElectrons {
-        changes: TupleItems<(HandleLike, Py<ElectronCountsForm>, Py<ElectronCountsForm>)>,
+        changes: FieldChanges<ElectronCountsForm>,
     },
     ModifyAromaticSystemCharges {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyAromaticSystemUnpairedElectrons {
-        changes: TupleItems<(
-            HandleLike,
-            Py<UnpairedElectronsForm>,
-            Py<UnpairedElectronsForm>,
-        )>,
+        changes: FieldChanges<UnpairedElectronsForm>,
     },
     ModifyAromaticSystemField {
         id: HandleLike,
         change: Py<AromaticSystemFieldChange>,
     },
     AddMulticenterBond {
-        atoms: Vec<HandleLike>,
+        atoms: TupleItems<Vec<HandleLike>>,
         attributes: Readonly<MulticenterBondForm>,
     },
     RemoveMulticenterBonds {
-        removes: Vec<ReadonlyMulticenterBondRemoval>,
+        removes: TupleItems<Vec<ReadonlyMulticenterBondRemoval>>,
     },
     ReplaceMulticenterBondAtoms {
         id: HandleLike,
-        old: Vec<HandleLike>,
-        new: Vec<HandleLike>,
+        old: TupleItems<Vec<HandleLike>>,
+        new: TupleItems<Vec<HandleLike>>,
     },
     ModifyMulticenterBondElectrons {
-        changes: TupleItems<(HandleLike, Py<ElectronCountsForm>, Py<ElectronCountsForm>)>,
+        changes: FieldChanges<ElectronCountsForm>,
     },
     ModifyMulticenterBondCharges {
-        changes: TupleItems<(HandleLike, Py<NumForm>, Py<NumForm>)>,
+        changes: FieldChanges<NumForm>,
     },
     ModifyMulticenterBondUnpairedElectrons {
-        changes: TupleItems<(
-            HandleLike,
-            Py<UnpairedElectronsForm>,
-            Py<UnpairedElectronsForm>,
-        )>,
+        changes: FieldChanges<UnpairedElectronsForm>,
     },
     ModifyMulticenterBondField {
         id: HandleLike,
@@ -670,7 +638,7 @@ pub enum Edit {
         attributes: Readonly<NoncovalentBondForm>,
     },
     RemoveNoncovalentBonds {
-        removes: Vec<ReadonlyNoncovalentBondRemoval>,
+        removes: TupleItems<Vec<ReadonlyNoncovalentBondRemoval>>,
     },
     ReplaceNoncovalentBondAtoms {
         id: HandleLike,
@@ -678,11 +646,7 @@ pub enum Edit {
         new: (HandleLike, HandleLike),
     },
     ModifyNoncovalentBondKinds {
-        changes: TupleItems<(
-            HandleLike,
-            Py<NoncovalentBondKindForm>,
-            Py<NoncovalentBondKindForm>,
-        )>,
+        changes: FieldChanges<NoncovalentBondKindForm>,
     },
     ModifyNoncovalentBondField {
         id: HandleLike,
@@ -690,7 +654,7 @@ pub enum Edit {
     },
     AddStereoAtom {
         site: HandleLike,
-        ligands: Vec<StereoLigandInput>,
+        ligands: TupleItems<Vec<StereoLigandInput>>,
         attributes: Readonly<StereoAtomForm>,
     },
     RemoveStereoAtoms {
@@ -703,15 +667,11 @@ pub enum Edit {
     },
     ReplaceStereoAtomLigands {
         id: HandleLike,
-        old: Vec<StereoLigandInput>,
-        new: Vec<StereoLigandInput>,
+        old: TupleItems<Vec<StereoLigandInput>>,
+        new: TupleItems<Vec<StereoLigandInput>>,
     },
     ModifyStereoAtomConfigurations {
-        changes: TupleItems<(
-            HandleLike,
-            Py<StereoConfigurationForm>,
-            Py<StereoConfigurationForm>,
-        )>,
+        changes: FieldChanges<StereoConfigurationForm>,
     },
     ModifyStereoAtomField {
         id: HandleLike,
@@ -719,7 +679,7 @@ pub enum Edit {
     },
     AddStereoBond {
         site: HandleLike,
-        ligands: Vec<StereoLigandInput>,
+        ligands: TupleItems<Vec<StereoLigandInput>>,
         attributes: Readonly<StereoBondForm>,
     },
     RemoveStereoBonds {
@@ -732,15 +692,11 @@ pub enum Edit {
     },
     ReplaceStereoBondLigands {
         id: HandleLike,
-        old: Vec<StereoLigandInput>,
-        new: Vec<StereoLigandInput>,
+        old: TupleItems<Vec<StereoLigandInput>>,
+        new: TupleItems<Vec<StereoLigandInput>>,
     },
     ModifyStereoBondConfigurations {
-        changes: TupleItems<(
-            HandleLike,
-            Py<StereoConfigurationForm>,
-            Py<StereoConfigurationForm>,
-        )>,
+        changes: FieldChanges<StereoConfigurationForm>,
     },
     ModifyStereoBondField {
         id: HandleLike,
@@ -753,7 +709,7 @@ pub enum Edit {
     },
     ModifyBondConstraints {
         key: Py<BondConstraintKey>,
-        changes: TupleItems<BondConstraintChange>,
+        changes: TupleItems<Vec<BondConstraintChange>>,
     },
     ModifyBondConstraint {
         id: HandleLike,
@@ -762,7 +718,7 @@ pub enum Edit {
     },
     ModifyDativeBondConstraints {
         key: Py<DativeBondConstraintKey>,
-        changes: TupleItems<DativeBondConstraintChange>,
+        changes: TupleItems<Vec<DativeBondConstraintChange>>,
     },
     ModifyDativeBondConstraint {
         id: HandleLike,
@@ -771,7 +727,7 @@ pub enum Edit {
     },
     ModifyAromaticSystemConstraints {
         key: Py<AromaticSystemConstraintKey>,
-        changes: TupleItems<AromaticSystemConstraintChange>,
+        changes: TupleItems<Vec<AromaticSystemConstraintChange>>,
     },
     ModifyAromaticSystemConstraint {
         id: HandleLike,
@@ -780,7 +736,7 @@ pub enum Edit {
     },
     ModifyMulticenterBondConstraints {
         key: Py<MulticenterBondConstraintKey>,
-        changes: TupleItems<MulticenterBondConstraintChange>,
+        changes: TupleItems<Vec<MulticenterBondConstraintChange>>,
     },
     ModifyMulticenterBondConstraint {
         id: HandleLike,
@@ -789,7 +745,7 @@ pub enum Edit {
     },
     ModifyNoncovalentBondConstraints {
         key: Py<NoncovalentBondConstraintKey>,
-        changes: TupleItems<NoncovalentBondConstraintChange>,
+        changes: TupleItems<Vec<NoncovalentBondConstraintChange>>,
     },
     ModifyNoncovalentBondConstraint {
         id: HandleLike,
@@ -800,7 +756,7 @@ pub enum Edit {
     ModifyStereoAtomConstraints {
         kind: Option<StereoKind>,
         key: Py<StereoAtomConstraintKey>,
-        changes: TupleItems<StereoAtomConstraintChange>,
+        changes: TupleItems<Vec<StereoAtomConstraintChange>>,
     },
     ModifyStereoAtomConstraint {
         id: HandleLike,
@@ -812,7 +768,7 @@ pub enum Edit {
     ModifyStereoBondConstraints {
         kind: Option<StereoKind>,
         key: Py<StereoBondConstraintKey>,
-        changes: TupleItems<StereoBondConstraintChange>,
+        changes: TupleItems<Vec<StereoBondConstraintChange>>,
     },
     ModifyStereoBondConstraint {
         id: HandleLike,

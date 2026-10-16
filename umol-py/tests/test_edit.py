@@ -185,6 +185,8 @@ def test_edit_replace(variant, old, new):
     edit = variant(id=New(0), old=old, new=new)
     edits = Edits([edit])
 
+    old = tuple(old) if isinstance(old, list) else old
+    new = tuple(new) if isinstance(new, list) else new
     assert (edit.id, edit.old, edit.new) == (New(0), old, new)
     assert repr(edit) == (
         f"Edit.{variant.__name__}(id=New(0), old={old!r}, new={new!r})"
@@ -194,6 +196,23 @@ def test_edit_replace(variant, old, new):
     for field in ("id", "old", "new"):
         with pytest.raises(AttributeError):
             setattr(edit, field, None)
+    assert variant(id=edit.id, old=edit.old, new=edit.new) == edit
+
+
+def test_edit_remove_topology_collections():
+    atoms, bonds = [2, 0, 2], [1, 3]
+    edit = Edit.RemoveTopology(atoms=atoms, bonds=bonds)
+    atoms.clear()
+    bonds.clear()
+    assert type(edit.atoms) is tuple
+    assert type(edit.bonds) is tuple
+    assert edit.atoms == (2, 0, 2)
+    assert edit.bonds == (1, 3)
+    assert Edit.RemoveTopology(atoms=edit.atoms, bonds=edit.bonds) == edit
+    with pytest.raises(TypeError):
+        edit.atoms[0] = 1
+    with pytest.raises(TypeError):
+        edit.bonds[0] = 1
 
 
 @pytest.mark.parametrize("atoms", [(), (0,), (0, 1, 2)])
@@ -222,10 +241,10 @@ def test_edit_form_fields():
             atoms=(0, New(0)), attributes=noncovalent
         ),
         Edit.AddStereoAtom(
-            site=New(0), ligands=[], attributes=stereo_atom
+            site=New(0), ligands=[(1, StereoLigandKind.Atom)], attributes=stereo_atom
         ),
         Edit.AddStereoBond(
-            site=New(0), ligands=[], attributes=stereo_bond
+            site=New(0), ligands=[(1, StereoLigandKind.Atom)], attributes=stereo_bond
         ),
     ]
 
@@ -266,10 +285,23 @@ def test_edit_form_fields():
     with pytest.raises(TypeError):
         retained[0].charge = 1
     returned_atoms = edits[0].atoms
-    returned_atoms.clear()
-    assert edits[0].atoms == [retained[0]]
+    with pytest.raises(AttributeError):
+        returned_atoms.clear()
+    assert edits[0].atoms == (retained[0],)
     with pytest.raises(AttributeError):
         edits[0].atoms = []
+    for edit in edits:
+        fields = {field: getattr(edit, field) for field in edit.__match_args__}
+        assert type(edit)(**fields) == edit
+        for field in ("atoms", "bonds", "donors", "ligands"):
+            if hasattr(edit, field):
+                values = getattr(edit, field)
+                assert type(values) is tuple
+                with pytest.raises(TypeError):
+                    values[0] = None
+    assert type(edits[1].bonds[0]) is tuple
+    assert type(edits[6].ligands[0]) is tuple
+    assert type(edits[7].ligands[0]) is tuple
 
 
 def test_edit_removal_form_fields():
@@ -285,8 +317,8 @@ def test_edit_removal_form_fields():
         Edit.RemoveAromaticSystems(removes=[(0, [0, 1], aromatic)]),
         Edit.RemoveMulticenterBonds(removes=[(0, [0, 1], multicenter)]),
         Edit.RemoveNoncovalentBonds(removes=[(0, (0, 1), noncovalent)]),
-        Edit.RemoveStereoAtoms(removes=[(0, 0, [], stereo_atom)]),
-        Edit.RemoveStereoBonds(removes=[(0, 0, [], stereo_bond)]),
+        Edit.RemoveStereoAtoms(removes=[(0, 0, [(1, StereoLigandKind.Atom)], stereo_atom)]),
+        Edit.RemoveStereoBonds(removes=[(0, 0, [(1, StereoLigandKind.Atom)], stereo_bond)]),
     ]
 
     dative.order = 2
@@ -310,6 +342,19 @@ def test_edit_removal_form_fields():
         "Ct0"
     ).configuration
     assert [attributes.readonly for attributes in retained] == [True] * 6
+    for edit in edits:
+        assert type(edit.removes) is tuple
+        assert type(edit.removes[0]) is tuple
+        assert type(edit)(removes=edit.removes) == edit
+        with pytest.raises(TypeError):
+            edit.removes[0] = None
+        with pytest.raises(TypeError):
+            edit.removes[0][0] = None
+    for edit in edits[:4]:
+        assert type(edit.removes[0][1]) is tuple
+    for edit in edits[4:]:
+        assert type(edit.removes[0][2]) is tuple
+        assert type(edit.removes[0][2][0]) is tuple
 
 
 def test_edits():
@@ -506,7 +551,7 @@ def test_edits_consumption(receiver, method):
         len(alias)
     assert copied == Edits([edit])
     assert indexed == yielded == edit
-    assert indexed.atoms == yielded.atoms == [atom]
+    assert indexed.atoms == yielded.atoms == (atom,)
     assert repr(copied) == f"Edits([{edit!r}])"
     with pytest.raises(TypeError):
         hash(copied)
@@ -1169,8 +1214,9 @@ def test_edits_atom_batches(variant, method, field, old, new, count):
     expected_rows = tuple(rows)
     rows.clear()
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     with pytest.raises(AttributeError):
         edit.changes = ()
     edits = Edits()
@@ -1282,8 +1328,9 @@ def test_edits_bond_batches(variant, method, field, old, new, count):
     expected_rows = tuple(rows)
     rows.clear()
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     with pytest.raises(AttributeError):
         edit.changes = ()
     edits = Edits()
@@ -1394,8 +1441,9 @@ def test_edits_relation_field_batches(variant, method, field, form_type, text, o
     edit = variant(changes=rows)
     rows.clear()
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     with pytest.raises(AttributeError):
         edit.changes = ()
     edits = Edits()
@@ -1464,8 +1512,9 @@ def test_edits_relation_constraint_batches(variant, method, add_method, key, fir
     assert edits[1] == edit
     assert edit.key == key
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     assert list(Edits.parse(edits.render())) == list(edits)
     atoms = [AtomForm.parse("C")] * 6
     source = Molecule.from_entries(atoms, **{collection: [(*participants, form_type.parse(text))]})
@@ -1528,8 +1577,9 @@ def test_edits_stereo_atom_constraint_batches(constraint, kind, empty):
     assert edit.kind == kind
     assert edit.key == key
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     with pytest.raises(AttributeError):
         edit.changes = ()
     with pytest.raises(AttributeError):
@@ -1586,8 +1636,9 @@ def test_edits_stereo_bond_configurations(stereo_bond_ligands, count):
     rows.clear()
     assert edits[1] == edit
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     with pytest.raises(AttributeError):
         edit.changes = ()
     assert list(Edits.parse(edits.render())) == list(edits)
@@ -1629,8 +1680,9 @@ def test_edits_stereo_bond_constraint_batches(stereo_bond_ligands, constraint, k
     assert edit.kind == kind
     assert edit.key == key
     assert edit.changes == expected_rows
-    assert isinstance(edit.changes, tuple)
-    assert all(isinstance(row, tuple) for row in edit.changes)
+    assert type(edit.changes) is tuple
+    assert type(edit)(**{field: getattr(edit, field) for field in edit.__match_args__}) == edit
+    assert all(type(row) is tuple for row in edit.changes)
     with pytest.raises(AttributeError):
         edit.changes = ()
     with pytest.raises(AttributeError):

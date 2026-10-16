@@ -55,7 +55,8 @@ from umol import (
     ],
 )
 def test_noncovalent_bond_update(update, expected):
-    assert (update.kind, update.constraints) == expected
+    assert update.kind == expected[0]
+    assert list(update.constraints.values()) == list(expected[-1].values())
 
 
 @pytest.mark.parametrize(

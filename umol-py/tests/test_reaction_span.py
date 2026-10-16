@@ -151,16 +151,16 @@ def test_reaction_span_correspondence():
 
     correspondence = span.correspondence()
 
-    assert correspondence.atoms.matched_pairs == [(0, 0)]
+    assert correspondence.atoms.matched_pairs == ((0, 0),)
     assert correspondence.atoms.left_count == 2
     assert correspondence.atoms.right_count == 2
-    assert correspondence.atoms.left_unmatched == [1]
-    assert correspondence.atoms.right_unmatched == [1]
-    assert correspondence.bonds.matched_pairs == []
+    assert correspondence.atoms.left_unmatched == (1,)
+    assert correspondence.atoms.right_unmatched == (1,)
+    assert correspondence.bonds.matched_pairs == ()
     assert correspondence.bonds.left_count == 1
     assert correspondence.bonds.right_count == 1
-    assert correspondence.bonds.left_unmatched == [0]
-    assert correspondence.bonds.right_unmatched == [0]
+    assert correspondence.bonds.left_unmatched == (0,)
+    assert correspondence.bonds.right_unmatched == (0,)
 
 
 def test_reaction_span_to_reaction_roundtrip():
@@ -206,8 +206,8 @@ def test_reaction_span_tracked_canonicalize():
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
     assert remapping.to_correspondence().is_total()
-    assert remapping.atoms.images == [3, 2, 1, 0]
-    assert remapping.bonds.images == [0, 2, 1]
+    assert remapping.atoms.images == (3, 2, 1, 0)
+    assert remapping.bonds.images == (0, 2, 1)
 
 
 def test_reaction_span_canonicalize_error():

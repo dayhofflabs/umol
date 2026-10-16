@@ -34,7 +34,9 @@ use umol_graph_ir::ir::{
 };
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
-use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::convert::{
+    hash_rust, into_py_variant, named_variant_repr, variant_repr, FrozenSetItems, TupleItems,
+};
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
@@ -90,9 +92,9 @@ impl Permutation {
 /// swap/mirror/permutation applied to a sub-term.
 #[pyclass]
 pub enum StereoTerm {
-    Var(String, Option<BTreeSet<u32>>),
+    Var(String, Option<FrozenSetItems<BTreeSet<u32>>>),
     Lit(u32),
-    LitSet(BTreeSet<u32>),
+    LitSet(FrozenSetItems<BTreeSet<u32>>),
     Swap(Py<StereoTerm>),
     Mirror(Py<StereoTerm>),
     Apply(Py<StereoTerm>, Permutation),
@@ -126,10 +128,12 @@ impl StereoTerm {
         Ok(match ir_value {
             GraphIrStereoTerm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
-                StereoTerm::Var(name.clone(), restriction.clone())
+                StereoTerm::Var(name.clone(), restriction.clone().map(FrozenSetItems))
             }
             GraphIrStereoTerm::Lit(index) => StereoTerm::Lit(*index),
-            GraphIrStereoTerm::LitSet(members) => StereoTerm::LitSet(members.clone()),
+            GraphIrStereoTerm::LitSet(members) => {
+                StereoTerm::LitSet(FrozenSetItems(members.clone()))
+            }
             GraphIrStereoTerm::Swap(inner) => {
                 StereoTerm::Swap(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
@@ -145,11 +149,12 @@ impl StereoTerm {
 
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoTerm {
         match self {
-            StereoTerm::Var(name, restriction) => {
-                GraphIrStereoTerm::Var(Box::new((name.clone(), restriction.clone())))
-            }
+            StereoTerm::Var(name, restriction) => GraphIrStereoTerm::Var(Box::new((
+                name.clone(),
+                restriction.as_ref().map(|items| items.0.clone()),
+            ))),
             StereoTerm::Lit(index) => GraphIrStereoTerm::Lit(*index),
-            StereoTerm::LitSet(members) => GraphIrStereoTerm::LitSet(members.clone()),
+            StereoTerm::LitSet(members) => GraphIrStereoTerm::LitSet(members.0.clone()),
             StereoTerm::Swap(inner) => {
                 GraphIrStereoTerm::Swap(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
@@ -170,7 +175,7 @@ impl StereoTerm {
 pub enum StereoCoset {
     Undetermined(),
     Lit(u32),
-    LitSet(BTreeSet<u32>),
+    LitSet(FrozenSetItems<BTreeSet<u32>>),
     Term(Py<StereoTerm>),
 }
 
@@ -200,7 +205,7 @@ impl StereoCoset {
         Ok(match ir_value {
             GraphIrStereoCoset::Undetermined => Self::Undetermined(),
             GraphIrStereoCoset::Lit(index) => Self::Lit(*index),
-            GraphIrStereoCoset::LitSet(members) => Self::LitSet(members.clone()),
+            GraphIrStereoCoset::LitSet(members) => Self::LitSet(FrozenSetItems(members.clone())),
             GraphIrStereoCoset::Term(inner) => {
                 Self::Term(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
@@ -211,7 +216,7 @@ impl StereoCoset {
         match self {
             Self::Undetermined() => GraphIrStereoCoset::Undetermined,
             Self::Lit(index) => GraphIrStereoCoset::Lit(*index),
-            Self::LitSet(members) => GraphIrStereoCoset::LitSet(members.clone()),
+            Self::LitSet(members) => GraphIrStereoCoset::LitSet(members.0.clone()),
             Self::Term(inner) => {
                 GraphIrStereoCoset::Term(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
@@ -731,7 +736,11 @@ impl StereoConfigurationForm {
 pub enum StereoConfigurationUpdate {
     Unchanged(),
     Undetermined(),
-    Kinded(StereoKind, Option<Py<StereoCoset>>),
+    #[pyo3(constructor = (kind, coset))]
+    Kinded {
+        kind: StereoKind,
+        coset: Option<Py<StereoCoset>>,
+    },
 }
 
 #[pymethods]
@@ -745,16 +754,16 @@ impl StereoConfigurationUpdate {
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            Self::Unchanged() => ("Unchanged", 0),
-            Self::Undetermined() => ("Undetermined", 0),
-            Self::Kinded(_, _) => ("Kinded", 2),
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Unchanged() => ("Unchanged", &[]),
+            Self::Undetermined() => ("Undetermined", &[]),
+            Self::Kinded { .. } => ("Kinded", &["kind", "coset"]),
         };
-        variant_repr(
+        named_variant_repr(
             slf.bind(py).as_any(),
             "StereoConfigurationUpdate",
             variant,
-            arity,
+            fields,
         )
     }
 }
@@ -774,16 +783,17 @@ impl StereoAtomUpdate {
     fn new(
         py: Python<'_>,
         configuration: Option<PyRef<'_, StereoConfigurationUpdate>>,
-        constraints: Option<Py<StereoAtomConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrStereoAtomUpdate {
+        constraints: Option<StereoAtomConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrStereoAtomUpdate {
             configuration: configuration
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a stereo-atom-update DSL string into a `StereoAtomUpdate`.
@@ -815,9 +825,12 @@ impl StereoAtomUpdate {
         StereoConfigurationUpdate::from_rust(py, &self.0.configuration)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> StereoAtomConstraintsForm {
-        StereoAtomConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> StereoAtomConstraintsView {
+        StereoAtomConstraintsView {
+            storage: StereoAtomConstraintsStorage::Update(slf),
+        }
     }
 }
 
@@ -846,16 +859,17 @@ impl StereoBondUpdate {
     fn new(
         py: Python<'_>,
         configuration: Option<PyRef<'_, StereoConfigurationUpdate>>,
-        constraints: Option<Py<StereoBondConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrStereoBondUpdate {
+        constraints: Option<StereoBondConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrStereoBondUpdate {
             configuration: configuration
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a stereo-bond-update DSL string into a `StereoBondUpdate`.
@@ -887,9 +901,12 @@ impl StereoBondUpdate {
         StereoConfigurationUpdate::from_rust(py, &self.0.configuration)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> StereoBondConstraintsForm {
-        StereoBondConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> StereoBondConstraintsView {
+        StereoBondConstraintsView {
+            storage: StereoBondConstraintsStorage::Update(slf),
+        }
     }
 }
 
@@ -911,16 +928,16 @@ impl StereoConfigurationUpdate {
         Ok(match update {
             GraphIrStereoConfigurationUpdate::Unchanged => Self::Unchanged(),
             GraphIrStereoConfigurationUpdate::Undetermined => Self::Undetermined(),
-            GraphIrStereoConfigurationUpdate::Kinded { kind, coset } => Self::Kinded(
-                StereoKind::from_rust(*kind),
-                coset
+            GraphIrStereoConfigurationUpdate::Kinded { kind, coset } => Self::Kinded {
+                kind: StereoKind::from_rust(*kind),
+                coset: coset
                     .as_ref()
                     .map(|coset| {
                         StereoCoset::from_rust(py, coset)
                             .and_then(|coset| into_py_variant(py, coset))
                     })
                     .transpose()?,
-            ),
+            },
         })
     }
 
@@ -928,7 +945,7 @@ impl StereoConfigurationUpdate {
         match self {
             Self::Unchanged() => GraphIrStereoConfigurationUpdate::Unchanged,
             Self::Undetermined() => GraphIrStereoConfigurationUpdate::Undetermined,
-            Self::Kinded(kind, coset) => GraphIrStereoConfigurationUpdate::Kinded {
+            Self::Kinded { kind, coset } => GraphIrStereoConfigurationUpdate::Kinded {
                 kind: kind.to_rust(),
                 coset: coset
                     .as_ref()
@@ -1408,16 +1425,17 @@ macro_rules! stereo_view {
 
             /// The ligands in frame order (read-only topology).
             #[getter]
-            fn ligands(&self, py: Python<'_>) -> PyResult<Vec<StereoLigand>> {
+            fn ligands(&self, py: Python<'_>) -> PyResult<TupleItems<Vec<StereoLigand>>> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                Ok(self
-                    .view(molecule.to_rust())?
-                    .ligand_ids()
-                    .iter()
-                    .copied()
-                    .map(StereoLigand::from_rust)
-                    .collect())
+                Ok(TupleItems(
+                    self.view(molecule.to_rust())?
+                        .ligand_ids()
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
+                ))
             }
 
             /// The coordination-geometry kind (from the configuration).
@@ -2143,7 +2161,7 @@ mod tests {
     )]
     #[case::undetermined(TopicityRelationForm::Undetermined(), None)]
     #[case::set(
-        TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])),
+        TopicityRelationForm::LitSet(FrozenSetItems(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic]))),
         None
     )]
     fn test_topicity_relation_form_as_lit(
@@ -2175,7 +2193,7 @@ mod tests {
     )]
     #[case::undetermined(StereogenicityForm::Undetermined(), None)]
     #[case::set(
-        StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric])),
+        StereogenicityForm::LitSet(FrozenSetItems(BTreeSet::from([Stereogenicity::Symmetric]))),
         None
     )]
     fn test_stereogenicity_form_as_lit(

@@ -20,7 +20,7 @@ use crate::constraint::dative::{
 use crate::constraint::dative::{
     DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsUpdate,
 };
-use crate::convert::hash_rust;
+use crate::convert::{hash_rust, TupleItems};
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
@@ -39,14 +39,15 @@ impl DativeBondUpdate {
     fn new(
         py: Python<'_>,
         order: Option<NumLike>,
-        constraints: Option<Py<DativeBondConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrDativeBondUpdate {
+        constraints: Option<DativeBondConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrDativeBondUpdate {
             order: order.map(|value| value.to_rust(py)),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse a dative-bond-update DSL string into a `DativeBondUpdate`.
@@ -82,9 +83,12 @@ impl DativeBondUpdate {
             .transpose()
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> DativeBondConstraintsForm {
-        DativeBondConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> DativeBondConstraintsView {
+        DativeBondConstraintsView {
+            storage: DativeBondConstraintsStorage::Update(slf),
+        }
     }
 }
 
@@ -295,14 +299,15 @@ impl DativeBondView {
 
     /// The donor atom indices (read-only).
     #[getter]
-    fn donors(&self, py: Python<'_>) -> PyResult<Vec<u32>> {
+    fn donors(&self, py: Python<'_>) -> PyResult<TupleItems<Vec<u32>>> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(DativeBondView))?;
-        Ok(self
-            .dative_bond(molecule.to_rust())?
-            .donor_ids()
-            .map(|donor| donor.0)
-            .collect())
+        Ok(TupleItems(
+            self.dative_bond(molecule.to_rust())?
+                .donor_ids()
+                .map(|donor| donor.0)
+                .collect(),
+        ))
     }
 
     /// All atom indices incident to this dative bond — the donors followed by the
@@ -667,7 +672,7 @@ mod tests {
                 id: GraphIrDativeBondId(0),
             };
             assert_eq!(view.acceptor(py).unwrap(), 0);
-            assert_eq!(view.donors(py).unwrap(), vec![1]);
+            assert_eq!(view.donors(py).unwrap().0, vec![1]);
             // atom_ids is donors-then-acceptor
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
             assert_eq!(atom_ids, vec![1, 0]);
@@ -743,7 +748,7 @@ mod tests {
             // value replaced, participants preserved
             assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(2));
             assert_eq!(view.acceptor(py).unwrap(), 0);
-            assert_eq!(view.donors(py).unwrap(), vec![1]);
+            assert_eq!(view.donors(py).unwrap().0, vec![1]);
         });
     }
 

@@ -20,7 +20,7 @@ use crate::constraint::atom::{
     atom_constraints_asdict, AtomConstraintsForm, AtomConstraintsLike, AtomConstraintsStorage,
     AtomConstraintsView,
 };
-use crate::convert::{hash_rust, variant_repr};
+use crate::convert::{hash_rust, variant_repr, FrozenSetItems};
 use crate::element::Element;
 use crate::entity::EntityForm;
 use crate::error::parse_error;
@@ -35,9 +35,9 @@ use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub enum ElementForm {
     Undetermined(),
     Lit(Element),
-    LitSet(BTreeSet<Element>),
-    NotSet(BTreeSet<Element>),
-    Var(String, Option<(MemOp, BTreeSet<Element>)>),
+    LitSet(FrozenSetItems<BTreeSet<Element>>),
+    NotSet(FrozenSetItems<BTreeSet<Element>>),
+    Var(String, Option<(MemOp, FrozenSetItems<BTreeSet<Element>>)>),
 }
 
 #[pymethods]
@@ -176,8 +176,8 @@ pub enum IsotopeMassForm {
     Undetermined(),
     Natural(),
     Lit(u32),
-    LitSet(BTreeSet<u32>),
-    Var(String, Option<BTreeSet<u32>>),
+    LitSet(FrozenSetItems<BTreeSet<u32>>),
+    Var(String, Option<FrozenSetItems<BTreeSet<u32>>>),
 }
 
 #[pymethods]
@@ -213,10 +213,12 @@ impl IsotopeMassForm {
             GraphIrIsotopeMassForm::Undetermined => IsotopeMassForm::Undetermined(),
             GraphIrIsotopeMassForm::Natural => IsotopeMassForm::Natural(),
             GraphIrIsotopeMassForm::Lit(mass) => IsotopeMassForm::Lit(*mass),
-            GraphIrIsotopeMassForm::LitSet(masses) => IsotopeMassForm::LitSet((**masses).clone()),
+            GraphIrIsotopeMassForm::LitSet(masses) => {
+                IsotopeMassForm::LitSet(FrozenSetItems((**masses).clone()))
+            }
             GraphIrIsotopeMassForm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
-                IsotopeMassForm::Var(name.clone(), restriction.clone())
+                IsotopeMassForm::Var(name.clone(), restriction.clone().map(FrozenSetItems))
             }
         }
     }
@@ -227,11 +229,12 @@ impl IsotopeMassForm {
             IsotopeMassForm::Natural() => GraphIrIsotopeMassForm::Natural,
             IsotopeMassForm::Lit(mass) => GraphIrIsotopeMassForm::Lit(*mass),
             IsotopeMassForm::LitSet(masses) => {
-                GraphIrIsotopeMassForm::LitSet(Box::new(masses.clone()))
+                GraphIrIsotopeMassForm::LitSet(Box::new(masses.0.clone()))
             }
-            IsotopeMassForm::Var(name, restriction) => {
-                GraphIrIsotopeMassForm::Var(Box::new((name.clone(), restriction.clone())))
-            }
+            IsotopeMassForm::Var(name, restriction) => GraphIrIsotopeMassForm::Var(Box::new((
+                name.clone(),
+                restriction.as_ref().map(|items| items.0.clone()),
+            ))),
         }
     }
 }
@@ -266,9 +269,9 @@ impl AtomUpdate {
         implicit_hydrogens: Option<NumLike>,
         lone_pairs: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<AtomConstraintsForm>>,
-    ) -> Self {
-        Self::from_rust(&GraphIrAtomUpdate {
+        constraints: Option<AtomConstraintsLike>,
+    ) -> PyResult<Self> {
+        Ok(Self::from_rust(&GraphIrAtomUpdate {
             element: element.map(|value| value.to_rust(py)),
             isotope_mass: isotope_mass.map(|value| value.to_rust(py)),
             charge: charge.map(|value| value.to_rust(py)),
@@ -278,9 +281,10 @@ impl AtomUpdate {
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().to_rust().clone())
+                .map(|value| value.to_rust(py))
+                .transpose()?
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     /// Parse an atom-update DSL string into an `AtomUpdate`.
@@ -349,9 +353,13 @@ impl AtomUpdate {
         UnpairedElectronsUpdate::from_rust(py, &self.0.unpaired_electrons)
     }
 
+    /// Read-only constraints borrowed from this update.
     #[getter]
-    fn constraints(&self) -> AtomConstraintsForm {
-        AtomConstraintsForm::from_rust(self.0.constraints.clone())
+    fn constraints(slf: Py<Self>) -> AtomConstraintsView {
+        AtomConstraintsView {
+            storage: AtomConstraintsStorage::Update(slf),
+            rings: None,
+        }
     }
 }
 

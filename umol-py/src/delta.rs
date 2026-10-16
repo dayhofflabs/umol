@@ -44,7 +44,7 @@ use crate::constraint::molecule::Constraint;
 use crate::constraint::multicenter::MulticenterBondConstraintForm;
 use crate::constraint::noncovalent::NoncovalentBondConstraintForm;
 use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
-use crate::convert::{into_py_variant, variant_repr};
+use crate::convert::{into_py_variant, variant_repr, TupleItems};
 use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
 use crate::entity::Readonly;
@@ -738,13 +738,13 @@ impl BondDelta {
 pub enum DativeBondDelta {
     Add {
         id: u32,
-        donors: Vec<u32>,
+        donors: TupleItems<Vec<u32>>,
         acceptor: u32,
         attributes: Readonly<DativeBondForm>,
     },
     Remove {
         id: u32,
-        donors: Vec<u32>,
+        donors: TupleItems<Vec<u32>>,
         acceptor: u32,
         attributes: Readonly<DativeBondForm>,
     },
@@ -912,12 +912,12 @@ impl DativeBondDelta {
 pub enum AromaticSystemDelta {
     Add {
         id: u32,
-        atoms: Vec<u32>,
+        atoms: TupleItems<Vec<u32>>,
         attributes: Readonly<AromaticSystemForm>,
     },
     Remove {
         id: u32,
-        atoms: Vec<u32>,
+        atoms: TupleItems<Vec<u32>>,
         attributes: Readonly<AromaticSystemForm>,
     },
     ModifyField {
@@ -1079,12 +1079,12 @@ impl AromaticSystemDelta {
 pub enum MulticenterBondDelta {
     Add {
         id: u32,
-        atoms: Vec<u32>,
+        atoms: TupleItems<Vec<u32>>,
         attributes: Readonly<MulticenterBondForm>,
     },
     Remove {
         id: u32,
-        atoms: Vec<u32>,
+        atoms: TupleItems<Vec<u32>>,
         attributes: Readonly<MulticenterBondForm>,
     },
     ModifyField {
@@ -1420,13 +1420,13 @@ pub enum StereoAtomDelta {
     Add {
         id: u32,
         site: u32,
-        ligands: Vec<StereoLigand>,
+        ligands: TupleItems<Vec<StereoLigand>>,
         attributes: Readonly<StereoAtomForm>,
     },
     Remove {
         id: u32,
         site: u32,
-        ligands: Vec<StereoLigand>,
+        ligands: TupleItems<Vec<StereoLigand>>,
         attributes: Readonly<StereoAtomForm>,
     },
     ModifyField {
@@ -1607,13 +1607,13 @@ pub enum StereoBondDelta {
     Add {
         id: u32,
         site: u32,
-        ligands: Vec<StereoLigand>,
+        ligands: TupleItems<Vec<StereoLigand>>,
         attributes: Readonly<StereoBondForm>,
     },
     Remove {
         id: u32,
         site: u32,
-        ligands: Vec<StereoLigand>,
+        ligands: TupleItems<Vec<StereoLigand>>,
         attributes: Readonly<StereoBondForm>,
     },
     ModifyField {
@@ -3445,7 +3445,7 @@ mod tests {
             acceptor: GraphIrAtomId(3),
             attributes: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
-        "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, attributes=DativeBondForm.parse('1'))",
+        "DativeBondDelta.Add(id=1, donors=(4, 2, 4), acceptor=3, attributes=DativeBondForm.parse('1'))",
     )]
     #[case::remove(
         GraphIrDativeBondDelta::Remove {
@@ -3454,7 +3454,7 @@ mod tests {
             acceptor: GraphIrAtomId(3),
             attributes: GraphIrDativeBondForm::new(GraphIrNumForm::Lit(1)),
         },
-        "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, attributes=DativeBondForm.parse('1'))",
+        "DativeBondDelta.Remove(id=1, donors=(4, 2, 4), acceptor=3, attributes=DativeBondForm.parse('1'))",
     )]
     #[case::modify_field(
         GraphIrDativeBondDelta::ModifyField {
@@ -3650,7 +3650,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             attributes: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
-        "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], attributes=AromaticSystemForm.parse('[1,1,1]'))",
+        "AromaticSystemDelta.Add(id=2, atoms=(4, 2, 4), attributes=AromaticSystemForm.parse('[1,1,1]'))",
     )]
     #[case::remove(
         GraphIrAromaticSystemDelta::Remove {
@@ -3658,7 +3658,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             attributes: GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1]),
         },
-        "AromaticSystemDelta.Remove(id=2, atoms=[4, 2, 4], attributes=AromaticSystemForm.parse('[1,1,1]'))",
+        "AromaticSystemDelta.Remove(id=2, atoms=(4, 2, 4), attributes=AromaticSystemForm.parse('[1,1,1]'))",
     )]
     #[case::modify_field(
         GraphIrAromaticSystemDelta::ModifyField {
@@ -3855,7 +3855,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             attributes: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
-        "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], attributes=MulticenterBondForm.parse('[1,1,1]'))",
+        "MulticenterBondDelta.Add(id=3, atoms=(4, 2, 4), attributes=MulticenterBondForm.parse('[1,1,1]'))",
     )]
     #[case::remove(
         GraphIrMulticenterBondDelta::Remove {
@@ -3863,7 +3863,7 @@ mod tests {
             atoms: vec![GraphIrAtomId(4), GraphIrAtomId(2), GraphIrAtomId(4)],
             attributes: GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1]),
         },
-        "MulticenterBondDelta.Remove(id=3, atoms=[4, 2, 4], attributes=MulticenterBondForm.parse('[1,1,1]'))",
+        "MulticenterBondDelta.Remove(id=3, atoms=(4, 2, 4), attributes=MulticenterBondForm.parse('[1,1,1]'))",
     )]
     #[case::modify_field(
         GraphIrMulticenterBondDelta::ModifyField {
@@ -4353,7 +4353,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], attributes=StereoAtomForm.parse('Th0'))",
+        "StereoAtomDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)), attributes=StereoAtomForm.parse('Th0'))",
     )]
     #[case::remove(
         GraphIrStereoAtomDelta::Remove {
@@ -4368,7 +4368,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], attributes=StereoAtomForm.parse('Th0'))",
+        "StereoAtomDelta.Remove(id=5, site=3, ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)), attributes=StereoAtomForm.parse('Th0'))",
     )]
     #[case::modify_field(
         GraphIrStereoAtomDelta::ModifyField {
@@ -4677,7 +4677,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], attributes=StereoBondForm.parse('Ct0'))",
+        "StereoBondDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)), attributes=StereoBondForm.parse('Ct0'))",
     )]
     #[case::remove(
         GraphIrStereoBondDelta::Remove {
@@ -4692,7 +4692,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         },
-        "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], attributes=StereoBondForm.parse('Ct0'))",
+        "StereoBondDelta.Remove(id=5, site=3, ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)), attributes=StereoBondForm.parse('Ct0'))",
     )]
     #[case::modify_field(
         GraphIrStereoBondDelta::ModifyField {
@@ -5063,7 +5063,7 @@ mod tests {
                 GraphIrStereoCoset::Lit(0),
             ),
         }),
-        "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], attributes=StereoAtomForm.parse('Th0')))"
+        "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=(StereoLigand(atom_id=4, kind=StereoLigandKind.Atom),), attributes=StereoAtomForm.parse('Th0')))"
     )]
     #[case::constraint(
         GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
