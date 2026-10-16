@@ -259,7 +259,7 @@ impl Coset {
     ///
     /// # Panics
     ///
-    /// Panics if `index >= count`.
+    /// Panics if `key`'s degree lies outside [`ClassKey::degree_domain`] or if `index >= count`.
     pub fn new(key: ClassKey, index: u32) -> Self {
         let space = key.space();
         assert!(

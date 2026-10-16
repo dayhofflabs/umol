@@ -594,3 +594,46 @@ closed by one table row; not a settled-scope violation.
   semantics, so the wrong qualifier is deleted rather than replaced.
 - Item 5 moved to doc 153 as task T9. With that, every finding and open item
   of both cycles is closed or moved, and this document is complete.
+
+## Addendum (2026-10-02) — indexed coset-space registry
+
+`ClassKey::space` no longer interns spaces in a mutex-guarded map. Each
+in-domain key owns a `OnceLock` entry in a fixed array, so looking up a built
+space takes no lock. Two statements in the F5 triage entry change with it.
+
+- "`build` deliberately gains no entry assertion: the callee asserts already
+  enforce the domain." The premise was false for directly constructed keys.
+  Probed against v0.9.0 at degrees 0 and 7–21, out-of-domain keys behaved
+  four ways: `Symmetric(0)` and `Alternating(0)` returned a degenerate space
+  (one coset, degree 0); `Cyclic(0)`, `Dihedral(0)`, and degrees 7–12
+  panicked in a callee; degrees 13–19 requested allocations of 174 GB and
+  more, which abort the process when they fail; degrees 20 and 21 panicked
+  with a capacity overflow. The enumeration test builds only in-domain keys,
+  so its buildability leg did not observe this. `build` still gains no entry
+  assertion. Mapping a key to its index asserts `ClassKey::degree_domain`
+  first: a class-2 check, since array indexing is the first operation to
+  require the domain, and an out-of-domain degree would otherwise index
+  another key's entry. Every out-of-domain key now panics in `space` with one
+  message.
+- "Direct construction retains its panic, now documented in `# Panics` on
+  `space` together with the registry-poisoning consequence." The poisoning
+  consequence no longer exists: a panicking build leaves only its own entry
+  uninitialized, and the next call for that key builds again. The `# Panics`
+  entry no longer states it.
+
+The rest of the F5 record is accurate.
+
+## Addendum (2026-10-16) — boxed coset spaces
+
+The indexed registry stores OnceLock<Box<CosetSpace>> entries. Each space is
+allocated and constructed only on its first use. On macOS ARM64 with Rust
+1.99.1, this reduces the fixed array from 5,280 to 480 bytes, with a 168-byte
+header allocated per initialized class, before allocator overhead and the
+unchanged internal buffers.
+
+Six interleaved rounds of warm tetrahedral/cis-trans lookups found no measurable
+cost from boxing: both indexed representations took 2.19 ns per lookup with one
+thread and sustained 1.74 billion lookups per second across four threads. The
+original mutex registry took 19.87 ns per lookup with one thread and sustained
+16.3 million lookups per second across four threads. These measurements cover
+registry lookups, not complete molecule operations.
