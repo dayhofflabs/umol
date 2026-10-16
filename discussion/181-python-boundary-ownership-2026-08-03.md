@@ -1,6 +1,6 @@
 # 181 — Python boundary ownership and copy costs
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-03
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
@@ -10,6 +10,12 @@ Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
 [Python API guide](../docs/development/python-api.md),
 [data-type guide](../docs/development/data-types.md)
+
+**Completed — 2026-10-15.** The agreed implementation and final integration checks
+are complete; see the [S12b outcome](#s12b--final-integration-and-closeout-done).
+Dated inventories and studies below retain the behavior of their reviewed
+revisions. Remaining Python parity work belongs to [231](231-python-api-parity-2026-09-21.md),
+starting with Reaction ownership.
 
 ## Molecule lifecycle
 
@@ -5690,11 +5696,11 @@ tests (2 ignored), 2,847 Python tests (2 skipped), strict umol-py Clippy across 
 targets, formatting of touched Rust files, and diff checks. Coverage includes
 named-property access without match, Rust roundtrips, exact immutable container
 types, input independence, reconstruction from getters, retained-owner lifetime,
-and mutation rejection. S12a measurements and the S12b workspace gate remain.
+and mutation rejection. The S12b workspace gate remains.
 
 ### S12 — Whole-operation comparison and final verification
 
-#### S12a — Equivalent-contract operation measurements
+#### S12a — Equivalent-contract operation measurements (done)
 
 **Modules:** existing graph-IR/graph benchmarks, isolated Python measurements,
 this record. **Verification, green.** [dep: S0–S7, S10–S11]
@@ -5729,7 +5735,117 @@ absolute and relative costs and measurement limits. Do not infer an automatic
 recovery policy or leaf-form/Reaction binding redesign; those binding changes
 remain assigned to 231.
 
-#### S12b — Final integration and closeout
+**Outcome — 2026-10-15.** Retain the completed implementation. The comparison
+identified no additional change to make before the integration gate. This does
+not erase the accepted S4a costs or establish a universal improvement: the
+remaining reaction timing difference and recovery-strategy differences are
+recorded below. No production code changed during this measurement step.
+
+The fixed selection reused S4a's composite fixtures, S0a's six-atom/six-bond
+reaction with a rotated aromatic participant frame, and existing Python fixtures.
+Graph-IR and graph-core production sources are unchanged since S4a (0b4407563);
+the subsequent graph changes are composite resolve/project and caller migration.
+S4a therefore remains the transformer and prepared structural-transaction
+comparison, including its singleton, rejection, Kekulizer, and cancellation
+regressions. S5–S7's bounded allocation findings also remain applicable; their
+full matrices were not repeated.
+
+Before/after comparisons freshly built S0a (7fa2bd203) and completed S11c
+(b1f8d5ccb), with the same release profile and harness, Rust 1.96.0,
+Python 3.13.16, and Darwin arm64. All 405 retained baseline dependency files
+matched the original commit. Three sequential processes per revision alternated
+execution order, with no concurrent builds. Timings below are microseconds,
+reported as the median of three process medians; parentheses give their range,
+not a confidence interval. The small fixture selection and single environment
+do not establish general workload or platform bounds.
+
+**Composite recovery.** One active component has 11 atoms; the sparse fixture
+adds 256 already-resolved carbon atoms. Dense fixtures use 16 components.
+The current Clone and Journal methods and explicit clone/consume/install have
+the same recovery obligation. Consume is only the no-recovery reference.
+Complete successful molecules agreed, and underdetermination, contradiction,
+and projection-error cases preserved the original receiver on all recovery
+routes. Those failure cases were verification-only.
+
+| Operation / input ownership | Consume | Clone/consume/install | Native Clone | Native Journal |
+| --- | --- | --- | --- | --- |
+| Resolve, 1 + 256, unique | 104.656 (104.582–110.840) | 117.419 (116.628–122.326) | 118.199 (118.115–126.050) | 107.590 (107.208–114.760) |
+| Resolve, 16, unique | 451.745 (449.027–478.526) | 462.433 (460.057–490.391) | 469.081 (462.498–493.263) | 464.651 (459.959–491.575) |
+| Resolve, 16, shared | 461.296 (455.437–481.564) | 459.277 (454.894–475.003) | 462.077 (458.388–478.207) | 470.849 (469.341–494.446) |
+| Project, 1 + 256, unique | 15.092 (14.769–16.127) | 26.852 (26.846–28.347) | 26.947 (26.800–28.292) | 16.861 (16.559–18.567) |
+| Project, 16, unique | 68.843 (67.384–70.115) | 78.641 (77.191–81.289) | 78.367 (77.548–80.868) | 72.591 (71.409–75.217) |
+| Project, 16, shared | 73.318 (72.779–75.569) | 73.233 (72.481–75.251) | 73.423 (72.441–75.863) | 78.176 (76.697–80.423) |
+
+Each process used 20 sample means of 32 operations, rotating route order.
+Preparation and final product destruction were outside timing; recovery copying,
+publication, and replaced-source destruction were inside. Native Clone differs
+from clone/consume/install by −0.3% to +1.4%, with overlapping ranges throughout.
+Journal saves 10.086 µs (37.4%) against Native Clone for sparse unique projection,
+but costs 4.754 µs (6.5%) more for dense shared projection. These separated-range
+differences support retaining explicit recovery selection; they do not select
+an automatic policy. Historical timings were not used to attribute costs to S10.
+
+**Actual Python calls.** The old consuming apply/resolve calls explicitly copied
+the source first; current calls preserved it directly. Both retained the source
+and returned an independent complete product. The harness called the production
+Python methods through PyO3, with complete Rust result, correspondence, and
+source-preservation checks before timing. Rendered products also agreed across
+revisions. Five warmups preceded 15 sample means of 32 calls (1,024 for inverse).
+Input/Edits construction was outside timing; required copying, Python dispatch,
+conversion, and result destruction were inside.
+
+| Python operation | S0a, µs | Current, µs | Difference |
+| --- | --- | --- | --- |
+| Eight charges on 96 atoms, apply | 2.889 (2.876–2.956) | 2.688 (2.630–2.711) | −0.202 µs, −7.0% |
+| Eight charges, tracked_apply | 3.146 (3.137–3.152) | 2.880 (2.865–2.961) | −0.266 µs, −8.4% |
+| Eight removals on 96 atoms, apply | 64.230 (63.805–64.675) | 62.737 (61.341–63.608) | −1.493 µs, −2.3% |
+| Eight removals, tracked_apply | 65.986 (65.297–66.888) | 64.162 (63.135–65.559) | −1.824 µs, −2.8% |
+| Atom Add inverse, 256-byte variable | 0.360 (0.355–0.366) | 0.312 (0.308–0.321) | −0.047 µs, −13.2% |
+| Resolve 80 atoms, omitted model | 84.280 (83.854–86.125) | 74.973 (74.867–75.094) | −9.307 µs, −11.0% |
+| Resolve 80 atoms, supplied default model | 329.675 (324.268–337.762) | 75.013 (74.616–76.368) | −254.661 µs, −77.2% |
+
+The resolution input had only lone-pair counts undetermined. The large supplied
+model difference is consistent with S5's removal of repeated model conversion;
+this combined comparison does not isolate each contributing change. Tracked
+removal ranges overlap; the other selected Python ranges are separated. No
+additional Python timing or allocation matrix was needed for the retain decision.
+
+**Reaction follow-up.** The first comparison used 20 sample means of 256 calls,
+rotating four routes and including product destruction. Its supplied-match
+increases prompted one bounded follow-up with 4,096 calls per sample and a
+separate allocation build. Independent expected products, tracked
+correspondences, and retained sources agreed before timing.
+
+| Reaction route | Initial S0a → current, µs | Initial difference | Longer S0a, µs | Longer current, µs | Longer difference |
+| --- | --- | --- | --- | --- | --- |
+| Supplied, plain | 3.300 (3.266–3.312) → 3.385 (3.295–3.473) | +0.085 µs, +2.6% | 3.259 (3.245–3.264) | 3.262 (3.256–3.295) | +0.004 µs, +0.1% |
+| Supplied, tracked | 3.276 (3.261–3.277) → 3.345 (3.284–3.422) | +0.069 µs, +2.1% | 3.232 (3.223–3.257) | 3.251 (3.244–3.281) | +0.019 µs, +0.6% |
+| Enumerated, plain | 4.387 (4.342–4.401) → 4.415 (4.332–4.577) | +0.028 µs, +0.6% | 4.296 (4.293–4.298) | 4.338 (4.304–4.402) | +0.042 µs, +1.0% |
+| Enumerated, tracked | 4.377 (4.339–4.392) → 4.424 (4.331–4.531) | +0.047 µs, +1.1% | 4.320 (4.307–4.337) | 4.309 (4.280–4.398) | −0.011 µs, −0.3% |
+
+The longer pair did not reproduce the supplied-match 2–3% increase. Plain
+enumerated application still costs 42 ns more (about 1%), with separated longer
+trial ranges; retain this measured cost rather than claiming exact parity.
+No additional semantic work or allocation count explains it. The paired builds
+change the whole completed implementation, so these timings alone cannot assign
+that difference to an individual change.
+
+Allocation/reallocation counts stayed at 61 for both supplied routes and 85 for
+both enumerated routes. Requested bytes fell by 1,216 on every route:
+7,898 → 6,682 supplied; 10,410 → 9,194 enumerated plain; and 11,690 → 10,474
+enumerated tracked. Peak extra live requested bytes fell 3,232 → 2,160 supplied,
+4,712 → 3,640 enumerated plain, and 4,712 → 4,296 enumerated tracked. Allocation
+measurement excluded final product destruction, matching S0a; timing included
+it. The counting allocator was absent from every timing executable. These
+reductions establish less requested storage, not a reason to disregard timing.
+
+The retain decision includes that approximately 1% residual cost and the
+previously accepted S4a costs. No new regression investigation or optimization
+is scheduled. Sources, pinned revisions, source/executable hashes, complete
+result hashes, build/run commands, raw trials, and summaries are retained in
+scratch/181-s12a/. S12b remains the final integration gate.
+
+#### S12b — Final integration and closeout (done)
 
 **Modules:** workspace, Python package, guides, discussion/status records,
 whitepaper/main.tex (read-only review), whitepaper/listings/, and whitepaper/tests/.
@@ -5751,6 +5867,72 @@ independent listings.
 Preserve measurements and remaining review items in durable documents before
 removing scratch artifacts. Close 181 only when its agreed work is complete;
 then start the Reaction ownership work already scheduled in 231.
+
+**Outcome — 2026-10-15.** The implementation is retained and 181 is complete.
+The final audit checked public constructors, conversions, visibility, failure
+boundaries, production callers, and lifecycle documentation at b1f8d5ccb. It
+covered the Edit/Undo payloads and batches; kindless stereo normalization,
+updates, and serialization; ordinary and tracked transactions with both recovery
+methods; composite resolution/projection and format callers; and the completed
+Python ownership, copying, conversion, and getter changes. Existing unit,
+property, conformance, and Python tests exercise these contracts through their
+public operations. No additional production change was needed at this gate.
+
+The Python review and independent challenge checked the scoped binding changes
+against their owning Rust APIs. They confirmed one pre-existing standalone
+ConstraintDelta lifetime defect: retaining a molecule-backed Constraint can make
+the delta invalid after source mutation, unlike the owned Rust value. Its
+implementation and existing invalidation test predate S0a. The exact evidence,
+scope, and required correction are recorded in
+[231](231-python-api-parity-2026-09-21.md#constraintdelta-constraint-lifetime--2026-10-15).
+This does not broaden 181 or change the next priority of Reaction ownership.
+
+**Final verification.** All PyO3 builds and Python tests used the repository's
+Python 3.13.16 environment. The native extension was rebuilt before the Python
+and manuscript checks.
+
+| Gate | Result |
+| --- | --- |
+| cargo +nightly-2026-06-04 fmt --all, followed by --check | Passed; no Rust formatting changes. |
+| cargo test --locked --workspace --all-features --no-fail-fast | 38,935 passed, 10 ignored, 0 failed, including doctests and the feature-gated property/conformance suites. |
+| cargo clippy --locked --workspace --all-targets --all-features -- -D warnings | Passed. |
+| RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --all-features --no-deps | Passed. |
+| maturin develop --offline --locked --manifest-path umol-py/Cargo.toml | Passed with a temporary writable UV_CACHE_DIR; the default cache was outside the session's writable roots. |
+| pytest -q umol-py/tests | 2,847 passed, 2 existing skips for molecule-scope constraint matching assigned to 195. |
+| Manuscript extracted listings | All 8 Rust listing tests passed; all 26 Python/data tests passed after the harness correction below. |
+| cargo +1.87.0 check --locked --workspace --all-targets --all-features | Passed. |
+| Final diff and whitespace review | Passed; library changes at this gate are discussion records only. |
+
+**Manuscript check.** Ran tests/run.py against the final library at manuscript
+revision 85b338ab9559c82b4720ecd32be03824b738b323. One Python harness assertion
+still expected a list from Correspondence.matched_pairs. S11c deliberately
+changed that getter to tuple. Changed only that expectation in
+whitepaper/tests/test_python.py and reran all 26 Python/data tests successfully.
+The asserted pairs and order are unchanged. No printed listing or manuscript
+prose was edited.
+
+The read-only prose audit found two passages for the author to reconcile:
+
+- whitepaper/main.tex:1122–1127 describes removal/modification edits as carrying
+  pre-edit values and batch application as unconditionally recording undo and
+  rolling back earlier edits. Current Undo values provide journal recovery;
+  Clone recovery discards the working copy. MoleculeEditor.apply retains an
+  applied prefix on error, consuming Molecule.apply drops a failed editor, and
+  Python Molecule.apply preserves the source by applying to a copy.
+- whitepaper/main.tex:1165–1166 describes reaction edits as applied in one
+  transaction. Current reaction application calls host.clone().apply(edits),
+  preserving the host through copying and using the journal-free editor path.
+
+Reporting these discrepancies completes the agreed manuscript review; prose
+revision remains with the author. The manuscript repository's only change is
+the test-harness expectation above.
+
+S12a and the earlier outcomes retain the measured trade-offs, including accepted
+S4a costs and the residual approximately 1% reaction timing difference. No new
+benchmarks ran in S12b. Raw measurements remain in their existing scratch
+directories; final verification logs and the harness correction are retained
+in scratch/181-s12b/. No scratch artifacts were removed. The status index is
+synchronized, and Reaction ownership in 231 is the next work item.
 
 **Dependencies:** S0a precedes every production change;
 S0b → S0c2 and S0b → S0d; S0e → S0e1 → S0e2 → S0f → S0g;

@@ -27,10 +27,9 @@ the statuses recorded here remain authoritative.
 
 ## Current frontier
 
-- [181 — Python boundary ownership and copy costs](181-python-boundary-ownership-2026-08-03.md)
-  owns the 0.10 blocker: revise the destructive public molecule lifecycle in Rust
-  and Python using the recovery findings from 213. Broader copy-cost and Python
-  parity reviews are separate from that release correction.
+- [231 — Python API semantic parity review](231-python-api-parity-2026-09-21.md)
+  starts with Reaction ownership following completion of 181: retain the Rust
+  Reaction and settle read-only component access before the broader parity review.
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
@@ -226,7 +225,7 @@ the statuses recorded here remain authoritative.
 | [178-python-lattice-ops-2026-08-01.md](178-python-lattice-ops-2026-08-01.md)                                     | Completed     | 2026-08-01   |                                                                                                            |
 | [179-python-editing-and-transactions-2026-08-02.md](179-python-editing-and-transactions-2026-08-02.md)           | Completed     | 2026-08-03   |                                                                                                            |
 | [180-umol-facade-crate-2026-08-02.md](180-umol-facade-crate-2026-08-02.md)                                       | Proposed      | 2026-08-02   | Scope the top-level umol facade crate: re-exports, prelude, and the one feature flag.                      |
-| [181-python-boundary-ownership-2026-08-03.md](181-python-boundary-ownership-2026-08-03.md)                       | In Progress   | 2026-10-15   | S2 field and constraint batches in progress; Python payload naming and immutable observations assigned separately to S11c. |
+| [181-python-boundary-ownership-2026-08-03.md](181-python-boundary-ownership-2026-08-03.md)                       | Completed     | 2026-10-15   |                                                                                                            |
 | [182-python-resolution-2026-08-03.md](182-python-resolution-2026-08-03.md)                                       | Completed     | 2026-08-15   |                                                                                                            |
 | [183-python-entity-update-parsing-2026-08-03.md](183-python-entity-update-parsing-2026-08-03.md)                 | Completed     | 2026-08-03   |                                                                                                            |
 | [184-deltas-and-edits-2026-08-04.md](184-deltas-and-edits-2026-08-04.md)                                         | Informational | 2026-08-04   |                                                                                                            |
@@ -276,7 +275,7 @@ the statuses recorded here remain authoritative.
 | [228-svg-render-configuration-2026-09-15.md](228-svg-render-configuration-2026-09-15.md)                         | Completed     | 2026-09-15   |                                                                                                            |
 | [229-python-smiles-output-2026-09-29.md](229-python-smiles-output-2026-09-29.md)                                 | Completed     | 2026-09-29   |                                                                                                            |
 | [230-label-mask-extents-2026-09-29.md](230-label-mask-extents-2026-09-29.md)                                     | Completed     | 2026-09-29   |                                                                                                            |
-| [231-python-api-parity-2026-09-21.md](231-python-api-parity-2026-09-21.md)                                       | In Progress   | 2026-10-13   | Reaction ownership correction after 181; broader parity work includes canonical_hash and remaining 192 type-role scope. S1–S6 remain withdrawn. |
+| [231-python-api-parity-2026-09-21.md](231-python-api-parity-2026-09-21.md)                                       | In Progress   | 2026-10-15   | Reaction ownership correction next; broader parity work includes canonical_hash, nested Delta ownership, and remaining 192 type-role scope. S1–S6 remain withdrawn. |
 | [232-aggregate-integrity-review-2026-09-22.md](232-aggregate-integrity-review-2026-09-22.md)                     | Completed     | 2026-09-23   |                                                                                                            |
 | [233-graph-ir-delta-review-2026-09-23.md](233-graph-ir-delta-review-2026-09-23.md)                               | Proposed      | 2026-09-23   | Awaiting triage of the surviving findings.                                                                 |
 | [234-view-arguments-2026-09-25.md](234-view-arguments-2026-09-25.md)                                             | Proposed      | 2026-09-25   | Awaiting interface and scheduling decisions.                                                               |

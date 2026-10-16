@@ -9,7 +9,7 @@ Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [Python API guide](../docs/development/python-api.md),
 [data-type guide](../docs/development/data-types.md)
 
-## Scope and urgency — updated 2026-10-08
+## Scope and urgency — updated 2026-10-15
 
 Review the public Python API for operations and semantics introduced in bindings
 without an owning Rust API. Python is the primary application interface; demand
@@ -25,18 +25,17 @@ outcomes below describe their reviewed revisions, not a fresh audit of that
 migration.
 
 This document owns the unfinished broader semantic-parity and type-role review,
-including the remaining scope transferred from 192. The urgent 0.10 molecule
-lifecycle correction belongs to
-[181](181-python-boundary-ownership-2026-08-03.md#010-blocker--molecule-lifecycle).
-It must not wait for this full audit. Doc 181 also retains the separate boundary
-copy-cost investigation; this document owns the semantic justification of those
+including the remaining scope transferred from 192. The molecule lifecycle
+correction and boundary copy-cost work in
+[181](181-python-boundary-ownership-2026-08-03.md#s12b--final-integration-and-closeout-done)
+are complete. This document owns the semantic justification of the remaining
 boundaries. No withdrawn implementation plan is reactivated.
 
 ## Next work after 181 — Reaction ownership
 
-Schedule this work immediately after the current work in
-[181](181-python-boundary-ownership-2026-08-03.md), before resuming the other
-unreviewed groups. It does not delay 181 or reactivate withdrawn S1–S6.
+Begin with this work now that [181](181-python-boundary-ownership-2026-08-03.md)
+is complete, before resuming the other unreviewed groups. It does not reactivate
+withdrawn S1–S6.
 
 **Confirmed finding:** Python Reaction splits a Rust Reaction into independently
 mutable Python Molecule and Deltas objects. Its lhs/deltas getters expose those
@@ -98,6 +97,35 @@ Verify agreement with Rust under the same context, equal successful hashes for
 canonically equal values, invariance under valid remapping, canonicalization
 errors, and receiver preservation. The result may collide and is not a persistent
 identifier. This explicit query does not add Python `__hash__` to mutable objects.
+
+## ConstraintDelta constraint lifetime — 2026-10-15
+
+**Confirmed binding defect:** standalone ConstraintDelta.Add and Remove retain a
+supplied Python Constraint object. When that object is a molecule-backed accessor,
+the delta remains tied to the molecule's accessor counter. Even transact([]) on
+that molecule makes the previously constructed delta's inverse, equality, and
+representation fail with InvalidatedViewError. Delta.Constraint retains the same
+dependency. Rust ConstraintDelta owns its Constraint value; the Python API's
+independent immutable Delta contract does not justify this lifetime difference.
+
+The 181 closeout reviewer and independent challenger confirmed this at b1f8d5ccb:
+umol-py/src/delta.rs, ConstraintDelta's Add/Remove fields and to_rust; and
+umol-py/tests/test_molecule_constraint.py, test_constraints_view_invalidation,
+which explicitly expects delta.inverse() to become invalid. Retaining an input
+accessor deliberately explains the behavior but does not establish parity with
+the owned Rust value. Both implementation and test originate in e7c63aa12 and
+predate 181's S0a baseline; this is not a regression from 181.
+
+The affected surface is the standalone constraint delta and its aggregate Delta
+envelope. ConstraintEdit construction and insertion into Deltas already convert
+to owned Rust values. Assess making standalone construction retain an independent
+constraint value through the existing representation, and cover source mutation,
+source lifetime, inverse, equality, and aggregate wrapping. Correct the existing
+invalidation expectation when implementing that ownership correction.
+
+This is part of the nested Delta/constraint ownership review below. It does not
+change the priority of the Reaction work immediately after 181. No production
+correction is included in this finding.
 
 ## Delta conversion Cow arguments — 2026-10-15
 
