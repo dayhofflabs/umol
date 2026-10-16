@@ -427,7 +427,7 @@ impl AromaticityPerceiver {
             let member_count = members.len();
             let reproduced = members
                 .next()
-                .and_then(&aromatic_system_at)
+                .and_then(aromatic_system_at)
                 .is_some_and(|index| {
                     aromatic_systems[index].0.len() == member_count
                         && members.all(|atom| aromatic_system_at(atom) == Some(index))

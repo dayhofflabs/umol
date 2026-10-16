@@ -340,14 +340,12 @@ def test_constraints_view_composition():
     assert next(iterator) == second
     with pytest.raises(StopIteration):
         next(iterator)
-    match entry:
-        case Constraint.And(children):
-            assert isinstance(children[0], Constraint.Atom)
-            assert children[0]._0 == 0
-            assert children[0]._1 == AtomConstraintForm.Degree(NumForm.Lit(2))
-            assert isinstance(children[1]._0, Constraint.Or)
-        case _:
-            pytest.fail("constraint variant matching failed")
+    children = entry._0
+    assert isinstance(children[0], Constraint.Atom)
+    assert children[0]._0 == 0
+    assert children[0]._1 == AtomConstraintForm.Degree(NumForm.Lit(2))
+    assert isinstance(children[1], Constraint.Not)
+    assert isinstance(children[1]._0, Constraint.Or)
 
     with pytest.raises(AttributeError):
         entry._0 = []
@@ -367,11 +365,12 @@ def test_constraint_variant_protocol():
     assert leaf[1] == AtomConstraintForm.Degree(NumForm.Lit(2))
     with pytest.raises(IndexError):
         leaf[2]
-    match entry:
-        case Constraint.And([Constraint.Atom(0, _), Constraint.Not(Constraint.Or([]))]):
-            pass
-        case _:
-            pytest.fail("nested constraint pattern did not match")
+    assert isinstance(entry, Constraint.And)
+    assert len(entry._0) == 2
+    assert entry._0[0] == leaf
+    assert isinstance(entry._0[1], Constraint.Not)
+    assert isinstance(entry._0[1]._0, Constraint.Or)
+    assert list(entry._0[1]._0._0) == []
 
 
 @pytest.mark.parametrize("index", [1, -2])

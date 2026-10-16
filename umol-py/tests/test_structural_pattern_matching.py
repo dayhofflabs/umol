@@ -1,3 +1,5 @@
+import pytest
+
 from umol import (
     AromaticSystemConstraintForm,
     AromaticSystemDelta,
@@ -22,6 +24,7 @@ from umol import (
     ElectronCountsForm,
     Element,
     ElementForm,
+    Molecule,
     MoleculeConstraint,
     MulticenterBondConstraintForm,
     MulticenterBondDelta,
@@ -80,6 +83,26 @@ def test_constraint_pattern_match():
             assert (bond, atom, atoms) == (3, 5, None)
         case _:
             raise AssertionError("constraint tree did not match its structural variants")
+
+
+@pytest.mark.parametrize("borrowed", [False, True], ids=["owned", "borrowed"])
+def test_constraint_pattern_match_nested(borrowed):
+    constraint = Constraint.And([
+        Constraint.Atom(0, AtomConstraintForm.Degree(NumForm.Lit(2))),
+        Constraint.Not(Constraint.Or([])),
+    ])
+    if borrowed:
+        molecule = Molecule.from_entries(
+            [AtomForm(Element("C"))], constraints=[constraint]
+        )
+        constraint = molecule.constraints[0]
+
+    match constraint:
+        case Constraint.And([Constraint.Atom(atom_id, predicate), Constraint.Not(Constraint.Or([]))]):
+            assert atom_id == 0
+            assert predicate == AtomConstraintForm.Degree(NumForm.Lit(2))
+        case _:
+            pytest.fail("nested constraint pattern did not match")
 
 
 def test_atomfieldchange_match_scalar():
