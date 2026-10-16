@@ -1,6 +1,7 @@
 //! Stereo class keys and the interned coset-space registry.
 //!
-//! `ClassKey::space` builds each `CosetSpace` once, into a static slot per key.
+//! `ClassKey::space` builds each `CosetSpace` on first use. A static array indexed
+//! by key holds the boxed spaces.
 //! The geometry classes pin the proper-rotation group as a permutation group
 //! acting on the ligand positions.
 
@@ -149,11 +150,13 @@ impl ClassKey {
     /// Panics when the key's degree lies outside [`Self::degree_domain`]. Parsing rejects such
     /// keys, so the panic is reachable only from directly constructed ones.
     pub fn space(self) -> &'static CosetSpace {
-        SPACES[self.slot()].get_or_init(|| self.build())
+        SPACES[self.index()]
+            .get_or_init(|| Box::new(self.build()))
+            .as_ref()
     }
 
-    fn slot(self) -> usize {
-        let family_slot = |family: usize, degree: u8| {
+    fn index(self) -> usize {
+        let family_index = |family: usize, degree: u8| {
             assert!(
                 self.degree_domain().contains(&degree),
                 "class key {self} lies outside its degree domain"
@@ -161,16 +164,16 @@ impl ClassKey {
             family * MAX_DEGREE + degree as usize - 1
         };
         match self {
-            ClassKey::Symmetric(n) => family_slot(0, n),
-            ClassKey::Alternating(n) => family_slot(1, n),
-            ClassKey::Cyclic(n) => family_slot(2, n),
-            ClassKey::Dihedral(n) => family_slot(3, n),
-            ClassKey::Tetrahedral => FAMILY_SLOTS,
-            ClassKey::CisTrans => FAMILY_SLOTS + 1,
-            ClassKey::Axial => FAMILY_SLOTS + 2,
-            ClassKey::SquarePlanar => FAMILY_SLOTS + 3,
-            ClassKey::TrigonalBipyramidal => FAMILY_SLOTS + 4,
-            ClassKey::Octahedral => FAMILY_SLOTS + 5,
+            ClassKey::Symmetric(n) => family_index(0, n),
+            ClassKey::Alternating(n) => family_index(1, n),
+            ClassKey::Cyclic(n) => family_index(2, n),
+            ClassKey::Dihedral(n) => family_index(3, n),
+            ClassKey::Tetrahedral => FAMILY_SPACE_COUNT,
+            ClassKey::CisTrans => FAMILY_SPACE_COUNT + 1,
+            ClassKey::Axial => FAMILY_SPACE_COUNT + 2,
+            ClassKey::SquarePlanar => FAMILY_SPACE_COUNT + 3,
+            ClassKey::TrigonalBipyramidal => FAMILY_SPACE_COUNT + 4,
+            ClassKey::Octahedral => FAMILY_SPACE_COUNT + 5,
         }
     }
 
@@ -279,11 +282,11 @@ impl FromStr for ClassKey {
     }
 }
 
-const FAMILY_SLOTS: usize = 4 * MAX_DEGREE;
-const GEOMETRY_SLOTS: usize = 6;
+const FAMILY_SPACE_COUNT: usize = 4 * MAX_DEGREE;
+const GEOMETRY_SPACE_COUNT: usize = 6;
 
-static SPACES: [OnceLock<CosetSpace>; FAMILY_SLOTS + GEOMETRY_SLOTS] =
-    [const { OnceLock::new() }; FAMILY_SLOTS + GEOMETRY_SLOTS];
+static SPACES: [OnceLock<Box<CosetSpace>>; FAMILY_SPACE_COUNT + GEOMETRY_SPACE_COUNT] =
+    [const { OnceLock::new() }; FAMILY_SPACE_COUNT + GEOMETRY_SPACE_COUNT];
 
 #[cfg(test)]
 mod tests {
