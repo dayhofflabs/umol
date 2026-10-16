@@ -1837,7 +1837,8 @@ and the corresponding operations for the other entity kinds.
 
 Three related counts, distinguished by what they measure.
 
-- **Valence** — the sum of the orders of an atom's localized bonds to non-hydrogen neighbours.
+- **Valence** — the sum of the orders of all localized bonds incident on an atom, including bonds
+  to explicit hydrogen atoms.
   Excludes implicit hydrogens, dative, aromatic, multicenter and noncovalent contributions, each of
   which is a separate field. Tag `#v`.
 - **Total valence** — valence plus implicit hydrogens plus aromatic valence plus multicenter

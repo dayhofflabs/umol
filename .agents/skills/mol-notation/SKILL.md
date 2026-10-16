@@ -61,7 +61,7 @@ Element first, then zero+ predicates in any order (canonical order is `#i #c #h 
 | `#s` | spin multiplicity (2S+1) | bare=1 |
 | `#a` | aromatic π contribution | `#a`/`#a1`=1 · `#a0` (in system, 0 π) · `#a2` · `#a+` member, π unspecified · `#a*` no constraint · `#a!` **not** in any aromatic system |
 | `#m` | multicenter valence | same shape as `#a` (`#m+ #m* #m!`) |
-| `#v` | localized valence (σ; heavy-neighbor bond-order sum, excludes H/dative/aromatic) | |
+| `#v` | localized valence (sum of incident localized bond orders, including explicit H) | excludes implicit H and contributions from other bond kinds |
 | `#d` / `#t` | dative donated / accepted pairs | |
 
 **Derived predicates** (topology queries against the target; never affect grounding):

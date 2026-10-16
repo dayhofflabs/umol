@@ -548,7 +548,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`num-form`** / **`
 | **`#n`** | Lone pairs (nonbonding pair count) |
 | **`#u`** | Unpaired electron count |
 | **`#s`** | Spin multiplicity (2S+1) |
-| **`#v`** | **Localized valence**: sum of **bond orders** of **localized** **`:bonds`** edges to **non-hydrogen** neighbors in the **molecular graph** (multiple bonds count by full order). **Excludes** implicit H (**`#h`**), **dative**, **aromatic**-section bonding, **multicenter**, and **noncovalent** contributions — those are separate fields. |
+| **`#v`** | **Localized valence**: sum of **bond orders** of all **localized** **`:bonds`** edges incident on the atom in the **molecular graph**, including bonds to **explicit hydrogen** atoms (multiple bonds count by full order). **Excludes** implicit H (**`#h`**), **dative**, **aromatic**-section bonding, **multicenter**, and **noncovalent** contributions — those are separate fields. |
 | **`#d`** | Dative **donated** pair count (electrons donated **by** this atom) |
 | **`#t`** | Dative **accepted** pair count (“accepted”; electrons accepted **by** this atom) |
 | **`#a`** | Aromatic π contribution; **special** **`#a*`**, **`#a+`**, **`#a!`** (**§7.3**) |

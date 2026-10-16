@@ -949,6 +949,21 @@ mod tests {
         AtomConstraintKey::Valence,
         Some(AtomConstraintForm::valence(2)),
     )]
+    #[case::valence_hydrogen_pair(
+        mol_dsl!(r#"{:atoms ["H" "H"] :bonds [[0 1 "1"]]}"#),
+        AtomConstraintKey::Valence,
+        Some(AtomConstraintForm::valence(1)),
+    )]
+    #[case::valence_mixed_neighbors(
+        mol_dsl!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "2"] [0 2 "1"]]}"#),
+        AtomConstraintKey::Valence,
+        Some(AtomConstraintForm::valence(3)),
+    )]
+    #[case::valence_implicit_hydrogens(
+        mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#),
+        AtomConstraintKey::Valence,
+        Some(AtomConstraintForm::valence(0)),
+    )]
     #[case::degree(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
         AtomConstraintKey::Degree,
