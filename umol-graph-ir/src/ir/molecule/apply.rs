@@ -275,20 +275,36 @@ impl ApplicationState {
     }
 
     fn compact(&mut self, compaction: &MoleculeCompaction) {
-        self.atoms.compact(|id| compaction.compact_atom(id));
-        self.bonds.compact(|id| compaction.compact_bond(id));
-        self.dative_bonds
-            .compact(|id| compaction.compact_dative_bond(id));
-        self.aromatic_systems
-            .compact(|id| compaction.compact_aromatic_system(id));
-        self.multicenter_bonds
-            .compact(|id| compaction.compact_multicenter_bond(id));
-        self.noncovalent_bonds
-            .compact(|id| compaction.compact_noncovalent_bond(id));
-        self.stereo_atoms
-            .compact(|id| compaction.compact_stereo_atom(id));
-        self.stereo_bonds
-            .compact(|id| compaction.compact_stereo_bond(id));
+        if !compaction.graph().nodes().removed().is_empty() {
+            self.atoms.compact(|id| compaction.compact_atom(id));
+        }
+        if !compaction.graph().edges().removed().is_empty() {
+            self.bonds.compact(|id| compaction.compact_bond(id));
+        }
+        if !compaction.dative_bonds().removed().is_empty() {
+            self.dative_bonds
+                .compact(|id| compaction.compact_dative_bond(id));
+        }
+        if !compaction.aromatic_systems().removed().is_empty() {
+            self.aromatic_systems
+                .compact(|id| compaction.compact_aromatic_system(id));
+        }
+        if !compaction.multicenter_bonds().removed().is_empty() {
+            self.multicenter_bonds
+                .compact(|id| compaction.compact_multicenter_bond(id));
+        }
+        if !compaction.noncovalent_bonds().removed().is_empty() {
+            self.noncovalent_bonds
+                .compact(|id| compaction.compact_noncovalent_bond(id));
+        }
+        if !compaction.stereo_atoms().removed().is_empty() {
+            self.stereo_atoms
+                .compact(|id| compaction.compact_stereo_atom(id));
+        }
+        if !compaction.stereo_bonds().removed().is_empty() {
+            self.stereo_bonds
+                .compact(|id| compaction.compact_stereo_bond(id));
+        }
     }
 
     /// Update an input correspondence with this batch's removals and surviving additions.

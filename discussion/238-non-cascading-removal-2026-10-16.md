@@ -1847,13 +1847,26 @@ passed for all graph-IR and Python targets with proptest and warnings denied;
 full nightly formatting and git diff --check passed. No performance measurements
 were run in this subitem. The full workspace gate remains at the end of S2.
 
-#### S2f — Handle transport [dep: S2e]
+#### S2f — Handle transport (done) [dep: S2e]
 
-Module: graph-IR molecule/apply ApplicationState and HandleTable. Internal
-change; green. Skip unchanged compaction components instead of materializing
-or traversing their handle tables. Preserve ID/New handle semantics, removal
-errors, and returned correspondence. Test through edit application and its
-public tracking results; do not expose internal tables for testing.
+Completed 2026-10-17. ApplicationState checks each component's existing removed-ID
+slice before calling HandleTable::compact. An empty slice skips materializing an
+implicit initial mapping and traversing existing initial and created handle tables.
+Changed components retain their existing transport. The eight constant-time
+checks add no allocation, storage, or public interface. Correspondence construction
+also retains its existing identity path when every handle family is unchanged.
+
+Public application tests cover empty removals with all eight entity kinds present,
+and mixed bond/atom removals followed by Id and New handle use. Plain and tracked
+application, Clone and Journal recovery, complete products, and all correspondence
+components agree with independently constructed expected values. Existing tests
+retain removed-handle errors and rollback coverage.
+
+Verification passed: 11,488 graph-IR unit tests (three ignored), 59 edit properties,
+four compaction properties, and Clippy for all graph-IR targets with proptest and
+warnings denied. Targeted nightly formatting and git diff --check passed. No
+performance measurements were run; the S3/S4 complete-operation comparisons remain
+scheduled after S2.
 
 #### S2g — Python removal methods [dep: S2e, S2f]
 

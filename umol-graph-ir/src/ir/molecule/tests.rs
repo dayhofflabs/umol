@@ -5671,8 +5671,18 @@ fn test_molecule_editor_tracked_apply_transient() {
 }
 
 #[rstest]
+#[case::empty_batch(None)]
+#[case::topology(Some(Edit::RemoveTopology { atoms: vec![], bonds: vec![] }))]
+#[case::topology_cascading(Some(Edit::RemoveTopologyCascading { atoms: vec![], bonds: vec![] }))]
+#[case::dative(Some(Edit::RemoveDativeBonds { removes: vec![] }))]
+#[case::aromatic(Some(Edit::RemoveAromaticSystems { removes: vec![] }))]
+#[case::multicenter(Some(Edit::RemoveMulticenterBonds { removes: vec![] }))]
+#[case::noncovalent(Some(Edit::RemoveNoncovalentBonds { removes: vec![] }))]
+#[case::stereo_atoms(Some(Edit::RemoveStereoAtoms { removes: vec![] }))]
+#[case::stereo_bonds(Some(Edit::RemoveStereoBonds { removes: vec![] }))]
 fn test_molecule_editor_tracked_apply_identity(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] edit: Option<Edit>,
 ) {
     let source = Molecule::from_entries(entries);
     let mut editor = source.clone().edit();
@@ -5705,7 +5715,7 @@ fn test_molecule_editor_tracked_apply_identity(
         Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
         Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1).unwrap(),
     );
-    let actual = editor.tracked_apply(Edits::new()).unwrap();
+    let actual = editor.tracked_apply(Edits::from_iter(edit)).unwrap();
     assert_eq!(actual, witness);
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));
