@@ -648,8 +648,8 @@ fn test_var_var_birelation_set_tracked_remove(
     let expected: Vec<_> = survivors.iter().map(|&i| entries[i].clone()).collect();
     let mut relations = VarVarBirelationSet::new(entries);
     let mut plain = relations.clone();
-    plain.remove(&ids);
-    let compaction = relations.tracked_remove(&ids);
+    plain.remove(ids.clone());
+    let compaction = relations.tracked_remove(ids.clone());
     assert_eq!(relations, plain);
     assert_eq!(compaction.source_count(), 3);
     assert_eq!(compaction.result_count(), survivors.len());
@@ -680,7 +680,7 @@ fn test_var_var_birelation_set_tracked_remove_identity(
 ) {
     let mut relations = input.clone();
     assert_eq!(
-        relations.tracked_remove(&[]),
+        relations.tracked_remove(vec![]),
         Compaction::identity(input.count())
     );
     assert_eq!(relations, input);
@@ -707,7 +707,7 @@ fn test_var_var_birelation_set_tracked_remove_arity(
         (first.clone(), vec![], "third"),
         (vec![NodeId(2)], second.clone(), "fourth"),
     ]);
-    let compaction = relations.tracked_remove(&[RelationId(1), RelationId(2)]);
+    let compaction = relations.tracked_remove(vec![RelationId(1), RelationId(2)]);
     assert_eq!(compaction.source_count(), 4);
     assert_eq!(compaction.result_count(), 2);
     assert_eq!(compaction.removed(), &[RelationId(1), RelationId(2)]);
@@ -746,7 +746,7 @@ fn test_var_var_birelation_set_tracked_remove_payload() {
         &[NodeId(2), NodeId(2), NodeId(3)],
         NonCloneData(vec![17, 19, 23]),
     );
-    let compaction = relations.tracked_remove(&[RelationId(0)]);
+    let compaction = relations.tracked_remove(vec![RelationId(0)]);
     assert_eq!(compaction.source_count(), 3);
     assert_eq!(compaction.result_count(), 2);
     assert_eq!(compaction.removed(), &[RelationId(0)]);
@@ -780,7 +780,8 @@ fn test_var_var_birelation_set_tracked_remove_error(
 ) {
     let original = VarVarBirelationSet::new(entries);
     let mut relations = original.clone();
-    let panic = catch_unwind(AssertUnwindSafe(|| relations.tracked_remove(&ids))).unwrap_err();
+    let panic =
+        catch_unwind(AssertUnwindSafe(|| relations.tracked_remove(ids.clone()))).unwrap_err();
     let message = panic.downcast_ref::<String>().unwrap();
     assert!(message.starts_with("removed relations belong to the source set"));
     assert_eq!(relations, original);
@@ -790,9 +791,101 @@ fn test_var_var_birelation_set_tracked_remove_error(
             original.incident_to_node(node)
         );
     }
-    let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(&ids))).unwrap_err();
+    let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(ids.clone()))).unwrap_err();
     assert_eq!(panic.downcast_ref::<String>(), Some(message));
     assert_eq!(relations, original);
+}
+
+#[rstest]
+#[case::both(vec![(vec![NodeId(5), NodeId(2)], vec![], 7), (vec![], vec![EdgeId(6), EdgeId(0), EdgeId(6)], 11), (vec![], vec![], 13)], vec![(vec![NodeId(3), NodeId(1)], vec![], 7), (vec![], vec![EdgeId(4), EdgeId(0), EdgeId(4)], 11), (vec![], vec![], 13)])]
+fn test_var_var_birelation_set_compact_participants(
+    #[case] entries: Vec<(Vec<NodeId>, Vec<EdgeId>, u32)>,
+    #[case] expected: Vec<(Vec<NodeId>, Vec<EdgeId>, u32)>,
+) {
+    let mut relations = VarVarBirelationSet::default();
+    for (first, second, data) in entries {
+        relations.add(&first, &second, NonCloneData(vec![data]));
+    }
+    let expected: Vec<_> = expected
+        .into_iter()
+        .map(|(first, second, data)| (first, second, NonCloneData(vec![data])))
+        .collect();
+    let topology = GraphCompaction::new(
+        Compaction::new(6, vec![NodeId(0), NodeId(3)]).unwrap(),
+        Compaction::new(7, vec![EdgeId(1), EdgeId(4)]).unwrap(),
+    );
+    relations.compact_participants(&topology);
+    for id in 0..8 {
+        let nodes: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (first, second, _))| {
+                first
+                    .iter()
+                    .map(|p| p.refs())
+                    .chain(second.iter().map(|p| p.refs()))
+                    .any(|refs| refs.node == Some(NodeId(id)))
+            })
+            .map(|(row, _)| RelationId::from(row))
+            .collect();
+        let edges: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (first, second, _))| {
+                first
+                    .iter()
+                    .map(|p| p.refs())
+                    .chain(second.iter().map(|p| p.refs()))
+                    .any(|refs| refs.edge == Some(EdgeId(id)))
+            })
+            .map(|(row, _)| RelationId::from(row))
+            .collect();
+        assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::empty(VarVarBirelationSet::<NodeId, EdgeId, u32>::new(vec![]))]
+#[case::empty_factors(VarVarBirelationSet::<NodeId, EdgeId, u32>::new(vec![(vec![], vec![], 7)]))]
+#[case::nonempty(VarVarBirelationSet::new(vec![(vec![NodeId(2), NodeId(0)], vec![EdgeId(1), EdgeId(1)], 7)]))]
+fn test_var_var_birelation_set_compact_participants_identity(
+    #[case] original: VarVarBirelationSet<NodeId, EdgeId, u32>,
+) {
+    let mut relations = original.clone();
+    relations.compact_participants(&GraphCompaction::new(
+        Compaction::identity(6),
+        Compaction::identity(7),
+    ));
+    assert_eq!(relations, original);
+}
+
+#[rstest]
+#[case::removed_node(References { node: Some(NodeId(0)), edge: Some(EdgeId(2)), label: 1 })]
+#[case::removed_edge(References { node: Some(NodeId(2)), edge: Some(EdgeId(1)), label: 1 })]
+#[case::outside_node(References { node: Some(NodeId(6)), edge: Some(EdgeId(2)), label: 1 })]
+#[case::outside_edge(References { node: Some(NodeId(2)), edge: Some(EdgeId(7)), label: 1 })]
+#[should_panic(expected = "retained participant references survive compaction")]
+fn test_var_var_birelation_set_compact_participants_error(
+    #[case] participant: References,
+    #[values(false, true)] second: bool,
+) {
+    let survivor = References {
+        node: Some(NodeId(2)),
+        edge: Some(EdgeId(2)),
+        label: 0,
+    };
+    let (first, second) = if second {
+        (survivor, participant)
+    } else {
+        (participant, survivor)
+    };
+    let mut relations = VarVarBirelationSet::new(vec![(vec![first], vec![second], 7)]);
+    relations.compact_participants(&GraphCompaction::new(
+        Compaction::new(6, vec![NodeId(0), NodeId(3)]).unwrap(),
+        Compaction::new(7, vec![EdgeId(1), EdgeId(4)]).unwrap(),
+    ));
 }
 
 #[rstest]

@@ -391,14 +391,15 @@ where
     /// # Panics
     ///
     /// Panics before mutation if any supplied id is outside the set.
-    pub fn remove(&mut self, ids: &[RelationId]) {
+    pub fn remove(&mut self, ids: Vec<RelationId>) {
         self.tracked_remove(ids);
     }
 
     /// Remove whole relations and return the old-to-new survivor compaction.
     ///
     /// Input ids refer to the pre-removal set; their order and repetitions do not matter.
-    /// The compaction records the original count and removed ids, not removed payloads.
+    /// The compaction records the original count and takes ownership of the removal vector.
+    /// Removed payloads are not retained.
     /// A nonempty removal compacts both factor buffers, updates their independent offsets,
     /// and rebuilds incidence over the surviving rows once.
     ///
@@ -414,10 +415,10 @@ where
     /// # Panics
     ///
     /// Panics before mutation if any supplied id is outside the set.
-    pub fn tracked_remove(&mut self, ids: &[RelationId]) -> Compaction<RelationId> {
-        let compaction = Compaction::new(self.count(), ids.to_vec())
-            .expect("removed relations belong to the source set");
-        if ids.is_empty() {
+    pub fn tracked_remove(&mut self, ids: Vec<RelationId>) -> Compaction<RelationId> {
+        let compaction =
+            Compaction::new(self.count(), ids).expect("removed relations belong to the source set");
+        if compaction.removed().is_empty() {
             return compaction;
         }
         let mut dst = 0;
@@ -465,6 +466,53 @@ where
             );
         });
         compaction
+    }
+
+    /// Compact graph references in place without removing or renumbering relation rows.
+    ///
+    /// Updates participant references and incidence; payloads are neither moved nor cloned.
+    ///
+    /// # Assumes
+    ///
+    /// Every participant reference is inside the corresponding source domain of `topology`
+    /// and has a surviving image. Callers remove dependent rows before transporting survivors.
+    ///
+    /// # Semantic properties
+    ///
+    /// Row ids, factor shapes, participant positions and multiplicity, non-reference data,
+    /// and payloads are preserved. A covering identity leaves storage unchanged. Matching
+    /// [`Self::restore_participants`] recovers the original set. Public-API properties in
+    /// `tests/property/relation.rs` compare with independent reference translation and incidence.
+    ///
+    /// # Panics
+    ///
+    /// May panic if a referenced node or edge has no surviving image.
+    pub fn compact_participants(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() && topology.edges().removed().is_empty() {
+            return;
+        }
+        for participant in self.participants_1.iter_mut() {
+            *participant = participant
+                .compact(topology)
+                .expect("retained participant references survive compaction");
+        }
+        for participant in self.participants_2.iter_mut() {
+            *participant = participant
+                .compact(topology)
+                .expect("retained participant references survive compaction");
+        }
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(
+                self.participants_1(RelationId::from(i))
+                    .iter()
+                    .map(|p| p.refs()),
+            );
+            out.extend(
+                self.participants_2(RelationId::from(i))
+                    .iter()
+                    .map(|p| p.refs()),
+            );
+        });
     }
 
     /// Undo row removal using its compaction and original saved entries.

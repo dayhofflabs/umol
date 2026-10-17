@@ -377,6 +377,11 @@ endpoints. Graph::try_remove checks that prerequisite before mutation. Graph::re
 also selects edges incident to removed nodes. Their tracked counterparts return the corresponding
 GraphCompaction.
 
+Relation-set remove/tracked_remove selects rows without translating their graph references.
+compact_participants applies a graph compaction to retained references without selecting or
+renumbering rows. It requires all retained references to survive. The operation returns unit;
+row IDs and participant positions are preserved, so it has no tracked counterpart.
+
 **`UndoCompaction`** is the inverse view of a `MoleculeCompaction` for rollback: it carries surviving
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for

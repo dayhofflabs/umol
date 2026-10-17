@@ -248,7 +248,7 @@ proptest! {
         let saved = rows.iter().enumerate().rev().filter(|(_, (_, remove))| *remove)
             .map(|(id, (row, _))| (RelationId::from(id), row.map(EdgeId), id)).collect();
         let mut relations = original.clone();
-        let compaction = relations.tracked_remove(&ids);
+        let compaction = relations.tracked_remove(ids);
         relations.restore(&compaction, saved);
         for edge in 0..17 {
             let incidence: Vec<_> = rows.iter().enumerate()
@@ -470,7 +470,7 @@ proptest! {
         let saved = rows.iter().enumerate().rev().filter(|(_, (_, remove))| *remove)
             .map(|(id, (row, _))| (RelationId::from(id), row.iter().copied().map(EdgeId).collect::<Vec<_>>(), id)).collect();
         let mut relations = original.clone();
-        let compaction = relations.tracked_remove(&ids);
+        let compaction = relations.tracked_remove(ids);
         relations.restore(&compaction, saved);
         for edge in 0..17 {
             let incidence: Vec<_> = rows.iter().enumerate()
@@ -691,7 +691,7 @@ proptest! {
         let saved = expected.iter().zip(&rows).enumerate().rev().filter(|(_, (_, (_, remove)))| *remove)
             .map(|(id, ((first, second, data), _))| (RelationId::from(id), *first, *second, *data)).collect();
         let mut relations = original.clone();
-        let compaction = relations.tracked_remove(&ids);
+        let compaction = relations.tracked_remove(ids);
         relations.restore(&compaction, saved);
         for id in 0..17 {
             let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (row, _, _))| row.contains(&NodeId(id))).map(|(i, _)| RelationId::from(i)).collect();
@@ -908,7 +908,7 @@ proptest! {
         let saved = expected.iter().zip(&rows).enumerate().rev().filter(|(_, (_, (_, remove)))| *remove)
             .map(|(id, ((first, second, data), _))| (RelationId::from(id), *first, second.clone(), *data)).collect();
         let mut relations = original.clone();
-        let compaction = relations.tracked_remove(&ids);
+        let compaction = relations.tracked_remove(ids);
         relations.restore(&compaction, saved);
         for id in 0..17 {
             let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (row, _, _))| row.contains(&NodeId(id))).map(|(i, _)| RelationId::from(i)).collect();
@@ -1131,7 +1131,7 @@ proptest! {
         let saved = expected.iter().zip(&rows).enumerate().rev().filter(|(_, (_, (_, remove)))| *remove)
             .map(|(id, ((first, second, data), _))| (RelationId::from(id), first.clone(), second.clone(), *data)).collect();
         let mut relations = original.clone();
-        let compaction = relations.tracked_remove(&ids);
+        let compaction = relations.tracked_remove(ids);
         relations.restore(&compaction, saved);
         for id in 0..17 {
             let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (row, _, _))| row.contains(&NodeId(id))).map(|(i, _)| RelationId::from(i)).collect();

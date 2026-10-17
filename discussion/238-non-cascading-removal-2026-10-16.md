@@ -1549,7 +1549,7 @@ composition laws. The reference-error and manipulated-undo cases are specified
 in the verification requirements above. No new test module or public testing
 seam is needed.
 
-### S1 — Graph-core primitives
+### S1 — Graph-core primitives (done)
 
 #### S1a — Graph removal family (done) [dep: S0a]
 
@@ -1575,23 +1575,35 @@ owned inputs constructed outside timing; no performance measurements were run.
 The shared execution route and input-vector reuse also complete that part of
 S2b. Its remaining duplicate-work review is still open.
 
-#### S1b — Relation removal and participant transport [dep: S0a]
+#### S1b — Relation removal and participant transport (done) [dep: S0a]
 
-Modules: the five graph-core relation-set families. Adapt remove/tracked_remove
-to the agreed owned input and add compact_participants. Breaking red-to-green:
-migrate callers of the changed removal signatures together; retain the old
-compact/tracked_compact temporarily until S2 moves their consumers. Each family
-keeps its own tests in the existing organization. Exercise row/payload
-preservation, fixed and variable factor shapes, participant order and
-multiplicity, node/edge references, complete participant values, incidence,
-identity, and transport/restoration roundtrips. No new combined public removal
-operation is introduced. Cover the asserted missing-image boundary separately
-from normal producer/consumer sequences that must satisfy it.
+Completed 2026-10-17. All five relation-set families consume Vec<RelationId> in
+remove/tracked_remove and expose compact_participants. The latter translates
+participant buffers in place, preserving row IDs, factor shapes and positions,
+participant data other than references, and payloads without requiring Clone.
+Missing images are asserted during translation; no separate validation scan
+was added. Incidence still rebuilds for nonidentity transport; S2a replaces that
+work. The old compact/tracked_compact pair remains until S2 migrates its consumers.
 
-S1 ends with focused graph-core tests and its feature-gated property target
-passing, and all mechanically affected callers building. It establishes the
-capabilities; S2 completes their integration and removes the remaining repeated
-work before the cost investigations.
+The six graph-IR owning stores now transfer their existing converted ID vectors
+to core removal. Tests and benchmarks use the owned signatures. Each family has
+unit coverage for reference translation, non-Clone payloads, factor shapes,
+identity, and missing images. New public-API properties select dependent rows
+explicitly, compare transport against independent survivor positions, and check
+both incidence spaces and matching restore_participants roundtrips. Existing
+removal and restoration laws retain their assertions. The data-type and
+nomenclature guides describe the implemented separation.
+
+The S1 gate passed: cargo test -p umol-graph-core --features proptest ran 1,963
+unit tests, 54 other integration tests, 215 property tests, and one doctest.
+Clippy passed for graph-core with all targets and proptest enabled; cargo check
+passed for graph IR with all targets. Targeted nightly formatting and
+git diff --check passed. Participant-compaction benchmark cases for all five
+families are prepared, and owned removal inputs are constructed outside timing;
+no performance measurements were run.
+
+S1 establishes the capabilities. S2 completes their integration and removes the
+remaining repeated work before the cost investigations.
 
 ### S2 — Integration and removal of known duplicate work
 

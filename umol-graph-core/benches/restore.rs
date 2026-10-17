@@ -327,7 +327,7 @@ fn fixed(c: &mut Criterion) {
                     .map(|(row, entry)| (RelationId::from(row), *entry))
                     .collect();
                 let mut compacted = original.clone();
-                let compaction = compacted.tracked_remove(&ids);
+                let compaction = compacted.tracked_remove(ids.clone());
                 let rebuilt = FixedRelationSet::new(rebuild_rows(
                     compacted.clone().into_entries(),
                     &compaction,
@@ -342,7 +342,7 @@ fn fixed(c: &mut Criterion) {
                     let setup = || {
                         if retained {
                             let mut relations = original.clone();
-                            relations.remove(&ids);
+                            relations.remove(ids.clone());
                             relations
                         } else {
                             compacted.clone()
@@ -512,7 +512,7 @@ fn var(c: &mut Criterion) {
                         .map(|(row, entry)| (RelationId::from(row), entry.clone()))
                         .collect();
                     let mut compacted = original.clone();
-                    let compaction = compacted.tracked_remove(&ids);
+                    let compaction = compacted.tracked_remove(ids.clone());
                     let rebuilt = VarRelationSet::new(rebuild_rows(
                         compacted.clone().into_entries(),
                         &compaction,
@@ -527,7 +527,7 @@ fn var(c: &mut Criterion) {
                         let setup = || {
                             if retained {
                                 let mut relations = original.clone();
-                                relations.remove(&ids);
+                                relations.remove(ids.clone());
                                 relations
                             } else {
                                 compacted.clone()
@@ -718,7 +718,7 @@ fn fixed_fixed(c: &mut Criterion) {
                     .map(|(row, entry)| (RelationId::from(row), *entry))
                     .collect();
                 let mut compacted = original.clone();
-                let compaction = compacted.tracked_remove(&ids);
+                let compaction = compacted.tracked_remove(ids.clone());
                 let rebuilt = FixedFixedBirelationSet::new(rebuild_rows(
                     compacted.clone().into_entries(),
                     &compaction,
@@ -733,7 +733,7 @@ fn fixed_fixed(c: &mut Criterion) {
                     let setup = || {
                         if retained {
                             let mut relations = original.clone();
-                            relations.remove(&ids);
+                            relations.remove(ids.clone());
                             relations
                         } else {
                             compacted.clone()
@@ -931,7 +931,7 @@ fn fixed_var(c: &mut Criterion) {
                         .map(|(row, entry)| (RelationId::from(row), entry.clone()))
                         .collect();
                     let mut compacted = original.clone();
-                    let compaction = compacted.tracked_remove(&ids);
+                    let compaction = compacted.tracked_remove(ids.clone());
                     let rebuilt = FixedVarBirelationSet::new(rebuild_rows(
                         compacted.clone().into_entries(),
                         &compaction,
@@ -946,7 +946,7 @@ fn fixed_var(c: &mut Criterion) {
                         let setup = || {
                             if retained {
                                 let mut relations = original.clone();
-                                relations.remove(&ids);
+                                relations.remove(ids.clone());
                                 relations
                             } else {
                                 compacted.clone()
@@ -1151,7 +1151,7 @@ fn var_var(c: &mut Criterion) {
                         .map(|(row, entry)| (RelationId::from(row), entry.clone()))
                         .collect();
                     let mut compacted = original.clone();
-                    let compaction = compacted.tracked_remove(&ids);
+                    let compaction = compacted.tracked_remove(ids.clone());
                     let rebuilt = VarVarBirelationSet::new(rebuild_rows(
                         compacted.clone().into_entries(),
                         &compaction,
@@ -1168,7 +1168,7 @@ fn var_var(c: &mut Criterion) {
                         let setup = || {
                             if retained {
                                 let mut relations = original.clone();
-                                relations.remove(&ids);
+                                relations.remove(ids.clone());
                                 relations
                             } else {
                                 compacted.clone()

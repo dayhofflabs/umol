@@ -1003,8 +1003,24 @@ and leaves the graph unchanged when the dangling condition fails. Cascading remo
 incident edges before exact removal. Surviving node and edge order is preserved, including loops
 and parallel edges; shared source graphs are unchanged.
 Single-node/edge cascading-removal conveniences retain their single-id inputs and return no witness.
-Relation-set `compact` returns the resulting set; `tracked_compact` returns that set
-and its relation-id compaction. Each pair preserves the same output and failure behavior.
+
+The five relation-set families consume Vec<RelationId> in remove/tracked_remove. They remove
+only the supplied rows, preserve survivor order, participant values and payloads, and update
+incidence to use dense row IDs. Removal bounds are asserted before mutation; input order and
+repeated IDs do not matter. The tracked result owns the supplied removal vector and records
+the source row count.
+
+Their compact_participants takes a GraphCompaction and translates references and incidence in
+place, preserving row IDs, factor shapes, participant positions and multiplicity, other participant
+data, and payloads. It requires coverage and survival of every stored reference in its corresponding
+node or edge domain; relation counts need not match graph counts. Missing images are programming
+errors and may panic during translation. There is no separate validation scan. A covering identity
+leaves storage unchanged, but a zero-domain identity does not cover nonempty reference domains.
+Matching restore_participants reverses the reference translation.
+
+The borrowing relation-set compact/tracked_compact pair still selects rows by participant survival
+and rebuilds the resulting set, cloning payloads. The tracked form additionally returns its
+relation-id compaction; both preserve the same output and failure behavior.
 
 The graph-IR owning overlay sets expose crate-private `compact` returning the resulting set
 and its row compaction. Molecule's crate-private `compact_<entity>` delegates install the set

@@ -230,7 +230,7 @@ impl StereoAtoms {
             return;
         }
         let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(&ids);
+        Arc::make_mut(&mut self.0).remove(ids);
     }
 
     pub(crate) fn tracked_remove(&mut self, ids: &[StereoAtomId]) -> Compaction<StereoAtomId> {
@@ -238,7 +238,7 @@ impl StereoAtoms {
             return Compaction::identity(self.count());
         }
         let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(ids);
         Compaction::new(
             compaction.source_count(),
             compaction
@@ -691,7 +691,7 @@ impl StereoBonds {
             return;
         }
         let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(&ids);
+        Arc::make_mut(&mut self.0).remove(ids);
     }
 
     pub(crate) fn tracked_remove(&mut self, ids: &[StereoBondId]) -> Compaction<StereoBondId> {
@@ -699,7 +699,7 @@ impl StereoBonds {
             return Compaction::identity(self.count());
         }
         let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(ids);
         Compaction::new(
             compaction.source_count(),
             compaction

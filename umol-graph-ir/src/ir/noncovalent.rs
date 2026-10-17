@@ -210,7 +210,7 @@ impl NoncovalentBonds {
             return;
         }
         let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(&ids);
+        Arc::make_mut(&mut self.0).remove(ids);
     }
 
     pub(crate) fn tracked_remove(
@@ -221,7 +221,7 @@ impl NoncovalentBonds {
             return Compaction::identity(self.count());
         }
         let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(ids);
         Compaction::new(
             compaction.source_count(),
             compaction
