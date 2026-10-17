@@ -10,7 +10,8 @@ use umol_graph_core::{
     NodeId,
 };
 
-use super::id::{AtomId, BondId};
+use super::correspondence::MoleculeCorrespondence;
+use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::reaction::Reaction;
 use super::traits::{Lattice, Normalize};
 
@@ -29,7 +30,7 @@ impl Reaction {
 
 /// The sequential composite for one overlap of A's product with `b`'s reactant: glue `a_inverse.lhs`
 /// (`R_A`) and `b.lhs` (`L_B`) over `overlap`, apply `A⁻¹` and `B` at the glue, and read off the
-/// composite `L_c → R_c` (`from_sides` diffs the two applied glues). `None` when the overlap is
+/// composite `L_c → R_c` from the two application witnesses. `None` when the overlap is
 /// inadmissible (`⊥` meet) or either application dangles.
 fn compose_overlap(
     a_inverse: &Reaction,
@@ -41,13 +42,71 @@ fn compose_overlap(
         .tracked_apply_at(&glue, &correspondence.left)
         .ok()??;
     let (rhs, right) = b.tracked_apply_at(&glue, &correspondence.right).ok()??;
-    let correspondence = left
-        .atoms()
+    let mut correspondence = left
         .reverse()
-        .compose(right.atoms())
+        .compose(&right)
         .expect("both applications share the pushout host");
-    let composite = Reaction::from_sides(lhs, rhs, correspondence)?;
-    let (lhs, deltas) = composite.into_parts();
+    let atom_survives = |&(left, right): &(StereoAtomId, StereoAtomId)| {
+        !lhs.stereo_atom(left)
+            .attributes()
+            .configuration
+            .kind()
+            .zip(rhs.stereo_atom(right).attributes().configuration.kind())
+            .is_some_and(|(left, right)| left != right)
+    };
+    let bond_survives = |&(left, right): &(StereoBondId, StereoBondId)| {
+        !lhs.stereo_bond(left)
+            .attributes()
+            .configuration
+            .kind()
+            .zip(rhs.stereo_bond(right).attributes().configuration.kind())
+            .is_some_and(|(left, right)| left != right)
+    };
+    if !correspondence
+        .stereo_atoms()
+        .matched_pairs()
+        .iter()
+        .all(atom_survives)
+        || !correspondence
+            .stereo_bonds()
+            .matched_pairs()
+            .iter()
+            .all(bond_survives)
+    {
+        correspondence = MoleculeCorrespondence::new(
+            correspondence.atoms().clone(),
+            correspondence.bonds().clone(),
+            correspondence.dative_bonds().clone(),
+            correspondence.aromatic_systems().clone(),
+            correspondence.multicenter_bonds().clone(),
+            correspondence.noncovalent_bonds().clone(),
+            Correspondence::new(
+                correspondence
+                    .stereo_atoms()
+                    .matched_pairs()
+                    .iter()
+                    .copied()
+                    .filter(atom_survives)
+                    .collect(),
+                lhs.stereo_atoms().count(),
+                rhs.stereo_atoms().count(),
+            )
+            .expect("removing pairs preserves the partial bijection"),
+            Correspondence::new(
+                correspondence
+                    .stereo_bonds()
+                    .matched_pairs()
+                    .iter()
+                    .copied()
+                    .filter(bond_survives)
+                    .collect(),
+                lhs.stereo_bonds().count(),
+                rhs.stereo_bonds().count(),
+            )
+            .expect("removing pairs preserves the partial bijection"),
+        );
+    }
+    let deltas = lhs.difference_to(&rhs, &correspondence)?;
     Some(Reaction::new(lhs, deltas.normalize().ok()?))
 }
 
@@ -119,19 +178,22 @@ mod tests {
     use super::super::constraint::Constraints;
     use super::super::delta::{
         AromaticSystemDelta, AtomDelta, BondDelta, Delta, Deltas, NoncovalentBondDelta,
-        StereoAtomDelta,
+        StereoAtomDelta, StereoBondDelta,
     };
     use super::super::edit::{
         AtomFieldChange, BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
+        StereoBondFieldChange,
     };
-    use super::super::id::{AromaticSystemId, NoncovalentBondId, StereoAtomId};
+    use super::super::id::{AromaticSystemId, NoncovalentBondId, StereoAtomId, StereoBondId};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::molecule::{Molecule, MoleculeEntries};
     use super::super::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
     use super::super::num::NumForm;
-    use super::super::stereo::{StereoAtomForm, StereoConfigurationForm, StereoCoset, StereoKind};
+    use super::super::stereo::{
+        StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
+    };
     use super::super::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use super::*;
 
@@ -140,6 +202,152 @@ mod tests {
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
+
+    #[rstest]
+    #[case::kindless_intermediate(
+        false,
+        StereoAtomForm::default(),
+        StereoBondForm::default(),
+        StereoAtomForm::new(StereoKind::SquarePlanar, 1_u32),
+        StereoBondForm::new(StereoKind::Axial, 1_u32)
+    )]
+    #[case::explicit_same_kind(
+        true,
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        StereoBondForm::new(StereoKind::CisTrans, 0_u32)
+    )]
+    fn test_compose_overlap_stereo_replacement(
+        #[case] explicit: bool,
+        #[case] middle_atom: StereoAtomForm,
+        #[case] middle_bond: StereoBondForm,
+        #[case] new_atom: StereoAtomForm,
+        #[case] new_bond: StereoBondForm,
+    ) {
+        let atom_ligands: Vec<_> = [1, 2, 3, 4]
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .to_vec();
+        let bond_ligands: Vec<_> = [2, 3, 4, 5]
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .to_vec();
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: (0..6)
+                .flat_map(|a| {
+                    ((a + 1)..6).map(move |b| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let old_atom = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32);
+        let old_bond = StereoBondForm::new(StereoKind::CisTrans, 0_u32);
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), atom_ligands.clone(), old_atom.clone())],
+            stereo_bonds: vec![(BondId(0), bond_ligands.clone(), old_bond.clone())],
+            ..entries.clone()
+        });
+        let remove_atom = Delta::StereoAtom(StereoAtomDelta::Remove {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: atom_ligands.clone(),
+            attributes: old_atom.clone(),
+        });
+        let remove_bond = Delta::StereoBond(StereoBondDelta::Remove {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: bond_ligands.clone(),
+            attributes: old_bond.clone(),
+        });
+        let first = Reaction::new(
+            lhs.clone(),
+            if explicit {
+                Deltas::from_iter([
+                    remove_atom.clone(),
+                    remove_bond.clone(),
+                    Delta::StereoAtom(StereoAtomDelta::Add {
+                        id: StereoAtomId(1),
+                        site: AtomId(0),
+                        ligands: atom_ligands.clone(),
+                        attributes: middle_atom.clone(),
+                    }),
+                    Delta::StereoBond(StereoBondDelta::Add {
+                        id: StereoBondId(1),
+                        site: BondId(0),
+                        ligands: bond_ligands.clone(),
+                        attributes: middle_bond.clone(),
+                    }),
+                ])
+            } else {
+                Deltas::from_iter([
+                    Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                        id: StereoAtomId(0),
+                        change: StereoAtomFieldChange::Configuration {
+                            old: old_atom.configuration,
+                            new: middle_atom.configuration.clone(),
+                        },
+                    }),
+                    Delta::StereoBond(StereoBondDelta::ModifyField {
+                        id: StereoBondId(0),
+                        change: StereoBondFieldChange::Configuration {
+                            old: old_bond.configuration,
+                            new: middle_bond.configuration.clone(),
+                        },
+                    }),
+                ])
+            },
+        );
+        let second = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                stereo_atoms: vec![(AtomId(0), atom_ligands.clone(), middle_atom.clone())],
+                stereo_bonds: vec![(BondId(0), bond_ligands.clone(), middle_bond.clone())],
+                ..entries
+            }),
+            Deltas::from_iter([
+                Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                    id: StereoAtomId(0),
+                    change: StereoAtomFieldChange::Configuration {
+                        old: middle_atom.configuration,
+                        new: new_atom.configuration.clone(),
+                    },
+                }),
+                Delta::StereoBond(StereoBondDelta::ModifyField {
+                    id: StereoBondId(0),
+                    change: StereoBondFieldChange::Configuration {
+                        old: middle_bond.configuration,
+                        new: new_bond.configuration.clone(),
+                    },
+                }),
+            ]),
+        );
+        let expected = Reaction::new(
+            lhs,
+            Deltas::from_iter([
+                remove_atom,
+                remove_bond,
+                Delta::StereoAtom(StereoAtomDelta::Add {
+                    id: StereoAtomId(1),
+                    site: AtomId(0),
+                    ligands: atom_ligands,
+                    attributes: new_atom,
+                }),
+                Delta::StereoBond(StereoBondDelta::Add {
+                    id: StereoBondId(1),
+                    site: BondId(0),
+                    ligands: bond_ligands,
+                    attributes: new_bond,
+                }),
+            ])
+            .normalize()
+            .unwrap(),
+        );
+        let overlap =
+            GraphCorrespondence::new(Correspondence::identity(6), Correspondence::identity(15));
+        assert_eq!(
+            compose_overlap(&first.reverse().unwrap(), &second, &overlap),
+            Some(expected)
+        );
+    }
 
     // C-O order 1→2 then 2→3; the single overlap fuses to 1→3.
     #[rstest]

@@ -1538,6 +1538,73 @@ def test_reaction_apply(method):
         next(zero)
 
 
+@pytest.mark.parametrize(
+    "source, expected, component",
+    [
+        pytest.param(
+            '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]} '
+            ':deltas [{:stereo-atom {:modify [0 "Sp1"]}}]}',
+            '{:atoms ["C" "F" "Cl" "Br" "I"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp1"}]}',
+            "stereo_atoms", id="atom",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "N" "F" "Cl" "Br" "I"] '
+            ':bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+            ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]} '
+            ':deltas [{:stereo-bond {:modify [0 "Ax1"]}}]}',
+            '{:atoms ["C" "N" "F" "Cl" "Br" "I"] '
+            ':bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+            ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ax1"}]}',
+            "stereo_bonds", id="bond",
+        ),
+    ],
+)
+def test_reaction_tracked_apply_stereo_replacement(source, expected, component):
+    reaction = Reaction.parse(source)
+    host = reaction.lhs
+    expected = Molecule.parse(expected)
+
+    results = list(reaction.tracked_apply(host))
+    assert len(results) == 1
+    product, witness = results[0]
+    assert product == expected
+    assert getattr(witness, component) == Correspondence([], 1, 1)
+    span = reaction.to_reaction_span()
+    assert span.lhs() == host
+    assert span.rhs() == expected
+    assert span.correspondence() == witness
+    assert list(reaction.apply_to_reaction_span(host)) == [span]
+    realized = next(reaction.apply_to_reaction(host))
+    assert realized.to_reaction_span() == span
+    assert list(realized.tracked_apply(host)) == results
+    assert reaction.reverse().to_reaction_span().rhs() == host
+
+
+@pytest.mark.parametrize(
+    "algorithm",
+    [SubstructureMatchAlgorithm.GraphAndOverlays(), SubstructureMatchAlgorithm.Incidence()],
+)
+@pytest.mark.parametrize(
+    "method", ["apply", "tracked_apply", "apply_to_reaction", "apply_to_reaction_span"],
+)
+def test_reaction_apply_aromatic_bond(method, algorithm):
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C" "C"] :bonds [[0 1 "*"]]} '
+        ':deltas [{:bond {:remove 0}}]}'
+    )
+    host = Molecule.parse(
+        '{:atoms ["C" "C" "C" "C" "C" "C"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}'
+    )
+    config = ReactionApplicationConfig(match_algorithm=algorithm)
+    assert list(getattr(reaction, method)(host, config=config)) == []
+
+
 def test_reaction_tracked_apply_composition():
     first_step = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'

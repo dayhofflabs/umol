@@ -300,6 +300,13 @@ currently reconstructs its reaction from sides using an atom correspondence,
 so delegation to the corrected application path alone does not prove that it
 preserves explicit replacement identity.
 
+Span/reaction replay compares molecule constraints after constraint-set
+normalization. Entity storage and the host-to-product correspondence must agree
+exactly, as must errors and non-applicability. Replacement combined with an
+explicit addition can change constraint storage order during conversion; keeping
+that order is not part of the replay contract. Application does not reorder or
+normalize the product to enforce this comparison.
+
 Faithful deletion/addition identity and replay are settled requirements. Reusing
 Molecule::tracked_apply for the complete host-to-product correspondence is
 accepted. For composition, the proposed trial reverses and composes complete
@@ -1708,48 +1715,74 @@ Verification passed: 11,322 graph-IR unit tests, with three ignored; Clippy for
 all graph-IR targets with warnings denied; targeted nightly formatting; and
 git diff --check. No performance measurements were run.
 
-#### S2d — DPO checks and faithful application tracking [dep: S0b, S2c]
+#### S2d — DPO checks and faithful application tracking (done) [dep: S0b, S2c]
 
-Modules: graph-IR reaction application, delta update lowering, reaction-span
-construction and reversal, realized results, and composition.
-Internal change; green. Complete the pre-mutation bond dangling checks while
-the current cascading graph-IR removal backend is still in use. After these
-checks, its cascade must select no additional entity.
+Completed 2026-10-17. Reaction application checks deleted bonds against retained
+aromatic systems, stereo-atom ligand bonds, stereo-bond sites and stereo-bond
+ligand bonds before mutation. Host-only dependencies reject the whole match with
+Ok(None); iteration skips it. Virtual ligands introduce no bond dependency.
+Explicit co-removal is permitted. Bond-order changes, bond additions, exocyclic
+deletion and deletion between separate aromatic systems remain permitted. The
+cascading removal backend remains until S2e.
 
-Align reaction lowering and direct span construction first. Different determined
-stereo kinds use ordinary replacement semantics in application and Removed/Added
-entries in spans, with fresh replacement IDs, correct RHS references and frames,
-and the existing removal/addition behavior for constraints. Do not inherit extra
-constraints from the host's removed stereo entity. Include the accepted delta
-for_update correction and removal of the enumeration-only kind-change prohibition.
-Retain existing checks for invalid forms and applicability; a valid kind change
-must no longer fail direct span construction or reversal solely because the
-kinds differ. Keep shared public update/delta interfaces and generic edits.
+Different determined stereo kinds now use ordinary remove/add edits and
+Removed/Added span entries. Replacement forms come from the rule, without
+inheriting host-only constraints. Old constraint references follow removal;
+explicit additions refer to the replacement. Application reuses its existing
+removal sets and addition handles, with no extra replacement maps or preliminary
+delta pass. Rule-form folding is local to replacements; span reference mapping
+is constructed only when replacements and molecule constraints require it.
+The for_update correction uses the resulting kind; enumeration accepts valid
+kind changes. Shared update/delta interfaces and generic Edit semantics remain.
 
-Use tracked_apply for application correspondence, preserving explicit replacement
-identity across all entity kinds and applying the reaction stereo identity rule.
-Then trial complete correspondence composition, apply the rule to its final
-stereo endpoints, and construct the composite through difference_to and
-Reaction::new. Acceptance of the composition implementation requires the separate
-comparison already specified. No new public constructor or tracking type is needed.
+Application obtains the complete witness from tracked_apply. Composition reverses
+and composes those witnesses, removes stereo pairs whose determined endpoint
+kinds differ, and constructs the result through difference_to and Reaction::new.
+This preserves explicit replacement identity, including composition through a
+kindless intermediate. Replay compares normalized molecule-constraint sets while
+requiring exact entity storage and correspondence equality, as recorded above.
 
-Cover host-only dependencies, every affected overlay kind, explicit removal
-and replacement, whole-match rejection, all application result forms, replay,
-direct span conversion, reversal, and composition. Include both stereo entity
-kinds, host-only constraints, replacement constraint references, same-kind
-modification, kindless refinement, and composition through a kindless intermediate.
-Include the issue #31 acceptance cases above under both match
-algorithms, including permitted bond-order changes and additions. Their chemical
-acceptability remains a Tier 3 validation concern. Add the public-API preservation
-properties for replacement identity and replay. These tests must pass before
-the removal backend changes; keep them unchanged through that migration.
+The bounded comparison supports keeping both implementations. Medians below are
+microseconds; the original is S0a commit 1f782a5f, and the result includes S1 and
+S2a–c plus S2d. The four application fixtures and complete composition results
+agree exactly across the measured versions before timing.
 
-Record this green implementation as the reference with corrected semantics.
-Run the bounded application/composition comparison selected in S0a to assess
-the tracking route's complete cost, accounting for the added DPO checks and any
-earlier core changes. Identify allocation or traversal regressions before
-accepting the route. Preserve both this reference and the original baseline for
-the subsequent comparisons; no separate permanent backend is introduced.
+| Case | Original | S2d | Change |
+| --- | ---: | ---: | ---: |
+| tracked_apply_at, aromatic frame | 3.342 | 2.536 | -24.1% |
+| tracked_apply_at, stereo 5 | 3.202 | 2.464 | -23.1% |
+| tracked_apply_at, stereo 128 | 22.654 | 5.683 | -74.9% |
+| tracked_apply_at, deletion 64 | 42.305 | 40.007 | -5.4% |
+| apply_at_to_reaction_span, aromatic frame | 13.278 | 12.061 | -9.2% |
+| apply_at_to_reaction_span, stereo 5 | 12.151 | 11.059 | -9.0% |
+| apply_at_to_reaction_span, stereo 128 | 137.104 | 111.212 | -18.9% |
+| apply_at_to_reaction_span, deletion 64 | 76.714 | 72.469 | -5.5% |
+| complete stereo composition | 750.714 | 690.919 | -8.0% |
+
+Holding S2d application fixed, atom-only composition versus complete-witness
+composition measured 700.666 versus 690.919 microseconds (-1.4%). Repeating those
+two measurements in reverse order gave 698.967 versus 692.731 (-0.9%). These
+controlled fixtures show no timing regression. Tracking initializes pairs for
+all host entities and transports them through edits, replacing reconstruction
+of atom survivors and output-incidence induction. The deletion-heavy fixture
+includes initializing pairs that are subsequently removed; the new local bond
+checks are included in every applicable measurement.
+
+Measurements used rustc 1.99.1 (58cf8f9c3), LLVM 23.1.1, aarch64-apple-darwin on
+Darwin 24.6.0, the bench profile with debug information and no extra Rust flags.
+Criterion used 50 samples, one-second warmup and three-second measurement per
+case, with sequential runs after compilation finished. The harness, original
+snapshot, composition control, trial snapshot, build commands, logs and estimates
+are in scratch/238-s2d. completed-s2d.patch against c160101d preserves the final
+implementation for the S2e removal-backend comparison.
+
+Verification passed: focused graph-IR unit tests, 101 reaction properties (one
+ignored), and 267 Python reaction/span/delta tests (two skipped), after rebuilding
+the Python 3.13 extension. Coverage includes both match algorithms, all result
+forms, aromatic-system replacement replay, both stereo kinds and host frames,
+virtual ligands, replacement-ID collisions, constraint references, reversal and
+composition. Clippy passed for all graph-IR targets with proptest and warnings
+denied; full nightly workspace formatting and git diff --check passed.
 
 #### S2e — Editor and edit execution [dep: S2c, S2d]
 

@@ -3,13 +3,17 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
-    ApplyError, Canonicalize, CanonicalizeContext, Entity, React, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig,
+    ApplyError, AtomForm, AtomId, BondDelta, BondForm, BondId, Canonicalize, CanonicalizeContext,
+    Delta, Deltas, Entity, Molecule, MoleculeCorrespondence, MoleculeEntries, React, Reaction,
+    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondDelta,
+    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoKind, StereoLigand,
+    StereoLigandKind, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 
 use crate::strategies::*;
@@ -461,8 +465,9 @@ proptest! {
         prop_assert!(products[0].normalized_eq(&expected));
     }
 
-    /// Delta normalization preserves exact application at an explicit occurrence in a generated,
-    /// non-identity host.
+    /// Span/reaction conversion preserves application at an explicit occurrence in a generated,
+    /// non-identity host. Entity storage and correspondence agree exactly; molecule constraints
+    /// agree after constraint normalization.
     #[test]
     fn test_reaction_tracked_apply_at_roundtrip(
         (reaction, host, correspondence) in reaction_application_strategy(),
@@ -472,10 +477,12 @@ proptest! {
             .expect("generated reaction materializes a span")
             .to_reaction();
 
-        prop_assert_eq!(
-            normalized.tracked_apply_at(&host, &correspondence),
-            reaction.tracked_apply_at(&host, &correspondence),
-        );
+        let [original, replay] = [&reaction, &normalized].map(|reaction| {
+            reaction.tracked_apply_at(&host, &correspondence).map(|result| {
+                result.map(|(product, witness)| (with_normalized_constraints(&product), witness))
+            })
+        });
+        prop_assert_eq!(replay, original);
     }
 
 
@@ -500,6 +507,122 @@ proptest! {
         prop_assert!(product.canonical_eq(&span.rhs(), &context));
         prop_assert!(product.canonical_eq(&realized.to_reaction_span().unwrap().rhs(), &context));
         prop_assert_eq!(realized.normalize(), span.to_reaction().normalize());
+    }
+
+    /// Replacement has fresh identity and uses the rule frame, independently of the host frame.
+    #[test]
+    fn test_reaction_tracked_apply_at_stereo_atom_replacement(
+        old in 0_u32..2,
+        new in 0_u32..2,
+        explicit in any::<bool>(),
+        permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..=4).map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1))).collect(),
+            ..Default::default()
+        };
+        let ligands: Vec<_> = (1..=4).map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect();
+        let before = StereoAtomForm::new(StereoKind::Tetrahedral, old);
+        let after = StereoAtomForm::new(if explicit { StereoKind::Tetrahedral } else { StereoKind::SquarePlanar }, new);
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), ligands.clone(), before.clone())], ..entries.clone()
+        });
+        let host = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), permutation.act(&ligands), before.clone().apply(permutation).unwrap())],
+            ..entries.clone()
+        });
+        let expected = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), ligands.clone(), after.clone())], ..entries
+        });
+        let deltas = if explicit {
+            Deltas::from_iter([
+                Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(0), site: AtomId(0), ligands: ligands.clone(), attributes: before }),
+                Delta::StereoAtom(StereoAtomDelta::Add { id: StereoAtomId(1), site: AtomId(0), ligands, attributes: after }),
+            ])
+        } else {
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0), change: StereoAtomFieldChange::Configuration { old: before.configuration, new: after.configuration },
+            })])
+        };
+        let reaction = Reaction::new(lhs, deltas);
+        let occurrence = MoleculeCorrespondence::new(
+            Correspondence::identity(5), Correspondence::identity(4),
+            Correspondence::empty(), Correspondence::empty(), Correspondence::empty(), Correspondence::empty(),
+            Correspondence::identity(1),
+            Correspondence::empty(),
+        );
+        let witness = MoleculeCorrespondence::new(
+            Correspondence::identity(5), Correspondence::identity(4),
+            Correspondence::empty(), Correspondence::empty(), Correspondence::empty(), Correspondence::empty(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::empty(),
+        );
+        prop_assert_eq!(reaction.tracked_apply_at(&host, &occurrence), Ok(Some((expected.clone(), witness.clone()))));
+        let realized = reaction.apply_at_to_reaction(&host, &occurrence).unwrap().unwrap();
+        prop_assert_eq!(realized.tracked_apply_at(&host, &occurrence), Ok(Some((expected.clone(), witness.clone()))));
+        let span = reaction.apply_at_to_reaction_span(&host, &occurrence).unwrap().unwrap();
+        prop_assert_eq!(span.rhs(), expected);
+        prop_assert_eq!(span.correspondence(), witness);
+        prop_assert_eq!(realized.to_reaction_span().unwrap(), span);
+    }
+
+    /// Replacement has fresh identity and uses the rule frame, independently of the host frame.
+    #[test]
+    fn test_reaction_tracked_apply_at_stereo_bond_replacement(
+        old in 0_u32..2,
+        new in 0_u32..2,
+        explicit in any::<bool>(),
+        permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5)].map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1))).to_vec(),
+            ..Default::default()
+        };
+        let ligands: Vec<_> = (2..=5).map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect();
+        let before = StereoBondForm::new(StereoKind::CisTrans, old);
+        let after = StereoBondForm::new(if explicit { StereoKind::CisTrans } else { StereoKind::Axial }, new);
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            stereo_bonds: vec![(BondId(0), ligands.clone(), before.clone())], ..entries.clone()
+        });
+        let host = Molecule::from_entries(MoleculeEntries {
+            stereo_bonds: vec![(BondId(0), permutation.act(&ligands), before.clone().apply(permutation).unwrap())],
+            ..entries.clone()
+        });
+        let expected = Molecule::from_entries(MoleculeEntries {
+            stereo_bonds: vec![(BondId(0), ligands.clone(), after.clone())], ..entries
+        });
+        let deltas = if explicit {
+            Deltas::from_iter([
+                Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(0), site: BondId(0), ligands: ligands.clone(), attributes: before }),
+                Delta::StereoBond(StereoBondDelta::Add { id: StereoBondId(1), site: BondId(0), ligands, attributes: after }),
+            ])
+        } else {
+            Deltas::from_iter([Delta::StereoBond(StereoBondDelta::ModifyField {
+                id: StereoBondId(0), change: StereoBondFieldChange::Configuration { old: before.configuration, new: after.configuration },
+            })])
+        };
+        let reaction = Reaction::new(lhs, deltas);
+        let occurrence = MoleculeCorrespondence::new(
+            Correspondence::identity(6), Correspondence::identity(5),
+            Correspondence::empty(), Correspondence::empty(), Correspondence::empty(), Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::identity(1),
+        );
+        let witness = MoleculeCorrespondence::new(
+            Correspondence::identity(6), Correspondence::identity(5),
+            Correspondence::empty(), Correspondence::empty(), Correspondence::empty(), Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+        );
+        prop_assert_eq!(reaction.tracked_apply_at(&host, &occurrence), Ok(Some((expected.clone(), witness.clone()))));
+        let realized = reaction.apply_at_to_reaction(&host, &occurrence).unwrap().unwrap();
+        prop_assert_eq!(realized.tracked_apply_at(&host, &occurrence), Ok(Some((expected.clone(), witness.clone()))));
+        let span = reaction.apply_at_to_reaction_span(&host, &occurrence).unwrap().unwrap();
+        prop_assert_eq!(span.rhs(), expected);
+        prop_assert_eq!(span.correspondence(), witness);
+        prop_assert_eq!(realized.to_reaction_span().unwrap(), span);
     }
 
     /// Adding one unavailable pattern atom to an otherwise valid explicit correspondence produces
