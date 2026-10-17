@@ -1648,7 +1648,7 @@ no performance measurements were run.
 S1 establishes the capabilities. S2 completes their integration and removes the
 remaining repeated work before the cost investigations.
 
-### S2 — Integration and removal of known duplicate work
+### S2 — Integration and removal of known duplicate work (done)
 
 #### S2a — Incidence maintenance (done) [dep: S1b]
 
@@ -1888,19 +1888,34 @@ with an unavailable participant, check InvalidReference translation, and repair
 and publish it after rejection. The changed Python tests parse with Python 3.9
 grammar. Targeted nightly formatting and git diff --check passed.
 
-#### S2h — Retire implicit relation cascades [dep: S2e, S2g]
+#### S2h — Retire implicit relation cascades (done) [dep: S2e, S2g]
 
-Modules: graph-core relation storage, remaining callers, and normative guides.
-Breaking red-to-green. Remove the old compact/tracked_compact pair after all
-production callers have migrated. Preserve the laws exercised by cascade and
-restoration tests by expressing their selection explicitly; do not weaken them
-to ordinary row-removal checks. Complete the development-guide inventory above,
-including the data-type, nomenclature, Python API, and integrity guides; reconcile
-rustdoc and examples with the final interfaces. Audit for hidden cascade
-selection and for new duplicate incidence/capture work.
+Completed 2026-10-17. Removed compact/tracked_compact from all five relation-set
+families and the twelve test-only graph-IR store and Molecule delegates. Unit
+tests, restoration properties, and restoration benchmark setup now separate
+dependent-row selection, row removal, and reference transport. Their existing
+survivor, frame, payload, incidence, shared-source, and restoration assertions
+remain. Benchmark setup stays outside timing; its fixtures passed in test mode.
 
-S2 ends with the full topology-removal distinction implemented across its
-consumers and the affected unit, property, and Python suites passing. The two
+The caller audit found no remaining implicit relation cascade. Cascade selection
+runs once before journal capture; capture uses the selected IDs. Row removal and
+reference transport update the separate row-ID and graph-reference parts of
+incidence without rebuilding it. Each topology operation compacts molecule
+constraints once. The editor draft reference scan remains explicit and is part
+of S3a's cost accounting. The four development guides were checked against the
+final interfaces. The data-type guide now removes the obsolete relation contract
+and corrects the stale claim that application output pairings are induced from
+incidence, including the agreed stereo replacement and composition rules.
+
+Verification passed: cargo test --workspace; all 215 graph-core, 484 graph-IR,
+and 179 graph property tests (one graph-IR property remains ignored); all 683
+resolution conformance cases; restoration benchmark fixtures in test mode; and
+2,898 Python tests after rebuilding the Python 3.13 extension (two skipped).
+Workspace Clippy passed with all targets, the property and conformance features,
+and warnings denied. Full cargo +nightly fmt --all, its check, and git diff
+--check passed.
+
+S2's topology-removal distinction is implemented across its consumers. The two
 remaining cost investigations start from this coherent implementation, with
 the same DPO checks and cascade scope in both sides of each comparison.
 

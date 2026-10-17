@@ -10,8 +10,8 @@
 //! payloads. Separate roundtrips exercise the removal producer. [`FixedRelationSet::restore_participants`]
 //! uses structured participants with node, edge, both, or neither reference and extra labels;
 //! independently enumerated survivors define inverse translation over eight-id domains.
-//! Separate compaction roundtrips check producer compatibility. Malformed-input properties
-//! require only freedom from panics for both operations.
+//! Separate removal and reference-transport roundtrips check producer compatibility.
+//! Malformed-input properties require only freedom from panics for both operations.
 //!
 //! VarRelationSet exercises the same restoration laws over heterogeneous rows of zero to eight
 //! participants, checking packed row boundaries as well as complete values and incidence.
@@ -25,9 +25,9 @@
 //! VarVarBirelationSet varies both factor lengths independently from zero to eight,
 //! checking the same laws with unequal lengths, empty factors, and shared references.
 //!
-//! Combined sequence properties exercise graph cascading removal and induced relation compaction
-//! over up to eight nodes, sixteen edges, and sixteen rows. One to three removals are undone in
-//! reverse order: graph restoration, survivor-reference restoration, then saved-row restoration.
+//! Combined sequence properties exercise graph cascading removal, explicit dependent-row removal,
+//! and reference transport over up to eight nodes, sixteen edges, and sixteen rows. One to three
+//! removals are undone in reverse order: graph restoration, survivor-reference restoration, then saved-row restoration.
 //! Each intermediate state is checked against its saved rows and an endpoint/adjacency model;
 //! incidence is scanned independently. This checks compatibility across the two id domains,
 //! supplementing the independent single-operation oracles above. Removal choices include random
@@ -329,7 +329,15 @@ proptest! {
             Compaction::new(8, (0..8).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(8, (0..8).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         );
-        let mut relations = FixedRelationSet::new(entries).compact(&compaction);
+        let mut relations = FixedRelationSet::new(entries);
+        let removed = relations.ids().filter(|&id| {
+            relations.participants(id).iter().any(|p| {
+                p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                    || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+            })
+        }).collect();
+        relations.remove(removed);
+        relations.compact_participants(&compaction);
         relations.restore_participants(&compaction);
         for id in 0..9 {
             let nodes: Vec<_> = expected.iter().enumerate()
@@ -389,12 +397,18 @@ proptest! {
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
             let compaction = graph.tracked_remove_cascading(nodes, edges);
-            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let removed = relations.ids().filter(|&id| {
+                relations.participants(id).iter().any(|p| {
+                    p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                        || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+                })
+            }).collect();
+            let row_compaction = relations.tracked_remove(removed);
+            relations.compact_participants(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, data) = before_rows[id.index()];
                 (*id, first, data)
             }).collect();
-            relations = compacted;
             history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
         }
         for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
@@ -551,7 +565,15 @@ proptest! {
             Compaction::new(8, (0..8).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(8, (0..8).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         );
-        let mut relations = VarRelationSet::new(entries).compact(&compaction);
+        let mut relations = VarRelationSet::new(entries);
+        let removed = relations.ids().filter(|&id| {
+            relations.participants(id).iter().any(|p| {
+                p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                    || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+            })
+        }).collect();
+        relations.remove(removed);
+        relations.compact_participants(&compaction);
         relations.restore_participants(&compaction);
         for id in 0..9 {
             let nodes: Vec<_> = expected.iter().enumerate()
@@ -611,12 +633,18 @@ proptest! {
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
             let compaction = graph.tracked_remove_cascading(nodes, edges);
-            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let removed = relations.ids().filter(|&id| {
+                relations.participants(id).iter().any(|p| {
+                    p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                        || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+                })
+            }).collect();
+            let row_compaction = relations.tracked_remove(removed);
+            relations.compact_participants(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, data) = before_rows[id.index()].clone();
                 (*id, first, data)
             }).collect();
-            relations = compacted;
             history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
         }
         for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
@@ -769,7 +797,15 @@ proptest! {
             Compaction::new(8, (0..8).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(8, (0..8).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         );
-        let mut relations = FixedFixedBirelationSet::new(entries).compact(&compaction);
+        let mut relations = FixedFixedBirelationSet::new(entries);
+        let removed = relations.ids().filter(|&id| {
+            relations.participants_1(id).iter().chain(relations.participants_2(id)).any(|p| {
+                p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                    || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+            })
+        }).collect();
+        relations.remove(removed);
+        relations.compact_participants(&compaction);
         relations.restore_participants(&compaction);
         for id in 0..9 {
             let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
@@ -828,12 +864,18 @@ proptest! {
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
             let compaction = graph.tracked_remove_cascading(nodes, edges);
-            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let removed = relations.ids().filter(|&id| {
+                relations.participants_1(id).iter().chain(relations.participants_2(id)).any(|p| {
+                    p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                        || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+                })
+            }).collect();
+            let row_compaction = relations.tracked_remove(removed);
+            relations.compact_participants(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, second, data) = before_rows[id.index()];
                 (*id, first, second, data)
             }).collect();
-            relations = compacted;
             history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
         }
         for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
@@ -991,7 +1033,15 @@ proptest! {
             Compaction::new(8, (0..8).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(8, (0..8).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         );
-        let mut relations = FixedVarBirelationSet::new(entries).compact(&compaction);
+        let mut relations = FixedVarBirelationSet::new(entries);
+        let removed = relations.ids().filter(|&id| {
+            relations.participants_1(id).iter().chain(relations.participants_2(id)).any(|p| {
+                p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                    || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+            })
+        }).collect();
+        relations.remove(removed);
+        relations.compact_participants(&compaction);
         relations.restore_participants(&compaction);
         for id in 0..9 {
             let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
@@ -1051,12 +1101,18 @@ proptest! {
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
             let compaction = graph.tracked_remove_cascading(nodes, edges);
-            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let removed = relations.ids().filter(|&id| {
+                relations.participants_1(id).iter().chain(relations.participants_2(id)).any(|p| {
+                    p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                        || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+                })
+            }).collect();
+            let row_compaction = relations.tracked_remove(removed);
+            relations.compact_participants(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, second, data) = before_rows[id.index()].clone();
                 (*id, first, second, data)
             }).collect();
-            relations = compacted;
             history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
         }
         for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
@@ -1214,7 +1270,15 @@ proptest! {
             Compaction::new(8, (0..8).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(8, (0..8).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         );
-        let mut relations = VarVarBirelationSet::new(entries).compact(&compaction);
+        let mut relations = VarVarBirelationSet::new(entries);
+        let removed = relations.ids().filter(|&id| {
+            relations.participants_1(id).iter().chain(relations.participants_2(id)).any(|p| {
+                p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                    || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+            })
+        }).collect();
+        relations.remove(removed);
+        relations.compact_participants(&compaction);
         relations.restore_participants(&compaction);
         for id in 0..9 {
             let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
@@ -1274,12 +1338,18 @@ proptest! {
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
             let compaction = graph.tracked_remove_cascading(nodes, edges);
-            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let removed = relations.ids().filter(|&id| {
+                relations.participants_1(id).iter().chain(relations.participants_2(id)).any(|p| {
+                    p.node.is_some_and(|id| compaction.nodes().compact(id).is_none())
+                        || p.edge.is_some_and(|id| compaction.edges().compact(id).is_none())
+                })
+            }).collect();
+            let row_compaction = relations.tracked_remove(removed);
+            relations.compact_participants(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, second, data) = before_rows[id.index()].clone();
                 (*id, first, second, data)
             }).collect();
-            relations = compacted;
             history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
         }
         for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {

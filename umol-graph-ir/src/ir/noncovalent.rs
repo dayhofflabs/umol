@@ -291,25 +291,6 @@ impl NoncovalentBonds {
         Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
-    #[cfg(test)]
-    pub(crate) fn compact(
-        &self,
-        compaction: &GraphCompaction,
-    ) -> (Self, Compaction<NoncovalentBondId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid noncovalent bond ids");
-        (Self(Arc::new(set)), relations)
-    }
-
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
     ///
     /// # Panics
@@ -1144,7 +1125,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bonds_compact() {
+    fn test_noncovalent_bonds_compact_topology_ids_roundtrip() {
         let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
         let original = NoncovalentBonds::new(vec![
             ([AtomId(3), AtomId(2)], attributes.clone()),
@@ -1154,7 +1135,10 @@ mod tests {
             Compaction::new(5, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original.incident_ids(AtomId(1)).collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(
             rows,

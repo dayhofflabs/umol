@@ -322,25 +322,6 @@ impl MulticenterBonds {
         Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
-    #[cfg(test)]
-    pub(crate) fn compact(
-        &self,
-        compaction: &GraphCompaction,
-    ) -> (Self, Compaction<MulticenterBondId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid multicenter bond ids");
-        (Self(Arc::new(set)), relations)
-    }
-
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
     ///
     /// # Panics
@@ -1247,7 +1228,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bonds_compact() {
+    fn test_multicenter_bonds_compact_topology_ids_roundtrip() {
         let original = MulticenterBonds::new(vec![
             (
                 vec![AtomId(0), AtomId(2)],
@@ -1266,7 +1247,10 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original.incident_ids(AtomId(1)).collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(
             rows,

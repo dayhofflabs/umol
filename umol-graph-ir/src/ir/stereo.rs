@@ -337,22 +337,6 @@ impl StereoAtoms {
         Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
-    #[cfg(test)]
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoAtomId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid stereo atom ids");
-        (Self(Arc::new(set)), relations)
-    }
-
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
     ///
     /// # Panics
@@ -811,22 +795,6 @@ impl StereoBonds {
             return;
         }
         Arc::make_mut(&mut self.0).compact_participants(topology);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoBondId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid stereo bond ids");
-        (Self(Arc::new(set)), relations)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -3248,7 +3216,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atoms_compact(stereo_atoms: StereoAtoms) {
+    fn test_stereo_atoms_compact_topology_ids_roundtrip(stereo_atoms: StereoAtoms) {
         let attributes = stereo_atoms.attributes(StereoAtomId(0)).clone();
         let ligands = vec![
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -3267,7 +3235,10 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original.incident_ids(AtomId(1)).collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(
             rows,
@@ -4329,7 +4300,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bonds_compact(stereo_bonds: StereoBonds) {
+    fn test_stereo_bonds_compact_topology_ids_roundtrip(stereo_bonds: StereoBonds) {
         let attributes = stereo_bonds.attributes(StereoBondId(0)).clone();
         let ligands = vec![
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -4349,7 +4320,13 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::new(4, vec![EdgeId(1)]).unwrap(),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original
+            .incident_to_atom_ids(AtomId(1))
+            .chain(original.incident_to_bond_ids(BondId(1)))
+            .collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(
             rows,

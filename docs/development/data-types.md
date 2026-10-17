@@ -721,6 +721,8 @@ edits. Recovery from allocation failure or an internal panic during an Edit is o
 
 Undo payloads remain public. Restoration from matching history is correct under the stated
 equivalence; manipulated history must not panic but has no specified result.
+Edits are independently supplied instructions, not restoration history. Exact topology-removal
+edits reject unresolved handles, unavailable stored references, and dangling references before mutation.
 
 Graph::restore and relation-set restore/restore_participants likewise consume undo data from a
 matching removal. The compaction and saved rows are supplied separately, but their required
@@ -732,8 +734,8 @@ RelationParticipant implementations, whose transported references are all report
 
 Whole-row restoration reinstates saved rows at their original ids without translating their
 participants and preserves current surviving values. Participant restoration expands only
-surviving references. After graph removal and relation compaction, undo restores the graph,
-restores participant references in surviving relations, then restores saved relation rows.
+surviving references. After graph removal, dependent-row removal, and reference transport, undo
+restores the graph, restores participant references in surviving relations, then restores saved rows.
 Relation payloads move without requiring Clone. Uncompaction remains non-mutating id/value
 translation; its existing asserted and checked interfaces retain their contracts.
 
@@ -805,9 +807,17 @@ classified to recover continuation policy.
 
 All four methods preserve the same application and applicability behavior. The supplied
 correspondence maps the rule into the host; the produced witness maps host to product.
-Other entity pairings are induced from atom provenance and compatible incidence. Equal
-stereo kinds remain matchable, while different determined kinds identify different entities
-and produce removal plus addition. An undetermined kind does not assert a conflicting geometry.
+The produced correspondence tracks surviving entities in all eight kinds. Explicit deletion and
+recreation leave both entities unmatched, even when their incidence is identical. Realized reactions,
+spans, and sequential composition retain this distinction rather than pairing by final incidence.
+Different determined stereo kinds likewise identify different entities: application and span
+conversion represent the change as removal plus addition, and reversal preserves that replacement.
+The replacement carries the rule's new attributes; host-only entity constraints are not copied,
+and molecule constraints referring to the removed entity undergo ordinary removal compaction.
+Composition also compares the final sides' stereo kinds, so an undetermined intermediate cannot
+join different determined kinds into one preserved entity. An undetermined kind alone does not
+assert a conflicting geometry. General correspondence construction and incidence-based induction
+remain separate operations.
 Realized reactions and spans use the existing lhs-anchored representation and constraint
 normal form; their product projections preserve the produced molecule's semantics rather
 than promising its exact row ordering.
@@ -1018,9 +1028,9 @@ errors and may panic during translation. There is no separate validation scan. A
 leaves storage unchanged, but a zero-domain identity does not cover nonempty reference domains.
 Matching restore_participants reverses the reference translation.
 
-The borrowing relation-set compact/tracked_compact pair still selects rows by participant survival
-and rebuilds the resulting set, cloning payloads. The tracked form additionally returns its
-relation-id compaction; both preserve the same output and failure behavior.
+Dependency selection belongs to the caller. For cascading removal, it selects dependent row IDs,
+calls remove/tracked_remove, then transports the retained references with compact_participants.
+The row compaction records that selection; graph-reference transport does not select more rows.
 
 Graph-IR owning overlay sets separate row removal from compact_topology_ids, which transports
 atom references and stereo-bond sites without removing rows. The coordinator establishes source

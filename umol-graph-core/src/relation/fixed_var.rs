@@ -912,60 +912,6 @@ where
         Some(Self::new(entries))
     }
 
-    /// Compact participant ids and discard rows containing a participant that cannot survive.
-    ///
-    /// A row is dropped if any [`RelationParticipant::compact`] call returns `None`.
-    /// For node/edge participants this includes removed or out-of-source-range references.
-    /// Returns the same set as [`Self::tracked_compact`], without its relation-id compaction.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
-    where
-        D: Clone,
-    {
-        self.tracked_compact(compaction).0
-    }
-
-    /// Compact participants and return the induced compaction of this set's relation ids.
-    ///
-    /// Drops a row if any participant's [`RelationParticipant::compact`] returns `None`.
-    /// The compaction's source count is this set's original row count.
-    ///
-    /// # Semantic properties
-    ///
-    /// Surviving rows retain their relative order, factor positions, and cloned payloads;
-    /// only participant ids and dense relation ids change. For conforming participants,
-    /// a covering identity compaction preserves the set exactly. Plain and tracked
-    /// compaction produce equal sets.
-    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
-    where
-        D: Clone,
-    {
-        let mut removed = Vec::new();
-        let mut entries: Vec<([L1; N1], Vec<L2>, D)> = Vec::with_capacity(self.count());
-        for i in 0..self.count() {
-            let rid = RelationId(i as u32);
-            let f1: Option<[L1; N1]> = self
-                .participants_1(rid)
-                .iter()
-                .map(|&p| p.compact(compaction))
-                .collect::<Option<Vec<L1>>>()
-                .and_then(|parts| parts.try_into().ok());
-            let f2: Option<Vec<L2>> = self
-                .participants_2(rid)
-                .iter()
-                .map(|&p| p.compact(compaction))
-                .collect();
-            match (f1, f2) {
-                (Some(f1), Some(f2)) => entries.push((f1, f2, self.data(rid).clone())),
-                _ => removed.push(rid),
-            }
-        }
-        (
-            Self::new(entries),
-            Compaction::new(self.count(), removed)
-                .expect("removed relations belong to the source set"),
-        )
-    }
-
     /// Glue two relation sets in the same participant id space using caller-selected pairings.
     ///
     /// Calls `coincident` on the original `self` for each right row. The callback must
