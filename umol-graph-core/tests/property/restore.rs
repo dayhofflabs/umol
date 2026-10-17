@@ -173,7 +173,7 @@ proptest! {
             .filter(|(_, (pair, requested))| *requested || pair.iter().any(|&n| nodes.contains(&NodeId(n))))
             .map(|(id, &(pair, _))| (EdgeId::from(id), pair.map(NodeId))).collect();
         let mut graph = original.clone();
-        let compaction = graph.tracked_remove_cascading(&nodes, &removed_edges);
+        let compaction = graph.tracked_remove_cascading(nodes, removed_edges);
         let before = Graph::new(graph.node_count(), &graph.edge_ids()
             .map(|edge| graph.edge_endpoints(edge).map(|node| node.0)).collect::<Vec<_>>());
         let retained = graph.clone();
@@ -385,10 +385,10 @@ proptest! {
             let before_rows = relations.clone().into_entries();
             let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
             let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
-            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
             let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let compaction = graph.tracked_remove_cascading(nodes, edges);
             let (compacted, row_compaction) = relations.tracked_compact(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, data) = before_rows[id.index()];
@@ -607,10 +607,10 @@ proptest! {
             let before_rows = relations.clone().into_entries();
             let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
             let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
-            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
             let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let compaction = graph.tracked_remove_cascading(nodes, edges);
             let (compacted, row_compaction) = relations.tracked_compact(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, data) = before_rows[id.index()].clone();
@@ -824,10 +824,10 @@ proptest! {
             let before_rows = relations.clone().into_entries();
             let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
             let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
-            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
             let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let compaction = graph.tracked_remove_cascading(nodes, edges);
             let (compacted, row_compaction) = relations.tracked_compact(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, second, data) = before_rows[id.index()];
@@ -1047,10 +1047,10 @@ proptest! {
             let before_rows = relations.clone().into_entries();
             let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
             let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
-            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
             let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let compaction = graph.tracked_remove_cascading(nodes, edges);
             let (compacted, row_compaction) = relations.tracked_compact(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, second, data) = before_rows[id.index()].clone();
@@ -1270,10 +1270,10 @@ proptest! {
             let before_rows = relations.clone().into_entries();
             let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
             let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
-            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
             let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
                 .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
                 .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let compaction = graph.tracked_remove_cascading(nodes, edges);
             let (compacted, row_compaction) = relations.tracked_compact(&compaction);
             let saved_rows = row_compaction.removed().iter().rev().map(|id| {
                 let (first, second, data) = before_rows[id.index()].clone();

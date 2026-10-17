@@ -1109,7 +1109,7 @@ impl Molecule {
     ) -> GraphCompaction {
         let nodes: Vec<_> = atoms.iter().copied().map(NodeId::from).collect();
         let edges: Vec<_> = bonds.iter().copied().map(EdgeId::from).collect();
-        let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
+        let compaction = self.graph.tracked_remove_cascading(nodes, edges);
         self.atoms = Arc::new(compaction.nodes().compact_vec(&self.atoms));
         self.bonds = Arc::new(compaction.edges().compact_vec(&self.bonds));
         compaction

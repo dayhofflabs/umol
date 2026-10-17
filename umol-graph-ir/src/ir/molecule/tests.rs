@@ -4325,7 +4325,7 @@ fn test_molecule_restore_topology(
 ) {
     let mut molecule = Molecule::from_entries(restoration_entries.clone());
     let mut expected_entries = restoration_entries.clone();
-    let compaction = molecule.graph.tracked_remove_cascading(&nodes, &edges);
+    let compaction = molecule.graph.tracked_remove_cascading(nodes, edges);
     let atoms = compaction
         .nodes()
         .removed()
@@ -4479,7 +4479,7 @@ fn test_molecule_restore_dative_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
     compacted.compact_dative_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
@@ -4552,7 +4552,7 @@ fn test_molecule_restore_aromatic_system_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
     compacted.compact_aromatic_systems(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
@@ -4625,7 +4625,7 @@ fn test_molecule_restore_multicenter_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
     compacted.compact_multicenter_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
@@ -4698,7 +4698,7 @@ fn test_molecule_restore_noncovalent_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
     compacted.compact_noncovalent_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
@@ -4769,7 +4769,7 @@ fn test_molecule_restore_stereo_atom_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
     compacted.compact_stereo_atoms(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
@@ -4840,7 +4840,7 @@ fn test_molecule_restore_stereo_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
     compacted.compact_stereo_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);

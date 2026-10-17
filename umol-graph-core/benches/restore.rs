@@ -185,7 +185,6 @@ fn graph(c: &mut Criterion) {
                         .collect()
                 };
                 let mut compacted = original.clone();
-                let compaction = compacted.tracked_remove_cascading(&nodes, &edges);
                 let removed: Vec<_> = endpoints
                     .iter()
                     .enumerate()
@@ -196,6 +195,7 @@ fn graph(c: &mut Criterion) {
                     })
                     .map(|(i, pair)| (EdgeId::from(i), pair.map(NodeId)))
                     .collect();
+                let compaction = compacted.tracked_remove_cascading(nodes, edges);
                 let rebuilt = rebuild_graph(&compacted, &compaction, &removed);
                 let mut restored = compacted.clone();
                 restored.restore(&compaction, &removed);
@@ -1385,7 +1385,7 @@ fn sequence(c: &mut Criterion) {
                             .then_some((id, pair))
                     })
                     .collect();
-                let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+                let compaction = graph.tracked_remove_cascading(nodes, edges);
                 let (compacted, fixed_compaction) = fixed.tracked_compact(&compaction);
                 let entries = fixed.into_entries();
                 let fixed_saved: Vec<_> = fixed_compaction

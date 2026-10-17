@@ -372,6 +372,11 @@ It is layered on both axes, matching correspondence: `Compaction<Id>` over one i
 `GraphCompaction` pairing the node and edge spaces, and `MoleculeCompaction` carrying a typed
 compaction per entity kind so every stale reference can be updated or discarded consistently.
 
+Graph::remove deletes exactly the supplied nodes and edges; retained edges must have surviving
+endpoints. Graph::try_remove checks that prerequisite before mutation. Graph::remove_cascading
+also selects edges incident to removed nodes. Their tracked counterparts return the corresponding
+GraphCompaction.
+
 **`UndoCompaction`** is the inverse view of a `MoleculeCompaction` for rollback: it carries surviving
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
@@ -1731,6 +1736,7 @@ the same primary result as its bare counterpart. The bare name returns only the 
 `tracked_<operation>` returns that result together with the operation's compaction, remapping,
 correspondence, frame action, or categorical mappings. Discarding the tracked value must preserve
 the ordinary output, failure or absence behavior, result ordering, and final mutable state.
+For an in-place operation returning unit, the tracked form returns the mapping directly.
 
 Use `try_tracked_<operation>` when `try_` distinguishes a checked counterpart; `try_` remains the
 outermost prefix. The return type identifies the returned provenance, so do not repeat it in names

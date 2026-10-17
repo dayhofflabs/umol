@@ -993,11 +993,17 @@ source count of values, and `try_compact_vec` returns `None` on a length mismatc
 is preserved. Borrowed conversions to single-space, graph, and molecule correspondences preserve
 both counts and every survivor pairing in each entity kind.
 
-Graph `remove_cascading` returns `()`, and `try_remove` returns `Option<()>`;
-`tracked_remove_cascading` and `try_tracked_remove` return the graph compaction instead.
-The checked removal leaves the graph unchanged when the dangling condition fails.
-Single-node/edge cascading-removal conveniences return no witness. Relation-set
-`compact` returns the resulting set; `tracked_compact` returns that set
+Graph `remove` and `remove_cascading` return `()`, and `try_remove` returns `Option<()>`;
+their tracked counterparts return the graph compaction instead. These bulk methods consume
+node and edge removal vectors, retaining their order-independent, deduplicating semantics.
+Exact `remove` assumes supplied ids are in range and retained edges have surviving endpoints;
+violations may panic during construction of the compaction or endpoint translation. It performs
+no separate dangling scan. The checked removal establishes endpoint survival before mutation
+and leaves the graph unchanged when the dangling condition fails. Cascading removal selects all
+incident edges before exact removal. Surviving node and edge order is preserved, including loops
+and parallel edges; shared source graphs are unchanged.
+Single-node/edge cascading-removal conveniences retain their single-id inputs and return no witness.
+Relation-set `compact` returns the resulting set; `tracked_compact` returns that set
 and its relation-id compaction. Each pair preserves the same output and failure behavior.
 
 The graph-IR owning overlay sets expose crate-private `compact` returning the resulting set

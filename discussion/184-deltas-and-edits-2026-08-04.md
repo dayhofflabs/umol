@@ -6,7 +6,8 @@ Relates: [043](043-mutative-undoable-mutation-2025-12-23.md),
 [086](086-molecule-ast-api-2026-04-16.md),
 [131](131-reaction-application-design-2026-06-24.md),
 [148](148-validated-transactions-operations-2026-07-13.md),
-[179](179-python-editing-and-transactions-2026-08-02.md)
+[179](179-python-editing-and-transactions-2026-08-02.md),
+[238](238-non-cascading-removal-2026-10-16.md)
 
 `Delta` and `Edit` describe nearly the same kinds of molecular change. This makes the two
 hierarchies look redundant, especially because reaction application eventually lowers deltas to
