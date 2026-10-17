@@ -5,6 +5,7 @@ from umol import (
     AtomForm,
     AtomFieldChange,
     BondForm,
+    Compaction,
     ConsumedError,
     Correspondence,
     DativeBondForm,
@@ -14,6 +15,7 @@ from umol import (
     InvalidatedViewError,
     InvalidStructureError,
     Molecule,
+    MoleculeCompaction,
     MulticenterBondForm,
     NoncovalentBondForm,
     NoncovalentBondKind,
@@ -563,26 +565,40 @@ def test_molecule_editor_apply_replace_error(replacement_case):
         editor.apply(edits)
 
 
-def test_molecule_editor_remove_topology():
+@pytest.mark.parametrize("cascading", [False, True])
+def test_molecule_editor_remove_topology(cascading):
     molecule = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
     )
-    editor = molecule.edit()
-    editor.remove_topology([1], [0, 1])
-
-    assert editor.finish() == Molecule.from_entries(
+    method = "remove_topology_cascading" if cascading else "remove_topology"
+    atoms = [1, 1]
+    bonds = [] if cascading else [1, 0, 1]
+    plain = molecule.edit()
+    tracked = molecule.edit()
+    assert getattr(plain, method)(atoms, bonds) is None
+    compaction = getattr(tracked, "tracked_" + method)(atoms, bonds)
+    expected = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
+    )
+    assert plain.finish() == expected
+    assert tracked.finish() == expected
+    assert compaction == MoleculeCompaction(
+        Compaction(3, [1]), Compaction(2, [0, 1]),
+        Compaction.empty(), Compaction.empty(), Compaction.empty(),
+        Compaction.empty(), Compaction.empty(), Compaction.empty(),
     )
 
 
-@pytest.mark.parametrize("method", ["remove_topology", "apply", "tracked_apply"])
+@pytest.mark.parametrize(
+    "method", ["remove_topology", "tracked_remove_topology", "apply", "tracked_apply"],
+)
 def test_molecule_editor_remove_topology_error(method):
     source = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
     editor = source.edit()
     with pytest.raises(TransactionError, match="^removing atom 0 would leave a dangling reference from bond 0$"):
-        if method == "remove_topology":
-            editor.remove_topology([0], [])
+        if method in ("remove_topology", "tracked_remove_topology"):
+            getattr(editor, method)([0], [])
         else:
             getattr(editor, method)(Edits([Edit.RemoveTopology(atoms=[0], bonds=[])]))
     assert editor.finish() == source
@@ -612,6 +628,33 @@ def test_molecule_remove_topology_cascading(method):
     assert product == Molecule.parse('{:atoms ["N" "O"] :bonds [[0 1 "1"]]}')
 
 
+def test_molecule_editor_tracked_remove_topology_cascading():
+    source = rich_molecule()
+    plain = source.edit()
+    tracked = source.edit()
+    assert plain.remove_topology_cascading([0], []) is None
+    compaction = tracked.tracked_remove_topology_cascading([0], [])
+    expected = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(4)],
+        bonds=[(0, 2, BondForm(1))],
+        dative_bonds=[([1], 0, DativeBondForm(1))],
+    )
+    assert plain.finish() == expected
+    assert tracked.finish() == expected
+    assert compaction == MoleculeCompaction(
+        Compaction(5, [0]), Compaction(5, [0, 1, 2, 3]),
+        Compaction.identity(1),
+        Compaction(1, [0]), Compaction(1, [0]), Compaction(1, [0]),
+        Compaction(1, [0]), Compaction(1, [0]),
+    )
+    edits = Edits()
+    edits.remove_topology_cascading([0], [])
+    product, correspondence = source.tracked_apply(edits)
+    assert product == expected
+    assert correspondence == compaction.to_correspondence()
+    assert source == rich_molecule()
+
+
 @pytest.mark.parametrize(
     ("method", "field"),
     [
@@ -623,7 +666,8 @@ def test_molecule_remove_topology_cascading(method):
         ("remove_stereo_bonds", "stereo_bonds"),
     ],
 )
-def test_molecule_editor_remove_entity_family(method, field):
+@pytest.mark.parametrize("ids", [[0], [0, 0]], ids=["removal", "repeated"])
+def test_molecule_editor_remove_entity_family(method, field, ids):
     molecule = rich_molecule()
     fields = (
         "atoms", "bonds", "dative_bonds", "aromatic_systems", "multicenter_bonds",
@@ -631,11 +675,46 @@ def test_molecule_editor_remove_entity_family(method, field):
     )
     expected = {name: [view.asdict() for view in getattr(molecule, name)] for name in fields}
     expected[field] = []
-    editor = molecule.edit()
-    getattr(editor, method)([0])
-    result = editor.finish()
+    plain = molecule.edit()
+    tracked = molecule.edit()
+    assert getattr(plain, method)(ids) is None
+    compaction = getattr(tracked, "tracked_" + method)(ids)
+    result = tracked.finish()
 
     assert {name: [view.asdict() for view in getattr(result, name)] for name in fields} == expected
+    assert result == plain.finish()
+    assert compaction == MoleculeCompaction(
+        Compaction.identity(5), Compaction.identity(5),
+        **{name: Compaction(1, [0] if name == field else []) for name in fields[2:]},
+    )
+
+
+@pytest.mark.parametrize(
+    ("method", "arguments"),
+    [
+        ("remove_topology", ([], [])),
+        ("remove_topology_cascading", ([], [])),
+        ("remove_dative_bonds", ([],)),
+        ("remove_aromatic_systems", ([],)),
+        ("remove_multicenter_bonds", ([],)),
+        ("remove_noncovalent_bonds", ([],)),
+        ("remove_stereo_atoms", ([],)),
+        ("remove_stereo_bonds", ([],)),
+    ],
+)
+def test_molecule_editor_remove_identity(method, arguments):
+    source = rich_molecule()
+    plain = source.edit()
+    tracked = source.edit()
+    assert getattr(plain, method)(*arguments) is None
+    compaction = getattr(tracked, "tracked_" + method)(*arguments)
+    assert plain.finish() == source
+    assert tracked.finish() == source
+    assert compaction == MoleculeCompaction(
+        Compaction.identity(5), Compaction.identity(5),
+        Compaction.identity(1), Compaction.identity(1), Compaction.identity(1),
+        Compaction.identity(1), Compaction.identity(1), Compaction.identity(1),
+    )
 
 
 @pytest.mark.parametrize(
@@ -643,6 +722,8 @@ def test_molecule_editor_remove_entity_family(method, field):
     [
         ("remove_topology", ([5], []), "atom id out of range"),
         ("remove_topology", ([], [5]), "bond id out of range"),
+        ("remove_topology_cascading", ([0, 5], []), "atom id out of range"),
+        ("remove_topology_cascading", ([0], [5]), "bond id out of range"),
         ("remove_dative_bonds", ([1],), "dative bond id out of range"),
         ("remove_aromatic_systems", ([1],), "aromatic system id out of range"),
         ("remove_multicenter_bonds", ([1],), "multicenter bond id out of range"),
@@ -651,10 +732,15 @@ def test_molecule_editor_remove_entity_family(method, field):
         ("remove_stereo_bonds", ([1],), "stereo bond id out of range"),
     ],
 )
-def test_molecule_editor_remove_error(method, arguments, message):
+@pytest.mark.parametrize("tracked", [False, True])
+def test_molecule_editor_remove_error(method, arguments, message, tracked):
     editor = rich_molecule().edit()
+    if tracked:
+        method = "tracked_" + method
 
     with pytest.raises(IndexError, match=f"^{message}$"):
         getattr(editor, method)(*arguments)
 
     assert editor.finish() == rich_molecule()
+    with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$"):
+        getattr(editor, method)(*arguments)

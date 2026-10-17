@@ -3219,6 +3219,20 @@ impl Edits {
         Ok(())
     }
 
+    /// Append explicit cascading removal; handles are checked when the batch is applied.
+    fn remove_topology_cascading(
+        &mut self,
+        atoms: Vec<HandleLike>,
+        bonds: Vec<HandleLike>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_topology_cascading(
+            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            bonds.iter().map(HandleLike::to_bond_handle).collect(),
+        );
+        Ok(())
+    }
+
     fn remove_dative_bonds(
         &mut self,
         py: Python<'_>,

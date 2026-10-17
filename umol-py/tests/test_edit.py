@@ -607,6 +607,7 @@ def test_edits_consumption_error(receiver, method):
         ("add_stereo_bond", (0, [], StereoBondForm.parse("Ct0"))),
         ("add_stereo_bonds", ([],)),
         ("remove_topology", ([], [])),
+        ("remove_topology_cascading", ([], [])),
         ("remove_dative_bonds", ([],)),
         ("remove_aromatic_systems", ([],)),
         ("remove_multicenter_bonds", ([],)),
@@ -861,6 +862,7 @@ def test_edits_remove():
     ligands = [(New(0), StereoLigandKind.Atom)]
 
     edits.remove_topology([0, New(0)], [1, New(0)])
+    assert edits.remove_topology_cascading([New(0), 1], [0]) is None
     edits.remove_dative_bonds([(New(0), [0], New(0), dative)])
     edits.remove_aromatic_systems([(0, [0, New(0)], aromatic)])
     edits.remove_multicenter_bonds([(New(0), [0, New(0)], multicenter)])
@@ -872,6 +874,7 @@ def test_edits_remove():
 
     assert list(edits) == [
         Edit.RemoveTopology(atoms=[0, New(0)], bonds=[1, New(0)]),
+        Edit.RemoveTopologyCascading(atoms=[New(0), 1], bonds=[0]),
         Edit.RemoveDativeBonds(
             removes=[(New(0), [0], New(0), dative)]
         ),

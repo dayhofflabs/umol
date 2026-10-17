@@ -1868,16 +1868,25 @@ warnings denied. Targeted nightly formatting and git diff --check passed. No
 performance measurements were run; the S3/S4 complete-operation comparisons remain
 scheduled after S2.
 
-#### S2g — Python removal methods [dep: S2e, S2f]
+#### S2g — Python removal methods (done) [dep: S2e, S2f]
 
-Modules: Python edit/editor bindings and the Python API guide. Additive, green.
-Add the nine editor methods listed above and the cascading Edits builder method;
-the new Edit variant and existing exact entry points were migrated in S2e.
-Return the existing MoleculeCompaction wrapper from all eight tracked removals
-and preserve Rust ownership and failure semantics. Cover direct/batch use,
-tracked/untracked equivalence, mapping source counts, and rejection before
-mutation for both reference errors. Keep Python 3.9-compatible access paths.
-Rebuild the extension before Python tests.
+Completed 2026-10-17. Python exposes all nine agreed editor methods and
+Edits.remove_topology_cascading. The eight tracked methods move their Rust results
+into the existing MoleculeCompaction wrapper. The methods preserve integer-ID
+conversion, IndexError bounds checks, ConsumedError lifecycle handling, and
+TransactionError translation. Dependency checks and mutation remain in Rust.
+The Python API guide records current IDs versus batch handles, repeated removal
+IDs, unchanged-family source counts, and the editor's continued availability.
+
+Verification passed: 608 focused Python tests after rebuilding the Python 3.13
+extension, ten Rust editor-binding tests, and Clippy for all Python crate targets
+with warnings denied. Coverage includes complete mapping results for all eight
+entity kinds, empty and repeated removals, direct/batch and tracked/untracked
+equivalence, consumed editors and batches, bounds rejection before mutation,
+and dangling-reference rejection. Rust binding tests construct an editor draft
+with an unavailable participant, check InvalidReference translation, and repair
+and publish it after rejection. The changed Python tests parse with Python 3.9
+grammar. Targeted nightly formatting and git diff --check passed.
 
 #### S2h — Retire implicit relation cascades [dep: S2e, S2g]
 

@@ -226,12 +226,30 @@ MoleculeEditor.remove_topology(atoms, bonds) removes exactly the supplied intege
 None. It raises TransactionError before changing storage if a stored participant or site is
 unavailable (InvalidReference), or a retained entity would reference a removed entity
 (DanglingReference). The editor remains usable after rejection. ID bounds errors remain IndexError.
+MoleculeEditor.remove_topology_cascading(atoms, bonds) explicitly includes incident bonds and
+overlays with unavailable stored references, including references already absent in an editor
+draft. It returns None and compacts molecule constraints with the completed removal.
+
+Each of remove_topology, remove_topology_cascading, remove_dative_bonds,
+remove_aromatic_systems, remove_multicenter_bonds, remove_noncovalent_bonds,
+remove_stereo_atoms, and remove_stereo_bonds has a tracked_ counterpart returning
+MoleculeCompaction. Tracking preserves the corresponding mutation and failure behavior. Every
+component records its source count immediately before the call, including identities for unchanged
+entity kinds. The binding moves the Rust result into the existing immutable wrapper.
+All direct removals mutate the editor without consuming it. They accept current integer IDs in
+any order, including repetitions; unlike Edit application, direct calls deduplicate removals.
+The existing Python ID bounds check translates Rust's asserted-domain prerequisite into IndexError
+before mutation. A consumed editor raises ConsumedError; bounds and reference errors leave an
+available editor usable.
+
 Edit.RemoveTopology(atoms=..., bonds=...) has the same exact semantics, with batch handles instead
 of current editor IDs. Constructing an Edit does not check it against a molecule; application does.
 Edit.RemoveTopologyCascading(atoms=..., bonds=...) explicitly includes incident bonds and overlays
 with unavailable stored references. Both variants expose immutable atoms and bonds tuples and
 support ordinary construction and property access on Python 3.9. Molecule constraint compaction,
 completed-prefix behavior, batch transfer, and transaction recovery follow the existing contracts.
+Edits.remove_topology and Edits.remove_topology_cascading append the corresponding variant and
+return None. Both accept initial integer IDs and New handles; contextual checks occur on application.
 
 A batch stays consumed after transfer, even when application or publication fails. An unavailable
 batch leaves the molecule or editor unchanged. A consumed editor rejects application before taking
