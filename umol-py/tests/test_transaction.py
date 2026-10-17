@@ -479,7 +479,7 @@ def test_molecule_transact_integrity_error(method, rollback_kwargs):
 
 def test_molecule_tracked_transact_compaction(rollback_kwargs):
     molecule = Molecule.parse('{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
-    first = Edits([Edit.RemoveTopology(atoms=[0], bonds=[])])
+    first = Edits([Edit.RemoveTopologyCascading(atoms=[0], bonds=[])])
     second = Edits()
     atom = second.add_atom(AtomForm.parse("F"))
     second.add_bond(1, atom, BondForm(1))
@@ -569,11 +569,47 @@ def test_molecule_editor_remove_topology():
         bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
     )
     editor = molecule.edit()
-    editor.remove_topology([1], [])
+    editor.remove_topology([1], [0, 1])
 
     assert editor.finish() == Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
+
+
+@pytest.mark.parametrize("method", ["remove_topology", "apply", "tracked_apply"])
+def test_molecule_editor_remove_topology_error(method):
+    source = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    editor = source.edit()
+    with pytest.raises(TransactionError, match="^removing atom 0 would leave a dangling reference from bond 0$"):
+        if method == "remove_topology":
+            editor.remove_topology([0], [])
+        else:
+            getattr(editor, method)(Edits([Edit.RemoveTopology(atoms=[0], bonds=[])]))
+    assert editor.finish() == source
+
+
+@pytest.mark.parametrize("rollback_method", [RollbackMethod.Clone, RollbackMethod.Journal])
+def test_molecule_transact_remove_topology_error(rollback_method):
+    source = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    molecule = source.copy()
+    edits = Edits([Edit.RemoveTopology(atoms=[0], bonds=[])])
+    with pytest.raises(TransactionError, match="^removing atom 0 would leave a dangling reference from bond 0$"):
+        molecule.transact([edits], rollback_method=rollback_method)
+    assert molecule == source
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_remove_topology_cascading(method):
+    source = Molecule.parse('{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+    edits = Edits([Edit.RemoveTopologyCascading(atoms=[0], bonds=[])])
+    parsed = Edits.parse(edits.render())
+    assert list(parsed) == list(edits)
+    product = getattr(source, method)(parsed)
+    if method == "tracked_apply":
+        product, correspondence = product
+        assert correspondence.atoms == Correspondence([(1, 0), (2, 1)], 3, 2)
+        assert correspondence.bonds == Correspondence([(1, 0)], 2, 1)
+    assert product == Molecule.parse('{:atoms ["N" "O"] :bonds [[0 1 "1"]]}')
 
 
 @pytest.mark.parametrize(

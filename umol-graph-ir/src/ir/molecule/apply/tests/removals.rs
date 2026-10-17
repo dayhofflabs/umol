@@ -33,12 +33,21 @@ use crate::ir::{Molecule, TransactionError};
 
 #[rstest]
 fn test_molecule_apply_edit_remove_topology(
+    #[values(false, true)] cascading: bool,
     mut removal_entries: MoleculeEntries,
     #[values(false, true)] journaled: bool,
 ) {
+    if !cascading {
+        removal_entries.dative.remove(0);
+        removal_entries.aromatic.remove(0);
+        removal_entries.multicenter.remove(0);
+        removal_entries.noncovalent.remove(0);
+        removal_entries.stereo_atoms.remove(0);
+        removal_entries.stereo_bonds.remove(0);
+    }
     let removed_constraint = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
     let old_constraint = Constraint::StereoBond(
-        StereoBondId(1),
+        StereoBondId(u32::from(cascading)),
         StereoKind::CisTrans,
         StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
     );
@@ -65,9 +74,16 @@ fn test_molecule_apply_edit_remove_topology(
         )
         .unwrap();
     let before_removal = molecule.clone();
-    let edit = Edit::RemoveTopology {
-        atoms: vec![AtomHandle::Id(AtomId(0))],
-        bonds: vec![],
+    let edit = if cascading {
+        Edit::RemoveTopologyCascading {
+            atoms: vec![AtomHandle::Id(AtomId(0))],
+            bonds: vec![],
+        }
+    } else {
+        Edit::RemoveTopology {
+            atoms: vec![AtomHandle::Id(AtomId(0))],
+            bonds: vec![BondHandle::Id(BondId(0))],
+        }
     };
     let undo = if journaled {
         molecule.apply_edit_with_undo(edit, &mut state).unwrap()
@@ -129,27 +145,33 @@ fn test_molecule_apply_edit_remove_topology(
     assert_eq!(state.atom(AtomHandle::New(0)), Ok(AtomId(3)));
     assert_eq!(state.bond(BondHandle::Id(BondId(1))), Ok(BondId(0)));
     assert_eq!(
-        state.dative_bond(DativeBondHandle::Id(DativeBondId(1))),
+        state.dative_bond(DativeBondHandle::Id(DativeBondId(u32::from(cascading)))),
         Ok(DativeBondId(0))
     );
     assert_eq!(
-        state.aromatic_system(AromaticSystemHandle::Id(AromaticSystemId(1))),
+        state.aromatic_system(AromaticSystemHandle::Id(AromaticSystemId(u32::from(
+            cascading
+        )))),
         Ok(AromaticSystemId(0))
     );
     assert_eq!(
-        state.multicenter_bond(MulticenterBondHandle::Id(MulticenterBondId(1))),
+        state.multicenter_bond(MulticenterBondHandle::Id(MulticenterBondId(u32::from(
+            cascading
+        )))),
         Ok(MulticenterBondId(0))
     );
     assert_eq!(
-        state.noncovalent_bond(NoncovalentBondHandle::Id(NoncovalentBondId(1))),
+        state.noncovalent_bond(NoncovalentBondHandle::Id(NoncovalentBondId(u32::from(
+            cascading
+        )))),
         Ok(NoncovalentBondId(0))
     );
     assert_eq!(
-        state.stereo_atom(StereoAtomHandle::Id(StereoAtomId(1))),
+        state.stereo_atom(StereoAtomHandle::Id(StereoAtomId(u32::from(cascading)))),
         Ok(StereoAtomId(0))
     );
     assert_eq!(
-        state.stereo_bond(StereoBondHandle::Id(StereoBondId(1))),
+        state.stereo_bond(StereoBondHandle::Id(StereoBondId(u32::from(cascading)))),
         Ok(StereoBondId(0))
     );
     if journaled {
@@ -170,11 +192,15 @@ fn test_molecule_apply_edit_remove_topology(
                         constraint: removed_constraint
                     },
                 ],
-                modified: vec![ModifiedConstraint {
-                    position: 1,
-                    old: old_constraint,
-                    new: new_constraint
-                }],
+                modified: if cascading {
+                    vec![ModifiedConstraint {
+                        position: 1,
+                        old: old_constraint,
+                        new: new_constraint,
+                    }]
+                } else {
+                    vec![]
+                },
             }
         );
         let mut restored = molecule.clone();
@@ -203,7 +229,7 @@ fn test_molecule_apply_edit_remove_bonds(
         removal_entries.stereo_bonds[0].0 = BondId(0);
     }
     let expected = Molecule::from_entries(removal_entries);
-    let edit = Edit::RemoveTopology {
+    let edit = Edit::RemoveTopologyCascading {
         atoms: vec![],
         bonds,
     };
@@ -654,6 +680,18 @@ fn test_molecule_apply_edit_remove_incidence(
     atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(4))], bonds: vec![],
 }, TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 4, count: 4 })]
 #[case::missing_bond(Edit::RemoveTopology {
+    atoms: vec![AtomHandle::Id(AtomId(0))], bonds: vec![BondHandle::Id(BondId(2))],
+}, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
+#[case::cascading_duplicate_atom(Edit::RemoveTopologyCascading {
+    atoms: vec![AtomHandle::Id(AtomId(0)); 2], bonds: vec![],
+}, TransactionError::DuplicateRemoval { kind: EntityKind::Atom })]
+#[case::cascading_duplicate_bond(Edit::RemoveTopologyCascading {
+    atoms: vec![], bonds: vec![BondHandle::Id(BondId(0)); 2],
+}, TransactionError::DuplicateRemoval { kind: EntityKind::Bond })]
+#[case::cascading_missing_atom(Edit::RemoveTopologyCascading {
+    atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(4))], bonds: vec![],
+}, TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 4, count: 4 })]
+#[case::cascading_missing_bond(Edit::RemoveTopologyCascading {
     atoms: vec![AtomHandle::Id(AtomId(0))], bonds: vec![BondHandle::Id(BondId(2))],
 }, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
 #[case::duplicate_dative_bond(Edit::RemoveDativeBonds { removes: vec![(

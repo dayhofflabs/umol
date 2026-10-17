@@ -1022,20 +1022,29 @@ The borrowing relation-set compact/tracked_compact pair still selects rows by pa
 and rebuilds the resulting set, cloning payloads. The tracked form additionally returns its
 relation-id compaction; both preserve the same output and failure behavior.
 
-The graph-IR owning overlay sets expose crate-private `compact` returning the resulting set
-and its row compaction. Molecule's crate-private `compact_<entity>` delegates install the set
-and return the row compaction. These mappings are required to update dependent constraints
-and handles, so these internal operations have no separate tracked counterpart.
+Graph-IR owning overlay sets separate row removal from compact_topology_ids, which transports
+atom references and stereo-bond sites without removing rows. The coordinator establishes source
+coverage and survivor references before transport, and uses the actual row and graph compactions
+to update constraints and handles.
 
-Molecule editor remove_topology and the six bulk relation-removal methods return ().
-Crate-private tracked counterparts supply the full MoleculeCompaction for extraction
-and constraint compaction, including unchanged-family counts.
+MoleculeEditor::remove_topology takes borrowed typed ID slices and returns Result<(), TransactionError>.
+It checks stored reference coverage and rejects retained references to the supplied removals before
+mutation. InvalidReference names an unavailable participant or site; DanglingReference names the
+removed entity and its retained dependent. Unrelated draft integrity failures are not checked here.
+Out-of-range removal IDs are programming errors for direct Rust calls; independent Edit handles
+are resolved and rejected on application. Duplicate IDs are accepted directly but rejected in Edits.
+remove_topology_cascading returns () and explicitly selects incident bonds and overlays with missing
+stored references, including references already unavailable in the draft. Both forms compact
+molecule constraints once after removal. The six bulk overlay removals retain their own constraint
+compaction. All eight public tracked editor removals return MoleculeCompaction instead of unit,
+inside Result for exact topology removal, including count-bearing identities for unchanged families.
 Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual
 host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
 extraction preserves host order. Both forms retain the same cascades and constraint transport.
 
 Restoration uses local count and indexing guards to avoid panics on manipulated history.
-It does not validate the history or report a rollback error.
+Undo of added topology skips an entry if its removal would leave a retained graph edge dangling;
+it does not check overlays, repair history, or report a rollback error.
 
 ## Remapping
 

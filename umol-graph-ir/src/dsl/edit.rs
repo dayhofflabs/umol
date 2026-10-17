@@ -534,6 +534,10 @@ enum EditInput {
         atoms: Vec<AtomHandle>,
         bonds: Vec<BondHandle>,
     },
+    TopologyRemoveCascading {
+        atoms: Vec<AtomHandle>,
+        bonds: Vec<BondHandle>,
+    },
     ConstraintAdd(ConstraintEdit),
     ConstraintRemove(ConstraintEdit),
 }
@@ -556,7 +560,28 @@ impl<'de> FromEdn<'de> for EditInput {
             "stereo-atoms" => parse_stereo_atoms_edit(body),
             "stereo-bond" => parse_stereo_bond_edit(body),
             "stereo-bonds" => parse_stereo_bonds_edit(body),
-            "topology" => parse_topology_edit(body),
+            "topology" => {
+                let (op, payload) = parse_single_key_map(body, "topology edit")?;
+                if !matches!(op, "remove" | "remove-cascading") {
+                    return Err(DeError::Custom(format!("unknown topology edit op :{op}")));
+                }
+                let Edn::Map(map) = payload else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "topology removal map",
+                        got: payload.kind(),
+                        path: vec!["topology edit".to_string()],
+                    });
+                };
+                let mut helper = EdnMapHelper::new(map);
+                let atoms = helper.required("atoms")?;
+                let bonds = helper.required("bonds")?;
+                helper.finalize()?;
+                Ok(if op == "remove" {
+                    Self::TopologyRemove { atoms, bonds }
+                } else {
+                    Self::TopologyRemoveCascading { atoms, bonds }
+                })
+            }
             "constraint" => parse_constraint_edit(body),
             other => Err(DeError::Custom(format!("unknown edit :{other}"))),
         }
@@ -1517,7 +1542,8 @@ impl ToEdn for EditInput {
                     StereoBondUpdateDsl(update.clone()).to_edn(),
                 ),
             ),
-            Self::TopologyRemove { atoms, bonds } => {
+            Self::TopologyRemove { atoms, bonds }
+            | Self::TopologyRemoveCascading { atoms, bonds } => {
                 let mut removal = EdnMap::with_capacity(2);
                 removal.insert(
                     Edn::keyword("atoms"),
@@ -1527,7 +1553,12 @@ impl ToEdn for EditInput {
                     Edn::keyword("bonds"),
                     Edn::Vector(bonds.iter().map(ToEdn::to_edn).collect::<Vec<_>>().into()),
                 );
-                edit_map("topology", "remove", Edn::Map(removal))
+                let op = if matches!(self, Self::TopologyRemoveCascading { .. }) {
+                    "remove-cascading"
+                } else {
+                    "remove"
+                };
+                edit_map("topology", op, Edn::Map(removal))
             }
             Self::ConstraintAdd(constraint) => edit_map(
                 "constraint",
@@ -1765,6 +1796,9 @@ impl EditInput {
                 append_stereo_bond_modify(edits, id, expect, update)?;
             }
             Self::TopologyRemove { atoms, bonds } => edits.remove_topology(atoms, bonds),
+            Self::TopologyRemoveCascading { atoms, bonds } => {
+                edits.remove_topology_cascading(atoms, bonds)
+            }
             Self::ConstraintAdd(constraint) => edits.add_molecule_constraint(constraint),
             Self::ConstraintRemove(constraint) => edits.remove_molecule_constraint(constraint),
         }
@@ -1817,6 +1851,10 @@ impl EditInput {
                 vec![Self::BondRemove(bonds[0].clone())]
             }
             Edit::RemoveTopology { atoms, bonds } => vec![Self::TopologyRemove {
+                atoms: atoms.clone(),
+                bonds: bonds.clone(),
+            }],
+            Edit::RemoveTopologyCascading { atoms, bonds } => vec![Self::TopologyRemoveCascading {
                 atoms: atoms.clone(),
                 bonds: bonds.clone(),
             }],
@@ -4049,25 +4087,6 @@ fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
         )),
         _ => Ok((AtomHandle::from_edn(edn)?, StereoLigandKind::Atom)),
     }
-}
-
-fn parse_topology_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
-    let (op, payload) = parse_single_key_map(edn, "topology edit")?;
-    if op != "remove" {
-        return Err(DeError::Custom(format!("unknown topology edit op :{op}")));
-    }
-    let Edn::Map(map) = payload else {
-        return Err(DeError::TypeMismatch {
-            expected: "topology :remove map",
-            got: payload.kind(),
-            path: vec!["topology edit".to_string()],
-        });
-    };
-    let mut helper = EdnMapHelper::new(map);
-    let atoms = helper.required("atoms")?;
-    let bonds = helper.required("bonds")?;
-    helper.finalize()?;
-    Ok(EditInput::TopologyRemove { atoms, bonds })
 }
 
 fn parse_constraint_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
@@ -7360,6 +7379,14 @@ mod tests {
             bonds: vec![BondHandle::Id(BondId(1)), BondHandle::New(1)],
         }]),
     )]
+    #[case::topology_remove_cascading(
+        "{:topology {:remove-cascading {:atoms [0 {:new 0}] :bonds [1 {:new 1}]}}}",
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::RemoveTopologyCascading {
+            atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+            bonds: vec![BondHandle::Id(BondId(1)), BondHandle::New(1)],
+        }]),
+    )]
     #[case::constraint_add(
         "{:constraint {:add {:connected {}}}}",
         MoleculeDefaults::new(),
@@ -7393,6 +7420,10 @@ mod tests {
         #[case] expected: Edits,
     ) {
         let parsed = EditInput::from_edn_str(input).unwrap();
+        assert_eq!(
+            parsed,
+            EditInput::from_edn(&read_string(input).unwrap()).unwrap()
+        );
         let mut edits = Edits::new();
 
         parsed.append_to(&mut edits, &defaults).unwrap();
@@ -7441,6 +7472,16 @@ mod tests {
         },
         MoleculeDefaults::new(),
         "{:topology {:remove {:atoms [0] :bonds [0]}}}",
+    )]
+    #[case::topology_remove_cascading_atom(
+        Edit::RemoveTopologyCascading { atoms: vec![AtomHandle::Id(AtomId(0))], bonds: vec![] },
+        MoleculeDefaults::new(),
+        "{:topology {:remove-cascading {:atoms [0] :bonds []}}}",
+    )]
+    #[case::topology_remove_cascading_bond(
+        Edit::RemoveTopologyCascading { atoms: vec![], bonds: vec![BondHandle::New(0)] },
+        MoleculeDefaults::new(),
+        "{:topology {:remove-cascading {:atoms [] :bonds [{:new 0}]}}}",
     )]
     #[case::atom_field(
         Edit::ModifyAtomField {

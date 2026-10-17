@@ -46,7 +46,7 @@ explicit and avoids rediscovering dependent removals after the caller has
 already established that none remain.
 
 Implementation began on 2026-10-17 with S1a. The subitems below record completion;
-graph-IR removal retains its existing cascading behavior until S2e.
+S2e separates exact graph-IR removal from the explicit cascading operation.
 
 ### Exclusions
 
@@ -1784,53 +1784,68 @@ virtual ligands, replacement-ID collisions, constraint references, reversal and
 composition. Clippy passed for all graph-IR targets with proptest and warnings
 denied; full nightly workspace formatting and git diff --check passed.
 
-#### S2e — Editor and edit execution [dep: S2c, S2d]
+#### S2e — Editor and edit execution (done) [dep: S2c, S2d]
 
-Modules: graph-IR molecule/editor, molecule/apply, ir/edit, exhaustive DSL/Python
-Edit conversions, and existing callers. Breaking red-to-green within this
-subitem. Change the raw Molecule topology helper to exact execution together
-with editor, plain/journaled application, extraction, and undo callers; switch
-forward removal consumers to participant-only transport. Undo of added topology
-retains its narrower path described in S0b. Implement the exact/cascading
-topology split and the two Edit variants. Expose both tracked topology methods
-and all six tracked overlay-removal methods publicly with the agreed
-MoleculeCompaction results.
-Check all exact-removal prerequisites before mutation or journal capture.
-Report TransactionError::InvalidReference for unavailable stored participants
-or sites and DanglingReference for references broken by the requested removal.
-Use existing graph-IR participant accessors for draft reference coverage. Audit
-each caller before omitting that scan: its input and preceding operations must
-establish valid references. In particular, editor batches can follow unchecked
-direct changes; handle resolution alone does not establish validity of existing
-rows. Do not introduce a core coverage query or editor tracking state. Record
-the additional participant passes for the S3/S4 end-to-end comparisons. Reuse
-the dependency discovery previously performed by cascading; do not add a
-redundant cascade scan after checking.
-Select cascaded bonds/overlays once, including rows with out-of-domain references
-in editor drafts; reuse selected IDs for mutation and journal capture, and
-assemble MoleculeCompaction from the actual results.
-Compact constraints once for the completed topology operation;
-explicit overlay edits retain their existing separate constraint handling.
-Remove the production dead-code expectations from S2c's participant methods as
-their callers migrate.
-Migrate extraction and its generated edits to the cascading operation.
-Remove duplicate incident-bond selection between extraction and that operation.
-Check plain/editor/journal equivalence, subsequent handles, explicit co-removal,
-rejection before mutation, rollback, undo of additions, and manipulated-history
-behavior. Invalid Edit input has a reported failure, not the unspecified-result
-contract of manipulated undo. Before Undo::RemoveAddedTopology reaches asserted
-exact removal, retain ID bounds handling and check only the retained graph
-endpoints as described in S0b. A failed check leaves that undo entry unapplied.
-Do not add overlay checks, history validation, repair, or fallibility to undo.
+Completed 2026-10-17. MoleculeEditor and Edit execution now separate exact
+remove_topology from explicit remove_topology_cascading. Both tracked topology
+methods and the six tracked overlay-removal methods are public, returning the
+agreed MoleculeCompaction. Exact removal reports TransactionError::InvalidReference
+for unavailable stored participants or sites and DanglingReference for retained
+references broken by removal, before mutation or journal capture. The checks use
+existing graph-IR accessors, including for batches following unchecked draft
+changes. Direct editing may temporarily break aromatic or stereo adjacency and
+repair it before publication; S2d's reaction applicability checks remain stronger.
 
-The new Edit variant must include its DSL tree/streaming parsing and serialization,
-Python Edit construction/conversion/observations, and all exhaustive matches in
-this subitem. Adjust the existing Python exact-removal entry points for their
-fallible Rust contract and test their rejection behavior. Carry focused variant
-roundtrips and existing-surface tests with these changes; S2g adds the remaining
-Python methods. Keep examples, generators, and other removal callers on their
-intended exact or cascading behavior. Reaction lowering now reaches exact
-removal with S2d's applicability checks already established.
+The raw Molecule helper now uses exact core removal. Extraction and its generated
+edits use the explicit cascade. Plain, tracked, and journaled application share
+selection and execution, with constraints compacted once per topology operation;
+explicit overlay edits retain their separate constraint handling. Undo of added
+topology retains ID bounds handling and checks only retained graph endpoints.
+A failed check skips that undo entry, without overlay checks, history validation,
+repair, or a new failure result.
+
+The new Edit variant is covered by DSL serialization, both existing parse entry
+points, the formal grammar, and Python construction/conversion/observations.
+Existing Python exact-removal methods propagate TransactionError and preserve
+the editor after rejection. S2g adds the remaining Python methods. Callers,
+examples, generators, and benchmarks retain their intended exact or cascading
+behavior. Reaction lowering reaches exact removal after S2d's applicability checks.
+
+The parser scope was clarified on 2026-10-17: EditsDsl has no independent streaming
+parser; from_edn_str uses the FromEdn tree default. Preserve that architecture for
+this change and test both existing entry points. An independent streaming parser
+is not part of S2e.
+
+Implementation uses one private collection of selected overlay IDs across editor,
+plain Edit, and journaled Edit execution. Exact removal leaves those lists empty;
+the cascade selects rows once and capture reads only those selected rows. Mutation
+removes rows, removes the complete topology selection through the exact core
+primitive, transports surviving references, then compacts molecule constraints
+once. Extraction no longer selects incident bonds separately. The old graph-IR
+row-dropping compaction delegates now exist only for their remaining tests until
+S2h retires them. No graph-core API or editor bookkeeping was added.
+
+Costs to include in S3/S4: exact removal traverses stored atom participants and
+stereo-bond sites to establish draft reference coverage, then checks removed-atom
+incidence and removed-bond sites. Reference transport remains a separate pass over
+survivors. Cascading combines coverage and row selection in its participant pass;
+journal capture no longer repeats dependency discovery or allocates atom and bond
+membership sets. Direct exact removal copies and sorts its borrowed bond list;
+direct cascading removal copies atom/bond lists and sorts the selected IDs. Edit
+execution reuses its resolved vectors. Selected overlay ID vectors and the existing
+typed-to-core ID conversions still allocate for nonempty selections. These costs
+are included in the scheduled complete-operation comparisons, not claimed away by
+the removal of duplicate discovery.
+
+Verification passed: 11,477 graph-IR unit tests (three ignored), 164 compaction,
+edit, and reaction properties (one ignored), the Rust/Python Edit conversion
+test, and 896 focused Python tests after rebuilding the Python 3.13 extension.
+Coverage includes exact rejection before mutation, draft reference coverage,
+all overlay families, adjacency repair, explicit co-removal versus cascading,
+tracking, subsequent handles, rollback, and manipulated undo entries. Clippy
+passed for all graph-IR and Python targets with proptest and warnings denied;
+full nightly formatting and git diff --check passed. No performance measurements
+were run in this subitem. The full workspace gate remains at the end of S2.
 
 #### S2f — Handle transport [dep: S2e]
 

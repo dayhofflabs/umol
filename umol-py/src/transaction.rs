@@ -10,7 +10,9 @@ use umol_graph_ir::ir::{
 
 use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
-use crate::error::{molecule_apply_error, molecule_integrity_error, ConsumedError};
+use crate::error::{
+    molecule_apply_error, molecule_integrity_error, transaction_error, ConsumedError,
+};
 use crate::molecule::Molecule;
 
 /// Recovery method for molecule transactions and in-place resolution.
@@ -89,15 +91,19 @@ impl MoleculeEditor {
             .map_err(molecule_apply_error)
     }
 
-    /// Remove atoms and bonds, cascading dependent entities.
+    /// Remove exactly the supplied atoms and bonds.
+    ///
+    /// Raises TransactionError before mutation for unavailable stored references or references
+    /// that would be broken by removal. The editor remains available after rejection.
     fn remove_topology(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&atoms, editor.atom_count(), "atom")?;
         ensure_in_range(&bonds, editor.bond_count(), "bond")?;
         let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
         let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
-        editor.remove_topology(&atoms, &bonds);
-        Ok(())
+        editor
+            .remove_topology(&atoms, &bonds)
+            .map_err(transaction_error)
     }
 
     /// Remove dative bonds and compact that entity space.

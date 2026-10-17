@@ -168,7 +168,7 @@ fn test_molecule_apply_undo_additions(removal_entries: MoleculeEntries) {
     let before_removal = molecule.clone();
     let removed = molecule
         .apply_edit_with_undo(
-            Edit::RemoveTopology {
+            Edit::RemoveTopologyCascading {
                 atoms: vec![AtomHandle::Id(AtomId(0))],
                 bonds: Vec::new(),
             },
@@ -246,6 +246,52 @@ fn test_molecule_apply_undo_added_topology_duplicate(mut one_atom: Molecule) {
 #[case::stereo_bond(Undo::RemoveAddedStereoBond(Box::new(AddedStereoBond { id: StereoBondId(0), site: BondId(0), ligands: vec![], attributes: StereoBondForm::default() })))]
 fn test_molecule_apply_undo_added_entry_manipulated(#[case] undo: Undo) {
     Molecule::default().apply_undo(undo);
+}
+
+#[rstest]
+#[case::dangling(vec![AtomId(1)], vec![BondId(0)], false)]
+#[case::all_incident(vec![AtomId(1)], vec![BondId(1), BondId(0)], true)]
+#[case::repeated_and_unavailable(vec![AtomId(1), AtomId(1), AtomId(9)], vec![BondId(1), BondId(0), BondId(0), BondId(7)], true)]
+fn test_molecule_apply_undo_added_topology_manipulated(
+    #[case] atoms: Vec<AtomId>,
+    #[case] bonds: Vec<BondId>,
+    #[case] removed: bool,
+) {
+    let initial = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::default(); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::default()),
+            (AtomId(1), AtomId(2), BondForm::default()),
+        ],
+        ..Default::default()
+    });
+    let mut molecule = initial.clone();
+    molecule.apply_undo(Undo::RemoveAddedTopology {
+        atoms: atoms
+            .into_iter()
+            .map(|id| AddedAtom {
+                id,
+                attributes: AtomForm::default(),
+            })
+            .collect(),
+        bonds: bonds
+            .into_iter()
+            .map(|id| AddedBond {
+                id,
+                endpoints: [AtomId(0), AtomId(1)],
+                attributes: BondForm::default(),
+            })
+            .collect(),
+    });
+    let expected = if removed {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            ..Default::default()
+        })
+    } else {
+        initial
+    };
+    assert_eq!(molecule, expected);
 }
 
 #[rstest]
@@ -668,7 +714,7 @@ fn test_molecule_apply_undo_constraint_position(mut removal_entries: MoleculeEnt
     let before_removal = molecule.clone();
     let topology = molecule
         .apply_edit_with_undo(
-            Edit::RemoveTopology {
+            Edit::RemoveTopologyCascading {
                 atoms: vec![AtomHandle::Id(AtomId(0))],
                 bonds: Vec::new(),
             },

@@ -382,6 +382,13 @@ compact_participants applies a graph compaction to retained references without s
 renumbering rows. It requires all retained references to survive. The operation returns unit;
 row IDs and participant positions are preserved, so it has no tracked counterpart.
 
+MoleculeEditor::remove_topology and Edit::RemoveTopology remove exactly the supplied atoms and
+bonds after checking stored references. The ordinarily fallible editor method has no try_ prefix.
+remove_topology_cascading and Edit::RemoveTopologyCascading additionally select incident bonds and
+overlays with unavailable stored references. A MoleculeCompaction records the resulting removals;
+it does not choose which entities to remove. Graph-IR compact_topology_ids names participant
+transport through the graph's atom and bond ID mappings.
+
 **`UndoCompaction`** is the inverse view of a `MoleculeCompaction` for rollback: it carries surviving
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for

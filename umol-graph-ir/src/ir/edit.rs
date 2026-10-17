@@ -303,12 +303,11 @@ pub struct AddStereoBond {
 /// host at application entry by `Id(n)`, and to entities created earlier in the same sequence
 /// by `New(n)`.
 ///
-/// Removal uses cascade deletion: taking an atom out of a ring also removes its incident bonds and
-/// any aromatic system it belonged to. This is an execution behavior, not a complete definition of
-/// SqPO rewriting. Because the edit need not name what it discards, and because concrete ids and
-/// compaction are only known during application, an edit cannot be inverted on its own.
-/// Transactional application records an [`Undo`] as these effects are realized.
-/// `RemoveTopology` removes atoms and bonds together.
+/// `RemoveTopology` removes exactly the named atoms and bonds, rejecting retained references to
+/// them before mutation. `RemoveTopologyCascading` also removes incident bonds and overlays whose
+/// stored participants or sites disappear. This execution behavior does not define reaction
+/// applicability. Concrete ids and compaction are only known during application, so an edit cannot
+/// be inverted on its own. Transactional application records an [`Undo`] as effects are realized.
 ///
 /// Edits have no normal form. Sorting or deduplicating a sequence would invalidate the `New(n)`
 /// references that depend on its order.
@@ -333,7 +332,13 @@ pub enum Edit {
     AddBonds {
         bonds: Vec<AddBond>,
     },
+    /// Exact removal; application checks stored references before mutation.
     RemoveTopology {
+        atoms: Vec<AtomHandle>,
+        bonds: Vec<BondHandle>,
+    },
+    /// Remove topology together with incident bonds and dependent stored overlays.
+    RemoveTopologyCascading {
         atoms: Vec<AtomHandle>,
         bonds: Vec<BondHandle>,
     },
@@ -983,6 +988,10 @@ impl Edits {
 
     pub fn remove_topology(&mut self, atoms: Vec<AtomHandle>, bonds: Vec<BondHandle>) {
         self.push(Edit::RemoveTopology { atoms, bonds });
+    }
+
+    pub fn remove_topology_cascading(&mut self, atoms: Vec<AtomHandle>, bonds: Vec<BondHandle>) {
+        self.push(Edit::RemoveTopologyCascading { atoms, bonds });
     }
 
     pub fn remove_dative_bonds(
@@ -3504,6 +3513,7 @@ mod tests {
         edits.remove_atom(AtomHandle::Id(AtomId(0)));
         edits.remove_bond(BondHandle::New(0));
         edits.remove_topology(vec![AtomHandle::New(1)], vec![BondHandle::Id(BondId(2))]);
+        edits.remove_topology_cascading(vec![AtomHandle::New(2)], vec![]);
 
         assert_eq!(
             edits.as_slice(),
@@ -3519,6 +3529,10 @@ mod tests {
                 Edit::RemoveTopology {
                     atoms: vec![AtomHandle::New(1)],
                     bonds: vec![BondHandle::Id(BondId(2))],
+                },
+                Edit::RemoveTopologyCascading {
+                    atoms: vec![AtomHandle::New(2)],
+                    bonds: vec![]
                 },
             ],
         );

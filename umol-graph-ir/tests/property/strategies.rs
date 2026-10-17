@@ -3914,7 +3914,10 @@ impl TransactionCase {
             Self::AddPath { count } => transaction_add_path_edits(*count),
             Self::RemoveAtom { count, id } => {
                 let mut edits = Edits::new();
-                edits.remove_atom(AtomHandle::Id(AtomId((id % count) as u32)));
+                edits.remove_topology_cascading(
+                    vec![AtomHandle::Id(AtomId((id % count) as u32))],
+                    vec![],
+                );
                 edits
             }
             Self::RemoveBond { count, id } => {
@@ -4247,15 +4250,15 @@ fn transaction_removal_cases() -> Vec<(Molecule, Edits)> {
             .collect::<Vec<_>>()
     };
     vec![
-        Edit::RemoveTopology {
+        Edit::RemoveTopologyCascading {
             atoms: vec![AtomHandle::Id(AtomId(0))],
             bonds: Vec::new(),
         },
-        Edit::RemoveTopology {
+        Edit::RemoveTopologyCascading {
             atoms: vec![AtomHandle::Id(AtomId(3))],
             bonds: Vec::new(),
         },
-        Edit::RemoveTopology {
+        Edit::RemoveTopologyCascading {
             atoms: Vec::new(),
             bonds: vec![BondHandle::Id(BondId(1))],
         },
@@ -4614,11 +4617,11 @@ impl ConstraintCompactionCase {
 
     pub(crate) fn edits(&self) -> Edits {
         let edit = match self.kind {
-            EntityKind::Atom => Edit::RemoveTopology {
+            EntityKind::Atom => Edit::RemoveTopologyCascading {
                 atoms: vec![AtomHandle::Id(AtomId(0))],
                 bonds: Vec::new(),
             },
-            EntityKind::Bond => Edit::RemoveTopology {
+            EntityKind::Bond => Edit::RemoveTopologyCascading {
                 atoms: Vec::new(),
                 bonds: vec![BondHandle::Id(BondId(0))],
             },
@@ -4965,7 +4968,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (Molecule,
                     .map(|i| AtomHandle::Id(AtomId(i as u32)))
                     .collect();
                 if !atoms.is_empty() {
-                    edits.push(Edit::RemoveTopology {
+                    edits.push(Edit::RemoveTopologyCascading {
                         atoms,
                         bonds: vec![],
                     });

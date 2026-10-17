@@ -1103,7 +1103,9 @@ stereo-bond-removal  ::= { :id stereo-bond-handle :site bond-handle
                             :ligands [ edit-ligand* ] :attrs stereo-spec }
 checked-stereo-update ::= { :expect partial-stereo-string :update partial-stereo-string }
 
-topology-edit ::= { :remove { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
+topology-edit ::=
+    { :remove { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
+  | { :remove-cascading { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
 
 edit-constraint ::=
     { :add    edit-constraint-entry }
@@ -1133,7 +1135,12 @@ edits; it does not validate chemical semantics against a host molecule.
 
 **Removal preconditions and batching.** Atom-only and bond-only singleton removals use their
 singular entity forms. **`:topology :remove`** is the inseparable operation for simultaneous atom and
-bond removal, allowing one pre-removal snapshot and one compaction after cascading removal.
+bond removal. Both remove exactly the supplied entities; application rejects unavailable stored
+references and retained references to removed entities before mutation. Dependent overlay rows must
+be removed explicitly first. **`:topology :remove-cascading`** additionally selects incident bonds
+and overlay rows whose stored participants or sites are removed or already unavailable in the
+editor draft. Each topology operation compacts molecule constraints once. Cascading singleton
+removals retain the **`:topology :remove-cascading`** form when serialized.
 Overlay removals use the plural overlay key and retain a vector of complete removal records: the
 entity handle, its participants, and its full form. The recorded values are checked during
 application and retained for exact rollback. These semantic batches **MUST NOT** be lowered to a

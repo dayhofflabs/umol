@@ -3839,7 +3839,7 @@ fn restoration_entries(
 
 #[rstest]
 #[case::mixed(
-    vec![AtomId(1)], vec![BondId(5)], (vec![0, 2, 3, 4, 5, 6, 7], vec![2, 3, 4]),
+    vec![AtomId(1)], vec![BondId(0), BondId(1), BondId(5)], (vec![0, 2, 3, 4, 5, 6, 7], vec![2, 3, 4]),
     Graph::new(7, &[[1, 2], [3, 4], [4, 5]]),
     GraphCompaction::new(
         Compaction::new(8, vec![NodeId(1)]).unwrap(),
@@ -3847,7 +3847,7 @@ fn restoration_entries(
     ),
 )]
 #[case::all(
-    (0..8).map(AtomId).collect(), vec![], (vec![], vec![]), Graph::new(0, &[]),
+    (0..8).map(AtomId).collect(), (0..6).map(BondId).collect(), (vec![], vec![]), Graph::new(0, &[]),
     GraphCompaction::new(
         Compaction::new(8, (0..8).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..6).map(EdgeId).collect()).unwrap(),
@@ -5140,7 +5140,7 @@ fn test_molecule_edits(#[from(rich_molecule)] molecule: Molecule) {
     let sub = molecule.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
     assert_eq!(
         molecule.edits(&sub),
-        Edits::from_iter([Edit::RemoveTopology {
+        Edits::from_iter([Edit::RemoveTopologyCascading {
             atoms: vec![AtomHandle::Id(AtomId(3))],
             bonds: vec![BondHandle::Id(BondId(2))],
         }])
@@ -5230,7 +5230,7 @@ fn test_molecule_edit_into_unwind(#[from(rich_molecule)] mut molecule: Molecule)
     let original = molecule.clone();
     let error = catch_unwind(AssertUnwindSafe(|| {
         molecule.edit_into(|editor| -> Result<(), MoleculeApplyError> {
-            editor.remove_topology(&[AtomId(0)], &[]);
+            editor.remove_topology_cascading(&[AtomId(0)], &[]);
             panic!("scoped editing interrupted");
         })
     }))
@@ -5271,7 +5271,7 @@ fn test_molecule_edit_into_repair() {
                 atoms: [AtomId(0), AtomId(1)]
             })
         );
-        editor.remove_topology(&[], &[BondId(0)]);
+        editor.remove_topology(&[], &[BondId(0)]).unwrap();
         let mut next = Edits::new();
         next.add_atom(AtomForm::from_element(Element::O));
         editor.apply(next)?;
@@ -5400,7 +5400,7 @@ fn test_molecule_tracked_apply(
     let source = Molecule::from_entries(entries);
     let mut edits = Edits::new();
     if remove_all {
-        edits.remove_topology(
+        edits.remove_topology_cascading(
             (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
             vec![],
         );
@@ -5532,7 +5532,7 @@ fn test_molecule_tracked_transact(
     let mut molecule = before.clone();
     let mut plain = before.clone();
     let mut edits = Edits::new();
-    edits.remove_topology(
+    edits.remove_topology_cascading(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
@@ -5585,7 +5585,7 @@ fn test_molecule_tracked_transact_error(
     let mut molecule = before.clone();
     let mut plain = before.clone();
     let mut edits = Edits::new();
-    edits.remove_topology(
+    edits.remove_topology_cascading(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
@@ -5615,7 +5615,7 @@ fn test_molecule_tracked_transact_error(
 fn test_molecule_editor_tracked_apply() {
     let source = mol_dsl!(r#"{:atoms ["C" "N" "O"]}"#);
     let mut editor = source.edit();
-    editor.remove_topology(&[AtomId(0)], &[]);
+    editor.remove_topology(&[AtomId(0)], &[]).unwrap();
     editor.add_atom(AtomForm::from_element(Element::F));
     let mut edits = Edits::new();
     edits.remove_atom(AtomHandle::Id(AtomId(0)));
@@ -5665,8 +5665,8 @@ fn test_molecule_editor_tracked_apply_transient() {
             atoms: [AtomId(0), AtomId(1)]
         })
     );
-    plain.remove_topology(&[], &[BondId(1)]);
-    editor.remove_topology(&[], &[BondId(1)]);
+    plain.remove_topology(&[], &[BondId(1)]).unwrap();
+    editor.remove_topology(&[], &[BondId(1)]).unwrap();
     assert_eq!(editor.finish(), plain.finish());
 }
 
@@ -5749,7 +5749,7 @@ fn test_molecule_editor_remove_topology_shared_storage(
 ) {
     let source = Molecule::from_entries(constrained_molecule_entries.clone());
     let mut editor = source.clone().edit();
-    editor.remove_topology(&[AtomId(0)], &[]);
+    editor.remove_topology(&[AtomId(0)], &[]).unwrap();
     let expected = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::O),
@@ -5802,14 +5802,14 @@ fn test_molecule_editor_finish_additions(#[from(equiv_molecule_entries)] entries
 fn test_molecule_editor_finish_session() {
     let source = mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}"#);
     let mut editor = source.edit();
-    editor.remove_topology(&[AtomId(1)], &[]);
+    editor.remove_topology_cascading(&[AtomId(1)], &[]);
     assert_eq!(
         editor.probe(),
         Ok(&mol_dsl!(r#"{:atoms ["C" "O" "F"] :bonds [[1 2 "1"]]}"#))
     );
     let added = editor.add_atom(AtomForm::from_element(Element::Cl));
     editor.add_bond(AtomId(2), added, BondForm::from_order(1));
-    editor.remove_topology(&[AtomId(0)], &[]);
+    editor.remove_topology(&[AtomId(0)], &[]).unwrap();
     let expected = mol_dsl!(r#"{:atoms ["O" "F" "Cl"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
     assert_eq!(editor.probe(), Ok(&expected));
     assert_eq!(editor.finish(), Ok(expected));
@@ -5823,7 +5823,7 @@ fn test_molecule_editor_probe_error(#[case] expected: MoleculeIntegrityError) {
     let added = editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
     assert_eq!(editor.probe(), Err(expected.clone()));
     assert_eq!(editor.clone().finish(), Err(expected));
-    editor.remove_topology(&[], &[added]);
+    editor.remove_topology(&[], &[added]).unwrap();
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));
 }
@@ -5868,7 +5868,7 @@ fn test_transaction_rollback_topology(#[from(equiv_molecule_entries)] entries: M
     let source = Molecule::from_entries(entries);
     let mut molecule = source.clone();
     let mut edits = Edits::new();
-    edits.remove_topology(
+    edits.remove_topology_cascading(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
@@ -6170,9 +6170,9 @@ fn test_molecule_editor_tracked_remove_topology_identity() {
     let mut plain = Molecule::new().edit();
     let mut tracked = Molecule::new().edit();
 
-    plain.remove_topology(&[], &[]);
+    plain.remove_topology(&[], &[]).unwrap();
     assert_eq!(
-        tracked.tracked_remove_topology(&[], &[]),
+        tracked.tracked_remove_topology(&[], &[]).unwrap(),
         MoleculeCompaction::empty()
     );
     assert_eq!(plain.finish().unwrap(), Molecule::new());
@@ -6976,7 +6976,7 @@ fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] molecule: Molecule
     let new_a = b.add_atom(AtomForm::from_element(Element::Br));
     b.add_bond(AtomId(0), new_a, BondForm::from_order(1));
     b.remove_aromatic_systems(&[AromaticSystemId(0)]);
-    b.remove_topology(&[AtomId(3)], &[BondId(2)]);
+    b.remove_topology_cascading(&[AtomId(3)], &[BondId(2)]);
     let result = b.finish().unwrap();
     let atoms: Vec<Element> = result
         .atoms()

@@ -243,7 +243,7 @@ fn benchmark_mutation(c: &mut Criterion) {
             Correspondence::new(vec![], size - 1, size - 1).unwrap(),
         );
         let mut edits = Edits::new();
-        edits.remove_atom(AtomHandle::Id(AtomId((size - 1) as u32)));
+        edits.remove_topology_cascading(vec![AtomHandle::Id(AtomId((size - 1) as u32))], vec![]);
         let added = edits.add_atom(AtomForm::from_element(Element::O));
         edits.add_bond(
             AtomHandle::Id(AtomId((size - 2) as u32)),
@@ -261,7 +261,7 @@ fn benchmark_mutation(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("editor_session/path", size), |b| {
             b.iter(|| {
                 let mut editor = molecule.clone().edit();
-                editor.remove_topology(&[AtomId((size - 1) as u32)], &[]);
+                editor.remove_topology_cascading(&[AtomId((size - 1) as u32)], &[]);
                 let added = editor.add_atom(AtomForm::from_element(Element::O));
                 editor.add_bond(AtomId((size - 2) as u32), added, BondForm::from_order(1));
                 black_box(editor.finish().unwrap())
@@ -271,7 +271,7 @@ fn benchmark_mutation(c: &mut Criterion) {
             b.iter_batched(
                 || molecule.clone().edit(),
                 |mut editor| {
-                    editor.remove_topology(black_box(&removed), &[]);
+                    editor.remove_topology_cascading(black_box(&removed), &[]);
                     black_box(editor)
                 },
                 BatchSize::SmallInput,

@@ -137,6 +137,7 @@ def test_constraint_edit():
         Edit.AddAtoms(atoms=[AtomForm.parse("C")]),
         Edit.AddBonds(bonds=[((0, New(0)), BondForm.parse("1"))]),
         Edit.RemoveTopology(atoms=[New(0)], bonds=[1]),
+        Edit.RemoveTopologyCascading(atoms=[New(0)], bonds=[1]),
         Edit.ModifyAtomField(
             id=New(0),
             change=AtomFieldChange.Charge(
@@ -199,16 +200,17 @@ def test_edit_replace(variant, old, new):
     assert variant(id=edit.id, old=edit.old, new=edit.new) == edit
 
 
-def test_edit_remove_topology_collections():
+@pytest.mark.parametrize("variant", [Edit.RemoveTopology, Edit.RemoveTopologyCascading])
+def test_edit_remove_topology_collections(variant):
     atoms, bonds = [2, 0, 2], [1, 3]
-    edit = Edit.RemoveTopology(atoms=atoms, bonds=bonds)
+    edit = variant(atoms=atoms, bonds=bonds)
     atoms.clear()
     bonds.clear()
     assert type(edit.atoms) is tuple
     assert type(edit.bonds) is tuple
     assert edit.atoms == (2, 0, 2)
     assert edit.bonds == (1, 3)
-    assert Edit.RemoveTopology(atoms=edit.atoms, bonds=edit.bonds) == edit
+    assert variant(atoms=edit.atoms, bonds=edit.bonds) == edit
     with pytest.raises(TypeError):
         edit.atoms[0] = 1
     with pytest.raises(TypeError):

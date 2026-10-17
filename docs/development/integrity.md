@@ -63,6 +63,16 @@ include finish. Transaction::apply also permits intermediate states that violate
 commit checks integrity and restores transaction-entry state on failure. Molecule::transact and
 tracked_transact include commit. A failed transaction probe leaves the transaction active.
 
+Exact topology removal has an earlier, narrower boundary: stored overlay references must be in
+the current atom or bond domain, and every retained stored reference must survive the removal.
+Editor drafts can contain unavailable references, so removal reports TransactionError::InvalidReference
+or DanglingReference before mutation or journal capture. It does not run full molecule integrity
+checking. Explicit cascading removal instead selects rows with unavailable stored references before
+transport. These are representation prerequisites, distinct from reaction application checking
+aromatic internal-bond and stereo ligand-bond dependencies before mutation. Direct editing can
+temporarily break that adjacency and restore it before publication. Changing bond order or adding
+bonds is not a dangling violation; chemical acceptability remains Tier 3 validation.
+
 Once published, an operation accepting only a closed aggregate relies on the contract. Do not call
 `check_integrity` defensively in every method. A trusted transformation must preserve the complete
 contract by construction and test that preservation. A new public raw constructor or mutable escape

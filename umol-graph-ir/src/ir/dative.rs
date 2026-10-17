@@ -332,7 +332,6 @@ impl DativeBonds {
     /// # Assumes
     ///
     /// Every stored reference is in the corresponding source domain and has a surviving image.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
         if topology.nodes().removed().is_empty() || self.count() == 0 {
             return;
@@ -340,6 +339,7 @@ impl DativeBonds {
         Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
+    #[cfg(test)]
     pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<DativeBondId>) {
         let (set, relations) = self.0.tracked_compact(compaction);
         let relations = Compaction::new(

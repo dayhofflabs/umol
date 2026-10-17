@@ -222,6 +222,17 @@ alias of the editor consumed. These are the Rust editor's mutation and publicati
 Molecule.apply and tracked_apply include finish; either kind of failure discards the working copy
 and leaves the source unchanged.
 
+MoleculeEditor.remove_topology(atoms, bonds) removes exactly the supplied integer IDs and returns
+None. It raises TransactionError before changing storage if a stored participant or site is
+unavailable (InvalidReference), or a retained entity would reference a removed entity
+(DanglingReference). The editor remains usable after rejection. ID bounds errors remain IndexError.
+Edit.RemoveTopology(atoms=..., bonds=...) has the same exact semantics, with batch handles instead
+of current editor IDs. Constructing an Edit does not check it against a molecule; application does.
+Edit.RemoveTopologyCascading(atoms=..., bonds=...) explicitly includes incident bonds and overlays
+with unavailable stored references. Both variants expose immutable atoms and bonds tuples and
+support ordinary construction and property access on Python 3.9. Molecule constraint compaction,
+completed-prefix behavior, batch transfer, and transaction recovery follow the existing contracts.
+
 A batch stays consumed after transfer, even when application or publication fails. An unavailable
 batch leaves the molecule or editor unchanged. A consumed editor rejects application before taking
 the batch. Use Edits.copy() to apply a prepared batch more than once:

@@ -7,7 +7,7 @@ use std::hash::Hash;
 use umol_graph_core::{Compaction, GraphCompaction};
 use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
 
-use super::{Molecule, TransactionError};
+use super::{Molecule, RemovedOverlayIds, TransactionError};
 use crate::ir::aromatic::AromaticSystemEntry;
 use crate::ir::compact::MoleculeCompaction;
 use crate::ir::constraint::Constraint;
@@ -456,6 +456,7 @@ impl Molecule {
         edit: Edit,
         state: &mut ApplicationState,
     ) -> Result<(), TransactionError> {
+        let cascading = matches!(edit, Edit::RemoveTopologyCascading { .. });
         match edit {
             Edit::AddAtoms { atoms } => {
                 for id in self.add_atoms(atoms) {
@@ -480,39 +481,26 @@ impl Molecule {
                 }
                 Ok(())
             }
-            Edit::RemoveTopology { atoms, bonds } => {
-                let atoms: Vec<AtomId> = atoms
+            Edit::RemoveTopology { atoms, bonds }
+            | Edit::RemoveTopologyCascading { atoms, bonds } => {
+                let mut atoms = atoms
                     .into_iter()
-                    .map(|id| {
-                        let id = state.atom(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
-                let bonds: Vec<BondId> = bonds
+                    .map(|id| state.atom(id))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut bonds = bonds
                     .into_iter()
-                    .map(|id| {
-                        let id = state.bond(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
+                    .map(|id| state.bond(id))
+                    .collect::<Result<Vec<_>, _>>()?;
                 ensure_unique(&atoms, EntityKind::Atom)?;
                 ensure_unique(&bonds, EntityKind::Bond)?;
-                let graph = self.tracked_remove_topology(&atoms, &bonds);
-                let dative_bonds = self.compact_dative_bonds(&graph);
-                let aromatic_systems = self.compact_aromatic_systems(&graph);
-                let multicenter_bonds = self.compact_multicenter_bonds(&graph);
-                let noncovalent_bonds = self.compact_noncovalent_bonds(&graph);
-                let stereo_atoms = self.compact_stereo_atoms(&graph);
-                let stereo_bonds = self.compact_stereo_bonds(&graph);
-                let compaction = MoleculeCompaction::new(
-                    graph,
-                    dative_bonds,
-                    aromatic_systems,
-                    multicenter_bonds,
-                    noncovalent_bonds,
-                    stereo_atoms,
-                    stereo_bonds,
-                );
+                let overlays = if cascading {
+                    self.select_topology_cascade(&mut atoms, &mut bonds)
+                } else {
+                    bonds.sort_unstable();
+                    self.check_topology_removal(&atoms, &bonds)?;
+                    RemovedOverlayIds::default()
+                };
+                let compaction = self.remove_selected_topology(&atoms, &bonds, overlays);
                 self.compact_constraints(&compaction);
                 state.compact(&compaction);
                 Ok(())
@@ -1787,6 +1775,7 @@ impl Molecule {
         edit: Edit,
         state: &mut ApplicationState,
     ) -> Result<Option<Undo>, TransactionError> {
+        let cascading = matches!(edit, Edit::RemoveTopologyCascading { .. });
         match edit {
             Edit::AddAtoms { atoms } => {
                 let added = self
@@ -1833,48 +1822,35 @@ impl Molecule {
                     bonds: added,
                 })
             }
-            Edit::RemoveTopology { atoms, bonds } => {
-                let atoms: Vec<AtomId> = atoms
+            Edit::RemoveTopology { atoms, bonds }
+            | Edit::RemoveTopologyCascading { atoms, bonds } => {
+                let mut atoms = atoms
                     .into_iter()
-                    .map(|id| {
-                        let id = state.atom(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
-                let bonds: Vec<BondId> = bonds
+                    .map(|id| state.atom(id))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut bonds = bonds
                     .into_iter()
-                    .map(|id| {
-                        let id = state.bond(id)?;
-                        Ok(id)
-                    })
-                    .collect::<Result<_, _>>()?;
+                    .map(|id| state.bond(id))
+                    .collect::<Result<Vec<_>, _>>()?;
                 ensure_unique(&atoms, EntityKind::Atom)?;
                 ensure_unique(&bonds, EntityKind::Bond)?;
-                let (removed_atoms, removed_bonds, overlays) =
-                    self.capture_removed_topology(&atoms, &bonds);
-                let graph = self.tracked_remove_topology(&atoms, &bonds);
-                let dative_bonds = self.compact_dative_bonds(&graph);
-                let aromatic_systems = self.compact_aromatic_systems(&graph);
-                let multicenter_bonds = self.compact_multicenter_bonds(&graph);
-                let noncovalent_bonds = self.compact_noncovalent_bonds(&graph);
-                let stereo_atoms = self.compact_stereo_atoms(&graph);
-                let stereo_bonds = self.compact_stereo_bonds(&graph);
-                let compaction = MoleculeCompaction::new(
-                    graph,
-                    dative_bonds,
-                    aromatic_systems,
-                    multicenter_bonds,
-                    noncovalent_bonds,
-                    stereo_atoms,
-                    stereo_bonds,
-                );
+                let overlays = if cascading {
+                    self.select_topology_cascade(&mut atoms, &mut bonds)
+                } else {
+                    bonds.sort_unstable();
+                    self.check_topology_removal(&atoms, &bonds)?;
+                    RemovedOverlayIds::default()
+                };
+                let (removed_atoms, removed_bonds, removed_overlays) =
+                    self.capture_removed_topology(&atoms, &bonds, &overlays);
+                let compaction = self.remove_selected_topology(&atoms, &bonds, overlays);
                 let cascade = self.tracked_compact_constraints(&compaction);
                 state.compact(&compaction);
                 let undo_compaction = compaction.undo_compaction();
                 Ok(Undo::RestoreRemovedTopology(Box::new(RemovedTopology {
                     atoms: removed_atoms,
                     bonds: removed_bonds,
-                    overlays,
+                    overlays: removed_overlays,
                     compaction,
                     undo_compaction,
                     cascade,
@@ -3773,12 +3749,15 @@ impl Molecule {
                     .map(|entry| entry.id)
                     .filter(|id| id.index() < self.atoms().count())
                     .collect::<Vec<_>>();
-                let bonds = bonds
+                let mut bonds = bonds
                     .into_iter()
                     .map(|entry| entry.id)
                     .filter(|id| id.index() < self.bonds().count())
                     .collect::<Vec<_>>();
-                self.remove_topology(&atoms, &bonds);
+                bonds.sort_unstable();
+                if self.retained_bond_at_removed_atom(&atoms, &bonds).is_none() {
+                    self.remove_topology(&atoms, &bonds);
+                }
             }
             Undo::RestoreRemovedTopology(removed) => {
                 let RemovedTopology {
@@ -4525,9 +4504,8 @@ impl Molecule {
         &self,
         atoms: &[AtomId],
         bonds: &[BondId],
+        overlays: &RemovedOverlayIds,
     ) -> (Vec<RemovedAtom>, Vec<RemovedBond>, RemovedOverlays) {
-        let atom_set: HashSet<AtomId> = atoms.iter().copied().collect();
-        let bond_set: HashSet<BondId> = bonds.iter().copied().collect();
         let removed_atoms = atoms
             .iter()
             .map(|&id| RemovedAtom {
@@ -4535,13 +4513,9 @@ impl Molecule {
                 attributes: self.atom(id).attributes().clone(),
             })
             .collect();
-        let removed_bonds = (0..self.bonds().count())
-            .map(BondId::from)
-            .filter(|&id| {
-                let view = self.bond(id);
-                bond_set.contains(&id) || view.atom_ids().iter().any(|atom| atom_set.contains(atom))
-            })
-            .map(|id| {
+        let removed_bonds = bonds
+            .iter()
+            .map(|&id| {
                 let view = self.bond(id);
                 RemovedBond {
                     id,
@@ -4550,124 +4524,84 @@ impl Molecule {
                 }
             })
             .collect();
-
-        let dative_bonds = (0..self.dative_bonds().count())
-            .map(DativeBondId::from)
-            .filter_map(|id| {
-                let view = self.dative_bond(id);
-                let atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedDativeBond {
+        let overlays = RemovedOverlays {
+            dative_bonds: overlays
+                .dative_bonds
+                .iter()
+                .map(|&id| {
+                    let view = self.dative_bond(id);
+                    RemovedDativeBond {
                         id,
                         donors: view.donor_ids().collect(),
                         acceptor: view.acceptor_id(),
                         attributes: view.attributes().clone(),
-                    })
-            })
-            .collect();
-        let aromatic_systems = (0..self.aromatic_systems().count())
-            .map(AromaticSystemId::from)
-            .filter_map(|id| {
-                let view = self.aromatic_system(id);
-                let atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedAromaticSystem {
+                    }
+                })
+                .collect(),
+            aromatic_systems: overlays
+                .aromatic_systems
+                .iter()
+                .map(|&id| {
+                    let view = self.aromatic_system(id);
+                    RemovedAromaticSystem {
                         id,
-                        atoms,
+                        atoms: view.atom_ids().collect(),
                         attributes: view.attributes().clone(),
-                    })
-            })
-            .collect();
-        let multicenter_bonds = (0..self.multicenter_bonds().count())
-            .map(MulticenterBondId::from)
-            .filter_map(|id| {
-                let view = self.multicenter_bond(id);
-                let atoms: Vec<AtomId> = view.atom_ids().collect();
-                atoms
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedMulticenterBond {
+                    }
+                })
+                .collect(),
+            multicenter_bonds: overlays
+                .multicenter_bonds
+                .iter()
+                .map(|&id| {
+                    let view = self.multicenter_bond(id);
+                    RemovedMulticenterBond {
                         id,
-                        atoms,
+                        atoms: view.atom_ids().collect(),
                         attributes: view.attributes().clone(),
-                    })
-            })
-            .collect();
-        let noncovalent_bonds = (0..self.noncovalent_bonds().count())
-            .map(NoncovalentBondId::from)
-            .filter_map(|id| {
-                let view = self.noncovalent_bond(id);
-                view.atom_ids()
-                    .iter()
-                    .any(|a| atom_set.contains(a))
-                    .then(|| RemovedNoncovalentBond {
+                    }
+                })
+                .collect(),
+            noncovalent_bonds: overlays
+                .noncovalent_bonds
+                .iter()
+                .map(|&id| {
+                    let view = self.noncovalent_bond(id);
+                    RemovedNoncovalentBond {
                         id,
                         atoms: view.atom_ids(),
                         attributes: view.attributes().clone(),
-                    })
-            })
-            .collect();
-
-        // A stereo atom drops when its site atom or any ligand atom is removed;
-        // a stereo bond drops when its site bond (directly or via a removed
-        // endpoint) or any ligand atom is removed. Mirrors `birelation_removed`.
-        let stereo_atoms = (0..self.stereo_atoms().count())
-            .map(StereoAtomId::from)
-            .filter_map(|id| {
-                let view = self.stereo_atom(id);
-                let dropped = atom_set.contains(&view.site_id())
-                    || view
-                        .ligand_ids()
-                        .iter()
-                        .any(|l| atom_set.contains(&l.atom_id));
-                dropped.then(|| RemovedStereoAtom {
-                    id,
-                    site: view.site_id(),
-                    ligands: view.ligand_ids().to_vec(),
-                    attributes: view.attributes().clone(),
+                    }
                 })
-            })
-            .collect();
-        let stereo_bonds = (0..self.stereo_bonds().count())
-            .map(StereoBondId::from)
-            .filter_map(|id| {
-                let view = self.stereo_bond(id);
-                let site = view.site_id();
-                let site_dropped = bond_set.contains(&site)
-                    || self
-                        .bond(site)
-                        .atom_ids()
-                        .iter()
-                        .any(|a| atom_set.contains(a));
-                let ligand_dropped = view
-                    .ligand_ids()
-                    .iter()
-                    .any(|l| atom_set.contains(&l.atom_id));
-                (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
-                    id,
-                    site,
-                    ligands: view.ligand_ids().to_vec(),
-                    attributes: view.attributes().clone(),
+                .collect(),
+            stereo_atoms: overlays
+                .stereo_atoms
+                .iter()
+                .map(|&id| {
+                    let view = self.stereo_atom(id);
+                    RemovedStereoAtom {
+                        id,
+                        site: view.site_id(),
+                        ligands: view.ligand_ids().to_vec(),
+                        attributes: view.attributes().clone(),
+                    }
                 })
-            })
-            .collect();
-
-        (
-            removed_atoms,
-            removed_bonds,
-            RemovedOverlays {
-                dative_bonds,
-                aromatic_systems,
-                multicenter_bonds,
-                noncovalent_bonds,
-                stereo_atoms,
-                stereo_bonds,
-            },
-        )
+                .collect(),
+            stereo_bonds: overlays
+                .stereo_bonds
+                .iter()
+                .map(|&id| {
+                    let view = self.stereo_bond(id);
+                    RemovedStereoBond {
+                        id,
+                        site: view.site_id(),
+                        ligands: view.ligand_ids().to_vec(),
+                        attributes: view.attributes().clone(),
+                    }
+                })
+                .collect(),
+        };
+        (removed_atoms, removed_bonds, overlays)
     }
 }
 

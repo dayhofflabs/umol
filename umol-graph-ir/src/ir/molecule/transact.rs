@@ -7,7 +7,7 @@ use super::apply::ApplicationState;
 use super::{Molecule, MoleculeIntegrityError};
 use crate::ir::correspondence::MoleculeCorrespondence;
 use crate::ir::edit::{Edits, Undo};
-use crate::ir::entity::EntityKind;
+use crate::ir::entity::{Entity, EntityKind};
 use crate::ir::error::MoleculeApplyError;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -24,6 +24,14 @@ pub enum TransactionError {
 
     #[error("duplicate {kind} in removal batch")]
     DuplicateRemoval { kind: EntityKind },
+
+    /// A stored participant or site is outside the editor's current topology.
+    #[error("invalid reference to {entity}")]
+    InvalidReference { entity: Entity },
+
+    /// Exact removal would leave a retained entity referencing a removed entity.
+    #[error("removing {removed} would leave a dangling reference from {dependent}")]
+    DanglingReference { removed: Entity, dependent: Entity },
 
     /// The current state does not match the edit's old value.
     #[error("precondition failed: old state does not match current")]
@@ -845,7 +853,7 @@ mod lifecycle_tests {
         let original = all_entities.clone();
         let result = Transaction::run(&mut all_entities, rollback_method, |mut transaction| {
             let mut first = Edits::new();
-            first.remove_atom(AtomHandle::Id(AtomId(0)));
+            first.remove_topology_cascading(vec![AtomHandle::Id(AtomId(0))], vec![]);
             transaction.apply(first)?;
             let mut second = Edits::new();
             second.add_atom(AtomForm::from_element(Element::N));
@@ -1101,14 +1109,14 @@ mod lifecycle_tests {
             ..MoleculeEntries::default()
         });
         let mut first = Edits::new();
-        first.remove_atom(AtomHandle::Id(AtomId(0)));
+        first.remove_topology_cascading(vec![AtomHandle::Id(AtomId(0))], vec![]);
         let hydrogen = first.add_atom(AtomForm::from_element(Element::H));
         first.add_bond(AtomHandle::Id(AtomId(4)), hydrogen, BondForm::from_order(1));
         let mut second = Edits::new();
-        second.remove_atom(AtomHandle::Id(AtomId(1)));
+        second.remove_topology_cascading(vec![AtomHandle::Id(AtomId(1))], vec![]);
         let chlorine = second.add_atom(AtomForm::from_element(Element::Cl));
         second.add_bond(AtomHandle::Id(AtomId(2)), chlorine, BondForm::from_order(1));
-        second.remove_atom(AtomHandle::Id(AtomId(4)));
+        second.remove_topology_cascading(vec![AtomHandle::Id(AtomId(4))], vec![]);
         let mut ordinary = molecule.clone();
         ordinary
             .transact([first.clone(), second.clone()], RollbackMethod::Journal)
@@ -1171,7 +1179,7 @@ mod lifecycle_tests {
             BondForm::from_order(1),
         );
         edits.add_bond(nitrogen.clone(), oxygen.clone(), BondForm::from_order(1));
-        edits.remove_atom(nitrogen);
+        edits.remove_topology_cascading(vec![nitrogen], vec![]);
         let fluorine = edits.add_atom(AtomForm::from_element(Element::F));
         edits.add_bond(oxygen, fluorine, BondForm::from_order(1));
         let correspondence =
@@ -1401,7 +1409,7 @@ mod lifecycle_tests {
         #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let mut edits = Edits::new();
-        edits.remove_atom(AtomHandle::Id(AtomId(0)));
+        edits.remove_topology_cascading(vec![AtomHandle::Id(AtomId(0))], vec![]);
         let correspondence =
             TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
                 transaction.apply(edits)?;
@@ -1536,7 +1544,7 @@ mod lifecycle_tests {
         let result =
             TrackedTransaction::run(&mut all_entities, rollback_method, |mut transaction| {
                 let mut first = Edits::new();
-                first.remove_atom(AtomHandle::Id(AtomId(0)));
+                first.remove_topology_cascading(vec![AtomHandle::Id(AtomId(0))], vec![]);
                 transaction.apply(first)?;
                 let mut second = Edits::new();
                 second.add_atom(AtomForm::from_element(Element::N));
