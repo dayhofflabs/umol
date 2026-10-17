@@ -1241,6 +1241,66 @@ impl Molecule {
         self.stereo_bonds.tracked_remove(ids)
     }
 
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_dative_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.dative_bonds.compact_topology_ids(topology);
+    }
+
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_aromatic_system_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.aromatic_systems.compact_topology_ids(topology);
+    }
+
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_multicenter_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.multicenter_bonds.compact_topology_ids(topology);
+    }
+
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_noncovalent_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.noncovalent_bonds.compact_topology_ids(topology);
+    }
+
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_stereo_atom_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_atoms.compact_topology_ids(topology);
+    }
+
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_stereo_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_bonds.compact_topology_ids(topology);
+    }
+
     /// Compact only the owning set and return its source-to-result compaction.
     pub(crate) fn compact_dative_bonds(
         &mut self,

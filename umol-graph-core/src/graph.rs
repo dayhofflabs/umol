@@ -314,40 +314,13 @@ impl Graph {
     ///
     /// Panics if a supplied id is out of range or a retained edge has a removed endpoint.
     pub fn tracked_remove(&mut self, nodes: Vec<NodeId>, edges: Vec<EdgeId>) -> GraphCompaction {
-        let old = &*self.csr;
         let compaction = GraphCompaction::new(
-            Compaction::new(old.node_count, nodes)
+            Compaction::new(self.node_count(), nodes)
                 .expect("removed nodes belong to the source graph"),
-            Compaction::new(old.edge_count, edges)
+            Compaction::new(self.edge_count(), edges)
                 .expect("removed edges belong to the source graph"),
         );
-        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
-            return compaction;
-        }
-        let kept_edges: Vec<_> = old
-            .endpoints
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| {
-                compaction
-                    .edges()
-                    .removed()
-                    .binary_search(&EdgeId::from(*index))
-                    .is_err()
-            })
-            .map(|(_, endpoints)| {
-                endpoints.map(|node| {
-                    compaction
-                        .compact_node(node)
-                        .expect("retained edge endpoints survive removal")
-                        .0
-                })
-            })
-            .collect();
-        self.csr = Arc::new(Self::build_csr(
-            compaction.nodes().result_count(),
-            &kept_edges,
-        ));
+        self.remove_with_compaction(&compaction);
         compaction
     }
 
@@ -374,17 +347,27 @@ impl Graph {
     /// Panics when a supplied node or edge id is outside the source graph.
     pub fn tracked_remove_cascading(
         &mut self,
-        mut nodes: Vec<NodeId>,
+        nodes: Vec<NodeId>,
         mut edges: Vec<EdgeId>,
     ) -> GraphCompaction {
-        nodes.sort_unstable();
-        nodes.dedup();
-        for (index, [a, b]) in self.csr.endpoints.iter().enumerate() {
-            if nodes.binary_search(a).is_ok() || nodes.binary_search(b).is_ok() {
-                edges.push(EdgeId::from(index));
+        let nodes = Compaction::new(self.node_count(), nodes)
+            .expect("removed nodes belong to the source graph");
+        if !nodes.removed().is_empty() {
+            for (index, [a, b]) in self.csr.endpoints.iter().enumerate() {
+                if nodes.removed().binary_search(a).is_ok()
+                    || nodes.removed().binary_search(b).is_ok()
+                {
+                    edges.push(EdgeId::from(index));
+                }
             }
         }
-        self.tracked_remove(nodes, edges)
+        let compaction = GraphCompaction::new(
+            nodes,
+            Compaction::new(self.edge_count(), edges)
+                .expect("removed edges belong to the source graph"),
+        );
+        self.remove_with_compaction(&compaction);
+        compaction
     }
 
     /// Undo a removal using its compaction and original saved edges.
@@ -474,14 +457,16 @@ impl Graph {
         nodes: Vec<NodeId>,
         edges: Vec<EdgeId>,
     ) -> Option<GraphCompaction> {
-        let removed_edges: HashSet<EdgeId> = edges.iter().copied().collect();
-        for &node in &nodes {
-            if self
-                .neighbors(node)
-                .iter()
-                .any(|n| !removed_edges.contains(&n.edge))
-            {
-                return None;
+        if !nodes.is_empty() {
+            let removed_edges: HashSet<EdgeId> = edges.iter().copied().collect();
+            for &node in &nodes {
+                if self
+                    .neighbors(node)
+                    .iter()
+                    .any(|n| !removed_edges.contains(&n.edge))
+                {
+                    return None;
+                }
             }
         }
         Some(self.tracked_remove(nodes, edges))
@@ -602,6 +587,38 @@ impl Graph {
             source_node_count,
             source_edge_count,
         }
+    }
+
+    /// Apply a compaction constructed from this graph's counts and complete removal lists.
+    fn remove_with_compaction(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        let kept_edges: Vec<_> = self
+            .csr
+            .endpoints
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                compaction
+                    .edges()
+                    .removed()
+                    .binary_search(&EdgeId::from(*index))
+                    .is_err()
+            })
+            .map(|(_, endpoints)| {
+                endpoints.map(|node| {
+                    compaction
+                        .compact_node(node)
+                        .expect("retained edge endpoints survive removal")
+                        .0
+                })
+            })
+            .collect();
+        self.csr = Arc::new(Self::build_csr(
+            compaction.nodes().result_count(),
+            &kept_edges,
+        ));
     }
 
     fn build_csr(node_count: usize, edges: &[[u32; 2]]) -> Csr {
@@ -1429,6 +1446,18 @@ mod tests {
         vec![EdgeId(0), EdgeId(1), EdgeId(3)],
         Graph::new(3, &[[1, 2]]),
     )]
+    #[case::unordered_nodes(
+        vec![NodeId(3), NodeId(1), NodeId(3)],
+        vec![],
+        vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+        Graph::new(2, &[]),
+    )]
+    #[case::unordered_edges(
+        vec![],
+        vec![EdgeId(3), EdgeId(1), EdgeId(3)],
+        vec![EdgeId(1), EdgeId(3)],
+        Graph::new(4, &[[0, 1], [2, 3]]),
+    )]
     #[case::all(
         vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
         vec![],
@@ -1632,6 +1661,9 @@ mod tests {
     #[rstest]
     #[case::node(vec![NodeId(1)], vec![EdgeId(0), EdgeId(1)], Some(Graph::new(3, &[[1, 2]])))]
     #[case::edge(vec![], vec![EdgeId(1)], Some(Graph::new(4, &[[0, 1], [2, 3]])))]
+    #[case::unordered_edges(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(2)], Some(Graph::new(4, &[[1, 2]])))]
+    #[case::all_edges(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)], Some(Graph::new(4, &[])))]
+    #[case::duplicates(vec![NodeId(1), NodeId(1)], vec![EdgeId(1), EdgeId(0), EdgeId(1)], Some(Graph::new(3, &[[1, 2]])))]
     #[case::dangling(vec![NodeId(1)], vec![], None)]
     #[case::one_dangling(vec![NodeId(1)], vec![EdgeId(0)], None)]
     fn test_graph_try_tracked_remove(

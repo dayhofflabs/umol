@@ -327,6 +327,19 @@ impl DativeBonds {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() || self.count() == 0 {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
+    }
+
     pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<DativeBondId>) {
         let (set, relations) = self.0.tracked_compact(compaction);
         let relations = Compaction::new(
@@ -1231,6 +1244,24 @@ mod tests {
             bonds.incident_ids(AtomId(0)).collect::<Vec<_>>(),
             vec![DativeBondId(0)]
         );
+    }
+
+    #[rstest]
+    #[case::empty(DativeBonds::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(DativeBonds::new(vec![(vec![AtomId(4), AtomId(2)], AtomId(1), DativeBondForm::from_order(2))]), vec![], vec![])]
+    #[case::bond_only(DativeBonds::new(vec![(vec![AtomId(4), AtomId(2)], AtomId(1), DativeBondForm::from_order(2))]), vec![], vec![EdgeId(0)])]
+    fn test_dative_bonds_compact_topology_ids_identity(
+        #[case] original: DativeBonds,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
     }
 
     #[rstest]

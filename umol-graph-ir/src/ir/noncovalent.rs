@@ -279,6 +279,19 @@ impl NoncovalentBonds {
         Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
     }
 
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() || self.count() == 0 {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
+    }
+
     pub(crate) fn compact(
         &self,
         compaction: &GraphCompaction,
@@ -1110,6 +1123,24 @@ mod tests {
             vec![NoncovalentBondId(0)]
         );
         assert!(!bonds.has_incident([AtomId(1), AtomId(2)][position]));
+    }
+
+    #[rstest]
+    #[case::empty(NoncovalentBonds::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(NoncovalentBonds::new(vec![([AtomId(4), AtomId(2)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]), vec![], vec![])]
+    #[case::bond_only(NoncovalentBonds::new(vec![([AtomId(4), AtomId(2)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]), vec![], vec![EdgeId(0)])]
+    fn test_noncovalent_bonds_compact_topology_ids_identity(
+        #[case] original: NoncovalentBonds,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
     }
 
     #[rstest]

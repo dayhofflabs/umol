@@ -325,6 +325,19 @@ impl StereoAtoms {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() || self.count() == 0 {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
+    }
+
     pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoAtomId>) {
         let (set, relations) = self.0.tracked_compact(compaction);
         let relations = Compaction::new(
@@ -784,6 +797,21 @@ impl StereoBonds {
     pub(crate) fn remove_ligand(&mut self, id: StereoBondId, position: usize) {
         let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
+    }
+
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if (topology.nodes().removed().is_empty() && topology.edges().removed().is_empty())
+            || self.count() == 0
+        {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
     pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoBondId>) {
@@ -3202,6 +3230,24 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(StereoAtoms::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(StereoAtoms::new(vec![(AtomId(2), vec![StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]), vec![], vec![])]
+    #[case::bond_only(StereoAtoms::new(vec![(AtomId(2), vec![StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]), vec![], vec![EdgeId(0)])]
+    fn test_stereo_atoms_compact_topology_ids_identity(
+        #[case] original: StereoAtoms,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
+    }
+
+    #[rstest]
     fn test_stereo_atoms_compact(stereo_atoms: StereoAtoms) {
         let attributes = stereo_atoms.attributes(StereoAtomId(0)).clone();
         let ligands = vec![
@@ -4263,6 +4309,23 @@ mod tests {
             elements,
             StereoBonds::new(vec![(BondId(2), remaining, attributes)])
         );
+    }
+
+    #[rstest]
+    #[case::empty(StereoBonds::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(StereoBonds::new(vec![(BondId(2), vec![StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom)], StereoBondForm::new(StereoKind::CisTrans, 1u32))]), vec![], vec![])]
+    fn test_stereo_bonds_compact_topology_ids_identity(
+        #[case] original: StereoBonds,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
     }
 
     #[rstest]

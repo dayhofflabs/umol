@@ -202,8 +202,9 @@ row deletion under bare compaction names does not satisfy this design.
 
 Overlay row removal and participant translation are separate responsibilities.
 Row removal applies the selected removals in that entity's ID space;
-compact_participants translates graph references in surviving rows without
-deleting rows. Neither operation discovers additional dependent removals.
+compact_participants in graph-core, exposed as compact_topology_ids by the
+graph-IR stores, translates graph references in surviving rows without deleting
+rows. Neither operation discovers additional dependent removals.
 Where participant-triggered deletion is retained, expose it as an explicitly
 named cascading operation and route cascading callers through it. A returned
 relation compaction records the removals performed by the selected operation;
@@ -724,7 +725,7 @@ The public boundary is settled. Edits are independently constructible inputs,
 not provenance-bound recovery data. Applying an invalid removal must report
 rejection; avoiding a panic while producing an unspecified result is
 insufficient. Wherever cascading previously prevented missing references, the
-updated exact operation checks reference coverage and survival before any mutation
+updated exact operation establishes reference coverage and survival before any mutation
 by that operation. Editor drafts may already contain references outside the
 current atom/bond domains; exact removal rejects those as InvalidReference,
 distinct from DanglingReference for a valid reference broken by this removal.
@@ -748,6 +749,35 @@ This prerequisite concerns stored references, not every molecule integrity
 condition: deleting a stereo ligand's adjacency bond can leave all stored atom
 references intact, allowing an intermediate incidence inconsistency to be
 repaired before publication.
+
+### Reference coverage during editing
+
+Published Molecule values already have valid stored references. Operations whose
+input and preceding changes preserve that property can rely on it. Direct editor
+additions and participant replacements may instead refer to atoms or bonds not
+yet added. This is transient editor state, not inconsistent graph-core relation
+storage: a core relation set has no owning graph against which to check its
+references.
+
+The old cascading compaction silently drops a row when any reference has no
+image, including a reference already outside the source domain. Exact removal
+cannot delete that unselected row. It must reject with InvalidReference before
+mutation instead of reaching participant transport with a missing image.
+
+Keep this check in graph IR, using existing participant accessors when the caller
+accepts an arbitrary editor draft. Do not add graph-core maximum-ID accessors or
+coverage predicates, or editor validity caches or tracking flags. Call paths
+with an established reference-validity guarantee do not need this scan; document
+that guarantee for each such path during migration. Deletion-dependency checks
+are still required because an existing reference may target a selected removal.
+
+Checking an arbitrary draft can add a full, allocation-free participant scan
+before removal. This is separate from survivor transport and can repeat reads
+that the old cascade performed during its combined selection and transport.
+S2e must account for that pass explicitly. Include its cost in the scheduled
+end-to-end removal comparisons in S3/S4; constant-cost coverage is no longer
+assumed. Any later core API or editor bookkeeping proposal requires its own
+interface and cost justification.
 
 ### Agreed primitive inventory and naming
 
@@ -843,7 +873,7 @@ contract; it is not part of this initial surface.
 
 Keep typed slice inputs at the owning overlay boundary. For each store and ID
 pair below, retain crate-private remove and tracked_remove, and replace its
-row-dropping compact with crate-private compact_participants. AromaticSystems
+row-dropping compact with crate-private compact_topology_ids. AromaticSystems
 illustrates the concrete signatures:
 
 ```rust
@@ -852,24 +882,24 @@ pub(crate) fn tracked_remove(
     &mut self,
     ids: &[AromaticSystemId],
 ) -> Compaction<AromaticSystemId>;
-pub(crate) fn compact_participants(&mut self, topology: &GraphCompaction);
+pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction);
 ```
 
 | Owning store | ID | Replacement Molecule delegate |
 | --- | --- | --- |
-| DativeBonds | DativeBondId | compact_dative_bond_participants |
-| AromaticSystems | AromaticSystemId | compact_aromatic_system_participants |
-| MulticenterBonds | MulticenterBondId | compact_multicenter_bond_participants |
-| NoncovalentBonds | NoncovalentBondId | compact_noncovalent_bond_participants |
-| StereoAtoms | StereoAtomId | compact_stereo_atom_participants |
-| StereoBonds | StereoBondId | compact_stereo_bond_participants |
+| DativeBonds | DativeBondId | compact_dative_bond_topology_ids |
+| AromaticSystems | AromaticSystemId | compact_aromatic_system_topology_ids |
+| MulticenterBonds | MulticenterBondId | compact_multicenter_bond_topology_ids |
+| NoncovalentBonds | NoncovalentBondId | compact_noncovalent_bond_topology_ids |
+| StereoAtoms | StereoAtomId | compact_stereo_atom_topology_ids |
+| StereoBonds | StereoBondId | compact_stereo_bond_topology_ids |
 
 Each replacement delegate is crate-private, takes &mut self and
-&GraphCompaction, and returns (). The explicit participant noun distinguishes
-it from deleting overlay rows. Sites and ligand anchors are participants in
-this storage sense. Existing Molecule bulk removal delegates retain their typed
-slice inputs and return () or a typed Compaction; they affect their owning store
-only.
+&GraphCompaction, and returns (). The topology_ids suffix follows the existing
+restore_topology_ids name: both translate atom and bond IDs stored in overlay
+entries without deleting rows. Existing Molecule bulk removal delegates retain
+their typed slice inputs and return () or a typed Compaction; they affect their
+owning store only.
 
 Molecule's crate-private remove_topology and tracked_remove_topology likewise
 retain typed atom/bond slices and () / GraphCompaction results. They become
@@ -1021,11 +1051,13 @@ ownership/conversion implementations:
   rediscovering the same dependencies in the mutation backend. Rejection can
   stop at the first failure. Successful execution still transports surviving
   references; moving the check does not make that separate work disappear.
-- Establish source-domain coverage from the largest atom and bond IDs in each
-  store's existing sorted incidence indices. This requires a fixed number of
-  comparisons per store, without another scan of every participant, a new cache,
-  or allocation. Wire access to that information through storage. Check deletion
-  dependencies through incidence separately; coverage does not establish survival.
+- Establish source-domain coverage from the caller's reference-validity guarantee
+  where available. For arbitrary editor drafts, use existing participant accessors
+  in graph IR before mutation. This can add a full allocation-free scan, as
+  described under reference coverage during editing. Do not add core queries or
+  editor bookkeeping to avoid that pass without a separate justification. Check
+  deletion dependencies through incidence separately; coverage does not establish
+  survival.
 - Undo of added topology needs only the graph-removal panic guard described in
   S0b. Do not reuse the editor's broader reference check or scan overlays that
   undo neither reads nor transports.
@@ -1366,7 +1398,7 @@ graph and relation removal/compaction primitives before S1.
 | [Molecule::tracked_remove_topology](../umol-graph-ir/src/ir/molecule.rs) | The sole production graph-removal bridge in graph IR converts typed IDs to node/edge vectors, obtains a compaction from the same graph, and compacts equally sized atom/bond attribute arrays. S1a transfers those vectors into the existing cascade. The later exact switch requires the graph-IR coordinator to supply the complete deletion and establish retained-reference survival first. |
 | [MoleculeEditor](../umol-graph-ir/src/ir/molecule/editor.rs), plain and journaled [Edit execution](../umol-graph-ir/src/ir/molecule/apply.rs) | These call the raw Molecule bridge, then all six row-dropping overlay compactions. Edit execution first resolves handles and rejects duplicates; journaled execution additionally captures removed rows. Today the cascades establish survivor validity. S2 must establish it before mutation by checking exact removal or selecting the complete existing cascade, remove overlay rows explicitly, remove topology, then transport surviving participants. |
 | Undo::RemoveAddedTopology in the same apply module | Matching reverse history removes later dependent additions before the original added topology. Current replay filters out-of-range IDs and uses the graph cascade. A mechanical switch to asserted exact removal would not cover manipulated history. S0b records the local guard before that caller migrates; ordinary history must not gain panic recovery. |
-| The six graph-IR owning overlay stores | Explicit remove/tracked_remove builds RelationId vectors for its own rows; pass those vectors directly to the changed core signatures. Existing compact calls borrowing tracked_compact, which selects surviving rows by successful participant translation. That selection must move to the coordinator before replacing it with compact_participants. The topology compaction retains the original graph domains while the surviving rows still hold original participant references. |
+| The six graph-IR owning overlay stores | Explicit remove/tracked_remove builds RelationId vectors for its own rows; pass those vectors directly to the changed core signatures. Existing compact calls borrowing tracked_compact, which selects surviving rows by successful participant translation. That selection must move to the coordinator before replacing it with compact_topology_ids. The topology compaction retains the original graph domains while the surviving rows still hold original participant references. |
 
 The owning-store mapping is FixedRelationSet for NoncovalentBonds;
 VarRelationSet for AromaticSystems and MulticenterBonds; and
@@ -1438,16 +1470,18 @@ transaction/error bindings.
 
 | Entry point | Required behavior |
 | --- | --- |
-| Direct editor exact removal | Check reference coverage and survival before changing any store. Return TransactionError and retain the editor on rejection. Preserve existing removal-ID bounds and duplicate handling. |
-| Plain or tracked editor apply | Resolve handles and reject duplicate removals, then use the same reference check. A rejected removal changes nothing; preceding successful edits remain. Tracking changes only the returned witness. |
-| Journal or clone transaction | Use the same check before mutation and before journal capture. An edit failure aborts and restores the transaction's entry state through the selected recovery method. |
+| Direct editor exact removal | Check draft reference coverage and deletion dependencies before changing any store. Return TransactionError and retain the editor on rejection. Preserve existing removal-ID bounds and duplicate handling. |
+| Plain or tracked editor apply | Resolve handles and reject duplicate removals. Direct changes may precede the batch, so removal must establish draft reference coverage as well as deletion dependencies. A rejected removal changes nothing; preceding successful edits remain. Tracking changes only the returned witness. |
+| Journal or clone transaction | Establish reference coverage and deletion dependencies before mutation and journal capture. Rely on valid input and preceding changes where they supply the coverage guarantee; arbitrary drafts require the scan. An edit failure aborts and restores the transaction's entry state through the selected recovery method. |
 | probe / finish / commit | Retain the final integrity gate. probe leaves the editor available; finish consumes it on either outcome; failed commit rolls back. Removal checks do not replace publication validation. |
 | Python editor and batch methods | Retain consumed-object, ID-range, and batch-transfer checks. Both new error variants use the existing TransactionError exception; publication integrity failures retain their existing translation. |
 
-The editor/Edit preflight has two parts. Check source-domain coverage from the
-largest atom/bond IDs in the existing sorted incidence indices; valid removal
-IDs alone do not exclude references to not-yet-added entities in a draft. This
-is a fixed number of comparisons per store, not a scan of every stored reference.
+The editor/Edit preflight has two parts. Establish source-domain coverage from
+the caller's input and preceding operations, or scan the stored references of an
+arbitrary editor draft through existing graph-IR accessors. Valid removal IDs
+alone do not exclude references to not-yet-added entities in that draft. The
+scan allocates nothing but visits every participant on success; the core
+maximum-ID and coverage-query proposals are not part of the interface.
 Then check dependencies of the requested deletions through incidence. Inspect
 stored IDs before following a stereo-bond site. Use all rows returned by
 owning-store incidence, not the single aromatic-system lookup valid only after
@@ -1459,10 +1493,12 @@ afterward.
 
 Explicit cascading must include out-of-domain participant/site references in
 its selected rows, preserving the old compaction behavior. Reuse the selected
-IDs for journal capture and removal. Source-domain coverage uses the same index
-bounds; only a failing bound requires finding the affected rows. Dependency
-selection and surviving-reference transport still cost work. S2e must account
-for those traversals rather than claim that moving checks eliminates them.
+IDs for journal capture and removal. For arbitrary drafts, select rows with
+unavailable references during the graph-IR reference scan. Call paths with an
+established coverage guarantee need no such selection. Dependency selection,
+draft reference scanning, and surviving-reference transport still cost work.
+S2e must account for those traversals rather than claim that moving checks
+eliminates them.
 
 The new reaction DPO checks inspect dependencies of deleted bonds; they do not
 add molecule-wide chemistry validation. The core asserted primitives gain no
@@ -1573,7 +1609,7 @@ and git diff --check passed. Exact-removal benchmark cases are prepared, with
 owned inputs constructed outside timing; no performance measurements were run.
 
 The shared execution route and input-vector reuse also complete that part of
-S2b. Its remaining duplicate-work review is still open.
+S2b. S2b completed the remaining review and cleanup.
 
 #### S1b — Relation removal and participant transport (done) [dep: S0a]
 
@@ -1626,27 +1662,51 @@ integration tests, 215 property tests, and one doctest. Clippy passed for
 graph-core with all targets and proptest enabled; targeted nightly formatting
 and git diff --check passed. No performance measurements were run.
 
-#### S2b — Graph selection and execution [dep: S1a]
+#### S2b — Graph selection and execution (done) [dep: S1a]
 
-Modules: umol-graph-core graph and rewriting. Internal change; green. Route
-checked removal to exact execution after its check; route cascading removal
-after its selection. Eliminate repeated cascade discovery and avoidable copies
-of the removal lists in that execution. Preserve rejection without mutation,
-returned mappings, and pushout-complement behavior. Use the existing graph and
-rewriting properties to verify the shared execution path.
+Completed 2026-10-17. The graph/rewrite caller review confirms that checked
+removal reaches exact execution after its dangling check and pushout complement
+transfers its owned deletion vectors directly into that checked operation.
+Cascading removal now constructs its node compaction once, reusing the sorted
+removal list for selection and exact execution instead of sorting/deduplicating
+it twice. A private execution method accepts the completed graph compaction;
+public interfaces and failure contracts are unchanged.
 
-#### S2c — Owning overlay stores and Molecule transport [dep: S2a, S2b]
+With no removed nodes, cascading removal skips incident-edge discovery and
+checked removal skips its edge-membership allocation. With removed nodes, their
+existing selection and membership algorithms remain: the cascade scans endpoints
+once for selection, then exact execution transports survivors in a separate pass.
+Checked removal still rejects dangling edges before mutation, without cascade
+discovery afterward. No removal-list clones were added.
 
-Modules: graph-IR overlay stores and ir/molecule. Add the agreed typed
-participant methods and six participant-only Molecule delegates; additive,
-green. Retain the old cascading compaction delegates and the raw topology
-helper's existing behavior until S2e migrates their consumers together. Keep
-exact row removal in the owning stores. Cover typed mappings, source counts,
-frame/payload preservation, and unchanged shared source molecules. Wire the
-constant-cost source-domain coverage check from the existing sorted incidence
-indices for S2e; do not add a participant scan, cache, or allocation for it. At
-this point use the simple existing copy-on-write model; do not preselect the
-S3 answer.
+Verification passed: 1,968 graph-core unit tests, including five added cases for
+unordered/repeated removals and edge-only deletion; 11 graph properties; and 38
+restoration properties. Existing rewriting tests cover the context graph,
+returned mappings, commuting square, dangling rejection, and count mismatches.
+Clippy passed with all graph-core targets and proptest enabled; targeted nightly
+formatting and git diff --check passed. No performance measurements were run.
+
+#### S2c — Owning overlay stores and Molecule transport (done) [dep: S2a, S2b]
+
+Completed 2026-10-17. All six owning overlay stores now provide crate-private
+compact_topology_ids, with the six agreed Molecule delegates. They translate
+atom references and stereo-bond sites through the existing core operation,
+preserving row IDs, participant order, attributes, and constraints. Empty stores
+and unchanged reference domains return before Arc::make_mut, including bond-only
+changes for atom-only stores. Other shared mutations retain ordinary copy-on-write.
+
+The old cascading compaction delegates and raw topology-removal behavior remain
+until S2e migrates their production callers together. The new methods are
+exercised by tests; their production dead-code expectations are removed in that
+migration. Reference coverage also belongs to S2e under the revised graph-IR
+boundary above. No core query or editor bookkeeping was added.
+
+Twenty-nine new unit cases cover typed row-removal mappings and source counts,
+participant/frame and payload preservation, both incidence domains, unchanged
+shared source molecules, and identity paths that retain shared storage.
+Verification passed: 11,322 graph-IR unit tests, with three ignored; Clippy for
+all graph-IR targets with warnings denied; targeted nightly formatting; and
+git diff --check. No performance measurements were run.
 
 #### S2d — DPO checks and faithful application tracking [dep: S0b, S2c]
 
@@ -1705,14 +1765,21 @@ MoleculeCompaction results.
 Check all exact-removal prerequisites before mutation or journal capture.
 Report TransactionError::InvalidReference for unavailable stored participants
 or sites and DanglingReference for references broken by the requested removal.
-Use the incidence-index bounds for source-domain coverage; do not scan all
-overlay participants to establish it. Reuse the dependency discovery previously
-performed by cascading; do not add a redundant cascade scan after checking.
+Use existing graph-IR participant accessors for draft reference coverage. Audit
+each caller before omitting that scan: its input and preceding operations must
+establish valid references. In particular, editor batches can follow unchecked
+direct changes; handle resolution alone does not establish validity of existing
+rows. Do not introduce a core coverage query or editor tracking state. Record
+the additional participant passes for the S3/S4 end-to-end comparisons. Reuse
+the dependency discovery previously performed by cascading; do not add a
+redundant cascade scan after checking.
 Select cascaded bonds/overlays once, including rows with out-of-domain references
 in editor drafts; reuse selected IDs for mutation and journal capture, and
 assemble MoleculeCompaction from the actual results.
 Compact constraints once for the completed topology operation;
 explicit overlay edits retain their existing separate constraint handling.
+Remove the production dead-code expectations from S2c's participant methods as
+their callers migrate.
 Migrate extraction and its generated edits to the cascading operation.
 Remove duplicate incident-bond selection between extraction and that operation.
 Check plain/editor/journal equivalence, subsequent handles, explicit co-removal,
@@ -1776,8 +1843,10 @@ green. Account for payload clones and allocated storage separately for unique
 and shared inputs, at deletion fractions chosen to expose the stated tradeoff.
 Distinguish overlay copying from the existing atom/bond attribute copying.
 Measure a bounded end-to-end removal/extraction workload as well as the storage
-step. A narrowly scoped survivor-copying alternative may be prototyped to test
-the hypothesis; it does not gain a public API merely to make the experiment
+step. Include removal from arbitrary editor drafts and account for its reference
+scan separately from cloning and transport; keep the same checks in compared
+implementations. A narrowly scoped survivor-copying alternative may be prototyped
+to test the hypothesis; it does not gain a public API merely to make the experiment
 convenient. Keep selection, mappings, constraints, and output semantics equal.
 
 #### S3b — Keep, change, or reject [dep: S3a]

@@ -4078,6 +4078,273 @@ fn test_molecule_remove_stereo_bonds(
 }
 
 #[rstest]
+fn test_molecule_compact_dative_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_dative_bonds(&[DativeBondId(0)]),
+        Compaction::new(2, vec![DativeBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.dative.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.dative[0].0 = vec![AtomId(2), AtomId(0)];
+    expected.dative[0].1 = AtomId(3);
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_dative_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [2, 0, 3].contains(&atom) {
+            vec![DativeBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .dative_bonds
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_aromatic_system_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_aromatic_systems(&[AromaticSystemId(0)]),
+        Compaction::new(2, vec![AromaticSystemId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.aromatic.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.aromatic[0].0 = vec![AtomId(2), AtomId(0), AtomId(1)];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_aromatic_system_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [2, 0, 1].contains(&atom) {
+            vec![AromaticSystemId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .aromatic_systems
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_multicenter_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_multicenter_bonds(&[MulticenterBondId(0)]),
+        Compaction::new(2, vec![MulticenterBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.multicenter.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.multicenter[0].0 = vec![AtomId(1), AtomId(2), AtomId(0)];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_multicenter_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [1, 2, 0].contains(&atom) {
+            vec![MulticenterBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .multicenter_bonds
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_noncovalent_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_noncovalent_bonds(&[NoncovalentBondId(0)]),
+        Compaction::new(2, vec![NoncovalentBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.noncovalent.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.noncovalent[0].0 = [AtomId(3), AtomId(0)];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_noncovalent_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [3, 0].contains(&atom) {
+            vec![NoncovalentBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .noncovalent_bonds
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_stereo_atom_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_stereo_atoms(&[StereoAtomId(0)]),
+        Compaction::new(2, vec![StereoAtomId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.stereo_atoms.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.stereo_atoms[0].0 = AtomId(1);
+    expected.stereo_atoms[0].1 = vec![
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    ];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_stereo_atom_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [0, 1, 2].contains(&atom) {
+            vec![StereoAtomId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .stereo_atoms
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_stereo_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_stereo_bonds(&[StereoBondId(0)]),
+        Compaction::new(2, vec![StereoBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.stereo_bonds.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.stereo_bonds[0].0 = BondId(1);
+    expected.stereo_bonds[0].1 = vec![
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    ];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_stereo_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [0, 1, 2, 3].contains(&atom) {
+            vec![StereoBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .stereo_bonds
+                .incident_to_atom_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    for bond in 0..6 {
+        let incidence = if bond == 1 {
+            vec![StereoBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .stereo_bonds
+                .incident_to_bond_ids(BondId(bond))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
 fn test_molecule_compact_dative_bonds(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
