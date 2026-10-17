@@ -278,7 +278,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// Input ids refer to the pre-removal set; their order and repetitions do not matter.
     /// The compaction records the original count and takes ownership of the removal vector.
     /// Removed payloads are not retained.
-    /// A nonempty removal rebuilds incidence over the surviving rows once.
+    /// A nonempty removal filters and renumbers the existing incidence in place.
     ///
     /// # Semantic properties
     ///
@@ -312,13 +312,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         }
         self.participants.truncate(dst);
         self.data.truncate(dst);
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(
-                self.participants[i]
-                    .iter()
-                    .map(|participant| participant.refs()),
-            );
-        });
+        self.incidence.remove(&compaction);
         compaction
     }
 
@@ -350,9 +344,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
                 .compact(topology)
                 .expect("retained participant references survive compaction");
         }
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(self.participants[i].iter().map(|p| p.refs()));
-        });
+        self.incidence.compact_participants(topology);
     }
 
     /// Undo row removal using its compaction and original saved entries.

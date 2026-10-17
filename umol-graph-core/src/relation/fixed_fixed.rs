@@ -345,7 +345,7 @@ where
     /// Input ids refer to the pre-removal set; their order and repetitions do not matter.
     /// The compaction records the original count and takes ownership of the removal vector.
     /// Removed payloads are not retained.
-    /// A nonempty removal rebuilds incidence over the surviving rows once.
+    /// A nonempty removal filters and renumbers the existing incidence in place.
     ///
     /// # Semantic properties
     ///
@@ -381,10 +381,7 @@ where
         self.participants_1.truncate(dst);
         self.participants_2.truncate(dst);
         self.data.truncate(dst);
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(self.participants_1[i].iter().map(|p| p.refs()));
-            out.extend(self.participants_2[i].iter().map(|p| p.refs()));
-        });
+        self.incidence.remove(&compaction);
         compaction
     }
 
@@ -421,10 +418,7 @@ where
                 .compact(topology)
                 .expect("retained participant references survive compaction");
         }
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(self.participants_1[i].iter().map(|p| p.refs()));
-            out.extend(self.participants_2[i].iter().map(|p| p.refs()));
-        });
+        self.incidence.compact_participants(topology);
     }
 
     /// Undo row removal using its compaction and original saved entries.

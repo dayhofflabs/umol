@@ -317,7 +317,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     /// The compaction records the original count and takes ownership of the removal vector.
     /// Removed payloads are not retained.
     /// A nonempty removal closes gaps in the participant buffer, updates row offsets,
-    /// and rebuilds incidence over the surviving rows once.
+    /// and filters and renumbers the existing incidence in place.
     ///
     /// # Semantic properties
     ///
@@ -358,13 +358,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         self.participants.truncate(participant_dst);
         self.offsets.truncate(dst + 1);
         self.data.truncate(dst);
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(
-                self.participants(RelationId::from(i))
-                    .iter()
-                    .map(|p| p.refs()),
-            );
-        });
+        self.incidence.remove(&compaction);
         compaction
     }
 
@@ -396,13 +390,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
                 .compact(topology)
                 .expect("retained participant references survive compaction");
         }
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(
-                self.participants(RelationId::from(i))
-                    .iter()
-                    .map(|p| p.refs()),
-            );
-        });
+        self.incidence.compact_participants(topology);
     }
 
     /// Undo row removal using its compaction and original saved entries.

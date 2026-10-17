@@ -1607,14 +1607,24 @@ remaining repeated work before the cost investigations.
 
 ### S2 — Integration and removal of known duplicate work
 
-#### S2a — Incidence maintenance [dep: S1b]
+#### S2a — Incidence maintenance (done) [dep: S1b]
 
-Module: umol-graph-core relation incidence and its storage callers. Internal
-change; green. Filter/renumber incidence entries for row removal and translate
-their graph keys for participant compaction, using monotonicity instead of
-rebuilding and sorting the index. Verify with independent scans through public
-incidence accessors across all five families. Account for the two traversals
-when the operations compose; do not describe them as a fused pass.
+Completed 2026-10-17. All five relation families now filter and renumber existing
+incidence entries during row removal and translate their sorted node/edge keys
+during participant compaction. Both operations reuse the index arrays without
+allocation, reconstruction, or sorting. Row filtering uses one binary search
+per entry in the sorted removal list; key translation advances through graph
+removals in order and skips unchanged reference domains. Stable compaction
+preserves key order, equal-key relation order, and uniqueness. The two operations
+still traverse incidence separately when composed. No public interface or
+additional validation pass was introduced.
+
+The existing independent row-model and public incidence properties cover all
+five families, including mixed removal sequences and participant compaction
+followed by restoration. The graph-core gate passed: 1,963 unit tests, 54 other
+integration tests, 215 property tests, and one doctest. Clippy passed for
+graph-core with all targets and proptest enabled; targeted nightly formatting
+and git diff --check passed. No performance measurements were run.
 
 #### S2b — Graph selection and execution [dep: S1a]
 
