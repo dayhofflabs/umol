@@ -261,14 +261,10 @@ impl AromaticSystems {
         } else {
             Arc::make_mut(&mut self.0).tracked_remove(ids)
         };
+        let (source_count, removed) = compaction.into_parts();
         Compaction::new(
-            compaction.source_count(),
-            compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(AromaticSystemId::from)
-                .collect(),
+            source_count,
+            removed.into_iter().map(AromaticSystemId::from).collect(),
         )
         .expect("relation compaction contains valid aromatic system ids")
     }

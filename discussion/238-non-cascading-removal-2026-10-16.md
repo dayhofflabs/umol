@@ -2080,7 +2080,7 @@ at S5.
 
 ### S4 — Decide the ID-conversion allocation tradeoff
 
-#### S4a — Account for conversions [dep: S3b]
+#### S4a — Account for conversions (done) [dep: S3b]
 
 Modules: graph-IR owning stores, molecule topology removal, and core Compaction.
 Investigation; green. Trace both directions: typed atom/bond/overlay IDs into
@@ -2091,7 +2091,107 @@ sorting, and deduplication. Measure the conversion contribution and a bounded
 whole operation after S3's decision. Do not assume iterator collection reuses
 an allocation on every compiler or that type conversion is allocation-free.
 
-#### S4b — Keep, change, or reject [dep: S4a]
+Completed 2026-10-17 against 04004b7b, after S3b. The consuming-conversion
+prototype is isolated in scratch/238-s4a; production code is unchanged.
+
+**Ownership trace.** Topology removal converts borrowed AtomId/BondId slices
+into owned NodeId/EdgeId vectors. Core removal retains those vectors in its
+GraphCompaction, which MoleculeCompaction stores directly. Each of the six
+owning overlay stores similarly allocates an input RelationId vector, but then
+allocates a second vector to convert its returned core compaction back to typed
+overlay IDs. MoleculeCompaction retains that typed result directly; constraint
+and handle transport borrow it. The return allocation is not recreated there.
+
+Cascade selection and Edit handle resolution already produce owned typed input
+vectors, which are subsequently borrowed and copied at the core boundary.
+Journal capture borrows those lists before removal. Reusing these inputs would
+require changes to ownership through the internal removal calls. Direct editor
+methods accept borrowed slices, so they still need owned removal storage.
+Separately, MoleculeCorrespondence::compact_right and uncompact_right copy
+borrowed node/edge removals into AtomId/BondId compactions; their overlay
+components already use the typed compactions directly. Python retains the
+MoleculeCompaction, while component getters construct independent snapshots.
+These input, correspondence, and Python snapshot costs are unchanged in this
+trial.
+
+**Prototype contract.** Add only Compaction::into_parts(self) -> (usize, Vec<Id>)
+in core. It infallibly consumes the value and moves out the existing count and
+vector, preserving the sorted, distinct, in-range sequence without allocating.
+The six owning-store return conversions consume that vector with into_iter,
+map to their existing typed IDs, and reconstruct through Compaction::new.
+Bounds checks, sorting, and deduplication remain. There is no new constructor,
+unchecked conversion, removal variant, or Python method in the prototype.
+
+With Rust 1.99.1 on aarch64-apple-darwin, the consuming collect reused the
+original allocation for 1, 8, and 56 removed IDs: zero allocation requests,
+versus one request for 4, 32, and 224 bytes respectively in the borrowed
+conversion. This cross-type reuse is an observation on this compiler, not an
+additional API guarantee.
+
+| Isolated operation, median ns | 1 ID | 8 IDs | 56 IDs |
+| --- | ---: | ---: | ---: |
+| Borrowed input to core-ID vector | 10.4 | 12.7 | 31.3 |
+| Borrowed return conversion, including Compaction::new | 19.8 | 32.2 | 110.2 |
+| Consuming return conversion, including Compaction::new | 5.9 | 12.8 | 53.6 |
+| Return vector copy/conversion without construction | 18.2 | 20.8 | 57.9 |
+| Consuming vector conversion without construction | 5.0 | 4.6 | 3.9 |
+| Compaction::new on an owned, sorted, distinct vector | 6.7 | 12.6 | 50.8 |
+
+The constructor still scans, sorts, and deduplicates the returned IDs. On
+reversed input with each ID repeated twice it took 7.2, 74.8, and 507.0 ns;
+that is an input-normalization control, not the state of the returned vectors.
+All constructor-only cases allocated nothing. Component timings have different
+optimization contexts and must not be added as an exact whole-operation cost.
+
+**Complete removal.** Same bounded fixtures and timing boundary as S3b, with
+40 samples, 0.3-second warmup, one-second measurement, setup and final output
+destruction excluded, and allocation counting in separate runs.
+
+| Case | Baseline µs | Consuming µs | Change | Allocation requests |
+| --- | ---: | ---: | ---: | ---: |
+| Mixed five removed overlays, shared | 1.075 | 1.017 | -5.3% | 47 -> 42 |
+| Mixed five removed overlays, unique | 1.060 | 1.013 | -4.5% | 31 -> 26 |
+| Eight rings, one removed, shared | 5.253 | 5.319 | +1.3% | 49 -> 48 |
+| 64 rings, 56 removed, shared | 22.668 | 22.938 | +1.2% | 115 -> 114 |
+| 64-atom path, no overlays, shared | 4.943 | 4.936 | -0.1% | 28 -> 28 |
+
+A reverse-order repeat gave 1.049 -> 1.016 µs (-3.1%) for shared mixed removal,
+and 22.764 -> 22.582 µs (-0.8%) for heavy ring removal. The heavy-case slowdown
+did not repeat. Shared-mixed confidence intervals overlap in both runs; its
+3–5% median improvement is not a precise speedup estimate. Unique-mixed 95%
+median intervals are disjoint (1.050–1.077 versus 1.003–1.024 µs). Small-ring
+and path intervals overlap. Requested bytes fall by 20 in either mixed case,
+4 in the small-ring case, and 224 in the heavy-ring case; path allocations and
+bytes are unchanged.
+
+Recommend adopting the return conversion in S4b: it removes demonstrated
+allocations with one consuming accessor and six local caller changes, while
+retaining the constructor contract. Retain the input ownership and borrowed
+correspondence conversions in this bounded change. Their measured vector-copy
+cost does not by itself justify extending the ownership changes through those
+call chains.
+
+Verification passed: four core decomposition cases, 71 graph-IR tracked-removal
+cases, 23 topology-ID transport cases, and benchmark checks for exact products,
+all mappings, shared-source preservation, draft rejection, and conversion
+equivalence. The prototype, contract, commands, source hashes, allocation
+counts, confidence intervals, and raw results are in scratch/238-s4a. S4b
+remains the production-adoption decision; workspace gates remain at S5.
+
+#### S4b — Keep, change, or reject (done) [dep: S4a]
+
+Decision 2026-10-17: adopt the S4a return conversion. The only new public symbol
+is Compaction::into_parts(self) -> (usize, Vec<Id>), with the infallible,
+allocation-free decomposition contract recorded above. The six owning-store
+callers retain Compaction::new and their existing signatures and failure behavior.
+Keep input ownership and borrowed correspondence conversions unchanged.
+
+Python omits this ownership-transfer accessor: Compaction.source_count and
+Compaction.removed already expose both components as immutable values. Returning
+Python integers in a tuple still requires constructing Python objects; it cannot
+transfer the Rust Vec allocation to Python. Consuming the Python compaction
+would therefore invalidate aliases without enabling the storage reuse that
+motivates this method. No Python lifecycle or surface change is made.
 
 Record which remaining allocations are justified and whether an ownership or
 conversion adjustment is worthwhile. Specify any changed constructor,
@@ -2101,6 +2201,44 @@ conversion trait, representation cast, or removal variant is necessary. Verify
 source/result counts, removed IDs, every survivor image, and roundtrips through
 the public consumers, then repeat the bounded whole-operation comparison.
 An explicit decision to retain the measured cost completes this investigation.
+
+Completed 2026-10-17. The production change matches S4a's prototype in all six
+source files: the public core accessor and the six return conversions. The
+data-type and Python API guides record the decomposition contract and the
+ownership-specific Python omission. Four accessor cases check exact components
+and preservation of the vector allocation; existing public editor and
+correspondence tests cover complete/partial/repeated removals, all eight mapping
+components, constraint transport, shared sources, and inverse mappings.
+
+The bounded confirmation reused S4a's executables after checking the production
+source against the prototype byte-for-byte. Build settings and the timing
+boundary are unchanged; compilation and other checks finished before timing.
+
+| Case | Baseline µs | Consuming µs | Change | Allocation requests |
+| --- | ---: | ---: | ---: | ---: |
+| Mixed five removed overlays, shared | 1.033 | 0.956 | -7.4% | 47 -> 42 |
+| Mixed five removed overlays, unique | 1.010 | 0.961 | -4.8% | 31 -> 26 |
+| Eight rings, one removed, shared | 5.420 | 5.554 | +2.5% | 49 -> 48 |
+| 64 rings, 56 removed, shared | 22.812 | 22.495 | -1.4% | 115 -> 114 |
+| 64-atom path, no overlays, shared | 4.802 | 4.653 | -3.1% | 28 -> 28 |
+
+Both mixed cases have disjoint 95% median confidence intervals in this run.
+The other intervals overlap. The small partial-removal case repeated in reverse
+order at 5.191 -> 5.246 µs (+1.1%), with overlapping intervals
+(5.124–5.349 versus 5.138–5.419 µs). Its medians remain slightly higher across
+the comparisons; these measurements do not resolve the size of that difference
+or establish equal performance. Keep the accepted change for its demonstrated
+allocation reduction and mixed-case improvement, with this small-case timing
+uncertainty stated explicitly. Allocation counts and requested bytes reproduce
+S4a exactly. No further implementation tuning was applied.
+
+Verification passed: 1,972 graph-core and 11,602 graph-IR unit tests (three
+graph-IR tests ignored), two core and five graph-IR compaction properties,
+Clippy for both crates with all targets and proptest enabled and warnings
+denied, targeted nightly formatting checks, and git diff --check. Benchmark
+product, mapping, source-preservation, and draft-rejection checks passed. Raw
+results, confidence intervals, commands, and source hashes are in scratch/238-s4b.
+The combined workspace gate remains at S5.
 
 ### S5 — Combined acceptance and closeout [dep: S3b, S4b]
 

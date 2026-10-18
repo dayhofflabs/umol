@@ -242,6 +242,11 @@ The existing Python ID bounds check translates Rust's asserted-domain prerequisi
 before mutation. A consumed editor raises ConsumedError; bounds and reference errors leave an
 available editor usable.
 
+Compaction exposes source_count and removed as immutable properties. It omits Rust's into_parts:
+that method transfers the owned Rust vector, while a Python tuple still requires constructing
+Python values. Consuming the Python compaction would invalidate aliases without preserving that
+allocation-reuse benefit.
+
 Edit.RemoveTopology(atoms=..., bonds=...) has the same exact semantics, with batch handles instead
 of current editor IDs. Constructing an Edit does not check it against a molecule; application does.
 Edit.RemoveTopologyCascading(atoms=..., bonds=...) explicitly includes incident bonds and overlays

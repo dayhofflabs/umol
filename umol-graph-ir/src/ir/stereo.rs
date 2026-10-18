@@ -261,14 +261,10 @@ impl StereoAtoms {
         } else {
             Arc::make_mut(&mut self.0).tracked_remove(ids)
         };
+        let (source_count, removed) = compaction.into_parts();
         Compaction::new(
-            compaction.source_count(),
-            compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoAtomId::from)
-                .collect(),
+            source_count,
+            removed.into_iter().map(StereoAtomId::from).collect(),
         )
         .expect("relation compaction contains valid stereo atom ids")
     }
@@ -741,14 +737,10 @@ impl StereoBonds {
         } else {
             Arc::make_mut(&mut self.0).tracked_remove(ids)
         };
+        let (source_count, removed) = compaction.into_parts();
         Compaction::new(
-            compaction.source_count(),
-            compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoBondId::from)
-                .collect(),
+            source_count,
+            removed.into_iter().map(StereoBondId::from).collect(),
         )
         .expect("relation compaction contains valid stereo bond ids")
     }

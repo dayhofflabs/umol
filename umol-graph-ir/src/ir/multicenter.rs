@@ -260,14 +260,10 @@ impl MulticenterBonds {
         } else {
             Arc::make_mut(&mut self.0).tracked_remove(ids)
         };
+        let (source_count, removed) = compaction.into_parts();
         Compaction::new(
-            compaction.source_count(),
-            compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(MulticenterBondId::from)
-                .collect(),
+            source_count,
+            removed.into_iter().map(MulticenterBondId::from).collect(),
         )
         .expect("relation compaction contains valid multicenter bond ids")
     }

@@ -997,6 +997,10 @@ Graph and molecule aggregates accept validated component compactions, including 
 identities for untouched entity kinds. Producers capture counts before removal; `UndoCompaction`
 preserves them.
 
+Compaction::into_parts consumes a compaction and returns its source count and owned removed-ID
+vector unchanged, without allocating. The vector remains sorted, distinct, and in range;
+reconstructing through Compaction::new recovers the original compaction.
+
 `compact` returns `None` for removed or out-of-source-range ids. `uncompact` asserts result-domain
 membership; `try_uncompact` returns `None` outside that domain. `compact_vec` requires exactly the
 source count of values, and `try_compact_vec` returns `None` on a length mismatch. Survivor order

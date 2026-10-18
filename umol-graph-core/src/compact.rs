@@ -48,6 +48,14 @@ impl<Id> Compaction<Id> {
             removed: Vec::new(),
         }
     }
+
+    /// Consume the compaction into its source count and removed ids.
+    ///
+    /// Moves the existing vector without allocating. Its ids remain sorted, distinct,
+    /// and within the source domain.
+    pub fn into_parts(self) -> (usize, Vec<Id>) {
+        (self.source_count, self.removed)
+    }
 }
 
 impl<Id> Compaction<Id>
@@ -242,6 +250,19 @@ mod tests {
                 removed: vec![]
             }
         );
+    }
+
+    #[rstest]
+    #[case::empty(0, vec![])]
+    #[case::identity(5, vec![])]
+    #[case::partial(6, vec![NodeId(1), NodeId(4)])]
+    #[case::full(3, vec![NodeId(0), NodeId(1), NodeId(2)])]
+    fn test_compaction_into_parts(#[case] source_count: usize, #[case] removed: Vec<NodeId>) {
+        let compaction = Compaction::new(source_count, removed.clone()).unwrap();
+        let address = compaction.removed().as_ptr();
+        let parts = compaction.into_parts();
+        assert_eq!(parts.1.as_ptr(), address);
+        assert_eq!(parts, (source_count, removed));
     }
 
     #[rstest]
