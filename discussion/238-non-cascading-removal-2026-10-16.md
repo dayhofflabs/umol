@@ -1921,7 +1921,7 @@ the same DPO checks and cascade scope in both sides of each comparison.
 
 ### S3 — Decide the shared-storage cloning tradeoff
 
-#### S3a — Isolate cloning before removal [dep: S2h]
+#### S3a — Isolate cloning before removal (done) [dep: S2h]
 
 Modules: graph-IR owning storage and relevant existing benchmarks. Investigation;
 green. Account for payload clones and allocated storage separately for unique
@@ -1934,7 +1934,93 @@ implementations. A narrowly scoped survivor-copying alternative may be prototype
 to test the hypothesis; it does not gain a public API merely to make the experiment
 convenient. Keep selection, mappings, constraints, and output semantics equal.
 
-#### S3b — Keep, change, or reject [dep: S3a]
+Completed 2026-10-17 against b06df57e. Production code is unchanged. The isolated
+prototype keeps unique overlay storage in place; for shared storage it copies
+only surviving rows into a vector reserved for the result count and constructs
+the replacement through existing core constructors. Selection, checks, ID
+conversions, reference transport, constraints, publication and returned mappings
+are unchanged. No core primitive or public interface was added.
+
+**Copying and allocation.** Unique overlay removal clones no payloads. Shared
+removal currently clones every source payload, including deleted rows. With 64
+six-member aromatic systems, deleting 8, 32 or 56 rows therefore clones 64
+payloads; the prototype clones 56, 32 or 8. Counts were checked with instrumented
+payloads in equivalent core storage; allocation counts below use the actual
+owning graph-IR store, including its unchanged ID conversions.
+
+| Deleted rows | Allocation requests, current / prototype | Bytes requested, current / prototype | Storage time, current / prototype (µs) |
+| --- | ---: | ---: | ---: |
+| 8 of 64 | 72 / 131 | 14,332 / 26,876 | 3.117 / 4.756 |
+| 32 of 64 | 72 / 82 | 14,524 / 15,260 | 3.596 / 3.217 |
+| 56 of 64 | 72 / 32 | 14,716 / 4,412 | 3.882 / 1.406 |
+
+Rebuilding introduces temporary participant vectors and incidence construction;
+fewer payload clones alone do not establish lower cost. Atom/bond attributes
+already copy only survivors, for both unique and shared inputs. Their separate,
+unchanged allocation volume in these cases is 285,680, 142,320 and 34,800 bytes.
+Those figures include vector growth requests, not just final retained storage.
+The graph rebuilds surviving topology without cloning the original CSR first.
+
+**Complete operations.** Medians below include selection, removal, reference and
+constraint transport, tracking and publication. Fixtures extend the existing
+small benchmarks with 8 or 64 disjoint six-member systems to vary deletion
+fraction; these are controlled comparisons, not workload-frequency assumptions.
+
+| Shared-input removal | Current (µs) | Prototype (µs) | Change |
+| --- | ---: | ---: | ---: |
+| 1 of 8 systems | 5.436 | 5.875 | +8.1% |
+| 4 of 8 systems | 4.509 | 4.645 | +3.0% |
+| 7 of 8 systems | 3.260 | 2.927 | -10.2% |
+| 8 of 64 systems | 53.425 | 54.638 | +2.3% |
+| 32 of 64 systems | 41.004 | 40.789 | -0.5% |
+| 56 of 64 systems | 22.947 | 20.232 | -11.8% |
+| Existing mixed-overlay fixture, atom 0 removed | 1.438 | 1.132 | -21.3% |
+
+A reverse-order repeat confirmed +8.6%, -11.0% and -24.6% for the first, sixth
+and seventh cases. The mixed case empties five shared overlay stores and retains
+the transported noncovalent row; allocation requests fall from 74 to 47. Unique
+removal results varied from -2.5% to +1.7%; unchanged path controls varied from
+-2.9% to +1.7%, with the repeated 64-atom shared control changing sign. These
+small movements do not establish an optimization benefit.
+
+The same six extraction fixtures reproduce their products and all eight
+compactions on the original 1f782a5f implementation, the S2d reference and both
+S3a variants. Current extraction measured 12.4–21.8% faster than the original
+and 12.6–22.8% faster than the S2d reference. Relative to current, the prototype
+changes extraction by +6.8%, +2.0%, -8.2% for 8 systems and +2.6%, -0.7%, -7.8%
+for 64 systems, in increasing deletion order.
+
+**Editor reference scan.** The actual pre-removal check measured 0.064 µs for
+8 systems and 0.261 µs for 64 systems, with zero allocations. Complete exact
+removal of an isolated atom, retaining and transporting those systems, measured
+4.698 and 46.100 µs. A draft with a late out-of-range reference was rejected in
+0.041 and 0.225 µs, also without allocations. Both variants retain these checks;
+rejection-before-mutation and subsequent successful publication were verified.
+These complete precheck times include bounds and dependency lookups, so they
+bound the reference scan itself.
+
+The experiment supports keeping the current general path while deciding whether
+to add a narrower shared-storage optimization in S3b. Rebuilding every shared
+store is not supported by the sparse-deletion results. Emptying a shared store
+is a useful case to consider separately: it needs neither survivor payload copies
+nor survivor incidence construction. The heavy partial-deletion benefit remains
+part of the decision; these two fixture sizes do not establish a general ratio
+threshold for switching implementations.
+
+The harness, prototype patch, source snapshots, commands, allocation counts,
+confidence intervals and reverse-order results are in scratch/238-s3a; report.md
+summarizes the comparison. Measurements used rustc 1.99.1, LLVM 23.1.1,
+aarch64-apple-darwin, the bench profile and no extra Rust flags. Each case used
+40 Criterion samples, 0.3-second warmup and one-second measurement, sequentially
+after compilation. Fresh unique setup or cloning a retained shared seed and
+result destruction were outside timing; destruction during mutation remained
+inside. Allocation counting ran separately; the same System allocator wrapper
+remained installed with counters disabled during timing. All experiment assertions and 71
+existing tracked-removal plus 23 topology-transport tests passed on the final
+prototype. The completed S2 workspace gates were not repeated for this
+scratch-only experiment.
+
+#### S3b — Keep, change, or reject (done) [dep: S3a]
 
 Record the measured cost and a concrete decision. Keep ordinary copy-on-write
 if its cost is acceptable; otherwise select and implement the narrow ownership
@@ -1943,6 +2029,54 @@ primitive or failure boundary returns to interface review before implementation.
 For an accepted storage change, rerun the affected preservation/shared-source
 tests and the paired comparison. Retain the evidence needed for the decision,
 not an open-ended benchmark worklist.
+
+Completed 2026-10-17. Retain ordinary copy-on-write for partial removals and
+replace a shared overlay store with its empty default when every row is removed.
+The six owning stores use this shortcut in remove and tracked_remove. Unique
+storage retains in-place removal. The existing Compaction constructor checks
+removal IDs before replacing storage; mappings, source preservation, constraint
+transport, and failure contracts are unchanged. No public interface or graph-core
+primitive changed.
+
+Recognition sorts and deduplicates the already allocated core-ID vector only
+when the input list is at least as long as the shared store. This preliminary
+pass also runs for duplicate-heavy partial lists; existing compaction construction
+still normalizes its input. Shorter lists and unique storage skip the pass. There
+is no additional ID vector, survivor copying, or incidence construction.
+
+The bounded comparison reuses S3a's harness and b06df57e baseline with identical
+settings. Complete operations include selection, checks, transport, constraints,
+tracking, and publication. Medians:
+
+| Case | Current (µs) | Shortcut (µs) | Change |
+| --- | ---: | ---: | ---: |
+| Mixed overlay removal, shared | 1.561 | 1.055 | -32.4% |
+| Mixed overlay removal, unique | 1.073 | 1.072 | -0.1% |
+| Delete 1 of 8 systems, shared | 5.432 | 5.067 | -6.7% |
+| Delete 56 of 64 systems, shared | 22.873 | 22.700 | -0.8% |
+| 64-atom path, shared | 4.958 | 4.980 | +0.4% |
+
+Reverse order confirmed the shared mixed case at 1.564 versus 1.048 µs (-33.0%),
+with non-overlapping 95% median confidence intervals. Its allocation requests
+fall from 74 to 47 and requested bytes from 3,700 to 2,864. The small partial case
+repeated at 5.423 versus 5.371 µs (-1.0%), with overlapping intervals; its first
+pass does not establish a partial-removal improvement. The other controls also
+have overlapping intervals and unchanged allocation counts and volumes.
+
+Accept this shortcut. Reject general survivor reconstruction and a deletion-ratio
+switch: S3a's approximately 11% heavy-partial benefit remains unrealized, while
+the measured sparse-deletion penalty and unknown crossover across payload and
+incidence shapes do not justify that policy.
+
+Verification passed: 11,602 graph-IR unit tests (three ignored), four compaction
+properties, graph-IR Clippy with all targets and proptest enabled and warnings
+denied, targeted nightly formatting, and git diff --check. Existing test tables
+now cover unique/shared storage, complete and partial repeated-ID lists, shared
+source preservation, all mapping components, and unchanged bounds failures.
+Benchmark product, mapping, source-preservation, and draft-rejection checks also
+passed. The source patch, snapshot, commands, allocation counts, confidence
+intervals, and raw results are retained in scratch/238-s3b. Workspace gates remain
+at S5.
 
 ### S4 — Decide the ID-conversion allocation tradeoff
 

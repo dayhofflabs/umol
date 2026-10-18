@@ -3907,14 +3907,21 @@ fn test_molecule_remove_topology_identity(restoration_entries: MoleculeEntries) 
 #[case::first(vec![DativeBondId(0)], vec![1])]
 #[case::last(vec![DativeBondId(1)], vec![0])]
 #[case::all(vec![DativeBondId(1), DativeBondId(0)], vec![])]
+#[case::all_repeated(vec![DativeBondId(1), DativeBondId(0), DativeBondId(1)], vec![])]
+#[case::partial_repeated(vec![DativeBondId(1), DativeBondId(1), DativeBondId(1)], vec![0])]
 fn test_molecule_remove_dative_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<DativeBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.dative = survivors
         .iter()
@@ -3936,14 +3943,21 @@ fn test_molecule_remove_dative_bonds(
 #[case::first(vec![AromaticSystemId(0)], vec![1])]
 #[case::last(vec![AromaticSystemId(1)], vec![0])]
 #[case::all(vec![AromaticSystemId(1), AromaticSystemId(0)], vec![])]
+#[case::all_repeated(vec![AromaticSystemId(1), AromaticSystemId(0), AromaticSystemId(1)], vec![])]
+#[case::partial_repeated(vec![AromaticSystemId(1), AromaticSystemId(1), AromaticSystemId(1)], vec![0])]
 fn test_molecule_remove_aromatic_systems(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<AromaticSystemId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.aromatic = survivors
         .iter()
@@ -3965,14 +3979,21 @@ fn test_molecule_remove_aromatic_systems(
 #[case::first(vec![MulticenterBondId(0)], vec![1])]
 #[case::last(vec![MulticenterBondId(1)], vec![0])]
 #[case::all(vec![MulticenterBondId(1), MulticenterBondId(0)], vec![])]
+#[case::all_repeated(vec![MulticenterBondId(1), MulticenterBondId(0), MulticenterBondId(1)], vec![])]
+#[case::partial_repeated(vec![MulticenterBondId(1), MulticenterBondId(1), MulticenterBondId(1)], vec![0])]
 fn test_molecule_remove_multicenter_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<MulticenterBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.multicenter = survivors
         .iter()
@@ -3994,14 +4015,21 @@ fn test_molecule_remove_multicenter_bonds(
 #[case::first(vec![NoncovalentBondId(0)], vec![1])]
 #[case::last(vec![NoncovalentBondId(1)], vec![0])]
 #[case::all(vec![NoncovalentBondId(1), NoncovalentBondId(0)], vec![])]
+#[case::all_repeated(vec![NoncovalentBondId(1), NoncovalentBondId(0), NoncovalentBondId(1)], vec![])]
+#[case::partial_repeated(vec![NoncovalentBondId(1), NoncovalentBondId(1), NoncovalentBondId(1)], vec![0])]
 fn test_molecule_remove_noncovalent_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<NoncovalentBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.noncovalent = survivors
         .iter()
@@ -4023,14 +4051,21 @@ fn test_molecule_remove_noncovalent_bonds(
 #[case::first(vec![StereoAtomId(0)], vec![1])]
 #[case::last(vec![StereoAtomId(1)], vec![0])]
 #[case::all(vec![StereoAtomId(1), StereoAtomId(0)], vec![])]
+#[case::all_repeated(vec![StereoAtomId(1), StereoAtomId(0), StereoAtomId(1)], vec![])]
+#[case::partial_repeated(vec![StereoAtomId(1), StereoAtomId(1), StereoAtomId(1)], vec![0])]
 fn test_molecule_remove_stereo_atoms(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<StereoAtomId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.stereo_atoms = survivors
         .iter()
@@ -4052,14 +4087,21 @@ fn test_molecule_remove_stereo_atoms(
 #[case::first(vec![StereoBondId(0)], vec![1])]
 #[case::last(vec![StereoBondId(1)], vec![0])]
 #[case::all(vec![StereoBondId(1), StereoBondId(0)], vec![])]
+#[case::all_repeated(vec![StereoBondId(1), StereoBondId(0), StereoBondId(1)], vec![])]
+#[case::partial_repeated(vec![StereoBondId(1), StereoBondId(1), StereoBondId(1)], vec![0])]
 fn test_molecule_remove_stereo_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<StereoBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.stereo_bonds = survivors
         .iter()
@@ -6225,6 +6267,7 @@ fn test_molecule_editor_tracked_remove_topology_identity() {
 #[case::middle(vec![DativeBondId(1)], vec![DativeBondId(1)])]
 #[case::unsorted_repeated(vec![DativeBondId(2), DativeBondId(0), DativeBondId(2)], vec![DativeBondId(0), DativeBondId(2)])]
 #[case::all(vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)], vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)])]
+#[case::all_repeated(vec![DativeBondId(2), DativeBondId(0), DativeBondId(2), DativeBondId(1)], vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)])]
 fn test_molecule_editor_tracked_remove_dative_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<DativeBondId>,
@@ -6257,7 +6300,7 @@ fn test_molecule_editor_tracked_remove_dative_bonds(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_dative_bonds(&ids);
     let compaction = tracked.tracked_remove_dative_bonds(&ids);
@@ -6265,6 +6308,10 @@ fn test_molecule_editor_tracked_remove_dative_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6275,8 +6322,15 @@ fn test_molecule_editor_tracked_remove_dative_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: DativeBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_dative_bonds(&[id]);
     } else {
@@ -6290,6 +6344,7 @@ fn test_molecule_editor_tracked_remove_dative_bonds_error(
 #[case::middle(vec![AromaticSystemId(1)], vec![AromaticSystemId(1)])]
 #[case::unsorted_repeated(vec![AromaticSystemId(2), AromaticSystemId(0), AromaticSystemId(2)], vec![AromaticSystemId(0), AromaticSystemId(2)])]
 #[case::all(vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)], vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)])]
+#[case::all_repeated(vec![AromaticSystemId(2), AromaticSystemId(0), AromaticSystemId(2), AromaticSystemId(1)], vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)])]
 fn test_molecule_editor_tracked_remove_aromatic_systems(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<AromaticSystemId>,
@@ -6322,7 +6377,7 @@ fn test_molecule_editor_tracked_remove_aromatic_systems(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_aromatic_systems(&ids);
     let compaction = tracked.tracked_remove_aromatic_systems(&ids);
@@ -6330,6 +6385,10 @@ fn test_molecule_editor_tracked_remove_aromatic_systems(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6340,8 +6399,15 @@ fn test_molecule_editor_tracked_remove_aromatic_systems_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: AromaticSystemId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_aromatic_systems(&[id]);
     } else {
@@ -6355,6 +6421,7 @@ fn test_molecule_editor_tracked_remove_aromatic_systems_error(
 #[case::middle(vec![MulticenterBondId(1)], vec![MulticenterBondId(1)])]
 #[case::unsorted_repeated(vec![MulticenterBondId(2), MulticenterBondId(0), MulticenterBondId(2)], vec![MulticenterBondId(0), MulticenterBondId(2)])]
 #[case::all(vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)], vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)])]
+#[case::all_repeated(vec![MulticenterBondId(2), MulticenterBondId(0), MulticenterBondId(2), MulticenterBondId(1)], vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)])]
 fn test_molecule_editor_tracked_remove_multicenter_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<MulticenterBondId>,
@@ -6387,7 +6454,7 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_multicenter_bonds(&ids);
     let compaction = tracked.tracked_remove_multicenter_bonds(&ids);
@@ -6395,6 +6462,10 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6405,8 +6476,15 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: MulticenterBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_multicenter_bonds(&[id]);
     } else {
@@ -6420,6 +6498,7 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds_error(
 #[case::middle(vec![NoncovalentBondId(1)], vec![NoncovalentBondId(1)])]
 #[case::unsorted_repeated(vec![NoncovalentBondId(2), NoncovalentBondId(0), NoncovalentBondId(2)], vec![NoncovalentBondId(0), NoncovalentBondId(2)])]
 #[case::all(vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
+#[case::all_repeated(vec![NoncovalentBondId(2), NoncovalentBondId(0), NoncovalentBondId(2), NoncovalentBondId(1)], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
 fn test_molecule_editor_tracked_remove_noncovalent_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<NoncovalentBondId>,
@@ -6452,7 +6531,7 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_noncovalent_bonds(&ids);
     let compaction = tracked.tracked_remove_noncovalent_bonds(&ids);
@@ -6460,6 +6539,10 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6470,8 +6553,15 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: NoncovalentBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_noncovalent_bonds(&[id]);
     } else {
@@ -6485,6 +6575,7 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds_error(
 #[case::middle(vec![StereoAtomId(1)], vec![StereoAtomId(1)])]
 #[case::unsorted_repeated(vec![StereoAtomId(2), StereoAtomId(0), StereoAtomId(2)], vec![StereoAtomId(0), StereoAtomId(2)])]
 #[case::all(vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)], vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)])]
+#[case::all_repeated(vec![StereoAtomId(2), StereoAtomId(0), StereoAtomId(2), StereoAtomId(1)], vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)])]
 fn test_molecule_editor_tracked_remove_stereo_atoms(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<StereoAtomId>,
@@ -6518,7 +6609,7 @@ fn test_molecule_editor_tracked_remove_stereo_atoms(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_stereo_atoms(&ids);
     let compaction = tracked.tracked_remove_stereo_atoms(&ids);
@@ -6526,6 +6617,10 @@ fn test_molecule_editor_tracked_remove_stereo_atoms(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6536,8 +6631,15 @@ fn test_molecule_editor_tracked_remove_stereo_atoms_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: StereoAtomId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_stereo_atoms(&[id]);
     } else {
@@ -6551,6 +6653,7 @@ fn test_molecule_editor_tracked_remove_stereo_atoms_error(
 #[case::middle(vec![StereoBondId(1)], vec![StereoBondId(1)])]
 #[case::unsorted_repeated(vec![StereoBondId(2), StereoBondId(0), StereoBondId(2)], vec![StereoBondId(0), StereoBondId(2)])]
 #[case::all(vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)], vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)])]
+#[case::all_repeated(vec![StereoBondId(2), StereoBondId(0), StereoBondId(2), StereoBondId(1)], vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)])]
 fn test_molecule_editor_tracked_remove_stereo_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<StereoBondId>,
@@ -6584,7 +6687,7 @@ fn test_molecule_editor_tracked_remove_stereo_bonds(
         Compaction::new(3, removed).unwrap(),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_stereo_bonds(&ids);
     let compaction = tracked.tracked_remove_stereo_bonds(&ids);
@@ -6592,6 +6695,10 @@ fn test_molecule_editor_tracked_remove_stereo_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6602,8 +6709,15 @@ fn test_molecule_editor_tracked_remove_stereo_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: StereoBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_stereo_bonds(&[id]);
     } else {

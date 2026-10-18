@@ -240,16 +240,38 @@ impl DativeBonds {
         if ids.is_empty() {
             return;
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(ids);
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        if remove_all {
+            Compaction::new(self.count(), ids).expect("removed relations belong to the source set");
+            self.0 = Arc::default();
+        } else {
+            Arc::make_mut(&mut self.0).remove(ids);
+        }
     }
 
     pub(crate) fn tracked_remove(&mut self, ids: &[DativeBondId]) -> Compaction<DativeBondId> {
         if ids.is_empty() {
             return Compaction::identity(self.count());
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(ids);
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        let compaction = if remove_all {
+            let compaction = Compaction::new(self.count(), ids)
+                .expect("removed relations belong to the source set");
+            self.0 = Arc::default();
+            compaction
+        } else {
+            Arc::make_mut(&mut self.0).tracked_remove(ids)
+        };
         Compaction::new(
             compaction.source_count(),
             compaction
