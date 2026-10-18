@@ -721,6 +721,8 @@ edits. Recovery from allocation failure or an internal panic during an Edit is o
 
 Undo payloads remain public. Restoration from matching history is correct under the stated
 equivalence; manipulated history must not panic but has no specified result.
+Edits are independently supplied instructions, not restoration history. Exact topology-removal
+edits reject unresolved handles, unavailable stored references, and dangling references before mutation.
 
 Graph::restore and relation-set restore/restore_participants likewise consume undo data from a
 matching removal. The compaction and saved rows are supplied separately, but their required
@@ -732,8 +734,8 @@ RelationParticipant implementations, whose transported references are all report
 
 Whole-row restoration reinstates saved rows at their original ids without translating their
 participants and preserves current surviving values. Participant restoration expands only
-surviving references. After graph removal and relation compaction, undo restores the graph,
-restores participant references in surviving relations, then restores saved relation rows.
+surviving references. After graph removal, dependent-row removal, and reference transport, undo
+restores the graph, restores participant references in surviving relations, then restores saved rows.
 Relation payloads move without requiring Clone. Uncompaction remains non-mutating id/value
 translation; its existing asserted and checked interfaces retain their contracts.
 
@@ -805,9 +807,17 @@ classified to recover continuation policy.
 
 All four methods preserve the same application and applicability behavior. The supplied
 correspondence maps the rule into the host; the produced witness maps host to product.
-Other entity pairings are induced from atom provenance and compatible incidence. Equal
-stereo kinds remain matchable, while different determined kinds identify different entities
-and produce removal plus addition. An undetermined kind does not assert a conflicting geometry.
+The produced correspondence tracks surviving entities in all eight kinds. Explicit deletion and
+recreation leave both entities unmatched, even when their incidence is identical. Realized reactions,
+spans, and sequential composition retain this distinction rather than pairing by final incidence.
+Different determined stereo kinds likewise identify different entities: application and span
+conversion represent the change as removal plus addition, and reversal preserves that replacement.
+The replacement carries the rule's new attributes; host-only entity constraints are not copied,
+and molecule constraints referring to the removed entity undergo ordinary removal compaction.
+Composition also compares the final sides' stereo kinds, so an undetermined intermediate cannot
+join different determined kinds into one preserved entity. An undetermined kind alone does not
+assert a conflicting geometry. General correspondence construction and incidence-based induction
+remain separate operations.
 Realized reactions and spans use the existing lhs-anchored representation and constraint
 normal form; their product projections preserve the produced molecule's semantics rather
 than promising its exact row ordering.
@@ -987,33 +997,68 @@ Graph and molecule aggregates accept validated component compactions, including 
 identities for untouched entity kinds. Producers capture counts before removal; `UndoCompaction`
 preserves them.
 
+Compaction::into_parts consumes a compaction and returns its source count and owned removed-ID
+vector unchanged, without allocating. The vector remains sorted, distinct, and in range;
+reconstructing through Compaction::new recovers the original compaction.
+
 `compact` returns `None` for removed or out-of-source-range ids. `uncompact` asserts result-domain
 membership; `try_uncompact` returns `None` outside that domain. `compact_vec` requires exactly the
 source count of values, and `try_compact_vec` returns `None` on a length mismatch. Survivor order
 is preserved. Borrowed conversions to single-space, graph, and molecule correspondences preserve
 both counts and every survivor pairing in each entity kind.
 
-Graph `remove_cascading` returns `()`, and `try_remove` returns `Option<()>`;
-`tracked_remove_cascading` and `try_tracked_remove` return the graph compaction instead.
-The checked removal leaves the graph unchanged when the dangling condition fails.
-Single-node/edge cascading-removal conveniences return no witness. Relation-set
-`compact` returns the resulting set; `tracked_compact` returns that set
-and its relation-id compaction. Each pair preserves the same output and failure behavior.
+Graph `remove` and `remove_cascading` return `()`, and `try_remove` returns `Option<()>`;
+their tracked counterparts return the graph compaction instead. These bulk methods consume
+node and edge removal vectors, retaining their order-independent, deduplicating semantics.
+Exact `remove` assumes supplied ids are in range and retained edges have surviving endpoints;
+violations may panic during construction of the compaction or endpoint translation. It performs
+no separate dangling scan. The checked removal establishes endpoint survival before mutation
+and leaves the graph unchanged when the dangling condition fails. Cascading removal selects all
+incident edges before exact removal. Surviving node and edge order is preserved, including loops
+and parallel edges; shared source graphs are unchanged.
+Single-node/edge cascading-removal conveniences retain their single-id inputs and return no witness.
 
-The graph-IR owning overlay sets expose crate-private `compact` returning the resulting set
-and its row compaction. Molecule's crate-private `compact_<entity>` delegates install the set
-and return the row compaction. These mappings are required to update dependent constraints
-and handles, so these internal operations have no separate tracked counterpart.
+The five relation-set families consume Vec<RelationId> in remove/tracked_remove. They remove
+only the supplied rows, preserve survivor order, participant values and payloads, and update
+incidence to use dense row IDs. Removal bounds are asserted before mutation; input order and
+repeated IDs do not matter. The tracked result owns the supplied removal vector and records
+the source row count.
 
-Molecule editor remove_topology and the six bulk relation-removal methods return ().
-Crate-private tracked counterparts supply the full MoleculeCompaction for extraction
-and constraint compaction, including unchanged-family counts.
+Their compact_participants takes a GraphCompaction and translates references and incidence in
+place, preserving row IDs, factor shapes, participant positions and multiplicity, other participant
+data, and payloads. It requires coverage and survival of every stored reference in its corresponding
+node or edge domain; relation counts need not match graph counts. Missing images are programming
+errors and may panic during translation. There is no separate validation scan. A covering identity
+leaves storage unchanged, but a zero-domain identity does not cover nonempty reference domains.
+Matching restore_participants reverses the reference translation.
+
+Dependency selection belongs to the caller. For cascading removal, it selects dependent row IDs,
+calls remove/tracked_remove, then transports the retained references with compact_participants.
+The row compaction records that selection; graph-reference transport does not select more rows.
+
+Graph-IR owning overlay sets separate row removal from compact_topology_ids, which transports
+atom references and stereo-bond sites without removing rows. The coordinator establishes source
+coverage and survivor references before transport, and uses the actual row and graph compactions
+to update constraints and handles.
+
+MoleculeEditor::remove_topology takes borrowed typed ID slices and returns Result<(), TransactionError>.
+It checks stored reference coverage and rejects retained references to the supplied removals before
+mutation. InvalidReference names an unavailable participant or site; DanglingReference names the
+removed entity and its retained dependent. Unrelated draft integrity failures are not checked here.
+Out-of-range removal IDs are programming errors for direct Rust calls; independent Edit handles
+are resolved and rejected on application. Duplicate IDs are accepted directly but rejected in Edits.
+remove_topology_cascading returns () and explicitly selects incident bonds and overlays with missing
+stored references, including references already unavailable in the draft. Both forms compact
+molecule constraints once after removal. The six bulk overlay removals retain their own constraint
+compaction. All eight public tracked editor removals return MoleculeCompaction instead of unit,
+inside Result for exact topology removal, including count-bearing identities for unchanged families.
 Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual
 host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
 extraction preserves host order. Both forms retain the same cascades and constraint transport.
 
 Restoration uses local count and indexing guards to avoid panics on manipulated history.
-It does not validate the history or report a rollback error.
+Undo of added topology skips an entry if its removal would leave a retained graph edge dangling;
+it does not check overlays, repair history, or report a rollback error.
 
 ## Remapping
 

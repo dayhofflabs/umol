@@ -8,9 +8,12 @@ use umol_graph_ir::ir::{
     StereoBondId,
 };
 
+use crate::compact::MoleculeCompaction;
 use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
-use crate::error::{molecule_apply_error, molecule_integrity_error, ConsumedError};
+use crate::error::{
+    molecule_apply_error, molecule_integrity_error, transaction_error, ConsumedError,
+};
 use crate::molecule::Molecule;
 
 /// Recovery method for molecule transactions and in-place resolution.
@@ -89,15 +92,72 @@ impl MoleculeEditor {
             .map_err(molecule_apply_error)
     }
 
-    /// Remove atoms and bonds, cascading dependent entities.
+    /// Remove exactly the supplied atoms and bonds.
+    ///
+    /// Raises TransactionError before mutation for unavailable stored references or references
+    /// that would be broken by removal. The editor remains available after rejection.
     fn remove_topology(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&atoms, editor.atom_count(), "atom")?;
         ensure_in_range(&bonds, editor.bond_count(), "bond")?;
         let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
         let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
-        editor.remove_topology(&atoms, &bonds);
+        editor
+            .remove_topology(&atoms, &bonds)
+            .map_err(transaction_error)
+    }
+
+    /// Exact removal as in remove_topology, returning all eight source-to-result compactions.
+    ///
+    /// Unchanged entity kinds retain their source counts. Reference errors leave the editor
+    /// unchanged and available; out-of-range removal IDs raise IndexError.
+    fn tracked_remove_topology(
+        &mut self,
+        atoms: Vec<u32>,
+        bonds: Vec<u32>,
+    ) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&atoms, editor.atom_count(), "atom")?;
+        ensure_in_range(&bonds, editor.bond_count(), "bond")?;
+        let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
+        let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
+        editor
+            .tracked_remove_topology(&atoms, &bonds)
+            .map(MoleculeCompaction::from_rust)
+            .map_err(transaction_error)
+    }
+
+    /// Remove topology, incident bonds, and overlays with unavailable stored participants or sites.
+    ///
+    /// Compacts surviving references and molecule constraints. The editor remains available;
+    /// out-of-range removal IDs raise IndexError before mutation.
+    fn remove_topology_cascading(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&atoms, editor.atom_count(), "atom")?;
+        ensure_in_range(&bonds, editor.bond_count(), "bond")?;
+        let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
+        let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
+        editor.remove_topology_cascading(&atoms, &bonds);
         Ok(())
+    }
+
+    /// Cascading removal as in remove_topology_cascading, returning all eight compactions.
+    ///
+    /// Unchanged entity kinds retain their source counts. The editor remains available;
+    /// out-of-range removal IDs raise IndexError before mutation.
+    fn tracked_remove_topology_cascading(
+        &mut self,
+        atoms: Vec<u32>,
+        bonds: Vec<u32>,
+    ) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&atoms, editor.atom_count(), "atom")?;
+        ensure_in_range(&bonds, editor.bond_count(), "bond")?;
+        let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
+        let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_topology_cascading(&atoms, &bonds),
+        ))
     }
 
     /// Remove dative bonds and compact that entity space.
@@ -108,12 +168,34 @@ impl MoleculeEditor {
         Ok(())
     }
 
+    /// Remove dative bonds and return all eight compactions, retaining unchanged source counts.
+    fn tracked_remove_dative_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.dative_bond_count(), "dative bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_dative_bonds(
+                &ids.into_iter().map(DativeBondId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
     /// Remove aromatic systems and compact that entity space.
     fn remove_aromatic_systems(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&ids, editor.aromatic_system_count(), "aromatic system")?;
         editor.remove_aromatic_systems(&ids.into_iter().map(AromaticSystemId).collect::<Vec<_>>());
         Ok(())
+    }
+
+    /// Remove aromatic systems and return all eight compactions, retaining unchanged source counts.
+    fn tracked_remove_aromatic_systems(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.aromatic_system_count(), "aromatic system")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_aromatic_systems(
+                &ids.into_iter().map(AromaticSystemId).collect::<Vec<_>>(),
+            ),
+        ))
     }
 
     /// Remove multicenter bonds and compact that entity space.
@@ -125,6 +207,17 @@ impl MoleculeEditor {
         Ok(())
     }
 
+    /// Remove multicenter bonds and return all eight compactions, retaining unchanged source counts.
+    fn tracked_remove_multicenter_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.multicenter_bond_count(), "multicenter bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_multicenter_bonds(
+                &ids.into_iter().map(MulticenterBondId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
     /// Remove noncovalent bonds and compact that entity space.
     fn remove_noncovalent_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
@@ -132,6 +225,17 @@ impl MoleculeEditor {
         editor
             .remove_noncovalent_bonds(&ids.into_iter().map(NoncovalentBondId).collect::<Vec<_>>());
         Ok(())
+    }
+
+    /// Remove noncovalent bonds and return all eight compactions, retaining unchanged source counts.
+    fn tracked_remove_noncovalent_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.noncovalent_bond_count(), "noncovalent bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_noncovalent_bonds(
+                &ids.into_iter().map(NoncovalentBondId).collect::<Vec<_>>(),
+            ),
+        ))
     }
 
     /// Remove stereo atoms and compact that entity space.
@@ -142,12 +246,34 @@ impl MoleculeEditor {
         Ok(())
     }
 
+    /// Remove stereo atoms and return all eight compactions, retaining unchanged source counts.
+    fn tracked_remove_stereo_atoms(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.stereo_atom_count(), "stereo atom")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_stereo_atoms(
+                &ids.into_iter().map(StereoAtomId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
     /// Remove stereo bonds and compact that entity space.
     fn remove_stereo_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&ids, editor.stereo_bond_count(), "stereo bond")?;
         editor.remove_stereo_bonds(&ids.into_iter().map(StereoBondId).collect::<Vec<_>>());
         Ok(())
+    }
+
+    /// Remove stereo bonds and return all eight compactions, retaining unchanged source counts.
+    fn tracked_remove_stereo_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.stereo_bond_count(), "stereo bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_stereo_bonds(
+                &ids.into_iter().map(StereoBondId).collect::<Vec<_>>(),
+            ),
+        ))
     }
 }
 
@@ -170,7 +296,8 @@ mod tests {
     use umol_graph_ir::ir::{
         AtomConstraintForm as GraphIrAtomConstraintForm, AtomForm as GraphIrAtomForm,
         AtomId as GraphIrAtomId, BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
-        Edits as GraphIrEdits, Entity as GraphIrEntity,
+        DativeBondForm as GraphIrDativeBondForm, Edits as GraphIrEdits, Entity as GraphIrEntity,
+        Molecule as GraphIrMolecule, MoleculeEntries as GraphIrMoleculeEntries,
         MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
         StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
         StereoAtomId as GraphIrStereoAtomId, StereoKind as GraphIrStereoKind,
@@ -179,7 +306,7 @@ mod tests {
     use umol_graph_ir::mol_dsl;
 
     use super::*;
-    use crate::error::InvalidStructureError;
+    use crate::error::{InvalidStructureError, TransactionError};
 
     #[rstest]
     #[case(RollbackMethod::Clone, GraphIrRollbackMethod::Clone)]
@@ -326,5 +453,50 @@ mod tests {
                 .unwrap_err()
                 .is_instance_of::<ConsumedError>(py));
         });
+    }
+
+    #[rstest]
+    fn test_molecule_editor_remove_topology_reference(
+        mut carbon_editor: MoleculeEditor,
+        #[values(false, true)] tracked: bool,
+    ) {
+        carbon_editor.inner.as_mut().unwrap().add_dative_bond(
+            &[GraphIrAtomId(2)],
+            GraphIrAtomId(0),
+            GraphIrDativeBondForm::from_order(1),
+        );
+        let result = if tracked {
+            carbon_editor
+                .tracked_remove_topology(vec![0], vec![])
+                .map(|_| ())
+        } else {
+            carbon_editor.remove_topology(vec![0], vec![])
+        };
+        Python::attach(|py| {
+            let error = result.unwrap_err();
+            assert!(error.is_instance_of::<TransactionError>(py));
+            assert_eq!(
+                error.to_string(),
+                "TransactionError: invalid reference to atom 2"
+            );
+        });
+        carbon_editor.inner.as_mut().unwrap().add_atoms(vec![
+            GraphIrAtomForm::from_element(ChemElement::N),
+            GraphIrAtomForm::from_element(ChemElement::O),
+        ]);
+        let expected = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+            atoms: vec![
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::N),
+                GraphIrAtomForm::from_element(ChemElement::O),
+            ],
+            dative: vec![(
+                vec![GraphIrAtomId(2)],
+                GraphIrAtomId(0),
+                GraphIrDativeBondForm::from_order(1),
+            )],
+            ..Default::default()
+        });
+        assert_eq!(carbon_editor.finish().unwrap().to_rust(), &expected);
     }
 }

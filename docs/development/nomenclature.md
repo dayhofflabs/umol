@@ -372,6 +372,23 @@ It is layered on both axes, matching correspondence: `Compaction<Id>` over one i
 `GraphCompaction` pairing the node and edge spaces, and `MoleculeCompaction` carrying a typed
 compaction per entity kind so every stale reference can be updated or discarded consistently.
 
+Graph::remove deletes exactly the supplied nodes and edges; retained edges must have surviving
+endpoints. Graph::try_remove checks that prerequisite before mutation. Graph::remove_cascading
+also selects edges incident to removed nodes. Their tracked counterparts return the corresponding
+GraphCompaction.
+
+Relation-set remove/tracked_remove selects rows without translating their graph references.
+compact_participants applies a graph compaction to retained references without selecting or
+renumbering rows. It requires all retained references to survive. The operation returns unit;
+row IDs and participant positions are preserved, so it has no tracked counterpart.
+
+MoleculeEditor::remove_topology and Edit::RemoveTopology remove exactly the supplied atoms and
+bonds after checking stored references. The ordinarily fallible editor method has no try_ prefix.
+remove_topology_cascading and Edit::RemoveTopologyCascading additionally select incident bonds and
+overlays with unavailable stored references. A MoleculeCompaction records the resulting removals;
+it does not choose which entities to remove. Graph-IR compact_topology_ids names participant
+transport through the graph's atom and bond ID mappings.
+
 **`UndoCompaction`** is the inverse view of a `MoleculeCompaction` for rollback: it carries surviving
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
@@ -1731,6 +1748,7 @@ the same primary result as its bare counterpart. The bare name returns only the 
 `tracked_<operation>` returns that result together with the operation's compaction, remapping,
 correspondence, frame action, or categorical mappings. Discarding the tracked value must preserve
 the ordinary output, failure or absence behavior, result ordering, and final mutable state.
+For an in-place operation returning unit, the tracked form returns the mapping directly.
 
 Use `try_tracked_<operation>` when `try_` distinguishes a checked counterpart; `try_` remains the
 outermost prefix. The return type identifies the returned provenance, so do not repeat it in names
@@ -1837,7 +1855,8 @@ and the corresponding operations for the other entity kinds.
 
 Three related counts, distinguished by what they measure.
 
-- **Valence** — the sum of the orders of an atom's localized bonds to non-hydrogen neighbours.
+- **Valence** — the sum of the orders of all localized bonds incident on an atom, including bonds
+  to explicit hydrogen atoms.
   Excludes implicit hydrogens, dative, aromatic, multicenter and noncovalent contributions, each of
   which is a separate field. Tag `#v`.
 - **Total valence** — valence plus implicit hydrogens plus aromatic valence plus multicenter

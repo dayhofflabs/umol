@@ -13,6 +13,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [234](234-view-arguments-2026-09-25.md),
 [235](235-view-accessors-2026-09-26.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
+[238](238-non-cascading-removal-2026-10-16.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 

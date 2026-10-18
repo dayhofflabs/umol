@@ -14,6 +14,8 @@
 //! include offset adjustment and any movement of later participants as well as index rebuilding.
 //! Whole-relation addition/removal uses fresh sets, excluding setup cloning and final destruction.
 //! It includes column changes, payload removal, incidence rebuilding, and compaction construction.
+//! Owned removal lists are prepared outside timing. Participant compaction translates sparse
+//! references in all five families, excluding setup cloning and final destruction.
 //! Bulk addition compares repeated add calls with extend on rows with overlapping four-node
 //! factors; birelations also have one edge participant. Input batches and fresh sets are prepared
 //! outside timing; both paths include batch consumption and incidence rebuilding.
@@ -23,8 +25,8 @@ use std::{array, mem};
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph_core::{
-    EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, NodeId,
-    ParticipantPosition, RelationId, VarRelationSet, VarVarBirelationSet,
+    Compaction, EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet,
+    GraphCompaction, NodeId, ParticipantPosition, RelationId, VarRelationSet, VarVarBirelationSet,
 };
 
 fn participants(row: usize) -> [NodeId; 4] {
@@ -240,7 +242,7 @@ fn fixed_rows(c: &mut Criterion) {
                     .map(|(_, entry)| *entry)
                     .collect();
                 let mut removed = relations.clone();
-                let compaction = removed.tracked_remove(&ids);
+                let compaction = removed.tracked_remove(ids.clone());
                 assert_eq!(compaction.source_count(), count);
                 assert_eq!(compaction.result_count(), expected.len());
                 for node in entries.iter().flat_map(|(row, _)| row) {
@@ -254,19 +256,22 @@ fn fixed_rows(c: &mut Criterion) {
                 }
                 assert_eq!(removed.into_entries(), expected);
                 group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
-                    b.iter_batched_ref(
-                        || relations.clone(),
-                        |relations| {
-                            relations.remove(black_box(&ids));
-                            black_box(relations.count());
+                    b.iter_batched(
+                        || (relations.clone(), ids.clone()),
+                        |(mut relations, ids)| {
+                            relations.remove(black_box(ids));
+                            black_box(relations)
                         },
                         BatchSize::LargeInput,
                     )
                 });
                 group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
-                    b.iter_batched_ref(
-                        || relations.clone(),
-                        |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                    b.iter_batched(
+                        || (relations.clone(), ids.clone()),
+                        |(mut relations, ids)| {
+                            let compaction = relations.tracked_remove(black_box(ids));
+                            black_box((relations, compaction))
+                        },
                         BatchSize::LargeInput,
                     )
                 });
@@ -607,7 +612,7 @@ fn var_rows(c: &mut Criterion) {
                         .map(|(_, entry)| entry.clone())
                         .collect();
                     let mut removed = relations.clone();
-                    let compaction = removed.tracked_remove(&ids);
+                    let compaction = removed.tracked_remove(ids.clone());
                     assert_eq!(compaction.source_count(), count);
                     assert_eq!(compaction.result_count(), expected.len());
                     for node in entries
@@ -626,19 +631,22 @@ fn var_rows(c: &mut Criterion) {
                     }
                     assert_eq!(removed.into_entries(), expected);
                     group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
-                        b.iter_batched_ref(
-                            || relations.clone(),
-                            |relations| {
-                                relations.remove(black_box(&ids));
-                                black_box(relations.count());
+                        b.iter_batched(
+                            || (relations.clone(), ids.clone()),
+                            |(mut relations, ids)| {
+                                relations.remove(black_box(ids));
+                                black_box(relations)
                             },
                             BatchSize::LargeInput,
                         )
                     });
                     group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
-                        b.iter_batched_ref(
-                            || relations.clone(),
-                            |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                        b.iter_batched(
+                            || (relations.clone(), ids.clone()),
+                            |(mut relations, ids)| {
+                                let compaction = relations.tracked_remove(black_box(ids));
+                                black_box((relations, compaction))
+                            },
                             BatchSize::LargeInput,
                         )
                     });
@@ -1049,7 +1057,7 @@ fn fixed_fixed_rows(c: &mut Criterion) {
                     .map(|(_, entry)| *entry)
                     .collect();
                 let mut removed = relations.clone();
-                let compaction = removed.tracked_remove(&ids);
+                let compaction = removed.tracked_remove(ids.clone());
                 assert_eq!(compaction.source_count(), count);
                 assert_eq!(compaction.result_count(), expected.len());
                 for node in entries.iter().flat_map(|(row, _, _)| row) {
@@ -1064,19 +1072,22 @@ fn fixed_fixed_rows(c: &mut Criterion) {
                 }
                 assert_eq!(removed.into_entries(), expected);
                 group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
-                    b.iter_batched_ref(
-                        || relations.clone(),
-                        |relations| {
-                            relations.remove(black_box(&ids));
-                            black_box(relations.count());
+                    b.iter_batched(
+                        || (relations.clone(), ids.clone()),
+                        |(mut relations, ids)| {
+                            relations.remove(black_box(ids));
+                            black_box(relations)
                         },
                         BatchSize::LargeInput,
                     )
                 });
                 group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
-                    b.iter_batched_ref(
-                        || relations.clone(),
-                        |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                    b.iter_batched(
+                        || (relations.clone(), ids.clone()),
+                        |(mut relations, ids)| {
+                            let compaction = relations.tracked_remove(black_box(ids));
+                            black_box((relations, compaction))
+                        },
                         BatchSize::LargeInput,
                     )
                 });
@@ -1724,7 +1735,7 @@ fn fixed_var_rows(c: &mut Criterion) {
                         .map(|(_, entry)| entry.clone())
                         .collect();
                     let mut removed = relations.clone();
-                    let compaction = removed.tracked_remove(&ids);
+                    let compaction = removed.tracked_remove(ids.clone());
                     assert_eq!(compaction.source_count(), count);
                     assert_eq!(compaction.result_count(), expected.len());
                     for node in entries
@@ -1757,19 +1768,22 @@ fn fixed_var_rows(c: &mut Criterion) {
                     }
                     assert_eq!(removed.into_entries(), expected);
                     group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
-                        b.iter_batched_ref(
-                            || relations.clone(),
-                            |relations| {
-                                relations.remove(black_box(&ids));
-                                black_box(relations.count());
+                        b.iter_batched(
+                            || (relations.clone(), ids.clone()),
+                            |(mut relations, ids)| {
+                                relations.remove(black_box(ids));
+                                black_box(relations)
                             },
                             BatchSize::LargeInput,
                         )
                     });
                     group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
-                        b.iter_batched_ref(
-                            || relations.clone(),
-                            |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                        b.iter_batched(
+                            || (relations.clone(), ids.clone()),
+                            |(mut relations, ids)| {
+                                let compaction = relations.tracked_remove(black_box(ids));
+                                black_box((relations, compaction))
+                            },
                             BatchSize::LargeInput,
                         )
                     });
@@ -2525,7 +2539,7 @@ fn var_var_rows(c: &mut Criterion) {
                         .map(|(_, entry)| entry.clone())
                         .collect();
                     let mut removed = relations.clone();
-                    let compaction = removed.tracked_remove(&ids);
+                    let compaction = removed.tracked_remove(ids.clone());
                     assert_eq!(compaction.source_count(), count);
                     assert_eq!(compaction.result_count(), expected.len());
                     for node in entries
@@ -2558,19 +2572,22 @@ fn var_var_rows(c: &mut Criterion) {
                     }
                     assert_eq!(removed.into_entries(), expected);
                     group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
-                        b.iter_batched_ref(
-                            || relations.clone(),
-                            |relations| {
-                                relations.remove(black_box(&ids));
-                                black_box(relations.count());
+                        b.iter_batched(
+                            || (relations.clone(), ids.clone()),
+                            |(mut relations, ids)| {
+                                relations.remove(black_box(ids));
+                                black_box(relations)
                             },
                             BatchSize::LargeInput,
                         )
                     });
                     group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
-                        b.iter_batched_ref(
-                            || relations.clone(),
-                            |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                        b.iter_batched(
+                            || (relations.clone(), ids.clone()),
+                            |(mut relations, ids)| {
+                                let compaction = relations.tracked_remove(black_box(ids));
+                                black_box((relations, compaction))
+                            },
                             BatchSize::LargeInput,
                         )
                     });
@@ -2640,8 +2657,163 @@ fn var_var_extend(c: &mut Criterion) {
     group.finish();
 }
 
+fn compact_participants(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/compact_participants");
+    for count in [64usize, 1024] {
+        let topology = GraphCompaction::new(
+            Compaction::new(
+                2 * (count + 4),
+                (0..2 * (count + 4)).step_by(2).map(NodeId::from).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2 * count,
+                (0..2 * count).step_by(2).map(EdgeId::from).collect(),
+            )
+            .unwrap(),
+        );
+        let relations = FixedRelationSet::new(
+            (0..count)
+                .map(|row| (participants(row).map(|id| NodeId(2 * id.0 + 1)), row))
+                .collect(),
+        );
+        let expected =
+            FixedRelationSet::new((0..count).map(|row| (participants(row), row)).collect());
+        let mut compacted = relations.clone();
+        compacted.compact_participants(&topology);
+        assert_eq!(compacted, expected);
+        group.bench_function(BenchmarkId::new("fixed", count), |b| {
+            b.iter_batched_ref(
+                || relations.clone(),
+                |relations| {
+                    relations.compact_participants(black_box(&topology));
+                    black_box(relations.count());
+                },
+                BatchSize::LargeInput,
+            )
+        });
+        let relations = VarRelationSet::new(
+            (0..count)
+                .map(|row| {
+                    (
+                        participants(row).map(|id| NodeId(2 * id.0 + 1)).to_vec(),
+                        row,
+                    )
+                })
+                .collect(),
+        );
+        let expected = VarRelationSet::new(
+            (0..count)
+                .map(|row| (participants(row).to_vec(), row))
+                .collect(),
+        );
+        let mut compacted = relations.clone();
+        compacted.compact_participants(&topology);
+        assert_eq!(compacted, expected);
+        group.bench_function(BenchmarkId::new("var", count), |b| {
+            b.iter_batched_ref(
+                || relations.clone(),
+                |relations| {
+                    relations.compact_participants(black_box(&topology));
+                    black_box(relations.count());
+                },
+                BatchSize::LargeInput,
+            )
+        });
+        let relations = FixedFixedBirelationSet::new(
+            (0..count)
+                .map(|row| {
+                    (
+                        participants(row).map(|id| NodeId(2 * id.0 + 1)),
+                        [EdgeId::from(2 * row + 1)],
+                        row,
+                    )
+                })
+                .collect(),
+        );
+        let expected = FixedFixedBirelationSet::new(
+            (0..count)
+                .map(|row| (participants(row), [EdgeId::from(row)], row))
+                .collect(),
+        );
+        let mut compacted = relations.clone();
+        compacted.compact_participants(&topology);
+        assert_eq!(compacted, expected);
+        group.bench_function(BenchmarkId::new("fixed_fixed", count), |b| {
+            b.iter_batched_ref(
+                || relations.clone(),
+                |relations| {
+                    relations.compact_participants(black_box(&topology));
+                    black_box(relations.count());
+                },
+                BatchSize::LargeInput,
+            )
+        });
+        let relations = FixedVarBirelationSet::new(
+            (0..count)
+                .map(|row| {
+                    (
+                        participants(row).map(|id| NodeId(2 * id.0 + 1)),
+                        vec![EdgeId::from(2 * row + 1)],
+                        row,
+                    )
+                })
+                .collect(),
+        );
+        let expected = FixedVarBirelationSet::new(
+            (0..count)
+                .map(|row| (participants(row), vec![EdgeId::from(row)], row))
+                .collect(),
+        );
+        let mut compacted = relations.clone();
+        compacted.compact_participants(&topology);
+        assert_eq!(compacted, expected);
+        group.bench_function(BenchmarkId::new("fixed_var", count), |b| {
+            b.iter_batched_ref(
+                || relations.clone(),
+                |relations| {
+                    relations.compact_participants(black_box(&topology));
+                    black_box(relations.count());
+                },
+                BatchSize::LargeInput,
+            )
+        });
+        let relations = VarVarBirelationSet::new(
+            (0..count)
+                .map(|row| {
+                    (
+                        participants(row).map(|id| NodeId(2 * id.0 + 1)).to_vec(),
+                        vec![EdgeId::from(2 * row + 1)],
+                        row,
+                    )
+                })
+                .collect(),
+        );
+        let expected = VarVarBirelationSet::new(
+            (0..count)
+                .map(|row| (participants(row).to_vec(), vec![EdgeId::from(row)], row))
+                .collect(),
+        );
+        let mut compacted = relations.clone();
+        compacted.compact_participants(&topology);
+        assert_eq!(compacted, expected);
+        group.bench_function(BenchmarkId::new("var_var", count), |b| {
+            b.iter_batched_ref(
+                || relations.clone(),
+                |relations| {
+                    relations.compact_participants(black_box(&topology));
+                    black_box(relations.count());
+                },
+                BatchSize::LargeInput,
+            )
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    compact_participants,
     fixed,
     fixed_rows,
     fixed_extend,

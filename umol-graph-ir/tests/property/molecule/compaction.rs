@@ -40,7 +40,7 @@ proptest! {
         );
         let mut editor = molecule.clone().edit();
         let mut edits = Edits::new();
-        edits.remove_topology(
+        edits.remove_topology_cascading(
             atoms.iter().copied().map(AtomHandle::Id).collect(),
             bonds.iter().copied().map(BondHandle::Id).collect(),
         );
@@ -59,7 +59,7 @@ proptest! {
         );
         prop_assert_eq!(correspondence, MoleculeCorrespondence::from(&compaction));
         let mut plain = molecule.edit();
-        plain.remove_topology(&atoms, &bonds);
+        plain.remove_topology_cascading(&atoms, &bonds);
         let publication = editor.finish();
         let expected = plain.finish();
         prop_assert_eq!(publication, expected);
@@ -114,19 +114,61 @@ proptest! {
             }
         }
     }
+    /// Selecting dependent rows from the source and removing them explicitly gives the same
+    /// result as the stored-reference cascade, including participant frames and constraints.
+    #[test]
+    fn test_molecule_editor_remove_topology_cascading(
+        (source, atoms, bonds) in molecule_with_removals_strategy(),
+    ) {
+        let removed_bonds = source.bonds().iter().filter(|view| {
+            bonds.contains(&view.id()) || view.atom_ids().iter().any(|id| atoms.contains(id))
+        }).map(|view| view.id()).collect::<Vec<_>>();
+        let dative = source.dative_bonds().iter()
+            .filter(|view| view.atom_ids().any(|id| atoms.contains(&id)))
+            .map(|view| view.id()).collect::<Vec<_>>();
+        let aromatic = source.aromatic_systems().iter()
+            .filter(|view| view.atom_ids().any(|id| atoms.contains(&id)))
+            .map(|view| view.id()).collect::<Vec<_>>();
+        let multicenter = source.multicenter_bonds().iter()
+            .filter(|view| view.atom_ids().any(|id| atoms.contains(&id)))
+            .map(|view| view.id()).collect::<Vec<_>>();
+        let noncovalent = source.noncovalent_bonds().iter()
+            .filter(|view| view.atom_ids().iter().any(|id| atoms.contains(id)))
+            .map(|view| view.id()).collect::<Vec<_>>();
+        let stereo_atoms = source.stereo_atoms().iter()
+            .filter(|view| view.atom_ids().any(|id| atoms.contains(&id)))
+            .map(|view| view.id()).collect::<Vec<_>>();
+        let stereo_bonds = source.stereo_bonds().iter()
+            .filter(|view| removed_bonds.contains(&view.site_id()) || view.ligand_ids().iter().any(|ligand| atoms.contains(&ligand.atom_id)))
+            .map(|view| view.id()).collect::<Vec<_>>();
+
+        let mut exact = source.clone().edit();
+        exact.remove_dative_bonds(&dative);
+        exact.remove_aromatic_systems(&aromatic);
+        exact.remove_multicenter_bonds(&multicenter);
+        exact.remove_noncovalent_bonds(&noncovalent);
+        exact.remove_stereo_atoms(&stereo_atoms);
+        exact.remove_stereo_bonds(&stereo_bonds);
+        let exact_compaction = exact.tracked_remove_topology(&atoms, &removed_bonds).unwrap();
+        let mut cascade = source.edit();
+        let compaction = cascade.tracked_remove_topology_cascading(&atoms, &bonds);
+        prop_assert_eq!(exact_compaction.graph(), compaction.graph());
+        prop_assert_eq!(exact.finish(), cascade.finish());
+    }
+
     #[test]
     fn test_molecule_editor_tracked_apply_composition(
         (molecule, atoms, bonds) in molecule_with_removals_strategy(),
     ) {
         let mut first = Edits::new();
-        first.remove_topology(
+        first.remove_topology_cascading(
             atoms.into_iter().map(AtomHandle::Id).collect(),
             bonds.into_iter().map(BondHandle::Id).collect(),
         );
         let mut addition = Edits::new();
         addition.add_atom(AtomForm::from_element(Element::F));
         let mut last = Edits::new();
-        last.remove_atom(AtomHandle::Id(AtomId(0)));
+        last.remove_topology_cascading(vec![AtomHandle::Id(AtomId(0))], vec![]);
         let mut expected = molecule.clone();
         let complete = expected.tracked_transact([first.clone(), addition.clone(), last.clone()], RollbackMethod::Journal).unwrap();
 
@@ -152,7 +194,7 @@ proptest! {
 
         let mut removal_editor = remapped.clone().edit();
         let mut edits = Edits::new();
-        edits.remove_topology(removed.into_iter().map(AtomHandle::Id).collect(), vec![]);
+        edits.remove_topology_cascading(removed.into_iter().map(AtomHandle::Id).collect(), vec![]);
         let compaction = removal_editor.tracked_apply(edits).unwrap();
         let compacted = removal_editor.finish().unwrap();
 

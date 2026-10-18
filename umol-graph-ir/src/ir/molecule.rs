@@ -27,7 +27,7 @@ use super::constraint::{
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
 use super::edit::{AtomHandle, BondHandle, CascadedConstraints, Edits, RemovedAtom, RemovedBond};
-use super::entity::EntityKind;
+use super::entity::{Entity, EntityKind};
 use super::error::{Contradiction, MoleculeApplyError};
 use super::frame::OverlaysFrameAction;
 use super::id::{
@@ -103,6 +103,16 @@ pub struct MoleculeEntries {
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
     pub constraints: Constraints,
+}
+
+#[derive(Default)]
+struct RemovedOverlayIds {
+    dative_bonds: Vec<DativeBondId>,
+    aromatic_systems: Vec<AromaticSystemId>,
+    multicenter_bonds: Vec<MulticenterBondId>,
+    noncovalent_bonds: Vec<NoncovalentBondId>,
+    stereo_atoms: Vec<StereoAtomId>,
+    stereo_bonds: Vec<StereoBondId>,
 }
 
 impl Molecule {
@@ -471,17 +481,8 @@ impl Molecule {
             .map(AtomId::from)
             .filter(|a| !kept.contains(a))
             .collect();
-        let remove_bonds: Vec<BondId> = self
-            .bonds()
-            .iter()
-            .filter(|b| {
-                let [a, b_end] = b.atom_ids();
-                !kept.contains(&a) || !kept.contains(&b_end)
-            })
-            .map(|b| b.id())
-            .collect();
         let mut builder = self.clone().edit();
-        let compaction = builder.tracked_remove_topology(&remove_atoms, &remove_bonds);
+        let compaction = builder.tracked_remove_topology_cascading(&remove_atoms, &[]);
         (
             builder
                 .finish()
@@ -490,7 +491,7 @@ impl Molecule {
         )
     }
 
-    /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the
+    /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopologyCascading` over the
     /// host atoms/bonds not in `sub` (empty when `sub` covers the whole molecule).
     pub fn edits(&self, sub: &MoleculeCorrespondence) -> Edits {
         let kept: HashSet<AtomId> = sub
@@ -519,7 +520,7 @@ impl Molecule {
             return Edits::new();
         }
         let mut edits = Edits::new();
-        edits.remove_topology(removed_atoms, removed_bonds);
+        edits.remove_topology_cascading(removed_atoms, removed_bonds);
         edits
     }
 
@@ -1086,8 +1087,12 @@ impl Molecule {
         self.stereo_bonds.extend(entries)
     }
 
-    /// Remove atoms, requested bonds, and incident bonds, compacting their attributes.
+    /// Remove exactly the supplied atoms and bonds, compacting their attributes.
     /// Overlays and constraints are unchanged.
+    ///
+    /// # Assumes
+    ///
+    /// Every retained bond has surviving endpoints.
     ///
     /// # Panics
     ///
@@ -1099,6 +1104,10 @@ impl Molecule {
     /// Remove topology and return its source-to-result compaction.
     /// Overlays and constraints are unchanged.
     ///
+    /// # Assumes
+    ///
+    /// Every retained bond has surviving endpoints.
+    ///
     /// # Panics
     ///
     /// Panics if an atom or bond id is outside the current topology.
@@ -1109,10 +1118,235 @@ impl Molecule {
     ) -> GraphCompaction {
         let nodes: Vec<_> = atoms.iter().copied().map(NodeId::from).collect();
         let edges: Vec<_> = bonds.iter().copied().map(EdgeId::from).collect();
-        let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
+        let compaction = self.graph.tracked_remove(nodes, edges);
         self.atoms = Arc::new(compaction.nodes().compact_vec(&self.atoms));
         self.bonds = Arc::new(compaction.edges().compact_vec(&self.bonds));
         compaction
+    }
+
+    fn assert_topology_ids(&self, atoms: &[AtomId], bonds: &[BondId]) {
+        assert!(
+            atoms.iter().all(|id| id.index() < self.atoms.len()),
+            "atom id out of range"
+        );
+        assert!(
+            bonds.iter().all(|id| id.index() < self.bonds.len()),
+            "bond id out of range"
+        );
+    }
+
+    // Bond ids are sorted by the caller.
+    fn retained_bond_at_removed_atom(
+        &self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> Option<(AtomId, BondId)> {
+        atoms.iter().find_map(|&atom| {
+            self.neighbors(atom)
+                .map(|neighbor| neighbor.bond_id())
+                .find(|bond| bonds.binary_search(bond).is_err())
+                .map(|bond| (atom, bond))
+        })
+    }
+
+    // Bond ids are sorted by the caller. Checks only references needed by transport.
+    fn check_topology_removal(
+        &self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> Result<(), TransactionError> {
+        self.assert_topology_ids(atoms, bonds);
+        let mut participants = self
+            .dative_bonds()
+            .iter()
+            .flat_map(|view| view.atom_ids())
+            .chain(
+                self.aromatic_systems()
+                    .iter()
+                    .flat_map(|view| view.atom_ids()),
+            )
+            .chain(
+                self.multicenter_bonds()
+                    .iter()
+                    .flat_map(|view| view.atom_ids()),
+            )
+            .chain(
+                self.noncovalent_bonds()
+                    .iter()
+                    .flat_map(|view| view.atom_ids()),
+            )
+            .chain(self.stereo_atoms().iter().flat_map(|view| view.atom_ids()))
+            .chain(
+                self.stereo_bonds()
+                    .iter()
+                    .flat_map(|view| view.ligand_ids().iter().map(|ligand| ligand.atom_id)),
+            );
+        if let Some(atom) = participants.find(|id| id.index() >= self.atoms.len()) {
+            return Err(TransactionError::InvalidReference {
+                entity: Entity::Atom(atom),
+            });
+        }
+        if let Some(bond) = self
+            .stereo_bonds()
+            .iter()
+            .map(|view| view.site_id())
+            .find(|id| id.index() >= self.bonds.len())
+        {
+            return Err(TransactionError::InvalidReference {
+                entity: Entity::Bond(bond),
+            });
+        }
+        if let Some((atom, bond)) = self.retained_bond_at_removed_atom(atoms, bonds) {
+            return Err(TransactionError::DanglingReference {
+                removed: Entity::Atom(atom),
+                dependent: Entity::Bond(bond),
+            });
+        }
+        for &atom in atoms {
+            let dependent = self
+                .dative_bonds
+                .incident_ids(atom)
+                .next()
+                .map(Entity::DativeBond)
+                .or_else(|| {
+                    self.aromatic_systems
+                        .incident_ids(atom)
+                        .next()
+                        .map(Entity::AromaticSystem)
+                })
+                .or_else(|| {
+                    self.multicenter_bonds
+                        .incident_ids(atom)
+                        .next()
+                        .map(Entity::MulticenterBond)
+                })
+                .or_else(|| {
+                    self.noncovalent_bonds
+                        .incident_ids(atom)
+                        .next()
+                        .map(Entity::NoncovalentBond)
+                })
+                .or_else(|| {
+                    self.stereo_atoms
+                        .incident_ids(atom)
+                        .next()
+                        .map(Entity::StereoAtom)
+                })
+                .or_else(|| {
+                    self.stereo_bonds
+                        .incident_to_atom_ids(atom)
+                        .next()
+                        .map(Entity::StereoBond)
+                });
+            if let Some(dependent) = dependent {
+                return Err(TransactionError::DanglingReference {
+                    removed: Entity::Atom(atom),
+                    dependent,
+                });
+            }
+        }
+        for &bond in bonds {
+            if let Some(id) = self.stereo_bonds.incident_to_bond_ids(bond).next() {
+                return Err(TransactionError::DanglingReference {
+                    removed: Entity::Bond(bond),
+                    dependent: Entity::StereoBond(id),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn select_topology_cascade(
+        &self,
+        atoms: &mut [AtomId],
+        bonds: &mut Vec<BondId>,
+    ) -> RemovedOverlayIds {
+        self.assert_topology_ids(atoms, bonds);
+        atoms.sort_unstable();
+        for &atom in atoms.iter() {
+            bonds.extend(self.neighbors(atom).map(|neighbor| neighbor.bond_id()));
+        }
+        bonds.sort_unstable();
+        bonds.dedup();
+        let removed_atom =
+            |id: AtomId| id.index() >= self.atoms.len() || atoms.binary_search(&id).is_ok();
+        let removed_bond =
+            |id: BondId| id.index() >= self.bonds.len() || bonds.binary_search(&id).is_ok();
+        RemovedOverlayIds {
+            dative_bonds: self
+                .dative_bonds()
+                .iter()
+                .filter(|view| view.atom_ids().any(removed_atom))
+                .map(|view| view.id())
+                .collect(),
+            aromatic_systems: self
+                .aromatic_systems()
+                .iter()
+                .filter(|view| view.atom_ids().any(removed_atom))
+                .map(|view| view.id())
+                .collect(),
+            multicenter_bonds: self
+                .multicenter_bonds()
+                .iter()
+                .filter(|view| view.atom_ids().any(removed_atom))
+                .map(|view| view.id())
+                .collect(),
+            noncovalent_bonds: self
+                .noncovalent_bonds()
+                .iter()
+                .filter(|view| view.atom_ids().into_iter().any(removed_atom))
+                .map(|view| view.id())
+                .collect(),
+            stereo_atoms: self
+                .stereo_atoms()
+                .iter()
+                .filter(|view| view.atom_ids().any(removed_atom))
+                .map(|view| view.id())
+                .collect(),
+            stereo_bonds: self
+                .stereo_bonds()
+                .iter()
+                .filter(|view| {
+                    removed_bond(view.site_id())
+                        || view
+                            .ligand_ids()
+                            .iter()
+                            .any(|ligand| removed_atom(ligand.atom_id))
+                })
+                .map(|view| view.id())
+                .collect(),
+        }
+    }
+
+    // The caller has checked that every surviving stored reference has a surviving image.
+    fn remove_selected_topology(
+        &mut self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+        overlays: RemovedOverlayIds,
+    ) -> MoleculeCompaction {
+        let dative_bonds = self.tracked_remove_dative_bonds(&overlays.dative_bonds);
+        let aromatic_systems = self.tracked_remove_aromatic_systems(&overlays.aromatic_systems);
+        let multicenter_bonds = self.tracked_remove_multicenter_bonds(&overlays.multicenter_bonds);
+        let noncovalent_bonds = self.tracked_remove_noncovalent_bonds(&overlays.noncovalent_bonds);
+        let stereo_atoms = self.tracked_remove_stereo_atoms(&overlays.stereo_atoms);
+        let stereo_bonds = self.tracked_remove_stereo_bonds(&overlays.stereo_bonds);
+        let graph = self.tracked_remove_topology(atoms, bonds);
+        self.compact_dative_bond_topology_ids(&graph);
+        self.compact_aromatic_system_topology_ids(&graph);
+        self.compact_multicenter_bond_topology_ids(&graph);
+        self.compact_noncovalent_bond_topology_ids(&graph);
+        self.compact_stereo_atom_topology_ids(&graph);
+        self.compact_stereo_bond_topology_ids(&graph);
+        MoleculeCompaction::new(
+            graph,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+        )
     }
 
     /// Remove entries only from the owning set; constraints are unchanged.
@@ -1241,64 +1475,58 @@ impl Molecule {
         self.stereo_bonds.tracked_remove(ids)
     }
 
-    /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn compact_dative_bonds(
-        &mut self,
-        topology: &GraphCompaction,
-    ) -> Compaction<DativeBondId> {
-        let (entries, compaction) = self.dative_bonds.compact(topology);
-        self.dative_bonds = entries;
-        compaction
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_dative_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.dative_bonds.compact_topology_ids(topology);
     }
 
-    /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn compact_aromatic_systems(
-        &mut self,
-        topology: &GraphCompaction,
-    ) -> Compaction<AromaticSystemId> {
-        let (entries, compaction) = self.aromatic_systems.compact(topology);
-        self.aromatic_systems = entries;
-        compaction
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_aromatic_system_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.aromatic_systems.compact_topology_ids(topology);
     }
 
-    /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn compact_multicenter_bonds(
-        &mut self,
-        topology: &GraphCompaction,
-    ) -> Compaction<MulticenterBondId> {
-        let (entries, compaction) = self.multicenter_bonds.compact(topology);
-        self.multicenter_bonds = entries;
-        compaction
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_multicenter_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.multicenter_bonds.compact_topology_ids(topology);
     }
 
-    /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn compact_noncovalent_bonds(
-        &mut self,
-        topology: &GraphCompaction,
-    ) -> Compaction<NoncovalentBondId> {
-        let (entries, compaction) = self.noncovalent_bonds.compact(topology);
-        self.noncovalent_bonds = entries;
-        compaction
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_noncovalent_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.noncovalent_bonds.compact_topology_ids(topology);
     }
 
-    /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn compact_stereo_atoms(
-        &mut self,
-        topology: &GraphCompaction,
-    ) -> Compaction<StereoAtomId> {
-        let (entries, compaction) = self.stereo_atoms.compact(topology);
-        self.stereo_atoms = entries;
-        compaction
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_stereo_atom_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_atoms.compact_topology_ids(topology);
     }
 
-    /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn compact_stereo_bonds(
-        &mut self,
-        topology: &GraphCompaction,
-    ) -> Compaction<StereoBondId> {
-        let (entries, compaction) = self.stereo_bonds.compact(topology);
-        self.stereo_bonds = entries;
-        compaction
+    /// Translate this store's references, preserving row ids, frames, and attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_stereo_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_bonds.compact_topology_ids(topology);
     }
 
     pub(crate) fn push_constraint(&mut self, constraint: Constraint) {

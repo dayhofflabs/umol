@@ -2024,7 +2024,7 @@ proptest! {
     ) {
         let mut edits = Edits::new();
         for id in removed.into_iter().rev() {
-            edits.remove_atom(AtomHandle::Id(id));
+            edits.remove_topology_cascading(vec![AtomHandle::Id(id)], vec![]);
         }
         for attributes in added {
             edits.add_atom(attributes);

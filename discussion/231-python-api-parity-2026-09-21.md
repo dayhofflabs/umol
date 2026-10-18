@@ -6,6 +6,7 @@ Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [149](149-molecule-ring-cache-and-hashing-2026-07-13.md),
 [192](192-python-api-type-roles-2026-08-09.md),
 [181](181-python-boundary-ownership-2026-08-03.md),
+[237](237-release-0-10-scope-2026-10-15.md),
 [Python API guide](../docs/development/python-api.md),
 [data-type guide](../docs/development/data-types.md)
 

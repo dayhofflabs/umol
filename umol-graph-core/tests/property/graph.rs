@@ -1,4 +1,8 @@
 //! Properties of the core graph representation and its predicates.
+//!
+//! Exact removal uses complete deletion lists derived from generated multigraph endpoints;
+//! cascading and checked removal also exercise incomplete lists. Expected survivors and
+//! correspondences come from the input endpoints, independently of the removal implementation.
 
 use std::collections::HashSet;
 
@@ -167,6 +171,50 @@ proptest! {
     }
 
     #[test]
+    fn test_graph_tracked_remove(
+        (original, endpoints) in graph_with_edge_multiset(8, 16),
+        node_mask in any::<u8>(),
+        edge_mask in any::<u16>(),
+        shared in any::<bool>(),
+    ) {
+        let nodes: Vec<_> = (0..original.node_count())
+            .filter(|&index| node_mask & (1 << index) != 0)
+            .map(NodeId::from).collect();
+        let edges: Vec<_> = endpoints.iter().enumerate()
+            .filter(|(index, pair)| edge_mask & (1 << index) != 0
+                || pair.iter().any(|&node| nodes.contains(&NodeId(node))))
+            .map(|(index, _)| EdgeId::from(index)).collect();
+        let surviving_nodes: Vec<_> = (0..original.node_count())
+            .map(NodeId::from).filter(|node| !nodes.contains(node)).collect();
+        let surviving_edges: Vec<_> = endpoints.iter().enumerate()
+            .filter(|(index, _)| !edges.contains(&EdgeId::from(*index))).collect();
+        let expected_endpoints: Vec<_> = surviving_edges.iter().map(|(_, pair)| {
+            pair.map(|node| surviving_nodes.iter().position(|id| *id == NodeId(node)).unwrap() as u32)
+        }).collect();
+        let expected = Graph::new(surviving_nodes.len(), &expected_endpoints);
+        let expected_correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                surviving_nodes.iter().enumerate()
+                    .map(|(index, &old)| (old, NodeId::from(index))).collect(),
+                original.node_count(), surviving_nodes.len(),
+            ).unwrap(),
+            Correspondence::new(
+                surviving_edges.iter().enumerate()
+                    .map(|(index, (old, _))| (EdgeId::from(*old), EdgeId::from(index))).collect(),
+                original.edge_count(), surviving_edges.len(),
+            ).unwrap(),
+        );
+        let mut plain = if shared { original.clone() } else { Graph::new(original.node_count(), &endpoints) };
+        let mut witnessed = if shared { original.clone() } else { Graph::new(original.node_count(), &endpoints) };
+        plain.remove(nodes.clone(), edges.clone());
+        let compaction = witnessed.tracked_remove(nodes, edges);
+        prop_assert_eq!(&plain, &expected);
+        prop_assert_eq!(&witnessed, &expected);
+        prop_assert_eq!(GraphCorrespondence::from(&compaction), expected_correspondence);
+        prop_assert_eq!(&original, &Graph::new(original.node_count(), &endpoints));
+    }
+
+    #[test]
     fn test_graph_tracked_remove_cascading(
         (graph, edges) in graph_with_edge_multiset(8, 16),
         node_mask in any::<u8>(),
@@ -219,8 +267,8 @@ proptest! {
 
         let mut plain = graph.clone();
         let mut witnessed = graph.clone();
-        plain.remove_cascading(&removed_nodes, &removed_edges);
-        let compaction = witnessed.tracked_remove_cascading(&removed_nodes, &removed_edges);
+        plain.remove_cascading(removed_nodes.clone(), removed_edges.clone());
+        let compaction = witnessed.tracked_remove_cascading(removed_nodes.clone(), removed_edges.clone());
         prop_assert_eq!(&plain, &expected);
         prop_assert_eq!(&witnessed, &expected);
         prop_assert_eq!(GraphCorrespondence::from(&compaction), expected_correspondence);
@@ -231,9 +279,9 @@ proptest! {
         });
         let mut plain = graph.clone();
         let mut witnessed = graph.clone();
-        prop_assert_eq!(plain.try_remove(&removed_nodes, &removed_edges), (!dangling).then_some(()));
+        prop_assert_eq!(plain.try_remove(removed_nodes.clone(), removed_edges.clone()), (!dangling).then_some(()));
         prop_assert_eq!(
-            witnessed.try_tracked_remove(&removed_nodes, &removed_edges),
+            witnessed.try_tracked_remove(removed_nodes, removed_edges),
             (!dangling).then_some(compaction),
         );
         let expected = if dangling { graph } else { expected };

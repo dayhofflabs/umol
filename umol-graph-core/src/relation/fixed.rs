@@ -269,15 +269,16 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// # Panics
     ///
     /// Panics before mutation if any supplied id is outside the set.
-    pub fn remove(&mut self, ids: &[RelationId]) {
+    pub fn remove(&mut self, ids: Vec<RelationId>) {
         self.tracked_remove(ids);
     }
 
     /// Remove whole relations and return the old-to-new survivor compaction.
     ///
     /// Input ids refer to the pre-removal set; their order and repetitions do not matter.
-    /// The compaction records the original count and removed ids, not removed payloads.
-    /// A nonempty removal rebuilds incidence over the surviving rows once.
+    /// The compaction records the original count and takes ownership of the removal vector.
+    /// Removed payloads are not retained.
+    /// A nonempty removal filters and renumbers the existing incidence in place.
     ///
     /// # Semantic properties
     ///
@@ -291,10 +292,10 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// # Panics
     ///
     /// Panics before mutation if any supplied id is outside the set.
-    pub fn tracked_remove(&mut self, ids: &[RelationId]) -> Compaction<RelationId> {
-        let compaction = Compaction::new(self.count(), ids.to_vec())
-            .expect("removed relations belong to the source set");
-        if ids.is_empty() {
+    pub fn tracked_remove(&mut self, ids: Vec<RelationId>) -> Compaction<RelationId> {
+        let compaction =
+            Compaction::new(self.count(), ids).expect("removed relations belong to the source set");
+        if compaction.removed().is_empty() {
             return compaction;
         }
         let mut dst = 0;
@@ -311,14 +312,39 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         }
         self.participants.truncate(dst);
         self.data.truncate(dst);
-        self.incidence = Incidence::build(self.count(), |i, out| {
-            out.extend(
-                self.participants[i]
-                    .iter()
-                    .map(|participant| participant.refs()),
-            );
-        });
+        self.incidence.remove(&compaction);
         compaction
+    }
+
+    /// Compact graph references in place without removing or renumbering relation rows.
+    ///
+    /// Updates participant references and incidence; payloads are neither moved nor cloned.
+    ///
+    /// # Assumes
+    ///
+    /// Every participant reference is inside the corresponding source domain of `topology`
+    /// and has a surviving image. Callers remove dependent rows before transporting survivors.
+    ///
+    /// # Semantic properties
+    ///
+    /// Row ids, factor shapes, participant positions and multiplicity, non-reference data,
+    /// and payloads are preserved. A covering identity leaves storage unchanged. Matching
+    /// [`Self::restore_participants`] recovers the original set. Public-API properties in
+    /// `tests/property/relation.rs` compare with independent reference translation and incidence.
+    ///
+    /// # Panics
+    ///
+    /// May panic if a referenced node or edge has no surviving image.
+    pub fn compact_participants(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() && topology.edges().removed().is_empty() {
+            return;
+        }
+        for participant in self.participants.iter_mut().flatten() {
+            *participant = participant
+                .compact(topology)
+                .expect("retained participant references survive compaction");
+        }
+        self.incidence.compact_participants(topology);
     }
 
     /// Undo row removal using its compaction and original saved entries.
@@ -583,55 +609,6 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
             })
             .collect::<Option<Vec<_>>>()?;
         Some(Self::new(entries))
-    }
-
-    /// Compact participant ids and discard rows containing a participant that cannot survive.
-    ///
-    /// A row is dropped if any [`RelationParticipant::compact`] call returns `None`.
-    /// For node/edge participants this includes removed or out-of-source-range references.
-    /// Returns the same set as [`Self::tracked_compact`], without its relation-id compaction.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
-    where
-        D: Clone,
-    {
-        self.tracked_compact(compaction).0
-    }
-
-    /// Compact participants and return the induced compaction of this set's relation ids.
-    ///
-    /// Drops a row if any participant's [`RelationParticipant::compact`] returns `None`.
-    /// The compaction's source count is this set's original row count.
-    ///
-    /// # Semantic properties
-    ///
-    /// Surviving rows retain their relative order, factor positions, and cloned payloads;
-    /// only participant ids and dense relation ids change. For conforming participants,
-    /// a covering identity compaction preserves the set exactly. Plain and tracked
-    /// compaction produce equal sets.
-    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
-    where
-        D: Clone,
-    {
-        let mut removed = Vec::new();
-        let mut entries: Vec<([P; N], D)> = Vec::with_capacity(self.count());
-        for i in 0..self.count() {
-            let rid = RelationId(i as u32);
-            let parts: Option<[P; N]> = self
-                .participants(rid)
-                .iter()
-                .map(|&p| p.compact(compaction))
-                .collect::<Option<Vec<P>>>()
-                .and_then(|parts| parts.try_into().ok());
-            match parts {
-                Some(parts) => entries.push((parts, self.data(rid).clone())),
-                None => removed.push(rid),
-            }
-        }
-        (
-            Self::new(entries),
-            Compaction::new(self.count(), removed)
-                .expect("removed relations belong to the source set"),
-        )
     }
 
     /// Glue two relation sets in the same participant id space using caller-selected pairings.

@@ -491,8 +491,8 @@ fn test_fixed_relation_set_tracked_remove(
         ([NodeId(3), NodeId(0)], "fourth"),
     ]);
     let mut plain = relations.clone();
-    plain.remove(&ids);
-    let compaction = relations.tracked_remove(&ids);
+    plain.remove(ids.clone());
+    let compaction = relations.tracked_remove(ids.clone());
     assert_eq!(relations, plain);
     assert_eq!(compaction.source_count(), 4);
     assert_eq!(compaction.result_count(), expected.len());
@@ -530,7 +530,7 @@ fn test_fixed_relation_set_tracked_remove_identity<const N: usize>(
 ) {
     let mut relations = input.clone();
     assert_eq!(
-        relations.tracked_remove(&[]),
+        relations.tracked_remove(vec![]),
         Compaction::identity(input.count())
     );
     assert_eq!(relations, input);
@@ -544,7 +544,7 @@ fn test_fixed_relation_set_tracked_remove_payload<const N: usize>(
     #[case] expected: Vec<([EdgeId; N], ReplacementData)>,
 ) {
     let mut relations = FixedRelationSet::new(entries);
-    let compaction = relations.tracked_remove(&[RelationId(1)]);
+    let compaction = relations.tracked_remove(vec![RelationId(1)]);
     assert_eq!(compaction.source_count(), 3);
     assert_eq!(compaction.result_count(), 2);
     assert_eq!(compaction.removed(), &[RelationId(1)]);
@@ -572,7 +572,8 @@ fn test_fixed_relation_set_tracked_remove_error(
 ) {
     let original = FixedRelationSet::new(entries);
     let mut relations = original.clone();
-    let panic = catch_unwind(AssertUnwindSafe(|| relations.tracked_remove(&ids))).unwrap_err();
+    let panic =
+        catch_unwind(AssertUnwindSafe(|| relations.tracked_remove(ids.clone()))).unwrap_err();
     let message = panic.downcast_ref::<String>().unwrap();
     assert!(message.starts_with("removed relations belong to the source set"));
     assert_eq!(relations, original);
@@ -582,9 +583,157 @@ fn test_fixed_relation_set_tracked_remove_error(
             original.incident_to_node(node)
         );
     }
-    let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(&ids))).unwrap_err();
+    let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(ids.clone()))).unwrap_err();
     assert_eq!(panic.downcast_ref::<String>(), Some(message));
     assert_eq!(relations, original);
+}
+
+#[rstest]
+#[case::nodes(vec![([NodeId(5), NodeId(2), NodeId(5)], 7), ([NodeId(2), NodeId(2), NodeId(5)], 11)], vec![([NodeId(3), NodeId(1), NodeId(3)], 7), ([NodeId(1), NodeId(1), NodeId(3)], 11)])]
+#[case::edges(vec![([EdgeId(6), EdgeId(0), EdgeId(6)], 7)], vec![([EdgeId(4), EdgeId(0), EdgeId(4)], 7)])]
+fn test_fixed_relation_set_compact_participants<P: RelationParticipant + Debug, const N: usize>(
+    #[case] entries: Vec<([P; N], u32)>,
+    #[case] expected: Vec<([P; N], u32)>,
+) {
+    let mut relations = FixedRelationSet::new(
+        entries
+            .into_iter()
+            .map(|(row, data)| (row, ReplacementData(vec![data])))
+            .collect(),
+    );
+    let expected: Vec<_> = expected
+        .into_iter()
+        .map(|(row, data)| (row, ReplacementData(vec![data])))
+        .collect();
+    let topology = GraphCompaction::new(
+        Compaction::new(6, vec![NodeId(0), NodeId(3)]).unwrap(),
+        Compaction::new(7, vec![EdgeId(1), EdgeId(4)]).unwrap(),
+    );
+    relations.compact_participants(&topology);
+    for id in 0..8 {
+        let nodes: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| {
+                row.iter()
+                    .map(|p| p.refs())
+                    .any(|refs| refs.node == Some(NodeId(id)))
+            })
+            .map(|(row, _)| RelationId::from(row))
+            .collect();
+        let edges: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| {
+                row.iter()
+                    .map(|p| p.refs())
+                    .any(|refs| refs.edge == Some(EdgeId(id)))
+            })
+            .map(|(row, _)| RelationId::from(row))
+            .collect();
+        assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::empty(FixedRelationSet::<NodeId, u32, 0>::new(vec![]))]
+#[case::empty_factors(FixedRelationSet::<NodeId, u32, 0>::new(vec![([], 7), ([], 11)]))]
+#[case::nonempty(FixedRelationSet::new(vec![([NodeId(2), NodeId(0), NodeId(2)], 7)]))]
+fn test_fixed_relation_set_compact_participants_identity<const N: usize>(
+    #[case] original: FixedRelationSet<NodeId, u32, N>,
+) {
+    let mut relations = original.clone();
+    relations.compact_participants(&GraphCompaction::new(
+        Compaction::identity(6),
+        Compaction::identity(7),
+    ));
+    assert_eq!(relations, original);
+}
+
+#[rstest]
+#[case::empty(FixedRelationSet::default())]
+#[case::rows(
+    FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "keep"), ([NodeId(1), NodeId(3)], "drop")]),
+)]
+fn test_fixed_relation_set_compact_participants_removal_identity(
+    #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
+) {
+    let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::empty());
+    let mut output = input.clone();
+    assert_eq!(
+        output.tracked_remove(vec![]),
+        Compaction::identity(input.count())
+    );
+    output.compact_participants(&compaction);
+    assert_eq!(output, input);
+}
+
+#[rstest]
+#[case::partial(
+    vec![NodeId(1)],
+    FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], "keep")]),
+    vec![RelationId(1)],
+)]
+#[case::all(
+    vec![NodeId(0), NodeId(1)],
+    FixedRelationSet::default(),
+    vec![RelationId(0), RelationId(1)],
+)]
+fn test_fixed_relation_set_compact_participants_removal(
+    fixed_relation_set_compaction_input: FixedRelationSet<NodeId, &'static str, 2>,
+    #[case] removed_nodes: Vec<NodeId>,
+    #[case] expected: FixedRelationSet<NodeId, &'static str, 2>,
+    #[case] removed_relations: Vec<RelationId>,
+) {
+    let input = fixed_relation_set_compaction_input;
+    let compaction = GraphCompaction::new(
+        Compaction::new(4, removed_nodes).unwrap(),
+        Compaction::empty(),
+    );
+    let selected: Vec<_> = input
+        .ids()
+        .filter(|&id| {
+            input
+                .participants(id)
+                .iter()
+                .any(|node| compaction.nodes().compact(*node).is_none())
+        })
+        .collect();
+    let mut plain = input.clone();
+    plain.remove(selected.clone());
+    plain.compact_participants(&compaction);
+    let mut output = input;
+    let witness = output.tracked_remove(selected);
+    output.compact_participants(&compaction);
+    assert_eq!(plain, expected);
+    assert_eq!(output, expected);
+    assert_eq!(
+        witness,
+        Compaction::new(2, removed_relations.clone()).unwrap()
+    );
+    let survivors = (0..2)
+        .map(RelationId)
+        .filter(|id| !removed_relations.contains(id))
+        .collect::<Vec<_>>();
+    for (idx, &old) in survivors.iter().enumerate() {
+        assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+    }
+}
+
+#[rstest]
+#[case::removed_node(References { node: Some(NodeId(0)), edge: Some(EdgeId(2)), label: 1 })]
+#[case::removed_edge(References { node: Some(NodeId(2)), edge: Some(EdgeId(1)), label: 1 })]
+#[case::outside_node(References { node: Some(NodeId(6)), edge: Some(EdgeId(2)), label: 1 })]
+#[case::outside_edge(References { node: Some(NodeId(2)), edge: Some(EdgeId(7)), label: 1 })]
+#[should_panic(expected = "retained participant references survive compaction")]
+fn test_fixed_relation_set_compact_participants_error(#[case] participant: References) {
+    let mut relations = FixedRelationSet::new(vec![([participant], 7)]);
+    relations.compact_participants(&GraphCompaction::new(
+        Compaction::new(6, vec![NodeId(0), NodeId(3)]).unwrap(),
+        Compaction::new(7, vec![EdgeId(1), EdgeId(4)]).unwrap(),
+    ));
 }
 
 #[rstest]
@@ -1218,60 +1367,6 @@ fn test_fixed_relation_set_try_remap(#[case] nodes: Vec<NodeId>, #[case] covered
     );
     let expected = covered.then(|| rs.remap(&remapping));
     assert_eq!(rs.try_remap(&remapping), expected);
-}
-
-#[rstest]
-#[case::empty(FixedRelationSet::default())]
-#[case::rows(
-    FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "keep"), ([NodeId(1), NodeId(3)], "drop")]),
-)]
-fn test_fixed_relation_set_compact_identity(
-    #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
-) {
-    let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::empty());
-    assert_eq!(input.compact(&compaction), input);
-    assert_eq!(
-        input.tracked_compact(&compaction),
-        (input.clone(), Compaction::identity(input.count())),
-    );
-}
-
-#[rstest]
-#[case::partial(
-    vec![NodeId(1)],
-    FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], "keep")]),
-    vec![RelationId(1)],
-)]
-#[case::all(
-    vec![NodeId(0), NodeId(1)],
-    FixedRelationSet::default(),
-    vec![RelationId(0), RelationId(1)],
-)]
-fn test_fixed_relation_set_tracked_compact(
-    fixed_relation_set_compaction_input: FixedRelationSet<NodeId, &'static str, 2>,
-    #[case] removed_nodes: Vec<NodeId>,
-    #[case] expected: FixedRelationSet<NodeId, &'static str, 2>,
-    #[case] removed_relations: Vec<RelationId>,
-) {
-    let input = fixed_relation_set_compaction_input;
-    let compaction = GraphCompaction::new(
-        Compaction::new(4, removed_nodes).unwrap(),
-        Compaction::empty(),
-    );
-    let (output, witness) = input.tracked_compact(&compaction);
-    assert_eq!(input.compact(&compaction), expected);
-    assert_eq!(output, expected);
-    assert_eq!(
-        witness,
-        Compaction::new(2, removed_relations.clone()).unwrap()
-    );
-    let survivors = (0..2)
-        .map(RelationId)
-        .filter(|id| !removed_relations.contains(id))
-        .collect::<Vec<_>>();
-    for (idx, &old) in survivors.iter().enumerate() {
-        assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
-    }
 }
 
 #[rstest]

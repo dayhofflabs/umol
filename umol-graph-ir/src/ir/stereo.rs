@@ -229,24 +229,42 @@ impl StereoAtoms {
         if ids.is_empty() {
             return;
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(&ids);
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        if remove_all {
+            Compaction::new(self.count(), ids).expect("removed relations belong to the source set");
+            self.0 = Arc::default();
+        } else {
+            Arc::make_mut(&mut self.0).remove(ids);
+        }
     }
 
     pub(crate) fn tracked_remove(&mut self, ids: &[StereoAtomId]) -> Compaction<StereoAtomId> {
         if ids.is_empty() {
             return Compaction::identity(self.count());
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
-        Compaction::new(
-            compaction.source_count(),
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        let compaction = if remove_all {
+            let compaction = Compaction::new(self.count(), ids)
+                .expect("removed relations belong to the source set");
+            self.0 = Arc::default();
             compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoAtomId::from)
-                .collect(),
+        } else {
+            Arc::make_mut(&mut self.0).tracked_remove(ids)
+        };
+        let (source_count, removed) = compaction.into_parts();
+        Compaction::new(
+            source_count,
+            removed.into_iter().map(StereoAtomId::from).collect(),
         )
         .expect("relation compaction contains valid stereo atom ids")
     }
@@ -325,19 +343,16 @@ impl StereoAtoms {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoAtomId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid stereo atom ids");
-        (Self(Arc::new(set)), relations)
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() || self.count() == 0 {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -690,24 +705,42 @@ impl StereoBonds {
         if ids.is_empty() {
             return;
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(&ids);
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        if remove_all {
+            Compaction::new(self.count(), ids).expect("removed relations belong to the source set");
+            self.0 = Arc::default();
+        } else {
+            Arc::make_mut(&mut self.0).remove(ids);
+        }
     }
 
     pub(crate) fn tracked_remove(&mut self, ids: &[StereoBondId]) -> Compaction<StereoBondId> {
         if ids.is_empty() {
             return Compaction::identity(self.count());
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
-        Compaction::new(
-            compaction.source_count(),
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        let compaction = if remove_all {
+            let compaction = Compaction::new(self.count(), ids)
+                .expect("removed relations belong to the source set");
+            self.0 = Arc::default();
             compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoBondId::from)
-                .collect(),
+        } else {
+            Arc::make_mut(&mut self.0).tracked_remove(ids)
+        };
+        let (source_count, removed) = compaction.into_parts();
+        Compaction::new(
+            source_count,
+            removed.into_iter().map(StereoBondId::from).collect(),
         )
         .expect("relation compaction contains valid stereo bond ids")
     }
@@ -786,19 +819,18 @@ impl StereoBonds {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoBondId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid stereo bond ids");
-        (Self(Arc::new(set)), relations)
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if (topology.nodes().removed().is_empty() && topology.edges().removed().is_empty())
+            || self.count() == 0
+        {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -3202,7 +3234,25 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atoms_compact(stereo_atoms: StereoAtoms) {
+    #[case::empty(StereoAtoms::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(StereoAtoms::new(vec![(AtomId(2), vec![StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]), vec![], vec![])]
+    #[case::bond_only(StereoAtoms::new(vec![(AtomId(2), vec![StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]), vec![], vec![EdgeId(0)])]
+    fn test_stereo_atoms_compact_topology_ids_identity(
+        #[case] original: StereoAtoms,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
+    }
+
+    #[rstest]
+    fn test_stereo_atoms_compact_topology_ids_roundtrip(stereo_atoms: StereoAtoms) {
         let attributes = stereo_atoms.attributes(StereoAtomId(0)).clone();
         let ligands = vec![
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -3221,7 +3271,10 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original.incident_ids(AtomId(1)).collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(
             rows,
@@ -4266,7 +4319,24 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bonds_compact(stereo_bonds: StereoBonds) {
+    #[case::empty(StereoBonds::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(StereoBonds::new(vec![(BondId(2), vec![StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom)], StereoBondForm::new(StereoKind::CisTrans, 1u32))]), vec![], vec![])]
+    fn test_stereo_bonds_compact_topology_ids_identity(
+        #[case] original: StereoBonds,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
+    }
+
+    #[rstest]
+    fn test_stereo_bonds_compact_topology_ids_roundtrip(stereo_bonds: StereoBonds) {
         let attributes = stereo_bonds.attributes(StereoBondId(0)).clone();
         let ligands = vec![
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -4286,7 +4356,13 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::new(4, vec![EdgeId(1)]).unwrap(),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original
+            .incident_to_atom_ids(AtomId(1))
+            .chain(original.incident_to_bond_ids(BondId(1)))
+            .collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(
             rows,

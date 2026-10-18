@@ -1,5 +1,5 @@
 use rstest::*;
-use umol_graph_core::Compaction;
+use umol_graph_core::{Compaction, Correspondence};
 
 use super::super::{ApplicationState, HandleTable};
 use super::stereo_bond_entries;
@@ -7,6 +7,7 @@ use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
 use crate::ir::constraint::{AtomConstraintForm, AtomConstraintKey};
+use crate::ir::correspondence::MoleculeCorrespondence;
 use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{AtomHandle, Edit, Edits};
 use crate::ir::electrons::ElectronCountsForm;
@@ -134,6 +135,90 @@ fn test_handle_table_compact_sequence() {
             count: 3
         }),
     );
+}
+
+#[rstest]
+fn test_molecule_tracked_apply_handles(
+    #[values(None, Some(RollbackMethod::Clone), Some(RollbackMethod::Journal))] recovery: Option<
+        RollbackMethod,
+    >,
+) {
+    let source = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::default(); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    });
+    let mut edits = Edits::new();
+    edits.remove_dative_bonds(vec![]);
+    let atom = edits.add_atom(AtomForm::default());
+    edits.remove_bond(BondHandle::Id(BondId(0)));
+    let bond = edits.add_bond(
+        AtomHandle::Id(AtomId(2)),
+        atom.clone(),
+        BondForm::from_order(1),
+    );
+    edits.remove_atom(AtomHandle::Id(AtomId(0)));
+    edits.remove_topology(vec![], vec![]);
+    edits.modify_atom_charges(vec![
+        (
+            AtomHandle::Id(AtomId(1)),
+            NumForm::Undetermined,
+            NumForm::Lit(1),
+        ),
+        (atom, NumForm::Undetermined, NumForm::Lit(-1)),
+    ]);
+    edits.modify_bond_orders(vec![
+        (BondHandle::Id(BondId(1)), NumForm::Lit(1), NumForm::Lit(2)),
+        (bond, NumForm::Lit(1), NumForm::Lit(3)),
+    ]);
+    let expected = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm {
+                charge: NumForm::Lit(1),
+                ..Default::default()
+            },
+            AtomForm::default(),
+            AtomForm {
+                charge: NumForm::Lit(-1),
+                ..Default::default()
+            },
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(1), AtomId(2), BondForm::from_order(3)),
+        ],
+        ..Default::default()
+    });
+    let expected_correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(1), AtomId(0)), (AtomId(2), AtomId(1))], 3, 3).unwrap(),
+        Correspondence::new(vec![(BondId(1), BondId(0))], 2, 2).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    let (plain, product, correspondence) = match recovery {
+        None => {
+            let plain = source.clone().apply(edits.clone()).unwrap();
+            let (product, correspondence) = source.tracked_apply(edits).unwrap();
+            (plain, product, correspondence)
+        }
+        Some(method) => {
+            let mut plain = source.clone();
+            plain.transact([edits.clone()], method).unwrap();
+            let mut product = source;
+            let correspondence = product.tracked_transact([edits], method).unwrap();
+            (plain, product, correspondence)
+        }
+    };
+    assert_eq!(plain, expected);
+    assert_eq!(product, expected);
+    assert_eq!(correspondence, expected_correspondence);
 }
 
 #[rstest]

@@ -226,8 +226,18 @@ impl AromaticSystems {
         if ids.is_empty() {
             return;
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        Arc::make_mut(&mut self.0).remove(&ids);
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        if remove_all {
+            Compaction::new(self.count(), ids).expect("removed relations belong to the source set");
+            self.0 = Arc::default();
+        } else {
+            Arc::make_mut(&mut self.0).remove(ids);
+        }
     }
 
     pub(crate) fn tracked_remove(
@@ -237,16 +247,24 @@ impl AromaticSystems {
         if ids.is_empty() {
             return Compaction::identity(self.count());
         }
-        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
-        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
-        Compaction::new(
-            compaction.source_count(),
+        let mut ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let remove_all = ids.len() >= self.count() && Arc::strong_count(&self.0) > 1 && {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() == self.count()
+        };
+        let compaction = if remove_all {
+            let compaction = Compaction::new(self.count(), ids)
+                .expect("removed relations belong to the source set");
+            self.0 = Arc::default();
             compaction
-                .removed()
-                .iter()
-                .copied()
-                .map(AromaticSystemId::from)
-                .collect(),
+        } else {
+            Arc::make_mut(&mut self.0).tracked_remove(ids)
+        };
+        let (source_count, removed) = compaction.into_parts();
+        Compaction::new(
+            source_count,
+            removed.into_iter().map(AromaticSystemId::from).collect(),
         )
         .expect("relation compaction contains valid aromatic system ids")
     }
@@ -311,22 +329,16 @@ impl AromaticSystems {
         Arc::make_mut(&mut self.0).remove_participant(id.into(), position);
     }
 
-    pub(crate) fn compact(
-        &self,
-        compaction: &GraphCompaction,
-    ) -> (Self, Compaction<AromaticSystemId>) {
-        let (set, relations) = self.0.tracked_compact(compaction);
-        let relations = Compaction::new(
-            relations.source_count(),
-            relations
-                .removed()
-                .iter()
-                .copied()
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .expect("relation compaction contains valid aromatic system ids");
-        (Self(Arc::new(set)), relations)
+    /// Translate surviving references without changing row ids, participant order, or attributes.
+    ///
+    /// # Assumes
+    ///
+    /// Every stored reference is in the corresponding source domain and has a surviving image.
+    pub(crate) fn compact_topology_ids(&mut self, topology: &GraphCompaction) {
+        if topology.nodes().removed().is_empty() || self.count() == 0 {
+            return;
+        }
+        Arc::make_mut(&mut self.0).compact_participants(topology);
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -1211,7 +1223,25 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_systems_compact() {
+    #[case::empty(AromaticSystems::default(), vec![NodeId(0)], vec![EdgeId(0)])]
+    #[case::identity(AromaticSystems::new(vec![(vec![AtomId(4), AtomId(2)], AromaticSystemForm::from_electrons(vec![2, 1]))]), vec![], vec![])]
+    #[case::bond_only(AromaticSystems::new(vec![(vec![AtomId(4), AtomId(2)], AromaticSystemForm::from_electrons(vec![2, 1]))]), vec![], vec![EdgeId(0)])]
+    fn test_aromatic_systems_compact_topology_ids_identity(
+        #[case] original: AromaticSystems,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+    ) {
+        let mut elements = original.clone();
+        elements.compact_topology_ids(&GraphCompaction::new(
+            Compaction::new(6, nodes).unwrap(),
+            Compaction::new(4, edges).unwrap(),
+        ));
+        assert_eq!(elements, original);
+        assert!(Arc::ptr_eq(&elements.0, &original.0));
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_compact_topology_ids_roundtrip() {
         let original = AromaticSystems::new(vec![
             (
                 vec![AtomId(0), AtomId(2)],
@@ -1230,7 +1260,10 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.compact(&graph);
+        let removed = original.incident_ids(AtomId(1)).collect::<Vec<_>>();
+        let mut compacted = original.clone();
+        let rows = compacted.tracked_remove(&removed);
+        compacted.compact_topology_ids(&graph);
 
         assert_eq!(rows, Compaction::new(3, vec![AromaticSystemId(1)]).unwrap());
         assert_eq!(

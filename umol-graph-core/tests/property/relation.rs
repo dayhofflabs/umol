@@ -55,6 +55,9 @@
 //! Transport exercises the identity/composition laws of [FixedRelationSet::try_map] and its
 //! peers, plus the positional preservation law of [FixedRelationSet::remap] and its peers.
 //! It uses permutations of eight node and edge ids; unit cases cover partial mappings.
+//! Participant compaction explicitly removes rows with deleted references, then compares retained
+//! rows with independent survivor-list positions in both graph spaces. Direct scans check incidence
+//! before and after inverse transport; labels, payloads, factor positions, and row ids are preserved.
 
 use std::iter;
 
@@ -62,10 +65,10 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, TestCaseResult, TestRunner};
 use rstest::rstest;
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet,
-    GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition,
-    ParticipantRefs, RelationId, RelationParticipant, Remapping, VarRelationSet,
-    VarVarBirelationSet,
+    Compaction, Correspondence, EdgeId, FixedFixedBirelationSet, FixedRelationSet,
+    FixedVarBirelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId,
+    ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant, Remapping,
+    VarRelationSet, VarVarBirelationSet,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -424,7 +427,7 @@ fn test_fixed_relation_set_add_roundtrip() {
             let mut appended = entries.clone();
             appended.push((participants, data));
             assert_fixed_relation_rows(&relations, &appended, &[], &participants)?;
-            relations.remove(&[id]);
+            relations.remove(vec![id]);
             assert_fixed_relation_rows(&relations, &entries, &participants, &[])?;
             prop_assert_eq!(relations.into_entries(), entries);
             Ok(())
@@ -468,7 +471,7 @@ fn test_fixed_relation_set_extend() {
             let added: Vec<_> = (original.len()..expected.len())
                 .map(RelationId::from)
                 .collect();
-            relations.remove(&added);
+            relations.remove(added);
             assert_fixed_relation_rows(&relations, &original, &[], &[])?;
             prop_assert_eq!(relations.into_entries(), original);
             Ok(())
@@ -539,8 +542,8 @@ fn test_fixed_relation_set_tracked_remove() {
                             .map(RelationId::from)
                             .collect();
                         let mut plain = relations.clone();
-                        plain.remove(&ids);
-                        let compaction = relations.tracked_remove(&ids);
+                        plain.remove(ids.clone());
+                        let compaction = relations.tracked_remove(ids);
                         prop_assert_eq!(&relations, &plain);
                         prop_assert_eq!(compaction.source_count(), source_count);
                         prop_assert_eq!(compaction.result_count(), survivors.len());
@@ -558,6 +561,119 @@ fn test_fixed_relation_set_tracked_remove() {
                 assert_fixed_relation_rows(&relations, &entries, &previous, &participants)?;
             }
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_relation_set_compact_participants() {
+    let strategy = (
+        prop::collection::vec(
+            (prop::array::uniform3(participant_strategy()), any::<u8>()),
+            0..8,
+        ),
+        any::<u8>(),
+        any::<u8>(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_relation_set_compact_participants"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, node_mask, edge_mask)| {
+            let nodes: Vec<_> = (0..8)
+                .filter(|index| node_mask & (1 << index) == 0)
+                .map(NodeId)
+                .collect();
+            let edges: Vec<_> = (0..8)
+                .filter(|index| edge_mask & (1 << index) == 0)
+                .map(EdgeId)
+                .collect();
+            let removed: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, (row, _))| {
+                    row.iter().any(|participant| {
+                        participant.node.is_some_and(|node| !nodes.contains(&node))
+                            || participant.edge.is_some_and(|edge| !edges.contains(&edge))
+                    })
+                })
+                .map(|(index, _)| RelationId::from(index))
+                .collect();
+            let surviving: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !removed.contains(&RelationId::from(*index)))
+                .map(|(_, row)| *row)
+                .collect();
+            let translate = |participant: TestParticipant| TestParticipant {
+                node: participant
+                    .node
+                    .map(|node| NodeId::from(nodes.iter().position(|id| *id == node).unwrap())),
+                edge: participant
+                    .edge
+                    .map(|edge| EdgeId::from(edges.iter().position(|id| *id == edge).unwrap())),
+                ..participant
+            };
+            let expected: Vec<_> = surviving
+                .iter()
+                .map(|(row, data)| (row.map(translate), *data))
+                .collect();
+            let topology = GraphCompaction::new(
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(NodeId)
+                        .filter(|node| !nodes.contains(node))
+                        .collect(),
+                )
+                .unwrap(),
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(EdgeId)
+                        .filter(|edge| !edges.contains(edge))
+                        .collect(),
+                )
+                .unwrap(),
+            );
+            let mut relations = FixedRelationSet::new(entries);
+            relations.remove(removed);
+            relations.compact_participants(&topology);
+            prop_assert_eq!(relations.clone().into_entries(), expected.clone());
+            prop_assert_eq!(
+                relations.ids().collect::<Vec<_>>(),
+                (0..expected.len())
+                    .map(RelationId::from)
+                    .collect::<Vec<_>>()
+            );
+            for (restore, rows) in [(false, &expected), (true, &surviving)] {
+                if restore {
+                    relations.restore_participants(&topology);
+                }
+                for id in 0..9 {
+                    let node_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (row, _))| row.iter().any(|p| p.node == Some(NodeId(id))))
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    let edge_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (row, _))| row.iter().any(|p| p.edge == Some(EdgeId(id))))
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    prop_assert_eq!(relations.incident_to_node(NodeId(id)), node_incidence);
+                    prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edge_incidence);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), surviving);
             Ok(())
         })
         .unwrap();
@@ -855,7 +971,7 @@ fn test_var_relation_set_add_roundtrip() {
             let mut appended = entries.clone();
             appended.push((participants.clone(), data));
             assert_var_relation_rows(&relations, &appended, &[], &participants)?;
-            relations.remove(&[id]);
+            relations.remove(vec![id]);
             assert_var_relation_rows(&relations, &entries, &participants, &[])?;
             prop_assert_eq!(relations.into_entries(), entries);
             Ok(())
@@ -907,7 +1023,7 @@ fn test_var_relation_set_extend() {
             let added: Vec<_> = (original.len()..expected.len())
                 .map(RelationId::from)
                 .collect();
-            relations.remove(&added);
+            relations.remove(added);
             assert_var_relation_rows(&relations, &original, &[], &[])?;
             prop_assert_eq!(relations.into_entries(), original);
             Ok(())
@@ -981,8 +1097,8 @@ fn test_var_relation_set_tracked_remove() {
                             .map(RelationId::from)
                             .collect();
                         let mut plain = relations.clone();
-                        plain.remove(&ids);
-                        let compaction = relations.tracked_remove(&ids);
+                        plain.remove(ids.clone());
+                        let compaction = relations.tracked_remove(ids);
                         prop_assert_eq!(&relations, &plain);
                         prop_assert_eq!(compaction.source_count(), source_count);
                         prop_assert_eq!(compaction.result_count(), survivors.len());
@@ -1000,6 +1116,127 @@ fn test_var_relation_set_tracked_remove() {
                 assert_var_relation_rows(&relations, &entries, &previous, &participants)?;
             }
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_relation_set_compact_participants() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..6),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        any::<u8>(),
+        any::<u8>(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_relation_set_compact_participants"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, node_mask, edge_mask)| {
+            let nodes: Vec<_> = (0..8)
+                .filter(|index| node_mask & (1 << index) == 0)
+                .map(NodeId)
+                .collect();
+            let edges: Vec<_> = (0..8)
+                .filter(|index| edge_mask & (1 << index) == 0)
+                .map(EdgeId)
+                .collect();
+            let removed: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, (row, _))| {
+                    row.iter().any(|participant| {
+                        participant.node.is_some_and(|node| !nodes.contains(&node))
+                            || participant.edge.is_some_and(|edge| !edges.contains(&edge))
+                    })
+                })
+                .map(|(index, _)| RelationId::from(index))
+                .collect();
+            let surviving: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !removed.contains(&RelationId::from(*index)))
+                .map(|(_, row)| row.clone())
+                .collect();
+            let translate = |participant: TestParticipant| TestParticipant {
+                node: participant
+                    .node
+                    .map(|node| NodeId::from(nodes.iter().position(|id| *id == node).unwrap())),
+                edge: participant
+                    .edge
+                    .map(|edge| EdgeId::from(edges.iter().position(|id| *id == edge).unwrap())),
+                ..participant
+            };
+            let expected: Vec<_> = surviving
+                .iter()
+                .map(|(row, data)| {
+                    (
+                        row.iter().copied().map(translate).collect::<Vec<_>>(),
+                        *data,
+                    )
+                })
+                .collect();
+            let topology = GraphCompaction::new(
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(NodeId)
+                        .filter(|node| !nodes.contains(node))
+                        .collect(),
+                )
+                .unwrap(),
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(EdgeId)
+                        .filter(|edge| !edges.contains(edge))
+                        .collect(),
+                )
+                .unwrap(),
+            );
+            let mut relations = VarRelationSet::new(entries);
+            relations.remove(removed);
+            relations.compact_participants(&topology);
+            prop_assert_eq!(relations.clone().into_entries(), expected.clone());
+            prop_assert_eq!(
+                relations.ids().collect::<Vec<_>>(),
+                (0..expected.len())
+                    .map(RelationId::from)
+                    .collect::<Vec<_>>()
+            );
+            for (restore, rows) in [(false, &expected), (true, &surviving)] {
+                if restore {
+                    relations.restore_participants(&topology);
+                }
+                for id in 0..9 {
+                    let node_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (row, _))| row.iter().any(|p| p.node == Some(NodeId(id))))
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    let edge_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (row, _))| row.iter().any(|p| p.edge == Some(EdgeId(id))))
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    prop_assert_eq!(relations.incident_to_node(NodeId(id)), node_incidence);
+                    prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edge_incidence);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), surviving);
             Ok(())
         })
         .unwrap();
@@ -1401,7 +1638,7 @@ fn test_fixed_fixed_birelation_set_add_roundtrip() {
             let mut appended = entries.clone();
             appended.push((first, second, data));
             assert_fixed_fixed_birelation_rows(&relations, &appended, &(first, second), &query)?;
-            relations.remove(&[id]);
+            relations.remove(vec![id]);
             assert_fixed_fixed_birelation_rows(&relations, &entries, &(first, second), &query)?;
             prop_assert_eq!(relations.into_entries(), entries);
             Ok(())
@@ -1460,7 +1697,7 @@ fn test_fixed_fixed_birelation_set_extend() {
             let added: Vec<_> = (original.len()..expected.len())
                 .map(RelationId::from)
                 .collect();
-            relations.remove(&added);
+            relations.remove(added);
             assert_fixed_fixed_birelation_rows(
                 &relations,
                 &original,
@@ -1543,8 +1780,8 @@ fn test_fixed_fixed_birelation_set_tracked_remove() {
                             .map(RelationId::from)
                             .collect();
                         let mut plain = relations.clone();
-                        plain.remove(&ids);
-                        let compaction = relations.tracked_remove(&ids);
+                        plain.remove(ids.clone());
+                        let compaction = relations.tracked_remove(ids);
                         prop_assert_eq!(&relations, &plain);
                         prop_assert_eq!(compaction.source_count(), source_count);
                         prop_assert_eq!(compaction.result_count(), survivors.len());
@@ -1562,6 +1799,133 @@ fn test_fixed_fixed_birelation_set_tracked_remove() {
                 assert_fixed_fixed_birelation_rows(&relations, &entries, &previous, &query)?;
             }
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_compact_participants() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::array::uniform2(participant_strategy()),
+                prop::array::uniform3(participant_strategy()),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        any::<u8>(),
+        any::<u8>(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_fixed_birelation_set_compact_participants"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, node_mask, edge_mask)| {
+            let nodes: Vec<_> = (0..8)
+                .filter(|index| node_mask & (1 << index) == 0)
+                .map(NodeId)
+                .collect();
+            let edges: Vec<_> = (0..8)
+                .filter(|index| edge_mask & (1 << index) == 0)
+                .map(EdgeId)
+                .collect();
+            let removed: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, (first, second, _))| {
+                    first.iter().chain(second).any(|participant| {
+                        participant.node.is_some_and(|node| !nodes.contains(&node))
+                            || participant.edge.is_some_and(|edge| !edges.contains(&edge))
+                    })
+                })
+                .map(|(index, _)| RelationId::from(index))
+                .collect();
+            let surviving: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !removed.contains(&RelationId::from(*index)))
+                .map(|(_, row)| *row)
+                .collect();
+            let translate = |participant: TestParticipant| TestParticipant {
+                node: participant
+                    .node
+                    .map(|node| NodeId::from(nodes.iter().position(|id| *id == node).unwrap())),
+                edge: participant
+                    .edge
+                    .map(|edge| EdgeId::from(edges.iter().position(|id| *id == edge).unwrap())),
+                ..participant
+            };
+            let expected: Vec<_> = surviving
+                .iter()
+                .map(|(first, second, data)| (first.map(translate), second.map(translate), *data))
+                .collect();
+            let topology = GraphCompaction::new(
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(NodeId)
+                        .filter(|node| !nodes.contains(node))
+                        .collect(),
+                )
+                .unwrap(),
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(EdgeId)
+                        .filter(|edge| !edges.contains(edge))
+                        .collect(),
+                )
+                .unwrap(),
+            );
+            let mut relations = FixedFixedBirelationSet::new(entries);
+            relations.remove(removed);
+            relations.compact_participants(&topology);
+            prop_assert_eq!(relations.clone().into_entries(), expected.clone());
+            prop_assert_eq!(
+                relations.ids().collect::<Vec<_>>(),
+                (0..expected.len())
+                    .map(RelationId::from)
+                    .collect::<Vec<_>>()
+            );
+            for (restore, rows) in [(false, &expected), (true, &surviving)] {
+                if restore {
+                    relations.restore_participants(&topology);
+                }
+                for id in 0..9 {
+                    let node_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (first, second, _))| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|p| p.node == Some(NodeId(id)))
+                        })
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    let edge_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (first, second, _))| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|p| p.edge == Some(EdgeId(id)))
+                        })
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    prop_assert_eq!(relations.incident_to_node(NodeId(id)), node_incidence);
+                    prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edge_incidence);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), surviving);
             Ok(())
         })
         .unwrap();
@@ -1966,7 +2330,7 @@ fn test_fixed_var_birelation_set_add_roundtrip() {
                 &(first, second.clone()),
                 &query,
             )?;
-            relations.remove(&[id]);
+            relations.remove(vec![id]);
             assert_fixed_var_birelation_rows(
                 &relations,
                 &entries,
@@ -2035,7 +2399,7 @@ fn test_fixed_var_birelation_set_extend() {
             let added: Vec<_> = (original.len()..expected.len())
                 .map(RelationId::from)
                 .collect();
-            relations.remove(&added);
+            relations.remove(added);
             assert_fixed_var_birelation_rows(
                 &relations,
                 &original,
@@ -2118,8 +2482,8 @@ fn test_fixed_var_birelation_set_tracked_remove() {
                             .map(RelationId::from)
                             .collect();
                         let mut plain = relations.clone();
-                        plain.remove(&ids);
-                        let compaction = relations.tracked_remove(&ids);
+                        plain.remove(ids.clone());
+                        let compaction = relations.tracked_remove(ids);
                         prop_assert_eq!(&relations, &plain);
                         prop_assert_eq!(compaction.source_count(), source_count);
                         prop_assert_eq!(compaction.result_count(), survivors.len());
@@ -2137,6 +2501,139 @@ fn test_fixed_var_birelation_set_tracked_remove() {
                 assert_fixed_var_birelation_rows(&relations, &entries, &previous, &query)?;
             }
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_var_birelation_set_compact_participants() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::array::uniform2(participant_strategy()),
+                prop::collection::vec(participant_strategy(), 0..6),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        any::<u8>(),
+        any::<u8>(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_var_birelation_set_compact_participants"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, node_mask, edge_mask)| {
+            let nodes: Vec<_> = (0..8)
+                .filter(|index| node_mask & (1 << index) == 0)
+                .map(NodeId)
+                .collect();
+            let edges: Vec<_> = (0..8)
+                .filter(|index| edge_mask & (1 << index) == 0)
+                .map(EdgeId)
+                .collect();
+            let removed: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, (first, second, _))| {
+                    first.iter().chain(second).any(|participant| {
+                        participant.node.is_some_and(|node| !nodes.contains(&node))
+                            || participant.edge.is_some_and(|edge| !edges.contains(&edge))
+                    })
+                })
+                .map(|(index, _)| RelationId::from(index))
+                .collect();
+            let surviving: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !removed.contains(&RelationId::from(*index)))
+                .map(|(_, row)| row.clone())
+                .collect();
+            let translate = |participant: TestParticipant| TestParticipant {
+                node: participant
+                    .node
+                    .map(|node| NodeId::from(nodes.iter().position(|id| *id == node).unwrap())),
+                edge: participant
+                    .edge
+                    .map(|edge| EdgeId::from(edges.iter().position(|id| *id == edge).unwrap())),
+                ..participant
+            };
+            let expected: Vec<_> = surviving
+                .iter()
+                .map(|(first, second, data)| {
+                    (
+                        first.map(translate),
+                        second.iter().copied().map(translate).collect::<Vec<_>>(),
+                        *data,
+                    )
+                })
+                .collect();
+            let topology = GraphCompaction::new(
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(NodeId)
+                        .filter(|node| !nodes.contains(node))
+                        .collect(),
+                )
+                .unwrap(),
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(EdgeId)
+                        .filter(|edge| !edges.contains(edge))
+                        .collect(),
+                )
+                .unwrap(),
+            );
+            let mut relations = FixedVarBirelationSet::new(entries);
+            relations.remove(removed);
+            relations.compact_participants(&topology);
+            prop_assert_eq!(relations.clone().into_entries(), expected.clone());
+            prop_assert_eq!(
+                relations.ids().collect::<Vec<_>>(),
+                (0..expected.len())
+                    .map(RelationId::from)
+                    .collect::<Vec<_>>()
+            );
+            for (restore, rows) in [(false, &expected), (true, &surviving)] {
+                if restore {
+                    relations.restore_participants(&topology);
+                }
+                for id in 0..9 {
+                    let node_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (first, second, _))| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|p| p.node == Some(NodeId(id)))
+                        })
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    let edge_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (first, second, _))| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|p| p.edge == Some(EdgeId(id)))
+                        })
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    prop_assert_eq!(relations.incident_to_node(NodeId(id)), node_incidence);
+                    prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edge_incidence);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), surviving);
             Ok(())
         })
         .unwrap();
@@ -2578,7 +3075,7 @@ fn test_var_var_birelation_set_add_roundtrip() {
                 &(first.clone(), second.clone()),
                 &query,
             )?;
-            relations.remove(&[id]);
+            relations.remove(vec![id]);
             assert_var_var_birelation_rows(
                 &relations,
                 &entries,
@@ -2646,7 +3143,7 @@ fn test_var_var_birelation_set_extend() {
             let added: Vec<_> = (original.len()..expected.len())
                 .map(RelationId::from)
                 .collect();
-            relations.remove(&added);
+            relations.remove(added);
             assert_var_var_birelation_rows(
                 &relations,
                 &original,
@@ -2729,8 +3226,8 @@ fn test_var_var_birelation_set_tracked_remove() {
                             .map(RelationId::from)
                             .collect();
                         let mut plain = relations.clone();
-                        plain.remove(&ids);
-                        let compaction = relations.tracked_remove(&ids);
+                        plain.remove(ids.clone());
+                        let compaction = relations.tracked_remove(ids);
                         prop_assert_eq!(&relations, &plain);
                         prop_assert_eq!(compaction.source_count(), source_count);
                         prop_assert_eq!(compaction.result_count(), survivors.len());
@@ -2748,6 +3245,139 @@ fn test_var_var_birelation_set_tracked_remove() {
                 assert_var_var_birelation_rows(&relations, &entries, &previous, &query)?;
             }
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_var_birelation_set_compact_participants() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..6),
+                prop::collection::vec(participant_strategy(), 0..6),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        any::<u8>(),
+        any::<u8>(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_var_birelation_set_compact_participants"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, node_mask, edge_mask)| {
+            let nodes: Vec<_> = (0..8)
+                .filter(|index| node_mask & (1 << index) == 0)
+                .map(NodeId)
+                .collect();
+            let edges: Vec<_> = (0..8)
+                .filter(|index| edge_mask & (1 << index) == 0)
+                .map(EdgeId)
+                .collect();
+            let removed: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, (first, second, _))| {
+                    first.iter().chain(second).any(|participant| {
+                        participant.node.is_some_and(|node| !nodes.contains(&node))
+                            || participant.edge.is_some_and(|edge| !edges.contains(&edge))
+                    })
+                })
+                .map(|(index, _)| RelationId::from(index))
+                .collect();
+            let surviving: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !removed.contains(&RelationId::from(*index)))
+                .map(|(_, row)| row.clone())
+                .collect();
+            let translate = |participant: TestParticipant| TestParticipant {
+                node: participant
+                    .node
+                    .map(|node| NodeId::from(nodes.iter().position(|id| *id == node).unwrap())),
+                edge: participant
+                    .edge
+                    .map(|edge| EdgeId::from(edges.iter().position(|id| *id == edge).unwrap())),
+                ..participant
+            };
+            let expected: Vec<_> = surviving
+                .iter()
+                .map(|(first, second, data)| {
+                    (
+                        first.iter().copied().map(translate).collect::<Vec<_>>(),
+                        second.iter().copied().map(translate).collect::<Vec<_>>(),
+                        *data,
+                    )
+                })
+                .collect();
+            let topology = GraphCompaction::new(
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(NodeId)
+                        .filter(|node| !nodes.contains(node))
+                        .collect(),
+                )
+                .unwrap(),
+                Compaction::new(
+                    8,
+                    (0..8)
+                        .map(EdgeId)
+                        .filter(|edge| !edges.contains(edge))
+                        .collect(),
+                )
+                .unwrap(),
+            );
+            let mut relations = VarVarBirelationSet::new(entries);
+            relations.remove(removed);
+            relations.compact_participants(&topology);
+            prop_assert_eq!(relations.clone().into_entries(), expected.clone());
+            prop_assert_eq!(
+                relations.ids().collect::<Vec<_>>(),
+                (0..expected.len())
+                    .map(RelationId::from)
+                    .collect::<Vec<_>>()
+            );
+            for (restore, rows) in [(false, &expected), (true, &surviving)] {
+                if restore {
+                    relations.restore_participants(&topology);
+                }
+                for id in 0..9 {
+                    let node_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (first, second, _))| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|p| p.node == Some(NodeId(id)))
+                        })
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    let edge_incidence: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (first, second, _))| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|p| p.edge == Some(EdgeId(id)))
+                        })
+                        .map(|(index, _)| RelationId::from(index))
+                        .collect();
+                    prop_assert_eq!(relations.incident_to_node(NodeId(id)), node_incidence);
+                    prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edge_incidence);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), surviving);
             Ok(())
         })
         .unwrap();

@@ -859,16 +859,19 @@ impl StereoAtomDelta {
                 },
             });
         }
-        let kind = update
-            .configuration
-            .kind()
-            .or_else(|| current.configuration.kind())
-            .or_else(|| updated.configuration.kind());
+        let Some(kind) = updated.configuration.kind() else {
+            return deltas;
+        };
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             if !options_normalized_eq(&old, &new) {
-                deltas.push(Self::ModifyConstraint { id, kind, old, new });
+                deltas.push(Self::ModifyConstraint {
+                    id,
+                    kind: Some(kind),
+                    old,
+                    new,
+                });
             }
         }
         deltas
@@ -983,16 +986,19 @@ impl StereoBondDelta {
                 },
             });
         }
-        let kind = update
-            .configuration
-            .kind()
-            .or_else(|| current.configuration.kind())
-            .or_else(|| updated.configuration.kind());
+        let Some(kind) = updated.configuration.kind() else {
+            return deltas;
+        };
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             if !options_normalized_eq(&old, &new) {
-                deltas.push(Self::ModifyConstraint { id, kind, old, new });
+                deltas.push(Self::ModifyConstraint {
+                    id,
+                    kind: Some(kind),
+                    old,
+                    new,
+                });
             }
         }
         deltas
@@ -4123,6 +4129,45 @@ mod tests {
             },
         ],
     )]
+    #[case::clear_kind(
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate {
+            configuration: StereoConfigurationUpdate::Undetermined,
+            constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        },
+        vec![StereoAtomDelta::ModifyField {
+            id: StereoAtomId(7),
+            change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationForm::Undetermined },
+        }],
+    )]
+    #[case::changed_kind(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        StereoAtomUpdate {
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Axial, coset: Some(StereoCoset::Lit(1)) },
+            constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        },
+        vec![
+            StereoAtomDelta::ModifyField {
+                id: StereoAtomId(7),
+                change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationForm::kinded(StereoKind::Axial, 1_u32) },
+            },
+            StereoAtomDelta::ModifyConstraint {
+                id: StereoAtomId(7), kind: Some(StereoKind::Axial), old: None,
+                new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+            },
+        ],
+    )]
+    #[case::unchanged_kind(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        StereoAtomUpdate {
+            configuration: StereoConfigurationUpdate::Unchanged,
+            constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        },
+        vec![StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(7), kind: Some(StereoKind::Tetrahedral), old: None,
+            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        }],
+    )]
     fn test_stereo_atom_delta_for_update(
         #[case] current: StereoAtomForm,
         #[case] update: StereoAtomUpdate,
@@ -4192,6 +4237,45 @@ mod tests {
                 new: None,
             },
         ],
+    )]
+    #[case::clear_kind(
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate {
+            configuration: StereoConfigurationUpdate::Undetermined,
+            constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        },
+        vec![StereoBondDelta::ModifyField {
+            id: StereoBondId(7),
+            change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationForm::Undetermined },
+        }],
+    )]
+    #[case::changed_kind(
+        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+        StereoBondUpdate {
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Axial, coset: Some(StereoCoset::Lit(1)) },
+            constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        },
+        vec![
+            StereoBondDelta::ModifyField {
+                id: StereoBondId(7),
+                change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationForm::kinded(StereoKind::Axial, 1_u32) },
+            },
+            StereoBondDelta::ModifyConstraint {
+                id: StereoBondId(7), kind: Some(StereoKind::Axial), old: None,
+                new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+            },
+        ],
+    )]
+    #[case::unchanged_kind(
+        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+        StereoBondUpdate {
+            configuration: StereoConfigurationUpdate::Unchanged,
+            constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        },
+        vec![StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(7), kind: Some(StereoKind::CisTrans), old: None,
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        }],
     )]
     fn test_stereo_bond_delta_for_update(
         #[case] current: StereoBondForm,

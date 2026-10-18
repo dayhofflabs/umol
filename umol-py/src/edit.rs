@@ -519,6 +519,10 @@ pub enum Edit {
         atoms: TupleItems<Vec<HandleLike>>,
         bonds: TupleItems<Vec<HandleLike>>,
     },
+    RemoveTopologyCascading {
+        atoms: TupleItems<Vec<HandleLike>>,
+        bonds: TupleItems<Vec<HandleLike>>,
+    },
     ModifyAtomElements {
         changes: FieldChanges<ElementForm>,
     },
@@ -808,6 +812,9 @@ impl Edit {
             Self::AddAtoms { .. } => ("AddAtoms", &["atoms"]),
             Self::AddBonds { .. } => ("AddBonds", &["bonds"]),
             Self::RemoveTopology { .. } => ("RemoveTopology", &["atoms", "bonds"]),
+            Self::RemoveTopologyCascading { .. } => {
+                ("RemoveTopologyCascading", &["atoms", "bonds"])
+            }
             Self::ModifyAtomElements { .. } => ("ModifyAtomElements", &["changes"]),
             Self::ModifyAtomIsotopeMasses { .. } => ("ModifyAtomIsotopeMasses", &["changes"]),
             Self::ModifyAtomCharges { .. } => ("ModifyAtomCharges", &["changes"]),
@@ -976,6 +983,12 @@ impl Edit {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
                 bonds: bonds.iter().map(HandleLike::from_bond_handle).collect(),
             },
+            GraphIrEdit::RemoveTopologyCascading { atoms, bonds } => {
+                Self::RemoveTopologyCascading {
+                    atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
+                    bonds: bonds.iter().map(HandleLike::from_bond_handle).collect(),
+                }
+            }
             GraphIrEdit::ModifyAtomElements { changes } => Self::ModifyAtomElements {
                 changes: TupleItems(
                     changes
@@ -2032,6 +2045,12 @@ impl Edit {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 bonds: bonds.iter().map(HandleLike::to_bond_handle).collect(),
             },
+            Self::RemoveTopologyCascading { atoms, bonds } => {
+                GraphIrEdit::RemoveTopologyCascading {
+                    atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                    bonds: bonds.iter().map(HandleLike::to_bond_handle).collect(),
+                }
+            }
             Self::ModifyAtomElements { changes } => GraphIrEdit::ModifyAtomElements {
                 changes: changes
                     .0
@@ -3200,6 +3219,20 @@ impl Edits {
         Ok(())
     }
 
+    /// Append explicit cascading removal; handles are checked when the batch is applied.
+    fn remove_topology_cascading(
+        &mut self,
+        atoms: Vec<HandleLike>,
+        bonds: Vec<HandleLike>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_topology_cascading(
+            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            bonds.iter().map(HandleLike::to_bond_handle).collect(),
+        );
+        Ok(())
+    }
+
     fn remove_dative_bonds(
         &mut self,
         py: Python<'_>,
@@ -4283,6 +4316,10 @@ mod tests {
             attributes: GraphIrBondForm::default(),
         }] },
         GraphIrEdit::RemoveTopology {
+            atoms: vec![GraphIrAtomHandle::New(0)],
+            bonds: vec![GraphIrBondHandle::Id(GraphIrBondId(1))],
+        },
+        GraphIrEdit::RemoveTopologyCascading {
             atoms: vec![GraphIrAtomHandle::New(0)],
             bonds: vec![GraphIrBondHandle::Id(GraphIrBondId(1))],
         },

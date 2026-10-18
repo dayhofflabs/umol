@@ -7,7 +7,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use umol_graph_core::{Correspondence, Graph, GraphCorrespondence, NodeId};
+use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
 
 fn graph(node_count: usize) -> Graph {
     let edges: Vec<_> = (1..node_count as u32)
@@ -169,6 +169,47 @@ fn extend(c: &mut Criterion) {
     group.finish();
 }
 
+fn remove(c: &mut Criterion) {
+    let mut group = c.benchmark_group("graph_remove");
+    for size in [8, 64] {
+        let graph = graph(size);
+        let middle = (size / 2) as u32;
+        group.bench_function(BenchmarkId::new("remove/path", size), |b| {
+            b.iter_batched(
+                || {
+                    (
+                        graph.clone(),
+                        vec![NodeId(middle)],
+                        vec![EdgeId(middle - 1), EdgeId(middle)],
+                    )
+                },
+                |(mut graph, nodes, edges)| {
+                    graph.remove(black_box(nodes), black_box(edges));
+                    black_box(graph)
+                },
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("tracked_remove/path", size), |b| {
+            b.iter_batched(
+                || {
+                    (
+                        graph.clone(),
+                        vec![NodeId(middle)],
+                        vec![EdgeId(middle - 1), EdgeId(middle)],
+                    )
+                },
+                |(mut graph, nodes, edges)| {
+                    let compaction = graph.tracked_remove(black_box(nodes), black_box(edges));
+                    black_box((graph, compaction))
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
 fn remove_cascading(c: &mut Criterion) {
     let mut group = c.benchmark_group("graph_remove_cascading");
     for size in [8, 64] {
@@ -176,9 +217,9 @@ fn remove_cascading(c: &mut Criterion) {
         let removed = [NodeId((size / 2) as u32)];
         group.bench_function(BenchmarkId::new("remove_cascading/path", size), |b| {
             b.iter_batched(
-                || graph.clone(),
-                |mut graph| {
-                    graph.remove_cascading(black_box(&removed), &[]);
+                || (graph.clone(), removed.to_vec()),
+                |(mut graph, removed)| {
+                    graph.remove_cascading(black_box(removed), vec![]);
                     black_box(graph)
                 },
                 BatchSize::SmallInput,
@@ -188,9 +229,9 @@ fn remove_cascading(c: &mut Criterion) {
             BenchmarkId::new("tracked_remove_cascading/path", size),
             |b| {
                 b.iter_batched(
-                    || graph.clone(),
-                    |mut graph| {
-                        let compaction = graph.tracked_remove_cascading(black_box(&removed), &[]);
+                    || (graph.clone(), removed.to_vec()),
+                    |(mut graph, removed)| {
+                        let compaction = graph.tracked_remove_cascading(black_box(removed), vec![]);
                         black_box((graph, compaction))
                     },
                     BatchSize::SmallInput,
@@ -224,6 +265,7 @@ criterion_group!(
     extend_nodes,
     extend_edges,
     extend,
+    remove,
     remove_cascading,
     pushout,
 );

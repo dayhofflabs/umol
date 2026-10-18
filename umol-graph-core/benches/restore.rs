@@ -185,7 +185,6 @@ fn graph(c: &mut Criterion) {
                         .collect()
                 };
                 let mut compacted = original.clone();
-                let compaction = compacted.tracked_remove_cascading(&nodes, &edges);
                 let removed: Vec<_> = endpoints
                     .iter()
                     .enumerate()
@@ -196,6 +195,7 @@ fn graph(c: &mut Criterion) {
                     })
                     .map(|(i, pair)| (EdgeId::from(i), pair.map(NodeId)))
                     .collect();
+                let compaction = compacted.tracked_remove_cascading(nodes, edges);
                 let rebuilt = rebuild_graph(&compacted, &compaction, &removed);
                 let mut restored = compacted.clone();
                 restored.restore(&compaction, &removed);
@@ -327,7 +327,7 @@ fn fixed(c: &mut Criterion) {
                     .map(|(row, entry)| (RelationId::from(row), *entry))
                     .collect();
                 let mut compacted = original.clone();
-                let compaction = compacted.tracked_remove(&ids);
+                let compaction = compacted.tracked_remove(ids.clone());
                 let rebuilt = FixedRelationSet::new(rebuild_rows(
                     compacted.clone().into_entries(),
                     &compaction,
@@ -342,7 +342,7 @@ fn fixed(c: &mut Criterion) {
                     let setup = || {
                         if retained {
                             let mut relations = original.clone();
-                            relations.remove(&ids);
+                            relations.remove(ids.clone());
                             relations
                         } else {
                             compacted.clone()
@@ -417,7 +417,25 @@ fn fixed(c: &mut Criterion) {
                     })
                     .cloned()
                     .collect();
-                let compacted = original.compact(&compaction);
+                let selected = original
+                    .ids()
+                    .filter(|&id| {
+                        original
+                            .participants(id)
+                            .iter()
+                            .map(|p| p.refs())
+                            .any(|refs| {
+                                refs.node
+                                    .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                    || refs
+                                        .edge
+                                        .is_some_and(|id| compaction.edges().compact(id).is_none())
+                            })
+                    })
+                    .collect();
+                let mut compacted = original.clone();
+                compacted.remove(selected);
+                compacted.compact_participants(&compaction);
                 let rebuild = |relations: FixedRelationSet<NodeId, usize, 4>| {
                     FixedRelationSet::new(
                         relations
@@ -512,7 +530,7 @@ fn var(c: &mut Criterion) {
                         .map(|(row, entry)| (RelationId::from(row), entry.clone()))
                         .collect();
                     let mut compacted = original.clone();
-                    let compaction = compacted.tracked_remove(&ids);
+                    let compaction = compacted.tracked_remove(ids.clone());
                     let rebuilt = VarRelationSet::new(rebuild_rows(
                         compacted.clone().into_entries(),
                         &compaction,
@@ -527,7 +545,7 @@ fn var(c: &mut Criterion) {
                         let setup = || {
                             if retained {
                                 let mut relations = original.clone();
-                                relations.remove(&ids);
+                                relations.remove(ids.clone());
                                 relations
                             } else {
                                 compacted.clone()
@@ -603,7 +621,25 @@ fn var(c: &mut Criterion) {
                         })
                         .cloned()
                         .collect();
-                    let compacted = original.compact(&compaction);
+                    let selected = original
+                        .ids()
+                        .filter(|&id| {
+                            original
+                                .participants(id)
+                                .iter()
+                                .map(|p| p.refs())
+                                .any(|refs| {
+                                    refs.node
+                                        .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                        || refs.edge.is_some_and(|id| {
+                                            compaction.edges().compact(id).is_none()
+                                        })
+                                })
+                        })
+                        .collect();
+                    let mut compacted = original.clone();
+                    compacted.remove(selected);
+                    compacted.compact_participants(&compaction);
                     let rebuild = |relations: VarRelationSet<EdgeId, usize>| {
                         VarRelationSet::new(
                             relations
@@ -718,7 +754,7 @@ fn fixed_fixed(c: &mut Criterion) {
                     .map(|(row, entry)| (RelationId::from(row), *entry))
                     .collect();
                 let mut compacted = original.clone();
-                let compaction = compacted.tracked_remove(&ids);
+                let compaction = compacted.tracked_remove(ids.clone());
                 let rebuilt = FixedFixedBirelationSet::new(rebuild_rows(
                     compacted.clone().into_entries(),
                     &compaction,
@@ -733,7 +769,7 @@ fn fixed_fixed(c: &mut Criterion) {
                     let setup = || {
                         if retained {
                             let mut relations = original.clone();
-                            relations.remove(&ids);
+                            relations.remove(ids.clone());
                             relations
                         } else {
                             compacted.clone()
@@ -813,7 +849,26 @@ fn fixed_fixed(c: &mut Criterion) {
                     })
                     .cloned()
                     .collect();
-                let compacted = original.compact(&compaction);
+                let selected = original
+                    .ids()
+                    .filter(|&id| {
+                        original
+                            .participants_1(id)
+                            .iter()
+                            .map(|p| p.refs())
+                            .chain(original.participants_2(id).iter().map(|p| p.refs()))
+                            .any(|refs| {
+                                refs.node
+                                    .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                    || refs
+                                        .edge
+                                        .is_some_and(|id| compaction.edges().compact(id).is_none())
+                            })
+                    })
+                    .collect();
+                let mut compacted = original.clone();
+                compacted.remove(selected);
+                compacted.compact_participants(&compaction);
                 let rebuild = |relations: FixedFixedBirelationSet<NodeId, 4, EdgeId, 4, usize>| {
                     FixedFixedBirelationSet::new(
                         relations
@@ -931,7 +986,7 @@ fn fixed_var(c: &mut Criterion) {
                         .map(|(row, entry)| (RelationId::from(row), entry.clone()))
                         .collect();
                     let mut compacted = original.clone();
-                    let compaction = compacted.tracked_remove(&ids);
+                    let compaction = compacted.tracked_remove(ids.clone());
                     let rebuilt = FixedVarBirelationSet::new(rebuild_rows(
                         compacted.clone().into_entries(),
                         &compaction,
@@ -946,7 +1001,7 @@ fn fixed_var(c: &mut Criterion) {
                         let setup = || {
                             if retained {
                                 let mut relations = original.clone();
-                                relations.remove(&ids);
+                                relations.remove(ids.clone());
                                 relations
                             } else {
                                 compacted.clone()
@@ -1027,7 +1082,26 @@ fn fixed_var(c: &mut Criterion) {
                         })
                         .cloned()
                         .collect();
-                    let compacted = original.compact(&compaction);
+                    let selected = original
+                        .ids()
+                        .filter(|&id| {
+                            original
+                                .participants_1(id)
+                                .iter()
+                                .map(|p| p.refs())
+                                .chain(original.participants_2(id).iter().map(|p| p.refs()))
+                                .any(|refs| {
+                                    refs.node
+                                        .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                        || refs.edge.is_some_and(|id| {
+                                            compaction.edges().compact(id).is_none()
+                                        })
+                                })
+                        })
+                        .collect();
+                    let mut compacted = original.clone();
+                    compacted.remove(selected);
+                    compacted.compact_participants(&compaction);
                     let rebuild = |relations: FixedVarBirelationSet<NodeId, 4, EdgeId, usize>| {
                         FixedVarBirelationSet::new(
                             relations
@@ -1151,7 +1225,7 @@ fn var_var(c: &mut Criterion) {
                         .map(|(row, entry)| (RelationId::from(row), entry.clone()))
                         .collect();
                     let mut compacted = original.clone();
-                    let compaction = compacted.tracked_remove(&ids);
+                    let compaction = compacted.tracked_remove(ids.clone());
                     let rebuilt = VarVarBirelationSet::new(rebuild_rows(
                         compacted.clone().into_entries(),
                         &compaction,
@@ -1168,7 +1242,7 @@ fn var_var(c: &mut Criterion) {
                         let setup = || {
                             if retained {
                                 let mut relations = original.clone();
-                                relations.remove(&ids);
+                                relations.remove(ids.clone());
                                 relations
                             } else {
                                 compacted.clone()
@@ -1249,7 +1323,26 @@ fn var_var(c: &mut Criterion) {
                         })
                         .cloned()
                         .collect();
-                    let compacted = original.compact(&compaction);
+                    let selected = original
+                        .ids()
+                        .filter(|&id| {
+                            original
+                                .participants_1(id)
+                                .iter()
+                                .map(|p| p.refs())
+                                .chain(original.participants_2(id).iter().map(|p| p.refs()))
+                                .any(|refs| {
+                                    refs.node
+                                        .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                        || refs.edge.is_some_and(|id| {
+                                            compaction.edges().compact(id).is_none()
+                                        })
+                                })
+                        })
+                        .collect();
+                    let mut compacted = original.clone();
+                    compacted.remove(selected);
+                    compacted.compact_participants(&compaction);
                     let rebuild = |relations: VarVarBirelationSet<NodeId, EdgeId, usize>| {
                         VarVarBirelationSet::new(
                             relations
@@ -1385,67 +1478,138 @@ fn sequence(c: &mut Criterion) {
                             .then_some((id, pair))
                     })
                     .collect();
-                let compaction = graph.tracked_remove_cascading(&nodes, &edges);
-                let (compacted, fixed_compaction) = fixed.tracked_compact(&compaction);
-                let entries = fixed.into_entries();
-                let fixed_saved: Vec<_> = fixed_compaction
-                    .removed()
+                let compaction = graph.tracked_remove_cascading(nodes, edges);
+                let selected: Vec<_> = fixed
+                    .ids()
+                    .filter(|&id| {
+                        fixed.participants(id).iter().map(|p| p.refs()).any(|refs| {
+                            refs.node
+                                .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                || refs
+                                    .edge
+                                    .is_some_and(|id| compaction.edges().compact(id).is_none())
+                        })
+                    })
+                    .collect();
+                let fixed_saved: Vec<_> = selected
+                    .iter()
+                    .rev()
+                    .map(|id| (*id, *fixed.participants(*id), *fixed.data(*id)))
+                    .collect();
+                let fixed_compaction = fixed.tracked_remove(selected);
+                fixed.compact_participants(&compaction);
+                let selected: Vec<_> = var
+                    .ids()
+                    .filter(|&id| {
+                        var.participants(id).iter().map(|p| p.refs()).any(|refs| {
+                            refs.node
+                                .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                || refs
+                                    .edge
+                                    .is_some_and(|id| compaction.edges().compact(id).is_none())
+                        })
+                    })
+                    .collect();
+                let var_saved: Vec<_> = selected
+                    .iter()
+                    .rev()
+                    .map(|id| (*id, var.participants(*id).to_vec(), *var.data(*id)))
+                    .collect();
+                let var_compaction = var.tracked_remove(selected);
+                var.compact_participants(&compaction);
+                let selected: Vec<_> = fixed_fixed
+                    .ids()
+                    .filter(|&id| {
+                        fixed_fixed
+                            .participants_1(id)
+                            .iter()
+                            .map(|p| p.refs())
+                            .chain(fixed_fixed.participants_2(id).iter().map(|p| p.refs()))
+                            .any(|refs| {
+                                refs.node
+                                    .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                    || refs
+                                        .edge
+                                        .is_some_and(|id| compaction.edges().compact(id).is_none())
+                            })
+                    })
+                    .collect();
+                let fixed_fixed_saved: Vec<_> = selected
                     .iter()
                     .rev()
                     .map(|id| {
-                        let (first, data) = &entries[id.index()];
-                        (*id, *first, *data)
+                        (
+                            *id,
+                            *fixed_fixed.participants_1(*id),
+                            *fixed_fixed.participants_2(*id),
+                            *fixed_fixed.data(*id),
+                        )
                     })
                     .collect();
-                fixed = compacted;
-                let (compacted, var_compaction) = var.tracked_compact(&compaction);
-                let entries = var.into_entries();
-                let var_saved: Vec<_> = var_compaction
-                    .removed()
+                let fixed_fixed_compaction = fixed_fixed.tracked_remove(selected);
+                fixed_fixed.compact_participants(&compaction);
+                let selected: Vec<_> = fixed_var
+                    .ids()
+                    .filter(|&id| {
+                        fixed_var
+                            .participants_1(id)
+                            .iter()
+                            .map(|p| p.refs())
+                            .chain(fixed_var.participants_2(id).iter().map(|p| p.refs()))
+                            .any(|refs| {
+                                refs.node
+                                    .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                    || refs
+                                        .edge
+                                        .is_some_and(|id| compaction.edges().compact(id).is_none())
+                            })
+                    })
+                    .collect();
+                let fixed_var_saved: Vec<_> = selected
                     .iter()
                     .rev()
                     .map(|id| {
-                        let (first, data) = &entries[id.index()];
-                        (*id, first.clone(), *data)
+                        (
+                            *id,
+                            *fixed_var.participants_1(*id),
+                            fixed_var.participants_2(*id).to_vec(),
+                            *fixed_var.data(*id),
+                        )
                     })
                     .collect();
-                var = compacted;
-                let (compacted, fixed_fixed_compaction) = fixed_fixed.tracked_compact(&compaction);
-                let entries = fixed_fixed.into_entries();
-                let fixed_fixed_saved: Vec<_> = fixed_fixed_compaction
-                    .removed()
+                let fixed_var_compaction = fixed_var.tracked_remove(selected);
+                fixed_var.compact_participants(&compaction);
+                let selected: Vec<_> = var_var
+                    .ids()
+                    .filter(|&id| {
+                        var_var
+                            .participants_1(id)
+                            .iter()
+                            .map(|p| p.refs())
+                            .chain(var_var.participants_2(id).iter().map(|p| p.refs()))
+                            .any(|refs| {
+                                refs.node
+                                    .is_some_and(|id| compaction.nodes().compact(id).is_none())
+                                    || refs
+                                        .edge
+                                        .is_some_and(|id| compaction.edges().compact(id).is_none())
+                            })
+                    })
+                    .collect();
+                let var_var_saved: Vec<_> = selected
                     .iter()
                     .rev()
                     .map(|id| {
-                        let (first, second, data) = &entries[id.index()];
-                        (*id, *first, *second, *data)
+                        (
+                            *id,
+                            var_var.participants_1(*id).to_vec(),
+                            var_var.participants_2(*id).to_vec(),
+                            *var_var.data(*id),
+                        )
                     })
                     .collect();
-                fixed_fixed = compacted;
-                let (compacted, fixed_var_compaction) = fixed_var.tracked_compact(&compaction);
-                let entries = fixed_var.into_entries();
-                let fixed_var_saved: Vec<_> = fixed_var_compaction
-                    .removed()
-                    .iter()
-                    .rev()
-                    .map(|id| {
-                        let (first, second, data) = &entries[id.index()];
-                        (*id, *first, second.clone(), *data)
-                    })
-                    .collect();
-                fixed_var = compacted;
-                let (compacted, var_var_compaction) = var_var.tracked_compact(&compaction);
-                let entries = var_var.into_entries();
-                let var_var_saved: Vec<_> = var_var_compaction
-                    .removed()
-                    .iter()
-                    .rev()
-                    .map(|id| {
-                        let (first, second, data) = &entries[id.index()];
-                        (*id, first.clone(), second.clone(), *data)
-                    })
-                    .collect();
-                var_var = compacted;
+                let var_var_compaction = var_var.tracked_remove(selected);
+                var_var.compact_participants(&compaction);
                 history.push((
                     compaction,
                     saved_edges,

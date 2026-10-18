@@ -3839,7 +3839,7 @@ fn restoration_entries(
 
 #[rstest]
 #[case::mixed(
-    vec![AtomId(1)], vec![BondId(5)], (vec![0, 2, 3, 4, 5, 6, 7], vec![2, 3, 4]),
+    vec![AtomId(1)], vec![BondId(0), BondId(1), BondId(5)], (vec![0, 2, 3, 4, 5, 6, 7], vec![2, 3, 4]),
     Graph::new(7, &[[1, 2], [3, 4], [4, 5]]),
     GraphCompaction::new(
         Compaction::new(8, vec![NodeId(1)]).unwrap(),
@@ -3847,7 +3847,7 @@ fn restoration_entries(
     ),
 )]
 #[case::all(
-    (0..8).map(AtomId).collect(), vec![], (vec![], vec![]), Graph::new(0, &[]),
+    (0..8).map(AtomId).collect(), (0..6).map(BondId).collect(), (vec![], vec![]), Graph::new(0, &[]),
     GraphCompaction::new(
         Compaction::new(8, (0..8).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..6).map(EdgeId).collect()).unwrap(),
@@ -3907,14 +3907,21 @@ fn test_molecule_remove_topology_identity(restoration_entries: MoleculeEntries) 
 #[case::first(vec![DativeBondId(0)], vec![1])]
 #[case::last(vec![DativeBondId(1)], vec![0])]
 #[case::all(vec![DativeBondId(1), DativeBondId(0)], vec![])]
+#[case::all_repeated(vec![DativeBondId(1), DativeBondId(0), DativeBondId(1)], vec![])]
+#[case::partial_repeated(vec![DativeBondId(1), DativeBondId(1), DativeBondId(1)], vec![0])]
 fn test_molecule_remove_dative_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<DativeBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.dative = survivors
         .iter()
@@ -3936,14 +3943,21 @@ fn test_molecule_remove_dative_bonds(
 #[case::first(vec![AromaticSystemId(0)], vec![1])]
 #[case::last(vec![AromaticSystemId(1)], vec![0])]
 #[case::all(vec![AromaticSystemId(1), AromaticSystemId(0)], vec![])]
+#[case::all_repeated(vec![AromaticSystemId(1), AromaticSystemId(0), AromaticSystemId(1)], vec![])]
+#[case::partial_repeated(vec![AromaticSystemId(1), AromaticSystemId(1), AromaticSystemId(1)], vec![0])]
 fn test_molecule_remove_aromatic_systems(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<AromaticSystemId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.aromatic = survivors
         .iter()
@@ -3965,14 +3979,21 @@ fn test_molecule_remove_aromatic_systems(
 #[case::first(vec![MulticenterBondId(0)], vec![1])]
 #[case::last(vec![MulticenterBondId(1)], vec![0])]
 #[case::all(vec![MulticenterBondId(1), MulticenterBondId(0)], vec![])]
+#[case::all_repeated(vec![MulticenterBondId(1), MulticenterBondId(0), MulticenterBondId(1)], vec![])]
+#[case::partial_repeated(vec![MulticenterBondId(1), MulticenterBondId(1), MulticenterBondId(1)], vec![0])]
 fn test_molecule_remove_multicenter_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<MulticenterBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.multicenter = survivors
         .iter()
@@ -3994,14 +4015,21 @@ fn test_molecule_remove_multicenter_bonds(
 #[case::first(vec![NoncovalentBondId(0)], vec![1])]
 #[case::last(vec![NoncovalentBondId(1)], vec![0])]
 #[case::all(vec![NoncovalentBondId(1), NoncovalentBondId(0)], vec![])]
+#[case::all_repeated(vec![NoncovalentBondId(1), NoncovalentBondId(0), NoncovalentBondId(1)], vec![])]
+#[case::partial_repeated(vec![NoncovalentBondId(1), NoncovalentBondId(1), NoncovalentBondId(1)], vec![0])]
 fn test_molecule_remove_noncovalent_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<NoncovalentBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.noncovalent = survivors
         .iter()
@@ -4023,14 +4051,21 @@ fn test_molecule_remove_noncovalent_bonds(
 #[case::first(vec![StereoAtomId(0)], vec![1])]
 #[case::last(vec![StereoAtomId(1)], vec![0])]
 #[case::all(vec![StereoAtomId(1), StereoAtomId(0)], vec![])]
+#[case::all_repeated(vec![StereoAtomId(1), StereoAtomId(0), StereoAtomId(1)], vec![])]
+#[case::partial_repeated(vec![StereoAtomId(1), StereoAtomId(1), StereoAtomId(1)], vec![0])]
 fn test_molecule_remove_stereo_atoms(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<StereoAtomId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.stereo_atoms = survivors
         .iter()
@@ -4052,14 +4087,21 @@ fn test_molecule_remove_stereo_atoms(
 #[case::first(vec![StereoBondId(0)], vec![1])]
 #[case::last(vec![StereoBondId(1)], vec![0])]
 #[case::all(vec![StereoBondId(1), StereoBondId(0)], vec![])]
+#[case::all_repeated(vec![StereoBondId(1), StereoBondId(0), StereoBondId(1)], vec![])]
+#[case::partial_repeated(vec![StereoBondId(1), StereoBondId(1), StereoBondId(1)], vec![0])]
 fn test_molecule_remove_stereo_bonds(
     restoration_entries: MoleculeEntries,
     #[case] ids: Vec<StereoBondId>,
     #[case] survivors: Vec<usize>,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
     let original = Molecule::from_entries(restoration_entries.clone());
-    let mut molecule = original.clone();
+    let mut molecule = if shared {
+        original.clone()
+    } else {
+        Molecule::from_entries(restoration_entries.clone())
+    };
     let mut expected = restoration_entries.clone();
     expected.stereo_bonds = survivors
         .iter()
@@ -4078,7 +4120,48 @@ fn test_molecule_remove_stereo_bonds(
 }
 
 #[rstest]
-fn test_molecule_compact_dative_bonds(restoration_entries: MoleculeEntries) {
+fn test_molecule_compact_dative_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_dative_bonds(&[DativeBondId(0)]),
+        Compaction::new(2, vec![DativeBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.dative.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.dative[0].0 = vec![AtomId(2), AtomId(0)];
+    expected.dative[0].1 = AtomId(3);
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_dative_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [2, 0, 3].contains(&atom) {
+            vec![DativeBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .dative_bonds
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_dative_bond_topology_ids_removal(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4093,15 +4176,58 @@ fn test_molecule_compact_dative_bonds(restoration_entries: MoleculeEntries) {
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
     assert_eq!(
-        molecule.compact_dative_bonds(&topology),
+        molecule.dative_bonds.tracked_remove(&[DativeBondId(0)]),
         Compaction::new(2, vec![DativeBondId(0)]).unwrap()
     );
+    molecule.compact_dative_bond_topology_ids(&topology);
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_aromatic_systems(restoration_entries: MoleculeEntries) {
+fn test_molecule_compact_aromatic_system_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_aromatic_systems(&[AromaticSystemId(0)]),
+        Compaction::new(2, vec![AromaticSystemId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.aromatic.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.aromatic[0].0 = vec![AtomId(2), AtomId(0), AtomId(1)];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_aromatic_system_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [2, 0, 1].contains(&atom) {
+            vec![AromaticSystemId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .aromatic_systems
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_aromatic_system_topology_ids_removal(
+    restoration_entries: MoleculeEntries,
+) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4114,15 +4240,60 @@ fn test_molecule_compact_aromatic_systems(restoration_entries: MoleculeEntries) 
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
     assert_eq!(
-        molecule.compact_aromatic_systems(&topology),
+        molecule
+            .aromatic_systems
+            .tracked_remove(&[AromaticSystemId(0)]),
         Compaction::new(2, vec![AromaticSystemId(0)]).unwrap()
     );
+    molecule.compact_aromatic_system_topology_ids(&topology);
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_multicenter_bonds(restoration_entries: MoleculeEntries) {
+fn test_molecule_compact_multicenter_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_multicenter_bonds(&[MulticenterBondId(0)]),
+        Compaction::new(2, vec![MulticenterBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.multicenter.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.multicenter[0].0 = vec![AtomId(1), AtomId(2), AtomId(0)];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_multicenter_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [1, 2, 0].contains(&atom) {
+            vec![MulticenterBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .multicenter_bonds
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_multicenter_bond_topology_ids_removal(
+    restoration_entries: MoleculeEntries,
+) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4135,15 +4306,60 @@ fn test_molecule_compact_multicenter_bonds(restoration_entries: MoleculeEntries)
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
     assert_eq!(
-        molecule.compact_multicenter_bonds(&topology),
+        molecule
+            .multicenter_bonds
+            .tracked_remove(&[MulticenterBondId(0)]),
         Compaction::new(2, vec![MulticenterBondId(0)]).unwrap()
     );
+    molecule.compact_multicenter_bond_topology_ids(&topology);
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_noncovalent_bonds(restoration_entries: MoleculeEntries) {
+fn test_molecule_compact_noncovalent_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_noncovalent_bonds(&[NoncovalentBondId(0)]),
+        Compaction::new(2, vec![NoncovalentBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.noncovalent.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.noncovalent[0].0 = [AtomId(3), AtomId(0)];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_noncovalent_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [3, 0].contains(&atom) {
+            vec![NoncovalentBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .noncovalent_bonds
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_noncovalent_bond_topology_ids_removal(
+    restoration_entries: MoleculeEntries,
+) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4156,15 +4372,64 @@ fn test_molecule_compact_noncovalent_bonds(restoration_entries: MoleculeEntries)
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
     assert_eq!(
-        molecule.compact_noncovalent_bonds(&topology),
+        molecule
+            .noncovalent_bonds
+            .tracked_remove(&[NoncovalentBondId(0)]),
         Compaction::new(2, vec![NoncovalentBondId(0)]).unwrap()
     );
+    molecule.compact_noncovalent_bond_topology_ids(&topology);
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_stereo_atoms(restoration_entries: MoleculeEntries) {
+fn test_molecule_compact_stereo_atom_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_stereo_atoms(&[StereoAtomId(0)]),
+        Compaction::new(2, vec![StereoAtomId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.stereo_atoms.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.stereo_atoms[0].0 = AtomId(1);
+    expected.stereo_atoms[0].1 = vec![
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    ];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_stereo_atom_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [0, 1, 2].contains(&atom) {
+            vec![StereoAtomId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .stereo_atoms
+                .incident_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_stereo_atom_topology_ids_removal(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4179,15 +4444,76 @@ fn test_molecule_compact_stereo_atoms(restoration_entries: MoleculeEntries) {
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
     assert_eq!(
-        molecule.compact_stereo_atoms(&topology),
+        molecule.stereo_atoms.tracked_remove(&[StereoAtomId(0)]),
         Compaction::new(2, vec![StereoAtomId(0)]).unwrap()
     );
+    molecule.compact_stereo_atom_topology_ids(&topology);
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_stereo_bonds(restoration_entries: MoleculeEntries) {
+fn test_molecule_compact_stereo_bond_topology_ids(
+    restoration_entries: MoleculeEntries,
+    #[values(false, true)] shared: bool,
+) {
+    let mut molecule = Molecule::from_entries(restoration_entries.clone());
+    assert_eq!(
+        molecule.tracked_remove_stereo_bonds(&[StereoBondId(0)]),
+        Compaction::new(2, vec![StereoBondId(0)]).unwrap(),
+    );
+    let mut source = restoration_entries;
+    source.stereo_bonds.remove(0);
+    let original = shared.then(|| molecule.clone());
+    let mut expected = source.clone();
+    expected.stereo_bonds[0].0 = BondId(1);
+    expected.stereo_bonds[0].1 = vec![
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    ];
+    let topology = GraphCompaction::new(
+        Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
+        Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
+    );
+    molecule.compact_stereo_bond_topology_ids(&topology);
+    assert_eq!(molecule, Molecule::from_entries(expected));
+    for atom in 0..8 {
+        let incidence = if [0, 1, 2, 3].contains(&atom) {
+            vec![StereoBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .stereo_bonds
+                .incident_to_atom_ids(AtomId(atom))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    for bond in 0..6 {
+        let incidence = if bond == 1 {
+            vec![StereoBondId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            molecule
+                .stereo_bonds
+                .incident_to_bond_ids(BondId(bond))
+                .collect::<Vec<_>>(),
+            incidence
+        );
+    }
+    if let Some(original) = original {
+        assert_eq!(original, Molecule::from_entries(source));
+    }
+}
+
+#[rstest]
+fn test_molecule_compact_stereo_bond_topology_ids_removal(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4202,9 +4528,10 @@ fn test_molecule_compact_stereo_bonds(restoration_entries: MoleculeEntries) {
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
     assert_eq!(
-        molecule.compact_stereo_bonds(&topology),
+        molecule.stereo_bonds.tracked_remove(&[StereoBondId(0)]),
         Compaction::new(2, vec![StereoBondId(0)]).unwrap()
     );
+    molecule.compact_stereo_bond_topology_ids(&topology);
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
@@ -4325,7 +4652,7 @@ fn test_molecule_restore_topology(
 ) {
     let mut molecule = Molecule::from_entries(restoration_entries.clone());
     let mut expected_entries = restoration_entries.clone();
-    let compaction = molecule.graph.tracked_remove_cascading(&nodes, &edges);
+    let compaction = molecule.graph.tracked_remove_cascading(nodes, edges);
     let atoms = compaction
         .nodes()
         .removed()
@@ -4479,11 +4806,13 @@ fn test_molecule_restore_dative_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.compact_dative_bonds(&topology);
+    compacted.dative_bonds.remove(&[DativeBondId(0)]);
+    compacted.compact_dative_bond_topology_ids(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.compact_dative_bonds(&topology);
+    molecule.dative_bonds.remove(&[DativeBondId(0)]);
+    molecule.compact_dative_bond_topology_ids(&topology);
     expected.dative_bonds.remove(&[DativeBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_dative_bond_topology_ids(&topology);
@@ -4552,11 +4881,13 @@ fn test_molecule_restore_aromatic_system_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.compact_aromatic_systems(&topology);
+    compacted.aromatic_systems.remove(&[AromaticSystemId(0)]);
+    compacted.compact_aromatic_system_topology_ids(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.compact_aromatic_systems(&topology);
+    molecule.aromatic_systems.remove(&[AromaticSystemId(0)]);
+    molecule.compact_aromatic_system_topology_ids(&topology);
     expected.aromatic_systems.remove(&[AromaticSystemId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_aromatic_system_topology_ids(&topology);
@@ -4625,11 +4956,13 @@ fn test_molecule_restore_multicenter_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.compact_multicenter_bonds(&topology);
+    compacted.multicenter_bonds.remove(&[MulticenterBondId(0)]);
+    compacted.compact_multicenter_bond_topology_ids(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.compact_multicenter_bonds(&topology);
+    molecule.multicenter_bonds.remove(&[MulticenterBondId(0)]);
+    molecule.compact_multicenter_bond_topology_ids(&topology);
     expected.multicenter_bonds.remove(&[MulticenterBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_multicenter_bond_topology_ids(&topology);
@@ -4698,11 +5031,13 @@ fn test_molecule_restore_noncovalent_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.compact_noncovalent_bonds(&topology);
+    compacted.noncovalent_bonds.remove(&[NoncovalentBondId(0)]);
+    compacted.compact_noncovalent_bond_topology_ids(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.compact_noncovalent_bonds(&topology);
+    molecule.noncovalent_bonds.remove(&[NoncovalentBondId(0)]);
+    molecule.compact_noncovalent_bond_topology_ids(&topology);
     expected.noncovalent_bonds.remove(&[NoncovalentBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_noncovalent_bond_topology_ids(&topology);
@@ -4769,11 +5104,13 @@ fn test_molecule_restore_stereo_atom_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.compact_stereo_atoms(&topology);
+    compacted.stereo_atoms.remove(&[StereoAtomId(0)]);
+    compacted.compact_stereo_atom_topology_ids(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.compact_stereo_atoms(&topology);
+    molecule.stereo_atoms.remove(&[StereoAtomId(0)]);
+    molecule.compact_stereo_atom_topology_ids(&topology);
     expected.stereo_atoms.remove(&[StereoAtomId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_stereo_atom_topology_ids(&topology);
@@ -4840,11 +5177,13 @@ fn test_molecule_restore_stereo_bond_topology_ids(
 ) {
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
-    let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
+    let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.compact_stereo_bonds(&topology);
+    compacted.stereo_bonds.remove(&[StereoBondId(0)]);
+    compacted.compact_stereo_bond_topology_ids(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.compact_stereo_bonds(&topology);
+    molecule.stereo_bonds.remove(&[StereoBondId(0)]);
+    molecule.compact_stereo_bond_topology_ids(&topology);
     expected.stereo_bonds.remove(&[StereoBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_stereo_bond_topology_ids(&topology);
@@ -4873,7 +5212,7 @@ fn test_molecule_edits(#[from(rich_molecule)] molecule: Molecule) {
     let sub = molecule.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
     assert_eq!(
         molecule.edits(&sub),
-        Edits::from_iter([Edit::RemoveTopology {
+        Edits::from_iter([Edit::RemoveTopologyCascading {
             atoms: vec![AtomHandle::Id(AtomId(3))],
             bonds: vec![BondHandle::Id(BondId(2))],
         }])
@@ -4963,7 +5302,7 @@ fn test_molecule_edit_into_unwind(#[from(rich_molecule)] mut molecule: Molecule)
     let original = molecule.clone();
     let error = catch_unwind(AssertUnwindSafe(|| {
         molecule.edit_into(|editor| -> Result<(), MoleculeApplyError> {
-            editor.remove_topology(&[AtomId(0)], &[]);
+            editor.remove_topology_cascading(&[AtomId(0)], &[]);
             panic!("scoped editing interrupted");
         })
     }))
@@ -5004,7 +5343,7 @@ fn test_molecule_edit_into_repair() {
                 atoms: [AtomId(0), AtomId(1)]
             })
         );
-        editor.remove_topology(&[], &[BondId(0)]);
+        editor.remove_topology(&[], &[BondId(0)]).unwrap();
         let mut next = Edits::new();
         next.add_atom(AtomForm::from_element(Element::O));
         editor.apply(next)?;
@@ -5133,7 +5472,7 @@ fn test_molecule_tracked_apply(
     let source = Molecule::from_entries(entries);
     let mut edits = Edits::new();
     if remove_all {
-        edits.remove_topology(
+        edits.remove_topology_cascading(
             (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
             vec![],
         );
@@ -5265,7 +5604,7 @@ fn test_molecule_tracked_transact(
     let mut molecule = before.clone();
     let mut plain = before.clone();
     let mut edits = Edits::new();
-    edits.remove_topology(
+    edits.remove_topology_cascading(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
@@ -5318,7 +5657,7 @@ fn test_molecule_tracked_transact_error(
     let mut molecule = before.clone();
     let mut plain = before.clone();
     let mut edits = Edits::new();
-    edits.remove_topology(
+    edits.remove_topology_cascading(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
@@ -5348,7 +5687,7 @@ fn test_molecule_tracked_transact_error(
 fn test_molecule_editor_tracked_apply() {
     let source = mol_dsl!(r#"{:atoms ["C" "N" "O"]}"#);
     let mut editor = source.edit();
-    editor.remove_topology(&[AtomId(0)], &[]);
+    editor.remove_topology(&[AtomId(0)], &[]).unwrap();
     editor.add_atom(AtomForm::from_element(Element::F));
     let mut edits = Edits::new();
     edits.remove_atom(AtomHandle::Id(AtomId(0)));
@@ -5398,14 +5737,24 @@ fn test_molecule_editor_tracked_apply_transient() {
             atoms: [AtomId(0), AtomId(1)]
         })
     );
-    plain.remove_topology(&[], &[BondId(1)]);
-    editor.remove_topology(&[], &[BondId(1)]);
+    plain.remove_topology(&[], &[BondId(1)]).unwrap();
+    editor.remove_topology(&[], &[BondId(1)]).unwrap();
     assert_eq!(editor.finish(), plain.finish());
 }
 
 #[rstest]
+#[case::empty_batch(None)]
+#[case::topology(Some(Edit::RemoveTopology { atoms: vec![], bonds: vec![] }))]
+#[case::topology_cascading(Some(Edit::RemoveTopologyCascading { atoms: vec![], bonds: vec![] }))]
+#[case::dative(Some(Edit::RemoveDativeBonds { removes: vec![] }))]
+#[case::aromatic(Some(Edit::RemoveAromaticSystems { removes: vec![] }))]
+#[case::multicenter(Some(Edit::RemoveMulticenterBonds { removes: vec![] }))]
+#[case::noncovalent(Some(Edit::RemoveNoncovalentBonds { removes: vec![] }))]
+#[case::stereo_atoms(Some(Edit::RemoveStereoAtoms { removes: vec![] }))]
+#[case::stereo_bonds(Some(Edit::RemoveStereoBonds { removes: vec![] }))]
 fn test_molecule_editor_tracked_apply_identity(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] edit: Option<Edit>,
 ) {
     let source = Molecule::from_entries(entries);
     let mut editor = source.clone().edit();
@@ -5438,7 +5787,7 @@ fn test_molecule_editor_tracked_apply_identity(
         Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
         Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1).unwrap(),
     );
-    let actual = editor.tracked_apply(Edits::new()).unwrap();
+    let actual = editor.tracked_apply(Edits::from_iter(edit)).unwrap();
     assert_eq!(actual, witness);
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));
@@ -5482,7 +5831,7 @@ fn test_molecule_editor_remove_topology_shared_storage(
 ) {
     let source = Molecule::from_entries(constrained_molecule_entries.clone());
     let mut editor = source.clone().edit();
-    editor.remove_topology(&[AtomId(0)], &[]);
+    editor.remove_topology(&[AtomId(0)], &[]).unwrap();
     let expected = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::O),
@@ -5535,14 +5884,14 @@ fn test_molecule_editor_finish_additions(#[from(equiv_molecule_entries)] entries
 fn test_molecule_editor_finish_session() {
     let source = mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}"#);
     let mut editor = source.edit();
-    editor.remove_topology(&[AtomId(1)], &[]);
+    editor.remove_topology_cascading(&[AtomId(1)], &[]);
     assert_eq!(
         editor.probe(),
         Ok(&mol_dsl!(r#"{:atoms ["C" "O" "F"] :bonds [[1 2 "1"]]}"#))
     );
     let added = editor.add_atom(AtomForm::from_element(Element::Cl));
     editor.add_bond(AtomId(2), added, BondForm::from_order(1));
-    editor.remove_topology(&[AtomId(0)], &[]);
+    editor.remove_topology(&[AtomId(0)], &[]).unwrap();
     let expected = mol_dsl!(r#"{:atoms ["O" "F" "Cl"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
     assert_eq!(editor.probe(), Ok(&expected));
     assert_eq!(editor.finish(), Ok(expected));
@@ -5556,7 +5905,7 @@ fn test_molecule_editor_probe_error(#[case] expected: MoleculeIntegrityError) {
     let added = editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
     assert_eq!(editor.probe(), Err(expected.clone()));
     assert_eq!(editor.clone().finish(), Err(expected));
-    editor.remove_topology(&[], &[added]);
+    editor.remove_topology(&[], &[added]).unwrap();
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));
 }
@@ -5601,7 +5950,7 @@ fn test_transaction_rollback_topology(#[from(equiv_molecule_entries)] entries: M
     let source = Molecule::from_entries(entries);
     let mut molecule = source.clone();
     let mut edits = Edits::new();
-    edits.remove_topology(
+    edits.remove_topology_cascading(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
@@ -5903,9 +6252,9 @@ fn test_molecule_editor_tracked_remove_topology_identity() {
     let mut plain = Molecule::new().edit();
     let mut tracked = Molecule::new().edit();
 
-    plain.remove_topology(&[], &[]);
+    plain.remove_topology(&[], &[]).unwrap();
     assert_eq!(
-        tracked.tracked_remove_topology(&[], &[]),
+        tracked.tracked_remove_topology(&[], &[]).unwrap(),
         MoleculeCompaction::empty()
     );
     assert_eq!(plain.finish().unwrap(), Molecule::new());
@@ -5918,6 +6267,7 @@ fn test_molecule_editor_tracked_remove_topology_identity() {
 #[case::middle(vec![DativeBondId(1)], vec![DativeBondId(1)])]
 #[case::unsorted_repeated(vec![DativeBondId(2), DativeBondId(0), DativeBondId(2)], vec![DativeBondId(0), DativeBondId(2)])]
 #[case::all(vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)], vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)])]
+#[case::all_repeated(vec![DativeBondId(2), DativeBondId(0), DativeBondId(2), DativeBondId(1)], vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)])]
 fn test_molecule_editor_tracked_remove_dative_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<DativeBondId>,
@@ -5950,7 +6300,7 @@ fn test_molecule_editor_tracked_remove_dative_bonds(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_dative_bonds(&ids);
     let compaction = tracked.tracked_remove_dative_bonds(&ids);
@@ -5958,6 +6308,10 @@ fn test_molecule_editor_tracked_remove_dative_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -5968,8 +6322,15 @@ fn test_molecule_editor_tracked_remove_dative_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: DativeBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_dative_bonds(&[id]);
     } else {
@@ -5983,6 +6344,7 @@ fn test_molecule_editor_tracked_remove_dative_bonds_error(
 #[case::middle(vec![AromaticSystemId(1)], vec![AromaticSystemId(1)])]
 #[case::unsorted_repeated(vec![AromaticSystemId(2), AromaticSystemId(0), AromaticSystemId(2)], vec![AromaticSystemId(0), AromaticSystemId(2)])]
 #[case::all(vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)], vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)])]
+#[case::all_repeated(vec![AromaticSystemId(2), AromaticSystemId(0), AromaticSystemId(2), AromaticSystemId(1)], vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)])]
 fn test_molecule_editor_tracked_remove_aromatic_systems(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<AromaticSystemId>,
@@ -6015,7 +6377,7 @@ fn test_molecule_editor_tracked_remove_aromatic_systems(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_aromatic_systems(&ids);
     let compaction = tracked.tracked_remove_aromatic_systems(&ids);
@@ -6023,6 +6385,10 @@ fn test_molecule_editor_tracked_remove_aromatic_systems(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6033,8 +6399,15 @@ fn test_molecule_editor_tracked_remove_aromatic_systems_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: AromaticSystemId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_aromatic_systems(&[id]);
     } else {
@@ -6048,6 +6421,7 @@ fn test_molecule_editor_tracked_remove_aromatic_systems_error(
 #[case::middle(vec![MulticenterBondId(1)], vec![MulticenterBondId(1)])]
 #[case::unsorted_repeated(vec![MulticenterBondId(2), MulticenterBondId(0), MulticenterBondId(2)], vec![MulticenterBondId(0), MulticenterBondId(2)])]
 #[case::all(vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)], vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)])]
+#[case::all_repeated(vec![MulticenterBondId(2), MulticenterBondId(0), MulticenterBondId(2), MulticenterBondId(1)], vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)])]
 fn test_molecule_editor_tracked_remove_multicenter_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<MulticenterBondId>,
@@ -6080,7 +6454,7 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_multicenter_bonds(&ids);
     let compaction = tracked.tracked_remove_multicenter_bonds(&ids);
@@ -6088,6 +6462,10 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6098,8 +6476,15 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: MulticenterBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_multicenter_bonds(&[id]);
     } else {
@@ -6113,6 +6498,7 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds_error(
 #[case::middle(vec![NoncovalentBondId(1)], vec![NoncovalentBondId(1)])]
 #[case::unsorted_repeated(vec![NoncovalentBondId(2), NoncovalentBondId(0), NoncovalentBondId(2)], vec![NoncovalentBondId(0), NoncovalentBondId(2)])]
 #[case::all(vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
+#[case::all_repeated(vec![NoncovalentBondId(2), NoncovalentBondId(0), NoncovalentBondId(2), NoncovalentBondId(1)], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
 fn test_molecule_editor_tracked_remove_noncovalent_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<NoncovalentBondId>,
@@ -6145,7 +6531,7 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_noncovalent_bonds(&ids);
     let compaction = tracked.tracked_remove_noncovalent_bonds(&ids);
@@ -6153,6 +6539,10 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6163,8 +6553,15 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: NoncovalentBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_noncovalent_bonds(&[id]);
     } else {
@@ -6178,6 +6575,7 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds_error(
 #[case::middle(vec![StereoAtomId(1)], vec![StereoAtomId(1)])]
 #[case::unsorted_repeated(vec![StereoAtomId(2), StereoAtomId(0), StereoAtomId(2)], vec![StereoAtomId(0), StereoAtomId(2)])]
 #[case::all(vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)], vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)])]
+#[case::all_repeated(vec![StereoAtomId(2), StereoAtomId(0), StereoAtomId(2), StereoAtomId(1)], vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)])]
 fn test_molecule_editor_tracked_remove_stereo_atoms(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<StereoAtomId>,
@@ -6211,7 +6609,7 @@ fn test_molecule_editor_tracked_remove_stereo_atoms(
         Compaction::identity(3),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_stereo_atoms(&ids);
     let compaction = tracked.tracked_remove_stereo_atoms(&ids);
@@ -6219,6 +6617,10 @@ fn test_molecule_editor_tracked_remove_stereo_atoms(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6229,8 +6631,15 @@ fn test_molecule_editor_tracked_remove_stereo_atoms_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: StereoAtomId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_stereo_atoms(&[id]);
     } else {
@@ -6244,6 +6653,7 @@ fn test_molecule_editor_tracked_remove_stereo_atoms_error(
 #[case::middle(vec![StereoBondId(1)], vec![StereoBondId(1)])]
 #[case::unsorted_repeated(vec![StereoBondId(2), StereoBondId(0), StereoBondId(2)], vec![StereoBondId(0), StereoBondId(2)])]
 #[case::all(vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)], vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)])]
+#[case::all_repeated(vec![StereoBondId(2), StereoBondId(0), StereoBondId(2), StereoBondId(1)], vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)])]
 fn test_molecule_editor_tracked_remove_stereo_bonds(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ids: Vec<StereoBondId>,
@@ -6277,7 +6687,7 @@ fn test_molecule_editor_tracked_remove_stereo_bonds(
         Compaction::new(3, removed).unwrap(),
     );
     let mut plain = source.clone().edit();
-    let mut tracked = source.edit();
+    let mut tracked = source.clone().edit();
 
     plain.remove_stereo_bonds(&ids);
     let compaction = tracked.tracked_remove_stereo_bonds(&ids);
@@ -6285,6 +6695,10 @@ fn test_molecule_editor_tracked_remove_stereo_bonds(
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.finish().unwrap(), expected);
     assert_eq!(tracked.finish(), Ok(expected));
+    assert_eq!(
+        source,
+        Molecule::combine_all([&component, &component, &component])
+    );
 }
 
 #[rstest]
@@ -6295,8 +6709,15 @@ fn test_molecule_editor_tracked_remove_stereo_bonds_error(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
     #[case] id: StereoBondId,
     #[values(false, true)] tracked: bool,
+    #[values(false, true)] shared: bool,
 ) {
-    let mut editor = Molecule::from_entries(entries).edit();
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = if shared {
+        source.clone()
+    } else {
+        Molecule::from_entries(entries)
+    }
+    .edit();
     if tracked {
         editor.tracked_remove_stereo_bonds(&[id]);
     } else {
@@ -6709,7 +7130,7 @@ fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] molecule: Molecule
     let new_a = b.add_atom(AtomForm::from_element(Element::Br));
     b.add_bond(AtomId(0), new_a, BondForm::from_order(1));
     b.remove_aromatic_systems(&[AromaticSystemId(0)]);
-    b.remove_topology(&[AtomId(3)], &[BondId(2)]);
+    b.remove_topology_cascading(&[AtomId(3)], &[BondId(2)]);
     let result = b.finish().unwrap();
     let atoms: Vec<Element> = result
         .atoms()

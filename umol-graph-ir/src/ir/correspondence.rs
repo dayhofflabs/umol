@@ -1250,10 +1250,10 @@ mod tests {
         let removed = (removed_start..removed_start + 6)
             .map(AtomId)
             .collect::<Vec<_>>();
-        let compaction = editor.tracked_remove_topology(&removed, &[]);
+        let compaction = editor.tracked_remove_topology_cascading(&removed, &[]);
         let result = editor.finish().unwrap();
         let mut plain = source.clone().edit();
-        plain.remove_topology(&removed, &[]);
+        plain.remove_topology_cascading(&removed, &[]);
         assert_eq!(plain.finish().unwrap(), result);
         let expected_compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1380,7 +1380,7 @@ mod tests {
         } else {
             Vec::new()
         };
-        let compaction = editor.tracked_remove_topology(&removed, &[]);
+        let compaction = editor.tracked_remove_topology_cascading(&removed, &[]);
         let result = editor.finish().unwrap();
         assert_eq!(
             result,

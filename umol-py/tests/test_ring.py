@@ -6,6 +6,7 @@ from umol import (
     AtomForm,
     BondForm,
     ConsumedError,
+    Edit,
     Edits,
     Element,
     InvalidatedViewError,
@@ -483,7 +484,7 @@ def test_ring_views_from_ring_set_edit(fused_rings, borrowed, method):
     bond = rings.bond(1)
     iterator = iter(rings)
     edits = Edits()
-    edits.remove_topology([4], [])
+    edits.append(Edit.RemoveTopologyCascading(atoms=[4], bonds=[]))
     if method == "edit":
         editor = fused_rings.edit()
         editor.apply(edits)

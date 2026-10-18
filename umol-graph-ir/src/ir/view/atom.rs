@@ -152,8 +152,9 @@ impl<'a> AtomView<'a> {
         self.molecule.neighbors(self.id).map(|n| n.bond_id())
     }
 
-    /// Localized valence: sum of normalized incident bond orders. Returns
-    /// top if an order remains non-literal, or `None` if an order is bottom.
+    /// Localized valence: sum of normalized incident localized bond orders,
+    /// including bonds to explicit hydrogens. Implicit hydrogens are excluded.
+    /// Returns top if an order remains non-literal, or `None` if an order is bottom.
     pub fn valence(&self) -> Option<NumForm> {
         valence(self.molecule, self.id)
     }
@@ -964,6 +965,21 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
         AtomId(2),
         NumForm::Lit(2),
+    )]
+    #[case::hydrogen_pair(
+        mol_dsl!(r#"{:atoms ["H" "H"] :bonds [[0 1 "1"]]}"#),
+        AtomId(0),
+        NumForm::Lit(1),
+    )]
+    #[case::mixed_neighbors(
+        mol_dsl!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "2"] [0 2 "1"]]}"#),
+        AtomId(0),
+        NumForm::Lit(3),
+    )]
+    #[case::implicit_hydrogens(
+        mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#),
+        AtomId(0),
+        NumForm::Lit(0),
     )]
     #[case::undetermined_bond(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#),

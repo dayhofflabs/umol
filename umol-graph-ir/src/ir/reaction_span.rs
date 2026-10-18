@@ -8,6 +8,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::mem;
 use std::sync::Arc;
@@ -2051,6 +2052,35 @@ fn reverse_constraint_span(span: ConstraintSpan) -> ConstraintSpan {
     }
 }
 
+fn span_rhs_correspondence<'a, Id: Copy + Ord + From<usize> + Into<usize> + Debug, T: 'a>(
+    spans: impl ExactSizeIterator<Item = &'a EntitySpan<T>>,
+    added: impl Iterator<Item = Id>,
+    union_count: usize,
+    is_replacement: impl Fn(Id) -> bool,
+) -> Correspondence<Id> {
+    let lhs_count = spans.len();
+    let mut source_count = lhs_count;
+    let mut pairs: Vec<_> = added
+        .enumerate()
+        .map(|(offset, id)| {
+            source_count = source_count.max(id.into() + 1);
+            (id, Id::from(lhs_count + offset))
+        })
+        .collect();
+    let mut replacement = lhs_count + pairs.len();
+    for (index, span) in spans.enumerate() {
+        let id = Id::from(index);
+        if span.rhs().is_some() {
+            pairs.push((id, id));
+        } else if is_replacement(id) {
+            pairs.push((id, Id::from(replacement)));
+            replacement += 1;
+        }
+    }
+    Correspondence::new(pairs, source_count, union_count)
+        .expect("span construction assigns distinct rhs references")
+}
+
 impl Reaction {
     /// Materialize the superimposed reaction span. Normalizes the deltas, then annotates
     /// each `lhs` entity (in its own id space) with its before/after state — `Removed` /
@@ -2068,8 +2098,10 @@ impl Reaction {
     /// `n = r.to_reaction_span()?.to_reaction()`. Then `n.lhs` has the same structural entities as
     /// `r.lhs` and canonically equal constraint-set semantics, `n` materializes the same span, and
     /// applying `n` or `r` to the same host at the same explicit correspondence returns the same
-    /// exact error, non-applicability, or product and host-to-product correspondence. Repeating
-    /// the span/reaction conversion on `n` returns `n` by exact structural equality.
+    /// error or non-applicability. Successful products have exactly equal entity storage and
+    /// equal molecule constraints after constraint normalization; their host-to-product
+    /// correspondences are exactly equal. Repeating the span/reaction conversion on `n` returns
+    /// `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
         let deltas = normalize_reaction_deltas(self.lhs(), self.deltas().clone())?;
         let lhs = self.lhs();
@@ -2491,6 +2523,16 @@ impl Reaction {
             dative.push((donors, acceptor, EntitySpan::Added(attributes)));
         }
 
+        let mut next_stereo_atom = added_stereo_atom
+            .keys()
+            .next_back()
+            .map_or(lhs.stereo_atoms().count(), |id| id.index() + 1);
+        let mut next_stereo_bond = added_stereo_bond
+            .keys()
+            .next_back()
+            .map_or(lhs.stereo_bonds().count(), |id| id.index() + 1);
+        let mut has_stereo_replacement = false;
+
         // Stereo overlays: lhs entities tagged by their fold (Removed/Modified/Unchanged), created
         // ones appended. Site/ligand ids mapped to the union frame via `atom_index`/`bond_index`.
         let mut stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> =
@@ -2506,14 +2548,27 @@ impl Reaction {
                 for change in changes {
                     apply_stereo_atom_modification(&mut right, change)?;
                 }
-                stereo_atoms.push((
-                    site,
-                    ligands,
-                    EntitySpan::Modified {
-                        lhs: left,
-                        rhs: right,
-                    },
-                ));
+                if left
+                    .configuration
+                    .kind()
+                    .zip(right.configuration.kind())
+                    .is_some_and(|(left, right)| left != right)
+                {
+                    stereo_atoms.push((site, ligands.clone(), EntitySpan::Removed(left)));
+                    added_stereo_atom
+                        .insert(StereoAtomId::from(next_stereo_atom), (site, ligands, right));
+                    next_stereo_atom += 1;
+                    has_stereo_replacement = true;
+                } else {
+                    stereo_atoms.push((
+                        site,
+                        ligands,
+                        EntitySpan::Modified {
+                            lhs: left,
+                            rhs: right,
+                        },
+                    ));
+                }
             } else {
                 stereo_atoms.push((
                     site,
@@ -2544,14 +2599,27 @@ impl Reaction {
                 for change in changes {
                     apply_stereo_bond_modification(&mut right, change)?;
                 }
-                stereo_bonds.push((
-                    site,
-                    ligands,
-                    EntitySpan::Modified {
-                        lhs: left,
-                        rhs: right,
-                    },
-                ));
+                if left
+                    .configuration
+                    .kind()
+                    .zip(right.configuration.kind())
+                    .is_some_and(|(left, right)| left != right)
+                {
+                    stereo_bonds.push((site, ligands.clone(), EntitySpan::Removed(left)));
+                    added_stereo_bond
+                        .insert(StereoBondId::from(next_stereo_bond), (site, ligands, right));
+                    next_stereo_bond += 1;
+                    has_stereo_replacement = true;
+                } else {
+                    stereo_bonds.push((
+                        site,
+                        ligands,
+                        EntitySpan::Modified {
+                            lhs: left,
+                            rhs: right,
+                        },
+                    ));
+                }
             } else {
                 stereo_bonds.push((
                     site,
@@ -2568,6 +2636,105 @@ impl Reaction {
                 .collect();
             stereo_bonds.push((site, ligands, EntitySpan::Added(attributes)));
         }
+
+        let constraint_map = if has_stereo_replacement
+            && (!lhs.constraints().is_empty() || !added_constraints.is_empty())
+        {
+            Some(MoleculeCorrespondence::new(
+                span_rhs_correspondence(
+                    atoms.iter().take(lhs.atoms().count()),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::Atom(AtomDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    atoms.len(),
+                    |_| false,
+                ),
+                span_rhs_correspondence(
+                    bonds.iter().take(lhs.bonds().count()).map(|entry| &entry.2),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::Bond(BondDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    bonds.len(),
+                    |_| false,
+                ),
+                span_rhs_correspondence(
+                    dative
+                        .iter()
+                        .take(lhs.dative_bonds().count())
+                        .map(|entry| &entry.2),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::DativeBond(DativeBondDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    dative.len(),
+                    |_| false,
+                ),
+                span_rhs_correspondence(
+                    aromatic
+                        .iter()
+                        .take(lhs.aromatic_systems().count())
+                        .map(|entry| &entry.1),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    aromatic.len(),
+                    |_| false,
+                ),
+                span_rhs_correspondence(
+                    multicenter
+                        .iter()
+                        .take(lhs.multicenter_bonds().count())
+                        .map(|entry| &entry.1),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    multicenter.len(),
+                    |_| false,
+                ),
+                span_rhs_correspondence(
+                    noncovalent
+                        .iter()
+                        .take(lhs.noncovalent_bonds().count())
+                        .map(|entry| &entry.1),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    noncovalent.len(),
+                    |_| false,
+                ),
+                span_rhs_correspondence(
+                    stereo_atoms
+                        .iter()
+                        .take(lhs.stereo_atoms().count())
+                        .map(|entry| &entry.2),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    stereo_atoms.len(),
+                    |id| !removed_stereo_atom.contains_key(&id),
+                ),
+                span_rhs_correspondence(
+                    stereo_bonds
+                        .iter()
+                        .take(lhs.stereo_bonds().count())
+                        .map(|entry| &entry.2),
+                    deltas.iter().filter_map(|delta| match delta {
+                        Delta::StereoBond(StereoBondDelta::Add { id, .. }) => Some(*id),
+                        _ => None,
+                    }),
+                    stereo_bonds.len(),
+                    |id| !removed_stereo_bond.contains_key(&id),
+                ),
+            ))
+        } else {
+            None
+        };
 
         let lhs_constraints = lhs
             .constraints()
@@ -2588,18 +2755,37 @@ impl Reaction {
         {
             return Err(Contradiction);
         }
-        let constraints = lhs_constraints
-            .union(&added_constraints)
-            .map(|constraint| {
-                if added_constraints.contains(constraint) {
-                    ConstraintSpan::Added(constraint.clone())
-                } else if removed_constraints.contains(constraint) {
-                    ConstraintSpan::Removed(constraint.clone())
+        let constraints = if let Some(mapping) = constraint_map {
+            let mut spans = Vec::new();
+            for constraint in lhs_constraints {
+                let survives = !removed_constraints.contains(&constraint)
+                    && constraint.clone().try_map(&mapping).as_ref() == Some(&constraint);
+                spans.push(if survives {
+                    ConstraintSpan::Unchanged(constraint)
                 } else {
-                    ConstraintSpan::Unchanged(constraint.clone())
-                }
-            })
-            .collect::<Vec<_>>();
+                    ConstraintSpan::Removed(constraint)
+                });
+            }
+            for constraint in added_constraints {
+                spans.push(ConstraintSpan::Added(
+                    constraint.try_map(&mapping).ok_or(Contradiction)?,
+                ));
+            }
+            normalize_constraint_spans(spans)?
+        } else {
+            lhs_constraints
+                .union(&added_constraints)
+                .map(|constraint| {
+                    if added_constraints.contains(constraint) {
+                        ConstraintSpan::Added(constraint.clone())
+                    } else if removed_constraints.contains(constraint) {
+                        ConstraintSpan::Removed(constraint.clone())
+                    } else {
+                        ConstraintSpan::Unchanged(constraint.clone())
+                    }
+                })
+                .collect()
+        };
 
         ReactionSpan::try_from_entries(ReactionSpanEntries {
             atoms,
@@ -2640,11 +2826,13 @@ mod tests {
         StereoBondConstraintForm, StereogenicityForm,
     };
     use super::super::delta::Deltas;
-    use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
+    use super::super::edit::{
+        BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange, StereoBondFieldChange,
+    };
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
     use super::super::num::NumForm;
-    use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
+    use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
     use super::*;
 
     #[fixture]
@@ -4357,6 +4545,215 @@ mod tests {
         #[case] expected: &str,
     ) {
         assert_eq!(error.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::adjacent(1)]
+    #[case::sparse(4)]
+    fn test_reaction_to_reaction_span_stereo_replacement(
+        #[case] added: u32,
+        #[values(false, true)] explicit_constraint_removal: bool,
+    ) {
+        let atoms = vec![AtomForm::from_element(Element::C); 6];
+        let bonds: Vec<_> = (0..6)
+            .flat_map(|a| {
+                ((a + 1)..6).map(move |b| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+            })
+            .collect();
+        let atom_ligands: Vec<_> = [1, 2, 3, 4]
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .to_vec();
+        let bond_ligands: Vec<_> = [2, 3, 4, 5]
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .to_vec();
+        let added_atom_ligands: Vec<_> = [0, 2, 3, 4]
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .to_vec();
+        let added_bond_ligands: Vec<_> = [1, 3, 4, 5]
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .to_vec();
+        let atom_constraint = StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        ));
+        let bond_constraint = StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        ));
+        let old_constraint = Constraint::Or(vec![
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                atom_constraint.clone(),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(0),
+                StereoKind::CisTrans,
+                bond_constraint.clone(),
+            ),
+        ]);
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                atom_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                bond_ligands.clone(),
+                StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+            )],
+            constraints: Constraints::from(old_constraint.clone()),
+            ..Default::default()
+        });
+        let mut deltas = Deltas::from_iter([
+            Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::Axial, 1_u32),
+                },
+            }),
+            Delta::StereoBond(StereoBondDelta::ModifyField {
+                id: StereoBondId(0),
+                change: StereoBondFieldChange::Configuration {
+                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::Axial, 1_u32),
+                },
+            }),
+            Delta::StereoAtom(StereoAtomDelta::Add {
+                id: StereoAtomId(added),
+                site: AtomId(1),
+                ligands: added_atom_ligands.clone(),
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+            }),
+            Delta::StereoBond(StereoBondDelta::Add {
+                id: StereoBondId(added),
+                site: BondId(1),
+                ligands: added_bond_ligands.clone(),
+                attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            }),
+            Delta::Constraint(ConstraintDelta::Add(Constraint::Or(vec![
+                Constraint::StereoAtom(StereoAtomId(0), StereoKind::Axial, atom_constraint.clone()),
+                Constraint::StereoBond(StereoBondId(0), StereoKind::Axial, bond_constraint.clone()),
+            ]))),
+            Delta::Constraint(ConstraintDelta::Add(Constraint::Or(vec![
+                Constraint::StereoAtom(
+                    StereoAtomId(added),
+                    StereoKind::Tetrahedral,
+                    atom_constraint.clone(),
+                ),
+                Constraint::StereoBond(
+                    StereoBondId(added),
+                    StereoKind::CisTrans,
+                    bond_constraint.clone(),
+                ),
+            ]))),
+        ]);
+        if explicit_constraint_removal {
+            deltas.push(Delta::Constraint(ConstraintDelta::Remove(
+                old_constraint.clone(),
+            )));
+        }
+        let reaction = Reaction::new(lhs.clone(), deltas);
+        let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: atoms.into_iter().map(EntitySpan::Unchanged).collect(),
+            bonds: bonds
+                .into_iter()
+                .map(|(a, b, form)| (a, b, EntitySpan::Unchanged(form)))
+                .collect(),
+            stereo_atoms: vec![
+                (
+                    AtomId(0),
+                    atom_ligands.clone(),
+                    EntitySpan::Removed(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32)),
+                ),
+                (
+                    AtomId(1),
+                    added_atom_ligands,
+                    EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32)),
+                ),
+                (
+                    AtomId(0),
+                    atom_ligands,
+                    EntitySpan::Added(StereoAtomForm::new(StereoKind::Axial, 1_u32)),
+                ),
+            ],
+            stereo_bonds: vec![
+                (
+                    BondId(0),
+                    bond_ligands.clone(),
+                    EntitySpan::Removed(StereoBondForm::new(StereoKind::CisTrans, 0_u32)),
+                ),
+                (
+                    BondId(1),
+                    added_bond_ligands,
+                    EntitySpan::Added(StereoBondForm::new(StereoKind::CisTrans, 1_u32)),
+                ),
+                (
+                    BondId(0),
+                    bond_ligands,
+                    EntitySpan::Added(StereoBondForm::new(StereoKind::Axial, 1_u32)),
+                ),
+            ],
+            constraints: vec![
+                ConstraintSpan::Removed(old_constraint),
+                ConstraintSpan::Added(Constraint::Or(vec![
+                    Constraint::StereoAtom(
+                        StereoAtomId(1),
+                        StereoKind::Tetrahedral,
+                        atom_constraint.clone(),
+                    ),
+                    Constraint::StereoBond(
+                        StereoBondId(1),
+                        StereoKind::CisTrans,
+                        bond_constraint.clone(),
+                    ),
+                ])),
+                ConstraintSpan::Added(Constraint::Or(vec![
+                    Constraint::StereoAtom(StereoAtomId(2), StereoKind::Axial, atom_constraint),
+                    Constraint::StereoBond(StereoBondId(2), StereoKind::Axial, bond_constraint),
+                ])),
+            ],
+            ..Default::default()
+        });
+        assert_eq!(reaction.to_reaction_span(), Ok(expected.clone()));
+        let occurrence = MoleculeCorrespondence::new(
+            Correspondence::identity(6),
+            Correspondence::identity(15),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::identity(1),
+            Correspondence::identity(1),
+        );
+        let replay = expected.to_reaction();
+        let mut expected_product = expected.rhs();
+        *expected_product.constraints_mut() =
+            expected_product.constraints().clone().normalize().unwrap();
+        for reaction in [&reaction, &replay] {
+            let (mut product, witness) = reaction
+                .tracked_apply_at(&lhs, &occurrence)
+                .unwrap()
+                .unwrap();
+            *product.constraints_mut() = product.constraints().clone().normalize().unwrap();
+            assert_eq!(product, expected_product);
+            assert_eq!(witness, expected.correspondence());
+        }
+        assert_eq!(
+            expected.to_reaction().to_reaction_span(),
+            Ok(expected.clone())
+        );
+        assert_eq!(
+            reaction
+                .reverse()
+                .unwrap()
+                .to_reaction_span()
+                .unwrap()
+                .rhs(),
+            lhs
+        );
     }
 
     #[rstest]

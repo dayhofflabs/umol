@@ -29,7 +29,7 @@ use super::super::view::{
     NoncovalentBondEditorViewMut, StereoAtomEditorView, StereoAtomEditorViewMut,
     StereoBondEditorView, StereoBondEditorViewMut,
 };
-use super::{Molecule, MoleculeIntegrityError};
+use super::{Molecule, MoleculeIntegrityError, RemovedOverlayIds, TransactionError};
 
 mod transact;
 
@@ -416,10 +416,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub(crate) fn tracked_remove_dative_bonds(
-        &mut self,
-        ids: &[DativeBondId],
-    ) -> MoleculeCompaction {
+    pub fn tracked_remove_dative_bonds(&mut self, ids: &[DativeBondId]) -> MoleculeCompaction {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(self.atom_count()),
@@ -455,7 +452,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub(crate) fn tracked_remove_aromatic_systems(
+    pub fn tracked_remove_aromatic_systems(
         &mut self,
         ids: &[AromaticSystemId],
     ) -> MoleculeCompaction {
@@ -494,7 +491,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub(crate) fn tracked_remove_multicenter_bonds(
+    pub fn tracked_remove_multicenter_bonds(
         &mut self,
         ids: &[MulticenterBondId],
     ) -> MoleculeCompaction {
@@ -533,7 +530,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub(crate) fn tracked_remove_noncovalent_bonds(
+    pub fn tracked_remove_noncovalent_bonds(
         &mut self,
         ids: &[NoncovalentBondId],
     ) -> MoleculeCompaction {
@@ -568,10 +565,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub(crate) fn tracked_remove_stereo_atoms(
-        &mut self,
-        ids: &[StereoAtomId],
-    ) -> MoleculeCompaction {
+    pub fn tracked_remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) -> MoleculeCompaction {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(self.atom_count()),
@@ -603,10 +597,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub(crate) fn tracked_remove_stereo_bonds(
-        &mut self,
-        ids: &[StereoBondId],
-    ) -> MoleculeCompaction {
+    pub fn tracked_remove_stereo_bonds(&mut self, ids: &[StereoBondId]) -> MoleculeCompaction {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(self.atom_count()),
@@ -625,44 +616,97 @@ impl MoleculeEditor {
 
     // -- Topological removal --------------------------------------------------
 
-    /// Remove topology directly from the editor, cascading dependent relations and constraints.
+    /// Remove exactly the supplied atoms and bonds, transporting surviving references.
     ///
-    /// This is the low-level dense topology-removal primitive. It removes the
-    /// requested atoms and bonds, cascades relations whose participants were
-    /// removed, and compacts molecule-level constraints. It does not build rollback
-    /// data.
-    pub fn remove_topology(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
-        self.tracked_remove_topology(atoms, bonds);
+    /// Molecule constraints referring to removed entities are compacted as part of removal.
+    /// Input order and repeated removal ids do not matter. Failure leaves the editor unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns TransactionError::InvalidReference for unavailable stored participants or sites,
+    /// or TransactionError::DanglingReference when a retained entity references a removed entity.
+    /// These checks cover stored references, not reaction applicability or chemical validity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a supplied atom or bond id is outside the current topology.
+    pub fn remove_topology(
+        &mut self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> Result<(), TransactionError> {
+        self.tracked_remove_topology(atoms, bonds).map(|_| ())
     }
 
-    /// Remove topology and return the source-to-result compaction for all eight entity kinds.
+    /// Exact removal with the source-to-result compaction for all eight entity kinds.
     ///
-    /// Leaves the same state as [`Self::remove_topology`], including cascading relation and constraint
-    /// removal. Every component retains the source count from before removal.
-    pub(crate) fn tracked_remove_topology(
+    /// Has the same mutation and prerequisites as [`Self::remove_topology`]. Each component retains
+    /// its source count, including entity kinds with no removed rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same reference errors as [`Self::remove_topology`], before mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a supplied atom or bond id is outside the current topology.
+    pub fn tracked_remove_topology(
+        &mut self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> Result<MoleculeCompaction, TransactionError> {
+        let mut bonds = bonds.to_vec();
+        bonds.sort_unstable();
+        self.molecule.check_topology_removal(atoms, &bonds)?;
+        let compaction =
+            self.molecule
+                .remove_selected_topology(atoms, &bonds, RemovedOverlayIds::default());
+        self.molecule.compact_constraints(&compaction);
+        Ok(compaction)
+    }
+
+    /// Remove topology, incident bonds, and overlays with unavailable stored participants or sites.
+    ///
+    /// Also removes draft overlays whose references were already outside the topology. Surviving
+    /// references and molecule constraints are compacted once. Input order and repeated removal ids
+    /// do not matter. This does not select additional overlays from reaction applicability rules.
+    ///
+    /// # Semantic properties
+    ///
+    /// On a published molecule, explicitly removing the dependent overlay rows and then exactly
+    /// removing the complete atom/bond selection gives the same result, including participant frames
+    /// and constraints. This equivalence is exercised in `tests/property/molecule/compaction.rs`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a supplied atom or bond id is outside the current topology.
+    pub fn remove_topology_cascading(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
+        self.tracked_remove_topology_cascading(atoms, bonds);
+    }
+
+    /// Cascading removal with the source-to-result compaction for all eight entity kinds.
+    ///
+    /// Has the same mutation as [`Self::remove_topology_cascading`]. Each component retains its
+    /// source count, including entity kinds with no removed rows.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a supplied atom or bond id is outside the current topology.
+    pub fn tracked_remove_topology_cascading(
         &mut self,
         atoms: &[AtomId],
         bonds: &[BondId],
     ) -> MoleculeCompaction {
-        let compaction = self.molecule.tracked_remove_topology(atoms, bonds);
-        let removed_dative_bonds = self.molecule.compact_dative_bonds(&compaction);
-        let removed_aromatic_systems = self.molecule.compact_aromatic_systems(&compaction);
-        let removed_multicenter_bonds = self.molecule.compact_multicenter_bonds(&compaction);
-        let removed_noncovalent_bonds = self.molecule.compact_noncovalent_bonds(&compaction);
-        let removed_stereo_atoms = self.molecule.compact_stereo_atoms(&compaction);
-        let removed_stereo_bonds = self.molecule.compact_stereo_bonds(&compaction);
-
-        let id_compaction = MoleculeCompaction::new(
-            compaction,
-            removed_dative_bonds,
-            removed_aromatic_systems,
-            removed_multicenter_bonds,
-            removed_noncovalent_bonds,
-            removed_stereo_atoms,
-            removed_stereo_bonds,
-        );
-        self.molecule.compact_constraints(&id_compaction);
-        id_compaction
+        let mut atoms = atoms.to_vec();
+        let mut bonds = bonds.to_vec();
+        let overlays = self
+            .molecule
+            .select_topology_cascade(&mut atoms, &mut bonds);
+        let compaction = self
+            .molecule
+            .remove_selected_topology(&atoms, &bonds, overlays);
+        self.molecule.compact_constraints(&compaction);
+        compaction
     }
 
     /// Borrow the current molecule after checking its integrity.
@@ -694,6 +738,8 @@ impl MoleculeEditor {
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use rstest::*;
     use umol_chem::element::Element;
 
@@ -702,8 +748,13 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::{Constraint, MoleculeConstraint};
     use crate::ir::dative::DativeBondForm;
-    use crate::ir::edit::{RemovedAtom, RemovedBond, RemovedDativeBond};
+    use crate::ir::edit::{
+        AtomHandle, BondHandle, Edit, Edits, RemovedAtom, RemovedBond, RemovedDativeBond,
+    };
+    use crate::ir::entity::{Entity, EntityKind};
+    use crate::ir::error::MoleculeApplyError;
     use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::molecule::apply::ApplicationState;
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::num::NumForm;
@@ -1724,8 +1775,293 @@ mod tests {
         assert_eq!(ids.next(), None);
     }
 
+    #[derive(Clone, Copy)]
+    enum RemovalMethod {
+        Direct,
+        Tracked,
+        Apply,
+        Journal,
+    }
+
     #[rstest]
-    fn test_molecule_editor_tracked_remove_topology_roundtrip(mut triatomic: MoleculeEditor) {
+    #[case::bond(Entity::Bond(BondId(0)), false)]
+    #[case::dative(Entity::DativeBond(DativeBondId(0)), false)]
+    #[case::aromatic(Entity::AromaticSystem(AromaticSystemId(0)), false)]
+    #[case::multicenter(Entity::MulticenterBond(MulticenterBondId(0)), false)]
+    #[case::noncovalent(Entity::NoncovalentBond(NoncovalentBondId(0)), false)]
+    #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(0)), false)]
+    #[case::stereo_bond_ligand(Entity::StereoBond(StereoBondId(0)), false)]
+    #[case::stereo_bond_site(Entity::StereoBond(StereoBondId(0)), true)]
+    fn test_molecule_editor_remove_topology_error(
+        #[case] dependent: Entity,
+        #[case] site: bool,
+        #[values(
+            RemovalMethod::Direct,
+            RemovalMethod::Tracked,
+            RemovalMethod::Apply,
+            RemovalMethod::Journal
+        )]
+        method: RemovalMethod,
+    ) {
+        let mut editor = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        })
+        .edit();
+        match dependent.kind() {
+            EntityKind::Bond => {}
+            EntityKind::DativeBond => {
+                editor.add_dative_bond(&[AtomId(0)], AtomId(1), DativeBondForm::default());
+            }
+            EntityKind::AromaticSystem => {
+                editor.add_aromatic_system(&[AtomId(0), AtomId(1)], AromaticSystemForm::default());
+            }
+            EntityKind::MulticenterBond => {
+                editor
+                    .add_multicenter_bond(&[AtomId(0), AtomId(1)], MulticenterBondForm::default());
+            }
+            EntityKind::NoncovalentBond => {
+                editor.add_noncovalent_bond([AtomId(0), AtomId(1)], NoncovalentBondForm::default());
+            }
+            EntityKind::StereoAtom => {
+                editor.add_stereo_atom(AtomId(0), &[], StereoAtomForm::default());
+            }
+            EntityKind::StereoBond => {
+                editor.add_stereo_bond(
+                    BondId(0),
+                    &[StereoLigand::new(
+                        AtomId(0),
+                        StereoLigandKind::ImplicitHydrogen,
+                    )],
+                    StereoBondForm::default(),
+                );
+            }
+            EntityKind::Atom => unreachable!(),
+        }
+        let before = editor.molecule.clone();
+        let atoms = if site { vec![] } else { vec![AtomId(0)] };
+        let bonds = if dependent.kind() == EntityKind::Bond {
+            vec![]
+        } else {
+            vec![BondId(0)]
+        };
+        let edit = Edit::RemoveTopology {
+            atoms: atoms.iter().copied().map(AtomHandle::Id).collect(),
+            bonds: bonds.iter().copied().map(BondHandle::Id).collect(),
+        };
+        let result = match method {
+            RemovalMethod::Direct => editor
+                .remove_topology(&atoms, &bonds)
+                .map_err(MoleculeApplyError::from),
+            RemovalMethod::Tracked => editor
+                .tracked_remove_topology(&atoms, &bonds)
+                .map(|_| ())
+                .map_err(MoleculeApplyError::from),
+            RemovalMethod::Apply => editor.apply(Edits::from_iter([edit])),
+            RemovalMethod::Journal => {
+                let mut state = ApplicationState::new(&editor.molecule);
+                editor
+                    .molecule
+                    .apply_edit_with_undo(edit, &mut state)
+                    .map(|_| ())
+                    .map_err(MoleculeApplyError::from)
+            }
+        };
+        assert_eq!(
+            result,
+            Err(TransactionError::DanglingReference {
+                removed: if site {
+                    Entity::Bond(BondId(0))
+                } else {
+                    Entity::Atom(AtomId(0))
+                },
+                dependent,
+            }
+            .into())
+        );
+        assert_eq!(editor.molecule, before);
+    }
+
+    #[rstest]
+    #[case::aromatic(EntityKind::AromaticSystem)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_molecule_editor_remove_topology_adjacency(
+        #[case] kind: EntityKind,
+        #[values(false, true)] cascading: bool,
+    ) {
+        let mut entries = MoleculeEntries {
+            atoms: vec![AtomForm::default(); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::default()),
+                (AtomId(0), AtomId(2), BondForm::default()),
+            ],
+            ..Default::default()
+        };
+        match kind {
+            EntityKind::AromaticSystem => entries
+                .aromatic
+                .push((vec![AtomId(0), AtomId(2)], AromaticSystemForm::default())),
+            EntityKind::StereoAtom => entries.stereo_atoms.push((
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+                StereoAtomForm::default(),
+            )),
+            EntityKind::StereoBond => entries.stereo_bonds.push((
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::default(),
+            )),
+            _ => unreachable!(),
+        }
+        let source = Molecule::from_entries(entries);
+        let mut expected = source.clone();
+        expected.graph = Graph::new(3, &[[0, 1]]);
+        expected.bonds = Arc::new(vec![BondForm::default()]);
+        let mut editor = source.clone().edit();
+        if cascading {
+            editor.remove_topology_cascading(&[], &[BondId(1)]);
+        } else {
+            editor.remove_topology(&[], &[BondId(1)]).unwrap();
+        }
+        assert_eq!(editor.molecule, expected);
+        editor.add_bond(AtomId(0), AtomId(2), BondForm::default());
+        assert_eq!(editor.finish(), Ok(source));
+    }
+
+    #[rstest]
+    #[case::dative(EntityKind::DativeBond, false)]
+    #[case::aromatic(EntityKind::AromaticSystem, false)]
+    #[case::multicenter(EntityKind::MulticenterBond, false)]
+    #[case::noncovalent(EntityKind::NoncovalentBond, false)]
+    #[case::stereo_atom_site(EntityKind::StereoAtom, true)]
+    #[case::stereo_atom_ligand(EntityKind::StereoAtom, false)]
+    #[case::stereo_bond_site(EntityKind::StereoBond, true)]
+    #[case::stereo_bond_ligand(EntityKind::StereoBond, false)]
+    fn test_molecule_editor_remove_topology_draft(
+        #[case] kind: EntityKind,
+        #[case] site: bool,
+        #[values(
+            RemovalMethod::Direct,
+            RemovalMethod::Tracked,
+            RemovalMethod::Apply,
+            RemovalMethod::Journal
+        )]
+        method: RemovalMethod,
+    ) {
+        let source = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        });
+        let mut editor = source.clone().edit();
+        let invalid = AtomId(2);
+        let ligand = StereoLigand::new(invalid, StereoLigandKind::Atom);
+        match kind {
+            EntityKind::DativeBond => {
+                editor.add_dative_bond(&[invalid], AtomId(0), DativeBondForm::default());
+            }
+            EntityKind::AromaticSystem => {
+                editor.add_aromatic_system(&[AtomId(0), invalid], AromaticSystemForm::default());
+            }
+            EntityKind::MulticenterBond => {
+                editor.add_multicenter_bond(&[AtomId(0), invalid], MulticenterBondForm::default());
+            }
+            EntityKind::NoncovalentBond => {
+                editor.add_noncovalent_bond([AtomId(0), invalid], NoncovalentBondForm::default());
+            }
+            EntityKind::StereoAtom => {
+                editor.add_stereo_atom(
+                    if site { invalid } else { AtomId(0) },
+                    if site { &[] } else { slice::from_ref(&ligand) },
+                    StereoAtomForm::default(),
+                );
+            }
+            EntityKind::StereoBond => {
+                editor.add_stereo_bond(
+                    if site { BondId(1) } else { BondId(0) },
+                    if site { &[] } else { slice::from_ref(&ligand) },
+                    StereoBondForm::default(),
+                );
+            }
+            EntityKind::Atom | EntityKind::Bond => unreachable!(),
+        }
+        let before = editor.molecule.clone();
+        let edit = Edit::RemoveTopology {
+            atoms: vec![],
+            bonds: vec![],
+        };
+        let result = match method {
+            RemovalMethod::Direct => editor
+                .remove_topology(&[], &[])
+                .map_err(MoleculeApplyError::from),
+            RemovalMethod::Tracked => editor
+                .tracked_remove_topology(&[], &[])
+                .map(|_| ())
+                .map_err(MoleculeApplyError::from),
+            RemovalMethod::Apply => editor.apply(Edits::from_iter([edit])),
+            RemovalMethod::Journal => {
+                let mut state = ApplicationState::new(&editor.molecule);
+                editor
+                    .molecule
+                    .apply_edit_with_undo(edit, &mut state)
+                    .map(|_| ())
+                    .map_err(MoleculeApplyError::from)
+            }
+        };
+        assert_eq!(
+            result,
+            Err(TransactionError::InvalidReference {
+                entity: if kind == EntityKind::StereoBond && site {
+                    Entity::Bond(BondId(1))
+                } else {
+                    Entity::Atom(invalid)
+                },
+            }
+            .into())
+        );
+        assert_eq!(editor.molecule, before);
+        let edit = Edit::RemoveTopologyCascading {
+            atoms: vec![],
+            bonds: vec![],
+        };
+        match method {
+            RemovalMethod::Direct => editor.remove_topology_cascading(&[], &[]),
+            RemovalMethod::Tracked => {
+                editor.tracked_remove_topology_cascading(&[], &[]);
+            }
+            RemovalMethod::Apply => editor.apply(Edits::from_iter([edit])).unwrap(),
+            RemovalMethod::Journal => {
+                let mut state = ApplicationState::new(&editor.molecule);
+                let undo = editor
+                    .molecule
+                    .apply_edit_with_undo(edit, &mut state)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(editor.molecule, source);
+                editor.molecule.apply_undo(undo);
+                assert_eq!(editor.molecule, before);
+                return;
+            }
+        }
+        assert_eq!(editor.finish(), Ok(source));
+    }
+
+    #[rstest]
+    #[case::ordered(vec![AtomId(1)], vec![BondId(0), BondId(1)])]
+    #[case::repeated(vec![AtomId(1), AtomId(1)], vec![BondId(1), BondId(0), BondId(1)])]
+    fn test_molecule_editor_tracked_remove_topology_roundtrip(
+        mut triatomic: MoleculeEditor,
+        #[case] atoms: Vec<AtomId>,
+        #[case] bonds: Vec<BondId>,
+        #[values(false, true)] cascading: bool,
+    ) {
         let expected = triatomic.clone().finish().unwrap();
         let removed_atoms = vec![RemovedAtom {
             id: AtomId(1),
@@ -1744,7 +2080,18 @@ mod tests {
             },
         ];
 
-        let compaction = triatomic.tracked_remove_topology(&[AtomId(1)], &[]);
+        let compaction = if cascading {
+            triatomic.tracked_remove_topology_cascading(&atoms, &bonds)
+        } else {
+            triatomic.tracked_remove_topology(&atoms, &bonds).unwrap()
+        };
+        assert_eq!(
+            compaction.graph(),
+            &GraphCompaction::new(
+                Compaction::new(3, vec![umol_graph_core::NodeId(1)]).unwrap(),
+                Compaction::new(2, vec![EdgeId(0), EdgeId(1)]).unwrap(),
+            )
+        );
         triatomic
             .molecule
             .restore_topology(compaction.graph(), removed_atoms, removed_bonds);
@@ -1821,7 +2168,7 @@ mod tests {
 
         assert_eq!(editor.probe(), Err(expected));
 
-        editor.remove_topology(&[], &[duplicate]);
+        editor.remove_topology(&[], &[duplicate]).unwrap();
         assert_eq!(
             editor.finish(),
             Ok(mol_dsl!(
@@ -1965,7 +2312,7 @@ mod tests {
                 :stereo-atoms [{:site 1 :ligands [2 3 4 [:h 1]] :attrs "Th1"}]}"#
         );
         let mut editor = molecule.edit();
-        editor.remove_topology(&remove_atoms, &[]);
+        editor.remove_topology_cascading(&remove_atoms, &[]);
         let surviving: Vec<Vec<AtomId>> = editor
             .finish()
             .unwrap()
@@ -1991,7 +2338,7 @@ mod tests {
                 :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
         );
         let mut editor = molecule.edit();
-        editor.remove_topology(&[], &remove_bonds);
+        editor.remove_topology_cascading(&[], &remove_bonds);
         let surviving: Vec<BondId> = editor
             .finish()
             .unwrap()

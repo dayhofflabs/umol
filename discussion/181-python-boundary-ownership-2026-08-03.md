@@ -8,6 +8,7 @@ Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [213](213-editor-overlay-storage-2026-08-27.md),
 [231](231-python-api-parity-2026-09-21.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
+[238](238-non-cascading-removal-2026-10-16.md),
 [Python API guide](../docs/development/python-api.md),
 [data-type guide](../docs/development/data-types.md)
 

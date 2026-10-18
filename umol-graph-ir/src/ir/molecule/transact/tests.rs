@@ -1672,7 +1672,7 @@ fn test_transaction_apply_topology_removal_restores_stereo_atom(
         |mut transaction| -> Result<(), MoleculeApplyError> {
             // Removing a ligand atom cascades the stereo element away.
             transaction
-                .apply(Edits::from_iter([Edit::RemoveTopology {
+                .apply(Edits::from_iter([Edit::RemoveTopologyCascading {
                     atoms: vec![AtomHandle::Id(AtomId(1))],
                     bonds: Vec::new(),
                 }]))
@@ -2885,7 +2885,7 @@ fn test_transaction_apply_handle_removed_error_cascade(
     #[case] kind: EntityKind,
 ) {
     let before = batched_overlays.clone().finish().unwrap();
-    let mut edits = Edits::from_iter([Edit::RemoveTopology {
+    let mut edits = Edits::from_iter([Edit::RemoveTopologyCascading {
         atoms: vec![AtomHandle::Id(AtomId(0))],
         bonds: Vec::new(),
     }]);
@@ -3824,7 +3824,7 @@ fn test_transaction_rollback_entries(#[case] case: RollbackCase) {
     };
     let before = editor.clone().finish().unwrap();
     let edits = match case {
-        RollbackCase::RemoveTopology => Edits::from_iter([Edit::RemoveTopology {
+        RollbackCase::RemoveTopology => Edits::from_iter([Edit::RemoveTopologyCascading {
             atoms: vec![AtomHandle::Id(AtomId(1))],
             bonds: vec![],
         }]),
@@ -3914,7 +3914,7 @@ fn test_transaction_rollback_topology(
         RollbackMethod::Journal,
         |mut transaction| -> Result<(), MoleculeApplyError> {
             transaction
-                .apply(Edits::from_iter([Edit::RemoveTopology {
+                .apply(Edits::from_iter([Edit::RemoveTopologyCascading {
                     atoms,
                     bonds: vec![],
                 }]))

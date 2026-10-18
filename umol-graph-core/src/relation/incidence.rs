@@ -5,7 +5,10 @@
 //! factors of a birelation contribute to the same index. Equal-key entries retain ascending
 //! relation-id order, so anchored searches can select the first matching row.
 
+use std::ops::Sub;
+
 use super::participant::ParticipantRefs;
+use crate::compact::{Compaction, GraphCompaction};
 use crate::id::{EdgeId, NodeId, RelationId};
 
 /// Union incidence index: a node → relations pair and an edge → relations pair,
@@ -64,6 +67,27 @@ impl Incidence {
         }
     }
 
+    /// Filter and renumber rows in place; monotone survivor ids retain equal-key order.
+    pub(super) fn remove(&mut self, compaction: &Compaction<RelationId>) {
+        remove_entries(
+            &mut self.node_keys,
+            &mut self.node_rels,
+            compaction.removed(),
+        );
+        remove_entries(
+            &mut self.edge_keys,
+            &mut self.edge_rels,
+            compaction.removed(),
+        );
+    }
+
+    /// Translate sorted keys in place after successful participant compaction.
+    /// All keys have surviving images; their order and relation ids are preserved.
+    pub(super) fn compact_participants(&mut self, topology: &GraphCompaction) {
+        compact_keys(&mut self.node_keys, topology.nodes().removed());
+        compact_keys(&mut self.edge_keys, topology.edges().removed());
+    }
+
     /// Rows referencing `node`, in ascending order; empty if absent.
     pub(super) fn incident_to_node(&self, node: NodeId) -> &[RelationId] {
         let start = self.node_keys.partition_point(|n| *n < node);
@@ -86,5 +110,36 @@ impl Incidence {
     /// Whether any row references `edge`.
     pub(super) fn has_incident_to_edge(&self, edge: EdgeId) -> bool {
         self.edge_keys.binary_search(&edge).is_ok()
+    }
+}
+
+fn remove_entries<K: Copy>(
+    keys: &mut Vec<K>,
+    relations: &mut Vec<RelationId>,
+    removed: &[RelationId],
+) {
+    let mut dst = 0;
+    for src in 0..relations.len() {
+        let relation = relations[src];
+        if let Err(offset) = removed.binary_search(&relation) {
+            keys[dst] = keys[src];
+            relations[dst] = relation - offset;
+            dst += 1;
+        }
+    }
+    keys.truncate(dst);
+    relations.truncate(dst);
+}
+
+fn compact_keys<K: Copy + Ord + Sub<usize, Output = K>>(keys: &mut [K], removed: &[K]) {
+    if removed.is_empty() {
+        return;
+    }
+    let mut offset = 0;
+    for key in keys {
+        while offset < removed.len() && removed[offset] < *key {
+            offset += 1;
+        }
+        *key = *key - offset;
     }
 }

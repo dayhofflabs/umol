@@ -137,6 +137,7 @@ def test_constraint_edit():
         Edit.AddAtoms(atoms=[AtomForm.parse("C")]),
         Edit.AddBonds(bonds=[((0, New(0)), BondForm.parse("1"))]),
         Edit.RemoveTopology(atoms=[New(0)], bonds=[1]),
+        Edit.RemoveTopologyCascading(atoms=[New(0)], bonds=[1]),
         Edit.ModifyAtomField(
             id=New(0),
             change=AtomFieldChange.Charge(
@@ -199,16 +200,17 @@ def test_edit_replace(variant, old, new):
     assert variant(id=edit.id, old=edit.old, new=edit.new) == edit
 
 
-def test_edit_remove_topology_collections():
+@pytest.mark.parametrize("variant", [Edit.RemoveTopology, Edit.RemoveTopologyCascading])
+def test_edit_remove_topology_collections(variant):
     atoms, bonds = [2, 0, 2], [1, 3]
-    edit = Edit.RemoveTopology(atoms=atoms, bonds=bonds)
+    edit = variant(atoms=atoms, bonds=bonds)
     atoms.clear()
     bonds.clear()
     assert type(edit.atoms) is tuple
     assert type(edit.bonds) is tuple
     assert edit.atoms == (2, 0, 2)
     assert edit.bonds == (1, 3)
-    assert Edit.RemoveTopology(atoms=edit.atoms, bonds=edit.bonds) == edit
+    assert variant(atoms=edit.atoms, bonds=edit.bonds) == edit
     with pytest.raises(TypeError):
         edit.atoms[0] = 1
     with pytest.raises(TypeError):
@@ -605,6 +607,7 @@ def test_edits_consumption_error(receiver, method):
         ("add_stereo_bond", (0, [], StereoBondForm.parse("Ct0"))),
         ("add_stereo_bonds", ([],)),
         ("remove_topology", ([], [])),
+        ("remove_topology_cascading", ([], [])),
         ("remove_dative_bonds", ([],)),
         ("remove_aromatic_systems", ([],)),
         ("remove_multicenter_bonds", ([],)),
@@ -859,6 +862,7 @@ def test_edits_remove():
     ligands = [(New(0), StereoLigandKind.Atom)]
 
     edits.remove_topology([0, New(0)], [1, New(0)])
+    assert edits.remove_topology_cascading([New(0), 1], [0]) is None
     edits.remove_dative_bonds([(New(0), [0], New(0), dative)])
     edits.remove_aromatic_systems([(0, [0, New(0)], aromatic)])
     edits.remove_multicenter_bonds([(New(0), [0, New(0)], multicenter)])
@@ -870,6 +874,7 @@ def test_edits_remove():
 
     assert list(edits) == [
         Edit.RemoveTopology(atoms=[0, New(0)], bonds=[1, New(0)]),
+        Edit.RemoveTopologyCascading(atoms=[New(0), 1], bonds=[0]),
         Edit.RemoveDativeBonds(
             removes=[(New(0), [0], New(0), dative)]
         ),

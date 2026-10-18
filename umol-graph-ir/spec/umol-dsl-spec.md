@@ -548,7 +548,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`num-form`** / **`
 | **`#n`** | Lone pairs (nonbonding pair count) |
 | **`#u`** | Unpaired electron count |
 | **`#s`** | Spin multiplicity (2S+1) |
-| **`#v`** | **Localized valence**: sum of **bond orders** of **localized** **`:bonds`** edges to **non-hydrogen** neighbors in the **molecular graph** (multiple bonds count by full order). **Excludes** implicit H (**`#h`**), **dative**, **aromatic**-section bonding, **multicenter**, and **noncovalent** contributions — those are separate fields. |
+| **`#v`** | **Localized valence**: sum of **bond orders** of all **localized** **`:bonds`** edges incident on the atom in the **molecular graph**, including bonds to **explicit hydrogen** atoms (multiple bonds count by full order). **Excludes** implicit H (**`#h`**), **dative**, **aromatic**-section bonding, **multicenter**, and **noncovalent** contributions — those are separate fields. |
 | **`#d`** | Dative **donated** pair count (electrons donated **by** this atom) |
 | **`#t`** | Dative **accepted** pair count (“accepted”; electrons accepted **by** this atom) |
 | **`#a`** | Aromatic π contribution; **special** **`#a*`**, **`#a+`**, **`#a!`** (**§7.3**) |
@@ -1103,7 +1103,9 @@ stereo-bond-removal  ::= { :id stereo-bond-handle :site bond-handle
                             :ligands [ edit-ligand* ] :attrs stereo-spec }
 checked-stereo-update ::= { :expect partial-stereo-string :update partial-stereo-string }
 
-topology-edit ::= { :remove { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
+topology-edit ::=
+    { :remove { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
+  | { :remove-cascading { :atoms [ atom-handle* ] :bonds [ bond-handle* ] } }
 
 edit-constraint ::=
     { :add    edit-constraint-entry }
@@ -1133,7 +1135,12 @@ edits; it does not validate chemical semantics against a host molecule.
 
 **Removal preconditions and batching.** Atom-only and bond-only singleton removals use their
 singular entity forms. **`:topology :remove`** is the inseparable operation for simultaneous atom and
-bond removal, allowing one pre-removal snapshot and one compaction after cascading removal.
+bond removal. Both remove exactly the supplied entities; application rejects unavailable stored
+references and retained references to removed entities before mutation. Dependent overlay rows must
+be removed explicitly first. **`:topology :remove-cascading`** additionally selects incident bonds
+and overlay rows whose stored participants or sites are removed or already unavailable in the
+editor draft. Each topology operation compacts molecule constraints once. Cascading singleton
+removals retain the **`:topology :remove-cascading`** form when serialized.
 Overlay removals use the plural overlay key and retain a vector of complete removal records: the
 entity handle, its participants, and its full form. The recorded values are checked during
 application and retained for exact rollback. These semantic batches **MUST NOT** be lowered to a
