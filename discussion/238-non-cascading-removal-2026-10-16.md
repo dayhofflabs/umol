@@ -1,6 +1,6 @@
 # 238 — Non-cascading removal and DPO application
 
-Status: In Progress
+Status: Completed
 Date: 2026-10-16
 Relates: [184](184-deltas-and-edits-2026-08-04.md),
 [213](213-editor-overlay-storage-2026-08-27.md),
@@ -1360,7 +1360,7 @@ change includes its caller migration and exhaustive DSL/Python conversions in
 the same subitem; it ends green. Every stage ends green. Full workspace gates
 run at S5, not after each subitem. No stage is deferred.
 
-### S0 — Caller prerequisites and comparison boundaries
+### S0 — Caller prerequisites and comparison boundaries (done)
 
 #### S0a — Core and storage contracts (done) [dep: none]
 
@@ -1919,7 +1919,7 @@ S2's topology-removal distinction is implemented across its consumers. The two
 remaining cost investigations start from this coherent implementation, with
 the same DPO checks and cascade scope in both sides of each comparison.
 
-### S3 — Decide the shared-storage cloning tradeoff
+### S3 — Decide the shared-storage cloning tradeoff (done)
 
 #### S3a — Isolate cloning before removal (done) [dep: S2h]
 
@@ -2078,7 +2078,7 @@ passed. The source patch, snapshot, commands, allocation counts, confidence
 intervals, and raw results are retained in scratch/238-s3b. Workspace gates remain
 at S5.
 
-### S4 — Decide the ID-conversion allocation tradeoff
+### S4 — Decide the ID-conversion allocation tradeoff (done)
 
 #### S4a — Account for conversions (done) [dep: S3b]
 
@@ -2240,7 +2240,7 @@ product, mapping, source-preservation, and draft-rejection checks passed. Raw
 results, confidence intervals, commands, and source hashes are in scratch/238-s4b.
 The combined workspace gate remains at S5.
 
-### S5 — Combined acceptance and closeout [dep: S3b, S4b]
+### S5 — Combined acceptance and closeout (done) [dep: S3b, S4b]
 
 Review the final diff against the agreed symbol inventory, semantic boundaries,
 and caller audit. Run one combined acceptance comparison where needed to check
@@ -2258,6 +2258,39 @@ covered by this migration. Activate umol-py/.venv in every shell that builds/tes
 Python or includes it in a workspace build; verify Python 3.13 before the first
 build. Rebuild with maturin develop before pytest -q umol-py/tests. Reconcile
 documentation and completion markers after the gates pass.
+
+Completed 2026-10-17 against c6e5a5520. The final review checked the agreed core,
+editor, Edit, DSL, and Python interfaces, the exact/cascading caller split,
+pre-mutation rejection and journal capture, replacement identity, and the
+preservation of existing test laws. The normative guides match the implemented
+contracts. No further implementation changes were needed.
+
+S4b's confirmation already compares the combined S3b/S4b implementation with
+S3b alone. All six production source hashes still match that measured version,
+so no additional timing run was needed. Its absolute costs, relative changes,
+allocation counts, and small partial-removal uncertainty remain as recorded
+above; the closeout does not strengthen those performance conclusions.
+
+The completed gate used Rust 1.99.1 and the repository's Python 3.13.16 environment:
+
+- cargo fmt --all and CI's nightly-2026-06-04 formatter check passed, with no
+  formatting changes.
+- cargo test --locked --offline --workspace passed: 24,064 tests, nine ignored.
+- The explicit proptest property targets passed: 215 graph-core, 484 graph-IR
+  (one ignored), and 179 graph tests.
+- The resolution conformance target passed all 683 cases.
+- Workspace Clippy passed with --all-targets --all-features and -D warnings,
+  matching CI's lint scope.
+- maturin develop rebuilt and installed the extension, then pytest -q
+  umol-py/tests passed 2,898 tests with two skipped. The build used
+  UV_CACHE_DIR=/private/tmp/umol-uv-cache because the default cache is outside
+  the sandbox's writable roots.
+- The four changed Python test files parse with Python 3.9 grammar; this is a
+  syntax check, not a Python 3.9 runtime test.
+- git diff --check passed.
+
+Gate logs are retained in scratch/238-s5. All agreed work in this document is
+complete; the separate stereo redesign remains recorded in [239](239-kindless-stereo-removal-2026-10-17.md).
 
 Critical path: S0a -> S1 -> S2 -> S3 -> S4 -> S5, with S0b required before
 S2d and its dependent surface/consumer changes. The stage order preserves the
