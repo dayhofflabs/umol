@@ -290,6 +290,13 @@ failure through `Result<Option<T>, ApplyError>`. Non-applicability is not an err
 The application iterator skips inapplicable matches and emits one selected output per successful
 match: a product, product with correspondence, realized reaction, or reaction span.
 
+Molecule::mutate names direct edit-batch application to a borrowed molecule.
+The caller establishes applicability and successful publication in advance. Its contract
+retains the per-edit and final integrity checks, returns unit, and panics on failure; unwinding
+leaves an empty molecule without restoring the original. The method is safe Rust. The verb mutate
+denotes mutation of its borrowed receiver and is not part of a consuming/_into pair. Existing
+apply, apply_into, and edit_into retain their contracts.
+
 **Not:** plan (which is derived without mutating), `react` (which emits product components).
 **In code:** `apply`, `apply_at`, `ReactionApplicationIter`.
 

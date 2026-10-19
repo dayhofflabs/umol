@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::convert::Infallible;
-use std::{iter, mem};
+use std::iter;
 
 use thiserror::Error;
 use umol_chem::element::Element;
@@ -319,9 +319,7 @@ impl Transformer for Aromatizer {
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizeError> {
         let edits = self.plan_transform(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("aromatization plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(())
     }
@@ -655,9 +653,7 @@ impl Transformer for Kekulizer {
         }
 
         let edits = self.plan_transform(molecule)?;
-        *molecule = mem::take(molecule)
-            .apply(edits)
-            .expect("kekulization plan applies and preserves molecule integrity");
+        molecule.mutate(edits);
         Ok(())
     }
 
@@ -1175,9 +1171,7 @@ impl Transformer for DelocalizeCharge {
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
         let edits = self.plan_transform(molecule);
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("charge delocalization plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(())
     }

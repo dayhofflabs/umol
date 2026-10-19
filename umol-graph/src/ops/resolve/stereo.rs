@@ -3,7 +3,6 @@
 //! the discharge of their source assertions without mutating the molecule.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::mem;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -355,9 +354,7 @@ impl StereoResolver {
             }
         };
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("stereo resolve plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }
@@ -412,9 +409,7 @@ impl StereoResolver {
     ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
         let edits = self.plan_project(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("stereo project plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }

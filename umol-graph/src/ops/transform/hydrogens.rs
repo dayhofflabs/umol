@@ -1,6 +1,6 @@
 //! Transformations between explicit and implicit hydrogen representations.
 
-use std::{iter, mem};
+use std::iter;
 
 use thiserror::Error;
 use umol_chem::element::Element;
@@ -281,9 +281,7 @@ impl Transformer for HydrogenFolder {
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
         let edits = self.plan_transform(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("hydrogen folding plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(())
     }
@@ -634,9 +632,7 @@ impl Transformer for HydrogenUnfolder {
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
         let edits = self.plan_transform(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("hydrogen unfolding plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(())
     }

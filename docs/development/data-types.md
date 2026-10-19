@@ -80,6 +80,11 @@ verb consumes the value and returns the result. An `_into` counterpart mutates a
 in place with recovery. A caller that keeps its input clones it explicitly before calling the
 consuming operation. Failure returns neither the input nor a partially rewritten value.
 
+Molecule::mutate is a direct borrowed mutation primitive for producers that establish batch
+applicability and successful publication in advance. It returns unit, retains the edit and
+integrity checks, and panics on failure. Unwinding leaves an empty receiver without recovery.
+It is safe Rust and is not part of a consuming/`_into` pair.
+
 A consuming implementation uses its ownership: it moves fields and reuses storage instead of
 cloning an input it already owns. Shared backing storage may still require a copy when written;
 see [copy-on-write aggregate storage](#copy-on-write-aggregate-storage).
@@ -843,15 +848,22 @@ borrowed and returns a separate correspondence.
 
 ### Molecule mutation and publication
 
-Every fallible operation on a published Molecule is atomic at its public boundary. A rejected
-in-place operation preserves the entry state under its documented equivalence; a consuming
-operation drops its input without publishing a partial result. In-place editing exists only with
-recovery. This may use a transaction, or a complete plan that reports every rejection before
-mutation and guarantees successful application and publication on its unchanged input, or a
-working copy installed only after successful publication.
+Every operation returning rejection on a published Molecule is atomic at its public boundary.
+A rejected in-place operation preserves the entry state under its documented equivalence;
+a consuming operation drops its input without publishing a partial result. Recovery may use
+a transaction, or a complete plan that reports every rejection before mutation and guarantees
+successful application and publication on its unchanged input, or a working copy installed only
+after successful publication.
+
+Molecule::mutate directly applies a batch whose applicability and successful publication the
+caller has established. It retains per-edit checks and the final integrity check. Failure panics;
+unwinding replaces the receiver with an empty molecule, without restoring the original. Empty
+batches leave the receiver unchanged. Successful application has the same stored result as
+consuming apply, including copy-on-write independence of retained clones.
 
 Molecule entity views expose mutable attributes and entity-level constraints. Structural changes
-use MoleculeEditor or Transaction. Molecule::edit moves the molecule into an editor without cloning.
+use MoleculeEditor, Transaction, or Molecule::mutate. Molecule::edit moves the molecule into an
+editor without cloning.
 Direct editor mutations and edit batches can be interleaved; neither records undo.
 
 Python Molecule.edit, apply, and tracked_apply preserve the source by cloning it before invoking
@@ -866,6 +878,7 @@ The [Python API guide](python-api.md#editor) specifies batch ownership, errors, 
 | Molecule::apply | Consumes Molecule and Edits; applies edits and finishes | Drops the molecule |
 | Molecule::edit_into | Lends an editor over one working copy to a callback, checks integrity, installs success, and returns the callback's value | Callback error, integrity failure, or callback unwinding leaves the receiver unchanged under structural equality |
 | Molecule::apply_into | Consumes Edits, applies them to one working copy, and installs the checked result | Leaves the receiver unchanged under structural equality |
+| Molecule::mutate | Consumes Edits and applies them directly to the borrowed molecule, checking each edit and final integrity | Panics; unwinding leaves an empty molecule without rollback |
 | Transaction::apply, TrackedTransaction::apply | Consumes Edits and immediately applies it to the receiver with undo recording (Journal) or a working copy without undo (Clone); only tracked application updates the accumulated correspondence | Restores transaction-entry state and aborts the transaction |
 | Transaction::probe, TrackedTransaction::probe | Checks integrity and lends `&Molecule` | Leaves the transaction active |
 | Transaction::commit | Consumes the handle, checks integrity, returns unit and requests acceptance by Transaction::run | Restores transaction-entry state and aborts the transaction |

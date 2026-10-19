@@ -222,6 +222,13 @@ alias of the editor consumed. These are the Rust editor's mutation and publicati
 Molecule.apply and tracked_apply include finish; either kind of failure discards the working copy
 and leaves the source unchanged.
 
+Python omits Rust Molecule::mutate, the direct batch primitive for producers that establish
+successful application in advance. Python's general batch operations accept independently
+assembled Edits and report ordinary exceptions; mutate instead panics and empties the receiver
+during unwinding. That failure contract is not exposed as a second general Python batch API.
+High-level operations may use mutate inside their Rust implementation while preserving their
+own checked Python outcomes. This omission is a usability choice, not a PyO3 limitation.
+
 MoleculeEditor.remove_topology(atoms, bonds) removes exactly the supplied integer IDs and returns
 None. It raises TransactionError before changing storage if a stored participant or site is
 unavailable (InvalidReference), or a retained entity would reference a removed entity

@@ -1,6 +1,8 @@
 #[path = "edit/stereo.rs"]
 mod stereo;
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
@@ -1866,6 +1868,52 @@ proptest! {
             })));
             prop_assert_eq!(molecule, base.clone());
         }
+    }
+
+    /// Direct mutation agrees with consuming application and journaled execution for applicable
+    /// batches across entity kinds, and its result satisfies the public publication gate.
+    #[test]
+    fn test_molecule_mutate((base, edits) in transaction_edits_strategy()) {
+        let expected = base.clone().apply(edits.clone()).unwrap();
+        let mut journaled = base.clone();
+        journaled.transact([edits.clone()], RollbackMethod::Journal).unwrap();
+        let mut molecule = base;
+        molecule.mutate(edits);
+        prop_assert_eq!(&molecule, &expected);
+        prop_assert_eq!(&molecule, &journaled);
+        prop_assert_eq!(molecule.clone().edit().finish(), Ok(molecule));
+    }
+
+    /// Consecutive direct batches have separate handle namespaces and agree with consuming
+    /// application of the same sequence.
+    #[test]
+    fn test_molecule_mutate_batches((base, first, second) in consecutive_transaction_strategy()) {
+        let expected = base.clone().apply(first.clone()).unwrap().apply(second.clone()).unwrap();
+        let mut molecule = base;
+        molecule.mutate(first);
+        molecule.mutate(second);
+        prop_assert_eq!(molecule, expected);
+    }
+
+    /// Rejection after an applicable prefix empties the receiver instead of retaining the prefix
+    /// or restoring the source; the empty receiver can immediately accept a new valid batch.
+    #[test]
+    fn test_molecule_mutate_error((base, mut edits) in transaction_edits_strategy()) {
+        let count = base.atoms().count();
+        edits.remove_atom(AtomHandle::Id(AtomId(count as u32)));
+        prop_assert_eq!(base.clone().apply(edits.clone()), Err(MoleculeApplyError::Transaction(
+            TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: count, count }
+        )));
+        let mut molecule = base;
+        prop_assert!(catch_unwind(AssertUnwindSafe(|| molecule.mutate(edits))).is_err());
+        prop_assert_eq!(&molecule, &Molecule::new());
+        let mut next = Edits::new();
+        next.add_atom(AtomForm::default());
+        molecule.mutate(next);
+        prop_assert_eq!(molecule, Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default()],
+            ..Default::default()
+        }));
     }
 
     #[test]
