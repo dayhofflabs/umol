@@ -5,6 +5,7 @@ from umol import (
     CommonSubgraphEnumerationAlgorithm,
     ConnectedComponentsAlgorithm,
     MaximumIndependentSetAlgorithm,
+    MaximumMatchingAlgorithm,
     RelevantCycleEnumerationAlgorithm,
     SimpleCycleEnumerationAlgorithm,
     SubgraphEnumerationAlgorithm,
@@ -81,6 +82,31 @@ def test_algorithm_value(algorithm, equal, expected_repr):
 def test_common_subgraph_enumeration_algorithm_value(
     algorithm, equal, unequal, expected_repr
 ):
+    assert algorithm == equal
+    assert algorithm != unequal
+    assert repr(algorithm) == expected_repr
+
+
+@pytest.mark.parametrize(
+    "algorithm,equal,unequal,expected_repr",
+    [
+        pytest.param(
+            MaximumMatchingAlgorithm.Edmonds(),
+            MaximumMatchingAlgorithm.Edmonds(),
+            MaximumMatchingAlgorithm.HopcroftKarp(),
+            "MaximumMatchingAlgorithm.Edmonds()",
+            id="edmonds",
+        ),
+        pytest.param(
+            MaximumMatchingAlgorithm.HopcroftKarp(),
+            MaximumMatchingAlgorithm.HopcroftKarp(),
+            MaximumMatchingAlgorithm.Edmonds(),
+            "MaximumMatchingAlgorithm.HopcroftKarp()",
+            id="hopcroft-karp",
+        ),
+    ],
+)
+def test_maximum_matching_algorithm_value(algorithm, equal, unequal, expected_repr):
     assert algorithm == equal
     assert algorithm != unequal
     assert repr(algorithm) == expected_repr

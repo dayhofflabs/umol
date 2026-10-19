@@ -102,9 +102,11 @@ PUBLIC_EXPORTS = frozenset(
     IsotopeMass
     IsotopeMassForm
     IsotopePolicy
+    KekulizeConfig
     LigandPermutation
     LigandSymmetryForm
     MaximumIndependentSetAlgorithm
+    MaximumMatchingAlgorithm
     MemOp
     MetadataError
     ModelConversionError

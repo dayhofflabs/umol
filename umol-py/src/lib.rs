@@ -11,9 +11,9 @@ use crate::layout::{MoleculeLayout, ReactionLayout};
 use crate::{
     algorithm::{
         AutomorphismAlgorithm, CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm,
-        MaximumIndependentSetAlgorithm, RelevantCycleEnumerationAlgorithm,
-        SimpleCycleEnumerationAlgorithm, SubgraphEnumerationAlgorithm,
-        SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
+        MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm,
+        RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
+        SubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
     aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystemView, AromaticSystemViews},
     atom::{AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
@@ -133,6 +133,7 @@ use crate::{
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, RollbackMethod},
+    transform::KekulizeConfig,
 };
 
 #[cfg(feature = "graph")]
@@ -210,6 +211,8 @@ mod stereo;
 mod substructure;
 #[cfg(feature = "graph")]
 mod transaction;
+#[cfg(feature = "graph")]
+mod transform;
 
 /// The native extension module. Wrapper types are registered here as the
 /// binding grows; the graph domain is gated behind the `graph` feature.
@@ -237,6 +240,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<SimpleCycleEnumerationAlgorithm>()?;
         module.add_class::<RelevantCycleEnumerationAlgorithm>()?;
         module.add_class::<MaximumIndependentSetAlgorithm>()?;
+        module.add_class::<MaximumMatchingAlgorithm>()?;
         module.add_class::<SubgraphEnumerationAlgorithm>()?;
         module.add_class::<SubgraphIsomorphismAlgorithm>()?;
         module.add_class::<SubstructureMatchAlgorithm>()?;
@@ -283,6 +287,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ElementScope>()?;
         module.add_class::<RingLimits>()?;
         module.add_class::<AromaticityConfig>()?;
+        module.add_class::<KekulizeConfig>()?;
         module.add_class::<AromaticityModel>()?;
         module.add_class::<AromaticityRule>()?;
         module.add_class::<AromaticityTieBreak>()?;
