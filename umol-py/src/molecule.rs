@@ -709,6 +709,13 @@ impl Molecule {
     ///
     /// Raises InvalidStructureError for negative affected hydrogen counts, or ModelConversionError
     /// when folding cannot preserve a stereo frame.
+    ///
+    /// Example:
+    ///
+    /// ```python
+    /// product = molecule.fold_hydrogens()
+    /// product.unfold_hydrogens_into()
+    /// ```
     fn fold_hydrogens(&self) -> PyResult<Self> {
         self.to_rust()
             .clone()

@@ -38,11 +38,11 @@ the statuses recorded here remain authoritative.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
-- [166 — Molecule operations](166-molecule-ops-2026-07-27.md) resumes after
-  completion of [213](213-editor-overlay-storage-2026-08-27.md): implement hydrogen
-  folding/unfolding and explicit constraint discharge, correct lift_constraints,
-  and address the recorded naming work. The mutation and restoration prerequisites
-  are implemented and verified.
+- [166 — Molecule operations](166-molecule-ops-2026-07-27.md) has completed
+  S0–S12. S15a's counts-resolver valence-capacity correction remains for 0.10.
+  S13, S14, and S16 moved to
+  [240 — Validation and constraint operations](240-validation-constraint-ops-2026-10-18.md)
+  and are outside 0.10.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -213,7 +213,7 @@ the statuses recorded here remain authoritative.
 | [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | Completed     | 2026-10-13   |                                                                                                            |
 | [164-dsl-edn-worklist-2026-07-27.md](164-dsl-edn-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated DSL, EDN, specification, and parsing-infrastructure work.                                     |
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
-| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | In Progress   | 2026-10-12   | Return to hydrogen folding/unfolding, explicit constraint discharge, the lift_constraints correction, and recorded operation naming work. |
+| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | In Progress   | 2026-10-18   | Complete S15a counts valence-capacity correction; S13/S14/S16 moved to 240 outside 0.10.                   |
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Completed     | 2026-07-27   |                                                                                                            |
 | [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-10-08   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing, and one private-link rustdoc correction. |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
@@ -287,3 +287,4 @@ the statuses recorded here remain authoritative.
 | [237-release-0-10-scope-2026-10-15.md](237-release-0-10-scope-2026-10-15.md)                                     | Proposed      | 2026-10-18   | Reconcile 123/198, review 217, triage 233 correctness findings, complete 166/231, and assess PR 29 and remaining release scope. |
 | [238-non-cascading-removal-2026-10-16.md](238-non-cascading-removal-2026-10-16.md)                               | Completed     | 2026-10-17   |                                                                                                            |
 | [239-kindless-stereo-removal-2026-10-17.md](239-kindless-stereo-removal-2026-10-17.md)                           | Proposed      | 2026-10-17   | Assess potential kindless-stereo removal using the recorded experiment; join and interface contracts remain unresolved. |
+| [240-validation-constraint-ops-2026-10-18.md](240-validation-constraint-ops-2026-10-18.md)                       | Proposed      | 2026-10-18   | S13/S14/S16 moved from 166; validation, constraint relocation, and discharge are outside 0.10.             |

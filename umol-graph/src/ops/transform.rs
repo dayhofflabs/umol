@@ -17,6 +17,8 @@ use crate::ops::model::AromaticityModel;
 
 /// Rewrites a determined molecular representation.
 ///
+/// Implemented by transformation engines. [`Transform`] provides the named methods on Molecule.
+///
 /// Derives a complete plan before mutation, reporting every rejection during planning.
 /// The plan applies to its unchanged input and preserves representation integrity;
 /// a failed application or publication is an implementation defect.
@@ -61,6 +63,23 @@ pub trait Transformer {
 ///
 /// Each call constructs the corresponding [`Transformer`] and publishes independently.
 /// In a sequence of in-place calls, a later rejection preserves earlier successful changes.
+///
+/// # Examples
+///
+/// ```
+/// use umol_graph::ops::transform::Transform;
+/// use umol_graph_ir::mol_dsl_concrete;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let explicit = mol_dsl_concrete!(r#"{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}"#);
+/// let mut molecule = explicit.fold_hydrogens()?;
+/// assert_eq!(molecule, mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#));
+///
+/// molecule.unfold_hydrogens_into()?;
+/// assert_eq!(molecule.atoms().count(), 5);
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Semantic properties
 ///

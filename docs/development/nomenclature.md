@@ -207,6 +207,10 @@ change the engine naming rule.
 Run artifacts retain the verb-stem convention from *Operation names*: KekulizeConfig,
 KekulizeError, FoldHydrogensError, and UnfoldHydrogensError.
 
+Transformer is the common engine trait. Transform is the extension trait providing named
+operations on Molecule: aromatize, kekulize, delocalize_charge, fold_hydrogens, and
+unfold_hydrogens, each with its in-place _into counterpart.
+
 ## Module names
 
 A module exporting a result-object noun is named that noun (`coloring`, `embedding`,
@@ -1035,7 +1039,7 @@ complete planning before mutation; the suffix does not require a rollback journa
 **Not:** the `into_` conversion prefix; the `_from` or `_with` names of in-place two-operand
 operations.
 **In code:** Resolver::resolve_into, Resolver::project_into, Resolver::resolve_into_with_report,
-Transformer::transform_into.
+Transformer::transform_into, Transform::fold_hydrogens_into.
 
 ### Invariant
 
@@ -1801,6 +1805,12 @@ rejection, including representation-integrity failures; application of that plan
 input must succeed. Transformer::transform_into applies the plan in place without a transaction
 or rollback and leaves the molecule unchanged on rejection.
 Transformer::transform_iter borrows its source and lazily produces independent transformed copies.
+
+Transform supplies the corresponding named methods on Molecule, constructing an engine and
+delegating to it. A sequence of calls publishes each result independently; a later rejection
+leaves earlier successful transformations applied. Python exposes these named Molecule methods:
+base methods preserve the receiver and return an independent result, while _into methods mutate
+the receiver and return None.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.
