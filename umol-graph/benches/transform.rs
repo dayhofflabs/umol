@@ -6,7 +6,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph::ops::model::AromaticityModel;
 use umol_graph::ops::transform::{
-    Aromatizer, HydrogenFolder, KekulizeConfig, Kekulizer, Transformer,
+    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, Transformer,
 };
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
@@ -209,5 +209,86 @@ fn bench_fold_hydrogens(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(transform, bench_transform, bench_fold_hydrogens);
+fn bench_unfold_hydrogens(c: &mut Criterion) {
+    let mut group = c.benchmark_group("unfold_hydrogens");
+    for (name, input, expected) in [
+        (
+            "methane",
+            mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C" "H" "H" "H" "H"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            }"#
+            ),
+        ),
+        (
+            "methanol",
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C" "O" "H" "H" "H" "H"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"]]
+            }"#
+            ),
+        ),
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C#h#T1" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
+            }"#
+            ),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C#T1" "F" "Cl" "Br" "H"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [4 1 2 3] :attrs "Th0"}]
+            }"#
+            ),
+        ),
+        (
+            "unchanged",
+            mol_dsl_concrete!(r#"{:atoms ["C" "H"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C" "H"] :bonds [[0 1 "1"]]}"#),
+        ),
+    ] {
+        assert_eq!(
+            HydrogenUnfolder.transform(input.clone()).unwrap(),
+            expected,
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        HydrogenUnfolder.transform_into(&mut in_place).unwrap();
+        assert_eq!(in_place, expected, "{name}");
+        group.bench_function(BenchmarkId::new("transform", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| HydrogenUnfolder.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| {
+                    HydrogenUnfolder
+                        .transform_into(black_box(molecule))
+                        .unwrap()
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    transform,
+    bench_transform,
+    bench_fold_hydrogens,
+    bench_unfold_hydrogens
+);
 criterion_main!(transform);

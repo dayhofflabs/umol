@@ -5,11 +5,11 @@ use std::{iter, mem};
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle, AtomId, BondConstraintForm,
-    BondConstraintKey, BondForm, BondHandle, BondId, CisTransStereoForm, Constraint, Edit, Edits,
-    ElementForm, Entity, Lattice, Molecule, MoleculeConstraint, NumForm, RelationalConstraint,
-    StereoAtomHandle, StereoBondHandle, StereoConfigurationForm, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+    AddBond, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle, AtomId,
+    BondConstraintForm, BondConstraintKey, BondForm, BondHandle, BondId, CisTransStereoForm,
+    Constraint, Edit, Edits, ElementForm, Entity, Lattice, Molecule, MoleculeConstraint, NumForm,
+    RelationalConstraint, StereoAtomHandle, StereoBondHandle, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
 };
 use umol_perm::Permutation;
 
@@ -18,9 +18,9 @@ use crate::ops::transform::Transformer;
 /// A hydrogen collapse that cannot preserve its affected count or stereo frame.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum FoldHydrogensError {
-    #[error("atom {atom:?} has negative implicit-hydrogen count {count}")]
+    #[error("atom {atom} has negative implicit-hydrogen count {count}")]
     NegativeImplicitHydrogenCount { atom: AtomId, count: i64 },
-    #[error("folding hydrogen {hydrogen:?} would repeat an implicit-hydrogen ligand in {entity}")]
+    #[error("folding hydrogen {hydrogen} would repeat an implicit-hydrogen ligand in {entity}")]
     StereoHydrogenConflict { entity: Entity, hydrogen: AtomId },
 }
 
@@ -433,6 +433,255 @@ fn collect_topology_references(
         | Constraint::StereoAtom(..)
         | Constraint::StereoBond(..) => {}
     }
+}
+
+/// A hydrogen expansion that cannot preserve its affected count or stereo frame.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum UnfoldHydrogensError {
+    #[error("atom {atom} has negative implicit-hydrogen count {count}")]
+    NegativeImplicitHydrogenCount { atom: AtomId, count: i64 },
+    #[error("implicit-hydrogen ligand on atom {atom} in {entity} has a non-concrete count")]
+    NonConcreteStereoHydrogenCount {
+        entity: Entity,
+        atom: AtomId,
+        value: NumForm,
+    },
+    #[error("atom {atom} has implicit-hydrogen count {implicit_hydrogens} but {virtual_hydrogens} virtual hydrogens in {entity}")]
+    StereoHydrogenCountMismatch {
+        entity: Entity,
+        atom: AtomId,
+        implicit_hydrogens: i64,
+        virtual_hydrogens: usize,
+    },
+}
+
+/// Expands literal implicit-hydrogen counts into ordinary hydrogen atoms and single bonds.
+///
+/// Each positive count produces that many concrete default hydrogens and bonds,
+/// appended in bearer-atom order, and becomes literal zero. Non-literal counts
+/// remain unchanged unless they back a virtual hydrogen in a stereo frame.
+/// All existing entities retain their identities; unrelated fields are unchanged.
+///
+/// Localized valence and degree assertions increase with the added bonds, using
+/// the existing numeric-form arithmetic. Total and ring assertions are unchanged.
+/// Virtual hydrogen ligands become actual ligands in the same stored positions;
+/// configurations and frame-relative constraints are preserved. Appending the
+/// hydrogens preserves the implicit neighbor ordering of tetrahedral and cis/trans
+/// assertions. Molecule-level predicates are unchanged.
+///
+/// # Errors
+///
+/// Reports any negative literal implicit-hydrogen count, a non-literal count
+/// backing a virtual hydrogen, or a disagreement between a stereo bearer's
+/// literal count and its frame's virtual hydrogen census. Each stereo-atom frame
+/// and stereo-bond endpoint supplies the complete census for its bearer.
+/// All rejections precede mutation. Consuming failure drops the input; in-place
+/// failure leaves it unchanged. Iteration lazily yields one independent result
+/// on success and no result on rejection.
+///
+/// # Semantic properties
+///
+/// Unfolding preserves molecule representation integrity and is idempotent.
+/// No general inverse or lossless roundtrip with hydrogen folding is promised.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HydrogenUnfolder;
+
+impl HydrogenUnfolder {
+    fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, UnfoldHydrogensError> {
+        let ordinary_hydrogen = AtomForm::from_element(Element::H).into_concrete();
+        let ordinary_bond = BondForm::from_order(1).into_concrete();
+        let has_stereo = molecule.has_stereo_atoms() || molecule.has_stereo_bonds();
+        let mut atoms = Vec::new();
+        let mut bonds = Vec::new();
+        let mut hydrogens = Vec::new();
+        let mut counts = Vec::new();
+        let mut valences = Vec::new();
+        let mut degrees = Vec::new();
+        for atom in molecule.atoms().iter() {
+            let NumForm::Lit(count) = atom.implicit_hydrogens() else {
+                continue;
+            };
+            if *count < 0 {
+                return Err(UnfoldHydrogensError::NegativeImplicitHydrogenCount {
+                    atom: atom.id(),
+                    count: *count,
+                });
+            }
+            if *count == 0 {
+                continue;
+            }
+            if has_stereo && *count == 1 {
+                hydrogens.push((atom.id(), atoms.len()));
+            }
+            for _ in 0..*count {
+                bonds.push(AddBond {
+                    endpoints: [AtomHandle::Id(atom.id()), AtomHandle::New(atoms.len())],
+                    attributes: ordinary_bond.clone(),
+                });
+                atoms.push(ordinary_hydrogen.clone());
+            }
+            counts.push((
+                AtomHandle::Id(atom.id()),
+                NumForm::Lit(*count),
+                NumForm::Lit(0),
+            ));
+            let constraints = &atom.attributes().constraints;
+            if let Some(old @ AtomConstraintForm::Valence(value)) =
+                constraints.get(AtomConstraintKey::Valence)
+            {
+                valences.push((
+                    AtomHandle::Id(atom.id()),
+                    Some(old.clone()),
+                    Some(AtomConstraintForm::valence(value + *count)),
+                ));
+            }
+            if let Some(old @ AtomConstraintForm::Degree(value)) =
+                constraints.get(AtomConstraintKey::Degree)
+            {
+                degrees.push((
+                    AtomHandle::Id(atom.id()),
+                    Some(old.clone()),
+                    Some(AtomConstraintForm::degree(value + *count)),
+                ));
+            }
+        }
+        let mut edits = Edits::new();
+        if !atoms.is_empty() {
+            edits.push(Edit::AddAtoms { atoms });
+            edits.push(Edit::AddBonds { bonds });
+            edits.modify_atom_implicit_hydrogens(counts);
+            for (key, changes) in [
+                (AtomConstraintKey::Valence, valences),
+                (AtomConstraintKey::Degree, degrees),
+            ] {
+                if !changes.is_empty() {
+                    edits.modify_atom_constraints(key, changes);
+                }
+            }
+        }
+        for stereo in molecule.stereo_atoms().iter() {
+            if let Some(new) = unfold_ligands(
+                molecule,
+                Entity::StereoAtom(stereo.id()),
+                &[stereo.site_id()],
+                stereo.ligand_ids(),
+                &hydrogens,
+            )? {
+                edits.push(Edit::ReplaceStereoAtomLigands {
+                    id: StereoAtomHandle::Id(stereo.id()),
+                    old: stereo
+                        .ligand_ids()
+                        .iter()
+                        .map(|l| (AtomHandle::Id(l.atom_id), l.kind))
+                        .collect(),
+                    new,
+                });
+            }
+        }
+        for stereo in molecule.stereo_bonds().iter() {
+            if let Some(new) = unfold_ligands(
+                molecule,
+                Entity::StereoBond(stereo.id()),
+                &stereo.site().atom_ids(),
+                stereo.ligand_ids(),
+                &hydrogens,
+            )? {
+                edits.push(Edit::ReplaceStereoBondLigands {
+                    id: StereoBondHandle::Id(stereo.id()),
+                    old: stereo
+                        .ligand_ids()
+                        .iter()
+                        .map(|l| (AtomHandle::Id(l.atom_id), l.kind))
+                        .collect(),
+                    new,
+                });
+            }
+        }
+        Ok(edits)
+    }
+}
+
+impl Transformer for HydrogenUnfolder {
+    type Error = UnfoldHydrogensError;
+
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error> {
+        let edits = self.plan_transform(&molecule)?;
+        if edits.is_empty() {
+            return Ok(molecule);
+        }
+        Ok(molecule
+            .apply(edits)
+            .expect("hydrogen unfolding plan applies and preserves molecule integrity"))
+    }
+
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
+        let edits = self.plan_transform(molecule)?;
+        if !edits.is_empty() {
+            *molecule = mem::take(molecule)
+                .apply(edits)
+                .expect("hydrogen unfolding plan applies and preserves molecule integrity");
+        }
+        Ok(())
+    }
+
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        iter::once_with(move || self.transform(molecule.clone()).ok()).flatten()
+    }
+}
+
+fn unfold_ligands(
+    molecule: &Molecule,
+    entity: Entity,
+    sites: &[AtomId],
+    ligands: &[StereoLigand],
+    hydrogens: &[(AtomId, usize)],
+) -> Result<Option<Vec<(AtomHandle, StereoLigandKind)>>, UnfoldHydrogensError> {
+    let mut changed = false;
+    for &atom in sites {
+        let virtual_hydrogens = ligands
+            .iter()
+            .filter(|l| l.atom_id == atom && l.kind == StereoLigandKind::ImplicitHydrogen)
+            .count();
+        let value = molecule.atom(atom).implicit_hydrogens();
+        match value {
+            NumForm::Lit(count) if *count != virtual_hydrogens as i64 => {
+                return Err(UnfoldHydrogensError::StereoHydrogenCountMismatch {
+                    entity,
+                    atom,
+                    implicit_hydrogens: *count,
+                    virtual_hydrogens,
+                });
+            }
+            NumForm::Lit(_) => {}
+            _ if virtual_hydrogens != 0 => {
+                return Err(UnfoldHydrogensError::NonConcreteStereoHydrogenCount {
+                    entity,
+                    atom,
+                    value: value.clone(),
+                });
+            }
+            _ => {}
+        }
+        changed |= virtual_hydrogens != 0;
+    }
+    if !changed {
+        return Ok(None);
+    }
+    Ok(Some(
+        ligands
+            .iter()
+            .map(|ligand| {
+                if ligand.kind == StereoLigandKind::ImplicitHydrogen {
+                    let index = hydrogens
+                        .binary_search_by_key(&ligand.atom_id, |&(atom, _)| atom)
+                        .expect("the checked stereo census has one planned hydrogen per bearer");
+                    (AtomHandle::New(hydrogens[index].1), StereoLigandKind::Atom)
+                } else {
+                    (AtomHandle::Id(ligand.atom_id), ligand.kind)
+                }
+            })
+            .collect(),
+    ))
 }
 
 #[cfg(test)]

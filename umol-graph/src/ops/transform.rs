@@ -7,7 +7,7 @@ pub use aromaticity::{
     AromatizeError, Aromatizer, DelocalizeCharge, KekulizeConfig, KekulizeError, Kekulizer,
     MaximumMatchingAlgorithm,
 };
-pub use hydrogens::{FoldHydrogensError, HydrogenFolder};
+pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};
 use umol_graph_ir::ir::Molecule;
 
 /// Rewrites a determined molecular representation.
