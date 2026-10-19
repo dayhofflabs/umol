@@ -1,14 +1,17 @@
-//! Kekulization and aromatization of paired fixtures, through consuming and
-//! in-place operations. Parsing, construction, and cloning are outside timing.
+//! Molecular transformations through consuming and in-place operations.
+//! Parsing, construction, and cloning are outside timing.
 
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph::ops::model::AromaticityModel;
-use umol_graph::ops::transform::{Aromatizer, KekulizeConfig, Kekulizer, Transformer};
+use umol_graph::ops::transform::{
+    Aromatizer, HydrogenFolder, KekulizeConfig, Kekulizer, Transformer,
+};
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::IntoIr;
+use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
 
 fn bench_transform(c: &mut Criterion) {
@@ -139,5 +142,72 @@ fn bench_transform(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(transform, bench_transform);
+fn bench_fold_hydrogens(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fold_hydrogens");
+    for (name, input, expected) in [
+        (
+            "methane",
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+        ),
+        (
+            "methanol",
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["H" "C" "H" "H" "O" "H"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"] [4 5 "1"]]
+            }"#
+            ),
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+        ),
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["H" "C#T0" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
+                :stereo-atoms [{:site 1 :ligands [0 2 3 4] :attrs "Th0"}]
+            }"#
+            ),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C#h#T1" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
+            }"#
+            ),
+        ),
+        (
+            "unchanged",
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+        ),
+    ] {
+        assert_eq!(
+            HydrogenFolder.transform(input.clone()).unwrap(),
+            expected,
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        HydrogenFolder.transform_into(&mut in_place).unwrap();
+        assert_eq!(in_place, expected, "{name}");
+        group.bench_function(BenchmarkId::new("transform", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| HydrogenFolder.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| HydrogenFolder.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(transform, bench_transform, bench_fold_hydrogens);
 criterion_main!(transform);

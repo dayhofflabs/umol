@@ -1,12 +1,13 @@
 //! Transformations of determined molecular representations.
 
-pub mod aromatizer;
-pub mod delocalize_charge;
-pub mod kekulizer;
+pub mod aromaticity;
+pub mod hydrogens;
 
-pub use aromatizer::{AromatizeError, Aromatizer};
-pub use delocalize_charge::DelocalizeCharge;
-pub use kekulizer::{KekulizeConfig, KekulizeError, Kekulizer, MaximumMatchingAlgorithm};
+pub use aromaticity::{
+    AromatizeError, Aromatizer, DelocalizeCharge, KekulizeConfig, KekulizeError, Kekulizer,
+    MaximumMatchingAlgorithm,
+};
+pub use hydrogens::{FoldHydrogensError, HydrogenFolder};
 use umol_graph_ir::ir::Molecule;
 
 /// Rewrites a determined molecular representation.
