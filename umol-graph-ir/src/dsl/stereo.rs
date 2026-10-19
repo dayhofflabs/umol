@@ -17,7 +17,7 @@ use winnow::Parser;
 
 use super::boolean::{boolean, fmt_boolean, BooleanDsl};
 use super::config::{StereoAtomDefaults, StereoBondDefaults};
-use super::edn_utils::{eof_err, single_key_map};
+use super::edn_utils::{eof_err, read_edn_map_keys, single_key_map};
 use super::error::{PResult, ParseError};
 use super::num::variable_name;
 use crate::ir::boolean::BooleanForm;
@@ -91,8 +91,8 @@ impl<'de> FromEdn<'de> for StereoAtomDsl {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("stereo atom", e)),
             Edn::Keyword(k) => {
-                let s = expand_stereo_atom_keyword(k.name()).ok_or_else(|| {
-                    DeError::Custom(format!("unknown stereo atom keyword :{}", k.name()))
+                let s = expand_stereo_atom_keyword(k.as_str()).ok_or_else(|| {
+                    DeError::Custom(format!("unknown stereo atom keyword :{}", k.as_str()))
                 })?;
                 s.parse().map_err(|e| DeError::subgrammar("stereo atom", e))
             }
@@ -333,8 +333,8 @@ impl<'de> FromEdn<'de> for StereoBondDsl {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("stereo bond", e)),
             Edn::Keyword(k) => {
-                let s = expand_stereo_bond_keyword(k.name()).ok_or_else(|| {
-                    DeError::Custom(format!("unknown stereo bond keyword :{}", k.name()))
+                let s = expand_stereo_bond_keyword(k.as_str()).ok_or_else(|| {
+                    DeError::Custom(format!("unknown stereo bond keyword :{}", k.as_str()))
                 })?;
                 s.parse().map_err(|e| DeError::subgrammar("stereo bond", e))
             }
@@ -1412,7 +1412,7 @@ macro_rules! relation_serde {
                             path: vec![path.into()],
                         });
                     };
-                    set.insert(keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
+                    set.insert(keyword_member(k.as_str()).ok_or_else(|| DeError::TypeMismatch {
                         expected: "relation keyword",
                         got: e.kind(),
                         path: vec![path.into()],
@@ -1425,9 +1425,9 @@ macro_rules! relation_serde {
                 path: vec![path.into()],
             })?;
             match value {
-                Edn::Keyword(k) if k.name() == "undetermined" => Ok($relation::Undetermined),
+                Edn::Keyword(k) if k.as_str() == "undetermined" => Ok($relation::Undetermined),
                 Edn::Keyword(k) => {
-                    let v = keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
+                    let v = keyword_member(k.as_str()).ok_or_else(|| DeError::TypeMismatch {
                         expected: concat!(stringify!($relation), " keyword"),
                         got: value.kind(),
                         path: vec![path.into()],
@@ -1436,6 +1436,7 @@ macro_rules! relation_serde {
                 }
                 Edn::Vector(xs) => Ok($relation::lit_set(member_set(xs)?)),
                 Edn::Map(inner) => {
+                    read_edn_map_keys(inner, &["not-in"], "relation")?;
                     let complement =
                         inner.get_keyword("not-in").ok_or_else(|| DeError::MissingField {
                             key: "not-in".into(),
@@ -1498,6 +1499,7 @@ impl<'de> FromEdn<'de> for StereogenicityDsl {
                 path: Vec::new(),
             });
         };
+        read_edn_map_keys(m, &["relation"], "stereogenicity")?;
         Ok(Self(read_edn_stereogenicity_relation(m, "stereogenicity")?))
     }
 }
@@ -1551,6 +1553,7 @@ impl<'de> FromEdn<'de> for TopicityDsl {
                 path: Vec::new(),
             });
         };
+        read_edn_map_keys(m, &["pair", "relation"], "topicity")?;
         let pair_edn = m.get_keyword("pair").ok_or_else(|| DeError::MissingField {
             key: "pair".into(),
             path: vec!["topicity".into()],
@@ -1639,7 +1642,7 @@ pub(crate) fn read_edn_stereo_kind(edn: &Edn) -> Result<StereoKind, DeError> {
             path: Vec::new(),
         });
     };
-    stereo_kind_from_name(k.name())
+    stereo_kind_from_name(k.as_str())
 }
 
 fn render_edn_ligand_symmetry(ls: &LigandSymmetryForm) -> Edn<'static> {
@@ -1665,6 +1668,11 @@ fn read_edn_ligand_symmetry(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
             path: Vec::new(),
         });
     };
+    read_edn_map_keys(
+        m,
+        &["permutation", "orientation", "invariant"],
+        "ligand-symmetry",
+    )?;
     let permutation_edn = m
         .get_keyword("permutation")
         .ok_or_else(|| DeError::MissingField {
@@ -1674,8 +1682,8 @@ fn read_edn_ligand_symmetry(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
     let permutation = LigandPermutation(read_edn_permutation(permutation_edn, kind.degree())?);
     let orientation = match m.get_keyword("orientation") {
         None => Orientation::Proper,
-        Some(Edn::Keyword(k)) if k.name() == "proper" => Orientation::Proper,
-        Some(Edn::Keyword(k)) if k.name() == "improper" => Orientation::Improper,
+        Some(Edn::Keyword(k)) if k.as_str() == "proper" => Orientation::Proper,
+        Some(Edn::Keyword(k)) if k.as_str() == "improper" => Orientation::Improper,
         Some(other) => {
             return Err(DeError::TypeMismatch {
                 expected: ":proper | :improper",
@@ -1717,6 +1725,7 @@ fn read_edn_fluxionality(edn: &Edn, kind: StereoKind) -> Result<FluxionalityForm
             path: Vec::new(),
         });
     };
+    read_edn_map_keys(m, &["permutation", "active"], "fluxionality")?;
     let permutation_edn = m
         .get_keyword("permutation")
         .ok_or_else(|| DeError::MissingField {
@@ -1786,7 +1795,7 @@ macro_rules! stereo_constraint_dsl {
                         path: vec![$context.into()],
                     });
                 };
-                let constraint = match key.name() {
+                let constraint = match key.as_str() {
                     "ligand-symmetry" => {
                         $constraint::LigandSymmetry(read_edn_ligand_symmetry(value, kind)?)
                     }
@@ -1899,7 +1908,7 @@ impl<'de> FromEdn<'de> for StereoCosetDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let coset = match edn {
             Edn::Int(n) => StereoCoset::Lit(coset_lit(*n)?),
-            Edn::Keyword(k) if k.name() == "undetermined" => StereoCoset::Undetermined,
+            Edn::Keyword(k) if k.as_str() == "undetermined" => StereoCoset::Undetermined,
             Edn::Vector(xs) => {
                 let mut set = BTreeSet::new();
                 for e in xs.iter() {
@@ -1995,8 +2004,10 @@ macro_rules! stereo_site_dsl {
         impl<'de> FromEdn<'de> for $dsl {
             fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
                 match edn {
-                    Edn::Keyword(k) if k.name() == "undetermined" => Ok(Self($form::Undetermined)),
-                    Edn::Keyword(k) if k.name() == "not-stereo" => Ok(Self($form::NotStereo)),
+                    Edn::Keyword(k) if k.as_str() == "undetermined" => {
+                        Ok(Self($form::Undetermined))
+                    }
+                    Edn::Keyword(k) if k.as_str() == "not-stereo" => Ok(Self($form::NotStereo)),
                     Edn::Map(m) if m.len() == 1 => {
                         let (k, v) = m.iter().next().unwrap();
                         let Edn::Keyword(key) = k else {
@@ -2006,7 +2017,7 @@ macro_rules! stereo_site_dsl {
                                 path: Vec::new(),
                             });
                         };
-                        match key.name() {
+                        match key.as_str() {
                             "stereo" => Ok(Self($form::Stereo(
                                 StereoCosetDsl::from_edn(v)?.into_ir(&()),
                             ))),

@@ -1018,10 +1018,10 @@ pub struct AromaticValenceDsl(pub AromaticValenceForm);
 impl<'de> FromEdn<'de> for AromaticValenceDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Keyword(k) if k.name() == "undetermined" => {
+            Edn::Keyword(k) if k.as_str() == "undetermined" => {
                 Ok(Self(AromaticValenceForm::Undetermined))
             }
-            Edn::Keyword(k) if k.name() == "not-aromatic" => {
+            Edn::Keyword(k) if k.as_str() == "not-aromatic" => {
                 Ok(Self(AromaticValenceForm::NotAromatic))
             }
             Edn::Map(m) if m.len() == 1 => {
@@ -1033,7 +1033,7 @@ impl<'de> FromEdn<'de> for AromaticValenceDsl {
                         path: Vec::new(),
                     });
                 };
-                match key.name() {
+                match key.as_str() {
                     "aromatic" => Ok(Self(AromaticValenceForm::Aromatic(
                         NumDsl::from_edn(v)?.into_ir(&()),
                     ))),
@@ -1092,10 +1092,10 @@ pub struct MulticenterValenceDsl(pub MulticenterValenceForm);
 impl<'de> FromEdn<'de> for MulticenterValenceDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Keyword(k) if k.name() == "undetermined" => {
+            Edn::Keyword(k) if k.as_str() == "undetermined" => {
                 Ok(Self(MulticenterValenceForm::Undetermined))
             }
-            Edn::Keyword(k) if k.name() == "not-multicenter" => {
+            Edn::Keyword(k) if k.as_str() == "not-multicenter" => {
                 Ok(Self(MulticenterValenceForm::NotMulticenter))
             }
             Edn::Map(m) if m.len() == 1 => {
@@ -1107,7 +1107,7 @@ impl<'de> FromEdn<'de> for MulticenterValenceDsl {
                         path: Vec::new(),
                     });
                 };
-                match key.name() {
+                match key.as_str() {
                     "multicenter" => Ok(Self(MulticenterValenceForm::Multicenter(
                         NumDsl::from_edn(v)?.into_ir(&()),
                     ))),
@@ -1187,7 +1187,7 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
                 path: vec!["atom-constraint".into()],
             });
         };
-        let c = match key.name() {
+        let c = match key.as_str() {
             "valence" => AtomConstraintForm::Valence(NumDsl::from_edn(v)?.into_ir(&())),
             "total-valence" => AtomConstraintForm::TotalValence(NumDsl::from_edn(v)?.into_ir(&())),
             "aromatic-valence" => {

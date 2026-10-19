@@ -249,7 +249,7 @@ impl<'de> FromEdn<'de> for RelationalConstraintDsl {
                 path: vec!["relational-constraint".into()],
             });
         };
-        parse_payload(key.name(), v)
+        parse_payload(key.as_str(), v)
     }
 }
 

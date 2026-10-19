@@ -505,7 +505,7 @@ impl<'de> FromEdn<'de> for AromaticSystemConstraintDsl {
             ));
         }
         let kw = match key {
-            Edn::Keyword(k) => k.name(),
+            Edn::Keyword(k) => k.as_str(),
             other => {
                 return Err(DeError::TypeMismatch {
                     expected: "keyword",

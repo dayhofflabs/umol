@@ -5,6 +5,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use rstest::rstest;
+use umol_edn::{DeError, Edn, EdnError, ParseError as EdnParseError};
 
 use crate::strategies::*;
 
@@ -56,6 +57,103 @@ proptest! {
             .ok()
             .and_then(|edn| MoleculeDsl::from_edn(&edn).ok());
         prop_assert_eq!(via_stream, via_tree);
+    }
+
+    /// Adding an unknown field to a valid structural reference is rejected by both parsers.
+    #[test]
+    fn test_molecule_dsl_from_edn_unknown_key(
+        suffix in "[a-z]{1,12}",
+        value in any::<i64>(),
+        first in any::<bool>(),
+        namespaced in any::<bool>(),
+    ) {
+        let key = if namespaced { format!("{suffix}/atoms") } else { format!("unknown-{suffix}") };
+        let entry = format!(":{key} {value}");
+        let fields = if first {
+            format!("{entry} :atoms [0 1]")
+        } else {
+            format!(":atoms [0 1] {entry}")
+        };
+        let source = format!(
+            r#"{{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{{:bond [{{{fields}}} {{:aromatic true}}]}}]}}"#,
+        );
+        let expected = DeError::UnknownField {
+            key,
+            path: vec!["bond structural ref".into()],
+        };
+        let tree = read_string(&source).unwrap();
+        prop_assert_eq!(MoleculeDsl::from_edn(&tree), Err(expected.clone()));
+        prop_assert_eq!(MoleculeDsl::from_edn_str(&source), Err(expected.into()));
+    }
+
+    /// EDN permits non-keyword map keys; the molecule DSL does not.
+    #[test]
+    fn test_molecule_dsl_from_edn_non_keyword_key(
+        values in prop::collection::vec(any::<i64>(), 0..5),
+        first in any::<bool>(),
+    ) {
+        let key = Edn::Vector(values.into_iter().map(Edn::Int).collect::<Vec<_>>().into());
+        let fields = if first {
+            format!("{key} 0 :atoms [0 1]")
+        } else {
+            format!(":atoms [0 1] {key} 0")
+        };
+        let source = format!(
+            r#"{{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{{:bond [{{{fields}}} {{:aromatic true}}]}}]}}"#,
+        );
+        let tree = read_string(&source).unwrap();
+        prop_assert_eq!(MoleculeDsl::from_edn(&tree), Err(DeError::TypeMismatch {
+            expected: "keyword key",
+            got: "vector",
+            path: vec!["bond structural ref".into()],
+        }));
+        prop_assert!(matches!(
+            MoleculeDsl::from_edn_str(&source),
+            Err(EdnError::Parse(EdnParseError::UnexpectedToken { found: '[', .. }))
+        ), "non-keyword map key was not rejected at its opening bracket");
+    }
+
+    /// Qualifying a grammar keyword does not retain its unqualified meaning.
+    #[test]
+    fn test_molecule_dsl_from_edn_namespaced_keyword(
+        namespace in "[a-z]{1,12}",
+        (source, keyword) in prop::sample::select(vec![
+            (r#"{:atoms ["C" "C"] :bonds [[0 1 :single]]}"#, "single"),
+            (r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs :single}]}"#, "single"),
+            (r#"{:atoms ["C"] :constraints [{:atom [0 {:valence :undetermined}]}]}"#, "undetermined"),
+            (r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:aromatic :undetermined}]}]}"#, "undetermined"),
+            (r#"{:atoms ["C"] :constraints [{:atom [0 {:aromatic-valence :not-aromatic}]}]}"#, "not-aromatic"),
+            (r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs :ccw}]}"#, "ccw"),
+        ]),
+    ) {
+        let valid = MoleculeDsl::from_edn_str(source).unwrap();
+        prop_assert_eq!(MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap(), valid);
+        let source = source.replace(&format!(":{keyword}"), &format!(":{namespace}/{keyword}"));
+        prop_assert_eq!(MoleculeDsl::from_edn(&read_string(&source).unwrap()).ok(), None);
+        prop_assert_eq!(MoleculeDsl::from_edn_str(&source).ok(), None);
+    }
+
+    /// Repeating a map field is invalid even when the repeated values are identical.
+    #[test]
+    fn test_molecule_dsl_from_edn_str_duplicate_key(
+        dsl in molecule_dsl_strategy(),
+        index in 0..10usize,
+        first in any::<bool>(),
+    ) {
+        let edn = dsl.to_edn();
+        let Edn::Map(map) = &edn else { unreachable!() };
+        let (key, value) = map.iter().nth(index % map.len()).unwrap();
+        let rendered = edn.to_string();
+        let original_fields = &rendered[1..rendered.len() - 1];
+        let source = if first {
+            format!("{{{key} {value} {original_fields}}}")
+        } else {
+            format!("{{{original_fields} {key} {value}}}")
+        };
+        let expected = read_string(&source).unwrap_err();
+        prop_assert!(matches!(expected, EdnError::Parse(EdnParseError::DuplicateKey { .. })),
+            "repeated field was not rejected as a duplicate key");
+        prop_assert_eq!(MoleculeDsl::from_edn_str(&source), Err(expected));
     }
 
     /// Direct `Molecule::ToEdn` / `FromEdn` round-trips are the identity.

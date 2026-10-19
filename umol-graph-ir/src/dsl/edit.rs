@@ -2524,7 +2524,7 @@ fn parse_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let changes: Edn<'_> = helper.required("changes")?;
             helper.finalize()?;
             let key = match &key {
-                Edn::Keyword(keyword) => match keyword.name() {
+                Edn::Keyword(keyword) => match keyword.as_str() {
                     "valence" => AtomConstraintKey::Valence,
                     "donated-pairs" => AtomConstraintKey::DonatedPairs,
                     "accepted-pairs" => AtomConstraintKey::AcceptedPairs,
@@ -2665,7 +2665,7 @@ fn parse_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let changes: Edn<'_> = helper.required("changes")?;
             helper.finalize()?;
             let key = match &key {
-                Edn::Keyword(keyword) => match keyword.name() {
+                Edn::Keyword(keyword) => match keyword.as_str() {
                     "aromatic" => BondConstraintKey::Aromatic,
                     "cis-trans-stereo" => BondConstraintKey::CisTransStereo,
                     other => {
@@ -2781,7 +2781,7 @@ fn parse_dative_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let changes: Edn<'_> = helper.required("changes")?;
             helper.finalize()?;
             let key = match &key {
-                Edn::Keyword(keyword) => match keyword.name() {
+                Edn::Keyword(keyword) => match keyword.as_str() {
                     "aromatic" => DativeBondConstraintKey::Aromatic,
                     other => {
                         return Err(DeError::Custom(format!(
@@ -2950,7 +2950,7 @@ fn parse_aromatic_system_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let changes: Edn<'_> = helper.required("changes")?;
             helper.finalize()?;
             let key = match &key {
-                Edn::Keyword(keyword) if keyword.name() == "electron-count" => {
+                Edn::Keyword(keyword) if keyword.as_str() == "electron-count" => {
                     AromaticSystemConstraintKey::ElectronCount
                 }
                 _ => {
@@ -3097,7 +3097,7 @@ fn parse_multicenter_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let changes: Edn<'_> = helper.required("changes")?;
             helper.finalize()?;
             let key = match &key {
-                Edn::Keyword(keyword) if keyword.name() == "electron-count" => {
+                Edn::Keyword(keyword) if keyword.as_str() == "electron-count" => {
                     MulticenterBondConstraintKey::ElectronCount
                 }
                 _ => {
@@ -3208,7 +3208,7 @@ fn parse_noncovalent_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let changes: Edn<'_> = helper.required("changes")?;
             helper.finalize()?;
             let key = match &key {
-                Edn::Keyword(keyword) if keyword.name() == "intramolecular" => {
+                Edn::Keyword(keyword) if keyword.as_str() == "intramolecular" => {
                     NoncovalentBondConstraintKey::Intramolecular
                 }
                 _ => {
@@ -3597,7 +3597,7 @@ fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             helper.finalize()?;
             let kind = read_edn_stereo_kind(&kind)?;
             let key = match &key {
-                Edn::Keyword(keyword) if keyword.name() == "stereogenicity" => {
+                Edn::Keyword(keyword) if keyword.as_str() == "stereogenicity" => {
                     StereoAtomConstraintKey::Stereogenicity
                 }
                 Edn::Map(_) => {
@@ -3631,10 +3631,12 @@ fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                                     helper.optional("orientation")?;
                                 let orientation = match orientation {
                                     None => Orientation::Proper,
-                                    Some(Edn::Keyword(keyword)) if keyword.name() == "proper" => {
+                                    Some(Edn::Keyword(keyword)) if keyword.as_str() == "proper" => {
                                         Orientation::Proper
                                     }
-                                    Some(Edn::Keyword(keyword)) if keyword.name() == "improper" => {
+                                    Some(Edn::Keyword(keyword))
+                                        if keyword.as_str() == "improper" =>
+                                    {
                                         Orientation::Improper
                                     }
                                     _ => {
@@ -3760,7 +3762,7 @@ fn parse_stereo_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             helper.finalize()?;
             let kind = read_edn_stereo_kind(&kind)?;
             let key = match &key {
-                Edn::Keyword(keyword) if keyword.name() == "stereogenicity" => {
+                Edn::Keyword(keyword) if keyword.as_str() == "stereogenicity" => {
                     StereoBondConstraintKey::Stereogenicity
                 }
                 Edn::Map(_) => {
@@ -3794,10 +3796,12 @@ fn parse_stereo_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                                     helper.optional("orientation")?;
                                 let orientation = match orientation {
                                     None => Orientation::Proper,
-                                    Some(Edn::Keyword(keyword)) if keyword.name() == "proper" => {
+                                    Some(Edn::Keyword(keyword)) if keyword.as_str() == "proper" => {
                                         Orientation::Proper
                                     }
-                                    Some(Edn::Keyword(keyword)) if keyword.name() == "improper" => {
+                                    Some(Edn::Keyword(keyword))
+                                        if keyword.as_str() == "improper" =>
+                                    {
                                         Orientation::Improper
                                     }
                                     _ => {
@@ -4071,7 +4075,7 @@ fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
                     path: vec!["stereo ligand".to_string()],
                 });
             };
-            let kind = match tag.name() {
+            let kind = match tag.as_str() {
                 "h" => StereoLigandKind::ImplicitHydrogen,
                 "lp" => StereoLigandKind::LonePair,
                 other => {

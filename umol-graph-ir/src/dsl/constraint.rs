@@ -14,8 +14,8 @@ use super::bond::BondConstraintDsl;
 use super::boolean::read_boolean_dsl;
 use super::dative::DativeBondConstraintDsl;
 use super::edn_utils::{
-    consume_single_key_map_close, eof_err, missing, read_map, read_single_key_map_header, read_vec,
-    unexpected_byte_kind,
+    consume_single_key_map_close, eof_err, missing, read_edn_map_keys, read_map,
+    read_single_key_map_header, read_vec, unexpected_byte_kind,
 };
 use super::error::ParseError;
 use super::metadata::Metadata;
@@ -84,7 +84,13 @@ pub(super) fn read_unpaired_electrons(
         match key {
             "count" => count = Some(read_num_dsl(d)?.into_ir(&())),
             "multiplicity" => multiplicity = Some(read_num_dsl(d)?.into_ir(&())),
-            _ => d.read_skip_value()?,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["unpaired-electrons".into()],
+                }
+                .into());
+            }
         }
         Ok(())
     })?;
@@ -245,7 +251,7 @@ impl<'de> FromEdn<'de> for RingMembershipDsl {
                     path: vec!["ring-membership".into()],
                 });
             };
-            match key.name() {
+            match key.as_str() {
                 "size" => {
                     let Edn::Int(n) = v else {
                         return Err(DeError::TypeMismatch {
@@ -933,7 +939,13 @@ pub(super) fn read_molecule_constraint_dsl(
                 match k {
                     "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
                     "sum" => sum = Some(read_num_dsl(d)?),
-                    _ => d.read_skip_value()?,
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["charge-sum".into()],
+                        }
+                        .into());
+                    }
                 }
                 Ok(())
             })?;
@@ -949,7 +961,13 @@ pub(super) fn read_molecule_constraint_dsl(
                 match k {
                     "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
                     "unpaired-electrons" => unpaired_electrons = Some(read_unpaired_electrons(d)?),
-                    _ => d.read_skip_value()?,
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["unpaired-electron-coupling".into()],
+                        }
+                        .into());
+                    }
                 }
                 Ok(())
             })?;
@@ -966,7 +984,13 @@ pub(super) fn read_molecule_constraint_dsl(
                 match k {
                     "bonds" => bonds = Some(read_vec(d, read_bond_ref)?),
                     "sum" => sum = Some(read_num_dsl(d)?),
-                    _ => d.read_skip_value()?,
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["bond-order-sum".into()],
+                        }
+                        .into());
+                    }
                 }
                 Ok(())
             })?;
@@ -980,7 +1004,13 @@ pub(super) fn read_molecule_constraint_dsl(
             read_map(de, |d, k| {
                 match k {
                     "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
-                    _ => d.read_skip_value()?,
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["connected".into()],
+                        }
+                        .into());
+                    }
                 }
                 Ok(())
             })?;
@@ -1245,13 +1275,18 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                 path: vec!["molecule-constraint".into()],
             });
         };
-        Ok(match key.name() {
+        Ok(match key.as_str() {
             "charge-sum" => {
                 let (atoms, sum) = parse_sum_map::<AtomRef>(v, "charge-sum", "atoms")?;
                 Self::ChargeSum { atoms, sum }
             }
             "unpaired-electron-coupling" => {
                 let m = expect_map(v, "unpaired-electron-coupling")?;
+                read_edn_map_keys(
+                    m,
+                    &["atoms", "unpaired-electrons"],
+                    "unpaired-electron-coupling",
+                )?;
                 let atoms = parse_optional_refs::<AtomRef>(m, "atoms")?;
                 let unpaired_electrons_edn =
                     m.get_keyword("unpaired-electrons")
@@ -1270,6 +1305,7 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
             }
             "connected" => {
                 let m = expect_map(v, "connected")?;
+                read_edn_map_keys(m, &["atoms"], "connected")?;
                 Self::Connected {
                     atoms: parse_optional_refs::<AtomRef>(m, "atoms")?,
                 }
@@ -1370,6 +1406,7 @@ where
     R: for<'de> FromEdn<'de>,
 {
     let m = expect_map(edn, context)?;
+    read_edn_map_keys(m, &[refs_key, "sum"], context)?;
     let refs = parse_optional_refs::<R>(m, refs_key)?;
     let sum_edn = m.get_keyword("sum").ok_or_else(|| DeError::MissingField {
         key: "sum".into(),
@@ -1392,6 +1429,7 @@ fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &NumDsl)
 
 pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectronsForm, DeError> {
     let m = expect_map(edn, "unpaired-electrons")?;
+    read_edn_map_keys(m, &["count", "multiplicity"], "unpaired-electrons")?;
     let count = m
         .get_keyword("count")
         .ok_or_else(|| DeError::MissingField {
@@ -1465,7 +1503,7 @@ impl<'de> FromEdn<'de> for ConstraintDsl {
                 path: vec!["constraint".into()],
             });
         };
-        Ok(match key.name() {
+        Ok(match key.as_str() {
             "atom" => {
                 let (r, c) = parse_entity_leaf::<AtomRef, AtomConstraintDsl>(v, "atom")?;
                 Self::Atom(r, c)
@@ -1816,6 +1854,88 @@ mod tests {
     }
 
     /// A namespace with ten entities of each kind, so index refs up to 9 resolve.
+    #[rstest]
+    #[case::charge_sum("{:charge-sum {:sum 0 :unexpected 0}}", "charge-sum")]
+    #[case::coupling("{:unpaired-electron-coupling {:unpaired-electrons {:count 1 :multiplicity 2} :unexpected 0}}", "unpaired-electron-coupling")]
+    #[case::unpaired_electrons("{:unpaired-electron-coupling {:unpaired-electrons {:count 1 :multiplicity 2 :unexpected 0}}}", "unpaired-electrons")]
+    #[case::bond_order_sum("{:bond-order-sum {:sum 2 :unexpected 0}}", "bond-order-sum")]
+    #[case::connected("{:connected {:atoms [0 1] :unexpected 0}}", "connected")]
+    #[case::ligand_symmetry(
+        "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :unexpected 0}}]]}",
+        "ligand-symmetry"
+    )]
+    #[case::fluxionality(
+        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :unexpected 0}}]]}",
+        "fluxionality"
+    )]
+    #[case::topicity("{:stereo-atom [0 [:tetrahedral {:topicity {:pair [0 1] :relation :homotopic :unexpected 0}}]]}", "topicity")]
+    #[case::stereogenicity(
+        "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :symmetric :unexpected 0}}]]}",
+        "stereogenicity"
+    )]
+    #[case::topicity_complement("{:stereo-atom [0 [:tetrahedral {:topicity {:pair [0 1] :relation {:not-in [:homotopic] :unexpected 0}}}]]}", "relation")]
+    #[case::stereogenicity_complement("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:symmetric] :unexpected 0}}}]]}", "relation")]
+    fn test_read_constraint_dsl_map_keys(
+        #[case] source: &str,
+        #[case] context: &str,
+        #[values(":unexpected", ":other/relation", "[]")] key: &str,
+    ) {
+        let valid = source.replace(" :unexpected 0", "");
+        assert_eq!(
+            read_constraint_dsl(&mut EdnStreamDeserializer::new(&valid)).unwrap(),
+            ConstraintDsl::from_edn(&read_string(&valid).unwrap()).unwrap(),
+        );
+
+        let source = source.replace(":unexpected", key);
+        let tree_error = if let Some(name) = key.strip_prefix(':') {
+            DeError::UnknownField {
+                key: name.into(),
+                path: vec![context.into()],
+            }
+        } else {
+            DeError::TypeMismatch {
+                expected: "keyword key",
+                got: "vector",
+                path: vec![context.into()],
+            }
+        };
+        let stream_error = if key.starts_with(':') {
+            EdnError::De(tree_error.clone())
+        } else {
+            umol_edn::ParseError::UnexpectedToken {
+                offset: source.find(key).unwrap(),
+                found: '[',
+            }
+            .into()
+        };
+        assert_eq!(
+            ConstraintDsl::from_edn(&read_string(&source).unwrap()),
+            Err(tree_error),
+        );
+        assert_eq!(
+            read_constraint_dsl(&mut EdnStreamDeserializer::new(&source)),
+            Err(stream_error),
+        );
+    }
+
+    #[rstest]
+    #[case::count(
+        "{:unpaired-electron-coupling {:unpaired-electrons {:count 1 :multiplicity 2 :count 3}}}",
+        ":count"
+    )]
+    #[case::orientation("{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :proper :orientation :improper}}]]}", ":orientation")]
+    #[case::relation("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:symmetric] :not-in [:stereogenic]}}}]]}", ":not-in")]
+    fn test_read_constraint_dsl_duplicate_keys(#[case] source: &str, #[case] key: &str) {
+        let expected = EdnError::from(umol_edn::ParseError::DuplicateKey {
+            offset: source.rfind(key).unwrap(),
+        });
+        assert_eq!(read_string(source), Err(expected.clone()));
+        assert_eq!(
+            read_constraint_dsl(&mut EdnStreamDeserializer::new(source)),
+            Err(expected),
+        );
+    }
+
     #[fixture]
     fn full_namespace() -> MoleculeContext {
         let mut context = MoleculeContext::default();

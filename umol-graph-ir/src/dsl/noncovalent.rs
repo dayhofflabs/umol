@@ -409,7 +409,7 @@ impl<'de> FromEdn<'de> for NoncovalentBondConstraintDsl {
                         path: vec!["noncovalent-bond-constraint".into()],
                     });
                 };
-                Ok(match key.name() {
+                Ok(match key.as_str() {
                     "intramolecular" => Self::Intramolecular(BooleanDsl::from_edn(v)?.0),
                     other => {
                         return Err(DeError::UnknownField {

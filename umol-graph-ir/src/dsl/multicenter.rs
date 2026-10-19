@@ -515,7 +515,7 @@ impl<'de> FromEdn<'de> for MulticenterBondConstraintDsl {
             ));
         }
         let kw = match key {
-            Edn::Keyword(k) => k.name(),
+            Edn::Keyword(k) => k.as_str(),
             other => {
                 return Err(DeError::TypeMismatch {
                     expected: "keyword",

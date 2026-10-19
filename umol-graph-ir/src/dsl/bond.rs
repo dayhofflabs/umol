@@ -75,8 +75,8 @@ impl<'de> FromEdn<'de> for BondDsl {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("bond", e)),
             Edn::Keyword(k) => {
-                let s = expand_bond_keyword(k.name()).ok_or_else(|| {
-                    DeError::Custom(format!("unknown bond keyword :{}", k.name()))
+                let s = expand_bond_keyword(k.as_str()).ok_or_else(|| {
+                    DeError::Custom(format!("unknown bond keyword :{}", k.as_str()))
                 })?;
                 s.parse().map_err(|e| DeError::subgrammar("bond", e))
             }
@@ -593,7 +593,7 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                         path: vec!["bond-constraint".into()],
                     });
                 };
-                let c = match key.name() {
+                let c = match key.as_str() {
                     "aromatic" => BondConstraintForm::Aromatic(BooleanDsl::from_edn(v)?.0),
                     "ring-membership" => {
                         BondConstraintForm::RingMembership(RingMembershipDsl::from_edn(v)?.0)
