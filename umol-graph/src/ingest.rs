@@ -1456,6 +1456,9 @@ mod tests {
     #[case::sulfoxide("[CH3][S](=[O])[CH3]", mol_dsl_concrete!(r#"{:atoms ["C#h3" "S#n1" "O#n2" "C#h3"] :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"]]}"#))]
     #[case::zwitterion("[NH3+][CH2][C](=[O])[O-]", mol_dsl_concrete!(r#"{:atoms ["N#c+#h3" "C#h2" "C" "O#n2" "O#c-#n3"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "2"] [2 4 "1"]]}"#))]
     #[case::components("[NH4+].[Cl-].[13CH3]", mol_dsl_concrete!(r#"{:atoms ["N#c+#h4" "Cl#c-#n4" "C#i13#h3#u1#s2"]}"#))]
+    #[case::carbon_four_bonds("[C](F)(Cl)(Br)I", mol_dsl_concrete!(r#"{:atoms ["C" "F#n3" "Cl#n3" "Br#n3" "I#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+    #[case::carbon_anion_three_bonds("[C-](F)(Cl)Br", mol_dsl_concrete!(r#"{:atoms ["C#c-#n1" "F#n3" "Cl#n3" "Br#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
+    #[case::chlorine_trifluoride("[Cl](F)(F)F", mol_dsl_concrete!(r#"{:atoms ["Cl#n2" "F#n3" "F#n3" "F#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
     fn test_ingest_smiles_with_resolution(
         #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
         #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
@@ -1587,6 +1590,27 @@ mod tests {
                         charge: Some(charge),
                     }
                 ),)
+            )),
+        );
+    }
+
+    #[rstest]
+    #[case::carbon_anion("[C-](F)(Cl)(Br)I")]
+    #[case::carbon_anion_stereo("[C@-](F)(Cl)(Br)I")]
+    fn test_ingest_smiles_with_counts_error(#[case] input: &str) {
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..ChemistryModel::default()
+        };
+        assert_eq!(
+            ingest_smiles_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &model,
+                &ResolveConfig::default(),
+            ),
+            Err(SmilesInputError::Contradiction(
+                ResolveContradiction::Valence(ValenceContradiction::Counts(CountsError::NoMatch))
             )),
         );
     }

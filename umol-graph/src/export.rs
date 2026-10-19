@@ -912,6 +912,33 @@ mod tests {
     }
 
     #[rstest]
+    #[case::over_capacity(
+        mol_dsl_concrete!(r#"{:atoms ["N" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]}"#),
+        "[N](F)(F)(F)(F)F"
+    )]
+    #[case::within_capacity(
+        mol_dsl_concrete!(r#"{:atoms ["P" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]}"#),
+        "P(F)(F)(F)(F)F"
+    )]
+    fn test_smiles_convey_valence(#[case] source: Molecule, #[case] expected: &str) {
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        };
+        let original = source.clone();
+        let smiles =
+            Smiles::convey(&source, &model, &config, &SmilesIoConfig::opensmiles()).unwrap();
+        assert_eq!(smiles.render(), Ok(expected.to_owned()));
+        assert_eq!(source, original);
+    }
+
+    #[rstest]
     #[case::boron("[BH3]", "[BH3]", "B")]
     #[case::water("[OH2]", "[OH2]", "O")]
     fn test_smiles_convey_model(
