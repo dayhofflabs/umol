@@ -310,8 +310,8 @@ mod tests {
         ValenceTieBreak,
     };
     use crate::ops::resolve::{
-        AromaticityFailurePolicy, AromaticityResolveConfig, StereoContradiction,
-        StereoResolveConfig, ValenceContradiction,
+        AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
+        StereoResolveContradiction, ValenceContradiction,
     };
     use crate::ops::stereo::StereoInconsistency;
     use crate::ops::valence::{AtomTypeRegistry, AtomTypingError, CountsError};
@@ -953,13 +953,13 @@ mod tests {
     #[case::syntax(" C", SmilesInputError::Syntax(SmilesParseError::LeadingWhitespace))]
     #[case::incomplete_stereo(
         "C[S@]C",
-        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::underdetermined("*", SmilesInputError::Underdetermined(ResolveUnderdetermined))]
     #[case::trigonal_carbon(
         "[C@](F)(Cl)Br",
         SmilesInputError::Contradiction(ResolveContradiction::Stereo(
-            StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure {
+            StereoResolveContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure {
                 stereo_atom: StereoAtomId(0),
             }),
         ))
@@ -967,18 +967,18 @@ mod tests {
     #[case::trigonal_carbocation(
         "[C@+](F)(Cl)Br",
         SmilesInputError::Contradiction(ResolveContradiction::Stereo(
-            StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure {
+            StereoResolveContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure {
                 stereo_atom: StereoAtomId(0),
             }),
         ))
     )]
     #[case::two_carbon_substituents(
         "[C@](F)Cl",
-        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::one_carbon_substituent(
         "[C@]F",
-        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::five_ligands(
         "[C@H](F)(Cl)(Br)I",
