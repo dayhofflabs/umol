@@ -102,8 +102,8 @@ approximate.
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
 | `*Form` / `*Dsl` | lattice-shaped graph-IR value / boundary surface | 69 / 38 | graph-ir, py |
 
-Families with no member yet, named in settled vocabulary and expected to gain one:
-`*Failure` and transformers (see *Transformer naming* below).
+`*Failure` has no member yet, but is named in settled vocabulary and expected to gain one.
+Transformer engine names follow the *Transformer naming* rule below.
 
 ### Stacking order
 
@@ -198,22 +198,14 @@ state.
 **Not:** each other. The difference is whether the input spoke.
 **In code:** `MoleculeDefaults`, `AtomDefaults` against `MoleculeOverrides`, `AtomOverrides`.
 
-### Transformer naming — unsettled
+### Transformer naming
 
-Three patterns are in use for the same family:
+Transformer engines use agent nouns whether configured or parameterless: Kekulizer, Aromatizer,
+ChargeDelocalizer, HydrogenFolder, and HydrogenUnfolder. Having a config or error type does not
+change the engine naming rule.
 
-- agent noun: `Kekulizer`, `Aromatizer`, each having grown `*Error` and `*Config`;
-- verb phrase: `DelocalizeCharge`;
-- target phrase: `ToExplicitHydrogens`, `ToImplicitHydrogens` (planned).
-
-The house pattern for a thing that performs an operation is the agent noun — `Resolver`, `Validator`,
-`Kekulizer`. The counter-argument is that `Kekulizer` and `Aromatizer` are configured engines with
-their own error and config types, while `DelocalizeCharge` and the hydrogen transforms are
-parameterless operations, which may justify two conventions rather than one.
-
-The engine-adjacent side is settled by the *Operation names* entry: the agent noun names engines
-only, and every run artifact (`*Error`, `*Config`, state) takes the verb stem. Open here remains
-only the choice between agent-noun engines and verb-phrase parameterless transforms.
+Run artifacts retain the verb-stem convention from *Operation names*: KekulizeConfig,
+KekulizeError, FoldHydrogensError, and UnfoldHydrogensError.
 
 ## Module names
 
@@ -258,10 +250,9 @@ text changes at the same time.
 
 | # | Issue | Where | Kind |
 | --- | --- | --- | --- |
-| 1 | Transformer naming has three patterns in use — agent noun (`Kekulizer`, `Aromatizer`), verb phrase (`DelocalizeCharge`), target phrase (`ToExplicitHydrogens`). Needs deciding before the planned members land. | *Transformer naming* | decision |
 | 3 | One patch law, two spellings: `apply`/`diff` on `EntityPatch`, `update`/`difference_to` on the entity update surface. | *Patch algebra* | naming split |
 | 4 | `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`; the `CosetSpace` doc on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so line 25 is wrong. | *Coset* | doc error |
-| 6 | `*Failure` and the transformer family are named in settled vocabulary but have no members yet, so the conventions are untested. | *Suffixes* | latent |
+| 6 | `*Failure` is named in settled vocabulary but has no members yet, so the convention is untested. | *Suffixes* | latent |
 | 7 | Six of eleven `Solution` accessors have no call sites outside `umol-utils`: `into_determined`, `into_data`, `into_contradiction`, `is_determined`, `is_underdetermined`, `contradiction`. API surface rather than nomenclature, but cheap to trim now. | *Solution* | unused surface |
 | 8 | `Derivation`, `Failure` and `Projection` have no `In code` names. | those entries | incomplete |
 

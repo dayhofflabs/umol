@@ -4,7 +4,7 @@ pub mod aromaticity;
 pub mod hydrogens;
 
 pub use aromaticity::{
-    AromatizeError, Aromatizer, DelocalizeCharge, KekulizeConfig, KekulizeError, Kekulizer,
+    AromatizeError, Aromatizer, ChargeDelocalizer, KekulizeConfig, KekulizeError, Kekulizer,
     MaximumMatchingAlgorithm,
 };
 pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};

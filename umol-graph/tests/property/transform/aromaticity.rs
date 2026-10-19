@@ -17,7 +17,7 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph::ops::model::{AromaticityModel, AromaticityRule, RingLimits};
 use umol_graph::ops::transform::{
-    Aromatizer, DelocalizeCharge, KekulizeConfig, KekulizeError, Kekulizer,
+    Aromatizer, ChargeDelocalizer, KekulizeConfig, KekulizeError, Kekulizer,
     MaximumMatchingAlgorithm, Transformer,
 };
 use umol_graph::ops::validate::ValenceInvariantsValidator;
@@ -115,8 +115,8 @@ proptest! {
         use_bipartite in any::<bool>(),
     ) {
         let mut borrowed = source.clone();
-        let published = DelocalizeCharge.transform(source.clone()).unwrap();
-        prop_assert_eq!(DelocalizeCharge.transform_into(&mut borrowed), Ok(()));
+        let published = ChargeDelocalizer.transform(source.clone()).unwrap();
+        prop_assert_eq!(ChargeDelocalizer.transform_into(&mut borrowed), Ok(()));
         prop_assert_eq!(&borrowed, &published);
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));
 

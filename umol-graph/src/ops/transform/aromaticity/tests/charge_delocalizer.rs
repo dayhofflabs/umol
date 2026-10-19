@@ -3,7 +3,7 @@ use rstest::rstest;
 use umol_graph_ir::ir::{AtomId, Molecule, NumForm};
 use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
-use crate::ops::transform::{DelocalizeCharge, Transformer};
+use crate::ops::transform::{ChargeDelocalizer, Transformer};
 
 #[rstest]
 #[case::cyclopentadienyl(
@@ -60,11 +60,11 @@ use crate::ops::transform::{DelocalizeCharge, Transformer};
             {:atoms [3 4 5] :attrs "[1,1,1]#c+"}]
     }"#)
 )]
-fn test_delocalize_charge_transform(#[case] input: Molecule, #[case] expected: Molecule) {
+fn test_charge_delocalizer_transform(#[case] input: Molecule, #[case] expected: Molecule) {
     let mut borrowed = input.clone();
-    assert_eq!(DelocalizeCharge.transform_into(&mut borrowed), Ok(()));
+    assert_eq!(ChargeDelocalizer.transform_into(&mut borrowed), Ok(()));
     assert_eq!(borrowed, expected);
-    assert_eq!(DelocalizeCharge.transform(input), Ok(expected));
+    assert_eq!(ChargeDelocalizer.transform(input), Ok(expected));
 }
 
 #[rstest]
@@ -87,11 +87,11 @@ fn test_delocalize_charge_transform(#[case] input: Molecule, #[case] expected: M
     :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
     :aromatic-systems [{:atoms [0 1 2] :attrs "*"}]
 }"#))]
-fn test_delocalize_charge_transform_identity(#[case] input: Molecule) {
+fn test_charge_delocalizer_transform_identity(#[case] input: Molecule) {
     let mut borrowed = input.clone();
-    assert_eq!(DelocalizeCharge.transform_into(&mut borrowed), Ok(()));
+    assert_eq!(ChargeDelocalizer.transform_into(&mut borrowed), Ok(()));
     assert_eq!(borrowed, input);
-    assert_eq!(DelocalizeCharge.transform(input.clone()), Ok(input));
+    assert_eq!(ChargeDelocalizer.transform(input.clone()), Ok(input));
 }
 
 #[rstest]
@@ -107,9 +107,9 @@ fn test_delocalize_charge_transform_identity(#[case] input: Molecule) {
         :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c+"}]
     }"#)
 )]
-fn test_delocalize_charge_transform_iter(#[case] input: Molecule, #[case] expected: Molecule) {
+fn test_charge_delocalizer_transform_iter(#[case] input: Molecule, #[case] expected: Molecule) {
     let original = input.clone();
-    let mut results = DelocalizeCharge.transform_iter(&input);
+    let mut results = ChargeDelocalizer.transform_iter(&input);
     let mut first = results.next().unwrap();
     assert_eq!(first, expected);
     assert_eq!(results.next(), None);
@@ -118,7 +118,7 @@ fn test_delocalize_charge_transform_iter(#[case] input: Molecule, #[case] expect
     first.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(-1);
     assert_eq!(input, original);
     assert_eq!(
-        DelocalizeCharge.transform_iter(&input).next(),
+        ChargeDelocalizer.transform_iter(&input).next(),
         Some(expected)
     );
 }

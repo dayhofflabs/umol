@@ -1,3 +1,3 @@
 mod aromatizer;
-mod delocalize_charge;
+mod charge_delocalizer;
 mod kekulizer;

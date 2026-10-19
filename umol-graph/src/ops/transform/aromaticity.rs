@@ -1050,7 +1050,7 @@ impl Kekulizer {
 
 /// Delocalizes atom-localized charge over homogeneous aromatic systems.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct DelocalizeCharge;
+pub struct ChargeDelocalizer;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DelocalizationPlan {
@@ -1119,7 +1119,7 @@ impl DelocalizationPlan {
     }
 }
 
-impl DelocalizeCharge {
+impl ChargeDelocalizer {
     fn plan_transform(&self, molecule: &Molecule) -> Edits {
         let mut edits = Edits::new();
         for aromatic_system in molecule.aromatic_systems().ids() {
@@ -1154,7 +1154,7 @@ impl DelocalizeCharge {
     }
 }
 
-impl Transformer for DelocalizeCharge {
+impl Transformer for ChargeDelocalizer {
     type Error = Infallible;
 
     fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error> {
