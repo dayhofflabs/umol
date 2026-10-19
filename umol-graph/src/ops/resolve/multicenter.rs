@@ -1,8 +1,6 @@
 //! Multicenter-bond resolver: fills `MulticenterBondForm` charge and unpaired-electron
 //! defaults parallel to `BondsResolver`.
 
-use std::mem;
-
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, Normalize, NumForm,
@@ -143,9 +141,7 @@ impl MulticenterBondsResolver {
             }
         };
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("multicenter-bond resolve plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }

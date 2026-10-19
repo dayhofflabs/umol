@@ -1,14 +1,20 @@
-//! Kekulization and aromatization of paired fixtures, through consuming and
-//! in-place operations. Parsing, construction, and cloning are outside timing.
+//! Molecular transformations through consuming and in-place operations.
+//! Parsing, construction, and cloning are outside timing.
+//! Inputs share storage with their fixtures unless labeled unique; shared mutation includes
+//! storage detachment.
 
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use umol_chem::element::Element;
 use umol_graph::ops::model::AromaticityModel;
-use umol_graph::ops::transform::{Aromatizer, KekulizeConfig, Kekulizer, Transformer};
+use umol_graph::ops::transform::{
+    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, Transformer,
+};
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_graph_ir::ir::IntoIr;
+use umol_graph_ir::ir::{AtomForm, AtomId, BondForm, IntoIr, Molecule, MoleculeEntries};
+use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
 
 fn bench_transform(c: &mut Criterion) {
@@ -139,5 +145,282 @@ fn bench_transform(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(transform, bench_transform);
+fn bench_fold_hydrogens(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fold_hydrogens");
+    for (name, input, expected) in [
+        (
+            "methane",
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+        ),
+        (
+            "methanol",
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["H" "C" "H" "H" "O" "H"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"] [4 5 "1"]]
+            }"#
+            ),
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+        ),
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["H" "C#T0" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
+                :stereo-atoms [{:site 1 :ligands [0 2 3 4] :attrs "Th0"}]
+            }"#
+            ),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C#h#T1" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
+            }"#
+            ),
+        ),
+        (
+            "unchanged",
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+        ),
+    ] {
+        assert_eq!(
+            HydrogenFolder.transform(input.clone()).unwrap(),
+            expected,
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        HydrogenFolder.transform_into(&mut in_place).unwrap();
+        assert_eq!(in_place, expected, "{name}");
+        group.bench_function(BenchmarkId::new("transform", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| HydrogenFolder.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| HydrogenFolder.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        if name == "methane" {
+            group.bench_function(BenchmarkId::new("transform_unique", name), |b| {
+                b.iter_batched(
+                    || mol_dsl_concrete!(r#"{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}"#),
+                    |molecule| HydrogenFolder.transform(black_box(molecule)).unwrap(),
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("transform_into_unique", name), |b| {
+                b.iter_batched_ref(
+                    || mol_dsl_concrete!(r#"{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}"#),
+                    |molecule| HydrogenFolder.transform_into(black_box(molecule)).unwrap(),
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+    }
+    group.finish();
+}
+
+fn bench_unfold_hydrogens(c: &mut Criterion) {
+    let mut group = c.benchmark_group("unfold_hydrogens");
+    for (name, input, expected) in [
+        (
+            "methane",
+            mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C" "H" "H" "H" "H"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            }"#
+            ),
+        ),
+        (
+            "methanol",
+            mol_dsl_concrete!(r#"{:atoms ["C#h3" "O#h"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C" "O" "H" "H" "H" "H"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"]]
+            }"#
+            ),
+        ),
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C#h#T1" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
+            }"#
+            ),
+            mol_dsl_concrete!(
+                r#"{
+                :atoms ["C#T1" "F" "Cl" "Br" "H"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [4 1 2 3] :attrs "Th0"}]
+            }"#
+            ),
+        ),
+        (
+            "unchanged",
+            mol_dsl_concrete!(r#"{:atoms ["C" "H"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C" "H"] :bonds [[0 1 "1"]]}"#),
+        ),
+    ] {
+        assert_eq!(
+            HydrogenUnfolder.transform(input.clone()).unwrap(),
+            expected,
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        HydrogenUnfolder.transform_into(&mut in_place).unwrap();
+        assert_eq!(in_place, expected, "{name}");
+        group.bench_function(BenchmarkId::new("transform", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| HydrogenUnfolder.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| {
+                    HydrogenUnfolder
+                        .transform_into(black_box(molecule))
+                        .unwrap()
+                },
+                BatchSize::SmallInput,
+            );
+        });
+        if name == "methane" {
+            group.bench_function(BenchmarkId::new("transform_unique", name), |b| {
+                b.iter_batched(
+                    || mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+                    |molecule| HydrogenUnfolder.transform(black_box(molecule)).unwrap(),
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("transform_into_unique", name), |b| {
+                b.iter_batched_ref(
+                    || mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+                    |molecule| {
+                        HydrogenUnfolder
+                            .transform_into(black_box(molecule))
+                            .unwrap()
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+    }
+    group.finish();
+}
+
+fn bench_hydrogens_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("hydrogens_scaling");
+    for size in [16usize, 64, 256, 1024] {
+        let mut implicit = MoleculeEntries::default();
+        let mut explicit = MoleculeEntries::default();
+        for i in 0..size {
+            let count = if i == 0 || i + 1 == size { 3 } else { 2 };
+            implicit.atoms.push(
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(count)
+                    .into_concrete(),
+            );
+            explicit
+                .atoms
+                .push(AtomForm::from_element(Element::C).into_concrete());
+            if i != 0 {
+                let bond = (
+                    AtomId::from(i - 1),
+                    AtomId::from(i),
+                    BondForm::from_order(1).into_concrete(),
+                );
+                implicit.bonds.push(bond.clone());
+                explicit.bonds.push(bond);
+            }
+        }
+        for i in 0..size {
+            let count = if i == 0 || i + 1 == size { 3 } else { 2 };
+            for _ in 0..count {
+                let hydrogen = AtomId::from(explicit.atoms.len());
+                explicit
+                    .atoms
+                    .push(AtomForm::from_element(Element::H).into_concrete());
+                explicit.bonds.push((
+                    AtomId::from(i),
+                    hydrogen,
+                    BondForm::from_order(1).into_concrete(),
+                ));
+            }
+        }
+        let implicit = Molecule::from_entries(implicit);
+        let explicit = Molecule::from_entries(explicit);
+        assert_eq!(
+            HydrogenFolder.transform(explicit.clone()).unwrap(),
+            implicit
+        );
+        assert_eq!(
+            HydrogenUnfolder.transform(implicit.clone()).unwrap(),
+            explicit
+        );
+        let mut folded = explicit.clone();
+        HydrogenFolder.transform_into(&mut folded).unwrap();
+        assert_eq!(folded, implicit);
+        let mut unfolded = implicit.clone();
+        HydrogenUnfolder.transform_into(&mut unfolded).unwrap();
+        assert_eq!(unfolded, explicit);
+
+        group.bench_function(BenchmarkId::new("fold", size), |b| {
+            b.iter_batched(
+                || explicit.clone(),
+                |molecule| HydrogenFolder.transform(black_box(molecule)).unwrap(),
+                BatchSize::LargeInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("fold_into", size), |b| {
+            b.iter_batched_ref(
+                || explicit.clone(),
+                |molecule| HydrogenFolder.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::LargeInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("unfold", size), |b| {
+            b.iter_batched(
+                || implicit.clone(),
+                |molecule| HydrogenUnfolder.transform(black_box(molecule)).unwrap(),
+                BatchSize::LargeInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("unfold_into", size), |b| {
+            b.iter_batched_ref(
+                || implicit.clone(),
+                |molecule| {
+                    HydrogenUnfolder
+                        .transform_into(black_box(molecule))
+                        .unwrap()
+                },
+                BatchSize::LargeInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    transform,
+    bench_transform,
+    bench_fold_hydrogens,
+    bench_unfold_hydrogens,
+    bench_hydrogens_scaling
+);
 criterion_main!(transform);

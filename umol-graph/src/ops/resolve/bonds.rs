@@ -2,8 +2,6 @@
 //! whose corresponding inherent fields are still `Undetermined` after the
 //! valence and aromaticity passes.
 
-use std::mem;
-
 use thiserror::Error;
 use umol_graph_ir::ir::{
     BondHandle, Edits, Lattice, Molecule, Normalize, NumForm, UnpairedElectronsForm,
@@ -101,9 +99,7 @@ impl BondsResolver {
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
         let edits = self.plan_resolve(molecule);
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("bond resolve plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }

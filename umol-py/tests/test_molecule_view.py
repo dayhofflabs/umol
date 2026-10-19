@@ -2,6 +2,7 @@ import pytest
 
 from umol import (
     AromaticSystemForm,
+    AromaticityModel,
     AtomForm,
     BondForm,
     DativeBondForm,
@@ -9,8 +10,10 @@ from umol import (
     Edits,
     Element,
     InvalidatedViewError,
+    InvalidStructureError,
     TransactionError,
     Molecule,
+    MoleculeDefaults,
     MulticenterBondForm,
     NoncovalentBondForm,
     NoncovalentBondKind,
@@ -20,6 +23,7 @@ from umol import (
     StereoLigand,
     StereoLigandKind,
     TetrahedralConfiguration,
+    UnderdeterminedError,
 )
 
 
@@ -173,6 +177,167 @@ def test_molecule_view_edit(molecule, entity, method):
         getattr(result, name)[0] = form
         assert molecule == original
         assert getattr(view, field) == getattr(getattr(original, name)[0], field)
+
+
+@pytest.mark.parametrize("in_place", [False, True])
+@pytest.mark.parametrize(
+    "method,args",
+    [
+        ("aromatize", (AromaticityModel.daylight(),)),
+        ("kekulize", ([],)),
+        ("delocalize_charge", ()),
+        ("fold_hydrogens", ()),
+        ("unfold_hydrogens", ()),
+    ],
+)
+@pytest.mark.parametrize(
+    "source",
+    [
+        '{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}',
+        '{:atoms ["C"]}',
+    ],
+    ids=["explicit-hydrogen", "no-hydrogen"],
+)
+def test_molecule_view_transform(source, method, args, in_place):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    alias = molecule
+    collection = molecule.atoms
+    view = collection[0]
+    constraints = view.constraints
+    sizes = constraints.ring_size_count
+    saved_constraints = list(constraints)
+    saved_sizes = list(sizes)
+    iterator = iter(collection)
+    first = next(iterator)
+    exhausted = iter(collection)
+    list(exhausted)
+
+    result = getattr(alias, method + ("_into" if in_place else ""))(*args)
+
+    if in_place:
+        assert result is None
+        for access in (
+            lambda: view.id,
+            lambda: first.charge,
+            lambda: len(constraints),
+            lambda: len(sizes),
+            lambda: len(collection),
+            lambda: next(iterator, None),
+            lambda: next(exhausted, None),
+        ):
+            with pytest.raises(InvalidatedViewError):
+                access()
+        assert alias.atoms[0].id == 0
+    else:
+        assert molecule == original
+        assert alias == original
+        assert view.id == first.id == 0
+        assert view.charge == original.atoms[0].charge
+        assert list(constraints) == saved_constraints
+        assert list(sizes) == saved_sizes
+        assert [atom.id for atom in iterator] == list(range(1, len(original.atoms)))
+        assert next(exhausted, None) is None
+        result.atoms[0].charge = 1
+        assert molecule == original
+        molecule.atoms[0].charge = -1
+        assert view.charge == NumForm.Lit(-1)
+        assert result.atoms[0].charge == NumForm.Lit(1)
+
+
+@pytest.mark.parametrize("in_place", [False, True])
+@pytest.mark.parametrize(
+    "source,method,args,error",
+    [
+        pytest.param(
+            '{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "*"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"]]}',
+            "aromatize", (AromaticityModel.daylight(),), UnderdeterminedError,
+            id="aromatize",
+        ),
+        pytest.param(
+            '{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]}',
+            "kekulize", ([],), ValueError,
+            id="kekulize",
+        ),
+        pytest.param(
+            '{:atoms ["C#h-1" "H"] :bonds [[0 1 "1"]]}',
+            "fold_hydrogens", (), InvalidStructureError,
+            id="fold",
+        ),
+        pytest.param(
+            '{:atoms ["C#h3" "O#h-1"]}',
+            "unfold_hydrogens", (), InvalidStructureError,
+            id="unfold",
+        ),
+    ],
+)
+def test_molecule_view_transform_error(source, method, args, error, in_place):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    alias = molecule
+    collection = molecule.atoms
+    view = collection[0]
+    constraints = view.constraints
+    saved_constraints = list(constraints)
+    iterator = iter(collection)
+    exhausted = iter(collection)
+    list(exhausted)
+
+    with pytest.raises(error):
+        getattr(alias, method + ("_into" if in_place else ""))(*args)
+
+    assert molecule == original
+    assert alias == original
+    if in_place:
+        for access in (
+            lambda: view.charge,
+            lambda: len(constraints),
+            lambda: len(collection),
+            lambda: next(iterator, None),
+            lambda: next(exhausted, None),
+        ):
+            with pytest.raises(InvalidatedViewError):
+                access()
+    else:
+        assert view.charge == original.atoms[0].charge
+        assert list(constraints) == saved_constraints
+        assert [atom.id for atom in iterator] == list(range(len(original.atoms)))
+        assert next(exhausted, None) is None
+    assert molecule.atoms[0].asdict() == original.atoms[0].asdict()
+
+
+@pytest.mark.parametrize(
+    "method,args,kwargs,error",
+    [
+        ("aromatize_into", (None,), {}, TypeError),
+        ("aromatize_into", (AromaticityModel.daylight(),), {"config": object()}, TypeError),
+        ("kekulize_into", ([None],), {}, TypeError),
+        ("kekulize_into", ([-1],), {}, OverflowError),
+        ("kekulize_into", ([],), {"config": object()}, TypeError),
+        ("delocalize_charge_into", (None,), {}, TypeError),
+        ("fold_hydrogens_into", (None,), {}, TypeError),
+        ("unfold_hydrogens_into", (None,), {}, TypeError),
+    ],
+)
+def test_molecule_view_transform_argument_error(method, args, kwargs, error):
+    molecule = Molecule.parse('{:atoms ["C#h4"]}', defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    collection = molecule.atoms
+    view = collection[0]
+    constraints = view.constraints
+    saved_constraints = list(constraints)
+    iterator = iter(collection)
+
+    with pytest.raises(error):
+        getattr(molecule, method)(*args, **kwargs)
+
+    assert molecule == original
+    assert view.asdict() == original.atoms[0].asdict()
+    assert list(constraints) == saved_constraints
+    assert len(collection) == 1
+    assert next(iterator).id == 0
 
 
 def test_molecule_view_setters(molecule, entity):

@@ -23,13 +23,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
       :atoms ["C#h" "N#h" "C#h" "C#h" "N#n"]
       :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single] [0 4 :single]]}
     :success true
-    :tie-breaks [0 1 2 3 4]}
+    :tie-breaks [0 2 3]}
   :counts-strict {
     :success false
     :tie-breaks []
     :unresolved {
       0 ["C#u#v2#a" "C#h#v2#a"]
-      1 ["N#h#u#v2#a" "N#h#v2#a2"]
       2 ["C#u#v2#a" "C#h#v2#a"]
-      3 ["C#u#v2#a" "C#h#v2#a"]
-      4 ["N#n#v2#a" "N#u#v2#a2"]}}}
+      3 ["C#u#v2#a" "C#h#v2#a"]}}}

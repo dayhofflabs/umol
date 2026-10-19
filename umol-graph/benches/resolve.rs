@@ -28,15 +28,16 @@ use umol_graph::ops::aromaticity::{AromaticityConfig, AromaticityPerceiver};
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
-    AtomSelectionAlgorithm, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver,
+    AtomSelectionAlgorithm, BondsResolver, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver,
 };
 use umol_graph::ops::valence::{
     AtomCompletions, AtomTypeRegistry, AtomTypingValence, CountsValence, ResolveReport,
     ValenceTable,
 };
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm, AtomId,
-    ElementForm, Molecule, NumForm, Reframe, RollbackMethod, TryIntoIr, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm,
+    AtomId, BondForm, ElementForm, Molecule, MoleculeEntries, NumForm, Reframe, RollbackMethod,
+    TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, mol_dsl};
 use umol_io::smiles::Smiles;
@@ -220,6 +221,70 @@ fn bench_aromaticity_project(c: &mut Criterion) {
                         .project_into(black_box(molecule))
                         .unwrap()
                 },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+fn bench_bonds_resolve(c: &mut Criterion) {
+    let resolver = BondsResolver::new();
+    let entries = MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    };
+    let source = Molecule::from_entries(entries.clone());
+    let expected = Molecule::from_entries(MoleculeEntries {
+        bonds: vec![(
+            AtomId(0),
+            AtomId(1),
+            BondForm::from_order(1)
+                .with_charge(0)
+                .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+        )],
+        ..entries.clone()
+    });
+    assert_eq!(
+        resolver.resolve(source.clone()),
+        Ok(Solution::Determined(expected.clone()))
+    );
+    let mut checked = source.clone();
+    assert_eq!(
+        resolver.resolve_into(&mut checked),
+        Ok(Solution::Determined(()))
+    );
+    assert_eq!(checked, expected);
+
+    let mut group = c.benchmark_group("bonds_resolve");
+    for (name, shared) in [("shared", true), ("unique", false)] {
+        group.bench_function(BenchmarkId::new("resolve", name), |b| {
+            b.iter_batched(
+                || {
+                    if shared {
+                        source.clone()
+                    } else {
+                        Molecule::from_entries(entries.clone())
+                    }
+                },
+                |molecule| resolver.resolve(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("resolve_into", name), |b| {
+            b.iter_batched_ref(
+                || {
+                    if shared {
+                        source.clone()
+                    } else {
+                        Molecule::from_entries(entries.clone())
+                    }
+                },
+                |molecule| resolver.resolve_into(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
@@ -665,6 +730,7 @@ criterion_group!(
     bench_resolve,
     bench_valence,
     bench_aromaticity_project,
+    bench_bonds_resolve,
     bench_aromatic_selection,
     bench_aromatic_selection_duplicates,
     bench_aromaticity_resolve,

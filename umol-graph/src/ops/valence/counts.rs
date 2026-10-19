@@ -88,6 +88,10 @@ impl CountsInput {
     }
 }
 
+/// Counts-based valence admission and classification.
+///
+/// Atom-field completion and classification bound electron counts by the actual
+/// element's valence capacity. Admission does not revalidate field-ground atoms.
 #[derive(Clone, Debug)]
 pub struct CountsValence<'a> {
     table: &'a ValenceTable,
@@ -253,6 +257,9 @@ impl<'a> CountsValence<'a> {
             bonding_budget,
             entry.is_none(),
         )?;
+        let electron_budget = i64::from(element.valence_electrons()) - charge;
+        let electron_count = electron_budget + valence + 2 * accepted_pairs;
+        let valence_capacity = i64::from(element.valence_capacity());
 
         let mut candidates = SmallVec::new();
         for aromatic_values in candidate_aromatic_valences(aromatic_constraint, is_aromatic, entry)
@@ -268,12 +275,15 @@ impl<'a> CountsValence<'a> {
                     if !aromatic_constraint.matches_value(aromatic_valence) {
                         continue;
                     }
+                    let aromatic_covalence = aromatic_covalence(aromatic_valence);
                     if let Some(b) = bonding_budget {
-                        if implicit_hydrogens + aromatic_covalence(aromatic_valence) > b {
+                        if implicit_hydrogens + aromatic_covalence > b {
                             continue;
                         }
                     }
-                    let electron_budget = i64::from(element.valence_electrons()) - charge;
+                    if electron_count + implicit_hydrogens + aromatic_covalence > valence_capacity {
+                        continue;
+                    }
                     let nonbonding =
                         electron_budget - valence - aromatic_valence - implicit_hydrogens;
                     if nonbonding < 0 {
@@ -370,6 +380,7 @@ impl<'a> CountsValence<'a> {
     /// Uses the first table covalence at or above #v and retains charge/spin evidence.
     /// Returns None for missing concrete evidence, no admissible H count, or distinct H
     /// counts under Strict. MostSaturated selects the greatest admissible count.
+    /// Admissible counts respect the actual element's valence capacity.
     /// Neither the molecule nor the table is modified.
     pub(crate) fn infer_implicit_hydrogens(
         &self,
@@ -417,10 +428,19 @@ impl<'a> CountsValence<'a> {
             .checked_sub(aromatic)?;
         let spin = atom.unpaired_electrons();
         let unpaired_count = spin.count.as_lit();
-        let max_lone_pairs = i64::from(element.valence_capacity()) / 2;
+        let valence_capacity = i64::from(element.valence_capacity());
+        let max_lone_pairs = valence_capacity / 2;
+        let aromatic_covalence = aromatic_covalence(aromatic);
+        let electron_count = i64::from(element.valence_electrons()) - charge
+            + valence
+            + aromatic_covalence
+            + 2 * accepted_pairs;
         let mut hydrogens = None;
         for h in 0..=bonding_budget {
-            if entry.is_some() && h.checked_add(aromatic_covalence(aromatic))? > bonding_budget {
+            if entry.is_some() && h.checked_add(aromatic_covalence)? > bonding_budget {
+                continue;
+            }
+            if electron_count + h > valence_capacity {
                 continue;
             }
             let nonbonding = nonbonding_budget.checked_sub(h)?;
@@ -825,6 +845,7 @@ mod tests {
         })
     )]
     #[case::unmarked(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))]
+    #[case::over_capacity(mol_dsl!(r#"{:atoms ["C#i=#c-#h4#n0#u1#s2"]}"#))]
     fn test_counts_valence_admit_ground_complete(#[case] molecule: Molecule) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(
@@ -928,14 +949,30 @@ mod tests {
         Some(0),
         Some(0)
     )]
+    #[case::original_element_capacity(
+        r#"{:atoms ["Cl#c-#u0#s" "F"] :bonds [[0 1 "2"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::carbon_anion_over_capacity(
+        r#"{:atoms ["C#c-#u1#s2" "C"] :bonds [[0 1 "4"]]}"#,
+        None,
+        None
+    )]
     #[case::no_electron_budget(r#"{:atoms ["C#c0#u0#s#v5" "C"] :bonds [[0 1 "5"]]}"#, None, None)]
     #[case::no_table_entry(r#"{:atoms ["Fe#c0#u0#s"]}"#, Some(0), Some(0))]
-    #[case::lone_pair_capacity(r#"{:atoms ["O#c-4#u0#s"]}"#, Some(2), Some(2))]
+    #[case::over_capacity(r#"{:atoms ["O#c-4#u0#s"]}"#, None, None)]
     #[case::excess_lone_pairs(r#"{:atoms ["O#c-8#u0#s"]}"#, None, None)]
     #[case::accepted_pairs(
         r#"{:atoms ["C#c0#u0#s" "N"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#,
         None,
         Some(2)
+    )]
+    #[case::accepted_pairs_over_capacity(
+        r#"{:atoms ["C#c0#u1#s2" "C" "N"] :bonds [[0 1 "3"]]
+            :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}]}"#,
+        None,
+        None
     )]
     #[case::open_charge(r#"{:atoms ["C#u0#s"]}"#, None, None)]
     #[case::open_aromatic(r#"{:atoms ["C#c0#u0#s#a+"]}"#, None, None)]
@@ -1055,14 +1092,12 @@ mod tests {
         "N#c0#h0#n0#u#s2#v2#a2",
     ])]
     #[case::pyrrole_nitrogen("N#c0#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec![
-        "N#c0#h#n0#u#s2#v2#a",
         "N#c0#h#n0#u0#s#v2#a2",
     ])]
     #[case::furan_oxygen("O#c0#v2#h0#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["O#c0#h0#n#u0#s#v2#a2"])]
     #[case::furan_oxygen_h_inferred("O#c0#v2#h*#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["O#c0#h0#n#u0#s#v2#a2"])]
     #[case::borazine_boron("B#c0#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["B#c0#h#n0#u0#s#v2#a0"])]
     #[case::cyclopentadienyl_carbanion("C#c-1#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec![
-        "C#c-#h#n0#u#s2#v2#a",
         "C#c-#h#n0#u0#s#v2#a2",
     ])]
     #[case::tropylium_carbocation("C#c1#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c+#h#n0#u0#s#v2#a0"])]
@@ -1091,7 +1126,10 @@ mod tests {
     #[rstest]
     #[case::chloronium("Cl#c1", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c+#h0#n2#u0#s#v2#a!"])]
     #[case::chlorine_trifluoride("Cl#c0", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c0#h0#n2#u0#s#v3#a!"])]
-    #[case::divalent_fluorine("F#c0", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["F#c0#h0#n2#u#s2#v2#a!"])]
+    #[case::chlorine_anion("Cl#c-#h0", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c-#h0#n3#u0#s#v2#a!"])]
+    #[case::carbon("C#c0#h0", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: false }, vec!["C#c0#h0#n0#u0#s#v4#a!"])]
+    #[case::carbon_anion("C#c-#h0", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: false }, vec!["C#c-#h0#n#u0#s#v3#a!"])]
+    #[case::accepted_pairs("C#c0#h2", CountsInput { valence: 0, accepted_pairs: 1, is_aromatic: false }, vec!["C#c0#h2#n#u0#s#v0#a!"])]
     fn test_counts_valence_candidate_states_saturated(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
@@ -1114,6 +1152,11 @@ mod tests {
     #[rstest]
     #[case::undetermined_aromatic_out_of_table("Fe#c0#h0#a+", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: true }, CountsError::UndeterminedAromaticValence)]
     #[case::over_valence("C#c0", CountsInput { valence: 5, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
+    #[case::carbon_anion_supplied_h("C#c-#h0", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
+    #[case::carbon_anion_inferred_h("C#c-", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
+    #[case::divalent_fluorine("F#c0", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
+    #[case::aromatic_over_capacity("C#c-#h1#a1", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, CountsError::NoMatch)]
+    #[case::accepted_pairs_over_capacity("C#c0#h3", CountsInput { valence: 0, accepted_pairs: 1, is_aromatic: false }, CountsError::NoMatch)]
     fn test_counts_valence_candidate_states_error(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
@@ -1129,6 +1172,8 @@ mod tests {
     #[rstest]
     #[case::methane_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
     #[case::excess_lone_pairs("C#i=#c0#h4#n2#u0#s#v0#a!", Solution::Contradictory(CountsMismatch { element: Element::C, charge: 0, valence: Some(0), }))]
+    #[case::over_capacity("C#i=#c-#h4#n0#u1#s2", Solution::Contradictory(CountsMismatch { element: Element::C, charge: -1, valence: Some(0), }))]
+    #[case::original_element_capacity("Cl#i=#c-#h2#n3#u0#s", Solution::Determined(()))]
     #[case::not_ground("C", Solution::Underdetermined(()))]
     fn test_counts_valence_classify_molecule_atom(
         #[case] input: &str,

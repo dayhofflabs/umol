@@ -22,5 +22,8 @@ mod resolve;
 #[path = "property/project.rs"]
 mod project;
 
+#[path = "property/transform.rs"]
+mod transform;
+
 #[path = "property/atom_typing.rs"]
 mod atom_typing;

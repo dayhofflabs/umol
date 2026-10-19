@@ -5463,6 +5463,99 @@ fn test_molecule_apply_into_error(#[case] edits: Edits, #[case] expected: Molecu
 }
 
 #[rstest]
+#[case::field(
+    mol_dsl!(r#"{:atoms ["C#c0"]}"#),
+    Edits::from_iter([Edit::ModifyAtomField {
+        id: AtomHandle::Id(AtomId(0)),
+        change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(1) },
+    }]),
+    mol_dsl!(r#"{:atoms ["C#c1"]}"#),
+)]
+#[case::created_handle(
+    mol_dsl!(r#"{:atoms ["C"]}"#),
+    Edits::from_iter([
+        Edit::AddAtoms { atoms: vec![AtomForm::from_element(Element::N)] },
+        Edit::AddBonds { bonds: vec![AddBond {
+            endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+            attributes: BondForm::from_order(1),
+        }] },
+    ]),
+    mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#),
+)]
+#[case::compaction(
+    mol_dsl!(r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+    Edits::from_iter([Edit::RemoveTopology {
+        atoms: vec![AtomHandle::Id(AtomId(0))],
+        bonds: vec![BondHandle::Id(BondId(0))],
+    }]),
+    mol_dsl!(r#"{:atoms ["N" "O"] :bonds [[0 1 "2"]]}"#),
+)]
+fn test_molecule_mutate(
+    #[case] mut molecule: Molecule,
+    #[case] edits: Edits,
+    #[case] expected: Molecule,
+) {
+    assert_eq!(molecule.clone().apply(edits.clone()), Ok(expected.clone()));
+    molecule.mutate(edits);
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::empty(Molecule::new())]
+#[case::populated(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#))]
+fn test_molecule_mutate_identity(#[case] mut molecule: Molecule) {
+    let original = molecule.clone();
+    molecule.mutate(Edits::new());
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+fn test_molecule_mutate_clones() {
+    let source = mol_dsl!(r#"{:atoms ["C#c0"]}"#);
+    let mut molecule = source.clone();
+    molecule.mutate(Edits::from_iter([Edit::ModifyAtomField {
+        id: AtomHandle::Id(AtomId(0)),
+        change: AtomFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+    }]));
+    assert_eq!(source, mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+    assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#c1"]}"#));
+}
+
+#[rstest]
+#[case::application(
+    Edits::from_iter([
+        Edit::AddAtoms { atoms: vec![AtomForm::from_element(Element::O)] },
+        Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge { old: NumForm::Lit(1), new: NumForm::Lit(2) },
+        },
+    ]),
+    MoleculeApplyError::Transaction(TransactionError::OldStateMismatch),
+)]
+#[case::integrity(
+    Edits::from_iter([Edit::AddBonds {
+        bonds: vec![AddBond {
+            endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+            attributes: BondForm::from_order(2),
+        }],
+    }]),
+    MoleculeApplyError::Integrity(MoleculeIntegrityError::ParallelBonds { atoms: [AtomId(0), AtomId(1)] }),
+)]
+fn test_molecule_mutate_error(#[case] edits: Edits, #[case] expected: MoleculeApplyError) {
+    let mut molecule = mol_dsl!(r#"{:atoms ["C#c0" "N"] :bonds [[0 1 "1"]]}"#);
+    assert_eq!(molecule.clone().apply(edits.clone()), Err(expected));
+    catch_unwind(AssertUnwindSafe(|| molecule.mutate(edits))).unwrap_err();
+    assert_eq!(molecule, Molecule::new());
+    molecule.mutate(Edits::from_iter([Edit::AddAtoms {
+        atoms: vec![AtomForm::from_element(Element::C)],
+    }]));
+    assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C"]}"#));
+}
+
+#[rstest]
 #[case::identity(false)]
 #[case::remove_all(true)]
 fn test_molecule_tracked_apply(

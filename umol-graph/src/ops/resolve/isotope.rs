@@ -1,7 +1,5 @@
 //! Isotope completion and projection under one policy, independent of valence resolution.
 
-use std::mem;
-
 use thiserror::Error;
 use umol_graph_ir::ir::{AtomHandle, AtomId, Edits, IsotopeMassForm, Lattice, Molecule};
 use umol_utils::solution::Solution;
@@ -130,9 +128,7 @@ impl IsotopeResolver {
             Solution::Contradictory(contradiction) => match contradiction {},
         };
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("isotope resolve plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }
@@ -176,9 +172,7 @@ impl IsotopeResolver {
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeProjectError> {
         let edits = self.plan_project(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("isotope project plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }

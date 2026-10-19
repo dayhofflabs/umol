@@ -1,6 +1,7 @@
 //! Python values selecting graph algorithms.
 
 use pyo3::prelude::*;
+use umol_graph::ops::transform::MaximumMatchingAlgorithm as GraphMaximumMatchingAlgorithm;
 use umol_graph_core::{
     AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
     CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
@@ -267,6 +268,48 @@ impl MaximumIndependentSetAlgorithm {
     pub(crate) fn to_rust(self) -> GraphCoreMaximumIndependentSetAlgorithm {
         match self {
             Self::BranchAndBound() => GraphCoreMaximumIndependentSetAlgorithm::BranchAndBound,
+        }
+    }
+}
+
+/// Algorithm used to find a maximum matching during kekulization.
+#[pyclass(frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaximumMatchingAlgorithm {
+    Edmonds(),
+    HopcroftKarp(),
+}
+
+#[pymethods]
+impl MaximumMatchingAlgorithm {
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __repr__(&self) -> &'static str {
+        self.repr()
+    }
+}
+
+impl MaximumMatchingAlgorithm {
+    pub(crate) fn repr(self) -> &'static str {
+        match self {
+            Self::Edmonds() => "MaximumMatchingAlgorithm.Edmonds()",
+            Self::HopcroftKarp() => "MaximumMatchingAlgorithm.HopcroftKarp()",
+        }
+    }
+
+    pub(crate) fn from_rust(algorithm: GraphMaximumMatchingAlgorithm) -> Self {
+        match algorithm {
+            GraphMaximumMatchingAlgorithm::Edmonds => Self::Edmonds(),
+            GraphMaximumMatchingAlgorithm::HopcroftKarp => Self::HopcroftKarp(),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphMaximumMatchingAlgorithm {
+        match self {
+            Self::Edmonds() => GraphMaximumMatchingAlgorithm::Edmonds,
+            Self::HopcroftKarp() => GraphMaximumMatchingAlgorithm::HopcroftKarp,
         }
     }
 }
@@ -634,6 +677,38 @@ mod tests {
             );
             assert!(value.bind(py).as_any().eq(expected.bind(py)).unwrap());
         });
+    }
+
+    #[rstest]
+    #[case::edmonds(
+        GraphMaximumMatchingAlgorithm::Edmonds,
+        MaximumMatchingAlgorithm::Edmonds()
+    )]
+    #[case::hopcroft_karp(
+        GraphMaximumMatchingAlgorithm::HopcroftKarp,
+        MaximumMatchingAlgorithm::HopcroftKarp()
+    )]
+    fn test_maximum_matching_algorithm_from_rust(
+        #[case] algorithm: GraphMaximumMatchingAlgorithm,
+        #[case] expected: MaximumMatchingAlgorithm,
+    ) {
+        assert_eq!(MaximumMatchingAlgorithm::from_rust(algorithm), expected);
+    }
+
+    #[rstest]
+    #[case::edmonds(
+        MaximumMatchingAlgorithm::Edmonds(),
+        GraphMaximumMatchingAlgorithm::Edmonds
+    )]
+    #[case::hopcroft_karp(
+        MaximumMatchingAlgorithm::HopcroftKarp(),
+        GraphMaximumMatchingAlgorithm::HopcroftKarp
+    )]
+    fn test_maximum_matching_algorithm_to_rust(
+        #[case] algorithm: MaximumMatchingAlgorithm,
+        #[case] expected: GraphMaximumMatchingAlgorithm,
+    ) {
+        assert_eq!(algorithm.to_rust(), expected);
     }
 
     #[rstest]

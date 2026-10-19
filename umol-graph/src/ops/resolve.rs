@@ -28,7 +28,8 @@ pub use multicenter::{
 };
 use stereo::StereoProjectError;
 pub use stereo::{
-    StereoContradiction, StereoError, StereoFailurePolicy, StereoResolveConfig, StereoResolver,
+    StereoFailurePolicy, StereoResolveConfig, StereoResolveContradiction, StereoResolveError,
+    StereoResolver,
 };
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -131,7 +132,7 @@ pub enum ResolveContradiction {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
     #[error(transparent)]
-    Stereo(#[from] StereoContradiction),
+    Stereo(#[from] StereoResolveContradiction),
     #[error(transparent)]
     Bonds(#[from] BondsContradiction),
     #[error(transparent)]
@@ -145,7 +146,7 @@ pub enum ResolveError {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),
     #[error(transparent)]
-    Stereo(#[from] StereoError),
+    Stereo(#[from] StereoResolveError),
     #[error(transparent)]
     Bonds(#[from] BondsError),
     #[error(transparent)]
@@ -170,7 +171,7 @@ pub enum ProjectContradiction {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
     #[error(transparent)]
-    Stereo(#[from] StereoContradiction),
+    Stereo(#[from] StereoResolveContradiction),
     #[error(transparent)]
     Valence(#[from] ValenceContradiction),
 }
@@ -1684,7 +1685,7 @@ mod tests {
             },
         );
         let expected =
-            ResolveContradiction::Stereo(StereoContradiction::Inconsistency(inconsistency));
+            ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(inconsistency));
         assert_eq!(
             resolver.resolve(molecule.clone()),
             Ok(Solution::Contradictory(expected.clone()))
@@ -1891,9 +1892,9 @@ mod tests {
             )
             .resolve_into(&mut molecule, rollback_method),
             Ok(Solution::Contradictory(ResolveContradiction::Stereo(
-                StereoContradiction::Inconsistency(StereoInconsistency::TetrahedralStereoFailure {
-                    atom: AtomId(0)
-                })
+                StereoResolveContradiction::Inconsistency(
+                    StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }
+                )
             )))
         );
         assert_eq!(molecule, original);
@@ -2386,7 +2387,7 @@ mod tests {
                     [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]
                     [4 5 "1#c0#u0#s"] [5 0 "1#c0#u0#s"]]
         }"#),
-        ResolveContradiction::Stereo(StereoContradiction::Inconsistency(
+        ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }
         ))
     )]

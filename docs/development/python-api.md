@@ -27,12 +27,13 @@ a lifecycle change. Neither defensive cloning nor a universal ban on copying dec
 Do not change the Rust API solely to legitimize a wrapper convenience.
 
 Python aliases do not follow Rust's move rules. Molecule remains reusable: edit, apply,
-tracked_apply, resolve, resolve_with_report, canonicalize, tracked_canonicalize, and combine
-clone the Rust receiver and pass that clone to the consuming Rust operation. The Python source,
-its aliases, and its views remain unchanged on every outcome. The initial clone shares topology,
-entity tables, and constraints; shared payloads are copied when the operation modifies or takes
-ownership of them. This is the same ownership choice as a Rust caller explicitly cloning its
-input to keep it available. Python does not expose project or Transformer methods.
+tracked_apply, resolve, resolve_with_report, canonicalize, tracked_canonicalize, combine, and the
+base transformation methods below clone the Rust receiver and pass that clone to the consuming
+Rust operation. The Python source, its aliases, and its views remain unchanged on every outcome.
+The initial clone shares topology, entity tables, and constraints; shared payloads are copied
+when the operation modifies or takes ownership of them. This is the same ownership choice as a
+Rust caller explicitly cloning its input to keep it available. Python exposes named transformation
+methods on Molecule without Transformer engine classes. The project operation remains Rust-only.
 
 Edits retains consumption on transfer: implicitly cloning a complete batch would copy its entries
 and payloads, so callers request Edits.copy() when they need reuse. MoleculeEditor.finish consumes
@@ -105,11 +106,11 @@ produces an independent owned value. Consumption invalidates dependent accessors
 above. The location and its behavior under structural mutation must be defined for the owning type.
 
 For molecule access, each view retains the owner and its accessor counter. Starting transact,
-tracked_transact, resolve_into, resolve_into_with_report, or combine_from
-invalidates all existing views and iterators, including nested accessors. The counter advances
-immediately before execution, including for a no-op or a call that rolls back. No list of views is
-maintained. Ordinary attribute and entity-constraint assignments leave accessors valid and their
-changes visible. Fresh accessors read the current molecule; independent copies remain usable.
+tracked_transact, resolve_into, resolve_into_with_report, combine_from, or any transformation's
+_into method invalidates all existing views and iterators, including nested accessors. The counter
+advances immediately before execution, including for a no-op, rejection, or rollback. No list of
+views is maintained. Ordinary attribute and entity-constraint assignments leave accessors valid
+and their changes visible. Fresh accessors read the current molecule; independent copies remain usable.
 Argument extraction or borrowing failure before execution leaves the counter unchanged.
 
 RingViews retains its molecule and any borrowed RingSet. into_ring_set moves owned ring data or
@@ -222,6 +223,13 @@ alias of the editor consumed. These are the Rust editor's mutation and publicati
 Molecule.apply and tracked_apply include finish; either kind of failure discards the working copy
 and leaves the source unchanged.
 
+Python omits Rust Molecule::mutate, the direct batch primitive for producers that establish
+successful application in advance. Python's general batch operations accept independently
+assembled Edits and report ordinary exceptions; mutate instead panics and empties the receiver
+during unwinding. That failure contract is not exposed as a second general Python batch API.
+High-level operations may use mutate inside their Rust implementation while preserving their
+own checked Python outcomes. This omission is a usability choice, not a PyO3 limitation.
+
 MoleculeEditor.remove_topology(atoms, bonds) removes exactly the supplied integer IDs and returns
 None. It raises TransactionError before changing storage if a stored participant or site is
 unavailable (InvalidReference), or a retained entity would reference a removed entity
@@ -317,6 +325,72 @@ report field. Returning a separate report preserves one Python Solution variant 
 the Rust methods' different payload types. Ordinary resolution does not construct a report.
 resolve_with_report preserves the source and its views; resolve_into_with_report follows
 resolve_into's mutation, invalidation, and rollback selection contract.
+
+### Transformations
+
+Rust's Transform extension trait supplies named methods on Molecule, delegating to engines that
+implement Transformer. Transformer retains transform, transform_into, and transform_iter for
+configured engine use. Python exposes the named Molecule methods and their configuration values:
+
+| Copy-producing method | In-place method | Arguments after self |
+| --- | --- | --- |
+| aromatize | aromatize_into | model, *, config=None |
+| kekulize | kekulize_into | node_order, *, config=None |
+| delocalize_charge | delocalize_charge_into | none |
+| fold_hydrogens | fold_hydrogens_into | none |
+| unfold_hydrogens | unfold_hydrogens_into | none |
+
+model is an explicitly supplied AromaticityModel. node_order is an explicit sequence of atom
+indices determining the localization order. The methods do not choose a model or compute an order.
+Omitting config, or passing None, selects the corresponding Rust Default: AromaticityConfig for
+aromatization and KekulizeConfig for kekulization. Rust requires these configuration arguments
+explicitly; Python's keyword-only defaults follow the existing configuration calling convention.
+
+KekulizeConfig accepts the keyword-only algorithm argument and exposes it as a read-only property.
+The default is MaximumMatchingAlgorithm.Edmonds(); MaximumMatchingAlgorithm.HopcroftKarp() is also
+available. Configuration and algorithm values are immutable and compare by value.
+
+Rust's base methods consume the molecule. Python's base methods clone the Rust receiver once,
+sharing storage initially, and return an independently mutable Molecule. Every outcome preserves
+the source, its aliases, and its views. The _into methods return None and change the receiver on
+success. Each operation plans before mutation, so rejection leaves the molecule exactly unchanged
+without a transaction or rollback. Starting in-place execution invalidates existing views and
+iterators even on rejection or a no-op; argument extraction or borrowing failure before execution
+preserves them.
+
+Compose transformations through successive calls. Each publishes independently; failure of a
+later _into call leaves earlier successful changes applied. To retain a source through a sequence,
+use a copying method first, then _into methods on its result:
+
+```python
+from umol import Molecule, MoleculeDefaults
+
+source = Molecule.parse(
+    '{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}',
+    defaults=MoleculeDefaults.concrete(),
+)
+product = source.fold_hydrogens()
+assert len(source.atoms) == 2
+assert len(product.atoms) == 1
+
+product.unfold_hydrogens_into()
+assert len(product.atoms) == 5
+assert len(source.atoms) == 2
+```
+
+Both methods in a pair use the same exceptions and retain the complete Rust diagnostic:
+
+| Operation failure | Python exception |
+| --- | --- |
+| Aromatization setup failure | RuntimeError |
+| Missing data required by aromatization or kekulization; nonliteral count backing a virtual stereo hydrogen during unfolding | UnderdeterminedError |
+| Aromatization contradiction; contradicted assertions or valence invariants in aromatization or kekulization | ContradictionError |
+| Missing or duplicate atoms in the supplied Kekulé order | ValueError |
+| Kekulization electron-count length mismatch; negative affected hydrogen count; unfolding count/stereo-frame mismatch | InvalidStructureError |
+| Unsupported kekulization state or unavailable matching; folding incompatible with a stereo frame | ModelConversionError |
+
+Charge delocalization has no operation error. Ordinary Python argument-extraction errors retain
+their existing behavior.
 
 ### Operation-issued iterator
 

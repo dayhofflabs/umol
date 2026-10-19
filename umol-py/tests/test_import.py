@@ -102,9 +102,11 @@ PUBLIC_EXPORTS = frozenset(
     IsotopeMass
     IsotopeMassForm
     IsotopePolicy
+    KekulizeConfig
     LigandPermutation
     LigandSymmetryForm
     MaximumIndependentSetAlgorithm
+    MaximumMatchingAlgorithm
     MemOp
     MetadataError
     ModelConversionError
@@ -434,6 +436,16 @@ def test_deferred_member(owner, name):
             umol.Reaction.to_reaction_smiles,
             "(self, /, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
+        (umol.Molecule.aromatize, "(self, /, model, *, config=None)"),
+        (umol.Molecule.aromatize_into, "(self, /, model, *, config=None)"),
+        (umol.Molecule.kekulize, "(self, /, node_order, *, config=None)"),
+        (umol.Molecule.kekulize_into, "(self, /, node_order, *, config=None)"),
+        (umol.Molecule.delocalize_charge, "(self, /)"),
+        (umol.Molecule.delocalize_charge_into, "(self, /)"),
+        (umol.Molecule.fold_hydrogens, "(self, /)"),
+        (umol.Molecule.fold_hydrogens_into, "(self, /)"),
+        (umol.Molecule.unfold_hydrogens, "(self, /)"),
+        (umol.Molecule.unfold_hydrogens_into, "(self, /)"),
         (
             umol.Reaction.compose,
             "(self, /, other, *, config=None)",

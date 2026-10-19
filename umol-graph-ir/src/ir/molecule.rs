@@ -69,7 +69,7 @@ mod transact;
 ///
 /// Entity attributes and entity-level constraints are mutable through entity views.
 /// Structural edits and molecule-level constraint changes go through `MoleculeEditor` via
-/// [`Molecule::edit`].
+/// [`Molecule::edit`], or [`Molecule::mutate`] for batches known to apply successfully.
 ///
 /// Clones share storage until mutation.
 ///
@@ -113,6 +113,19 @@ struct RemovedOverlayIds {
     noncovalent_bonds: Vec<NoncovalentBondId>,
     stereo_atoms: Vec<StereoAtomId>,
     stereo_bonds: Vec<StereoBondId>,
+}
+
+struct MutationGuard<'a> {
+    molecule: &'a mut Molecule,
+    complete: bool,
+}
+
+impl Drop for MutationGuard<'_> {
+    fn drop(&mut self) {
+        if !self.complete {
+            *self.molecule = Molecule::new();
+        }
+    }
 }
 
 impl Molecule {
@@ -1801,6 +1814,45 @@ impl Molecule {
     /// Failure preserves the receiver under structural equality (`==`).
     pub fn apply_into(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
         self.edit_into(|editor| editor.apply(edits))
+    }
+
+    /// Apply an edit batch directly to the borrowed molecule without recovery storage.
+    ///
+    /// The caller establishes that the batch applies to this molecule and preserves representation
+    /// integrity. Per-edit checks and the final integrity check still run. Use [`Self::apply_into`]
+    /// when rejection must return an error and preserve the original molecule.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an edit cannot be applied or the result fails its integrity check. During unwinding,
+    /// the receiver is replaced by an empty molecule; the original state is not restored.
+    ///
+    /// # Semantic properties
+    ///
+    /// Successful application agrees under structural equality (`==`) with [`Self::apply`] on an
+    /// equal input. Empty batches leave the receiver unchanged. Retained clones remain independent.
+    pub fn mutate(&mut self, edits: Edits) {
+        if edits.is_empty() {
+            return;
+        }
+        let mut guard = MutationGuard {
+            molecule: self,
+            complete: false,
+        };
+        {
+            let mut state = apply::ApplicationState::new(guard.molecule);
+            for edit in edits {
+                guard
+                    .molecule
+                    .apply_edit(edit, &mut state)
+                    .expect("edit batch applies to its input");
+            }
+        }
+        guard
+            .molecule
+            .check_integrity()
+            .expect("edit batch preserves molecule integrity");
+        guard.complete = true;
     }
 
     /// Apply a batch and return the resulting molecule with its source-to-result correspondence.

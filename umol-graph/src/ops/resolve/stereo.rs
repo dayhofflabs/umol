@@ -3,7 +3,6 @@
 //! the discharge of their source assertions without mutating the molecule.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::mem;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -57,13 +56,13 @@ pub struct StereoResolver {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum StereoContradiction {
+pub enum StereoResolveContradiction {
     #[error("stereo inconsistency: {0}")]
     Inconsistency(#[from] StereoInconsistency),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum StereoError {}
+pub enum StereoResolveError {}
 
 /// Failures to express stereo entities as fixed-frame atom and bond assertions.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -102,7 +101,7 @@ impl StereoResolver {
     pub fn plan_resolve(
         &self,
         molecule: &Molecule,
-    ) -> Result<Solution<Edits, StereoContradiction>, StereoError> {
+    ) -> Result<Solution<Edits, StereoResolveContradiction>, StereoResolveError> {
         let derivation = self.perception.derive(molecule);
         for &inconsistency in &derivation.inconsistencies {
             let error = match inconsistency {
@@ -317,7 +316,7 @@ impl StereoResolver {
     pub fn resolve(
         &self,
         molecule: Molecule,
-    ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoError> {
+    ) -> Result<Solution<Molecule, StereoResolveContradiction, ()>, StereoResolveError> {
         let edits = match self.plan_resolve(&molecule)? {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
@@ -346,7 +345,7 @@ impl StereoResolver {
     pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
-    ) -> Result<Solution<(), StereoContradiction>, StereoError> {
+    ) -> Result<Solution<(), StereoResolveContradiction>, StereoResolveError> {
         let edits = match self.plan_resolve(molecule)? {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
@@ -355,9 +354,7 @@ impl StereoResolver {
             }
         };
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("stereo resolve plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }
@@ -373,7 +370,7 @@ impl StereoResolver {
     pub fn project(
         &self,
         molecule: Molecule,
-    ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoProjectError> {
+    ) -> Result<Solution<Molecule, StereoResolveContradiction, ()>, StereoProjectError> {
         let edits = self.plan_project(&molecule)?;
         let mut editor = molecule.edit();
         editor
@@ -409,12 +406,10 @@ impl StereoResolver {
     pub fn project_into(
         &self,
         molecule: &mut Molecule,
-    ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
+    ) -> Result<Solution<(), StereoResolveContradiction>, StereoProjectError> {
         let edits = self.plan_project(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("stereo project plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }
@@ -908,7 +903,7 @@ mod tests {
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
-        Solution::Contradictory(StereoContradiction::Inconsistency(
+        Solution::Contradictory(StereoResolveContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) }
         ))
     )]
@@ -938,7 +933,7 @@ mod tests {
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
         ),
-        Solution::Contradictory(StereoContradiction::Inconsistency(
+        Solution::Contradictory(StereoResolveContradiction::Inconsistency(
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }
         ))
     )]
@@ -946,7 +941,7 @@ mod tests {
         stereo_model: StereoModel,
         #[case] policy: StereoFailurePolicy,
         #[case] molecule: Molecule,
-        #[case] expected: Solution<Edits, StereoContradiction>,
+        #[case] expected: Solution<Edits, StereoResolveContradiction>,
     ) {
         assert_eq!(
             StereoResolver::with_config(
@@ -965,7 +960,7 @@ mod tests {
     #[rstest]
     #[case::error(
         StereoFailurePolicy::Error,
-        Solution::Contradictory(StereoContradiction::Inconsistency(
+        Solution::Contradictory(StereoResolveContradiction::Inconsistency(
             StereoInconsistency::StereoAtomFailure {
                 stereo_atom: StereoAtomId(0),
             }
@@ -995,7 +990,7 @@ mod tests {
         stereo_model: StereoModel,
         tetrahedral_entity_failure_molecule: Molecule,
         #[case] policy: StereoFailurePolicy,
-        #[case] expected: Solution<Edits, StereoContradiction>,
+        #[case] expected: Solution<Edits, StereoResolveContradiction>,
     ) {
         assert_eq!(
             StereoResolver::with_config(
@@ -1013,7 +1008,7 @@ mod tests {
     #[rstest]
     #[case::error(
         StereoFailurePolicy::Error,
-        Solution::Contradictory(StereoContradiction::Inconsistency(
+        Solution::Contradictory(StereoResolveContradiction::Inconsistency(
             StereoInconsistency::StereoBondFailure {
                 stereo_bond: StereoBondId(0),
             }
@@ -1046,7 +1041,7 @@ mod tests {
         stereo_model: StereoModel,
         cis_trans_entity_failure_molecule: Molecule,
         #[case] policy: StereoFailurePolicy,
-        #[case] expected: Solution<Edits, StereoContradiction>,
+        #[case] expected: Solution<Edits, StereoResolveContradiction>,
     ) {
         assert_eq!(
             StereoResolver::with_config(
@@ -1082,11 +1077,12 @@ mod tests {
                 stereo_bond_failure: failure,
             },
         );
-        let expected =
-            StereoContradiction::Inconsistency(StereoInconsistency::TetrahedralStereoMismatch {
+        let expected = StereoResolveContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoMismatch {
                 atom: AtomId(1),
                 stereo_atom: StereoAtomId(0),
-            });
+            },
+        );
         assert_eq!(
             resolver.plan_resolve(&tetrahedral_mismatch_molecule),
             Ok(Solution::Contradictory(expected.clone()))
@@ -1123,11 +1119,12 @@ mod tests {
                 stereo_bond_failure: failure,
             },
         );
-        let expected =
-            StereoContradiction::Inconsistency(StereoInconsistency::CisTransStereoMismatch {
+        let expected = StereoResolveContradiction::Inconsistency(
+            StereoInconsistency::CisTransStereoMismatch {
                 bond: BondId(1),
                 stereo_bond: StereoBondId(0),
-            });
+            },
+        );
         assert_eq!(
             resolver.plan_resolve(&cis_trans_mismatch_molecule),
             Ok(Solution::Contradictory(expected.clone()))
@@ -1282,35 +1279,35 @@ mod tests {
     #[case::atom(
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "1"]]}"#),
-        StereoContradiction::Inconsistency(
+        StereoResolveContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) }
         )
     )]
     #[case::bond(
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"]
                              :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
-        StereoContradiction::Inconsistency(
+        StereoResolveContradiction::Inconsistency(
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }
         )
     )]
     #[case::atom_open(
         mol_dsl_concrete!(r#"{:atoms ["C#h3" "S#h0#T+" "C#h3"]
                              :bonds [[0 1 "1"] [1 2 "1"]]}"#),
-        StereoContradiction::Inconsistency(
+        StereoResolveContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) }
         )
     )]
     #[case::bond_open(
         mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h2" "C#h"]
                              :bonds [[0 1 "1"] [1 2 "2#C+"]]}"#),
-        StereoContradiction::Inconsistency(
+        StereoResolveContradiction::Inconsistency(
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }
         )
     )]
     fn test_stereo_resolver_resolve_error(
         stereo_model: StereoModel,
         #[case] mut molecule: Molecule,
-        #[case] expected: StereoContradiction,
+        #[case] expected: StereoResolveContradiction,
     ) {
         let original = molecule.clone();
         assert_eq!(

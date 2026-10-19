@@ -14,6 +14,10 @@ use umol_graph::ingest::{
     ReactionSmilesInputError as GraphReactionSmilesInputError,
     SmilesInputError as GraphSmilesInputError,
 };
+use umol_graph::ops::transform::{
+    AromatizeError as GraphAromatizeError, FoldHydrogensError as GraphFoldHydrogensError,
+    KekulizeError as GraphKekulizeError, UnfoldHydrogensError as GraphUnfoldHydrogensError,
+};
 use umol_graph_ir::dsl::{MetadataError as GraphIrMetadataError, ParseError as GraphIrParseError};
 use umol_graph_ir::ir::{
     Contradiction as GraphIrContradiction, MoleculeApplyError as GraphIrMoleculeApplyError,
@@ -240,6 +244,70 @@ pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
     }
 }
 
+/// Map aromatization errors onto the public Python exception taxonomy.
+pub(crate) fn aromatize_error(error: GraphAromatizeError) -> PyErr {
+    let message = error.to_string();
+    match error {
+        GraphAromatizeError::Setup(_) => PyRuntimeError::new_err(message),
+        GraphAromatizeError::Underdetermined => UnderdeterminedError::new_err(message),
+        GraphAromatizeError::Contradiction(_)
+        | GraphAromatizeError::ContradictedAssertion { .. }
+        | GraphAromatizeError::ValenceInvariant { .. } => ContradictionError::new_err(message),
+    }
+}
+
+/// Map kekulization errors onto the public Python exception taxonomy.
+pub(crate) fn kekulize_error(error: GraphKekulizeError) -> PyErr {
+    let message = error.to_string();
+    match error {
+        GraphKekulizeError::UndeterminedElectrons(_)
+        | GraphKekulizeError::UndeterminedCharge(_)
+        | GraphKekulizeError::UndeterminedUnpairedElectrons(_)
+        | GraphKekulizeError::UndeterminedExposedAtomCharge { .. }
+        | GraphKekulizeError::UndeterminedExposedAtomLonePairs { .. } => {
+            UnderdeterminedError::new_err(message)
+        }
+        GraphKekulizeError::InvalidNodeOrder { .. } => PyValueError::new_err(message),
+        GraphKekulizeError::ElectronCountMismatch { .. } => InvalidStructureError::new_err(message),
+        GraphKekulizeError::ContradictedAssertion { .. }
+        | GraphKekulizeError::ValenceInvariant { .. } => ContradictionError::new_err(message),
+        GraphKekulizeError::UnsupportedElectronContribution { .. }
+        | GraphKekulizeError::OpenShell(_)
+        | GraphKekulizeError::UnsupportedCharge { .. }
+        | GraphKekulizeError::MixedExposureDemand(_)
+        | GraphKekulizeError::MatchingDeficiency { .. }
+        | GraphKekulizeError::NoMatching(_)
+        | GraphKekulizeError::NonBipartiteMatching(_) => ModelConversionError::new_err(message),
+    }
+}
+
+/// Map hydrogen-folding errors onto the public Python exception taxonomy.
+pub(crate) fn fold_hydrogens_error(error: GraphFoldHydrogensError) -> PyErr {
+    let message = error.to_string();
+    match error {
+        GraphFoldHydrogensError::NegativeImplicitHydrogenCount { .. } => {
+            InvalidStructureError::new_err(message)
+        }
+        GraphFoldHydrogensError::StereoHydrogenConflict { .. } => {
+            ModelConversionError::new_err(message)
+        }
+    }
+}
+
+/// Map hydrogen-unfolding errors onto the public Python exception taxonomy.
+pub(crate) fn unfold_hydrogens_error(error: GraphUnfoldHydrogensError) -> PyErr {
+    let message = error.to_string();
+    match error {
+        GraphUnfoldHydrogensError::NonConcreteStereoHydrogenCount { .. } => {
+            UnderdeterminedError::new_err(message)
+        }
+        GraphUnfoldHydrogensError::NegativeImplicitHydrogenCount { .. }
+        | GraphUnfoldHydrogensError::StereoHydrogenCountMismatch { .. } => {
+            InvalidStructureError::new_err(message)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pyo3::prelude::*;
@@ -249,12 +317,16 @@ mod tests {
         AromaticityContradiction as GraphAromaticityContradiction,
         AromaticityError as GraphAromaticityError,
     };
+    use umol_graph::ops::invariant::ValenceMismatch;
     use umol_graph::ops::resolve::{
         ResolveContradiction as GraphResolveContradiction, ResolveError as GraphResolveError,
         ResolveUnderdetermined as GraphResolveUnderdetermined,
     };
     use umol_graph_ir::dsl::MetadataError as GraphIrMetadataError;
-    use umol_graph_ir::ir::{AtomId, BondId, Entity, EntityKind};
+    use umol_graph_ir::ir::{
+        AromaticSystemId, AtomConstraintForm, AtomId, BondId, Entity, EntityKind, NumForm,
+        StereoAtomId, StereoBondId,
+    };
     use umol_io::smiles::ParseError as SmilesParseError;
     use umol_io::table_ir::raise::RaiseError;
 
@@ -568,6 +640,208 @@ mod tests {
     ) {
         Python::attach(|py| {
             let error = fingerprint_error(input);
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::setup(
+        GraphAromatizeError::Setup(GraphAromaticityError::HmoMissingParameters("carbon".into())),
+        "RuntimeError",
+    )]
+    #[case::underdetermined(GraphAromatizeError::Underdetermined, "UnderdeterminedError")]
+    #[case::contradiction(
+        GraphAromatizeError::Contradiction(GraphAromaticityContradiction::ClarNonBenzenoid(
+            "heterocycle".into(),
+        )),
+        "ContradictionError",
+    )]
+    #[case::assertion(
+        GraphAromatizeError::ContradictedAssertion {
+            aromatic_system: AromaticSystemId(0),
+            atom: AtomId(2),
+            constraint: AtomConstraintForm::valence(3),
+        },
+        "ContradictionError",
+    )]
+    #[case::valence(
+        GraphAromatizeError::ValenceInvariant {
+            aromatic_system: AromaticSystemId(0),
+            mismatch: ValenceMismatch::OrbitalCount {
+                atom_id: AtomId(2), orbital_count: 10, electron_count: 8,
+            },
+        },
+        "ContradictionError",
+    )]
+    fn test_aromatize_error(#[case] input: GraphAromatizeError, #[case] expected_type: &str) {
+        let expected_message = input.to_string();
+        Python::attach(|py| {
+            let error = aromatize_error(input);
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::electrons(
+        GraphKekulizeError::UndeterminedElectrons(AromaticSystemId(0)),
+        "UnderdeterminedError"
+    )]
+    #[case::charge(
+        GraphKekulizeError::UndeterminedCharge(AromaticSystemId(0)),
+        "UnderdeterminedError"
+    )]
+    #[case::unpaired(
+        GraphKekulizeError::UndeterminedUnpairedElectrons(AromaticSystemId(0)),
+        "UnderdeterminedError"
+    )]
+    #[case::electron_count(
+        GraphKekulizeError::ElectronCountMismatch {
+            aromatic_system: AromaticSystemId(0), member_count: 6, electron_count: 5,
+        },
+        "InvalidStructureError",
+    )]
+    #[case::contribution(
+        GraphKekulizeError::UnsupportedElectronContribution {
+            aromatic_system: AromaticSystemId(0), atom: AtomId(1), contribution: 3,
+        },
+        "ModelConversionError",
+    )]
+    #[case::open_shell(
+        GraphKekulizeError::OpenShell(AromaticSystemId(0)),
+        "ModelConversionError"
+    )]
+    #[case::unsupported_charge(
+        GraphKekulizeError::UnsupportedCharge { aromatic_system: AromaticSystemId(0), charge: 2 },
+        "ModelConversionError",
+    )]
+    #[case::mixed_exposure(
+        GraphKekulizeError::MixedExposureDemand(AromaticSystemId(0)),
+        "ModelConversionError"
+    )]
+    #[case::order(
+        GraphKekulizeError::InvalidNodeOrder {
+            aromatic_system: AromaticSystemId(0), missing: vec![AtomId(5)], duplicates: vec![],
+        },
+        "ValueError",
+    )]
+    #[case::deficiency(
+        GraphKekulizeError::MatchingDeficiency {
+            aromatic_system: AromaticSystemId(0), expected: 1, actual: 3,
+        },
+        "ModelConversionError",
+    )]
+    #[case::exposed_charge(
+        GraphKekulizeError::UndeterminedExposedAtomCharge {
+            aromatic_system: AromaticSystemId(0), atom: AtomId(1),
+        },
+        "UnderdeterminedError",
+    )]
+    #[case::exposed_lone_pairs(
+        GraphKekulizeError::UndeterminedExposedAtomLonePairs {
+            aromatic_system: AromaticSystemId(0), atom: AtomId(1),
+        },
+        "UnderdeterminedError",
+    )]
+    #[case::assertion(
+        GraphKekulizeError::ContradictedAssertion {
+            aromatic_system: AromaticSystemId(0),
+            atom: AtomId(2),
+            constraint: AtomConstraintForm::valence(2),
+        },
+        "ContradictionError",
+    )]
+    #[case::valence(
+        GraphKekulizeError::ValenceInvariant {
+            aromatic_system: AromaticSystemId(0),
+            mismatch: ValenceMismatch::OrbitalCount {
+                atom_id: AtomId(2), orbital_count: 10, electron_count: 8,
+            },
+        },
+        "ContradictionError",
+    )]
+    #[case::no_matching(
+        GraphKekulizeError::NoMatching(AromaticSystemId(0)),
+        "ModelConversionError"
+    )]
+    #[case::non_bipartite(
+        GraphKekulizeError::NonBipartiteMatching(AromaticSystemId(0)),
+        "ModelConversionError"
+    )]
+    fn test_kekulize_error(#[case] input: GraphKekulizeError, #[case] expected_type: &str) {
+        let expected_message = input.to_string();
+        Python::attach(|py| {
+            let error = kekulize_error(input);
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::negative(
+        GraphFoldHydrogensError::NegativeImplicitHydrogenCount { atom: AtomId(0), count: -1 },
+        "InvalidStructureError",
+    )]
+    #[case::stereo(
+        GraphFoldHydrogensError::StereoHydrogenConflict {
+            entity: Entity::StereoAtom(StereoAtomId(0)), hydrogen: AtomId(1),
+        },
+        "ModelConversionError",
+    )]
+    fn test_fold_hydrogens_error(
+        #[case] input: GraphFoldHydrogensError,
+        #[case] expected_type: &str,
+    ) {
+        let expected_message = input.to_string();
+        Python::attach(|py| {
+            let error = fold_hydrogens_error(input);
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::negative(
+        GraphUnfoldHydrogensError::NegativeImplicitHydrogenCount { atom: AtomId(0), count: -1 },
+        "InvalidStructureError",
+    )]
+    #[case::underdetermined(
+        GraphUnfoldHydrogensError::NonConcreteStereoHydrogenCount {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            atom: AtomId(1),
+            value: NumForm::Undetermined,
+        },
+        "UnderdeterminedError",
+    )]
+    #[case::stereo(
+        GraphUnfoldHydrogensError::StereoHydrogenCountMismatch {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            atom: AtomId(1),
+            implicit_hydrogens: 0,
+            virtual_hydrogens: 1,
+        },
+        "InvalidStructureError",
+    )]
+    fn test_unfold_hydrogens_error(
+        #[case] input: GraphUnfoldHydrogensError,
+        #[case] expected_type: &str,
+    ) {
+        let expected_message = input.to_string();
+        Python::attach(|py| {
+            let error = unfold_hydrogens_error(input);
             assert_eq!(error.get_type(py).name().unwrap(), expected_type);
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),

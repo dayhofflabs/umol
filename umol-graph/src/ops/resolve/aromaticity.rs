@@ -4,7 +4,7 @@
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::{mem, slice};
+use std::slice;
 
 use smallvec::{smallvec, SmallVec};
 use thiserror::Error;
@@ -213,9 +213,7 @@ impl AromaticityResolver {
             }
         };
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("aromaticity resolve plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }
@@ -267,9 +265,7 @@ impl AromaticityResolver {
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityProjectError> {
         let edits = self.plan_project(molecule)?;
         if !edits.is_empty() {
-            *molecule = mem::take(molecule)
-                .apply(edits)
-                .expect("aromaticity project plan applies and preserves molecule integrity");
+            molecule.mutate(edits);
         }
         Ok(Solution::Determined(()))
     }

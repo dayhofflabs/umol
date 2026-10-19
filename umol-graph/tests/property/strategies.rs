@@ -197,6 +197,37 @@ pub(crate) fn stored_aromatic_skeleton() -> impl Strategy<Value = Molecule> {
     })
 }
 
+/// Raw, stored-aromatic, and saturated molecules for publication properties.
+pub(crate) fn publication_molecule() -> impl Strategy<Value = Molecule> {
+    prop_oneof![
+        aromatic_skeleton().prop_map(|skeleton| skeleton.molecule()),
+        stored_aromatic_skeleton(),
+        aromatic_skeleton().prop_map(|skeleton| {
+            let source = skeleton.molecule();
+            Molecule::from_entries(MoleculeEntries {
+                atoms: source
+                    .atoms()
+                    .iter()
+                    .map(|atom| {
+                        AtomForm::from_element(Element::C)
+                            .with_implicit_hydrogens(4 - atom.neighbors().count() as i64)
+                            .into_concrete()
+                    })
+                    .collect(),
+                bonds: source
+                    .bonds()
+                    .iter()
+                    .map(|bond| {
+                        let [a, b] = bond.atom_ids();
+                        (a, b, BondForm::from_order(1).into_concrete())
+                    })
+                    .collect(),
+                ..Default::default()
+            })
+        }),
+    ]
+}
+
 #[derive(Clone, Debug)]
 struct SkeletonAtom {
     element: Element,
