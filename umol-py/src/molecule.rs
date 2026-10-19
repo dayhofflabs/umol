@@ -15,6 +15,7 @@ use umol_graph::ops::resolve::{
     IsotopePolicy as GraphIsotopePolicy, ResolveConfig as GraphResolveConfig,
     Resolver as GraphResolver,
 };
+use umol_graph::ops::transform::Transform;
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr, Molecule as GraphIrMolecule,
@@ -33,8 +34,9 @@ use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
-    smiles_output_error, InvalidStructureError, InvalidatedViewError,
+    aromatize_error, fingerprint_error, fold_hydrogens_error, kekulize_error, metadata_error,
+    molecule_apply_error, parse_error, smiles_input_error, smiles_output_error,
+    unfold_hydrogens_error, InvalidStructureError, InvalidatedViewError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -43,6 +45,7 @@ use crate::fingerprint::value::{
     BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet,
 };
 use crate::metadata::MoleculeMetadata;
+use crate::model::aromaticity::{AromaticityConfig, AromaticityModel};
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
@@ -55,6 +58,7 @@ use crate::stereo::{
 };
 use crate::substructure::SubstructureSearchConfig;
 use crate::transaction::{MoleculeEditor, RollbackMethod};
+use crate::transform::KekulizeConfig;
 
 /// A molecule: the owned graph-IR root.
 ///
@@ -610,6 +614,141 @@ impl Molecule {
                 None,
             ),
         })
+    }
+
+    /// Aromatize an independent copy using the supplied model and optional configuration.
+    ///
+    /// Preserves this molecule and its views on every outcome. Raises RuntimeError for setup
+    /// errors, UnderdeterminedError for missing data, or ContradictionError for contradictions.
+    #[pyo3(signature = (model, *, config=None))]
+    fn aromatize(
+        &self,
+        model: &AromaticityModel,
+        config: Option<AromaticityConfig>,
+    ) -> PyResult<Self> {
+        self.to_rust()
+            .clone()
+            .aromatize(&model.to_rust(), config.unwrap_or_default().to_rust())
+            .map(Self::from_rust)
+            .map_err(aromatize_error)
+    }
+
+    /// Aromatize in place. Rejection preserves the molecule; errors follow aromatize.
+    ///
+    /// Execution invalidates existing views and iterators, including on rejection or a no-op.
+    /// Earlier successful transformations remain applied if this call fails.
+    #[pyo3(signature = (model, *, config=None))]
+    fn aromatize_into(
+        &mut self,
+        model: &AromaticityModel,
+        config: Option<AromaticityConfig>,
+    ) -> PyResult<()> {
+        let model = model.to_rust();
+        let config = config.unwrap_or_default().to_rust();
+        self.advance_counter();
+        self.to_rust_mut()
+            .aromatize_into(&model, config)
+            .map_err(aromatize_error)
+    }
+
+    /// Kekulize an independent copy using the supplied atom order and optional configuration.
+    ///
+    /// Preserves this molecule and its views on every outcome. Raises UnderdeterminedError for
+    /// missing data, ValueError for an invalid order, InvalidStructureError for inconsistent
+    /// electron-count length, ContradictionError for contradictions, or ModelConversionError
+    /// when localization is unavailable.
+    #[pyo3(signature = (node_order, *, config=None))]
+    fn kekulize(&self, node_order: Vec<u32>, config: Option<KekulizeConfig>) -> PyResult<Self> {
+        self.to_rust()
+            .clone()
+            .kekulize(
+                node_order.into_iter().map(GraphIrAtomId).collect(),
+                config.unwrap_or_default().to_rust(),
+            )
+            .map(Self::from_rust)
+            .map_err(kekulize_error)
+    }
+
+    /// Kekulize in place. Rejection preserves the molecule; errors follow kekulize.
+    ///
+    /// Execution invalidates existing views and iterators, including on rejection or a no-op.
+    /// Earlier successful transformations remain applied if this call fails.
+    #[pyo3(signature = (node_order, *, config=None))]
+    fn kekulize_into(
+        &mut self,
+        node_order: Vec<u32>,
+        config: Option<KekulizeConfig>,
+    ) -> PyResult<()> {
+        let node_order = node_order.into_iter().map(GraphIrAtomId).collect();
+        let config = config.unwrap_or_default().to_rust();
+        self.advance_counter();
+        self.to_rust_mut()
+            .kekulize_into(node_order, config)
+            .map_err(kekulize_error)
+    }
+
+    /// Delocalize charge in an independent copy, preserving this molecule and its views.
+    fn delocalize_charge(&self) -> Self {
+        let molecule = self
+            .to_rust()
+            .clone()
+            .delocalize_charge()
+            .unwrap_or_else(|error| match error {});
+        Self::from_rust(molecule)
+    }
+
+    /// Delocalize charge in place, invalidating existing views and iterators even on a no-op.
+    fn delocalize_charge_into(&mut self) {
+        self.advance_counter();
+        self.to_rust_mut()
+            .delocalize_charge_into()
+            .unwrap_or_else(|error| match error {});
+    }
+
+    /// Fold eligible explicit hydrogens in an independent copy, preserving this molecule and its views.
+    ///
+    /// Raises InvalidStructureError for negative affected hydrogen counts, or ModelConversionError
+    /// when folding cannot preserve a stereo frame.
+    fn fold_hydrogens(&self) -> PyResult<Self> {
+        self.to_rust()
+            .clone()
+            .fold_hydrogens()
+            .map(Self::from_rust)
+            .map_err(fold_hydrogens_error)
+    }
+
+    /// Fold hydrogens in place. Rejection preserves the molecule; errors follow fold_hydrogens.
+    ///
+    /// Execution invalidates existing views and iterators, including on rejection or a no-op.
+    /// Earlier successful transformations remain applied if this call fails.
+    fn fold_hydrogens_into(&mut self) -> PyResult<()> {
+        self.advance_counter();
+        self.to_rust_mut()
+            .fold_hydrogens_into()
+            .map_err(fold_hydrogens_error)
+    }
+
+    /// Unfold literal hydrogen counts in an independent copy, preserving this molecule and its views.
+    ///
+    /// Raises InvalidStructureError for negative counts or disagreement with a stereo frame,
+    /// or UnderdeterminedError for a nonliteral count backing a virtual stereo hydrogen.
+    fn unfold_hydrogens(&self) -> PyResult<Self> {
+        self.to_rust()
+            .clone()
+            .unfold_hydrogens()
+            .map(Self::from_rust)
+            .map_err(unfold_hydrogens_error)
+    }
+
+    /// Unfold hydrogens in place. Rejection preserves the molecule; errors follow unfold_hydrogens.
+    ///
+    /// Execution invalidates existing views and iterators, including on rejection or a no-op.
+    /// Earlier successful transformations remain applied if this call fails.
+    fn unfold_hydrogens_into(&mut self) -> PyResult<()> {
+        self.advance_counter();
+        self.to_rust_mut()
+            .unfold_hydrogens_into()
+            .map_err(unfold_hydrogens_error)
     }
 
     /// Apply `reaction` and lazily emit one connected product-component list per match.

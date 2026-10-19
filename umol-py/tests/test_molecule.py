@@ -30,7 +30,9 @@ from umol import (
     ElementScope,
     Entity,
     InvalidStructureError,
+    KekulizeConfig,
     MaximumIndependentSetAlgorithm,
+    MaximumMatchingAlgorithm,
     MetadataError,
     IsotopePolicy,
     Molecule,
@@ -39,6 +41,7 @@ from umol import (
     MoleculeCorrespondence,
     MoleculeDefaults,
     MoleculeMetadata,
+    ModelConversionError,
     MulticenterBondForm,
     NoncovalentBondForm,
     NoncovalentBondKind,
@@ -72,6 +75,25 @@ from umol import (
     ValenceTieBreak,
     NumForm,
 )
+
+
+@pytest.fixture
+def localized_benzene():
+    return Molecule.parse(
+        '{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+        ':bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"]]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+
+
+@pytest.fixture
+def aromatic_benzene():
+    return Molecule.parse(
+        '{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
 
 
 def test_canonicalization_config():
@@ -563,6 +585,7 @@ def test_molecule_from_smiles_chemistry_model_aromaticity():
     assert list(molecule.aromatic_systems) == []
 
 
+
 def _smiles_valence_model():
     default = ChemistryModel.default()
     return ChemistryModel(
@@ -655,6 +678,205 @@ def test_molecule_resolve_with_report_default_model():
     ]
 
 
+
+
+@pytest.mark.parametrize("method", ["aromatize", "aromatize_into"])
+@pytest.mark.parametrize("kwargs", [{}, {"config": AromaticityConfig()}])
+def test_molecule_aromatize(localized_benzene, aromatic_benzene, method, kwargs):
+    original = localized_benzene.copy()
+
+    result = getattr(localized_benzene, method)(AromaticityModel.daylight(), **kwargs)
+
+    if method == "aromatize":
+        assert result == aromatic_benzene
+        assert localized_benzene == original
+    else:
+        assert result is None
+        assert localized_benzene == aromatic_benzene
+
+
+@pytest.mark.parametrize("method", ["aromatize", "aromatize_into"])
+@pytest.mark.parametrize(
+    "source,model,error,message",
+    [
+        pytest.param(
+            '{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "*"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"]]}',
+            AromaticityModel.daylight(),
+            UnderdeterminedError,
+            "aromatization input is underdetermined",
+            id="underdetermined",
+        ),
+        pytest.param(
+            '{:atoms ["N#n" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [0 5 "1"]]}',
+            AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Clar()),
+            ContradictionError,
+            "aromaticity contradiction: clar: non-benzenoid input: "
+            "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
+            id="clar-heterocycle",
+        ),
+    ],
+)
+def test_molecule_aromatize_error(method, source, model, error, message):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+
+    with pytest.raises(error) as caught:
+        getattr(molecule, method)(model)
+
+    assert str(caught.value) == message
+    assert molecule == original
+
+
+@pytest.mark.parametrize("method", ["kekulize", "kekulize_into"])
+@pytest.mark.parametrize("kwargs", [{}, {"config": KekulizeConfig()}])
+def test_molecule_kekulize(aromatic_benzene, localized_benzene, method, kwargs):
+    original = aromatic_benzene.copy()
+
+    result = getattr(aromatic_benzene, method)(tuple(range(6)), **kwargs)
+
+    if method == "kekulize":
+        assert result == localized_benzene
+        assert aromatic_benzene == original
+    else:
+        assert result is None
+        assert aromatic_benzene == localized_benzene
+
+
+@pytest.mark.parametrize("method", ["kekulize", "kekulize_into"])
+@pytest.mark.parametrize(
+    "node_order,config,error,message",
+    [
+        pytest.param(
+            [0, 1],
+            KekulizeConfig(),
+            ValueError,
+            "node order for aromatic system AromaticSystemId(0) has missing atoms "
+            "[AtomId(2)] and duplicate atoms []",
+            id="missing-atom",
+        ),
+        pytest.param(
+            [0, 1, 2],
+            KekulizeConfig(algorithm=MaximumMatchingAlgorithm.HopcroftKarp()),
+            ModelConversionError,
+            "maximum matching requires a bipartite aromatic system AromaticSystemId(0)",
+            id="hopcroft-karp",
+        ),
+    ],
+)
+def test_molecule_kekulize_error(method, node_order, config, error, message):
+    molecule = Molecule.parse(
+        '{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = molecule.copy()
+
+    with pytest.raises(error) as caught:
+        getattr(molecule, method)(node_order, config=config)
+
+    assert str(caught.value) == message
+    assert molecule == original
+
+
+def test_molecule_kekulize_into_sequence(localized_benzene, aromatic_benzene):
+    assert localized_benzene.aromatize_into(AromaticityModel.daylight()) is None
+    assert localized_benzene == aromatic_benzene
+
+    with pytest.raises(ValueError, match="^node order for aromatic system"):
+        localized_benzene.kekulize_into([])
+
+    assert localized_benzene == aromatic_benzene
+
+
+@pytest.mark.parametrize("method", ["delocalize_charge", "delocalize_charge_into"])
+def test_molecule_delocalize_charge(method):
+    molecule = Molecule.parse(
+        '{:atoms ["C#c+#h#a0" "C#h#a" "C#h#a"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = molecule.copy()
+    expected = Molecule.parse(
+        '{:atoms ["C#h#a" "C#h#a" "C#h#a"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c+"}]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+
+    result = getattr(molecule, method)()
+
+    if method == "delocalize_charge":
+        assert result == expected
+        assert molecule == original
+    else:
+        assert result is None
+        assert molecule == expected
+
+
+@pytest.mark.parametrize("method", ["fold_hydrogens", "fold_hydrogens_into"])
+def test_molecule_fold_hydrogens(method):
+    molecule = Molecule.parse(
+        '{:atoms ["H" "C#h2"] :bonds [[0 1 "1"]]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = molecule.copy()
+    expected = Molecule.parse('{:atoms ["C#h3"]}', defaults=MoleculeDefaults.concrete())
+
+    result = getattr(molecule, method)()
+
+    if method == "fold_hydrogens":
+        assert result == expected
+        assert molecule == original
+    else:
+        assert result is None
+        assert molecule == expected
+
+
+@pytest.mark.parametrize("method", ["fold_hydrogens", "fold_hydrogens_into"])
+def test_molecule_fold_hydrogens_error(method):
+    molecule = Molecule.parse(
+        '{:atoms ["C#h-1" "H"] :bonds [[0 1 "1"]]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = molecule.copy()
+
+    with pytest.raises(InvalidStructureError, match="^atom 0 has negative implicit-hydrogen count -1$"):
+        getattr(molecule, method)()
+
+    assert molecule == original
+
+
+@pytest.mark.parametrize("method", ["unfold_hydrogens", "unfold_hydrogens_into"])
+def test_molecule_unfold_hydrogens(method):
+    molecule = Molecule.parse('{:atoms ["C#h3"]}', defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    expected = Molecule.parse(
+        '{:atoms ["C" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+
+    result = getattr(molecule, method)()
+
+    if method == "unfold_hydrogens":
+        assert result == expected
+        assert molecule == original
+    else:
+        assert result is None
+        assert molecule == expected
+
+
+@pytest.mark.parametrize("method", ["unfold_hydrogens", "unfold_hydrogens_into"])
+def test_molecule_unfold_hydrogens_error(method):
+    molecule = Molecule.parse('{:atoms ["C#h3" "O#h-1"]}', defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+
+    with pytest.raises(InvalidStructureError, match="^atom 1 has negative implicit-hydrogen count -1$"):
+        getattr(molecule, method)()
+
+    assert molecule == original
 
 
 @pytest.mark.parametrize(

@@ -35,10 +35,6 @@ impl KekulizeConfig {
         Self(config)
     }
 
-    #[allow(
-        dead_code,
-        reason = "Rust conversion for molecule transformation bindings"
-    )]
     pub(crate) fn to_rust(self) -> GraphKekulizeConfig {
         self.0
     }
