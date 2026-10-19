@@ -49,7 +49,12 @@ pub enum FoldHydrogensError {
 ///
 /// # Semantic properties
 ///
-/// Folding preserves molecule representation integrity and is idempotent.
+/// Every successful result preserves molecule representation integrity and is
+/// unchanged by another application under exact representation equality.
+/// With literal elements and hydrogen counts, the number of hydrogen atoms plus
+/// the sum of implicit-hydrogen counts is conserved. Retained atoms preserve their
+/// total valence, degree, and hydrogen readings under the surviving atom correspondence.
+///
 /// Atom and bond identities are removed, so no general inverse or lossless
 /// roundtrip with hydrogen unfolding is promised.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -446,7 +451,9 @@ pub enum UnfoldHydrogensError {
         atom: AtomId,
         value: NumForm,
     },
-    #[error("atom {atom} has implicit-hydrogen count {implicit_hydrogens} but {virtual_hydrogens} virtual hydrogens in {entity}")]
+    #[error(
+        "atom {atom} has implicit-hydrogen count {implicit_hydrogens} but {virtual_hydrogens} virtual hydrogens in {entity}"
+    )]
     StereoHydrogenCountMismatch {
         entity: Entity,
         atom: AtomId,
@@ -481,7 +488,17 @@ pub enum UnfoldHydrogensError {
 ///
 /// # Semantic properties
 ///
-/// Unfolding preserves molecule representation integrity and is idempotent.
+/// Every successful result preserves molecule representation integrity and is
+/// unchanged by another application under exact representation equality.
+/// With literal elements and hydrogen counts, the number of hydrogen atoms plus
+/// the sum of implicit-hydrogen counts is conserved. Existing atoms preserve their
+/// total valence, degree, and hydrogen readings at their original ids.
+///
+/// Unfolding followed by folding restores the exact stored representation when
+/// no explicit hydrogen is initially eligible for folding, all hydrogen counts
+/// are nonnegative literals, positive counts belong to known non-hydrogen atoms,
+/// affected localized valence/degree assertions are literal or absent, and stereo
+/// frames and assertions are compatible with the hydrogen counts.
 /// No general inverse or lossless roundtrip with hydrogen folding is promised.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HydrogenUnfolder;
