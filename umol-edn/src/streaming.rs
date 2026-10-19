@@ -104,7 +104,7 @@ impl<'de> EdnStreamDeserializer<'de> {
             return Err(ParseError::UnexpectedEof { offset: start });
         }
         let first = bytes[self.pos] as char;
-        if !is_symbol_start(first) && !first.is_ascii_digit() {
+        if !is_symbol_start(first) {
             return Err(ParseError::UnexpectedToken {
                 offset: start,
                 found: first,
@@ -547,17 +547,28 @@ mod tests {
     #[case::simple(":foo", "foo")]
     #[case::with_ws("  :bar", "bar")]
     #[case::namespaced(":ns/name", "ns/name")]
+    #[case::digit_suffix(":a01", "a01")]
+    #[case::namespaced_digit_suffix(":ns0/name1", "ns0/name1")]
     fn test_edn_stream_deserializer_read_keyword_name(#[case] input: &str, #[case] expected: &str) {
         let mut d = EdnStreamDeserializer::new(input);
         assert_eq!(d.read_keyword_name().unwrap().as_ref(), expected);
     }
 
     #[rstest]
-    #[case::not_keyword("foo")]
-    #[case::leading_slash(":/foo")]
-    fn test_edn_stream_deserializer_read_keyword_name_error(#[case] input: &str) {
+    #[case::not_keyword("foo", ParseError::UnexpectedToken { offset: 0, found: 'f' })]
+    #[case::leading_slash(":/foo", ParseError::UnexpectedToken { offset: 1, found: '/' })]
+    #[case::single_digit(":0", ParseError::UnexpectedToken { offset: 1, found: '0' })]
+    #[case::leading_zero(":01", ParseError::UnexpectedToken { offset: 1, found: '0' })]
+    #[case::digit_prefix(":9abc", ParseError::UnexpectedToken { offset: 1, found: '9' })]
+    #[case::digit_namespace(":1/name", ParseError::UnexpectedToken { offset: 1, found: '1' })]
+    #[case::digit_name(":ns/1", ParseError::InvalidSymbol { offset: 1 })]
+    #[case::with_ws(" , :01", ParseError::UnexpectedToken { offset: 4, found: '0' })]
+    fn test_edn_stream_deserializer_read_keyword_name_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
         let mut d = EdnStreamDeserializer::new(input);
-        assert!(d.read_keyword_name().is_err());
+        assert_eq!(d.read_keyword_name(), Err(expected));
     }
 
     #[rstest]
@@ -597,6 +608,7 @@ mod tests {
 
     #[rstest]
     #[case::string(r#""hello""#, "hello")]
+    #[case::numeric_string(r#""01""#, "01")]
     #[case::keyword(":foo", "foo")]
     fn test_edn_stream_deserializer_read_string_or_keyword(
         #[case] input: &str,
@@ -604,6 +616,19 @@ mod tests {
     ) {
         let mut d = EdnStreamDeserializer::new(input);
         assert_eq!(d.read_string_or_keyword().unwrap().as_ref(), expected);
+    }
+
+    #[rstest]
+    #[case::eof("", ParseError::UnexpectedEof { offset: 0 })]
+    #[case::number("123", ParseError::UnexpectedToken { offset: 0, found: '1' })]
+    #[case::leading_zero(":01", ParseError::UnexpectedToken { offset: 1, found: '0' })]
+    #[case::digit_namespace(":1/name", ParseError::UnexpectedToken { offset: 1, found: '1' })]
+    fn test_edn_stream_deserializer_read_string_or_keyword_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_string_or_keyword(), Err(expected));
     }
 
     #[rstest]
@@ -773,13 +798,5 @@ mod tests {
         assert_eq!(d.read_i64().unwrap(), -1);
         d.consume_byte(b'}').unwrap();
         d.expect_eof().unwrap();
-    }
-
-    #[rstest]
-    #[case::eof("")]
-    #[case::number("123")]
-    fn test_edn_stream_deserializer_read_string_or_keyword_error(#[case] input: &str) {
-        let mut d = EdnStreamDeserializer::new(input);
-        assert!(d.read_string_or_keyword().is_err());
     }
 }

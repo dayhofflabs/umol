@@ -720,6 +720,18 @@ fn test_molecule_dsl_from_edn_str_duplicate_keys(#[case] source: &str, #[case] k
 }
 
 #[rstest]
+#[case::atom(r#"{:atoms [[:01 "C"]]}"#)]
+#[case::stereo_atom(r#"{:atoms ["N" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :01 :site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th1"}]}"#)]
+fn test_molecule_dsl_from_edn_str_keyword_error(#[case] source: &str) {
+    let expected = EdnParseError::UnexpectedToken {
+        offset: source.find(":01").unwrap() + 1,
+        found: '0',
+    };
+    assert_eq!(read_string(source), Err(expected.clone().into()));
+    assert_eq!(MoleculeDsl::from_edn_str(source), Err(expected.into()));
+}
+
+#[rstest]
 fn test_molecule_dsl_from_edn_map_key_regression() {
     let source = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1] [[0 1 "1"]] :cons} {:aromatic true}]}]}"#;
     assert_eq!(

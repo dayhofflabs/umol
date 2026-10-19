@@ -5,7 +5,9 @@ use std::cmp::Ordering;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
-use umol_edn::{read_string, Edn, EdnKeyword, EdnMap, EdnSeq, EdnSet, EdnSymbol};
+use umol_edn::{
+    read_string, Edn, EdnKeyword, EdnMap, EdnSeq, EdnSet, EdnStreamDeserializer, EdnSymbol,
+};
 
 const SYMBOL_START: &[char] = &[
     'a', 'b', 'c', 'z', 'A', 'B', 'Z', '.', '*', '+', '!', '-', '_', '?', '$', '%', '&', '=', '<',
@@ -231,6 +233,32 @@ fn reference_sequence_cmp<'a>(
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Keyword readers accept the same complete input and preserve the same name as tree parsing.
+    #[test]
+    fn test_edn_stream_deserializer_read_keyword_name_parity(
+        name in prop_oneof![
+            keyword_name_strategy(),
+            "[0-9][a-zA-Z0-9/_-]{0,20}",
+            any::<String>(),
+        ],
+    ) {
+        let input = format!(":{name}");
+        let tree = read_string(&input).ok().and_then(|value| match value {
+            Edn::Keyword(keyword) => Some(keyword.as_str().to_owned()),
+            _ => None,
+        });
+        let mut reader = EdnStreamDeserializer::new(&input);
+        let keyword = reader.read_keyword_name()
+            .and_then(|name| reader.expect_eof().map(|()| name.into_owned()))
+            .ok();
+        let mut reader = EdnStreamDeserializer::new(&input);
+        let string_or_keyword = reader.read_string_or_keyword()
+            .and_then(|name| reader.expect_eof().map(|()| name.into_owned()))
+            .ok();
+        prop_assert_eq!(&keyword, &tree);
+        prop_assert_eq!(&string_or_keyword, &tree);
+    }
 
     #[test]
     fn test_display_parse_roundtrip(edn in edn_strategy()) {
