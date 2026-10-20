@@ -1,21 +1,39 @@
 # 123 — AST allocation/clone survey and prioritized worklist (2026-06-21)
 
 Status: In Progress
-Date: 2026-06-21
-Relates: [237](237-release-0-10-scope-2026-10-15.md)
+
+**Review — 2026-10-19, upstream main e3b234822.** Only matcher working-buffer
+allocation and incidence-graph construction remain active. The other findings
+and profiles below are historical, subject to the dispositions in this worklist.
 
 ## Current worklist
 
-- Adopt the measured removal of recursive matcher allocations: S0a and S0b below.
-- Adopt the measured incidence-vector reservation in S0c, then run the shared gate.
+- Skip semantically vacuous pattern fields in matching without weakening the
+  lattice laws. **Not pursued.**
+- Add allocation-free stereo value matching where the coset semantics permit
+  it. **Not prioritized:** literal/undetermined cases already avoid steady-state
+  heap allocation; optimization of other variants is not selected.
+- Remove the per-call `Vec<Cow<...>>` buffers from the no-derivation
+  substructure path; entity cloning on that path is already gone. **Done:**
+  matching now reads host attributes directly without these buffers.
+- Measure and address per-match embedding allocation and per-call incidence
+  graph construction where the measured workload justifies it. **Narrowed:**
+  MoleculeEmbedding is gone; no new per-match correspondence work is selected.
+  Incidence-graph construction remains in scope.
+- Audit resolver and transaction mutation paths for clone-then-modify patterns,
+  while preserving rollback snapshots required by transactionality. **Closed:**
+  later operation and ownership work covers this audit; it is not reopened here.
+- **Remaining:** measure and address per-invocation matcher working-buffer
+  allocation and incidence-graph construction where the measured workload
+  justifies a change.
 
-Scope review, 2026-10-19: the predicate fast path and uncommon stereo-form
-optimizations are not selected for 0.10. The host Vec<Cow> buffers and
-MoleculeEmbedding are gone; returned-correspondence allocation is not part of
-this work. Mutation and transactions are closed here. The reference-only
-constraint-reading proposal was superseded by the semantic readings in 236.
-The historical rankings and mutation-audit proposals below are not additional
-implementation tasks.
+Constraint accessors returning references and the host-entity borrowing change
+are complete. The profiles below are the evidence that produced this worklist,
+not independent task lists.
+
+**Accessor disposition:** raw getters still borrow. The semantic constraint
+readings accepted in 236 return normalized owned values by design; this does not
+reopen the old reference-only proposal.
 
 ## Method
 
