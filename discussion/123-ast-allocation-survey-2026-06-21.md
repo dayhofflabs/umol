@@ -1,23 +1,43 @@
 # 123 — AST allocation/clone survey and prioritized worklist (2026-06-21)
 
-Status: **In Progress**
+Status: Completed
+
+**Closeout — 2026-10-20.** S0a–S0c and their shared verification gate are complete.
+The accepted matcher and incidence-construction implementations were adopted
+unchanged from the measured experiments. No further work remains selected here.
+
+**Review — 2026-10-19, upstream main e3b234822.** Only matcher working-buffer
+allocation and incidence-graph construction were selected. The other findings
+and profiles below are historical, subject to the dispositions in this worklist.
 
 ## Current worklist
 
 - Skip semantically vacuous pattern fields in matching without weakening the
-  lattice laws.
+  lattice laws. **Not pursued.**
 - Add allocation-free stereo value matching where the coset semantics permit
-  it.
+  it. **Not prioritized:** literal/undetermined cases already avoid steady-state
+  heap allocation; optimization of other variants is not selected.
 - Remove the per-call `Vec<Cow<...>>` buffers from the no-derivation
-  substructure path; entity cloning on that path is already gone.
+  substructure path; entity cloning on that path is already gone. **Done:**
+  matching now reads host attributes directly without these buffers.
 - Measure and address per-match embedding allocation and per-call incidence
-  graph construction where the measured workload justifies it.
+  graph construction where the measured workload justifies it. **Narrowed:**
+  MoleculeEmbedding is gone; no new per-match correspondence work is selected.
+  Incidence-graph construction is complete in S0c.
 - Audit resolver and transaction mutation paths for clone-then-modify patterns,
-  while preserving rollback snapshots required by transactionality.
+  while preserving rollback snapshots required by transactionality. **Closed:**
+  later operation and ownership work covers this audit; it is not reopened here.
+- **Completed:** measured and adopted the matcher working-buffer and
+  incidence-construction improvements in S0a–S0c. No additional optimization
+  is selected.
 
 Constraint accessors returning references and the host-entity borrowing change
 are complete. The profiles below are the evidence that produced this worklist,
 not independent task lists.
+
+**Accessor disposition:** raw getters still borrow. The semantic constraint
+readings accepted in 236 return normalized owned values by design; this does not
+reopen the old reference-only proposal.
 
 ## Method
 
@@ -170,3 +190,185 @@ Distinct from doc 122 (read-path): different correctness surface (mutation of an
 value-semantic `MoleculeAst`, kept to well-delimited contexts). Tracked here; pursued after
 doc 122. **Interning is explicitly out of scope** — not a destination now; the APIs are
 designed without regard for it.
+
+## Accepted matcher experiment — 2026-10-19
+
+The experiment compared main e3b2348225aadf8e73b2c8507fca883d9534f30f with
+two internal changes in umol-graph-core: depth-based VF2 restoration and
+allocation-free Vf2Rdkit candidate traversal. Both are accepted for adoption.
+They preserve the matching algorithms, candidate order, predicate calls,
+anchoring, and visitor termination behavior. Public signatures, ownership,
+and failure behavior are unchanged.
+
+VF2 replaces its per-branch restoration vectors with another pass over the
+selected query and target nodes' adjacency, clearing only terminal markers
+introduced at the current depth. This trades the saved lists for neighbor
+reads; it does not scan the whole graph. Vf2Rdkit reads a mapped parent's
+adjacency directly, or the target node range for a component root, instead of
+collecting a candidate vector at every recursive step.
+
+Measurements used Rust 1.99.1 on macOS 15.7.3 arm64, release builds, the same
+dependency lockfile and benchmark sources, and separate binaries for timing
+and allocation counting. Three paired passes alternated execution order.
+Each Criterion case used 30 samples, 100 ms warm-up, and 400 ms measurement.
+The seven controls were 3-atom paths in 8- and 64-atom carbon chains, an
+absent-element query in the 64-atom chain, a path in a branched 4-atom host,
+a six-member ring in itself and in two fused six-member rings, and one
+3-atom multicenter overlay with contributions [2, 0, 1]. Ordinary fields used
+literal or undetermined forms. These controls do not define workload frequencies.
+
+Median reductions in complete molecule-matching time, including returned
+correspondences and their destruction:
+
+| Case | GraphAndOverlays / VF2 | GraphAndOverlays / Vf2Rdkit | Incidence / VF2 | Incidence / Vf2Rdkit |
+| --- | ---: | ---: | ---: | ---: |
+| 8-atom chain | 8.7% | 7.5% | 15.8% | 8.6% |
+| 64-atom chain | 3.1% | 2.8% | 6.2% | 3.9% |
+| Six-member ring | 10.7% | 14.7% | 23.2% | 16.9% |
+| Fused rings | 10.9% | 13.9% | 21.8% | 18.7% |
+
+The 64-atom chain's core matcher allocations fell from 504 to 6 for VF2 and
+from 193 to 4 for Vf2Rdkit; per-call working storage remains. The only slower
+full-matching case was VF2 with GraphAndOverlays on the multicenter control:
+0.3%, about 0.01 microseconds, with paired changes of +0.04% to +0.40%.
+The no-match VF2 Incidence case was near unchanged: paired changes ranged
+from -1.84% to +1.39%. The experiment passed 111 focused unit tests, six
+matching properties, exact comparisons with saved baseline correspondences,
+formatting, and graph-core Clippy with warnings denied.
+
+The separately measured incidence construction for the 64-atom chain and
+its pattern took about 2.17 microseconds. This was roughly 1% of the successful
+Incidence matching call and 73–79% of the corresponding no-match call.
+That supports keeping construction separate from the accepted matcher changes;
+it does not select a cache, prepared matcher, or other construction API.
+
+## Accepted incidence-construction experiment — 2026-10-19
+
+The subsequent experiment isolated one change to Molecule::incidence_graph:
+count the selected participant occurrences and reserve the endpoint and incidence
+vectors before filling them. Fixed-degree counts use arithmetic; variable-degree
+overlays require an extra pass over rows to read list lengths. The existing
+construction loops and Graph::new remain unchanged. This change is accepted for
+adoption. ReactionSpan::incidence_graph is outside the selected scope.
+
+Both binaries used main e3b2348225aadf8e73b2c8507fca883d9534f30f plus the
+accepted matcher changes above. The compiler, platform, separate timing/allocation
+binaries, and three alternating paired passes matched the preceding experiment.
+The 51 cases covered complete matching with both algorithms and strategies,
+separate pattern/host construction, and empty, mixed-overlay, and 32-multicenter-row
+construction controls at all three incidence levels. Timing used 30 samples,
+100 ms warm-up, and 400 ms measurement. The controls retain the preceding
+experiment's literal/undetermined forms and do not define workload frequencies.
+
+| Measured operation | Median paired time reduction |
+| --- | ---: |
+| 64-atom host construction | 16.8% |
+| 8-atom host construction | 21.4% |
+| Mixed-overlay Full construction | 23.4% |
+| 32 multicenter rows, Constitution construction | 16.1% |
+| Complete no-match call, Incidence / VF2 | 12.0% |
+| Complete no-match call, Incidence / Vf2Rdkit | 11.1% |
+
+The 64-atom host's eight allocations remain, while its nine reallocations become
+zero. Cumulative requested bytes fall from 6,920 to 5,790; this is allocation
+traffic, not retained or peak memory. Most successful enumeration timings changed
+by less than 1%. A focused repeat of chain8, ring6, and fused10 used three paired
+passes with one-second measurements. The initially slower fused10/VF2 Incidence
+median changed from +0.88% to +0.03%; timing excursions also occurred in unchanged
+GraphAndOverlays controls. The evidence supports construction and rejection gains,
+without establishing a general successful-enumeration speedup.
+
+Empty construction consistently costs about 1–5 ns more, or 3–10%, without saving
+allocations. The added counting work is retained with that measured trade-off.
+Exact comparisons preserved 51 complete incidence graphs and the seven fixtures'
+complete correspondences across both algorithms and strategies. The experiment
+passed 85 focused unit tests, two matching properties, formatting, and graph-IR
+Clippy with warnings denied.
+
+## Implementation plan
+
+### S0 — Matching allocations
+
+The tested implementations were adopted unchanged on 2026-10-20. The changes
+stay inside existing implementations; there are no new public symbols, DSL forms,
+Python methods, or guide contracts.
+
+#### S0a — VF2 terminal restoration
+
+- [x] **Done — 2026-10-20. Additive (green). [dep: none]**
+- Module: umol-graph-core, algorithms/subgraph_isomorphism.rs, Vf2State::search.
+- Remove restore_q and restore_t. After recursive return, revisit the affected
+  adjacency and clear entries whose terminal marker equals the exiting depth,
+  then decrement depth. Preserve earlier markers, including the seeded anchor,
+  and restore state before propagating ControlFlow::Break.
+- Carry over the experiment's property assertion in
+  tests/property/subgraph_isomorphism.rs: anchored results equal the restriction
+  of unanchored Ullmann results to the supplied anchor. Retain the existing
+  algorithm cross-validation, planted matches, visitor/enumerator agreement,
+  disconnected-query, branching, cycle, and early-termination coverage.
+
+#### S0b — Vf2Rdkit candidate traversal
+
+- [x] **Done — 2026-10-20. Additive (green). [dep: none]**
+- Module: umol-graph-core, algorithms/subgraph_isomorphism.rs,
+  vf2_rdkit::vf2rdkit_search.
+- Replace the collected candidate vector with traversal of the borrowed
+  adjacency slice or target node range. Preserve candidate order and
+  repetitions, degree and predicate checks, edge consistency, and state
+  restoration on normal and early return. Both anchored and unanchored entry
+  points continue to use this function.
+- Run the existing matching unit cases and cross-algorithm properties,
+  including the anchored restriction assertion from S0a when both are present.
+  The two implementations are independent; apply them in the listed order.
+
+#### S0c — Incidence vector reservation
+
+- [x] **Done — 2026-10-20. Additive (green). [dep: none]**
+- Module: umol-graph-ir, ir/incidence.rs, Molecule::incidence_graph.
+- Compute the exact selected incidence count before construction: two per localized
+  bond; under Constitution or Full, donors plus acceptor per dative bond, participant
+  lengths for aromatic and multicenter entities, and two per noncovalent bond;
+  under Full, site plus ligand count per stereo atom or stereo bond.
+- Initialize both edges and incidences with that capacity. Count variable-degree
+  rows through their existing exact-size iterators' lengths, without traversing
+  their participants. Retain the existing filling loops and Graph::new call.
+- Preserve entity-block order, edge and role alignment, selected-level behavior,
+  and parallel participant occurrences, including shared virtual-ligand anchors.
+  Keep the change confined to the molecule producer tested in the experiment.
+- Run the existing exact incidence cases for all levels and roles, including
+  parallel occurrences, and the substructure unit and cross-strategy/cross-algorithm
+  property suites. No new fixture files or property generators are needed.
+- This implementation is independent of S0a/S0b; apply it after them so the combined
+  result matches the measured baseline plus candidate.
+
+#### S0 shared gate — after S0a, S0b, and S0c
+
+- [x] **Done — 2026-10-20.** Focused checks passed: 133 unit cases and six
+  matching properties. The all-feature workspace test run passed 39,771 tests
+  with 10 ignored; all-target/all-feature workspace Clippy passed with warnings
+  denied. CI-pinned nightly formatting and git diff --check passed. Workspace
+  commands used the repository Python 3.13 environment. The three source/test
+  files match the measured experiment exactly; no measurement repeat was needed.
+
+Run the focused graph-core matching, graph-IR incidence, and graph-IR matching
+tests and their explicitly enabled property suites:
+
+```sh
+cargo test -p umol-graph-core --features proptest subgraph_isomorphism
+cargo test -p umol-graph-ir --features proptest --lib ir::incidence
+cargo test -p umol-graph-ir --features proptest substructure
+```
+
+Then run formatting, workspace tests, and workspace Clippy with warnings denied
+once for the combined changes, using the repository's Python 3.13 environment
+for workspace commands that include umol-py. Review the complete diff against
+the accepted matcher and incidence changes and the anchored-matching property
+assertion.
+
+The recorded experiments settle the performance decisions for the tested code.
+Repeat affected paired measurements only if adoption changes the implementation
+or exposes a new performance concern.
+
+Execution order: S0a, S0b, S0c, then the shared gate. The three implementations
+are independent; the final gate depends on all three. No further optimization
+experiment or stage remains selected in this document.

@@ -722,35 +722,36 @@ mod vf2 {
                 self.mapping[q_idx] = Some(t_idx as u32);
                 self.reverse[t_idx] = true;
 
-                let mut restore_q = Vec::new();
-                let mut restore_t = Vec::new();
-
                 for qn in self.query.neighbors(q_node) {
                     let ni = qn.node.index();
                     if self.terminal_query[ni] == 0 && self.mapping[ni].is_none() {
                         self.terminal_query[ni] = self.depth;
-                        restore_q.push(ni);
                     }
                 }
                 for tn in self.target.neighbors(t_node) {
                     let ni = tn.node.index();
                     if self.terminal_target[ni] == 0 && !self.reverse[ni] {
                         self.terminal_target[ni] = self.depth;
-                        restore_t.push(ni);
                     }
                 }
 
                 let result = self.search(node_match, edge_match, emit);
 
-                self.depth -= 1;
                 self.mapping[q_idx] = None;
                 self.reverse[t_idx] = false;
-                for ni in restore_q {
-                    self.terminal_query[ni] = 0;
+                for qn in self.query.neighbors(q_node) {
+                    let ni = qn.node.index();
+                    if self.terminal_query[ni] == self.depth {
+                        self.terminal_query[ni] = 0;
+                    }
                 }
-                for ni in restore_t {
-                    self.terminal_target[ni] = 0;
+                for tn in self.target.neighbors(t_node) {
+                    let ni = tn.node.index();
+                    if self.terminal_target[ni] == self.depth {
+                        self.terminal_target[ni] = 0;
+                    }
                 }
+                self.depth -= 1;
                 if let ControlFlow::Break(value) = result {
                     return ControlFlow::Break(value);
                 }
@@ -1743,15 +1744,10 @@ mod vf2_rdkit {
             .neighbors(NodeId(q as u32))
             .iter()
             .find_map(|nb| mapping[nb.node.index()]);
-        let candidates: Vec<usize> = match parent {
-            Some(image) => target
-                .neighbors(NodeId(image as u32))
-                .iter()
-                .map(|nb| nb.node.index())
-                .collect(),
-            None => (0..target.node_count()).collect(),
-        };
-        for t in candidates {
+        let candidates = parent.map(|image| target.neighbors(NodeId(image as u32)));
+        let candidate_count = candidates.map_or(target.node_count(), |neighbors| neighbors.len());
+        for index in 0..candidate_count {
+            let t = candidates.map_or(index, |neighbors| neighbors[index].node.index());
             if used[t]
                 || q_degree > target.neighbors(NodeId(t as u32)).len()
                 || !node_match(NodeId(q as u32), NodeId(t as u32))

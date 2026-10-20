@@ -1,12 +1,21 @@
 # 198 — Resolver performance profile
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-17
 Relates: [123](123-ast-allocation-survey-2026-06-21.md),
 [148](148-validated-transactions-operations-2026-07-13.md),
 [160](160-relevant-cycle-algs-2026-07-25.md),
 [196](196-aromatic-assignment-selection-2026-08-13.md),
 [199](199-open-container-integrity-2026-08-18.md)
+
+**Closeout — 2026-10-19, upstream main e3b234822.** The agreed optimization work
+is complete. Later work in 236, 181, and 166 covers the lifecycle and valence
+follow-ups; 236 also records the counts derivation-reuse trial that was not
+retained. Automatic closing discharge was removed, and focused valence,
+resolver, and cycle benchmarks exist. No further resolver work is selected.
+Further cycle-algorithm optimization is future work outside 0.10, not an open
+item here. The profiles and follow-up lists below remain historical evidence;
+they do not describe current costs or schedule additional work.
 
 ## Motivation and outcome
 
