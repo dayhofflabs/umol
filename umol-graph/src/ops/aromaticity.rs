@@ -28,8 +28,10 @@ use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorit
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValence, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondId, BooleanForm, Edits,
-    ElectronCountsForm, Molecule, RingConfig, RingModel, RingSet, RingSetKind,
+    ElectronCountsForm, FrameTransport, Lattice, Molecule, RingConfig, RingModel, RingSet,
+    RingSetKind,
 };
+use umol_perm::DynPermutation;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::{AromaticityModel, AromaticityRule};
@@ -379,6 +381,7 @@ impl AromaticityPerceiver {
     }
 
     /// Compare a perceived partition with sorted member lists against aromatic requirements.
+    /// Stored systems must have equal members and lattice-compatible attributes in a common frame.
     pub(crate) fn check_aromatic_systems(
         &self,
         molecule: &Molecule,
@@ -428,13 +431,23 @@ impl AromaticityPerceiver {
             let reproduced = members
                 .next()
                 .and_then(aromatic_system_at)
-                .is_some_and(|index| {
+                .filter(|&index| {
                     aromatic_systems[index].0.len() == member_count
                         && members.all(|atom| aromatic_system_at(atom) == Some(index))
                 });
-            if matches!(&aromatic_system.attributes().electrons, ElectronCountsForm::Lit(electrons) if electrons.len() != member_count)
-                || !reproduced
-            {
+            let compatible = reproduced.is_some_and(|index| {
+                let stored = aromatic_system.attributes();
+                if matches!(&stored.electrons, ElectronCountsForm::Lit(electrons) if electrons.len() != member_count)
+                {
+                    return false;
+                }
+                let (atoms, perceived) = &aromatic_systems[index];
+                let stored_atoms: SmallVec<[AtomId; 16]> = aromatic_system.atom_ids().collect();
+                DynPermutation::between(&stored_atoms, atoms)
+                    .and_then(|action| stored.clone().reframe_by(&action))
+                    .is_some_and(|reframed| reframed.is_compatible(perceived))
+            });
+            if !compatible {
                 inconsistencies.push(AromaticityInconsistency::AromaticSystemFailure {
                     aromatic_system: aromatic_system.id(),
                 });
@@ -1234,6 +1247,82 @@ mod tests {
                 .derive(&molecule, AromaticityConfig::default())
                 .unwrap(),
             expected
+        );
+    }
+
+    #[rstest]
+    #[case::equal(
+        vec![0, 1, 2], vec![0, 1, 2],
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]),
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]), vec![]
+    )]
+    #[case::reframed(
+        vec![2, 0, 1], vec![0, 1, 2],
+        AromaticSystemForm::from_electrons(vec![0, 2, 1]),
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]), vec![]
+    )]
+    #[case::undetermined(
+        vec![2, 0, 1], vec![0, 1, 2], AromaticSystemForm::default(),
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]).with_charge(0), vec![]
+    )]
+    #[case::partial_charge(
+        vec![0, 1, 2], vec![0, 1, 2],
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]).with_charge(NumForm::lit_set([0, 1])),
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]).with_charge(0), vec![]
+    )]
+    #[case::different_members(
+        vec![0, 1, 2], vec![0, 1, 3], AromaticSystemForm::default(),
+        AromaticSystemForm::default(), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::larger_perceived_system(
+        vec![0, 1, 2], vec![0, 1, 2, 3], AromaticSystemForm::default(),
+        AromaticSystemForm::default(), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::short_counts(
+        vec![0, 1, 2], vec![0, 1, 2], AromaticSystemForm::from_electrons(vec![2, 1]),
+        AromaticSystemForm::default(), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::long_counts(
+        vec![0, 1, 2], vec![0, 1, 2], AromaticSystemForm::from_electrons(vec![2, 1, 0, 1]),
+        AromaticSystemForm::default(), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::different_contributions(
+        vec![0, 1, 2], vec![0, 1, 2], AromaticSystemForm::from_electrons(vec![2, 1, 0]),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::different_frame(
+        vec![2, 0, 1], vec![0, 1, 2], AromaticSystemForm::from_electrons(vec![2, 1, 0]),
+        AromaticSystemForm::from_electrons(vec![2, 1, 0]), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::different_charge(
+        vec![0, 1, 2], vec![0, 1, 2], AromaticSystemForm::default().with_charge(1),
+        AromaticSystemForm::default().with_charge(0), vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    #[case::different_spin(
+        vec![0, 1, 2], vec![0, 1, 2],
+        AromaticSystemForm::default().with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+        AromaticSystemForm::default().with_unpaired_electrons(UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }),
+        vec![AromaticityInconsistency::AromaticSystemFailure { aromatic_system: AromaticSystemId(0) }]
+    )]
+    fn test_aromaticity_perceiver_check_aromatic_systems(
+        #[case] stored_atoms: Vec<u32>,
+        #[case] perceived_atoms: Vec<u32>,
+        #[case] stored: AromaticSystemForm,
+        #[case] perceived: AromaticSystemForm,
+        #[case] expected: Vec<AromaticityInconsistency>,
+    ) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            aromatic: vec![(stored_atoms.into_iter().map(AtomId).collect(), stored)],
+            ..MoleculeEntries::default()
+        });
+        assert_eq!(
+            AromaticityPerceiver::new(&AromaticityModel::daylight()).check_aromatic_systems(
+                &molecule,
+                &[],
+                &[(perceived_atoms.into_iter().map(AtomId).collect(), perceived)],
+            ),
+            expected,
         );
     }
 
