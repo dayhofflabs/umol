@@ -64,10 +64,10 @@ fn peek_byte(input: &Input) -> Option<u8> {
     input.as_ref().as_bytes().first().copied()
 }
 
-/// Check if a byte is whitespace.
+/// Check if an ASCII byte is whitespace.
 #[inline(always)]
 fn is_ws_byte(b: u8) -> bool {
-    matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b',')
+    matches!(b, b' ' | b'\t'..=b'\r' | b',')
 }
 
 /// Parse a single EDN value from the input, returning the value and remaining input.
@@ -119,8 +119,8 @@ pub fn parse_all<'a>(input: &'a str, config: &ParseConfig) -> Result<Vec<Edn<'a>
     Ok(values)
 }
 
-fn is_ws(c: char) -> bool {
-    matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
+pub(crate) fn is_ws(c: char) -> bool {
+    c.is_whitespace() || c == ','
 }
 
 fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) -> PResult<()> {
@@ -430,7 +430,7 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
                 || is_ws_byte(second.unwrap());
             if single_char {
                 let c = s.chars().next().unwrap();
-                if c.is_whitespace() {
+                if is_ws(c) {
                     return Err(ErrMode::Cut(ParseError::InvalidCharLiteral {
                         offset: char_offset,
                     }));
@@ -490,7 +490,7 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         // Multi-byte but not a recognized named char — error.
         // (Single chars were handled by the fast path above.)
         let c = s.chars().next().unwrap();
-        if c.is_whitespace() {
+        if is_ws(c) {
             return Err(ErrMode::Cut(ParseError::InvalidCharLiteral {
                 offset: char_offset,
             }));

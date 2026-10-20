@@ -117,8 +117,8 @@ fn edn_leaf() -> impl Strategy<Value = Edn<'static>> {
             .prop_map(Edn::Char),
         // Named characters.
         prop::sample::select(&['\n', '\r', ' ', '\t'][..]).prop_map(Edn::Char),
-        // Non-ASCII chars that roundtrip via \uXXXX.
-        prop::sample::select(&['\u{03B1}', '\u{00E9}', '\u{4E16}'][..]).prop_map(Edn::Char),
+        // All Unicode scalar values, including whitespace and supplementary characters.
+        any::<char>().prop_map(Edn::Char),
         // Control chars rendered as \uXXXX.
         (1u32..0x20u32)
             .prop_filter_map("not named", |cp| {
@@ -233,6 +233,24 @@ fn reference_sequence_cmp<'a>(
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Inserting EDN whitespace between tokens preserves values in both reader paths.
+    #[test]
+    fn test_read_string_whitespace(
+        first in any::<i64>(),
+        second in any::<i64>(),
+        whitespace in r"[\u0009-\u000D ,\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]{1,12}",
+    ) {
+        let input = format!("{whitespace}[{first}{whitespace}{second}]{whitespace}");
+        let expected = Edn::Vector(vec![Edn::Int(first), Edn::Int(second)].into());
+        prop_assert_eq!(read_string(&input).unwrap(), expected);
+        let mut reader = EdnStreamDeserializer::new(&input);
+        reader.consume_byte(b'[').unwrap();
+        prop_assert_eq!(reader.read_i64().unwrap(), first);
+        prop_assert_eq!(reader.read_i64().unwrap(), second);
+        reader.consume_byte(b']').unwrap();
+        reader.expect_eof().unwrap();
+    }
 
     /// Keyword readers accept the same complete input and preserve the same name as tree parsing.
     #[test]

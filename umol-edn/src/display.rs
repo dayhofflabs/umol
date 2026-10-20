@@ -3,7 +3,7 @@
 use std::fmt;
 
 use crate::edn::Edn;
-use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
+use crate::parser::{is_symbol_char, is_symbol_start, is_ws, validate_symbol};
 
 impl fmt::Display for Edn<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -84,7 +84,9 @@ fn format_char(f: &mut fmt::Formatter<'_>, c: char) -> fmt::Result {
         '\r' => write!(f, "\\return"),
         ' ' => write!(f, "\\space"),
         '\t' => write!(f, "\\tab"),
-        c if (c as u32) < 0x20 || c == '\u{7F}' => write!(f, "\\u{:04X}", c as u32),
+        c if (c as u32) < 0x20 || c == '\u{7F}' || is_ws(c) => {
+            write!(f, "\\u{:04X}", c as u32)
+        }
         _ => write!(f, "\\{c}"),
     }
 }
@@ -159,8 +161,16 @@ mod tests {
     #[case::tab('\t', "\\tab")]
     #[case::formfeed('\u{000C}', "\\u000C")]
     #[case::backspace('\u{0008}', "\\u0008")]
+    #[case::comma(',', "\\u002C")]
+    #[case::next_line('\u{0085}', "\\u0085")]
+    #[case::nonbreaking_space('\u{00A0}', "\\u00A0")]
+    #[case::thin_space('\u{2009}', "\\u2009")]
+    #[case::line_separator('\u{2028}', "\\u2028")]
+    #[case::paragraph_separator('\u{2029}', "\\u2029")]
+    #[case::ideographic_space('\u{3000}', "\\u3000")]
     fn test_display_char(#[case] c: char, #[case] expected: &str) {
         assert_eq!(Edn::Char(c).to_string(), expected);
+        assert_eq!(read_string(expected).unwrap(), Edn::Char(c));
     }
 
     #[rstest]

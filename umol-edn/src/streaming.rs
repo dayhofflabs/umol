@@ -10,7 +10,7 @@ use std::fmt;
 use std::str::{from_utf8, FromStr};
 
 use crate::error::{DeError, EdnError, ParseError};
-use crate::parser::{is_symbol_char, is_symbol_start, parse_value, validate_symbol};
+use crate::parser::{is_symbol_char, is_symbol_start, is_ws, parse_value, validate_symbol};
 use crate::reader::default_config;
 
 pub struct EdnStreamDeserializer<'de> {
@@ -57,7 +57,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         let bytes = self.input.as_bytes();
         while self.pos < bytes.len() {
             match bytes[self.pos] {
-                b' ' | b'\t' | b'\n' | b'\r' | b',' => self.pos += 1,
+                b' ' | b'\t'..=b'\r' | b',' => self.pos += 1,
                 b';' => {
                     self.pos += 1;
                     while self.pos < bytes.len() && bytes[self.pos] != b'\n' {
@@ -66,6 +66,13 @@ impl<'de> EdnStreamDeserializer<'de> {
                 }
                 b'#' if bytes.get(self.pos + 1) == Some(&b'_') => {
                     return self.skip_ws_discard();
+                }
+                0xC2..=0xF4 => {
+                    let c = self.input[self.pos..].chars().next().unwrap();
+                    if !is_ws(c) {
+                        break;
+                    }
+                    self.pos += c.len_utf8();
                 }
                 _ => break,
             }
