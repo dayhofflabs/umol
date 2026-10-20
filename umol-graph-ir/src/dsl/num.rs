@@ -49,7 +49,7 @@ impl<'de> FromEdn<'de> for NumDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let v = match edn {
             Edn::Int(n) => NumForm::Lit(*n),
-            Edn::Keyword(k) if k.name() == "undetermined" => NumForm::Undetermined,
+            Edn::Keyword(k) if k.as_str() == "undetermined" => NumForm::Undetermined,
             Edn::Vector(xs) => {
                 let mut out = BTreeSet::new();
                 for e in xs.iter() {

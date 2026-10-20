@@ -1,6 +1,11 @@
 //! Content-independent EDN serialization helpers shared across the DSL boundary types.
 
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn};
+use std::borrow::Cow;
+
+use smallvec::SmallVec;
+use umol_edn::{
+    DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ParseError,
+};
 
 use super::refs::AtomRef;
 
@@ -48,7 +53,7 @@ pub(super) fn required_key<'e>(
 
 pub(super) fn optional_id_keyword(m: &EdnMap<'_>) -> Result<Option<String>, DeError> {
     match m.get_keyword("id") {
-        Some(Edn::Keyword(k)) => Ok(Some(k.name().to_string())),
+        Some(Edn::Keyword(k)) => Ok(Some(k.as_str().to_string())),
         Some(other) => Err(DeError::TypeMismatch {
             expected: "keyword",
             got: other.kind(),
@@ -111,17 +116,46 @@ pub(super) fn read_vec<T>(
     Ok(out)
 }
 
-pub(super) fn read_map(
-    de: &mut EdnStreamDeserializer<'_>,
-    mut on_entry: impl FnMut(&mut EdnStreamDeserializer<'_>, &str) -> Result<(), EdnError>,
+pub(super) fn read_map<'de>(
+    de: &mut EdnStreamDeserializer<'de>,
+    mut on_entry: impl FnMut(&mut EdnStreamDeserializer<'de>, &str) -> Result<(), EdnError>,
 ) -> Result<(), EdnError> {
     de.consume_byte(b'{')?;
+    let mut keys = SmallVec::<[Cow<'de, str>; 16]>::new();
     loop {
         if de.try_consume_byte(b'}')? {
             break;
         }
-        let key = de.read_keyword_name()?.into_owned();
-        on_entry(de, key.as_str())?;
+        let offset = de.position();
+        let key = de.read_keyword_name()?;
+        if keys.contains(&key) {
+            return Err(ParseError::DuplicateKey { offset }.into());
+        }
+        on_entry(de, key.as_ref())?;
+        keys.push(key);
+    }
+    Ok(())
+}
+
+pub(super) fn read_edn_map_keys(
+    map: &EdnMap<'_>,
+    allowed: &[&str],
+    context: &'static str,
+) -> Result<(), DeError> {
+    for (key, _) in map.iter() {
+        let Edn::Keyword(key) = key else {
+            return Err(DeError::TypeMismatch {
+                expected: "keyword key",
+                got: key.kind(),
+                path: vec![context.into()],
+            });
+        };
+        if !allowed.contains(&key.as_str()) {
+            return Err(DeError::UnknownField {
+                key: key.as_str().to_string(),
+                path: vec![context.into()],
+            });
+        }
     }
     Ok(())
 }
@@ -186,7 +220,7 @@ pub(super) fn parse_single_key_map<'a, 'de>(
             path: vec![context.into()],
         });
     };
-    Ok((key.name(), v))
+    Ok((key.as_str(), v))
 }
 
 #[cfg(test)]

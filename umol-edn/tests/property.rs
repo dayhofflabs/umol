@@ -5,7 +5,9 @@ use std::cmp::Ordering;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
-use umol_edn::{read_string, Edn, EdnKeyword, EdnMap, EdnSeq, EdnSet, EdnSymbol};
+use umol_edn::{
+    read_string, Edn, EdnKeyword, EdnMap, EdnSeq, EdnSet, EdnStreamDeserializer, EdnSymbol,
+};
 
 const SYMBOL_START: &[char] = &[
     'a', 'b', 'c', 'z', 'A', 'B', 'Z', '.', '*', '+', '!', '-', '_', '?', '$', '%', '&', '=', '<',
@@ -115,8 +117,8 @@ fn edn_leaf() -> impl Strategy<Value = Edn<'static>> {
             .prop_map(Edn::Char),
         // Named characters.
         prop::sample::select(&['\n', '\r', ' ', '\t'][..]).prop_map(Edn::Char),
-        // Non-ASCII chars that roundtrip via \uXXXX.
-        prop::sample::select(&['\u{03B1}', '\u{00E9}', '\u{4E16}'][..]).prop_map(Edn::Char),
+        // All Unicode scalar values, including whitespace and supplementary characters.
+        any::<char>().prop_map(Edn::Char),
         // Control chars rendered as \uXXXX.
         (1u32..0x20u32)
             .prop_filter_map("not named", |cp| {
@@ -231,6 +233,50 @@ fn reference_sequence_cmp<'a>(
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Inserting EDN whitespace between tokens preserves values in both reader paths.
+    #[test]
+    fn test_read_string_whitespace(
+        first in any::<i64>(),
+        second in any::<i64>(),
+        whitespace in r"[\u0009-\u000D ,\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]{1,12}",
+    ) {
+        let input = format!("{whitespace}[{first}{whitespace}{second}]{whitespace}");
+        let expected = Edn::Vector(vec![Edn::Int(first), Edn::Int(second)].into());
+        prop_assert_eq!(read_string(&input).unwrap(), expected);
+        let mut reader = EdnStreamDeserializer::new(&input);
+        reader.consume_byte(b'[').unwrap();
+        prop_assert_eq!(reader.read_i64().unwrap(), first);
+        prop_assert_eq!(reader.read_i64().unwrap(), second);
+        reader.consume_byte(b']').unwrap();
+        reader.expect_eof().unwrap();
+    }
+
+    /// Keyword readers accept the same complete input and preserve the same name as tree parsing.
+    #[test]
+    fn test_edn_stream_deserializer_read_keyword_name_parity(
+        name in prop_oneof![
+            keyword_name_strategy(),
+            "[0-9][a-zA-Z0-9/_-]{0,20}",
+            any::<String>(),
+        ],
+    ) {
+        let input = format!(":{name}");
+        let tree = read_string(&input).ok().and_then(|value| match value {
+            Edn::Keyword(keyword) => Some(keyword.as_str().to_owned()),
+            _ => None,
+        });
+        let mut reader = EdnStreamDeserializer::new(&input);
+        let keyword = reader.read_keyword_name()
+            .and_then(|name| reader.expect_eof().map(|()| name.into_owned()))
+            .ok();
+        let mut reader = EdnStreamDeserializer::new(&input);
+        let string_or_keyword = reader.read_string_or_keyword()
+            .and_then(|name| reader.expect_eof().map(|()| name.into_owned()))
+            .ok();
+        prop_assert_eq!(&keyword, &tree);
+        prop_assert_eq!(&string_or_keyword, &tree);
+    }
 
     #[test]
     fn test_display_parse_roundtrip(edn in edn_strategy()) {

@@ -12,6 +12,7 @@ use crate::collections::EdnMap;
 use crate::edn::Edn;
 #[cfg(feature = "serde")]
 use crate::error::EdnError;
+use crate::parser::is_ws;
 #[cfg(feature = "serde")]
 use crate::ser;
 
@@ -147,12 +148,12 @@ fn format_float_len(v: f64) -> usize {
 
 fn display_char_len(c: char) -> usize {
     match c {
-        '\n' => 8,                                    // \newline
-        '\r' => 7,                                    // \return
-        ' ' => 6,                                     // \space
-        '\t' => 4,                                    // \tab
-        c if (c as u32) < 0x20 || c == '\u{7F}' => 6, // \uNNNN
-        _ => 1 + c.len_utf8(),                        // \ + char
+        '\n' => 8,                                                // \newline
+        '\r' => 7,                                                // \return
+        ' ' => 6,                                                 // \space
+        '\t' => 4,                                                // \tab
+        c if (c as u32) < 0x20 || c == '\u{7F}' || is_ws(c) => 6, // \uNNNN
+        _ => 1 + c.len_utf8(),                                    // \ + char
     }
 }
 
@@ -681,6 +682,10 @@ mod tests {
     #[case::tab_char('\t', 4)]
     #[case::ascii_char('a', 2)]
     #[case::control_char('\x01', 6)]
+    #[case::comma(',', 6)]
+    #[case::nonbreaking_space('\u{00A0}', 6)]
+    #[case::thin_space('\u{2009}', 6)]
+    #[case::ideographic_space('\u{3000}', 6)]
     fn test_formatter_display_char_len(#[case] c: char, #[case] expected: usize) {
         assert_eq!(display_char_len(c), expected);
     }

@@ -9,7 +9,8 @@
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::edn_utils::{
-    atoms_pair, atoms_vec, eof_err, parse_vec, read_map, read_vec, required_key, two_atom_refs,
+    atoms_pair, atoms_vec, eof_err, parse_vec, read_edn_map_keys, read_map, read_vec, required_key,
+    two_atom_refs,
 };
 use super::error::ParseError;
 use super::metadata::Metadata;
@@ -85,7 +86,7 @@ macro_rules! define_ref {
                         })?;
                         Ok(Self::Index(i))
                     }
-                    Edn::Keyword(k) => Ok(Self::Keyword(k.name().to_string())),
+                    Edn::Keyword(k) => Ok(Self::Keyword(k.as_str().to_string())),
                     $( Edn::Map(m) => {
                         if m.get_keyword("attrs").is_some() || m.get_keyword("id").is_some() {
                             return Err(DeError::Custom(format!(
@@ -254,22 +255,27 @@ pub struct StereoBondParticipants {
 }
 
 fn parse_bond_structural(m: &EdnMap<'_>) -> Result<[AtomRef; 2], DeError> {
+    read_edn_map_keys(m, &["atoms"], "bond structural ref")?;
     atoms_pair(m, "bond structural ref")
 }
 
 fn parse_noncovalent_structural(m: &EdnMap<'_>) -> Result<[AtomRef; 2], DeError> {
+    read_edn_map_keys(m, &["atoms"], "noncovalent-bond structural ref")?;
     atoms_pair(m, "noncovalent-bond structural ref")
 }
 
 fn parse_aromatic_structural(m: &EdnMap<'_>) -> Result<Vec<AtomRef>, DeError> {
+    read_edn_map_keys(m, &["atoms"], "aromatic-system structural ref")?;
     atoms_vec(m, "aromatic-system structural ref")
 }
 
 fn parse_multicenter_structural(m: &EdnMap<'_>) -> Result<Vec<AtomRef>, DeError> {
+    read_edn_map_keys(m, &["atoms"], "multicenter-bond structural ref")?;
     atoms_vec(m, "multicenter-bond structural ref")
 }
 
 fn parse_dative_structural(m: &EdnMap<'_>) -> Result<DativeBondParticipants, DeError> {
+    read_edn_map_keys(m, &["donors", "acceptor"], "dative-bond structural ref")?;
     Ok(DativeBondParticipants {
         // `AtomRef::from_edn` can't be passed directly here — HRTB inference fails
         // ("FnMut not general enough"); the closure is required despite clippy.
@@ -284,6 +290,7 @@ fn parse_dative_structural(m: &EdnMap<'_>) -> Result<DativeBondParticipants, DeE
 }
 
 fn parse_stereo_atom_structural(m: &EdnMap<'_>) -> Result<StereoAtomParticipants, DeError> {
+    read_edn_map_keys(m, &["site", "ligands"], "stereo-atom structural ref")?;
     Ok(StereoAtomParticipants {
         site: AtomRef::from_edn(required_key(m, "site", "stereo-atom structural ref")?)?,
         ligands: parse_vec(
@@ -295,6 +302,7 @@ fn parse_stereo_atom_structural(m: &EdnMap<'_>) -> Result<StereoAtomParticipants
 }
 
 fn parse_stereo_bond_structural(m: &EdnMap<'_>) -> Result<StereoBondParticipants, DeError> {
+    read_edn_map_keys(m, &["site", "ligands"], "stereo-bond structural ref")?;
     Ok(StereoBondParticipants {
         site: BondRef::from_edn(required_key(m, "site", "stereo-bond structural ref")?)?,
         ligands: parse_vec(
@@ -313,7 +321,11 @@ fn reject_structural_key(key: &str, context: &'static str) -> EdnError {
     if key == "attrs" || key == "id" {
         DeError::Custom(format!("{context} must not carry :attrs or :id")).into()
     } else {
-        DeError::Custom(format!("unexpected key :{key} in {context}")).into()
+        DeError::UnknownField {
+            key: key.to_string(),
+            path: vec![context.into()],
+        }
+        .into()
     }
 }
 
@@ -588,7 +600,7 @@ pub(super) fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandRef, DeEr
                 });
             };
             Ok(StereoLigandRef {
-                kind: stereo_ligand_kind(tag.name())?,
+                kind: stereo_ligand_kind(tag.as_str())?,
                 atom: AtomRef::from_edn(&v[1])?,
             })
         }

@@ -10,8 +10,8 @@ use rstest::rstest;
 use serde::Deserialize;
 use umol_edn::serde::{from_str, from_str_with};
 use umol_edn::{
-    read_all_with, read_string_with, DuplicateKeyPolicy, Edn, EdnError, EdnMap, EdnSet, EdnSymbol,
-    ParseConfig, ParseError, TagFn, TagReaders,
+    read_all_with, read_string_with, DuplicateKeyPolicy, Edn, EdnError, EdnMap, EdnSet,
+    EdnStreamDeserializer, EdnSymbol, ParseConfig, ParseError, TagFn, TagReaders,
 };
 
 fn cfg() -> ParseConfig {
@@ -27,28 +27,63 @@ fn stream<'a, T: Deserialize<'a>>(input: &'a str) -> Result<T, EdnError> {
 }
 
 #[rstest]
-#[case::spaces(" 1 ", Edn::Int(1))]
-#[case::tabs("\t1\t", Edn::Int(1))]
-#[case::newlines("\n1\n", Edn::Int(1))]
-#[case::carriage_returns("\r1\r", Edn::Int(1))]
-#[case::commas(",1,", Edn::Int(1))]
-#[case::mixed(" \t\n\r,1", Edn::Int(1))]
-fn test_whitespace(#[case] input: &str, #[case] expected: Edn<'_>) {
-    assert_eq!(parse(input).unwrap(), expected);
+#[case::space(" ")]
+#[case::tab("\t")]
+#[case::newline("\n")]
+#[case::vertical_tab("\u{000B}")]
+#[case::formfeed("\u{000C}")]
+#[case::carriage_return("\r")]
+#[case::comma(",")]
+#[case::next_line("\u{0085}")]
+#[case::nonbreaking_space("\u{00A0}")]
+#[case::ogham_space("\u{1680}")]
+#[case::en_quad("\u{2000}")]
+#[case::em_quad("\u{2001}")]
+#[case::en_space("\u{2002}")]
+#[case::em_space("\u{2003}")]
+#[case::three_per_em_space("\u{2004}")]
+#[case::four_per_em_space("\u{2005}")]
+#[case::six_per_em_space("\u{2006}")]
+#[case::figure_space("\u{2007}")]
+#[case::punctuation_space("\u{2008}")]
+#[case::thin_space("\u{2009}")]
+#[case::hair_space("\u{200A}")]
+#[case::line_separator("\u{2028}")]
+#[case::paragraph_separator("\u{2029}")]
+#[case::narrow_nonbreaking_space("\u{202F}")]
+#[case::medium_mathematical_space("\u{205F}")]
+#[case::ideographic_space("\u{3000}")]
+#[case::mixed(" \t\n\r,\u{000C}\u{2009}")]
+fn test_read_string_with_whitespace(#[case] whitespace: &str) {
+    let input = format!("{whitespace}[1{whitespace}2]{whitespace}");
+    assert_eq!(
+        parse(&input).unwrap(),
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into())
+    );
+    assert_eq!(stream::<Vec<i64>>(&input).unwrap(), vec![1, 2]);
+
+    let mut reader = EdnStreamDeserializer::new(&input);
+    reader.consume_byte(b'[').unwrap();
+    assert_eq!(reader.read_i64().unwrap(), 1);
+    assert_eq!(reader.read_i64().unwrap(), 2);
+    reader.consume_byte(b']').unwrap();
+    reader.expect_eof().unwrap();
 }
 
 #[rstest]
-#[case::spaces(" 1 ", 1i64)]
-#[case::tabs("\t1\t", 1)]
-#[case::newlines("\n1\n", 1)]
-#[case::commas(",1,", 1)]
-fn test_whitespace_streaming(#[case] input: &str, #[case] expected: i64) {
-    assert_eq!(stream::<i64>(input).unwrap(), expected);
-}
-
-#[test]
-fn test_formfeed_not_whitespace() {
-    assert!(parse("\x0C1").is_err());
+#[case::zero_width_space('\u{200B}')]
+#[case::bom('\u{FEFF}')]
+#[case::file_separator('\u{001C}')]
+fn test_read_string_with_whitespace_error(#[case] c: char) {
+    let input = format!("1{c}");
+    let expected = ParseError::TrailingContent { offset: 1 };
+    assert_eq!(
+        parse(&input).unwrap_err(),
+        EdnError::Parse(expected.clone())
+    );
+    let mut reader = EdnStreamDeserializer::new(&input);
+    assert_eq!(reader.read_i64().unwrap(), 1);
+    assert_eq!(reader.expect_eof().unwrap_err(), expected);
 }
 
 #[test]
@@ -160,6 +195,19 @@ fn test_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
 }
 
 #[rstest]
+#[case::formfeed("\u{000C}")]
+#[case::unicode_whitespace("\u{0085}\u{00A0}\u{2009}\u{2028}\u{3000}")]
+#[case::comma(",")]
+fn test_read_string_with_string_whitespace(#[case] contents: &str) {
+    let input = format!("\"{contents}\"");
+    assert_eq!(parse(&input).unwrap(), Edn::Str(Cow::Borrowed(contents)));
+    assert_eq!(stream::<String>(&input).unwrap(), contents);
+    let mut reader = EdnStreamDeserializer::new(&input);
+    assert_eq!(reader.read_string().unwrap(), contents);
+    reader.expect_eof().unwrap();
+}
+
+#[rstest]
 #[case::backspace(r#""\b""#)]
 #[case::formfeed(r#""\f""#)]
 fn test_string_clojure_escapes_rejected_streaming(#[case] input: &str) {
@@ -201,6 +249,9 @@ fn test_string_unterminated() {
 #[case::tab(r"\tab", '\t')]
 #[case::unicode_ascii(r"\u0041", 'A')]
 #[case::unicode_alpha(r"\u03B1", '\u{03B1}')]
+#[case::unicode_formfeed(r"\u000C", '\u{000C}')]
+#[case::unicode_comma(r"\u002C", ',')]
+#[case::unicode_thin_space(r"\u2009", '\u{2009}')]
 fn test_characters(#[case] input: &str, #[case] expected: char) {
     assert_eq!(parse(input).unwrap(), Edn::Char(expected));
 }
@@ -219,6 +270,25 @@ fn test_formfeed_backspace_rejected(#[case] input: &str) {
 #[case::surrogate(r"\uD800")]
 fn test_characters_error(#[case] input: &str) {
     assert!(parse(input).is_err());
+}
+
+#[rstest]
+#[case::space("\\ ")]
+#[case::tab("\\\t")]
+#[case::formfeed("\\\u{000C}")]
+#[case::comma("\\,")]
+#[case::nonbreaking_space("\\\u{00A0}")]
+#[case::thin_space("\\\u{2009}")]
+#[case::line_separator("\\\u{2028}")]
+fn test_read_string_with_character_whitespace_error(#[case] input: &str) {
+    let expected = ParseError::InvalidCharLiteral { offset: 1 };
+    assert_eq!(parse(input).unwrap_err(), EdnError::Parse(expected.clone()));
+    assert_eq!(
+        stream::<char>(input).unwrap_err(),
+        EdnError::Parse(expected.clone())
+    );
+    let mut reader = EdnStreamDeserializer::new(input);
+    assert_eq!(reader.read_value_slice().unwrap_err(), expected);
 }
 
 #[test]

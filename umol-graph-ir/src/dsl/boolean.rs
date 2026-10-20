@@ -98,7 +98,7 @@ impl<'de> FromEdn<'de> for BooleanDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let b = match edn {
             Edn::Bool(b) => BooleanForm::Lit(*b),
-            Edn::Keyword(k) if k.name() == "undetermined" => BooleanForm::Undetermined,
+            Edn::Keyword(k) if k.as_str() == "undetermined" => BooleanForm::Undetermined,
             Edn::Str(s) => {
                 parse_boolean(s)
                     .map_err(|e| DeError::subgrammar("boolean", e))?

@@ -13,12 +13,21 @@ language. There is no encoding detection or BOM handling.
 
 ## 1. Whitespace and commas
 
-Whitespace characters: space (0x20), tab (0x09), newline (0x0A), carriage return
-(0x0D). Comma (0x2C) is also treated as whitespace. Form feed (0x0C) is **not**
+Whitespace consists of characters with the Unicode `White_Space` property,
+plus comma (U+002C). This includes tab, newline, vertical tab, form feed,
+carriage return, space, and Unicode spaces such as nonbreaking space (U+00A0)
+and thin space (U+2009). Zero-width space (U+200B) and BOM (U+FEFF) are not
 whitespace.
 
 Whitespace separates tokens and is otherwise insignificant. Leading and trailing
 whitespace around values is ignored.
+
+**Ambiguity resolution:** The informal EDN specification does not enumerate
+whitespace. The narrow ASCII set in the
+[proposed grammar](https://github.com/edn-format/edn/issues/56) excluded form feed;
+umol-edn instead uses Unicode `White_Space` plus comma consistently for token
+separation and the prohibition on literal whitespace after a character-literal
+backslash. Rust's `char::is_whitespace` supplies the Unicode property.
 
 ## 2. Comments
 
@@ -81,6 +90,7 @@ Delimited by `"`. Supports escape sequences:
 | `\uNNNN` | unicode code point (4 hex digits) |
 
 Unterminated strings are an error. Unknown escape sequences are an error.
+Literal whitespace and commas inside strings are preserved as content.
 
 **Ambiguity resolution:** The EDN spec lists "standard C/Java escape characters
 `\t, \r, \n, \\ and \"`" — exactly five. `\uNNNN` is not explicitly listed but
@@ -104,7 +114,13 @@ A character literal must be followed by a non-symbol character, whitespace, or
 end of input. `\abc` is an error (multi-character sequence that isn't a named
 character).
 
-`\ ` (backslash followed by literal space) is invalid.
+A backslash followed directly by any whitespace character defined in section 1
+is invalid, including `\ ` and `\,`. These values use the named forms above or
+Unicode escapes: for example, `\u000C` (form feed), `\u002C` (comma), and
+`\u2009` (thin space). `\formfeed` and `\backspace` are not accepted names.
+
+Character formatting uses the named forms above where available, and `\uNNNN`
+for other whitespace characters, comma, ASCII control characters, and DEL.
 
 ## 9. Keywords
 
@@ -241,7 +257,7 @@ Summary of decisions on underspecified areas of the EDN spec:
 | String escapes beyond the listed five | `\uNNNN` accepted                             | 7       |
 | Duplicate map keys                    | Configurable; error by default                | 13      |
 | `#_` nesting (`#_ #_ a b`)            | Each `#_` discards next form                  | 3       |
-| Whitespace definition                 | Space, tab, newline, CR, comma. Not form feed | 1       |
+| Whitespace definition                 | Unicode `White_Space` plus comma              | 1, 8    |
 | `#_` + tagged literal                 | Discards entire tagged form                   | 3       |
 | Leading zeros (`007`)                 | Rejected                                      | 5       |
 | `-0` / `-0.0`                         | Valid                                         | 5, 6    |

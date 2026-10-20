@@ -70,8 +70,8 @@ impl<'de> FromEdn<'de> for DativeBondDsl {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("dative", e)),
             Edn::Keyword(k) => {
-                let s = expand_dative_keyword(k.name()).ok_or_else(|| {
-                    DeError::Custom(format!("unknown dative keyword :{}", k.name()))
+                let s = expand_dative_keyword(k.as_str()).ok_or_else(|| {
+                    DeError::Custom(format!("unknown dative keyword :{}", k.as_str()))
                 })?;
                 s.parse().map_err(|e| DeError::subgrammar("dative", e))
             }
@@ -420,7 +420,7 @@ impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
                         path: vec!["dative-bond-constraint".into()],
                     });
                 };
-                Ok(match key.name() {
+                Ok(match key.as_str() {
                     "aromatic" => Self::Aromatic(BooleanDsl::from_edn(v)?.0),
                     "ring-membership" => Self::RingMembership(RingMembershipDsl::from_edn(v)?.0),
                     other => {

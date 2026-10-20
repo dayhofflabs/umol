@@ -386,7 +386,7 @@ fn split_span_entry<'a, 'de>(edn: &'a Edn<'de>) -> (Option<&'a str>, &'a Edn<'de
     if let Edn::Vector(v) = edn {
         if v.len() == 2 {
             if let Edn::Keyword(keyword) = &v[0] {
-                return (Some(keyword.name()), &v[1]);
+                return (Some(keyword.as_str()), &v[1]);
             }
         }
     }
@@ -403,8 +403,8 @@ fn verb_wrapper<'a, 'de>(edn: &'a Edn<'de>) -> Option<(&'a str, &'a Edn<'de>)> {
     let (key, payload) = m.iter().next()?;
     let Edn::Keyword(verb) = key else { return None };
     SPAN_VERBS
-        .contains(&verb.name())
-        .then_some((verb.name(), payload))
+        .contains(&verb.as_str())
+        .then_some((verb.as_str(), payload))
 }
 
 fn parse_atom_span_entry(
@@ -857,7 +857,7 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
                 path: vec!["span".into()],
             });
         };
-        match key.name() {
+        match key.as_str() {
             "atoms" => atoms = parse_vec(value, ":atoms", parse_atom_span_entry)?,
             "bonds" => bonds = parse_vec(value, ":bonds", parse_bond_span_entry)?,
             "dative-bonds" => {
@@ -2386,6 +2386,56 @@ mod tests {
         );
         assert_eq!(ReactionSpanDsl::from_edn_str(input).unwrap(), expected);
         assert_eq!(ReactionSpanDsl::from_str(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    fn test_reaction_span_dsl_from_edn_namespaced_key() {
+        let source = "{:other/atoms []}";
+        let expected = DeError::Custom("unknown span key :other/atoms".into());
+        assert_eq!(
+            ReactionSpanDsl::from_edn(&read_string(source).unwrap()),
+            Err(expected.clone())
+        );
+        assert_eq!(ReactionSpanDsl::from_edn_str(source), Err(expected.into()));
+    }
+
+    #[rstest]
+    fn test_reaction_span_dsl_from_edn_namespaced_ids() {
+        let source = r#"{:atoms [[:left/c "C"] [:right/c "C"]] :bonds [{:id :edge/cc :atoms [:left/c :right/c] :attrs :single}]}"#;
+        let via_tree = ReactionSpanDsl::from_edn(&read_string(source).unwrap()).unwrap();
+        let via_stream = ReactionSpanDsl::from_edn_str(source).unwrap();
+        assert_eq!(via_tree, via_stream);
+        assert_eq!(
+            via_tree.metadata().keyword(Entity::Atom(AtomId(0))),
+            Some("left/c")
+        );
+        assert_eq!(
+            via_tree.metadata().keyword(Entity::Atom(AtomId(1))),
+            Some("right/c")
+        );
+        assert_eq!(
+            via_tree.metadata().keyword(Entity::Bond(BondId(0))),
+            Some("edge/cc")
+        );
+        assert_eq!(
+            ReactionSpanDsl::from_edn_str(&via_tree.to_string()).unwrap(),
+            via_tree
+        );
+    }
+
+    #[rstest]
+    #[case::atoms(r#"{:atoms [] :atoms ["C"]}"#, ":atoms")]
+    #[case::constraints("{:constraints [] :constraints []}", ":constraints")]
+    #[case::bond_entry(
+        r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :attrs "1" :attrs "2"}]}"#,
+        ":attrs"
+    )]
+    fn test_reaction_span_dsl_from_edn_str_duplicate_keys(#[case] source: &str, #[case] key: &str) {
+        let expected = EdnError::from(umol_edn::ParseError::DuplicateKey {
+            offset: source.rfind(key).unwrap(),
+        });
+        assert_eq!(read_string(source), Err(expected.clone()));
+        assert_eq!(ReactionSpanDsl::from_edn_str(source), Err(expected));
     }
 
     #[rstest]

@@ -19,7 +19,7 @@ use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl};
 use super::dative::{DativeBondDsl, DativeBondUpdateDsl};
 use super::edn_utils::{
-    consume_single_key_map_close, missing, parse_single_key_map, parse_vec,
+    consume_single_key_map_close, missing, parse_single_key_map, parse_vec, read_map,
     read_single_key_map_header, read_vec, single_key_map,
 };
 use super::error::ParseError;
@@ -1135,16 +1135,11 @@ impl ToEdn for Reaction {
 }
 
 fn read_reaction_input(de: &mut EdnStreamDeserializer<'_>) -> Result<ReactionInput, EdnError> {
-    de.consume_byte(b'{')?;
     let mut lhs = None;
     let mut atom_aliases = Vec::new();
     let mut deltas = Vec::new();
-    loop {
-        if de.try_consume_byte(b'}')? {
-            break;
-        }
-        let key = de.read_keyword_name()?.into_owned();
-        match key.as_str() {
+    read_map(de, |de, key| {
+        match key {
             "lhs" => lhs = Some(read_molecule_input(de)?),
             "atom-aliases" => atom_aliases = read_atom_aliases(de)?,
             "deltas" => deltas = read_vec(de, read_delta_input)?,
@@ -1156,7 +1151,8 @@ fn read_reaction_input(de: &mut EdnStreamDeserializer<'_>) -> Result<ReactionInp
                 .into())
             }
         }
-    }
+        Ok(())
+    })?;
     Ok(ReactionInput {
         lhs: lhs.ok_or_else(|| missing("lhs", "reaction"))?,
         atom_aliases,
@@ -1183,7 +1179,7 @@ fn parse_reaction_input(edn: &Edn<'_>) -> Result<ReactionInput, DeError> {
                 path: vec!["reaction".into()],
             });
         };
-        match key.name() {
+        match key.as_str() {
             "lhs" => lhs = Some(parse_molecule_input(v)?),
             "atom-aliases" => atom_aliases = parse_atom_aliases(v)?,
             "deltas" => deltas = parse_vec(v, ":deltas", parse_delta_input)?,
@@ -3808,10 +3804,39 @@ mod tests {
     #[case::metadata(
         r##"{:lhs {:atoms [[:c "C"] :lo] :atom-aliases [:lo "N"]} :atom-aliases [:hi "O"] :deltas [{:atom {:add [:o :hi]}}]}"##
     )]
+    #[case::namespaced_metadata(
+        r#"{:lhs {:atoms [[:left/c "C"]]} :atom-aliases [:alias/oxygen "O"] :deltas [{:atom {:add [:right/o :alias/oxygen]}} {:bond {:add {:id :edge/co :atoms [:left/c :right/o] :attrs :single}}}]}"#
+    )]
     fn test_reaction_dsl_from_edn_str_from_edn_parity(#[case] input: &str) {
         let via_tree = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
         let via_stream = ReactionDsl::from_edn_str(input).unwrap();
         assert_eq!(via_tree, via_stream);
+    }
+
+    #[rstest]
+    fn test_reaction_dsl_from_edn_namespaced_key() {
+        let source = "{:other/lhs {}}";
+        let expected = DeError::UnknownField {
+            key: "other/lhs".into(),
+            path: vec!["reaction".into()],
+        };
+        assert_eq!(
+            ReactionDsl::from_edn(&read_string(source).unwrap()),
+            Err(expected.clone())
+        );
+        assert_eq!(ReactionDsl::from_edn_str(source), Err(expected.into()));
+    }
+
+    #[rstest]
+    #[case::lhs("{:lhs {} :lhs {}}", ":lhs")]
+    #[case::deltas("{:lhs {} :deltas [] :deltas []}", ":deltas")]
+    #[case::nested_molecule("{:lhs {:atoms [] :atoms []}}", ":atoms")]
+    fn test_reaction_dsl_from_edn_str_duplicate_keys(#[case] source: &str, #[case] key: &str) {
+        let expected = EdnError::from(umol_edn::ParseError::DuplicateKey {
+            offset: source.rfind(key).unwrap(),
+        });
+        assert_eq!(read_string(source), Err(expected.clone()));
+        assert_eq!(ReactionDsl::from_edn_str(source), Err(expected));
     }
 
     #[rstest]

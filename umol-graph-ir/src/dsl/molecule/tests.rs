@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
-use umol_edn::read_string;
+use umol_edn::{read_string, ParseError as EdnParseError};
 
 use super::*;
 use crate::dsl::config::NumDefault;
@@ -626,6 +626,177 @@ fn test_molecule_dsl_from_edn_str_structural_ref(#[case] input: &str) {
     let via_stream = MoleculeDsl::from_edn_str(input).unwrap();
     let via_tree = MoleculeDsl::from_edn(&read_string(input).unwrap()).unwrap();
     assert_eq!(via_stream, via_tree);
+}
+
+#[rstest]
+#[case::bond_ref(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1] :unexpected 0} {:aromatic true}]}]}"#, "bond structural ref")]
+#[case::dative_ref(r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R"}] :constraints [{:dative-bond [{:donors [0] :acceptor 1 :unexpected 0} {:ring-membership {:count 1}}]}]}"#, "dative-bond structural ref")]
+#[case::aromatic_ref(r#"{:atoms ["C" "C"] :aromatic-systems [{:atoms [0 1] :attrs "*#e2"}] :constraints [{:aromatic-system [{:atoms [0 1] :unexpected 0} {:electron-count 2}]}]}"#, "aromatic-system structural ref")]
+#[case::multicenter_ref(r#"{:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :attrs "*#e2"}] :constraints [{:multicenter-bond [{:atoms [0 1] :unexpected 0} {:electron-count 2}]}]}"#, "multicenter-bond structural ref")]
+#[case::noncovalent_ref(r#"{:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}] :constraints [{:noncovalent-bond-ends [{:atoms [0 1] :unexpected 0} [0 1]]}]}"#, "noncovalent-bond structural ref")]
+#[case::stereo_atom_ref(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}] :constraints [{:stereo-atom [{:site 0 :ligands [1 2 3 4] :unexpected 0} [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}]}"#, "stereo-atom structural ref")]
+#[case::stereo_bond_ref(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"}] :constraints [{:stereo-bond [{:site 0 :ligands [2 3 4 5] :unexpected 0} [:cis-trans {:ligand-symmetry {:permutation [[0 1]]}}]]}]}"#, "stereo-bond structural ref")]
+#[case::bond_entry(
+    r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :attrs "1" :unexpected 0}]}"#,
+    "bond-entry"
+)]
+#[case::dative_entry(
+    r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R" :unexpected 0}]}"#,
+    "dative-bond-entry"
+)]
+#[case::aromatic_entry(
+    r#"{:atoms ["C" "C"] :aromatic-systems [{:atoms [0 1] :attrs "*#e2" :unexpected 0}]}"#,
+    "aromatic-system-entry"
+)]
+#[case::multicenter_entry(
+    r#"{:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :attrs "*#e2" :unexpected 0}]}"#,
+    "multicenter-bond-entry"
+)]
+#[case::noncovalent_entry(
+    r#"{:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd" :unexpected 0}]}"#,
+    "noncovalent-bond-entry"
+)]
+#[case::stereo_atom_entry(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1" :unexpected 0}]}"#, "stereo-atom-entry")]
+#[case::stereo_bond_entry(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1" :unexpected 0}]}"#, "stereo-bond-entry")]
+fn test_molecule_dsl_from_edn_map_keys(
+    #[case] source: &str,
+    #[case] context: &str,
+    #[values(":unexpected", ":other/atoms", "[]", "\"unexpected\"")] key: &str,
+) {
+    let valid = source.replace(" :unexpected 0", "");
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&valid).unwrap(),
+        MoleculeDsl::from_edn(&read_string(&valid).unwrap()).unwrap(),
+    );
+
+    let source = source.replace(":unexpected", key);
+    let tree_error = if let Some(name) = key.strip_prefix(':') {
+        DeError::UnknownField {
+            key: name.into(),
+            path: vec![context.into()],
+        }
+    } else {
+        DeError::TypeMismatch {
+            expected: "keyword key",
+            got: if key == "[]" { "vector" } else { "string" },
+            path: vec![context.into()],
+        }
+    };
+    let stream_error = if key.starts_with(':') {
+        EdnError::De(tree_error.clone())
+    } else {
+        EdnParseError::UnexpectedToken {
+            offset: source.find(key).unwrap(),
+            found: key.chars().next().unwrap(),
+        }
+        .into()
+    };
+    assert_eq!(
+        MoleculeDsl::from_edn(&read_string(&source).unwrap()),
+        Err(tree_error),
+    );
+    assert_eq!(MoleculeDsl::from_edn_str(&source), Err(stream_error));
+}
+
+#[rstest]
+#[case::molecule(r#"{:atoms [] :atoms ["C"]}"#, ":atoms")]
+#[case::bond_entry(
+    r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :attrs "1" :attrs "2"}]}"#,
+    ":attrs"
+)]
+#[case::structural_ref(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1] :atoms [1 0]} {:aromatic true}]}]}"#, ":atoms")]
+#[case::constraint(
+    r#"{:atoms [] :constraints [{:charge-sum {:sum 0, ; repeated key
+    :sum 1}}]}"#,
+    ":sum"
+)]
+#[case::unicode_prefix("{:atoms [] ; α\n :atoms []}", ":atoms")]
+fn test_molecule_dsl_from_edn_str_duplicate_keys(#[case] source: &str, #[case] key: &str) {
+    let expected = EdnParseError::DuplicateKey {
+        offset: source.rfind(key).unwrap(),
+    };
+    assert_eq!(read_string(source), Err(expected.clone().into()));
+    assert_eq!(MoleculeDsl::from_edn_str(source), Err(expected.into()));
+}
+
+#[rstest]
+#[case::atom(r#"{:atoms [[:01 "C"]]}"#)]
+#[case::stereo_atom(r#"{:atoms ["N" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :01 :site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th1"}]}"#)]
+fn test_molecule_dsl_from_edn_str_keyword_error(#[case] source: &str) {
+    let expected = EdnParseError::UnexpectedToken {
+        offset: source.find(":01").unwrap() + 1,
+        found: '0',
+    };
+    assert_eq!(read_string(source), Err(expected.clone().into()));
+    assert_eq!(MoleculeDsl::from_edn_str(source), Err(expected.into()));
+}
+
+#[rstest]
+fn test_molecule_dsl_from_edn_map_key_regression() {
+    let source = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1] [[0 1 "1"]] :cons} {:aromatic true}]}]}"#;
+    assert_eq!(
+        MoleculeDsl::from_edn(&read_string(source).unwrap()),
+        Err(DeError::TypeMismatch {
+            expected: "keyword key",
+            got: "vector",
+            path: vec!["bond structural ref".into()],
+        }),
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(source),
+        Err(EdnParseError::UnexpectedToken {
+            offset: 73,
+            found: '['
+        }
+        .into()),
+    );
+}
+
+#[rstest]
+#[case::atoms("{:other/atoms []}", "other/atoms")]
+#[case::bonds(
+    r#"{:atoms ["C" "C"] :bonds [] :multicenter/bonds [{:atoms [0 1] :attrs "*"}]}"#,
+    "multicenter/bonds"
+)]
+fn test_molecule_dsl_from_edn_namespaced_key(#[case] source: &str, #[case] key: &str) {
+    let expected = DeError::UnknownField {
+        key: key.into(),
+        path: vec!["molecule".into()],
+    };
+    assert_eq!(
+        MoleculeDsl::from_edn(&read_string(source).unwrap()),
+        Err(expected.clone())
+    );
+    assert_eq!(MoleculeDsl::from_edn_str(source), Err(expected.into()));
+}
+
+#[rstest]
+fn test_molecule_dsl_from_edn_namespaced_ids() {
+    let source = r#"{
+        :atom-aliases [:alias/carbon "C"]
+        :atoms [[:left/c :alias/carbon] [:right/c :alias/carbon]]
+        :bonds [{:id :edge/cc :atoms [:left/c :right/c] :attrs :single}]
+        :constraints [{:bond [:edge/cc {:aromatic false}]}]
+    }"#;
+    let via_tree = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
+    let via_stream = MoleculeDsl::from_edn_str(source).unwrap();
+    assert_eq!(via_tree, via_stream);
+    assert_eq!(
+        via_tree.metadata().keyword(Entity::Atom(AtomId(0))),
+        Some("left/c")
+    );
+    assert_eq!(
+        via_tree.metadata().keyword(Entity::Atom(AtomId(1))),
+        Some("right/c")
+    );
+    assert_eq!(
+        via_tree.metadata().keyword(Entity::Bond(BondId(0))),
+        Some("edge/cc")
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&via_tree.to_string()).unwrap(),
+        via_tree
+    );
 }
 
 #[rstest]
