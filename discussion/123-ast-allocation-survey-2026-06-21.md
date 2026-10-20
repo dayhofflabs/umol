@@ -1,9 +1,13 @@
 # 123 — AST allocation/clone survey and prioritized worklist (2026-06-21)
 
-Status: In Progress
+Status: Completed
+
+**Closeout — 2026-10-20.** S0a–S0c and their shared verification gate are complete.
+The accepted matcher and incidence-construction implementations were adopted
+unchanged from the measured experiments. No further work remains selected here.
 
 **Review — 2026-10-19, upstream main e3b234822.** Only matcher working-buffer
-allocation and incidence-graph construction remain active. The other findings
+allocation and incidence-graph construction were selected. The other findings
 and profiles below are historical, subject to the dispositions in this worklist.
 
 ## Current worklist
@@ -19,13 +23,13 @@ and profiles below are historical, subject to the dispositions in this worklist.
 - Measure and address per-match embedding allocation and per-call incidence
   graph construction where the measured workload justifies it. **Narrowed:**
   MoleculeEmbedding is gone; no new per-match correspondence work is selected.
-  Incidence-graph construction remains in scope.
+  Incidence-graph construction is complete in S0c.
 - Audit resolver and transaction mutation paths for clone-then-modify patterns,
   while preserving rollback snapshots required by transactionality. **Closed:**
   later operation and ownership work covers this audit; it is not reopened here.
-- **Remaining:** measure and address per-invocation matcher working-buffer
-  allocation and incidence-graph construction where the measured workload
-  justifies a change.
+- **Completed:** measured and adopted the matcher working-buffer and
+  incidence-construction improvements in S0a–S0c. No additional optimization
+  is selected.
 
 Constraint accessors returning references and the host-entity borrowing change
 are complete. The profiles below are the evidence that produced this worklist,
@@ -285,14 +289,13 @@ Clippy with warnings denied.
 
 ### S0 — Matching allocations
 
-Adopt the tested implementations in the working branch. The experiments are
-complete in separate worktrees; these subitems remain open until adoption
-and the shared gate are complete. The changes stay inside existing implementations;
-there are no new public symbols, DSL forms, Python methods, or guide contracts.
+The tested implementations were adopted unchanged on 2026-10-20. The changes
+stay inside existing implementations; there are no new public symbols, DSL forms,
+Python methods, or guide contracts.
 
 #### S0a — VF2 terminal restoration
 
-- [ ] **Additive (green). [dep: none]**
+- [x] **Done — 2026-10-20. Additive (green). [dep: none]**
 - Module: umol-graph-core, algorithms/subgraph_isomorphism.rs, Vf2State::search.
 - Remove restore_q and restore_t. After recursive return, revisit the affected
   adjacency and clear entries whose terminal marker equals the exiting depth,
@@ -306,7 +309,7 @@ there are no new public symbols, DSL forms, Python methods, or guide contracts.
 
 #### S0b — Vf2Rdkit candidate traversal
 
-- [ ] **Additive (green). [dep: none]**
+- [x] **Done — 2026-10-20. Additive (green). [dep: none]**
 - Module: umol-graph-core, algorithms/subgraph_isomorphism.rs,
   vf2_rdkit::vf2rdkit_search.
 - Replace the collected candidate vector with traversal of the borrowed
@@ -320,7 +323,7 @@ there are no new public symbols, DSL forms, Python methods, or guide contracts.
 
 #### S0c — Incidence vector reservation
 
-- [ ] **Additive (green). [dep: none]**
+- [x] **Done — 2026-10-20. Additive (green). [dep: none]**
 - Module: umol-graph-ir, ir/incidence.rs, Molecule::incidence_graph.
 - Compute the exact selected incidence count before construction: two per localized
   bond; under Constitution or Full, donors plus acceptor per dative bond, participant
@@ -339,6 +342,13 @@ there are no new public symbols, DSL forms, Python methods, or guide contracts.
   result matches the measured baseline plus candidate.
 
 #### S0 shared gate — after S0a, S0b, and S0c
+
+- [x] **Done — 2026-10-20.** Focused checks passed: 133 unit cases and six
+  matching properties. The all-feature workspace test run passed 39,771 tests
+  with 10 ignored; all-target/all-feature workspace Clippy passed with warnings
+  denied. CI-pinned nightly formatting and git diff --check passed. Workspace
+  commands used the repository Python 3.13 environment. The three source/test
+  files match the measured experiment exactly; no measurement repeat was needed.
 
 Run the focused graph-core matching, graph-IR incidence, and graph-IR matching
 tests and their explicitly enabled property suites:

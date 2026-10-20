@@ -190,8 +190,39 @@ impl Molecule {
         // Entity nodes follow the atom block in the same fixed order as `entity_counts`,
         // each wired to its participant occurrences. Bonds come first, fixing
         // BondId(k) at atom_count + k — relied on by the stereo-bond site link.
-        let mut edges: Vec<[u32; 2]> = Vec::new();
-        let mut incidences = Vec::new();
+        let mut incidence_count = 2 * self.bonds().count();
+        if constitution {
+            incidence_count += self
+                .dative_bonds()
+                .iter()
+                .map(|bond| bond.donor_ids().len() + 1)
+                .sum::<usize>()
+                + self
+                    .aromatic_systems()
+                    .iter()
+                    .map(|system| system.atom_ids().len())
+                    .sum::<usize>()
+                + self
+                    .multicenter_bonds()
+                    .iter()
+                    .map(|bond| bond.atom_ids().len())
+                    .sum::<usize>()
+                + 2 * self.noncovalent_bonds().count();
+        }
+        if stereo {
+            incidence_count += self
+                .stereo_atoms()
+                .iter()
+                .map(|atom| atom.ligands().len() + 1)
+                .sum::<usize>()
+                + self
+                    .stereo_bonds()
+                    .iter()
+                    .map(|bond| bond.ligands().len() + 1)
+                    .sum::<usize>();
+        }
+        let mut edges: Vec<[u32; 2]> = Vec::with_capacity(incidence_count);
+        let mut incidences = Vec::with_capacity(incidence_count);
         let mut node = atom_count as u32;
 
         let mut push = |entity: u32, participant: u32, incidence: Incidence| {

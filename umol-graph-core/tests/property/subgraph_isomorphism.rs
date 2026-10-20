@@ -2,7 +2,9 @@
 //! subgraph-isomorphism algorithms: on random labeled graphs, every named
 //! algorithm must return the same match set as VF2 (the reference), and for
 //! every algorithm the visitor emissions must equal the eager enumeration,
-//! ordinary and anchored. For ArcMatch the cross-validation is a complete
+//! ordinary and anchored. Anchored results must also equal the restriction of
+//! unanchored Ullmann results to the supplied anchor. For ArcMatch the
+//! cross-validation is a complete
 //! correctness check — its reduction is provably safe (Bonnici 2024 Thm 2-3),
 //! so the only possible defect is returning *fewer* matches, which a set
 //! mismatch against VF2 catches.
@@ -194,6 +196,7 @@ proptest! {
         query in labeled_graph(3, 2, 2),
         target in labeled_graph(5, 2, 2),
     ) {
+        let reference = matches(&query, &target, Ullmann);
         let mut node_match =
             |q: NodeId, t: NodeId| query.node_labels[q.index()] == target.node_labels[t.index()];
         let mut edge_match =
@@ -215,6 +218,18 @@ proptest! {
                         },
                     );
                     via_visit.sort();
+                    let expected: Vec<_> = reference
+                        .iter()
+                        .filter(|embedding| embedding[qa] == ta)
+                        .cloned()
+                        .collect();
+                    prop_assert_eq!(
+                        &via_visit,
+                        &expected,
+                        "{:?} anchored at {:?}: differs from unanchored Ullmann restriction",
+                        alg,
+                        anchor
+                    );
                     let mut via_enumerate: Vec<Vec<usize>> = target
                         .graph
                         .enumerate_subgraph_isomorphisms_at(
