@@ -28,11 +28,11 @@ the statuses recorded here remain authoritative.
 ## Current frontier
 
 - [237 — 0.10 release scope](237-release-0-10-scope-2026-10-15.md) records the
-  release inclusions and exclusions, pending document reconciliation, contribution
-  reviews, author-owned whitepaper work, and downstream request triage.
+  completed unresolved-SMILES ingestion and remaining author-owned whitepaper work.
+  Further 231 work and PR 29 are excluded from 0.10.
 - [231 — Python API semantic parity review](231-python-api-parity-2026-09-21.md)
-  starts with Reaction ownership following completion of 181: retain the Rust
-  Reaction and settle read-only component access before the broader parity review.
+  retains the outstanding Reaction ownership and broader parity review outside
+  the remaining 0.10 scope.
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
@@ -279,11 +279,11 @@ the statuses recorded here remain authoritative.
 | [230-label-mask-extents-2026-09-29.md](230-label-mask-extents-2026-09-29.md)                                     | Completed     | 2026-09-29   |                                                                                                            |
 | [231-python-api-parity-2026-09-21.md](231-python-api-parity-2026-09-21.md)                                       | In Progress   | 2026-10-15   | Reaction ownership correction next; broader parity work includes canonical_hash, nested Delta ownership, and remaining 192 type-role scope. S1–S6 remain withdrawn. |
 | [232-aggregate-integrity-review-2026-09-22.md](232-aggregate-integrity-review-2026-09-22.md)                     | Completed     | 2026-09-23   |                                                                                                            |
-| [233-graph-ir-delta-review-2026-09-23.md](233-graph-ir-delta-review-2026-09-23.md)                               | Proposed      | 2026-09-23   | Awaiting triage of the surviving findings.                                                                 |
+| [233-graph-ir-delta-review-2026-09-23.md](233-graph-ir-delta-review-2026-09-23.md)                               | Proposed      | 2026-10-20   | Reconsider the normalization contract before selecting corrections; no implementation approved. |
 | [234-view-arguments-2026-09-25.md](234-view-arguments-2026-09-25.md)                                             | Proposed      | 2026-09-25   | Awaiting interface and scheduling decisions.                                                               |
 | [235-view-accessors-2026-09-26.md](235-view-accessors-2026-09-26.md)                                             | Proposed      | 2026-09-26   | Review id names, collection interfaces, induced-selection allocations, and noncovalent connectivity delegation to graph-core. |
 | [236-operation-ownership-copy-costs-2026-10-09.md](236-operation-ownership-copy-costs-2026-10-09.md)             | Completed     | 2026-10-13   |                                                                                                            |
-| [237-release-0-10-scope-2026-10-15.md](237-release-0-10-scope-2026-10-15.md)                                     | Proposed      | 2026-10-20   | Review 217, triage 233 correctness findings, complete 231, and assess PR 29 and remaining release scope. |
+| [237-release-0-10-scope-2026-10-15.md](237-release-0-10-scope-2026-10-15.md)                                     | In Progress   | 2026-10-20   | Author-owned whitepaper revisions remain; further 231 work and PR 29 are excluded. |
 | [238-non-cascading-removal-2026-10-16.md](238-non-cascading-removal-2026-10-16.md)                               | Completed     | 2026-10-17   |                                                                                                            |
 | [239-kindless-stereo-removal-2026-10-17.md](239-kindless-stereo-removal-2026-10-17.md)                           | Proposed      | 2026-10-17   | Assess potential kindless-stereo removal using the recorded experiment; join and interface contracts remain unresolved. |
 | [240-validation-constraint-ops-2026-10-18.md](240-validation-constraint-ops-2026-10-18.md)                       | Proposed      | 2026-10-18   | S13/S14/S16 moved from 166; validation, constraint relocation, and discharge are outside 0.10.             |
