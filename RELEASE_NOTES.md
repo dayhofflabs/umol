@@ -1,112 +1,127 @@
-# umol 0.9.0
+# umol 0.10.0
 
-Changes since 0.8.0. This release adds molecular and reaction SMILES output,
-depiction from supplied layouts, and SVG rendering controls. It corrects stereo
-parsing and separates isotope completion from valence resolution. It includes
-breaking Rust and Python API changes.
+Changes since 0.9.0. This release expands molecular editing, revises operation
+ownership and transactions, and adds hydrogen transformations and unresolved
+SMILES ingestion. It makes constraint readings consistent across normalization,
+separates exact and cascading removal, and reduces matching allocations. It
+includes breaking Rust and Python API changes.
 
-## SMILES output
+## Molecular editing and ownership
 
-- Rust adds export::export_smiles and export::export_reaction_smiles in
-  umol-graph. Their _with variants accept explicit IO, chemistry-model, and
-  resolve configurations, in the same order as the ingestion functions.
-- Python adds Molecule.to_smiles and Reaction.to_reaction_smiles, returning
-  strings. Both accept the keyword options io_config, chemistry_model, and
-  resolve_config used by their corresponding input methods.
-- Default input and output use OpenSMILES syntax, the SMILES valence model, and
-  Natural isotope policy. Output supports ordinary atoms, isotopes, charges,
-  bracket-H radical notation, neutral closed-shell aromatic systems,
-  tetrahedral stereo, and local double-bond stereo.
-- Graph reaction output assigns one-based atom-map labels in correspondence
-  order. Original numeric labels are not retained; unmatched atoms are unlabelled.
-- The Rust export::Convey trait converts a graph model to an output boundary
-  after projecting a private copy. Smiles and ReactionSmiles add from_table_ir
-  construction and render/render_with methods. Boundary construction retains
-  the table as supplied; rendering checks whether it can be expressed as SMILES.
+- Expose direct mutation of entity attributes and constraints through Rust mutable
+  views and Python properties. Expand structural edits and add batched field and
+  constraint updates across entity kinds. Attribute mutation remains infallible;
+  structural editing checks representation integrity before publication.
+- Rust Molecule.apply consumes the molecule and Edits, returning the modified
+  molecule on success. Failure returns an error and drops the consumed input.
+  Python Molecule.apply returns a new molecule and preserves the source on both
+  success and failure. The supplied Edits is consumed in either language.
+- Molecule.apply_into replaces the receiver only on success. MoleculeEditor
+  supports incremental structural construction, with finish checking and
+  publishing the result. Ordinary edit and reaction application no longer need
+  an undo journal.
+- Separate Transaction and TrackedTransaction provide rollback where requested,
+  with Clone and Journal strategies. Only tracked transactions maintain the
+  correspondence returned at commit. The composite Resolver retains transactions
+  for in-place resolution and projection.
 
-## Stereo parsing and resolution
+## Constraint readings and ring views
 
-- Correct tetrahedral SMILES interpretation at ring-closing stereocenters,
-  including the ordering of explicit atoms, implicit hydrogens, and lone pairs.
-  Basic and extended parsers now retain explicit stereo frames instead of
-  reconstructing them from bond-table order.
-- Normalize slash/backslash evidence into explicit double-bond frames. Conflicting
-  markers and markers outside the supported local double-bond domain fail during
-  parsing.
-- MOL wedges retain their narrow endpoint when atom indices are reordered.
-  Either wedges and CXSMILES wiggly-bond annotations preserve unknown stereo.
-  MOL atom parity remains parsed metadata and is no longer used to infer
-  tetrahedral configuration.
-- MOL double-bond configurations are derived from suitable supplied coordinates.
-  Bond stereo codes inconsistent with the bond order now fail parsing.
-- StereoModel.stereo_bond_minimum_ring_size defaults to 8. Resolution clears
-  cis/trans assertions on ring double bonds below that threshold. A value of 0
-  permits realization at every ring size.
+- Entity constraint views distinguish asserted, derived, and evidenced readings.
+  Asserted readings reflect stored assertions; derived readings use molecular
+  relations; evidenced readings combine applicable evidence by meet. Results do
+  not depend on whether the stored constraints have been normalized.
+- Readings use None consistently for bottom, meaning contradictory evidence.
+  Absent evidence produces an undetermined form. The _complete counterparts give
+  closed readings for resolution-written overlays, including definite negative
+  aromaticity and stereo information where appropriate.
+- Extend Python access to constraint readings and ring data, including RingView,
+  RingAtomView, RingBondView, RingRelation, RingConnection, and RingGraph.
+  RingSet remains standalone perceived data; molecule-bound RingViews can reuse
+  it without repeating ring perception.
 
-## Isotopes and graph projection
+## Transformations
 
-- IsotopeResolver handles isotope completion independently of valence resolution.
-  ResolveConfig gains isotope: Strict leaves unspecified composition unresolved;
-  Natural fills it with natural composition. Explicit masses, sets, and
-  variables are preserved.
-- General resolution defaults to Strict. SMILES ingestion and export convenience
-  functions select Natural explicitly. Valence resolution no longer supplies
-  isotope defaults.
-- Resolver::project and ProjectFlags expose stereo, aromaticity, valence, and
-  isotope projection within graph IR. Only a determined result replaces the
-  supplied molecule. Projection preserves implicit hydrogen counts; Convey
-  omits a boundary H count only when inference under the selected model and
-  policy reproduces it.
+- Add HydrogenFolder and HydrogenUnfolder for explicit and implicit hydrogen
+  representations. Folding retains isotope-labelled and otherwise ineligible
+  hydrogens. Both operations transport affected stereo frames and constraints;
+  retained atoms preserve total valence, degree, and hydrogen readings.
+- Add the Rust Transform extension trait with Molecule.aromatize, kekulize,
+  delocalize_charge, fold_hydrogens, and unfold_hydrogens, plus _into counterparts.
+  Python exposes the same named molecule methods.
+- Rust value-returning transformations consume their input; Python counterparts
+  preserve the source and return a new molecule. The _into methods mutate the
+  receiver and leave it unchanged on rejection. Each operation publishes its own
+  result; failure in a later operation does not undo earlier successful calls.
 
-## Supplied layouts and SVG rendering
+## Removal and reaction application
 
-- The Rust Depict trait adds layout/layout_with, verify_layout, and depict_layout
-  for Molecule and Reaction. Generated and supplied layouts use the same
-  depiction path. Verification checks the atom frame, definite cis/trans
-  geometry, and tetrahedral wedge selection without moving coordinates.
-- Python exposes MoleculeLayout and ReactionLayout, plus layout, verify_layout,
-  and depict_layout on molecules and reactions. Layouts are mutable; use
-  set_position, set_lhs_position, set_rhs_position, and set_arrow for edits.
-  MoleculeLayout.positions is an immutable snapshot; reaction side getters
-  return copies.
-- SvgConfig and Depiction.render_svg_with expose the atom-label mask identifier
-  and reaction mapping-index text size in Rust and Python. Use distinct mask_id
-  values when embedding multiple SVGs in one document.
+- Separate exact topology removal from explicitly cascading removal in editors
+  and Edits. Exact removal rejects retained bonds and overlays that reference
+  removed entities before mutation. Cascading removal also removes incident
+  bonds and overlays whose stored participants or sites disappear.
+- Check reaction dangling conditions before applying changes, including bond
+  dependencies of aromatic systems and stereo entities. A match that would leave
+  a retained dependent entity dangling is inapplicable; reaction application does
+  not repair it by cascading removal.
+- Align stereo identity and correspondence handling between application, realized
+  reactions, and spans. Changes between different determined stereo kinds are
+  represented as removal and addition in reaction spans.
 
-## Graph traversal
+## Resolution and chemistry corrections
 
-- Add callback-based depth-first and breadth-first traversal, event collectors,
-  and a connected-component visitor. Visitors support immediate termination
-  through ControlFlow. Connected components use the shared breadth-first path.
+- Individual resolvers, projectors, and transformers prepare complete changes
+  before applying them. Resolution preserves the molecule-level constraint list
+  instead of automatically placing or discharging those constraints.
+- Make resolution reports optional through _with_report methods. Solution carries
+  a molecule only for a determined result; undetermined outcomes no longer expose
+  a partially resolved molecule.
+- Correct heteroaromatic kekulization, aromaticity perception under non-aromatic
+  assertions, and counts-based valence bounds. Stereo and aromatic-system
+  comparisons account for participant ordering by reframing before comparing
+  their values.
 
-## Migration from 0.8.0
+## Unresolved SMILES ingestion
 
-- Add isotope to explicit Rust ResolveConfig values. Select IsotopePolicy::Natural
-  (Python IsotopePolicy.Natural) when unspecified isotopes should resolve to
-  natural composition. Passing a default resolve configuration explicitly to
-  SMILES ingestion now selects Strict, unlike omitting that configuration.
-- AtomTypeRegistry entries must have undetermined isotopes, literal elements,
-  and literal charges in -128..=127. Remove explicit isotope defaults such as
-  #i= from custom registry patterns. Rust adds try_from_atoms and try_add;
-  asserted from_atoms/add panic on invalid entries. Python from_atoms raises
-  ValueError.
-- Add stereo_bond_minimum_ring_size to explicit StereoModel construction in
-  Rust and Python; use 8 to match StereoModel's default. StereoDerivation.atoms
-  and .bonds become .stereo_atoms and .stereo_bonds; it also reports
-  skipped_stereo_bonds.
-- Replace Rust layout::layout_molecule with Depict::layout or
-  Depict::layout_with. Custom Depict implementations now supply Layout,
-  layout_with, verify_layout, and depict_layout.
-- BondWedge is now a record with orientation: BondOrientation and taper:
-  BondTaper. Preserve the pointed endpoint when constructing or renumbering
-  wedges.
-- Replace TraversalAlgorithm with NeighborhoodAlgorithm. Graph neighborhood
-  limits and returned distances, circular-refinement radii and rounds, and
-  Rust ECFP/Morgan radii use usize instead of u32. Update custom
-  CircularRefinementHash::combine implementations accordingly.
-- Update error handling for the revised parsing and conversion boundaries.
-  Direction-marker failures formerly reported during graph conversion now
-  arise during parsing; Python reports them as ParseError.
+- Rust adds ingest::ingest_smiles_unresolved and
+  ingest::ingest_reaction_smiles_unresolved, with _with variants accepting an IO
+  configuration. They parse and raise the format representation without running
+  molecular resolution.
+- Python Molecule.from_smiles and Reaction.from_reaction_smiles accept
+  resolve=False. Resolution remains enabled by default. Unresolved ingestion
+  retains format defaults and raised information, including stereo overlays;
+  it leaves unspecified molecular properties unresolved.
+
+## Storage, matching, and parsing
+
+- Reduce matching allocations through reusable buffers and revised incidence
+  construction. Extend shared storage for molecule constraints, reaction deltas,
+  and reaction spans to reduce copying.
+- Replace the mutex-protected stereo coset registry with lazy initialization per
+  class key. Unused symmetry classes are not constructed at startup.
+- Fix parsing and roundtrip failures found by fuzzing, including escaped token
+  delimiters and excessive work on malformed input. EDN consistently recognizes
+  Unicode White_Space plus comma, including form feed, and escapes delimiters
+  when writing tokens.
+
+## Migration from 0.9.0
+
+- Update Rust callers for consuming molecule operations. Clone explicitly when
+  retaining the source, or use the applicable _into method for in-place work.
+  Python value-returning methods preserve their receiver, but transferred Edits
+  are consumed even on failure; copy a batch explicitly if it must be reused.
+- Use TrackedTransaction when commit must return a correspondence, and select
+  the rollback strategy explicitly in Rust. Ordinary application does not need
+  to be wrapped in a transaction.
+- Replace remove_topology with remove_topology_cascading, or Edit::RemoveTopology
+  with Edit::RemoveTopologyCascading, where the previous cascade is intended.
+- Handle owned Option results from constraint readings: None is contradiction,
+  not absence. Replace normalized with consuming normalize, or normalized_eq
+  when only normalized equality is needed.
+- Rename DelocalizeCharge to ChargeDelocalizer. Import Transform for the named
+  Rust molecule transformation methods.
+- Use resolution _with_report methods when diagnostics are needed. Python returns
+  the report separately from Solution. Underdetermined outcomes carry no molecule.
 
 umol remains an alpha library. Canonical representatives may change between
 0.x releases and are not persistent identifiers.
