@@ -28,7 +28,7 @@ the statuses recorded here remain authoritative.
 ## Current frontier
 
 - [237 — 0.10 release scope](237-release-0-10-scope-2026-10-15.md) records the
-  completed unresolved-SMILES ingestion and remaining author-owned whitepaper work.
+  completed implementation scope and author-owned whitepaper updates.
   Further 231 work and PR 29 are excluded from 0.10.
 - [231 — Python API semantic parity review](231-python-api-parity-2026-09-21.md)
   retains the outstanding Reaction ownership and broader parity review outside
@@ -283,7 +283,7 @@ the statuses recorded here remain authoritative.
 | [234-view-arguments-2026-09-25.md](234-view-arguments-2026-09-25.md)                                             | Proposed      | 2026-09-25   | Awaiting interface and scheduling decisions.                                                               |
 | [235-view-accessors-2026-09-26.md](235-view-accessors-2026-09-26.md)                                             | Proposed      | 2026-09-26   | Review id names, collection interfaces, induced-selection allocations, and noncovalent connectivity delegation to graph-core. |
 | [236-operation-ownership-copy-costs-2026-10-09.md](236-operation-ownership-copy-costs-2026-10-09.md)             | Completed     | 2026-10-13   |                                                                                                            |
-| [237-release-0-10-scope-2026-10-15.md](237-release-0-10-scope-2026-10-15.md)                                     | In Progress   | 2026-10-20   | Author-owned whitepaper revisions remain; further 231 work and PR 29 are excluded. |
+| [237-release-0-10-scope-2026-10-15.md](237-release-0-10-scope-2026-10-15.md)                                     | Completed     | 2026-10-26   |                                                                                                            |
 | [238-non-cascading-removal-2026-10-16.md](238-non-cascading-removal-2026-10-16.md)                               | Completed     | 2026-10-17   |                                                                                                            |
 | [239-kindless-stereo-removal-2026-10-17.md](239-kindless-stereo-removal-2026-10-17.md)                           | Proposed      | 2026-10-17   | Assess potential kindless-stereo removal using the recorded experiment; join and interface contracts remain unresolved. |
 | [240-validation-constraint-ops-2026-10-18.md](240-validation-constraint-ops-2026-10-18.md)                       | Proposed      | 2026-10-18   | S13/S14/S16 moved from 166; validation, constraint relocation, and discharge are outside 0.10.             |

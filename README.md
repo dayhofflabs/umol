@@ -25,9 +25,9 @@ Install the distribution `umol-py`, which provides the import package `umol`:
 pip install umol-py
 ```
 
-Version 0.9.0 is an alpha release; interfaces may still change. See the
+Version 0.10.0 is an alpha release; interfaces may still change. See the
 [release notes](https://github.com/dayhofflabs/umol/blob/main/RELEASE_NOTES.md)
-for changes since 0.8.0, including API migration guidance. The
+for changes since 0.9.0, including API migration guidance. The
 [whitepaper](https://github.com/dayhofflabs/umol/blob/main/docs/umol-whitepaper.pdf)
 develops the molecular model and its algebra.
 
@@ -41,7 +41,12 @@ from umol import Molecule
 
 mol = Molecule.from_smiles("CCO")  # ethanol: 3 atoms, 2 bonds
 text = mol.render()                # umol notation; str(mol) is equivalent
+smiles = mol.to_smiles()
+unresolved = Molecule.from_smiles("CCO", resolve=False)
 ```
+
+With `resolve=False`, ingestion applies format conversion and format-owned
+defaults, preserving unspecified attributes without resolution.
 
 MOL and SDF ingestion is also available. Structures with more general bonding
 can be written directly in umol's notation. Diborane has four terminal B–H
@@ -211,9 +216,50 @@ components = combined.split()  # two Molecule values
 Existing entity ids are preserved by combination, and each appended entity family
 follows the corresponding family of the left operand.
 
+## Editing molecules
+
+Entity views allow direct assignment to atom, bond, and overlay attributes. For
+example, label the first carbon of a copy of ethanol with carbon-13:
+
+```python
+labelled = mol.copy()
+labelled.atoms[0].isotope_mass = 13
+```
+
+Structural changes can be collected in an edit batch:
+
+```python
+from umol import AtomForm, BondForm, Edits
+
+source = Molecule.parse('{:atoms ["C#h3"]}')
+edits = Edits()
+chlorine = edits.add_atom(AtomForm.parse("Cl"))
+edits.add_bond(0, chlorine, BondForm.parse("1"))
+product = source.apply(edits)
+```
+
+On success, `apply` returns the modified molecule and preserves `source`. On
+failure, it raises an exception and also preserves `source`. The edit batch is
+consumed in either case. Applying a batch does not require a transaction.
+
+## Transforming molecules
+
+Hydrogens can be converted between explicit atoms and implicit counts:
+
+```python
+explicit = mol.unfold_hydrogens()
+folded = explicit.fold_hydrogens()
+```
+
+These methods return independent molecules and preserve their receivers. Their
+`_into` counterparts modify the receiver in place. Molecules also provide
+`aromatize`, `kekulize`, and `delocalize_charge`, with corresponding `_into` methods.
+
 ## Applying reactions
 
 A reaction can be read from mapped reaction SMILES or from umol notation.
+`Reaction.from_reaction_smiles` also accepts `resolve=False` to convert both sides
+without resolution.
 This Paal–Knorr cyclization converts hexane-2,5-dione into a substituted furan
 and water:
 
@@ -228,6 +274,9 @@ diketone = Molecule.from_smiles("CC(=O)CCC(=O)C")
 
 products = list(rule.apply(diketone))  # two applications, one for each symmetric match
 ```
+
+Application preserves the host molecule and yields a product molecule for each
+applicable match.
 
 To also obtain the correspondence from the host to a product, use `tracked_apply`:
 
@@ -284,9 +333,9 @@ needs:
 
 ```toml
 [dependencies]
-umol-graph = "0.9.0"
-umol-graph-ir = "0.9.0"
-umol-io = { version = "0.9.0", features = ["depiction"] }
+umol-graph = "0.10.0"
+umol-graph-ir = "0.10.0"
+umol-io = { version = "0.10.0", features = ["depiction"] }
 ```
 
 ```rust
