@@ -431,7 +431,8 @@ def test_deferred_member(owner, name):
         (umol.MoleculeEditor.remove_stereo_bonds, "(self, /, ids)"),
         (
             umol.Reaction.from_reaction_smiles,
-            "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
+            "(source, *, resolve=True, io_config=None, chemistry_model=None, "
+            "resolve_config=None)",
         ),
         (
             umol.Reaction.to_reaction_smiles,

@@ -2935,26 +2935,24 @@ pub(crate) fn molecule_with_removals_strategy(
         )
             .prop_map(|(molecule, atom_mask, bond_mask)| {
                 let graph = molecule.raw_graph();
-                let ligand_bond = |sites: &[AtomId], ligand: &StereoLigand| {
+                let ligand_bond = |site: AtomId, ligand: &StereoLigand| {
                     (ligand.kind == StereoLigandKind::Atom)
-                        .then(|| {
-                            sites.iter().find_map(|&site| {
-                                graph.find_edge(NodeId::from(site), NodeId::from(ligand.atom_id))
-                            })
-                        })
+                        .then(|| graph.find_edge(NodeId::from(site), NodeId::from(ligand.atom_id)))
                         .flatten()
                 };
                 let mut ligand_bonds = HashSet::new();
                 for view in molecule.stereo_atoms().iter() {
                     for ligand in view.ligand_ids() {
-                        ligand_bonds.extend(ligand_bond(&[view.site_id()], ligand));
+                        ligand_bonds.extend(ligand_bond(view.site_id(), ligand));
                     }
                 }
                 for view in molecule.stereo_bonds().iter() {
                     let [first, second] = graph.edge_endpoints(EdgeId::from(view.site_id()));
                     let sites = [AtomId::from(first), AtomId::from(second)];
                     for ligand in view.ligand_ids() {
-                        ligand_bonds.extend(ligand_bond(&sites, ligand));
+                        for site in sites {
+                            ligand_bonds.extend(ligand_bond(site, ligand));
+                        }
                     }
                 }
                 let atoms = atom_mask

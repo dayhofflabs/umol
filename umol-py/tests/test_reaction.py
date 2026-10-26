@@ -832,6 +832,7 @@ def test_reaction_from_sides_error():
         Reaction.from_sides(lhs, rhs, atom_correspondence)
 
 
+@pytest.mark.parametrize("kwargs", [{}, {"resolve": True}])
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -856,8 +857,86 @@ def test_reaction_from_sides_error():
         ),
     ],
 )
-def test_reaction_from_reaction_smiles(source, expected):
-    assert Reaction.from_reaction_smiles(source) == Reaction.parse(expected)
+def test_reaction_from_reaction_smiles(source, expected, kwargs):
+    assert Reaction.from_reaction_smiles(source, **kwargs) == Reaction.parse(expected)
+
+
+@pytest.mark.parametrize(
+    ("source", "kwargs", "expected"),
+    [
+        pytest.param(
+            "*>>C",
+            {},
+            '{:lhs {:atoms ["*#i=#c0#u0"]} :deltas '
+            '[{:atom {:remove 0}} {:atom {:add "C#i=#c0#u0"}}]}',
+            id="unmapped-wildcard",
+        ),
+        pytest.param(
+            "[CH4:1].[OH2:2]>>[OH2:2].[CH4:1]",
+            {},
+            '{:lhs {:atoms ["C#i=#c0#h4" "O#i=#c0#h2"]} :deltas []}',
+            id="reordered",
+        ),
+        pytest.param(
+            "[CH4:1]>>[CH4:1].[13NH3:2]",
+            {},
+            '{:lhs {:atoms ["C#i=#c0#h4"]} '
+            ':deltas [{:atom {:add "N#i13#c0#h3"}}]}',
+            id="one-sided-label",
+        ),
+        pytest.param(
+            "[CH4:1]>>[CH4:1]",
+            {
+                "chemistry_model": ChemistryModel.default(),
+                "resolve_config": ResolveConfig(
+                    isotope=IsotopePolicy.Strict,
+                    aromaticity=AromaticityResolveConfig(),
+                    stereo=StereoResolveConfig(),
+                ),
+            },
+            '{:lhs {:atoms ["C#i=#c0#h4"]} :deltas []}',
+            id="ignored-resolution-options",
+        ),
+        pytest.param(
+            "[CH4:1]~[NH3:2]>>[CH4:1]~[NH3:2]",
+            {"io_config": SmilesIoConfig.lenient()},
+            '{:lhs {:atoms ["C#i=#c0#h4" "N#i=#c0#h3"] '
+            ':bonds [[0 1 "*"]]} :deltas []}',
+            id="io-config",
+        ),
+    ],
+)
+def test_reaction_from_reaction_smiles_unresolved(source, kwargs, expected):
+    assert Reaction.from_reaction_smiles(
+        source, resolve=False, **kwargs
+    ) == Reaction.parse(expected)
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            ">>c1ccccc1",
+            '{:atoms ["C#i=#c0#u0#a+" "C#i=#c0#u0#a+" "C#i=#c0#u0#a+" '
+            '"C#i=#c0#u0#a+" "C#i=#c0#u0#a+" "C#i=#c0#u0#a+"] '
+            ':bonds [[0 5 "1#a"] [0 1 "1#a"] [1 2 "1#a"] '
+            '[2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"]]}',
+            id="aromatic",
+        ),
+        pytest.param(
+            ">>[C@H](F)(Cl)Br",
+            '{:atoms ["C#i=#c0#h1" "F#i=#c0#u0" "Cl#i=#c0#u0" "Br#i=#c0#u0"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs :ccw}]}',
+            id="tetrahedral",
+        ),
+    ],
+)
+def test_reaction_from_reaction_smiles_unresolved_product(source, expected):
+    reaction = Reaction.from_reaction_smiles(source, resolve=False)
+    span = reaction.to_reaction_span()
+    assert span.lhs() == Molecule.parse("{}")
+    assert span.rhs() == Molecule.parse(expected)
 
 
 @pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
@@ -980,6 +1059,44 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
 @pytest.mark.parametrize(
     ("source", "kwargs", "error_type", "message"),
     [
+        pytest.param(
+            " C>>C",
+            {"resolve": False},
+            ParseError,
+            "Leading whitespace",
+            id="unresolved-syntax",
+        ),
+        pytest.param(
+            "[C:1]>>[C:1].[O:1]",
+            {"resolve": False},
+            ModelConversionError,
+            "atom-map class 1 cannot be projected into one correspondence "
+            "(reactant atoms: 1, product atoms: 2)",
+            id="unresolved-ambiguous-map",
+        ),
+        pytest.param(
+            "C>O>C",
+            {"resolve": False},
+            ModelConversionError,
+            "reaction agents cannot be represented in Reaction",
+            id="unresolved-agents",
+        ),
+        pytest.param(
+            "[C@H2](F)(Cl)Br>>",
+            {"resolve": False},
+            ModelConversionError,
+            "reactants: stereo atom 0: stereo ligand StereoLigand { atom_id: AtomId(0), "
+            "kind: ImplicitHydrogen } is duplicated in the frame",
+            id="unresolved-reactants-conversion",
+        ),
+        pytest.param(
+            ">>[C@H2](F)(Cl)Br",
+            {"resolve": False},
+            ModelConversionError,
+            "products: stereo atom 0: stereo ligand StereoLigand { atom_id: AtomId(0), "
+            "kind: ImplicitHydrogen } is duplicated in the frame",
+            id="unresolved-products-conversion",
+        ),
         pytest.param(" C>>C", {}, ParseError, "Leading whitespace", id="syntax"),
         pytest.param(
             "C[S@]C>>",

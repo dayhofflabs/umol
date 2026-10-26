@@ -110,7 +110,7 @@ impl UmolError for SmilesInputError {
     }
 }
 
-/// Failure while accepting reaction SMILES text as a determined reaction.
+/// Failure while accepting reaction SMILES text as a reaction.
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ReactionSmilesInputError {
     #[error("{0}")]
@@ -138,6 +138,39 @@ fn interpret_molecule(
     }
 }
 
+fn interpret_reaction(
+    smiles: &ReactionSmiles,
+    interpret: impl Fn(&TableMolecule) -> Result<Molecule, MoleculeInterpretationError>,
+) -> Result<Reaction, ReactionInterpretationError> {
+    let reaction = smiles.as_table_ir();
+    if reaction.agents.atom_count() != 0 {
+        return Err(ReactionInterpretationError::AgentsUnsupported);
+    }
+
+    let mut matched_pairs = Vec::new();
+    for (&class, (reactants, products)) in &reaction.atom_mapping {
+        if reactants.len() > 1 || products.len() > 1 {
+            return Err(ReactionInterpretationError::AmbiguousAtomMapClass {
+                class,
+                reactant_count: reactants.len(),
+                product_count: products.len(),
+            });
+        }
+        if let ([reactant], [product]) = (reactants.as_slice(), products.as_slice()) {
+            matched_pairs.push((AtomId(*reactant), AtomId(*product)));
+        }
+    }
+
+    let lhs = interpret(&reaction.reactants).map_err(ReactionInterpretationError::Reactants)?;
+    let rhs = interpret(&reaction.products).map_err(ReactionInterpretationError::Products)?;
+    let atom_correspondence =
+        Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count())
+            .expect("correspondence producer preserves partial-bijection invariants");
+
+    Ok(Reaction::from_sides(lhs, rhs, atom_correspondence)
+        .expect("interpreted reaction sides preserve unique entity incidence"))
+}
+
 impl Interpret for Smiles {
     type Output = Molecule;
     type Error = MoleculeInterpretationError;
@@ -160,35 +193,9 @@ impl Interpret for ReactionSmiles {
         model: &ChemistryModel,
         resolve_config: &ResolveConfig,
     ) -> Result<Self::Output, Self::Error> {
-        let reaction = self.as_table_ir();
-        if reaction.agents.atom_count() != 0 {
-            return Err(ReactionInterpretationError::AgentsUnsupported);
-        }
-
-        let mut matched_pairs = Vec::new();
-        for (&class, (reactants, products)) in &reaction.atom_mapping {
-            if reactants.len() > 1 || products.len() > 1 {
-                return Err(ReactionInterpretationError::AmbiguousAtomMapClass {
-                    class,
-                    reactant_count: reactants.len(),
-                    product_count: products.len(),
-                });
-            }
-            if let ([reactant], [product]) = (reactants.as_slice(), products.as_slice()) {
-                matched_pairs.push((AtomId(*reactant), AtomId(*product)));
-            }
-        }
-
-        let lhs = interpret_molecule(&reaction.reactants, model, resolve_config)
-            .map_err(ReactionInterpretationError::Reactants)?;
-        let rhs = interpret_molecule(&reaction.products, model, resolve_config)
-            .map_err(ReactionInterpretationError::Products)?;
-        let atom_correspondence =
-            Correspondence::new(matched_pairs, lhs.atoms().count(), rhs.atoms().count())
-                .expect("correspondence producer preserves partial-bijection invariants");
-
-        Ok(Reaction::from_sides(lhs, rhs, atom_correspondence)
-            .expect("interpreted reaction sides preserve unique entity incidence"))
+        interpret_reaction(self, |molecule| {
+            interpret_molecule(molecule, model, resolve_config)
+        })
     }
 }
 
@@ -266,6 +273,46 @@ pub fn ingest_smiles_bytes_with(
     smiles
         .interpret(model, resolve_config)
         .map_err(SmilesInputError::from)
+}
+
+/// Ingest reaction SMILES text without resolution using the OpenSMILES configuration.
+///
+/// Applies format-owned defaults and raises both sides to graph IR, preserving
+/// undetermined fields, constraints, and overlays supplied by the format conversion.
+/// Atom-map labels determine correspondence; unmatched atoms are removed or added.
+/// Each label may occur at most once per side. Nonempty agents are not supported.
+/// The product is reindexed into the lhs-anchored reaction frame.
+///
+/// # Errors
+///
+/// Returns [`ReactionSmilesInputError::Syntax`] for invalid reaction SMILES or
+/// [`ReactionSmilesInputError::Interpretation`] for agents, ambiguous atom-map
+/// classes, or a side that cannot be converted to graph IR.
+pub fn ingest_reaction_smiles_unresolved(
+    input: &str,
+) -> Result<Reaction, ReactionSmilesInputError> {
+    ingest_reaction_smiles_unresolved_with(input, &SmilesIoConfig::opensmiles())
+}
+
+/// Ingest reaction SMILES text without resolution using an explicit IO configuration.
+///
+/// Applies the same format conversion and atom mapping as
+/// [`ingest_reaction_smiles_unresolved`]. No chemistry model or resolution policy is applied.
+///
+/// # Errors
+///
+/// Returns [`ReactionSmilesInputError::Syntax`] for invalid reaction SMILES or
+/// [`ReactionSmilesInputError::Interpretation`] for agents, ambiguous atom-map
+/// classes, or a side that cannot be converted to graph IR.
+pub fn ingest_reaction_smiles_unresolved_with(
+    input: &str,
+    io_config: &SmilesIoConfig,
+) -> Result<Reaction, ReactionSmilesInputError> {
+    let smiles = ReactionSmiles::parse_with(input, io_config)?;
+    interpret_reaction(&smiles, |molecule| {
+        molecule.try_into_ir(&()).map_err(Into::into)
+    })
+    .map_err(Into::into)
 }
 
 /// Ingest reaction SMILES text with the OpenSMILES configuration and the
@@ -1911,6 +1958,148 @@ mod tests {
     ) {
         assert_eq!(
             ingest_smiles_with(input, &io_config, &model, &resolve_config,),
+            Err(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::unmapped(
+        "C>>O",
+        r#"{:atoms ["C#i=#c0#u0"]}"#,
+        r#"{:atoms ["O#i=#c0#u0"]}"#,
+        &[]
+    )]
+    #[case::wildcard(
+        "*>>C",
+        r#"{:atoms ["*#i=#c0#u0"]}"#,
+        r#"{:atoms ["C#i=#c0#u0"]}"#,
+        &[]
+    )]
+    #[case::reordered(
+        "[CH4:1].[OH2:2]>>[OH2:2].[CH4:1]",
+        r#"{:atoms ["C#i=#c0#h4" "O#i=#c0#h2"]}"#,
+        r#"{:atoms ["C#i=#c0#h4" "O#i=#c0#h2"]}"#,
+        &[(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))]
+    )]
+    #[case::one_sided_labels(
+        "[CH4:1].[OH2:2]>>[CH4:1].[13NH3:3]",
+        r#"{:atoms ["C#i=#c0#h4" "O#i=#c0#h2"]}"#,
+        r#"{:atoms ["C#i=#c0#h4" "N#i13#c0#h3"]}"#,
+        &[(AtomId(0), AtomId(0))]
+    )]
+    #[case::bond_change(
+        "[CH2:1]=[CH2:2]>>[CH3:1][CH3:2]",
+        r#"{:atoms ["C#i=#c0#h2" "C#i=#c0#h2"] :bonds [[0 1 "2"]]}"#,
+        r#"{:atoms ["C#i=#c0#h3" "C#i=#c0#h3"] :bonds [[0 1 "1"]]}"#,
+        &[(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))]
+    )]
+    #[case::aromatic(
+        ">>c1ccccc1",
+        "{}",
+        r#"{:atoms ["C#i=#c0#u0#a+" "C#i=#c0#u0#a+" "C#i=#c0#u0#a+"
+                    "C#i=#c0#u0#a+" "C#i=#c0#u0#a+" "C#i=#c0#u0#a+"]
+            :bonds [[0 5 "1#a"] [0 1 "1#a"] [1 2 "1#a"]
+                    [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"]]}"#,
+        &[]
+    )]
+    #[case::tetrahedral(
+        ">>[C@H](F)(Cl)Br",
+        "{}",
+        r#"{:atoms ["C#i=#c0#h1" "F#i=#c0#u0" "Cl#i=#c0#u0" "Br#i=#c0#u0"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs :ccw}]}"#,
+        &[]
+    )]
+    fn test_ingest_reaction_smiles_unresolved(
+        #[case] input: &str,
+        #[case] lhs: &str,
+        #[case] rhs: &str,
+        #[case] pairs: &[(AtomId, AtomId)],
+    ) {
+        let reaction = ingest_reaction_smiles_unresolved(input).unwrap();
+        let span = reaction.to_reaction_span().unwrap();
+        assert_eq!(span.correspondence().atoms().matched_pairs(), pairs);
+        assert_eq!(reaction.lhs(), &lhs.parse::<Molecule>().unwrap());
+        assert_eq!(span.rhs(), rhs.parse::<Molecule>().unwrap());
+    }
+
+    #[rstest]
+    #[case::syntax(
+        " C>>C",
+        ReactionSmilesInputError::Syntax(SmilesParseError::LeadingWhitespace)
+    )]
+    #[case::agents(
+        "C>O>C",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::AgentsUnsupported)
+    )]
+    #[case::reactant_map(
+        "[C:1].[O:1]>>[C:1]",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::AmbiguousAtomMapClass {
+            class: 1, reactant_count: 2, product_count: 1,
+        })
+    )]
+    #[case::product_map(
+        "[C:1]>>[C:1].[O:1]",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::AmbiguousAtomMapClass {
+            class: 1, reactant_count: 1, product_count: 2,
+        })
+    )]
+    #[case::reactant_conversion(
+        "[C@H2](F)(Cl)Br>>",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::ModelConversion(RaiseError::MoleculeEntries(
+                MoleculeIntegrityError::DuplicateStereoLigand {
+                    entity: Entity::StereoAtom(StereoAtomId(0)),
+                    ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                },
+            ))
+        ))
+    )]
+    #[case::product_conversion(
+        ">>[C@H2](F)(Cl)Br",
+        ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Products(
+            MoleculeInterpretationError::ModelConversion(RaiseError::MoleculeEntries(
+                MoleculeIntegrityError::DuplicateStereoLigand {
+                    entity: Entity::StereoAtom(StereoAtomId(0)),
+                    ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                },
+            ))
+        ))
+    )]
+    fn test_ingest_reaction_smiles_unresolved_error(
+        #[case] input: &str,
+        #[case] expected: ReactionSmilesInputError,
+    ) {
+        assert_eq!(ingest_reaction_smiles_unresolved(input), Err(expected));
+    }
+
+    #[rstest]
+    #[case::opensmiles(
+        ">>C", SmilesIoConfig::opensmiles(), mol_dsl!(r#"{:atoms ["C#i=#c0#u0"]}"#)
+    )]
+    #[case::dative(
+        ">>C->N", SmilesIoConfig::lenient(),
+        mol_dsl!(r#"{:atoms ["C#i=#c0#u0" "N#i=#c0#u0"]
+            :dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}"#)
+    )]
+    fn test_ingest_reaction_smiles_unresolved_with(
+        #[case] input: &str,
+        #[case] config: SmilesIoConfig,
+        #[case] rhs: Molecule,
+    ) {
+        let reaction = ingest_reaction_smiles_unresolved_with(input, &config).unwrap();
+        assert_eq!(reaction.lhs(), &Molecule::default());
+        assert_eq!(reaction.to_reaction_span().unwrap().rhs(), rhs);
+    }
+
+    #[rstest]
+    #[case::dative("C->N>>", ReactionSmilesInputError::Syntax(SmilesParseError::TrailingBond { pos: 1 }))]
+    fn test_ingest_reaction_smiles_unresolved_with_error(
+        #[case] input: &str,
+        #[case] expected: ReactionSmilesInputError,
+    ) {
+        assert_eq!(
+            ingest_reaction_smiles_unresolved_with(input, &SmilesIoConfig::opensmiles()),
             Err(expected)
         );
     }
