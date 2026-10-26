@@ -377,7 +377,8 @@ def test_deferred_member(owner, name):
     [
         (
             umol.Molecule.from_smiles,
-            "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
+            "(source, *, resolve=True, io_config=None, chemistry_model=None, "
+            "resolve_config=None)",
         ),
         (
             umol.Molecule.to_smiles,

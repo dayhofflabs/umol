@@ -78,7 +78,7 @@ impl UmolError for ReactionInterpretationError {
     }
 }
 
-/// Failure while accepting SMILES text as a determined molecule.
+/// Failure while accepting SMILES text as a molecule.
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum SmilesInputError {
     #[error("{0}")]
@@ -190,6 +190,36 @@ impl Interpret for ReactionSmiles {
         Ok(Reaction::from_sides(lhs, rhs, atom_correspondence)
             .expect("interpreted reaction sides preserve unique entity incidence"))
     }
+}
+
+/// Ingest SMILES text without resolution using the OpenSMILES configuration.
+///
+/// Applies format-owned defaults and preserves the raised graph-IR representation,
+/// including undetermined fields and constraints, without invoking a resolver.
+///
+/// # Errors
+///
+/// Returns [`SmilesInputError::Syntax`] for invalid SMILES or
+/// [`SmilesInputError::ModelConversion`] if conversion to graph IR fails.
+pub fn ingest_smiles_unresolved(input: &str) -> Result<Molecule, SmilesInputError> {
+    ingest_smiles_unresolved_with(input, &SmilesIoConfig::opensmiles())
+}
+
+/// Ingest SMILES text without resolution using an explicit IO configuration.
+///
+/// Applies the same format defaults and conversion as [`ingest_smiles_unresolved`].
+/// No chemistry model or resolution policy is applied.
+///
+/// # Errors
+///
+/// Returns [`SmilesInputError::Syntax`] for invalid SMILES or
+/// [`SmilesInputError::ModelConversion`] if conversion to graph IR fails.
+pub fn ingest_smiles_unresolved_with(
+    input: &str,
+    io_config: &SmilesIoConfig,
+) -> Result<Molecule, SmilesInputError> {
+    let smiles = Smiles::parse_with(input, io_config)?;
+    smiles.as_table_ir().try_into_ir(&()).map_err(Into::into)
 }
 
 /// Ingest SMILES text with the OpenSMILES configuration and the SMILES
@@ -925,6 +955,79 @@ mod tests {
             automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
         };
         assert!(actual.canonical_eq(&expected, &context));
+    }
+
+    #[rstest]
+    #[case::implicit_counts("C", mol_dsl!(r#"{:atoms ["C#i=#c0#u0"]}"#))]
+    #[case::wildcard("*", mol_dsl!(r#"{:atoms ["*#i=#c0#u0"]}"#))]
+    #[case::bracket_fields("[13CH3+]", mol_dsl!(r#"{:atoms ["C#i13#c+#h3"]}"#))]
+    #[case::aromatic(
+        "c1ccccc1",
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#u0#a+" "C#i=#c0#u0#a+" "C#i=#c0#u0#a+"
+                    "C#i=#c0#u0#a+" "C#i=#c0#u0#a+" "C#i=#c0#u0#a+"]
+            :bonds [[0 5 "1#a"] [0 1 "1#a"] [1 2 "1#a"]
+                    [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"]]
+        }"#)
+    )]
+    #[case::tetrahedral(
+        "[C@H](F)(Cl)Br",
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h1" "F#i=#c0#u0" "Cl#i=#c0#u0" "Br#i=#c0#u0"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs :ccw}]
+        }"#)
+    )]
+    fn test_ingest_smiles_unresolved(#[case] input: &str, #[case] expected: Molecule) {
+        assert_eq!(ingest_smiles_unresolved(input), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::syntax(" C", SmilesInputError::Syntax(SmilesParseError::LeadingWhitespace))]
+    #[case::duplicate_bracket_h(
+        "[C@H2](F)(Cl)Br",
+        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
+            MoleculeIntegrityError::DuplicateStereoLigand {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            },
+        ))
+    )]
+    fn test_ingest_smiles_unresolved_error(
+        #[case] input: &str,
+        #[case] expected: SmilesInputError,
+    ) {
+        assert_eq!(ingest_smiles_unresolved(input), Err(expected));
+    }
+
+    #[rstest]
+    #[case::opensmiles("C", SmilesIoConfig::opensmiles(), mol_dsl!(r#"{:atoms ["C#i=#c0#u0"]}"#))]
+    #[case::dative(
+        "C->N",
+        SmilesIoConfig::lenient(),
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#u0" "N#i=#c0#u0"]
+            :dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]
+        }"#)
+    )]
+    fn test_ingest_smiles_unresolved_with(
+        #[case] input: &str,
+        #[case] config: SmilesIoConfig,
+        #[case] expected: Molecule,
+    ) {
+        assert_eq!(ingest_smiles_unresolved_with(input, &config), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::dative("C->N", SmilesInputError::Syntax(SmilesParseError::InvalidToken { pos: 2 }))]
+    fn test_ingest_smiles_unresolved_with_error(
+        #[case] input: &str,
+        #[case] expected: SmilesInputError,
+    ) {
+        assert_eq!(
+            ingest_smiles_unresolved_with(input, &SmilesIoConfig::opensmiles()),
+            Err(expected)
+        );
     }
 
     #[rstest]

@@ -17,6 +17,17 @@ Relates: [184](184-deltas-and-edits-2026-08-04.md),
 [nomenclature guide](../docs/development/nomenclature.md),
 [property tests guide](../docs/development/property-tests.md)
 
+## Review note — 2026-10-20
+
+The proposals below assume that delta normalization should retain its current
+folding rules. That premise needs reconsideration before selecting corrections.
+The intended minimum is constituent-value normalization preserving the delta
+sequence, without chain fusion, absorption, or cancellation. Reaction
+canonicalization addresses equivalence of the represented reactions. Correct
+application must not require folding; any folding must preserve its result.
+The implementation consequences have not been scoped, and no implementation is
+approved by this review.
+
 ## Purpose
 
 Review-cycle record for the graph-IR delta module, produced under the `review-cycle` skill and

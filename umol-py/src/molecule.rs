@@ -7,7 +7,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph::export::export_smiles_with;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
-use umol_graph::ingest::ingest_smiles_with;
+use umol_graph::ingest::{ingest_smiles_unresolved_with, ingest_smiles_with};
 use umol_graph::ops::model::{
     ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
 };
@@ -250,20 +250,27 @@ impl Molecule {
         .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
-    /// Ingest a determined molecule from SMILES under explicit IO, chemistry,
-    /// and resolution policies.
+    /// Ingest a molecule from SMILES, resolving it by default.
     /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
-    /// An explicitly supplied resolve_config is preserved.
+    /// With resolve=False, apply format-owned defaults and convert to graph IR without
+    /// resolution; chemistry_model and resolve_config are ignored. io_config applies
+    /// in both modes. An explicitly supplied resolve_config is preserved when resolving.
     #[staticmethod]
-    #[pyo3(signature = (source, *, io_config=None, chemistry_model=None, resolve_config=None))]
+    #[pyo3(signature = (source, *, resolve=true, io_config=None, chemistry_model=None, resolve_config=None))]
     fn from_smiles(
         source: &str,
+        resolve: bool,
         io_config: Option<SmilesIoConfig>,
         chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
+        if !resolve {
+            return ingest_smiles_unresolved_with(source, &io_config)
+                .map(Self::from_rust)
+                .map_err(smiles_input_error);
+        }
         let default_model;
         let chemistry_model = match &chemistry_model {
             Some(model) => model.to_rust(),
@@ -1405,6 +1412,7 @@ mod tests {
             assert_eq!(
                 Molecule::from_smiles(
                     "C",
+                    true,
                     io_config,
                     chemistry_model.as_ref().map(|model| model.borrow(py)),
                     resolve_config,
@@ -1430,7 +1438,7 @@ mod tests {
         #[case] expected_message: &str,
     ) {
         Python::attach(|py| {
-            let error = Molecule::from_smiles(source, None, None, None).unwrap_err();
+            let error = Molecule::from_smiles(source, true, None, None, None).unwrap_err();
             assert_eq!(error.get_type(py).name().unwrap(), expected_type);
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),

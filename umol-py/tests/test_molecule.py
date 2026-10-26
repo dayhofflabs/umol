@@ -466,8 +466,43 @@ def test_molecule_stereo_mutation_attributes():
         molecule.tracked_canonicalize()
 
 
-def test_molecule_from_smiles():
-    assert Molecule.from_smiles("C") == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+@pytest.mark.parametrize(
+    ("source", "kwargs", "expected"),
+    [
+        pytest.param(
+            "C", {}, '{:atoms ["C#i=#c0#h4#n0#u0#s"]}', id="default"
+        ),
+        pytest.param(
+            "C", {"resolve": True}, '{:atoms ["C#i=#c0#h4#n0#u0#s"]}', id="resolved"
+        ),
+        pytest.param(
+            "C", {"resolve": False}, '{:atoms ["C#i=#c0#u0"]}', id="unresolved"
+        ),
+        pytest.param(
+            "*", {"resolve": False}, '{:atoms ["*#i=#c0#u0"]}', id="wildcard"
+        ),
+        pytest.param(
+            "[13CH3+]", {"resolve": False}, '{:atoms ["C#i13#c+#h3"]}', id="bracket-fields"
+        ),
+        pytest.param(
+            "C",
+            {
+                "resolve": False,
+                "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
+                    valence=ValenceModel.atom_typing(AtomTypeRegistry.from_atoms([])),
+                    aromaticity=ChemistryModel.default().aromaticity,
+                    stereo=ChemistryModel.default().stereo,
+                ),
+                "resolve_config": ResolveConfig.default(),
+            },
+            '{:atoms ["C#i=#c0#u0"]}',
+            id="unresolved-with-model-and-policy",
+        ),
+    ],
+)
+def test_molecule_from_smiles(source, kwargs, expected):
+    assert Molecule.from_smiles(source, **kwargs) == Molecule.parse(expected)
 
 
 @pytest.mark.parametrize(
@@ -505,18 +540,31 @@ def test_molecule_from_smiles_io_config(io_config):
     ]
 
 
-def test_molecule_from_smiles_io_config_dative():
+@pytest.mark.parametrize(
+    ("resolve", "expected"),
+    [
+        (
+            True,
+            '{:atoms ["C#i=#c0#h4#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
+            ':dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}',
+        ),
+        (
+            False,
+            '{:atoms ["C#i=#c0#u0" "N#i=#c0#u0"] '
+            ':dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}',
+        ),
+    ],
+)
+def test_molecule_from_smiles_io_config_dative(resolve, expected):
     assert Molecule.from_smiles(
-        "C->N", io_config=SmilesIoConfig.lenient()
-    ) == Molecule.parse(
-        '{:atoms ["C#i=#c0#h4#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
-        ":dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}"
-    )
+        "C->N", resolve=resolve, io_config=SmilesIoConfig.lenient()
+    ) == Molecule.parse(expected)
 
 
-def test_molecule_from_smiles_io_config_error():
+@pytest.mark.parametrize("resolve", [True, False])
+def test_molecule_from_smiles_io_config_error(resolve):
     with pytest.raises(ParseError, match="^Invalid token at position 2$"):
-        Molecule.from_smiles("C->N", io_config=SmilesIoConfig.opensmiles())
+        Molecule.from_smiles("C->N", resolve=resolve, io_config=SmilesIoConfig.opensmiles())
 
 
 @pytest.mark.parametrize(
@@ -1074,6 +1122,14 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
     ("source", "kwargs", "error_type", "message"),
     [
         (" C", {}, ParseError, "Leading whitespace"),
+        (" C", {"resolve": False}, ParseError, "Leading whitespace"),
+        (
+            "[C@H2](F)(Cl)Br",
+            {"resolve": False},
+            ModelConversionError,
+            "stereo atom 0: stereo ligand StereoLigand { atom_id: AtomId(0), "
+            "kind: ImplicitHydrogen } is duplicated in the frame",
+        ),
         (
             "C[S@]C",
             {},

@@ -134,7 +134,7 @@ pub(crate) fn molecule_apply_error(error: GraphIrMoleculeApplyError) -> PyErr {
     }
 }
 
-/// Map the resolved SMILES operation error onto the public Python taxonomy.
+/// Map a SMILES ingestion error onto the public Python taxonomy.
 pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
     match error {
         GraphSmilesInputError::Syntax(error) => ParseError::new_err(error.to_string()),

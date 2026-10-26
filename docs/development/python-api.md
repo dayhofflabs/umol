@@ -303,6 +303,19 @@ and fails on the second. Once execution starts, rollback restores the molecule, 
 or consumed Edits. Edit failures raise TransactionError; publication failures raise
 InvalidStructureError.
 
+### SMILES ingestion
+
+Molecule.from_smiles uses resolve=True by default and delegates to Rust's
+ingest::ingest_smiles_with. With resolve=False it delegates to
+ingest::ingest_smiles_unresolved_with, applying format-owned defaults and converting
+to graph IR without resolution. Undetermined fields and raised constraints are preserved.
+io_config applies in both modes; chemistry_model and resolve_config are ignored when
+resolve=False. Parsing and conversion retain the existing ParseError and
+ModelConversionError mappings.
+
+The keyword selects between the two Rust operations while retaining one Python
+constructor for SMILES input. It introduces no additional interpretation in the binding.
+
 ### Resolution
 
 Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
