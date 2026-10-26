@@ -313,8 +313,18 @@ io_config applies in both modes; chemistry_model and resolve_config are ignored 
 resolve=False. Parsing and conversion retain the existing ParseError and
 ModelConversionError mappings.
 
-The keyword selects between the two Rust operations while retaining one Python
-constructor for SMILES input. It introduces no additional interpretation in the binding.
+Reaction.from_reaction_smiles likewise defaults to resolve=True and delegates to
+ingest::ingest_reaction_smiles_with. With resolve=False it delegates to
+ingest::ingest_reaction_smiles_unresolved_with, raising both sides without resolution
+and constructing the reaction from their atom-map correspondence. Raised constraints
+and overlays are preserved; the product is reindexed into the lhs-anchored reaction
+frame. io_config applies in both modes; chemistry_model and resolve_config are ignored
+when resolve=False. Both modes reject nonempty agents and atom-map labels repeated
+on either side; labels present on only one side remain permitted. Side-conversion
+failures retain the existing ModelConversionError mapping and identify the failing side.
+
+The keyword selects between Rust operations while retaining one Python constructor
+per input format. It introduces no additional interpretation in the binding.
 
 ### Resolution
 

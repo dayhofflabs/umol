@@ -61,8 +61,8 @@ proptest! {
         let mut plain = molecule.edit();
         plain.remove_topology_cascading(&atoms, &bonds);
         let publication = editor.finish();
-        let expected = plain.finish();
-        prop_assert_eq!(publication, expected);
+        let expected = plain.finish().unwrap();
+        prop_assert_eq!(publication, Ok(expected));
         let undo = compaction.undo_compaction();
 
         for index in 0..counts.0 {
@@ -153,7 +153,8 @@ proptest! {
         let mut cascade = source.edit();
         let compaction = cascade.tracked_remove_topology_cascading(&atoms, &bonds);
         prop_assert_eq!(exact_compaction.graph(), compaction.graph());
-        prop_assert_eq!(exact.finish(), cascade.finish());
+        let expected = exact.finish().unwrap();
+        prop_assert_eq!(cascade.finish(), Ok(expected));
     }
 
     #[test]

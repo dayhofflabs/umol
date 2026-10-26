@@ -7,7 +7,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph::export::export_reaction_smiles_with;
 use umol_graph::fingerprint::featurize_reaction;
-use umol_graph::ingest::ingest_reaction_smiles_with;
+use umol_graph::ingest::{ingest_reaction_smiles_unresolved_with, ingest_reaction_smiles_with};
 use umol_graph::ops::model::{
     ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
 };
@@ -329,14 +329,16 @@ impl Reaction {
         Self::from_rust(py, reaction)
     }
 
-    /// Ingest a determined reaction from reaction SMILES under explicit IO,
-    /// chemistry, and resolution policies.
+    /// Ingest a reaction from reaction SMILES, resolving both sides by default.
+    /// With resolve=False, preserve the raised sides without resolution;
+    /// chemistry_model and resolve_config are ignored.
     /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
-    /// An explicitly supplied resolve_config is preserved.
+    /// With resolution enabled, an explicitly supplied resolve_config is preserved.
     #[staticmethod]
     #[pyo3(signature = (
         source,
         *,
+        resolve=true,
         io_config=None,
         chemistry_model=None,
         resolve_config=None,
@@ -344,33 +346,37 @@ impl Reaction {
     fn from_reaction_smiles(
         py: Python<'_>,
         source: &str,
+        resolve: bool,
         io_config: Option<SmilesIoConfig>,
         chemistry_model: Option<PyRef<'_, ChemistryModel>>,
         resolve_config: Option<ResolveConfig>,
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let default_model;
-        let chemistry_model = match &chemistry_model {
-            Some(model) => model.to_rust(),
-            None => {
-                default_model = GraphChemistryModel {
-                    valence: GraphValenceModel::smiles(),
-                    ..GraphChemistryModel::default()
-                };
-                &default_model
-            }
-        };
-        let resolve_config = resolve_config.map_or_else(
-            || GraphResolveConfig {
-                isotope: GraphIsotopePolicy::Natural,
-                ..Default::default()
-            },
-            ResolveConfig::to_rust,
-        );
-        let reaction =
+        let reaction = if resolve {
+            let default_model;
+            let chemistry_model = match &chemistry_model {
+                Some(model) => model.to_rust(),
+                None => {
+                    default_model = GraphChemistryModel {
+                        valence: GraphValenceModel::smiles(),
+                        ..GraphChemistryModel::default()
+                    };
+                    &default_model
+                }
+            };
+            let resolve_config = resolve_config.map_or_else(
+                || GraphResolveConfig {
+                    isotope: GraphIsotopePolicy::Natural,
+                    ..Default::default()
+                },
+                ResolveConfig::to_rust,
+            );
             ingest_reaction_smiles_with(source, &io_config, chemistry_model, &resolve_config)
-                .map_err(reaction_smiles_input_error)?;
+        } else {
+            ingest_reaction_smiles_unresolved_with(source, &io_config)
+        }
+        .map_err(reaction_smiles_input_error)?;
         let (lhs, deltas) = reaction.into_parts();
         let reaction = GraphIrReaction::try_new(lhs, deltas).map_err(reaction_integrity_error)?;
 
