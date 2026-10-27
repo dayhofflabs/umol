@@ -122,7 +122,7 @@ Start from the status index and follow relevant links; never read the archive ch
 
 ## Verification
 
-- Format: `cargo fmt --all`
+- Format: `cargo +nightly fmt --all`
 - Test: `cargo test --workspace`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Python: activate `umol-py/.venv`, run `maturin develop`, then `pytest -q umol-py/tests`
