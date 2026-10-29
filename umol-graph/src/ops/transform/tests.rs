@@ -1,3 +1,5 @@
+mod stereo;
+
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{AromaticSystemId, AtomId, Molecule};

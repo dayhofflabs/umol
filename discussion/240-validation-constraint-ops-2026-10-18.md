@@ -6,7 +6,8 @@ Relates: [166](166-molecule-ops-2026-07-27.md),
 [118](118-validator-architecture-2026-06-20.md),
 [195](195-molecule-constraint-matching-2026-08-12.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
-[237](237-release-0-10-scope-2026-10-15.md)
+[237](237-release-0-10-scope-2026-10-15.md),
+[242](242-stereo-transformers-2026-10-29.md)
 
 ## Scope
 
