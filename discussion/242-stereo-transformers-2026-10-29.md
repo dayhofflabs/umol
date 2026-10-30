@@ -17,8 +17,9 @@ tasks: addition creates missing stereo entities; enumeration determines selected
 configuration values on existing entities.
 
 This record contains the agreed semantics, interfaces, and nomenclature.
-S0's test fixtures, finite references, and baseline benchmarks are implemented;
-the transformer engines remain future work. External implementations under
+S0's fixtures/references/baselines and S1a's binary classification correction are
+implemented; the ligand-census correction and transformer engines remain future
+work. External implementations under
 materials/codes may supply algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -301,7 +302,7 @@ materials/codes/rdkit/Code/GraphMol/FindStereo.cpp and ConjugHybrid.cpp, and CDK
 34806d7a54ee4493d57b5c5d1b26a3d748da1cb1, principally
 materials/codes/cdk/base/standard/src/main/java/org/openscience/cdk/stereo/Stereocenters.java.
 The agreed algorithm below adapts those source cases to umol's representation.
-Its implementation and performance measurements remain future work.
+Implementation progress and measurements are recorded in the plan below.
 
 1. **Screen local environments.** Inspect topology and inherent element, charge,
    bond orders, hydrogen counts, and lone-pair counts independently of whether
@@ -438,7 +439,7 @@ success, rejection, preservation, and iterator cases.
   filters domains and supplied admissibility, and sorts by the requested order.
   The [IR reference](../umol-graph-ir/tests/property/stereo/reference.rs)
   checks all 96 Th/Ct coset/permutation combinations using inversion parity and
-  Ct endpoint blocks. Open-coset classification assertions remain with S1a.
+  Ct endpoint blocks. Open-coset classification coverage is supplied by S1a.
   Validation passed: 265 transformer unit tests, 29 feature-gated IR stereo
   tests, and Clippy for both crates' libraries/tests with proptest enabled and
   warnings denied.
@@ -529,11 +530,11 @@ within perception is material on the asserted-ring series: perception is the
 largest measured phase for the twelve-membered ring. These are measured
 synthetic domains; the transformer and discovery costs are measured in S2/S3.
 
-The four-distinct-ligand Th* and Ct* fixtures currently classify as Symmetric,
-while their literal controls classify as Stereogenic. This records the known
-undetermined-coset defect for S1a. The manifest also records current producer
-failures, including the hydrogen-plus-lone-pair case assigned to S13c, so changed
-work after the foundation corrections remains visible alongside timing.
+At the S0 baseline, the four-distinct-ligand Th* and Ct* fixtures classified as
+Symmetric, while their literal controls classified as Stereogenic. S1a corrects
+this undetermined-coset defect. The S0 manifest also records producer failures,
+including the hydrogen-plus-lone-pair case assigned to S13c, so changed work
+after the foundation corrections remains visible alongside timing.
 
 ### S1 — Shared stereo foundations
 
@@ -549,6 +550,60 @@ work after the foundation corrections remains visible alongside timing.
   prochiral/symmetric and malformed-attribute domains. Leave non-binary
   classification behavior outside this correction. Audit
   dependent classification and validation before closing the subitem.
+
+  **Completed — 2026-10-29.** StereoSymmetry classifies known Th/Ct kinds from
+  their two-coset action for undetermined cosets and valid nonempty finite coset
+  sets. It preserves the supplied coset rather than choosing a literal. Empty
+  or invalid finite domains, invalid literal indices, and incompatible actions
+  retain the false result; non-binary open configurations retain their prior
+  behavior.
+
+  Binary local projection grades the queried Th carrier by permutation parity;
+  the queried Ct carrier contributes no handedness. Other carriers retain their
+  stored-state grading. This makes prochiral Th arrangements recognizable with
+  open cosets and retains the actions identifying Ct cosets at non-stereogenic
+  sites, including sites carrying literal configurations. The existing private
+  grading helper receives the carrier iterator and accumulated orientation.
+  Existing public Molecule and StereoSymmetry method signatures are preserved.
+
+  View delegates use the corrected classification. StereoConformanceValidator
+  retains its configuration-determinacy boundary: a known kind with an open
+  coset still contributes Underdetermined. Tests cover that case separately
+  from an undetermined kind, and cover a non-stereogenic literal Ct record.
+  The consumer audit found no direct Python symmetry-query bindings to migrate.
+
+  Verification passed: 11,736 graph-IR unit tests (three ignored), 2,683 graph
+  unit tests, 45 feature-gated stereo tests, 683 resolution-conformance tests,
+  all-target/all-feature Clippy for both crates, and all 140 benchmark cases in
+  test mode. The independent reference exhausts 4,096 one-carrier inputs across
+  both kinds, all four-label assignments, literal/open/finite cosets, and both
+  refinement settings. It checks ligand-equality predictions, the independent
+  binary action, and preservation of the supplied coset.
+
+  The [S1a phase comparison](../scratch/stereo-s1a-2026-10-29/verified/results.md)
+  repeats 30 affected phase/input cases with S0's sampling settings. The
+  [metadata](../scratch/stereo-s1a-2026-10-29/verified/run.json) records commands,
+  source hashes, and longer confirmation runs (50 samples, 300 ms warm-up,
+  one-second measurement) for the large-chain and many-site cases. The primary
+  comparison and confirmation samples are retained beside that record.
+
+  Selected medians in microseconds compare the same phase and input:
+
+  | Phase and input | S0b | S1a |
+  | --- | ---: | ---: |
+  | Classification, five-atom Th* | 0.358 | 0.260 |
+  | Classification, six-atom Ct* | 0.360 | 0.182 |
+  | Classification, 80 atoms / 16 Th* sites | 5.713 | 4.147 |
+  | Graph symmetry, 132 atoms / one Th* site (confirmation) | 74.698 | 74.514 |
+  | Local projection, 132 atoms / one Th* site (confirmation) | 26.888 | 27.189 |
+  | Graph symmetry, 80 atoms / 16 Th* sites (confirmation) | 210.334 | 210.275 |
+  | Local projection, 80 atoms / 16 Th* sites (confirmation) | 1390.284 | 1402.543 |
+
+  The open-coset rows now return Stereogenic on the distinct-ligand fixtures.
+  Their classification costs therefore reflect corrected work. The longer
+  confirmations place local-projection cost about one percent above S0 in the
+  two larger domains; local projection remains the largest phase on the
+  many-site input. S1b and the complete S1 gate remain outstanding.
 
 - **S1b — Complete perceived ligand frames** — additive (green).
   Modules: umol-graph/src/ops/stereo.rs and its resolver/conformance tests.

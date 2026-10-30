@@ -83,7 +83,15 @@ impl Molecule {
         let mut proper: Vec<Vec<NodeId>> = Vec::new();
         let mut improper: Vec<Vec<NodeId>> = Vec::new();
         for generator in auto.generators() {
-            match self.grade_generator(&incidence, generator) {
+            match self.grade_generator(
+                &incidence,
+                generator,
+                self.stereo_atoms()
+                    .ids()
+                    .map(Entity::StereoAtom)
+                    .chain(self.stereo_bonds().ids().map(Entity::StereoBond)),
+                None,
+            ) {
                 Some(Orientation::Proper) => proper.push(generator.clone()),
                 Some(Orientation::Improper) => improper.push(generator.clone()),
                 None => {} // mixed / invalid → discard
@@ -149,30 +157,28 @@ impl Molecule {
         coset_space.observable_coset(raw, &generators)
     }
 
-    /// A generator's orientation = its uniform action on every stereocenter's coset.
+    /// Combine a generator's orientation over the supplied stereo carriers.
     /// `None` ⇒ discard (mixed across centers, or inconsistent).
     fn grade_generator(
         &self,
         incidence: &IncidenceGraph,
         generator: &[NodeId],
+        carriers: impl Iterator<Item = Entity>,
+        mut accumulated: Option<Orientation>,
     ) -> Option<Orientation> {
-        let mut net: Option<Orientation> = None;
-        for kind in [EntityKind::StereoAtom, EntityKind::StereoBond] {
-            for index in 0..incidence.entity_count(kind) {
-                let contribution =
-                    match self.grade_center(incidence, kind.with_id(index as u32), generator) {
-                        Err(()) => return None,
-                        Ok(None) => continue,
-                        Ok(Some(orientation)) => orientation,
-                    };
-                match net {
-                    None => net = Some(contribution),
-                    Some(previous) if previous == contribution => {}
-                    Some(_) => return None,
-                }
+        for entity in carriers {
+            let contribution = match self.grade_center(incidence, entity, generator) {
+                Err(()) => return None,
+                Ok(None) => continue,
+                Ok(Some(orientation)) => orientation,
+            };
+            match accumulated {
+                None => accumulated = Some(contribution),
+                Some(previous) if previous == contribution => {}
+                Some(_) => return None,
             }
         }
-        Some(net.unwrap_or(Orientation::Proper))
+        Some(accumulated.unwrap_or(Orientation::Proper))
     }
 
     /// One stereocenter's orientation contribution to a generator. `Ok(None)` =
@@ -324,6 +330,10 @@ pub struct StereoSymmetry {
 
 impl Molecule {
     /// Project the molecule symmetry onto a stereo atom's ligand positions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the id is unavailable or the stereo kind is undetermined.
     pub fn stereo_atom_symmetry(&self, gs: &GraphSymmetry, id: StereoAtomId) -> StereoSymmetry {
         let site = self
             .stereo_atoms()
@@ -334,6 +344,10 @@ impl Molecule {
     }
 
     /// Project the molecule symmetry onto a stereo bond's ligand positions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the id is unavailable or the stereo kind is undetermined.
     pub fn stereo_bond_symmetry(&self, gs: &GraphSymmetry, id: StereoBondId) -> StereoSymmetry {
         let site = self
             .stereo_bonds()
@@ -356,10 +370,36 @@ impl Molecule {
         let mut oriented: Vec<OrientedPermutation> = Vec::new();
         // The carrier stabilizer, projected onto ligand positions and graded.
         for generator in gs.site_stabilizer(site_node) {
-            let Some(orientation) = self.grade_generator(gs.incidence(), &generator) else {
+            let Some(permutation) = project_onto_ligands(&ligands, &generator) else {
                 continue;
             };
-            let Some(permutation) = project_onto_ligands(&ligands, &generator) else {
+            let local_orientation = match kind {
+                StereoKind::Tetrahedral => {
+                    let orientation = if permutation.sign() == 1 {
+                        Orientation::Proper
+                    } else {
+                        Orientation::Improper
+                    };
+                    Some(orientation)
+                }
+                StereoKind::CisTrans => {
+                    if !kind.class_key().space().allows(permutation) {
+                        continue;
+                    }
+                    None
+                }
+                _ => None,
+            };
+            let binary = matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans);
+            let carriers = self
+                .stereo_atoms()
+                .ids()
+                .map(Entity::StereoAtom)
+                .chain(self.stereo_bonds().ids().map(Entity::StereoBond))
+                .filter(|&entity| !binary || entity != carrier);
+            let Some(orientation) =
+                self.grade_generator(gs.incidence(), &generator, carriers, local_orientation)
+            else {
                 continue;
             };
             oriented.push(oriented_permutation(orientation, permutation));
@@ -388,14 +428,31 @@ impl StereoSymmetry {
         &self.coset
     }
 
-    /// Whether the stored arrangement is a genuine stereocenter: its coset is not
-    /// identified with any other by the local symmetry (proper *or* improper). A
-    /// proper ligand symmetry (homotopic ligands) or an improper one (enantiotopic
-    /// ligands) both collapse the class and make the center non-stereogenic.
+    /// Whether the carrier's coset has a singleton orbit under local ligand symmetry.
+    ///
+    /// For tetrahedral and cis/trans kinds, an undetermined coset or a nonempty
+    /// finite coset set is classified from the action on both cosets.
+    /// Other nonliteral configurations, empty or invalid finite sets, invalid
+    /// literal indices, and incompatible ligand actions return false.
+    ///
+    /// # Semantic properties
+    ///
+    /// For a valid tetrahedral or cis/trans ligand action, the result agrees for
+    /// an undetermined coset, any valid nonempty finite coset set, and either
+    /// literal coset in the same ligand frame.
     pub fn is_stereogenic(&self) -> bool {
-        let Some(coset) = self.coset.as_lit() else {
+        let coset = self.coset.as_lit();
+        let binary_domain = matches!(self.kind, StereoKind::Tetrahedral | StereoKind::CisTrans)
+            && match &self.coset {
+                StereoCoset::Undetermined => true,
+                StereoCoset::LitSet(domain) => {
+                    !domain.is_empty() && domain.iter().all(|&index| index < 2)
+                }
+                _ => false,
+            };
+        if coset.is_none() && !binary_domain {
             return false;
-        };
+        }
         let perms: Vec<Permutation> = self
             .group
             .elements()
@@ -405,10 +462,15 @@ impl StereoSymmetry {
         let Some(classes) = self.kind.class_key().space().orbit_reps(&perms) else {
             return false;
         };
-        let Some(&class) = classes.get(coset as usize) else {
-            return false;
-        };
-        classes.iter().filter(|&&c| c == class).count() == 1
+        match coset {
+            Some(coset) => {
+                let Some(&class) = classes.get(coset as usize) else {
+                    return false;
+                };
+                classes.iter().filter(|&&c| c == class).count() == 1
+            }
+            None => classes.len() == 2 && classes[0] != classes[1],
+        }
     }
 
     /// The carrier's stereogenicity classification: a genuine stereocenter, a
@@ -826,6 +888,72 @@ mod tests {
     #[case::undetermined(
         OrientedPermutationGroup::generate(4, &[]),
         StereoKind::Tetrahedral,
+        StereoCoset::Undetermined,
+        true,
+    )]
+    #[case::undetermined_merged(
+        OrientedPermutationGroup::generate(4, &[
+            OrientedPermutation::improper(Permutation::from_image(&[1, 0, 2, 3])),
+        ]),
+        StereoKind::Tetrahedral,
+        StereoCoset::Undetermined,
+        false,
+    )]
+    #[case::cis_trans_undetermined(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::CisTrans,
+        StereoCoset::Undetermined,
+        true,
+    )]
+    #[case::cis_trans_merged(
+        OrientedPermutationGroup::generate(4, &[
+            OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3])),
+        ]),
+        StereoKind::CisTrans,
+        StereoCoset::Undetermined,
+        false,
+    )]
+    #[case::cis_trans_invalid_action(
+        OrientedPermutationGroup::generate(4, &[
+            OrientedPermutation::proper(Permutation::from_image(&[0, 2, 1, 3])),
+        ]),
+        StereoKind::CisTrans,
+        StereoCoset::Undetermined,
+        false,
+    )]
+    #[case::finite_domain(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::Tetrahedral,
+        StereoCoset::lit_set([0, 1]),
+        true,
+    )]
+    #[case::finite_singleton(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::CisTrans,
+        StereoCoset::lit_set([1]),
+        true,
+    )]
+    #[case::empty_domain(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::Tetrahedral,
+        StereoCoset::lit_set([]),
+        false,
+    )]
+    #[case::invalid_domain(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::Tetrahedral,
+        StereoCoset::lit_set([0, 2]),
+        false,
+    )]
+    #[case::nonbinary_literal(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::SquarePlanar,
+        StereoCoset::Lit(0),
+        true,
+    )]
+    #[case::nonbinary_undetermined(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::SquarePlanar,
         StereoCoset::Undetermined,
         false,
     )]

@@ -16,6 +16,7 @@ use umol_graph_ir::ir::{
     GraphSymmetryConfig, Molecule, StereoAtomId, StereoBondId, StereoConfigurationForm,
     StereoCoset, StereoKind, StereoLigandKind, StereoTerm, Stereogenicity, TetrahedralStereoForm,
 };
+use umol_graph_ir::mol_dsl_concrete;
 
 type StereoRecord = (
     Entity,
@@ -116,10 +117,11 @@ fn test_molecule_edit_stereo_fixture(
 #[case::stereogenic(tetrahedral(), Stereogenicity::Stereogenic)]
 #[case::prochiral(prochiral(), Stereogenicity::Prochiral)]
 #[case::symmetric(symmetric(), Stereogenicity::Symmetric)]
-fn test_stereo_symmetry_stereogenicity_literal(
+fn test_stereo_symmetry_stereogenicity_atom(
     #[case] mut molecule: Molecule,
     #[case] expected: Stereogenicity,
-    #[values(0u32, 1)] coset: u32,
+    #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
+    coset: StereoCoset,
 ) {
     molecule
         .stereo_atom_mut(StereoAtomId(0))
@@ -136,6 +138,40 @@ fn test_stereo_symmetry_stereogenicity_literal(
             .stereo_atom_symmetry(&graph, StereoAtomId(0))
             .stereogenicity(),
         expected,
+    );
+}
+
+#[rstest]
+#[case::stereogenic(cis_trans(), Stereogenicity::Stereogenic)]
+#[case::symmetric(
+    mol_dsl_concrete!(r#"{
+        :atoms ["C" "C" "F" "F" "Br" "I"]
+        :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct*"}]
+    }"#),
+    Stereogenicity::Symmetric,
+)]
+fn test_stereo_symmetry_stereogenicity_bond(
+    #[case] mut molecule: Molecule,
+    #[case] expected: Stereogenicity,
+    #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
+    coset: StereoCoset,
+) {
+    molecule
+        .stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
+    let graph = molecule.graph_symmetry(&GraphSymmetryConfig {
+        coloring: ConstitutionColoring::full(),
+        iterate_to_fixpoint: true,
+        max_iterations: 16,
+        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    });
+    assert_eq!(
+        molecule
+            .stereo_bond_symmetry(&graph, StereoBondId(0))
+            .stereogenicity(),
+        expected
     );
 }
 

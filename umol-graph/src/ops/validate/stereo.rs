@@ -297,8 +297,8 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AtomId, BondId, LigandPermutation, OrientedLigandPermutation, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereoConfigurationForm, StereoLigandPosition,
-        StereogenicityForm,
+        StereoBondConstraintForm, StereoConfigurationForm, StereoCoset, StereoKind,
+        StereoLigandPosition, StereogenicityForm,
     };
     use umol_graph_ir::mol_dsl_concrete;
     use umol_perm::{Orientation, Permutation};
@@ -374,6 +374,16 @@ mod tests {
                 .set(StereoAtomConstraintForm::Stereogenicity(
                     StereogenicityForm::Lit(Stereogenicity::Stereogenic),
                 ));
+        }) as fn(&mut Molecule)
+    )]
+    #[case::non_stereogenic_cis_trans(
+        r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_bond_mut(StereoBondId(0)).attributes_mut().constraints.set(
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric)),
+            );
         }) as fn(&mut Molecule)
     )]
     fn test_stereo_conformance_validator_validate(
@@ -515,6 +525,28 @@ mod tests {
         (|molecule: &mut Molecule| {
             molecule.stereo_bond_mut(StereoBondId(0)).attributes_mut().configuration =
                 StereoConfigurationForm::Undetermined;
+        }) as fn(&mut Molecule)
+    )]
+    #[case::atom_undetermined_coset(
+        CFCLBRI,
+        (|molecule: &mut Molecule| {
+            let mut atom = molecule.stereo_atom_mut(StereoAtomId(0));
+            atom.attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined);
+            atom.attributes_mut().constraints.set(StereoAtomConstraintForm::Stereogenicity(
+                StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+            ));
+        }) as fn(&mut Molecule)
+    )]
+    #[case::bond_undetermined_coset(
+        BUTENE,
+        (|molecule: &mut Molecule| {
+            let mut bond = molecule.stereo_bond_mut(StereoBondId(0));
+            bond.attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined);
+            bond.attributes_mut().constraints.set(StereoBondConstraintForm::Stereogenicity(
+                StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+            ));
         }) as fn(&mut Molecule)
     )]
     #[case::atom_topicity(

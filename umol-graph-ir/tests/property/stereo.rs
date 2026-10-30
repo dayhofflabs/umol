@@ -2,7 +2,7 @@
 //!
 //! The semantic and serialization properties share one regression file through
 //! `super::REGRESSION_FILE`, so reorganizing them does not orphan minimized failures.
-//! The reference checks both binary kinds over every four-position permutation.
+//! The references exhaust binary coset actions and single-carrier ligand-equality domains.
 
 const REGRESSION_FILE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
