@@ -404,7 +404,7 @@ def test_deferred_member(owner, name):
         (umol.Molecule.combine_all, "(molecules)"),
         (umol.Molecule.react, "(self, /, reaction, *, config=None)"),
         (umol.Molecule.react_all, "(reactants, reaction, *, config=None)"),
-        (umol.Molecule.enumerate_stereo, "(self, /, model, site_order, *, config=None)"),
+        (umol.Molecule.enumerate_stereo, "(self, /, model, sites, *, config=None)"),
         (umol.Molecule.split, "(self, /)"),
         (umol.Molecule.tracked_split, "(self, /)"),
         (umol.Molecule.extract, "(self, /, selection)"),

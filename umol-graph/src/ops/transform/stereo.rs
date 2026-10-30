@@ -1,11 +1,40 @@
-//! Stereo transformations and their configuration.
+//! Stereo addition, removal, and absolute configuration enumeration.
 //!
-//! Generated finite Th/Ct cases check publication and preservation against
-//! independently constructed entries, and enumeration against exhaustive binary
-//! assignments. Relabeling transports ids and implicit #T/#C assertion frames;
-//! allowed ligand-frame actions transport stored configurations. Comparisons of
-//! full result collections preserve multiplicity, while the first choice remains
-//! dependent on the supplied processing order and ligand frames.
+//! StereoAdder creates missing selected tetrahedral/cis-trans entities; StereoRemover
+//! removes selected entities and their source assertions. StereoEnumerator determines
+//! existing selected absolute configurations in the supplied sequence of sites.
+//! All three use StereoPerception and intersect site, kind, and stereogenicity filters.
+//! A stored stereo entity may be symmetric or prochiral; its presence does not assert
+//! stereogenicity. Enumeration retains symmetry-equivalent assignments.
+//!
+//! # Examples
+//!
+//! ```
+//! use umol_graph::ops::model::StereoModel;
+//! use umol_graph::ops::stereo::StereoSite;
+//! use umol_graph::ops::transform::{
+//!     AddStereoConfig, RemoveStereoConfig, StereoEnumerator, Transform,
+//! };
+//! use umol_graph_ir::ir::{AtomId, StereoAtomId, StereoKind};
+//! use umol_graph_ir::mol_dsl_concrete;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let source = mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+//!     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#);
+//! let model = StereoModel::default();
+//! let stereo = source.clone().add_stereo(&model, AddStereoConfig::default())?;
+//! let transformer = StereoEnumerator::new(&model, vec![StereoSite::Atom(AtomId(0))]);
+//! let configurations: Vec<_> = transformer.transform_iter(&stereo)
+//!     .map(|molecule| molecule.stereo_atom(StereoAtomId(0)).attributes().configuration.clone())
+//!     .collect();
+//! assert_eq!(configurations, vec![
+//!     (StereoKind::Tetrahedral, 0).into(),
+//!     (StereoKind::Tetrahedral, 1).into(),
+//! ]);
+//! assert_eq!(stereo.remove_stereo(&model, RemoveStereoConfig::default())?, source);
+//! # Ok(())
+//! # }
+//! ```
 
 mod enumeration;
 
@@ -74,6 +103,8 @@ pub enum AddStereoError {
 /// model and configuration. New cosets remain undetermined unless source
 /// evidence supplies them. Existing entities, their frames and configurations,
 /// source assertions, and molecular topology are preserved.
+/// Use the selection's stereogenicities to admit prochiral or symmetric sites;
+/// the default admits only stereogenic sites.
 ///
 /// All rejection occurs during planning. Undetermined fields outside the
 /// selected processing scope are retained. Recognition failures and incompatible
@@ -235,7 +266,9 @@ pub enum RemoveStereoError {
 /// Classification uses StereoPerception with the unchanged molecular context
 /// and is omitted when the class selector is unrestricted. Such removal accepts
 /// kindless, symbolic, and other-geometry records without interpreting them.
-/// Undetermined tests only an explicitly undetermined coset of a known kind.
+/// All accepts every configuration and is the default. Undetermined tests only
+/// an explicitly undetermined coset of a known kind, excluding finite sets and
+/// symbolic configurations. Only assertions at removed entity sites are cleared.
 ///
 /// Unrelated assertions, topology, and retained entity data are preserved;
 /// graph IR compacts entity ids and their references after removal. Invalid
@@ -508,15 +541,15 @@ pub enum EnumerateStereoError {
 pub struct StereoEnumerator {
     model: StereoModel,
     config: EnumerateStereoConfig,
-    site_order: Vec<StereoSite>,
+    sites: Vec<StereoSite>,
 }
 
 impl StereoEnumerator {
     /// Store a model snapshot and processing order with the default config.
     ///
     /// Contextual site and order checks occur during execution.
-    pub fn new(model: &StereoModel, site_order: Vec<StereoSite>) -> Self {
-        Self::with_config(model, EnumerateStereoConfig::default(), site_order)
+    pub fn new(model: &StereoModel, sites: Vec<StereoSite>) -> Self {
+        Self::with_config(model, EnumerateStereoConfig::default(), sites)
     }
 
     /// Store a model snapshot, owned configuration, and processing order.
@@ -525,12 +558,12 @@ impl StereoEnumerator {
     pub fn with_config(
         model: &StereoModel,
         config: EnumerateStereoConfig,
-        site_order: Vec<StereoSite>,
+        sites: Vec<StereoSite>,
     ) -> Self {
         Self {
             model: model.clone(),
             config,
-            site_order,
+            sites,
         }
     }
 
@@ -641,7 +674,7 @@ impl StereoEnumerator {
         let mut seen = BTreeSet::new();
         let mut duplicates = Vec::new();
         let mut ordered = Vec::new();
-        for &site in self.site_order.iter().filter(|site| sites.contains(site)) {
+        for &site in self.sites.iter().filter(|site| sites.contains(site)) {
             if seen.insert(site) {
                 ordered.push(site);
             } else if !duplicates.contains(&site) {

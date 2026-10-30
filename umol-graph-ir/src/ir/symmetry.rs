@@ -428,10 +428,11 @@ impl StereoSymmetry {
         &self.coset
     }
 
-    /// Whether the carrier's coset has a singleton orbit under local ligand symmetry.
+    /// Whether a literal coset has a singleton orbit under local ligand symmetry.
     ///
     /// For tetrahedral and cis/trans kinds, an undetermined coset or a nonempty
     /// finite coset set is classified from the action on both cosets.
+    /// This does not choose or modify the stored coset.
     /// Other nonliteral configurations, empty or invalid finite sets, invalid
     /// literal indices, and incompatible ligand actions return false.
     ///
@@ -473,8 +474,10 @@ impl StereoSymmetry {
         }
     }
 
-    /// The carrier's stereogenicity classification: a genuine stereocenter, a
-    /// prochiral center (some enantiotopic ligand pair), or symmetric.
+    /// Stereogenic, prochiral (an enantiotopic ligand pair), or symmetric.
+    ///
+    /// Graph-derived actions fix virtual ligands, so prochirality does not arise
+    /// from treating virtual hydrogens as distinguishable positions.
     pub fn stereogenicity(&self) -> Stereogenicity {
         if self.is_stereogenic() {
             Stereogenicity::Stereogenic

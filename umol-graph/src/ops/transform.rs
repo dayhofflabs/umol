@@ -182,6 +182,8 @@ pub trait Transform: Sized {
     /// Adds selected missing stereo entities using [`StereoAdder`].
     ///
     /// Existing arrangements and source assertions are preserved.
+    /// The default configuration admits only stereogenic tetrahedral/cis-trans
+    /// sites; selectors may also admit prochiral or symmetric arrangements.
     ///
     /// # Errors
     ///
@@ -205,6 +207,10 @@ pub trait Transform: Sized {
     ) -> Result<(), AddStereoError>;
 
     /// Removes selected stereo entities and their #T/#C assertions using [`StereoRemover`].
+    ///
+    /// The default removes all stored stereo. Undetermined mode removes only
+    /// explicitly undetermined cosets of known kinds. Site, kind, and
+    /// stereogenicity selectors intersect before removal.
     ///
     /// # Errors
     ///

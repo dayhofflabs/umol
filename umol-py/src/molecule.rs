@@ -852,20 +852,20 @@ impl Molecule {
     /// Preserves this molecule and its views. The native iterator owns one source snapshot;
     /// later source mutation does not affect it. Each result is independently mutable.
     /// Preparation rejection yields an empty iterator. Assignments are not deduplicated.
-    #[pyo3(signature = (model, site_order, *, config=None))]
+    #[pyo3(signature = (model, sites, *, config=None))]
     fn enumerate_stereo(
         &self,
         model: &StereoModel,
-        site_order: Vec<StereoSite>,
+        sites: Vec<StereoSite>,
         config: Option<&EnumerateStereoConfig>,
     ) -> EnumerateStereoIter {
         let model = model.to_rust();
-        let order = site_order.into_iter().map(StereoSite::to_rust).collect();
+        let sites = sites.into_iter().map(StereoSite::to_rust).collect();
         let transformer = match config {
             Some(config) => {
-                GraphStereoEnumerator::with_config(&model, config.to_rust().clone(), order)
+                GraphStereoEnumerator::with_config(&model, config.to_rust().clone(), sites)
             }
-            None => GraphStereoEnumerator::new(&model, order),
+            None => GraphStereoEnumerator::new(&model, sites),
         };
         EnumerateStereoIter::from_rust(transformer.transform_iter(self.to_rust()))
     }

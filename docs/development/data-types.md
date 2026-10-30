@@ -227,6 +227,19 @@ follows the operation's existing absence policy. Any boundary that supplies an e
 ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it during raise; it must not normalize, deduplicate, or choose an
 arbitrary coset for malformed input.
 
+An existing stereo atom or bond records an arrangement, without asserting stereogenicity.
+Symmetric and prochiral arrangements remain representable. Graph-derived ligand actions fix
+virtual ligands; distinguishable hydrogen positions require explicit atoms. Construction and
+ordinary conversion preserve supplied stereo information without implicitly running the stereo
+transformations below.
+
+StereoPerception supplies read-only evidence, recognition, and classification queries.
+StereoAdder explicitly adds missing selected tetrahedral/cis-trans entities; StereoRemover removes
+selected entities and their corresponding #T/#C assertions. Their configurations intersect site,
+kind, and stereogenicity selectors. StereoEnumerator determines existing selected absolute cosets
+in the supplied sequence of sites, retaining symmetry-equivalent assignments. These operations
+check their contextual requirements during execution, without expanding constructor invariants.
+
 Canonicalization is a transformation of a closed, representation-integrity-valid value. It does not
 repair or revalidate malformed representation state, and its error types contain no unreachable
 integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization,

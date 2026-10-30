@@ -310,6 +310,8 @@ impl StereoPerception {
     /// Uses the whole molecule's symmetry and the model's para-stereo setting.
     /// Automatic recognition rules and element scopes do not reject existing
     /// arrangements. Empty input returns an empty map without a symmetry query.
+    /// Graph-derived ligand actions fix virtual ligands; distinguishable hydrogen
+    /// positions require explicit atoms.
     ///
     /// # Errors
     ///

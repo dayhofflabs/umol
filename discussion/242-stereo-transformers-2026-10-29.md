@@ -21,8 +21,8 @@ S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
 S3's three transformer engines and absolute-assignment traversal, S4a's
 properties, S4b's receiver methods, S4c's Python values and existing perception
-queries, and S4d's Python operations are implemented. S5's documentation and
-performance closeout remain future work.
+queries, S4d's Python operations, and S5a's public contracts and examples are
+implemented. S5b's measurements and final verification remain future work.
 External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
@@ -363,11 +363,11 @@ constructors, following Aromatizer. StereoEnumerator additionally receives the
 site order, following Kekulizer's explicit-order construction:
 
     impl StereoEnumerator {
-        pub fn new(model: &StereoModel, site_order: Vec<StereoSite>) -> Self;
+        pub fn new(model: &StereoModel, sites: Vec<StereoSite>) -> Self;
         pub fn with_config(
             model: &StereoModel,
             config: EnumerateStereoConfig,
-            site_order: Vec<StereoSite>,
+            sites: Vec<StereoSite>,
         ) -> Self;
     }
 
@@ -387,7 +387,7 @@ Python follows the established named-Molecule-method ownership contract for
 addition and removal: the base method preserves its receiver and returns an
 independent result; the _into method mutates and returns None. Bind shared
 selectors and operation configurations faithfully. Python exposes enumeration as
-Molecule.enumerate_stereo(model, site_order, *, config=None), returning the native
+Molecule.enumerate_stereo(model, sites, *, config=None), returning the native
 owned iterator without exposing a transformer class. It preserves native lazy
 results, ordering, multiplicity, and exhaustion on rejection. next selects its
 first consistent result. The native single-result and in-place methods remain
@@ -1143,7 +1143,7 @@ synthetic domains. No optimization or para-stereo redesign is added here.
 - **S3d — StereoEnumerator and EnumerateStereoError** — additive (green).
   Modules: the stereo engine module, enumerator tests, ops/transform.rs
   re-exports, and the transform benchmark. [dep: S3c]
-  Add new(model, site_order) and with_config(model, config, site_order), storing
+  Add new(model, sites) and with_config(model, config, sites), storing
   configuration and order without contextual validation. Check that new agrees
   with with_config using EnumerateStereoConfig::default(). At execution, project
   the caller's order onto selected processing sites, following Kekulizer;
@@ -1167,7 +1167,7 @@ synthetic domains. No optimization or para-stereo redesign is added here.
 
   **Completed — 2026-10-30.** Added StereoEnumerator, EnumerateStereoIter,
   and EnumerateStereoError, exported from ops::transform and its stereo module.
-  new(model, site_order) delegates to with_config with the default config.
+  new(model, sites) delegates to with_config with the default config.
   Constructors capture a model snapshot and own the configuration and order;
   they perform no contextual lookup. Execution validates explicit selection ids
   before empty-filter handling, applies site/kind filters, and requests shared
@@ -1505,7 +1505,7 @@ the small differences between consuming/in-place or shared/unique paths.
   StereoPerception.recognize/classify. The named receiver methods use the same
   model/configuration convention as the existing transformers. Reusable models
   and configurations supply settings without separate Python transformer
-  classes. enumerate_stereo(model, site_order, *, config=None) constructs the
+  classes. enumerate_stereo(model, sites, *, config=None) constructs the
   native StereoEnumerator and returns its owned iterator. The operation retains
   Rust defaults and contextual checks, with rejection producing an empty
   iterator. Native single-result and in-place enumeration remain Rust-only;
@@ -1562,6 +1562,30 @@ unexplained Rust/Python differences in the implemented stereo operations.
   determined-representation description without turning constructors or ordinary
   conversion into transformations. Examples must use the implemented happy path.
   Source comments and rustdoc must not cite this discussion record.
+
+  **Completed — 2026-10-30.** Documented operation defaults, selector intersections,
+  All/Undetermined removal, source-assertion clearing, and absolute enumeration
+  without symmetry deduplication. The Rust and Python guides retain structural
+  equality for idempotence and source preservation; native API rustdoc states
+  the frame/relabeling laws and the first-result versus full-collection distinction.
+  Perception and symmetry documentation distinguish classification of an
+  undetermined coset from choosing a determined configuration, and retain the
+  fixed virtual-ligand contract. Construction and conversion remain separate
+  from these explicit transformations; transformation no longer requires fully
+  determined input in the nomenclature guide.
+
+  Rust and Python enumeration now name the supplied sequence sites, including
+  the Rust constructors, stored field, Python keyword, and interface descriptions.
+  The nomenclature guide records simple argument names for supplied values.
+  The positive keyword case and signature inventory use sites. Added runnable
+  Rust module and Python README examples for addition, enumeration, and removal;
+  Python continues to expose only Molecule methods and the opaque native iterator.
+
+  All 105 Rust enumeration cases and 196 focused Python binding/import cases
+  passed on Python 3.13.16. The new README example passed independently. All
+  active graph-IR/graph doctests passed (five passed, four ignored), including
+  the new stereo workflow. Strict rustdoc for graph-IR and graph, formatting,
+  and diff checks passed. Measurements and the final workspace gate remain S5b.
 
 - **S5b — Measurements and final verification** — additive (green).
   Modules: the established transform benchmark and this record's evidence and

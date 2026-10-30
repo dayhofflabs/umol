@@ -44,7 +44,7 @@ def test_molecule_enumerate_stereo(stereo_source, kwargs, order, values):
     constraints = atom.constraints
     iterator = iter(stereo_source.atoms)
     order = list(order)
-    run = stereo_source.enumerate_stereo(StereoModel.default(), order, **kwargs)
+    run = stereo_source.enumerate_stereo(StereoModel.default(), sites=order, **kwargs)
     order.clear()
     expected = [
         Molecule.parse(

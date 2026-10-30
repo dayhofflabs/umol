@@ -119,12 +119,20 @@ pub enum StereoInconsistency {
 }
 
 /// Stereo evidence, recognition, and classification under a selected chemistry model.
+///
+/// derive realizes #T/#C evidence and checks stored arrangements; recognize
+/// additionally identifies missing selected tetrahedral/cis-trans entities.
+/// classify evaluates existing arrangements without choosing their cosets.
+/// All queries preserve the molecule. Resolver policy and transformation remain
+/// separate from these read-only results. A stored arrangement may be symmetric
+/// or prochiral, independently of its configuration being determined.
 #[derive(Clone, Debug)]
 pub struct StereoPerception {
     model: StereoModel,
 }
 
 impl StereoPerception {
+    /// Capture a snapshot of the supplied stereo model.
     pub fn new(model: &StereoModel) -> Self {
         Self {
             model: model.clone(),

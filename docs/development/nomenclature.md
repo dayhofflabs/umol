@@ -34,11 +34,13 @@ not license new abbreviations by analogy.
 Orientation, read once. The contrasts below are the ones most often collapsed; each participant has
 its own glossary entry.
 
-**Operations.** Three disjoint kinds: *resolution* fills undetermined state using a chemistry model;
-*transformation* rewrites one resolved representation into another; *validation* checks integrity,
+**Operations.** Three kinds: *resolution* fills undetermined state using a chemistry model;
+*transformation* explicitly changes molecular representation or state; *validation* checks integrity,
 model-independent invariants, and model-dependent conformance without mutation. Kekulization,
-aromatization, and charge delocalization are transformations, not resolver behaviour, because they
-alter determined representation.
+aromatization, charge delocalization, stereo addition/removal, and stereo enumeration are
+transformations. A transformation may retain or introduce undetermined values, or choose
+determined values; its input need not be fully determined. Construction and ordinary conversion
+preserve the supplied representation rather than perform these changes implicitly.
 
 **Integrity and validation tiers.** *Integrity* is the graph-IR-owned construction contract and is
 enforced by an integrity check. *Invariants* are model-independent semantic properties and
@@ -201,14 +203,22 @@ state.
 ### Transformer naming
 
 Name transformers for the operation they perform: Kekulizer, Aromatizer, ChargeDelocalizer,
-HydrogenFolder, and HydrogenUnfolder. Apply this convention whether configured or parameterless.
+HydrogenFolder, HydrogenUnfolder, StereoAdder, StereoRemover, and StereoEnumerator.
+Apply this convention whether configured or parameterless.
 
 Configuration and error types use the verb stems from *Operation names*: KekulizeConfig,
 KekulizeError, FoldHydrogensError, and UnfoldHydrogensError.
 
 Transformers implement Transformer. Transform is the extension trait providing named
-operations on Molecule: aromatize, kekulize, delocalize_charge, fold_hydrogens, and
-unfold_hydrogens, each with its in-place _into counterpart.
+operations on Molecule: aromatize, kekulize, delocalize_charge, fold_hydrogens,
+unfold_hydrogens, add_stereo, and remove_stereo, each with its in-place _into counterpart.
+Rust stereo enumeration uses StereoEnumerator's Transformer methods. Python exposes
+Molecule.enumerate_stereo, returning its native iterator; transformer classes remain Rust-only.
+
+## Argument names
+
+Name arguments for the values supplied. Use sites for a sequence of sites; describe how
+their sequence controls processing in the operation's contract.
 
 ## Module names
 
@@ -1790,9 +1800,11 @@ apply, probe, commit and rollback; Molecule::transact, Molecule::tracked_transac
 
 ### Transformation
 
-A **transformation** explicitly rewrites one valid representation into another. Kekulization,
-aromatization, and charge delocalization are transformations because they alter determined
-representation rather than fill undetermined state.
+A **transformation** explicitly changes molecular representation or state while preserving
+representation integrity. Its input may contain undetermined values. Stereo addition creates
+missing selected entities; removal strips selected entities and their source assertions;
+enumeration chooses consistent absolute configurations on existing entities. Construction and
+ordinary conversion do not perform these operations implicitly.
 
 Transformer::transform consumes its molecule and returns the result; failure drops the input.
 Both transform and transform_into derive a complete plan before mutation. Planning reports every
@@ -1805,7 +1817,8 @@ Transform supplies the corresponding named methods on Molecule, constructing a t
 delegating to it. A sequence of calls publishes each result independently; a later rejection
 leaves earlier successful transformations applied. Python exposes these named Molecule methods:
 base methods preserve the receiver and return an independent result, while _into methods mutate
-the receiver and return None.
+the receiver and return None. Python's Molecule.enumerate_stereo returns the native iterator
+over independent results, preserving order and multiplicity without symmetry deduplication.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.

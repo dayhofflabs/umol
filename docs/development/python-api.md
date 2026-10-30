@@ -448,6 +448,29 @@ RemoveStereoMode.All and RemoveStereoMode.Undetermined preserve the Rust matchin
 Undetermined accepts only an explicitly undetermined coset of a known kind, including kinds
 that perception does not process. Its matches method accepts StereoConfigurationForm.
 
+All three configurations select all topology sites by default. Their other defaults are:
+
+| Configuration | Kinds | Stereogenicities | Removal mode |
+| --- | --- | --- | --- |
+| AddStereoConfig | Tetrahedral, CisTrans | Stereogenic | none |
+| RemoveStereoConfig | unrestricted | unrestricted | All |
+| EnumerateStereoConfig | Tetrahedral, CisTrans | unrestricted | none |
+
+All three default to AutomorphismAlgorithm.Nauty(); addition also uses RingConfig's
+Rust default.
+
+Addition creates missing selected entities and preserves existing arrangements and source
+assertions. Positive #T/#C evidence supplies the coset; otherwise the added coset remains
+undetermined. Symmetric and prochiral arrangements are permitted when selected explicitly.
+Removal clears the corresponding #T/#C assertion at each removed entity's site, preserving
+other assertions and topology. Undetermined mode excludes finite coset sets, symbolic
+configurations, and kindless forms. A stereogenicity filter requests classification;
+unrestricted removal can strip unsupported geometries without interpreting them.
+
+Addition is idempotent for the same model/configuration. Removal is idempotent without a
+stereogenicity filter; removing entities can change the classifications of remaining entities.
+These equalities use structural Molecule equality.
+
 The immutable configuration values replace Rust's mutable public fields with constructor
 arguments and read-only observations, so assigning through a returned selection cannot
 silently modify a disconnected copy. Construction extracts iterable members into owned sets;
@@ -502,11 +525,18 @@ result fields into exceptions.
 
 ### Stereo enumeration
 
-Molecule.enumerate_stereo(model, site_order, *, config=None) constructs the native
+Molecule.enumerate_stereo(model, sites, *, config=None) constructs the native
 StereoEnumerator and returns its transform_iter result through the opaque Python iterator
-wrapper. model is explicit; site_order is a sequence of typed StereoSite values. Omitting
+wrapper. model is explicit; sites is a sequence of typed StereoSite values. Omitting
 config, or passing None, selects EnumerateStereoConfig's Rust default. Every selected existing
 stereo site must occur exactly once in the order; unselected order entries are ignored.
+The sequence controls traversal; selection is supplied separately through the configuration.
+
+Enumeration processes existing arrangements and preserves topology, ligand frames, and source
+assertions. Fixed cosets are retained; undetermined cosets and finite absolute sets supply their
+admitted values. Constant expressions are normalized; variable expressions and selected
+unsupported geometries reject processing. Compatible symmetric/prochiral arrangements remain
+eligible. Empty selected work yields one unchanged result when its checks are consistent.
 
 The call borrows the molecule and preserves its aliases, views, and iterators. It stores
 EnumerateStereoIter directly and adds no molecule snapshot in the binding. The native iterator
