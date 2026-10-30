@@ -20,8 +20,9 @@ This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
 S3's three transformer engines and absolute-assignment traversal, S4a's
-properties, and S4b's receiver methods are implemented. S4c/S4d's Python bindings
-remain future work. External implementations under materials/codes may supply
+properties, S4b's receiver methods, and S4c's Python values and existing perception
+queries are implemented. S4d's Python operations remain future work.
+External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -1443,6 +1444,38 @@ the small differences between consuming/in-place or shared/unique paths.
   StereoDerivation and StereoInconsistency values needed by its public queries.
   Map StereoPerceptionError through the existing exception vocabulary, retaining
   its site, kind, field, and shared inconsistency information.
+
+  **Completed — 2026-10-30.** Registered and exported StereoSite, StereoSelection,
+  RemoveStereoMode, AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig,
+  StereoPerception, StereoDerivation, and StereoInconsistency. Added the existing
+  Rust AtomFieldKind enum to preserve typed atom-field diagnostics. The explicit
+  Python export inventory includes all ten classes. Site, inconsistency, and
+  atom-field values retain Rust equality, ordering, and hashing.
+
+  Configuration constructors preserve Rust defaults and all shared selector
+  fields, including kinds and None/empty-set distinctions. They borrow supplied
+  selectors and copy their sets once into the retained configuration. Selection
+  matching and removal-mode matching delegate directly to Rust. Immutable
+  properties expose frozensets and the existing algorithm/ring wrappers.
+
+  Bound StereoPerception construction, derive, skipped_stereo_bonds, and the two
+  frame builders. Queries borrow the molecule; frame builders preserve optional
+  results and return independently mutable forms. StereoDerivation preserves its
+  four open fields, including independent construction, sequence order, and
+  duplicates. Its properties return tuples and read-only form copies. Existing
+  exceptions retain the Rust message and typed site, kind, atom/bond, field, or
+  inconsistency payloads. The Python API guide records constructor syntax,
+  immutability and copying, optional matching arguments, and the frame builders'
+  bounds-check adaptation. recognize/classify and the transformation operations
+  remain in S4d.
+
+  Twenty-six new Rust cases and 68 new Python cases cover conversions, defaults,
+  selector intersections, both removal modes, constructor errors, immutable
+  observations, perception results, diagnostic fields, comparisons, and exports.
+  On Python 3.13.16, the Rust binding suite passed 1,768 cases with two ignored;
+  the freshly rebuilt extension passed 3,078 Python cases with two skipped.
+  All-target/all-feature binding Clippy, strict binding rustdoc, Ruff, formatting,
+  and diff checks passed.
 
 - **S4d — Python operation bindings and iterator lifecycle** — additive (green).
   Modules: umol-py/src/molecule.rs, src/transform.rs, src/error.rs, registration

@@ -5,15 +5,17 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
+use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_chem::element::Element as ChemElement;
 use umol_graph_ir::ir::{
-    AsLit, AtomForm as GraphIrAtomForm, AtomId as GraphIrAtomId, AtomUpdate as GraphIrAtomUpdate,
-    AtomView as GraphIrAtomView, ElementForm as GraphIrElementForm,
-    IsotopeMass as GraphIrIsotopeMass, IsotopeMassForm as GraphIrIsotopeMassForm,
-    Molecule as GraphIrMolecule, NumForm as GraphIrNumForm,
+    AsLit, AtomFieldKind as GraphIrAtomFieldKind, AtomForm as GraphIrAtomForm,
+    AtomId as GraphIrAtomId, AtomUpdate as GraphIrAtomUpdate, AtomView as GraphIrAtomView,
+    ElementForm as GraphIrElementForm, IsotopeMass as GraphIrIsotopeMass,
+    IsotopeMassForm as GraphIrIsotopeMassForm, Molecule as GraphIrMolecule,
+    NumForm as GraphIrNumForm,
 };
 
 use crate::constraint::atom::{
@@ -28,6 +30,56 @@ use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::num::{MemOp, NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
+
+/// An inherent atom field, retaining the Rust discriminant names.
+#[pyclass(frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AtomFieldKind {
+    Element,
+    IsotopeMass,
+    Charge,
+    ImplicitHydrogens,
+    LonePairs,
+    UnpairedElectrons,
+}
+
+#[pymethods]
+impl AtomFieldKind {
+    fn __hash__(&self) -> u64 {
+        hash_rust(&self.to_rust())
+    }
+
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        op.matches(self.to_rust().cmp(&other.to_rust()))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AtomFieldKind.{:?}", self.to_rust())
+    }
+}
+
+impl AtomFieldKind {
+    pub(crate) fn to_rust(self) -> GraphIrAtomFieldKind {
+        match self {
+            Self::Element => GraphIrAtomFieldKind::Element,
+            Self::IsotopeMass => GraphIrAtomFieldKind::IsotopeMass,
+            Self::Charge => GraphIrAtomFieldKind::Charge,
+            Self::ImplicitHydrogens => GraphIrAtomFieldKind::ImplicitHydrogens,
+            Self::LonePairs => GraphIrAtomFieldKind::LonePairs,
+            Self::UnpairedElectrons => GraphIrAtomFieldKind::UnpairedElectrons,
+        }
+    }
+    pub(crate) fn from_rust(field: GraphIrAtomFieldKind) -> Self {
+        match field {
+            GraphIrAtomFieldKind::Element => Self::Element,
+            GraphIrAtomFieldKind::IsotopeMass => Self::IsotopeMass,
+            GraphIrAtomFieldKind::Charge => Self::Charge,
+            GraphIrAtomFieldKind::ImplicitHydrogens => Self::ImplicitHydrogens,
+            GraphIrAtomFieldKind::LonePairs => Self::LonePairs,
+            GraphIrAtomFieldKind::UnpairedElectrons => Self::UnpairedElectrons,
+        }
+    }
+}
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable with an optional membership restriction.

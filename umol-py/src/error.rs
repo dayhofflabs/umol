@@ -1,6 +1,7 @@
 //! Binding exceptions.
 
-use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyException, PyIndexError, PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
 use pyo3::{create_exception, PyErr};
 use umol_graph::export::{
     ConveyError as GraphConveyError, ReactionConveyError as GraphReactionConveyError,
@@ -14,6 +15,7 @@ use umol_graph::ingest::{
     ReactionSmilesInputError as GraphReactionSmilesInputError,
     SmilesInputError as GraphSmilesInputError,
 };
+use umol_graph::ops::stereo::StereoPerceptionError as GraphStereoPerceptionError;
 use umol_graph::ops::transform::{
     AromatizeError as GraphAromatizeError, FoldHydrogensError as GraphFoldHydrogensError,
     KekulizeError as GraphKekulizeError, UnfoldHydrogensError as GraphUnfoldHydrogensError,
@@ -25,6 +27,9 @@ use umol_graph_ir::ir::{
     ReactionIntegrityError as GraphIrReactionIntegrityError,
     TransactionError as GraphIrTransactionError,
 };
+
+use crate::atom::AtomFieldKind;
+use crate::stereo::{StereoInconsistency, StereoKind, StereoSite};
 
 create_exception!(
     umol,
@@ -308,9 +313,61 @@ pub(crate) fn unfold_hydrogens_error(error: GraphUnfoldHydrogensError) -> PyErr 
     }
 }
 
+/// Preserve stereo query diagnostics in the existing exception categories.
+pub(crate) fn stereo_perception_error(py: Python<'_>, error: GraphStereoPerceptionError) -> PyErr {
+    let message = error.to_string();
+    let exception = match &error {
+        GraphStereoPerceptionError::InvalidSite { .. } => PyIndexError::new_err(message),
+        GraphStereoPerceptionError::MissingStereoEntity { .. } => {
+            InvalidStructureError::new_err(message)
+        }
+        GraphStereoPerceptionError::UnsupportedKind { .. }
+        | GraphStereoPerceptionError::UnsupportedConfiguration { .. }
+        | GraphStereoPerceptionError::UnsupportedFluxionality { .. } => {
+            ModelConversionError::new_err(message)
+        }
+        GraphStereoPerceptionError::UnderdeterminedAtomField { .. }
+        | GraphStereoPerceptionError::UnderdeterminedBondOrder { .. } => {
+            UnderdeterminedError::new_err(message)
+        }
+        GraphStereoPerceptionError::Inconsistency(_) => ContradictionError::new_err(message),
+    };
+    let attach = || -> PyResult<()> {
+        let value = exception.value(py);
+        match error {
+            GraphStereoPerceptionError::InvalidSite { site }
+            | GraphStereoPerceptionError::MissingStereoEntity { site }
+            | GraphStereoPerceptionError::UnsupportedConfiguration { site } => {
+                value.setattr("site", StereoSite::from_rust(site))?;
+            }
+            GraphStereoPerceptionError::UnsupportedKind { kind }
+            | GraphStereoPerceptionError::UnsupportedFluxionality { kind } => {
+                value.setattr("kind", StereoKind::from_rust(kind))?;
+            }
+            GraphStereoPerceptionError::UnderdeterminedAtomField { atom, field } => {
+                value.setattr("atom", atom.0)?;
+                value.setattr("field", AtomFieldKind::from_rust(field))?;
+            }
+            GraphStereoPerceptionError::UnderdeterminedBondOrder { bond } => {
+                value.setattr("bond", bond.0)?;
+            }
+            GraphStereoPerceptionError::Inconsistency(inconsistency) => {
+                value.setattr(
+                    "inconsistency",
+                    StereoInconsistency::from_rust(inconsistency),
+                )?;
+            }
+        }
+        Ok(())
+    };
+    match attach() {
+        Ok(()) => exception,
+        Err(error) => error,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use pyo3::prelude::*;
     use rstest::rstest;
     use umol_graph::ingest::ingest_smiles;
     use umol_graph::ops::aromaticity::{
@@ -322,10 +379,14 @@ mod tests {
         ResolveContradiction as GraphResolveContradiction, ResolveError as GraphResolveError,
         ResolveUnderdetermined as GraphResolveUnderdetermined,
     };
+    use umol_graph::ops::stereo::{
+        StereoInconsistency as GraphStereoInconsistency, StereoSite as GraphStereoSite,
+    };
     use umol_graph_ir::dsl::MetadataError as GraphIrMetadataError;
     use umol_graph_ir::ir::{
-        AromaticSystemId, AtomConstraintForm, AtomId, BondId, Entity, EntityKind, NumForm,
-        StereoAtomId, StereoBondId,
+        AromaticSystemId, AtomConstraintForm, AtomFieldKind as GraphIrAtomFieldKind, AtomId,
+        BondId, Entity, EntityKind, NumForm, StereoAtomId, StereoBondId,
+        StereoKind as GraphIrStereoKind,
     };
     use umol_io::smiles::ParseError as SmilesParseError;
     use umol_io::table_ir::raise::RaiseError;
@@ -847,6 +908,90 @@ mod tests {
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 expected_message
             );
+        });
+    }
+
+    #[rstest]
+    #[case::invalid_atom(GraphStereoPerceptionError::InvalidSite { site: GraphStereoSite::Atom(AtomId(2)) }, "IndexError")]
+    #[case::invalid_bond(GraphStereoPerceptionError::InvalidSite { site: GraphStereoSite::Bond(BondId(3)) }, "IndexError")]
+    #[case::missing(GraphStereoPerceptionError::MissingStereoEntity { site: GraphStereoSite::Atom(AtomId(1)) }, "InvalidStructureError")]
+    #[case::kind(GraphStereoPerceptionError::UnsupportedKind { kind: GraphIrStereoKind::SquarePlanar }, "ModelConversionError")]
+    #[case::configuration(GraphStereoPerceptionError::UnsupportedConfiguration { site: GraphStereoSite::Bond(BondId(1)) }, "ModelConversionError")]
+    #[case::fluxionality(GraphStereoPerceptionError::UnsupportedFluxionality { kind: GraphIrStereoKind::Tetrahedral }, "ModelConversionError")]
+    #[case::field(GraphStereoPerceptionError::UnderdeterminedAtomField { atom: AtomId(2), field: GraphIrAtomFieldKind::Charge }, "UnderdeterminedError")]
+    #[case::order(GraphStereoPerceptionError::UnderdeterminedBondOrder { bond: BondId(2) }, "UnderdeterminedError")]
+    #[case::inconsistency(GraphStereoPerceptionError::Inconsistency(GraphStereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(1), stereo_atom: StereoAtomId(0) }), "ContradictionError")]
+    fn test_stereo_perception_error(
+        #[case] input: GraphStereoPerceptionError,
+        #[case] exception: &str,
+    ) {
+        Python::attach(|py| {
+            let error = stereo_perception_error(py, input.clone());
+            assert_eq!(error.get_type(py).name().unwrap(), exception);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                input.to_string()
+            );
+            let value = error.value(py);
+            match input {
+                GraphStereoPerceptionError::InvalidSite { site }
+                | GraphStereoPerceptionError::MissingStereoEntity { site }
+                | GraphStereoPerceptionError::UnsupportedConfiguration { site } => {
+                    assert_eq!(
+                        value
+                            .getattr("site")
+                            .unwrap()
+                            .extract::<StereoSite>()
+                            .unwrap()
+                            .to_rust(),
+                        site
+                    );
+                }
+                GraphStereoPerceptionError::UnsupportedKind { kind }
+                | GraphStereoPerceptionError::UnsupportedFluxionality { kind } => {
+                    assert_eq!(
+                        value
+                            .getattr("kind")
+                            .unwrap()
+                            .extract::<StereoKind>()
+                            .unwrap()
+                            .to_rust(),
+                        kind
+                    );
+                }
+                GraphStereoPerceptionError::UnderdeterminedAtomField { atom, field } => {
+                    assert_eq!(
+                        value.getattr("atom").unwrap().extract::<u32>().unwrap(),
+                        atom.0
+                    );
+                    assert_eq!(
+                        value
+                            .getattr("field")
+                            .unwrap()
+                            .extract::<AtomFieldKind>()
+                            .unwrap()
+                            .to_rust(),
+                        field
+                    );
+                }
+                GraphStereoPerceptionError::UnderdeterminedBondOrder { bond } => {
+                    assert_eq!(
+                        value.getattr("bond").unwrap().extract::<u32>().unwrap(),
+                        bond.0
+                    );
+                }
+                GraphStereoPerceptionError::Inconsistency(inconsistency) => {
+                    assert_eq!(
+                        value
+                            .getattr("inconsistency")
+                            .unwrap()
+                            .extract::<StereoInconsistency>()
+                            .unwrap()
+                            .to_rust(),
+                        inconsistency
+                    );
+                }
+            }
         });
     }
 }

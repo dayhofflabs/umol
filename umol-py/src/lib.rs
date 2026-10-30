@@ -16,7 +16,10 @@ use crate::{
         SubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
     aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystemView, AromaticSystemViews},
-    atom::{AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
+    atom::{
+        AtomFieldKind, AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass,
+        IsotopeMassForm,
+    },
     bond::{BondForm, BondUpdate, BondView, BondViews},
     boolean::BooleanForm,
     canonicalize::CanonicalizeConfig,
@@ -127,13 +130,17 @@ use crate::{
         CisTransConfiguration, CisTransStereo, CisTransStereoForm, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomForm, StereoAtomUpdate, StereoAtomView,
         StereoAtomViews, StereoBondForm, StereoBondUpdate, StereoBondView, StereoBondViews,
-        StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand,
-        StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity, TetrahedralConfiguration,
-        TetrahedralStereo, TetrahedralStereoForm, Topicity,
+        StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoDerivation,
+        StereoInconsistency, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
+        StereoPerception, StereoSelection, StereoSite, StereoTerm, Stereogenicity,
+        TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, RollbackMethod},
-    transform::KekulizeConfig,
+    transform::{
+        AddStereoConfig, EnumerateStereoConfig, KekulizeConfig, RemoveStereoConfig,
+        RemoveStereoMode,
+    },
 };
 
 #[cfg(feature = "graph")]
@@ -288,6 +295,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RingLimits>()?;
         module.add_class::<AromaticityConfig>()?;
         module.add_class::<KekulizeConfig>()?;
+        module.add_class::<AddStereoConfig>()?;
+        module.add_class::<RemoveStereoConfig>()?;
+        module.add_class::<RemoveStereoMode>()?;
+        module.add_class::<EnumerateStereoConfig>()?;
         module.add_class::<AromaticityModel>()?;
         module.add_class::<AromaticityRule>()?;
         module.add_class::<AromaticityTieBreak>()?;
@@ -295,6 +306,11 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoFailurePolicy>()?;
         module.add_class::<StereoKindModel>()?;
         module.add_class::<StereoModel>()?;
+        module.add_class::<StereoSite>()?;
+        module.add_class::<StereoSelection>()?;
+        module.add_class::<StereoInconsistency>()?;
+        module.add_class::<StereoDerivation>()?;
+        module.add_class::<StereoPerception>()?;
         module.add_class::<ConnectivityModel>()?;
         module.add_class::<ChemistryModel>()?;
         module.add_class::<AtomSelectionAlgorithm>()?;
@@ -389,6 +405,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<SpinState>()?;
         module.add_class::<UnpairedElectronsForm>()?;
         module.add_class::<UnpairedElectronsUpdate>()?;
+        module.add_class::<AtomFieldKind>()?;
         module.add_class::<AtomForm>()?;
         module.add_class::<AtomUpdate>()?;
         module.add_class::<AtomView>()?;

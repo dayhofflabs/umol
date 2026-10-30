@@ -415,6 +415,65 @@ Both methods in a pair use the same exceptions and retain the complete Rust diag
 Charge delocalization has no operation error. Ordinary Python argument-extraction errors retain
 their existing behavior.
 
+### Stereo values and perception
+
+StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
+IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
+the executing operation performs contextual checks. StereoSite, StereoInconsistency,
+and AtomFieldKind retain Rust equality, ordering, and hashing. Named inconsistency fields
+retain their Rust names; StereoSite's tuple payload is available as _0.
+
+StereoSelection accepts keyword-only sites, kinds, and stereogenicities. Each accepts
+None or an iterable of the corresponding typed values. None is unrestricted and an
+empty iterable selects nothing; the filters intersect. Properties return None or
+frozensets. matches(site, kind=None, stereogenicity=None) delegates to Rust, with omitted
+optional arguments supplying its absent values. This permits callers to test the
+information they have without calculating missing values in the binding.
+
+AddStereoConfig, RemoveStereoConfig, and EnumerateStereoConfig expose the corresponding
+Rust fields through immutable properties. Keyword-only construction supplies Rust defaults
+for omitted configuration fields. selection=None selects the operation's default selection;
+an explicit StereoSelection() supplies unrestricted filters. AddStereoConfig also exposes
+ring_config, and RemoveStereoConfig exposes mode. All three expose automorphism_algorithm.
+RemoveStereoMode.All and RemoveStereoMode.Undetermined preserve the Rust matching predicate:
+Undetermined accepts only an explicitly undetermined coset of a known kind, including kinds
+that perception does not process. Its matches method accepts StereoConfigurationForm.
+
+The immutable configuration values replace Rust's mutable public fields with constructor
+arguments and read-only observations, so assigning through a returned selection cannot
+silently modify a disconnected copy. Construction extracts iterable members into owned sets;
+passing a selection to a configuration and reading it back copy its owned sets.
+The supplied values remain reusable, including the immutable getter results.
+
+StereoPerception(model) captures the model as Rust's constructor does. derive,
+skipped_stereo_bonds, derive_stereo_atom, and derive_stereo_bond delegate to Rust while
+borrowing the source molecule. They preserve the source and its existing views.
+The frame builders require the coset explicitly and return None under the same exclusion
+or incompatibility conditions as Rust. Their successful results contain a ligand tuple
+and an ordinary, independently mutable entity form. Their ID bounds checks translate
+Rust's asserted indexing prerequisite into IndexError before calling the query.
+
+StereoDerivation preserves the four public Rust fields and supports their independent
+construction, with empty sequences by default. It does not validate the supplied rows
+against a molecule. Its immutable properties expose tuples, retaining sequence order and
+duplicates. Each stereo row remains a (site ID, ligand tuple, entity form) triple.
+Construction copies supplied forms to isolate them from later caller mutation. A Rust query's
+derivation moves into the wrapper; reading a row collection copies its forms into the existing
+read-only owned form wrappers, so nested observations reject mutation. The returned form's
+copy() supplies an explicitly mutable value.
+
+StereoPerceptionError uses the existing exception classes and retains its Rust message:
+
+| Rust failure | Python exception | Additional attributes |
+| --- | --- | --- |
+| InvalidSite | IndexError | site: StereoSite |
+| MissingStereoEntity | InvalidStructureError | site: StereoSite |
+| UnsupportedKind, UnsupportedFluxionality | ModelConversionError | kind: StereoKind |
+| UnsupportedConfiguration | ModelConversionError | site: StereoSite |
+| UnderdeterminedAtomField | UnderdeterminedError | atom: int, field: AtomFieldKind |
+| UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
+| Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
+
 ### Operation-issued iterator
 
 An operation-issued iterator captures one configured execution and cannot be constructed
