@@ -23,10 +23,12 @@ bench = false
 
 [[test]]
 name = "resolution"
+path = "tests/resolution/suite.rs"
 required-features = ["conformance"]
 
 [[test]]
 name = "property"
+path = "tests/property/suite.rs"
 required-features = ["proptest"]
 
 [[test]]

@@ -3,13 +3,13 @@
 #[path = "../../src/ops/transform/tests/stereo/fixtures.rs"]
 mod fixtures;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ops::model::StereoModel;
-use umol_graph::ops::stereo::StereoPerception;
+use umol_graph::ops::stereo::{StereoDerivation, StereoPerception, StereoSelection, StereoSite};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
@@ -257,6 +257,94 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
     eprintln!("stereo_config\talgorithm=Nauty\tcoloring=full\tpara_stereo={}\tmax_iterations=16\tminimum_ring_size={}",
         model.para_stereo, model.stereo_bond_minimum_ring_size);
     eprintln!("stereo_columns\tcase\tatoms\tbonds\tstereo_atoms\tstereo_bonds\tring_size\tproper_atom_orbits_size_count\tconfigurations\tperceived_atoms\tperceived_bonds\tskipped_bonds\tinconsistencies\tclassifications");
+    let mut recognition_cases = Vec::new();
+    for (name, molecule, ring_size, _) in &cases {
+        if matches!(
+            name.as_str(),
+            "fixture_square_planar" | "fixture_partial_stereo" | "fixture_hydrogen_and_lone_pair"
+        ) {
+            continue;
+        }
+        let source = Molecule::from_entries(MoleculeEntries {
+            atoms: molecule
+                .atoms()
+                .iter()
+                .map(|atom| {
+                    let mut form = atom.attributes().clone();
+                    form.constraints = Default::default();
+                    form
+                })
+                .collect(),
+            bonds: molecule
+                .bonds()
+                .iter()
+                .map(|bond| {
+                    let [a, b] = bond.atom_ids();
+                    let mut form = bond.attributes().clone();
+                    form.constraints = Default::default();
+                    (a, b, form)
+                })
+                .collect(),
+            ..Default::default()
+        });
+        let sites: BTreeSet<_> = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| StereoSite::Atom(stereo.site_id()))
+            .chain(
+                molecule
+                    .stereo_bonds()
+                    .iter()
+                    .map(|stereo| StereoSite::Bond(stereo.site_id())),
+            )
+            .collect();
+        let selection = StereoSelection {
+            sites: name.starts_with("sites_").then_some(sites),
+            ..Default::default()
+        };
+        let expected = StereoDerivation {
+            stereo_atoms: molecule
+                .stereo_atoms()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+                    )
+                })
+                .collect(),
+            stereo_bonds: if ring_size
+                .is_some_and(|size| size < model.stereo_bond_minimum_ring_size as usize)
+            {
+                vec![]
+            } else {
+                molecule
+                    .stereo_bonds()
+                    .iter()
+                    .map(|stereo| {
+                        (
+                            stereo.site_id(),
+                            stereo.ligand_ids().to_vec(),
+                            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
+                        )
+                    })
+                    .collect()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            perception.recognize(
+                &source,
+                &selection,
+                AutomorphismAlgorithm::Nauty,
+                RingConfig::default()
+            ),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        recognition_cases.push((name.clone(), source, selection, expected));
+    }
     let mut group = c.benchmark_group("stereo_baseline");
     for (name, molecule, ring_size, expected_classifications) in cases {
         let original = molecule.clone();
@@ -359,6 +447,142 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 for symmetry in black_box(&symmetries) {
                     black_box(symmetry.stereogenicity());
                 }
+            });
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("stereo_recognition");
+    for (name, source, selection, expected) in recognition_cases {
+        let original = source.clone();
+        let sites: BTreeSet<_> = expected
+            .stereo_atoms
+            .iter()
+            .map(|(site, _, _)| StereoSite::Atom(*site))
+            .chain(
+                expected
+                    .stereo_bonds
+                    .iter()
+                    .map(|(site, _, _)| StereoSite::Bond(*site)),
+            )
+            .collect();
+        let mut editor = source.clone().edit();
+        for (site, ligands, form) in &expected.stereo_atoms {
+            editor.add_stereo_atom(*site, ligands, form.clone());
+        }
+        for (site, ligands, form) in &expected.stereo_bonds {
+            editor.add_stereo_bond(*site, ligands, form.clone());
+        }
+        let prospective = editor.finish().unwrap();
+        let graph = prospective.graph_symmetry(&config);
+        let classifications: BTreeMap<_, _> = prospective
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| {
+                (
+                    StereoSite::Atom(stereo.site_id()),
+                    prospective
+                        .stereo_atom_symmetry(&graph, stereo.id())
+                        .stereogenicity(),
+                )
+            })
+            .chain(prospective.stereo_bonds().iter().map(|stereo| {
+                (
+                    StereoSite::Bond(stereo.site_id()),
+                    prospective
+                        .stereo_bond_symmetry(&graph, stereo.id())
+                        .stereogenicity(),
+                )
+            }))
+            .collect();
+        assert_eq!(
+            perception.classify(&prospective, &sites, AutomorphismAlgorithm::Nauty),
+            Ok(classifications.clone())
+        );
+        let mut filtered_selection = selection.clone();
+        filtered_selection.stereogenicities = Some(BTreeSet::from([Stereogenicity::Stereogenic]));
+        let mut filtered = expected.clone();
+        filtered.stereo_atoms.retain(|(site, _, _)| {
+            classifications[&StereoSite::Atom(*site)] == Stereogenicity::Stereogenic
+        });
+        filtered.stereo_bonds.retain(|(site, _, _)| {
+            classifications[&StereoSite::Bond(*site)] == Stereogenicity::Stereogenic
+        });
+        assert_eq!(
+            perception.recognize(
+                &source,
+                &filtered_selection,
+                AutomorphismAlgorithm::Nauty,
+                RingConfig::default()
+            ),
+            Ok(filtered)
+        );
+        assert_eq!(source, original);
+        eprintln!("stereo_recognition_input\t{name}\tatoms={}\tbonds={}\tselected_sites={:?}\tcandidates={}\tclassifications={classifications:?}\tgraph_calls={}\tlocal_projections={}",
+            source.atoms().count(), source.bonds().count(), selection.sites.as_ref().map(BTreeSet::len), sites.len(), usize::from(!sites.is_empty()), sites.len());
+
+        group.bench_function(BenchmarkId::new("local_candidates", &name), |b| {
+            b.iter(|| {
+                black_box(
+                    perception
+                        .recognize(
+                            black_box(&source),
+                            black_box(&selection),
+                            AutomorphismAlgorithm::Nauty,
+                            RingConfig::default(),
+                        )
+                        .unwrap(),
+                )
+            });
+        });
+        group.bench_function(BenchmarkId::new("filtered_candidates", &name), |b| {
+            b.iter(|| {
+                black_box(
+                    perception
+                        .recognize(
+                            black_box(&source),
+                            black_box(&filtered_selection),
+                            AutomorphismAlgorithm::Nauty,
+                            RingConfig::default(),
+                        )
+                        .unwrap(),
+                )
+            });
+        });
+        group.bench_function(BenchmarkId::new("graph_symmetry", &name), |b| {
+            b.iter(|| black_box(black_box(&prospective).graph_symmetry(black_box(&config))));
+        });
+        group.bench_function(BenchmarkId::new("local_classification", &name), |b| {
+            b.iter(|| {
+                let molecule = black_box(&prospective);
+                let graph = black_box(&graph);
+                for stereo in molecule.stereo_atoms().iter() {
+                    black_box(
+                        molecule
+                            .stereo_atom_symmetry(graph, stereo.id())
+                            .stereogenicity(),
+                    );
+                }
+                for stereo in molecule.stereo_bonds().iter() {
+                    black_box(
+                        molecule
+                            .stereo_bond_symmetry(graph, stereo.id())
+                            .stereogenicity(),
+                    );
+                }
+            });
+        });
+        group.bench_function(BenchmarkId::new("classify", &name), |b| {
+            b.iter(|| {
+                black_box(
+                    perception
+                        .classify(
+                            black_box(&prospective),
+                            black_box(&sites),
+                            AutomorphismAlgorithm::Nauty,
+                        )
+                        .unwrap(),
+                )
             });
         });
     }

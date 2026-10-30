@@ -17,10 +17,10 @@ tasks: addition creates missing stereo entities; enumeration determines selected
 configuration values on existing entities.
 
 This record contains the agreed semantics, interfaces, and nomenclature.
-S0's fixtures/references/baselines and S1's binary classification and
-ligand-construction corrections are implemented; shared identification and the
-transformer engines remain future work. External implementations under
-materials/codes may supply algorithms, counterexamples, and comparison cases;
+S0's fixtures/references/baselines, S1's binary classification and
+ligand-construction corrections, and S2's selectors, configurations, and shared
+queries are implemented. The transformer engines remain future work. External
+implementations under materials/codes may supply algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
 Variables and variable-based relative configurations are deferred. Initial
@@ -55,6 +55,65 @@ resolver contract: extending discovery must not make ordinary stereo resolution
 start adding every unasserted candidate. Recovery policies and edit construction
 remain outside perception; graph symmetry and coset algebra retain their
 graph-IR and umol-perm owners.
+
+The shared read-only queries are public methods on StereoPerception:
+
+    pub fn recognize(
+        &self,
+        molecule: &Molecule,
+        selection: &StereoSelection,
+        automorphism_algorithm: AutomorphismAlgorithm,
+        ring_config: RingConfig,
+    ) -> Result<StereoDerivation, StereoPerceptionError>;
+
+    pub fn classify(
+        &self,
+        molecule: &Molecule,
+        sites: &BTreeSet<StereoSite>,
+        automorphism_algorithm: AutomorphismAlgorithm,
+    ) -> Result<BTreeMap<StereoSite, Stereogenicity>, StereoPerceptionError>;
+
+recognize returns only missing selected entities. Positive evidence supplies
+their cosets; otherwise the coset is Undetermined. Explicit negative evidence
+excludes a site. Automatic chemistry eligibility applies to unasserted sites;
+positive assertions use the existing structural frame rules. Existing entities
+are retained, and contradictory evidence at their sites is reported using
+StereoInconsistency. Recognition reads open evidence, so the absence of an
+overlay does not imply a negative assertion.
+
+When stereogenicities is restricted, recognition appends prospective entities
+to a temporary molecule sharing the input's storage, calls classify in that
+molecular context, and filters the additions. With an unrestricted class
+selector it does no symmetry calculation. Empty selectors select nothing;
+explicit topology ids are checked even when another selector is empty.
+
+classify requires an existing entity at every supplied topology site. It
+calculates one whole-molecule GraphSymmetry and a local projection per supplied
+site. It does not impose automatic recognition eligibility or the model's
+element scopes on stored arrangements; classification also works when their
+producer kinds are disabled. It supports Th/Ct with Undetermined, literal zero
+or one, or a nonempty finite subset of those values. Kindless configurations,
+symbolic cosets, invalid coset domains, and other geometries report unsupported
+input. Empty input returns an empty map. Both queries retain the current
+para-stereo behavior and leave the input unchanged.
+
+StereoPerception's existing new, derive, derive_stereo_atom, derive_stereo_bond,
+and skipped_stereo_bonds signatures remain unchanged. derive stays driven by
+source evidence for resolver and validator callers. The frame builders remain
+structural queries rather than automatic chemistry screens. No Molecule method,
+perception configuration type, or prepared-result type is added in S2e.
+
+StereoPerceptionError distinguishes InvalidSite { site }, MissingStereoEntity
+{ site }, UnsupportedKind { kind }, UnsupportedConfiguration { site },
+UnsupportedFluxionality { kind }, UnderdeterminedAtomField { atom, field }, and
+UnderdeterminedBondOrder { bond }; field is the existing AtomFieldKind.
+Inconsistency wraps the existing StereoInconsistency for incompatible stored
+frame arity. Evidence failures remain in StereoDerivation.inconsistencies.
+Recognition checks explicitly selected kinds, or enabled producer kinds when
+the kind selector is unrestricted; only Th/Ct producers are implemented.
+Fluxional processing is unsupported rather than silently ignored. Required
+literal fields are checked only within the selected processing scope, without
+requiring the whole molecule to be concrete.
 
 Correct StereoSymmetry::is_stereogenic and its dependent classification for a
 known Th/Ct kind with an undetermined coset. Both have two cosets: the carrier
@@ -245,6 +304,9 @@ silently supply a canonical order.
 | StereoSite | Typed atom/bond topology site; no molecule provenance |
 | StereoSelection | Shared open site/kind/stereogenicity selector |
 | StereoSelection::default, StereoSelection::matches | Unrestricted default and intersection predicate over supplied values; no molecule lookup |
+| StereoPerception::recognize | Public query for selected missing Th/Ct entities; preserves evidence and input; returns StereoDerivation |
+| StereoPerception::classify | Public query for existing selected Th/Ct arrangements in the whole molecular context; independent of automatic chemistry eligibility |
+| StereoPerceptionError | Shared query failures; reuses StereoSite, AtomFieldKind, StereoKind, and StereoInconsistency |
 | AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig | Shared selection and explicit algorithm choices; removal also has one mode |
 | AddStereoConfig::default | All sites; Th/Ct kinds; Stereogenic only; Nauty and RingConfig::default() |
 | RemoveStereoMode | All and Undetermined variants; Undetermined tests the coset |
@@ -766,17 +828,16 @@ different outcome. The sixteen-site median differs by less than one percent.
   atom/bond site restrictions, kind selection, all stereogenicity values,
   selector intersections, empty kinds, and unbound ids. All 2,890 graph unit
   tests and all-target/all-feature Clippy with warnings denied passed. Strict
-  rustdoc, formatting, and diff checks passed. S2e and the S2 gate remain outstanding.
+  rustdoc, formatting, and diff checks passed.
 
 - **S2e — Shared identification and classification** — additive (green).
   Modules: umol-graph/src/ops/stereo.rs, with focused resolver and validator
   callers and tests. [dep: S1a, S1b, S2a]
   Extend StereoPerception to identify unasserted candidates and classify selected
   existing/candidate entities using the shared symmetry machinery. Reuse
-  existing kind/coset/frame values and StereoInconsistency. Keep new helper
-  surfaces internal unless an additional public consumer is actually required;
-  an internal helper's visibility is an explicit choice, not an unfinished
-  public API. Compute context from the complete molecule, apply candidate
+  existing kind/coset/frame values and StereoInconsistency. Add public recognize
+  and classify queries with StereoPerceptionError as specified above; local
+  eligibility checks remain private. Compute context from the complete molecule, apply candidate
   restrictions without letting unrelated unsupported fields reject the chosen
   scope, and honor the model's element and ring rules. Preserve derive's
   evidence-driven resolver behavior and all source assertion/frame transport.
@@ -793,11 +854,99 @@ different outcome. The sixteen-site median differs by less than one percent.
   discovery, molecular symmetry, and per-site classification to the established
   benchmark target, including restricted-selection cases.
 
+  **Completed — 2026-10-30.** Added public recognize and classify methods and
+  StereoPerceptionError under ops::stereo. Automatic Th recognition covers
+  four-coordinate arrangements, one virtual hydrogen, P/As lone-pair sites,
+  S/Se valence/charge cases, and saturated pyramidal N in a three-membered ring
+  or at a bridged-ring endpoint, subject to its local conjugation screen.
+  The N screen checks adjacent pi bonds, main-group electron contributions,
+  neutral hypervalence, and the heavier P/S-group exclusions used by the
+  inspected reference algorithm. Existing asserted arrangements use the
+  structural frame builders. Ct recognition checks unmarked double bonds,
+  endpoint frames including imine/oxime lone pairs, and the ring threshold.
+  Ring data is reused within a query, with a search bound at least the
+  configured minimum ring size minus one. Symmetric and prochiral candidates
+  remain available to selectors. Neither query changes resolver policy or
+  adds a Molecule method.
+
+  The 118 focused query cases cover recognition, literal/open/finite/symbolic
+  evidence, negatives, existing entities and competing kinds, frame failures,
+  selectors, ring thresholds including a 24-membered ring, model scope and
+  disabled producers, required partial input, classification independent of
+  automatic eligibility, and exact error payloads. Two generated properties
+  compare Th/Ct recognition and classification with independent label-equality
+  references over explicit H/F/Cl/Br/I ligands and binary coset domains.
+  The full 3,008 graph unit tests, 188 graph property tests, 45 graph-IR stereo
+  property tests, and 683 resolution conformance cases passed. All-target,
+  all-feature Clippy for graph/graph-IR, strict graph rustdoc, formatting, and
+  diff checks passed. The established benchmark target validates all phase
+  inputs outside timing; measurements are recorded below.
+
+  Property and resolution test roots now live at tests/property/suite.rs and
+  tests/resolution/suite.rs, with explicit Cargo target paths and ordinary
+  child module declarations. The conformance body moved unchanged to
+  resolution_suite.rs; test names, snapshots, and saved property cases retain
+  their existing locations. suite.rs avoids proptest treating a new main.rs as
+  a different saved-case root. Rust/Python query bindings and their result and
+  diagnostic values are included in S4c/S4d.
+
 S2 gate: all new public configuration fields, constructors, defaults, visibility,
 and failure boundaries are listed and reconciled with this record. Selector,
 config, perception, resolver, and validator tests pass. No new DSL representation
 is required; do not introduce a stored stereogenicity label as a shortcut.
 Record the discovery/classification measurements before proceeding to engines.
+**Passed — 2026-10-30.** Public query/configuration surfaces and their failure
+boundaries are listed above; existing resolver and validator callers continue
+using derive without signature or behavior changes.
+
+#### S2 recognition and classification measurements
+
+Host, compiler, optimization profile, Nauty, full constitution coloring,
+para_stereo=false, and minimum ring size eight match S0b. The new
+stereo_recognition group uses 25 named inputs from the S0 manifest with source
+assertions and stored entities removed; the retained square-planar, symbolic
+partial-state, and acyclic N hydrogen/lone-pair inputs are excluded from this
+automatic-recognition domain. The 80-atom series explicitly selects 1, 2, 4, 8,
+or 16 sites in the same 16-component topology. The ring series is unmarked.
+Independent expected frames and configurations are checked before timing.
+
+Each input has five phases: local candidates without a class filter; whole
+molecular symmetry after prospective additions; local projections and
+classification using that precomputed symmetry; the public classify query;
+and recognize filtered to Stereogenic, including prospective construction.
+The latter two query phases compute one molecular symmetry and one local
+projection per candidate, or neither when there are no candidates.
+
+    cargo bench --locked -p umol-graph --bench transform -- stereo_recognition --save-baseline stereo-s2e-final --sample-size 30 --warm-up-time 0.1 --measurement-time 0.3 --nresamples 10000 --noplot
+
+All 125 phases were measured. The initially noisy 132-atom and 80-atom/one-site
+and four-site controls were repeated with 50 samples, 300 ms warm-up, and one
+second measurement; the table uses that isolated repeat for those inputs.
+
+    cargo bench --locked -p umol-graph --bench transform -- 'stereo_recognition/.*/(sites_1|sites_4|atoms_132)$' --save-baseline stereo-s2e-controls --sample-size 50 --warm-up-time 0.3 --measurement-time 1 --nresamples 10000 --noplot
+
+Medians below are microseconds per iteration. Parsing, expected-result
+construction, and setup for the isolated symmetry/projection phases are
+outside timing.
+
+| Input | Local candidates | Graph symmetry | Local classification | classify | Filtered recognize |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Five-atom Th | 0.279 | 2.965 | 1.471 | 4.609 | 5.518 |
+| Explicit methane, Th | 0.281 | 7.002 | 15.289 | 22.687 | 23.580 |
+| Six-atom Ct | 0.891 | 3.232 | 1.460 | 4.981 | 6.370 |
+| 132 atoms, one candidate | 4.202 | 74.032 | 27.562 | 102.217 | 107.818 |
+| 80 atoms, one selected site | 0.498 | 168.360 | 75.854 | 247.772 | 248.750 |
+| 80 atoms, four selected sites | 1.123 | 173.341 | 281.282 | 461.845 | 458.735 |
+| 80 atoms, sixteen selected sites | 2.908 | 212.882 | 1425.375 | 1631.235 | 1659.985 |
+| Twelve-membered ring | 17.072 | 7.626 | 3.060 | 11.023 | 28.949 |
+
+Local recognition is small on the acyclic inputs. Molecular symmetry dominates
+the 132-atom/one-candidate case; local projections and classification dominate the
+80-atom/16-site case, at 6.7 times its whole-molecule symmetry cost. The
+twelve-membered ring's local-candidate phase includes ring perception and
+accounts for most of its filtered recognition time. These are separate phase
+measurements, not alternative algorithms; they establish costs in the stated
+synthetic domains. No optimization or para-stereo redesign is added here.
 
 ### S3 — Transformer engines
 
@@ -903,7 +1052,7 @@ handling, and producers/consumers before declaring any engine complete.
 - **S4c — Python configuration and selector values** — additive (green).
   Modules: umol-py/src/transform.rs, relevant stereo/algorithm wrappers,
   src/lib.rs registration, python/umol/__init__.py, and test_transform.py.
-  [dep: S2b, S2c, S2d]
+  [dep: S2b, S2c, S2d, S2e]
   Bind StereoSite, StereoSelection, RemoveStereoMode, and the three operation
   configurations. Bind StereoSelection.kinds as well as sites and
   stereogenicities, and bind StereoSelection::matches as a direct Rust delegate
@@ -912,7 +1061,10 @@ handling, and producers/consumers before declaring any engine complete.
   distinctions. Use
   from_rust/to_rust and the established immutable config conventions. Test exact values, selector
   intersections, both removal modes, imports, constructor failures, and attempted
-  mutation. Reuse existing enum wrappers.
+  mutation. Reuse existing enum wrappers. Bind StereoPerception and the
+  StereoDerivation and StereoInconsistency values needed by its public queries.
+  Map StereoPerceptionError through the existing exception vocabulary, retaining
+  its site, kind, field, and shared inconsistency information.
 
 - **S4d — Python operation bindings and iterator lifecycle** — additive (green).
   Modules: umol-py/src/molecule.rs, src/transform.rs, src/error.rs, registration
@@ -928,6 +1080,10 @@ handling, and producers/consumers before declaring any engine complete.
   vocabulary; retain Transformer iterator exhaustion on rejection. Check source
   and alias preservation, in-place failure, early stop, independent yielded
   molecules, and the selected iterator's interaction with later source mutation.
+  Bind StereoPerception.recognize and classify as read-only Rust delegates,
+  preserving explicit algorithm arguments, selectors, result fields, errors,
+  and source preservation; reconcile the existing perception methods in the
+  same public-surface inventory.
 
 S4 gate: the feature-gated stereo/transformer properties and focused Python
 binding tests pass. Rebuild the extension before Python tests. Record every

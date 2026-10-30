@@ -4,7 +4,5 @@
 //! Hydrogen properties use independent representations, conservation laws, and
 //! count/stereo rejection domains.
 
-#[path = "transform/aromaticity.rs"]
 mod aromaticity;
-#[path = "transform/hydrogens.rs"]
 mod hydrogens;

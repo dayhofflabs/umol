@@ -9,21 +9,16 @@ const REGRESSION_FILE: &str = concat!(
     "/tests/property.proptest-regressions"
 );
 
-#[path = "property/strategies.rs"]
 mod strategies;
 
-#[path = "property/isotope.rs"]
 mod isotope;
-#[path = "property/publication.rs"]
 mod publication;
-#[path = "property/resolve.rs"]
 mod resolve;
 
-#[path = "property/project.rs"]
 mod project;
 
-#[path = "property/transform.rs"]
 mod transform;
 
-#[path = "property/atom_typing.rs"]
 mod atom_typing;
+
+mod stereo;

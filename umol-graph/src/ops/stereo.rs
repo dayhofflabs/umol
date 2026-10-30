@@ -1,11 +1,14 @@
 //! Stereo sites, selection, and structural perception.
 //!
-//! [`StereoPerception`] derives tetrahedral atom and cis-trans bond relations
-//! from complete `#T` and `#C` evidence and checks existing relations.
+//! [`StereoPerception`] realizes `#T`/`#C` evidence, recognizes missing
+//! tetrahedral and cis/trans entities, and classifies existing arrangements.
 //! Resolver inconsistency policy and edit construction remain separate.
+
+mod recognize;
 
 use std::collections::BTreeSet;
 
+pub use recognize::StereoPerceptionError;
 use smallvec::SmallVec;
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -74,7 +77,7 @@ impl StereoSelection {
     }
 }
 
-/// Policy-free result of stereo perception and relation comparison.
+/// Derived stereo entities and evidence inconsistencies.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StereoDerivation {
     /// Realizable tetrahedral stereo atoms.
@@ -115,7 +118,7 @@ pub enum StereoInconsistency {
     },
 }
 
-/// Structural stereo perception under a selected chemistry model.
+/// Stereo evidence, recognition, and classification under a selected chemistry model.
 #[derive(Clone, Debug)]
 pub struct StereoPerception {
     model: StereoModel,
