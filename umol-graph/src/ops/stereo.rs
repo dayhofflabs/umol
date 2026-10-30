@@ -1,4 +1,4 @@
-//! Policy-free structural stereo perception.
+//! Stereo sites, selection, and structural perception.
 //!
 //! [`StereoPerception`] derives tetrahedral atom and cis-trans bond relations
 //! from complete `#T` and `#C` evidence and checks existing relations.
@@ -12,10 +12,67 @@ use umol_graph_ir::ir::{
     AsLit, AtomConstraintForm, AtomConstraintKey, AtomId, BondConstraintForm, BondConstraintKey,
     BondId, CisTransStereoForm, Molecule, RingConfig, RingModel, StereoAtomForm, StereoAtomId,
     StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    TetrahedralStereoForm,
+    Stereogenicity, TetrahedralStereoForm,
 };
 
 use crate::ops::model::StereoModel;
+
+/// An atom or bond topology site for stereo processing.
+///
+/// The id refers to an input molecule's atom or bond table, independently of
+/// whether a stereo entity exists there. It is not bound to a molecule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StereoSite {
+    Atom(AtomId),
+    Bond(BondId),
+}
+
+/// Site, kind, and stereogenicity filters for stereo processing.
+///
+/// Each None is unrestricted; an empty set selects nothing. The filters
+/// intersect. Default leaves all three unrestricted. Sets do not specify
+/// processing order.
+///
+/// This is an open configuration value. Construction does not check site ids
+/// against a molecule. The executing operation checks them before indexing or
+/// mutation and obtains the kind and stereogenicity from the molecular context.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StereoSelection {
+    pub sites: Option<BTreeSet<StereoSite>>,
+    pub kinds: Option<BTreeSet<StereoKind>>,
+    pub stereogenicities: Option<BTreeSet<Stereogenicity>>,
+}
+
+impl StereoSelection {
+    /// Whether the supplied site, kind, and stereogenicity satisfy every filter.
+    ///
+    /// A missing kind or stereogenicity matches only an unrestricted filter for
+    /// that field. This predicate does not look up ids or calculate stereo.
+    ///
+    /// # Semantic properties
+    ///
+    /// None accepts every value in its field, including a missing value. An
+    /// empty set rejects every value. A match requires all three field filters
+    /// to accept their supplied values, without changing the selection.
+    pub fn matches(
+        &self,
+        site: StereoSite,
+        kind: Option<StereoKind>,
+        stereogenicity: Option<Stereogenicity>,
+    ) -> bool {
+        self.sites
+            .as_ref()
+            .is_none_or(|sites| sites.contains(&site))
+            && self
+                .kinds
+                .as_ref()
+                .is_none_or(|kinds| kind.is_some_and(|kind| kinds.contains(&kind)))
+            && self
+                .stereogenicities
+                .as_ref()
+                .is_none_or(|classes| stereogenicity.is_some_and(|class| classes.contains(&class)))
+    }
+}
 
 /// Policy-free result of stereo perception and relation comparison.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -353,6 +410,200 @@ mod tests {
 
     use super::*;
     use crate::ops::model::{ElementScope, StereoKindModel};
+
+    #[rstest]
+    #[case::unrestricted(
+        StereoSelection::default(),
+        vec![StereoSite::Bond(BondId(0)), StereoSite::Atom(AtomId(2)),
+            StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(4)),
+            StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(3))],
+    )]
+    #[case::empty_sites(
+        StereoSelection { sites: Some(BTreeSet::new()), ..Default::default() },
+        vec![],
+    )]
+    #[case::empty_kinds(
+        StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() },
+        vec![],
+    )]
+    #[case::empty_stereogenicities(
+        StereoSelection { stereogenicities: Some(BTreeSet::new()), ..Default::default() },
+        vec![],
+    )]
+    #[case::atom(
+        StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+            ..Default::default() },
+        vec![StereoSite::Atom(AtomId(0))],
+    )]
+    #[case::bond(
+        StereoSelection { sites: Some(BTreeSet::from([StereoSite::Bond(BondId(0))])),
+            ..Default::default() },
+        vec![StereoSite::Bond(BondId(0))],
+    )]
+    #[case::sites(
+        StereoSelection { sites: Some(BTreeSet::from([
+            StereoSite::Atom(AtomId(1)), StereoSite::Bond(BondId(0)),
+        ])), ..Default::default() },
+        vec![StereoSite::Bond(BondId(0)), StereoSite::Atom(AtomId(1))],
+    )]
+    #[case::tetrahedral(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
+            ..Default::default() },
+        vec![StereoSite::Atom(AtomId(2)), StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1))],
+    )]
+    #[case::cis_trans(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
+            ..Default::default() },
+        vec![StereoSite::Bond(BondId(0))],
+    )]
+    #[case::square_planar(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::SquarePlanar])),
+            ..Default::default() },
+        vec![StereoSite::Atom(AtomId(3))],
+    )]
+    #[case::stereogenic(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+            ..Default::default() },
+        vec![StereoSite::Bond(BondId(0)), StereoSite::Atom(AtomId(0))],
+    )]
+    #[case::prochiral(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+            ..Default::default() },
+        vec![StereoSite::Atom(AtomId(4)), StereoSite::Atom(AtomId(1))],
+    )]
+    #[case::symmetric(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+            ..Default::default() },
+        vec![StereoSite::Atom(AtomId(2)), StereoSite::Atom(AtomId(3))],
+    )]
+    #[case::site_kind_intersection(
+        StereoSelection {
+            sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(1)), StereoSite::Bond(BondId(0))])),
+            kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
+            stereogenicities: None,
+        },
+        vec![StereoSite::Atom(AtomId(1))],
+    )]
+    #[case::intersection(
+        StereoSelection {
+            sites: Some(BTreeSet::from([
+                StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1)),
+                StereoSite::Atom(AtomId(3)), StereoSite::Bond(BondId(0)), StereoSite::Atom(AtomId(4)),
+            ])),
+            kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
+            stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+        },
+        vec![StereoSite::Atom(AtomId(1))],
+    )]
+    fn test_stereo_selection_matches(
+        #[case] selection: StereoSelection,
+        #[case] expected: Vec<StereoSite>,
+    ) {
+        let candidates = [
+            (
+                StereoSite::Bond(BondId(0)),
+                StereoKind::CisTrans,
+                Stereogenicity::Stereogenic,
+            ),
+            (
+                StereoSite::Atom(AtomId(2)),
+                StereoKind::Tetrahedral,
+                Stereogenicity::Symmetric,
+            ),
+            (
+                StereoSite::Atom(AtomId(0)),
+                StereoKind::Tetrahedral,
+                Stereogenicity::Stereogenic,
+            ),
+            (
+                StereoSite::Atom(AtomId(4)),
+                StereoKind::Axial,
+                Stereogenicity::Prochiral,
+            ),
+            (
+                StereoSite::Atom(AtomId(1)),
+                StereoKind::Tetrahedral,
+                Stereogenicity::Prochiral,
+            ),
+            (
+                StereoSite::Atom(AtomId(3)),
+                StereoKind::SquarePlanar,
+                Stereogenicity::Symmetric,
+            ),
+        ];
+        let selected: Vec<_> = candidates
+            .into_iter()
+            .filter(|&(site, kind, stereogenicity)| {
+                selection.matches(site, Some(kind), Some(stereogenicity))
+            })
+            .map(|(site, _, _)| site)
+            .collect();
+        assert_eq!(selected, expected);
+    }
+
+    #[rstest]
+    #[case::unknown_values(
+        StereoSelection::default(),
+        StereoSite::Atom(AtomId(0)),
+        None,
+        None,
+        true
+    )]
+    #[case::unknown_kind(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), ..Default::default() },
+        StereoSite::Atom(AtomId(0)), None, Some(Stereogenicity::Stereogenic), false,
+    )]
+    #[case::unknown_stereogenicity(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+            ..Default::default() },
+        StereoSite::Atom(AtomId(0)), Some(StereoKind::Tetrahedral), None, false,
+    )]
+    #[case::known_kind(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), ..Default::default() },
+        StereoSite::Atom(AtomId(0)), Some(StereoKind::Tetrahedral), None, true,
+    )]
+    #[case::known_stereogenicity(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+            ..Default::default() },
+        StereoSite::Atom(AtomId(0)), None, Some(Stereogenicity::Prochiral), true,
+    )]
+    #[case::empty_kinds(
+        StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() },
+        StereoSite::Atom(AtomId(0)), None, None, false,
+    )]
+    #[case::empty_stereogenicities(
+        StereoSelection { stereogenicities: Some(BTreeSet::new()), ..Default::default() },
+        StereoSite::Atom(AtomId(0)), None, None, false,
+    )]
+    #[case::unbound_atom(
+        StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(u32::MAX))])),
+            ..Default::default() },
+        StereoSite::Atom(AtomId(u32::MAX)), None, None, true,
+    )]
+    #[case::unbound_bond(
+        StereoSelection { sites: Some(BTreeSet::from([StereoSite::Bond(BondId(u32::MAX))])),
+            ..Default::default() },
+        StereoSite::Bond(BondId(u32::MAX)), None, None, true,
+    )]
+    #[case::excluded_atom(
+        StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(u32::MAX))])),
+            ..Default::default() },
+        StereoSite::Atom(AtomId(0)), None, None, false,
+    )]
+    #[case::excluded_bond(
+        StereoSelection { sites: Some(BTreeSet::from([StereoSite::Bond(BondId(u32::MAX))])),
+            ..Default::default() },
+        StereoSite::Bond(BondId(0)), None, None, false,
+    )]
+    fn test_stereo_selection_matches_values(
+        #[case] selection: StereoSelection,
+        #[case] site: StereoSite,
+        #[case] kind: Option<StereoKind>,
+        #[case] stereogenicity: Option<Stereogenicity>,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(selection.matches(site, kind, stereogenicity), expected);
+    }
 
     #[rstest]
     #[case::materializations(

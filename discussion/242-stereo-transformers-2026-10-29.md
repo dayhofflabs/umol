@@ -85,6 +85,15 @@ The shared selection vocabulary is:
         pub stereogenicities: Option<BTreeSet<Stereogenicity>>,
     }
 
+    impl StereoSelection {
+        pub fn matches(
+            &self,
+            site: StereoSite,
+            kind: Option<StereoKind>,
+            stereogenicity: Option<Stereogenicity>,
+        ) -> bool;
+    }
+
     pub struct AddStereoConfig {
         pub selection: StereoSelection,
         pub automorphism_algorithm: AutomorphismAlgorithm,
@@ -109,6 +118,11 @@ StereoSelection is an open configuration carrier. Its construction does not bind
 ids to a molecule; the executing operation checks supplied ids before indexing
 or mutation. Selection limits changes, while classification uses the molecular
 context, including stereo outside the selected sites.
+
+StereoSelection::default leaves all three selectors unrestricted. The matches
+predicate tests only the supplied values; it neither checks ids against a
+molecule nor calculates stereo. A missing kind or stereogenicity satisfies
+only an unrestricted selector for that field.
 
 Each operation uses one StereoSelection. Its configuration applies uniformly to
 the selected sites, kinds, and stereogenicity classes. RemoveStereoConfig also
@@ -224,6 +238,7 @@ silently supply a canonical order.
 | --- | --- |
 | StereoSite | Typed atom/bond topology site; no molecule provenance |
 | StereoSelection | Shared open site/kind/stereogenicity selector |
+| StereoSelection::default, StereoSelection::matches | Unrestricted default and intersection predicate over supplied values; no molecule lookup |
 | AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig | Shared selection and explicit algorithm choices; removal also has one mode |
 | RemoveStereoMode | All and Undetermined variants; Undetermined tests the coset |
 | StereoAdder, StereoRemover, StereoEnumerator | Configured Transformer engines sharing StereoPerception |
@@ -659,6 +674,20 @@ different outcome. The sixteen-site median differs by less than one percent.
   restrictions, including excluded kinds at otherwise eligible sites. Keep
   selection separate from the caller's processing order.
 
+  **Completed — 2026-10-30.** Added StereoSite's Atom/Bond variants,
+  StereoSelection's three public optional sets, its unrestricted Default, and
+  the matches predicate under ops::stereo. Construction and matching accept
+  unbound ids without indexing a molecule; executing operations check ids in
+  their input context. Missing kind or stereogenicity values satisfy only
+  unrestricted selectors for those fields.
+
+  The 26 selector cases cover unrestricted and empty sets for every field,
+  atom/bond identity, kind inclusion/exclusion, all three stereogenicity values,
+  intersections, missing values, and unbound ids. Exact expected selections
+  retain caller-supplied order. Validation passed: all 2,805 graph unit tests
+  and all-target/all-feature Clippy with warnings denied. Strict rustdoc,
+  formatting, and diff checks passed. S2b–S2e and the S2 gate remain outstanding.
+
 - **S2b — AddStereoConfig** — additive (green).
   Modules: umol-graph/src/ops/transform/stereo.rs and config tests. [dep: S2a]
   Implement AddStereoConfig with the shared StereoSelection and required
@@ -821,8 +850,9 @@ handling, and producers/consumers before declaring any engine complete.
   [dep: S2b, S2c, S2d]
   Bind StereoSite, StereoSelection, RemoveStereoMode, and the three operation
   configurations. Bind StereoSelection.kinds as well as sites and
-  stereogenicities. Preserve None/empty-set distinctions. Use from_rust/to_rust
-  and the established immutable config conventions. Test exact values, selector
+  stereogenicities, and bind matches as a direct Rust delegate with optional
+  kind and stereogenicity values. Preserve None/empty-set distinctions. Use
+  from_rust/to_rust and the established immutable config conventions. Test exact values, selector
   intersections, both removal modes, imports, constructor failures, and attempted
   mutation. Reuse existing enum wrappers.
 
