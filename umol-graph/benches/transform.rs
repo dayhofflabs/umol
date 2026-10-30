@@ -10,13 +10,17 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_chem::element::Element;
-use umol_graph::ops::model::AromaticityModel;
+use umol_graph::ops::model::{AromaticityModel, StereoModel};
 use umol_graph::ops::transform::{
-    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, Transformer,
+    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, StereoAdder,
+    Transformer,
 };
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_graph_ir::ir::{AtomForm, AtomId, BondForm, IntoIr, Molecule, MoleculeEntries};
+use umol_graph_ir::ir::{
+    AtomForm, AtomId, BondForm, IntoIr, Molecule, MoleculeEntries, StereoAtomForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind,
+};
 use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
 
@@ -419,12 +423,185 @@ fn bench_hydrogens_scaling(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_stereo_adder(c: &mut Criterion) {
+    let transformer = StereoAdder::new(&StereoModel::default());
+    let retained = mol_dsl_concrete!(
+        r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]}"#
+    );
+    let mut cases = vec![
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#
+            ),
+        ),
+        (
+            "cis_trans",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct*"}]}"#
+            ),
+        ),
+        (
+            "source_evidence",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#T1" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#T1" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+            :stereo-bonds [{:site 4 :ligands [0 [:h 1] 6 [:h 5]] :attrs "Ct0"}]}"#
+            ),
+        ),
+        ("retained", retained.clone(), retained),
+    ];
+    let mut entries = MoleculeEntries::default();
+    let mut stereo_atoms = Vec::new();
+    for component in 0..16 {
+        let base = component * 5;
+        entries.atoms.extend(
+            [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+                .map(|element| AtomForm::from_element(element).into_concrete()),
+        );
+        entries.bonds.extend((1..=4).map(|ligand| {
+            (
+                AtomId(base),
+                AtomId(base + ligand),
+                BondForm::from_order(1).into_concrete(),
+            )
+        }));
+        stereo_atoms.push((
+            AtomId(base),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(base + ligand), StereoLigandKind::Atom))
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+        ));
+    }
+    let input = Molecule::from_entries(entries.clone());
+    entries.stereo_atoms = stereo_atoms;
+    cases.push(("sites_16", input, Molecule::from_entries(entries)));
+
+    let mut group = c.benchmark_group("stereo_adder");
+    for (name, input, expected) in cases {
+        let entries = MoleculeEntries {
+            atoms: input
+                .atoms()
+                .iter()
+                .map(|atom| atom.attributes().clone())
+                .collect(),
+            bonds: input
+                .bonds()
+                .iter()
+                .map(|bond| {
+                    let [a, b] = bond.atom_ids();
+                    (a, b, bond.attributes().clone())
+                })
+                .collect(),
+            stereo_atoms: input
+                .stereo_atoms()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        stereo.attributes().clone(),
+                    )
+                })
+                .collect(),
+            stereo_bonds: input
+                .stereo_bonds()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        stereo.attributes().clone(),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        };
+        assert_eq!(Molecule::from_entries(entries.clone()), input, "{name}");
+        assert_eq!(
+            transformer.transform(input.clone()),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        assert_eq!(transformer.transform_into(&mut in_place), Ok(()), "{name}");
+        assert_eq!(in_place, expected, "{name}");
+        assert_eq!(
+            transformer.transform(Molecule::from_entries(entries.clone())),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        let mut unique = Molecule::from_entries(entries.clone());
+        assert_eq!(transformer.transform_into(&mut unique), Ok(()), "{name}");
+        assert_eq!(unique, expected, "{name}");
+        assert_eq!(
+            expected.clone().edit().finish(),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        eprintln!("stereo_adder_input\t{name}\tatoms={}\tbonds={}\tretained_atoms={}\tretained_bonds={}\tadded_atoms={}\tadded_bonds={}\talgorithm=Nauty\tpara_stereo=false\tminimum_ring_size=8",
+            input.atoms().count(), input.bonds().count(), input.stereo_atoms().count(), input.stereo_bonds().count(),
+            expected.stereo_atoms().count() - input.stereo_atoms().count(), expected.stereo_bonds().count() - input.stereo_bonds().count());
+
+        group.bench_function(BenchmarkId::new("transform_shared", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| transformer.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into_shared", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| transformer.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_unique", name), |b| {
+            b.iter_batched(
+                || Molecule::from_entries(entries.clone()),
+                |molecule| transformer.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into_unique", name), |b| {
+            b.iter_batched_ref(
+                || Molecule::from_entries(entries.clone()),
+                |molecule| transformer.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     transform,
     bench_transform,
     bench_fold_hydrogens,
     bench_unfold_hydrogens,
     bench_hydrogens_scaling,
+    bench_stereo_adder,
     stereo::bench_stereo
 );
 criterion_main!(transform);

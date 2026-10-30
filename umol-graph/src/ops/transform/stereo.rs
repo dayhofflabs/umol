@@ -1,13 +1,20 @@
-//! Configuration for stereo transformations.
+//! Stereo transformations and their configuration.
 
 use std::collections::BTreeSet;
+use std::iter;
 
+use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    RingConfig, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
+    AtomHandle, BondHandle, Edits, Molecule, RingConfig, StereoConfigurationForm, StereoCoset,
+    StereoKind, Stereogenicity,
 };
 
-use crate::ops::stereo::StereoSelection;
+use crate::ops::model::StereoModel;
+use crate::ops::stereo::{
+    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection,
+};
+use crate::ops::transform::Transformer;
 
 /// Site selection and algorithms for stereo addition.
 ///
@@ -37,6 +44,117 @@ impl Default for AddStereoConfig {
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             ring_config: RingConfig::default(),
         }
+    }
+}
+
+/// Stereo addition could not interpret its input or realize selected evidence.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum AddStereoError {
+    #[error(transparent)]
+    Perception(#[from] StereoPerceptionError),
+    #[error(transparent)]
+    Inconsistency(#[from] StereoInconsistency),
+}
+
+/// Add selected missing tetrahedral atoms and cis/trans bonds.
+///
+/// Uses StereoPerception's recognition and classification with the supplied
+/// model and configuration. New cosets remain undetermined unless source
+/// evidence supplies them. Existing entities, their frames and configurations,
+/// source assertions, and molecular topology are preserved.
+///
+/// All rejection occurs during planning. Undetermined fields outside the
+/// selected processing scope are retained. Recognition failures and incompatible
+/// selected evidence return AddStereoError. The iterator lazily produces one
+/// independent result on success and no result on rejection.
+///
+/// # Semantic properties
+///
+/// Addition is idempotent for the same model and configuration. Consuming and
+/// in-place results agree under structural equality. An in-place rejection
+/// leaves the molecule unchanged, and every result preserves its integrity.
+#[derive(Clone, Debug)]
+pub struct StereoAdder {
+    perception: StereoPerception,
+    config: AddStereoConfig,
+}
+
+impl StereoAdder {
+    /// Construct an adder with the default selection and algorithms.
+    pub fn new(model: &StereoModel) -> Self {
+        Self::with_config(model, AddStereoConfig::default())
+    }
+
+    /// Store a model snapshot and explicit configuration for stereo addition.
+    ///
+    /// Site ids are checked against each input molecule during transformation.
+    pub fn with_config(model: &StereoModel, config: AddStereoConfig) -> Self {
+        Self {
+            perception: StereoPerception::new(model),
+            config,
+        }
+    }
+
+    fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, AddStereoError> {
+        let derivation = self.perception.recognize(
+            molecule,
+            &self.config.selection,
+            self.config.automorphism_algorithm,
+            self.config.ring_config,
+        )?;
+        if let Some(&inconsistency) = derivation.inconsistencies.first() {
+            return Err(inconsistency.into());
+        }
+
+        let mut edits = Edits::new();
+        for (site, ligands, form) in derivation.stereo_atoms {
+            edits.add_stereo_atom(
+                AtomHandle::Id(site),
+                ligands
+                    .into_iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                form,
+            );
+        }
+        for (site, ligands, form) in derivation.stereo_bonds {
+            edits.add_stereo_bond(
+                BondHandle::Id(site),
+                ligands
+                    .into_iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                form,
+            );
+        }
+        Ok(edits)
+    }
+}
+
+impl Transformer for StereoAdder {
+    type Error = AddStereoError;
+
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, AddStereoError> {
+        let edits = self.plan_transform(&molecule)?;
+        let mut editor = molecule.edit();
+        editor
+            .apply(edits)
+            .expect("stereo addition plan applies to its input");
+        Ok(editor
+            .finish()
+            .expect("stereo addition plan preserves molecule integrity"))
+    }
+
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AddStereoError> {
+        let edits = self.plan_transform(molecule)?;
+        if !edits.is_empty() {
+            molecule.mutate(edits);
+        }
+        Ok(())
+    }
+
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        iter::once_with(move || self.transform(molecule.clone()).ok()).flatten()
     }
 }
 
@@ -121,6 +239,8 @@ impl Default for EnumerateStereoConfig {
 
 #[cfg(test)]
 mod tests {
+    mod adder;
+
     use rstest::rstest;
     use umol_graph_ir::ir::{AtomId, BondId, StereoTerm};
 

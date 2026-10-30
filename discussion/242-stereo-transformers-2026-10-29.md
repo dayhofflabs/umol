@@ -18,9 +18,10 @@ configuration values on existing entities.
 
 This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
-ligand-construction corrections, and S2's selectors, configurations, and shared
-queries are implemented. The transformer engines remain future work. External
-implementations under materials/codes may supply algorithms, counterexamples, and comparison cases;
+ligand-construction corrections, S2's selectors/configurations/shared queries,
+and S3a's StereoAdder are implemented. StereoRemover and StereoEnumerator remain
+future work. External implementations under materials/codes may supply
+algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
 Variables and variable-based relative configurations are deferred. Initial
@@ -247,6 +248,10 @@ value. Do not choose a determined isomer during addition.
 New entities must have ligand lists agreeing with the site's neighbors and
 hydrogen/lone-pair counts and satisfy representation integrity. Report incompatible
 selected evidence or competing incompatible kind assignments before mutation.
+Addition retains the input's #T/#C and unrelated assertions; its edit plan only
+appends missing entities. AddStereoError::Perception wraps StereoPerceptionError;
+AddStereoError::Inconsistency rejects a reported StereoInconsistency, with the
+first diagnostic returned when perception reports several.
 Successful addition is idempotent for the
 same model and configuration. Its iterator produces its single transformed
 result, or no result on rejection.
@@ -314,8 +319,11 @@ silently supply a canonical order.
 | RemoveStereoConfig::default | All; unrestricted sites/kinds/stereogenicities; Nauty |
 | EnumerateStereoConfig::default | Th/Ct; all sites and stereogenicities; Nauty; processing order supplied separately |
 | StereoAdder, StereoRemover, StereoEnumerator | Configured Transformer engines sharing StereoPerception |
+| StereoAdder::new, StereoAdder::with_config | Infallible model snapshot and owned configuration; topology ids checked during execution |
+| StereoAdder's Transformer implementation | Consuming, in-place, and lazy one-result operations; AddStereoError on singular rejection, no iterator result on rejection |
 | EnumerateStereoIter | Owned operation-issued iterator, produced by StereoEnumerator::transform_iter |
 | AddStereoError, RemoveStereoError, EnumerateStereoError | Operation-specific rejection boundaries |
+| AddStereoError::Perception, AddStereoError::Inconsistency | Existing shared query/evidence causes, with From conversions; no parallel diagnostic vocabulary |
 
 StereoAdder and StereoRemover have new(model) and with_config(model, config)
 constructors, following Aromatizer. StereoEnumerator additionally receives the
@@ -964,6 +972,33 @@ synthetic domains. No optimization or para-stereo redesign is added here.
   every rejection. Verify the one-result iterator and independent storage.
   Add correctness-checked consuming/in-place benchmark cases with this engine.
 
+  **Completed — 2026-10-30.** Added StereoAdder with new(model) and
+  with_config(model, config), its three Transformer methods, and AddStereoError;
+  the engine and error are exported from ops::transform and its stereo module.
+  Each call uses shared recognize once, rejects its errors or first reported
+  inconsistency, and prepares additions through Edits. Consuming publication
+  uses an editor; in-place publication applies the same plan directly after
+  successful planning. The lazy iterator follows the existing deterministic
+  transformer implementation. No recovery copy, journal, or public planning
+  surface is added. Model, selector, and algorithm interpretation remain with
+  the existing configuration and perception objects.
+
+  The 67 adder cases cover full Th/Ct outputs, virtual H and lone-pair frames,
+  positive/negative and finite/symbolic evidence, retained frames and other
+  kinds, remote stereo, selector intersections and empty sets, model scope and
+  disabled kinds, symmetric/prochiral opt-in, idempotence, partial data, exact
+  rejection errors and unchanged inputs, and independent iterator results.
+  Cases with a valid early candidate and a later failed site verify that a
+  rejection publishes no additions. Existing assertions and stored cosets are
+  preserved.
+
+  All 3,075 graph unit tests, 188 graph property tests, and 683 resolution
+  conformance cases passed. All-target/all-feature Clippy for graph and
+  graph-IR, strict graph rustdoc, formatting, and diff checks passed. All 20
+  adder benchmark cases passed their complete-result checks for consuming and
+  in-place calls with shared and uniquely owned input storage. The S4a
+  transformer properties and S4b receiver methods remain planned work.
+
 - **S3b — StereoRemover and RemoveStereoError** — additive (green).
   Modules: the same implementation, remover tests, re-exports, and benchmark
   target. [dep: S2c, S2e]
@@ -1024,6 +1059,41 @@ synthetic domains. No optimization or para-stereo redesign is added here.
 S3 gate: the complete transformer unit group and the new stereo benchmark cases
 pass in test mode. Audit all public exports and error variants, source assertion
 handling, and producers/consumers before declaring any engine complete.
+
+#### S3a addition measurements
+
+Measured the S3a working tree on S0b's host and optimization profile with rustc
+1.99.1, the default stereo model, and AddStereoConfig::default(): Th/Ct,
+Stereogenic, all sites, Nauty, default ring algorithms, para_stereo=false, and
+minimum ring size eight. Five inputs exercise a five-atom Th addition, a
+six-atom Ct addition, a seven-atom input with positive Th/Ct assertions, one
+already-present Th entity with a retained frame, and sixteen missing Th
+entities in the same 80-atom/64-bond component series used in S2.
+
+Each input is measured through consuming and in-place calls with shared and
+uniquely owned storage. Shared setup clones the fixture; unique setup
+constructs a fresh molecule from owned entries. Both setups and independent
+expected-result construction are outside timing. Before timing, each of the
+four paths is checked under full molecule equality, including source
+assertions, and the expected result passes integrity checking. Every timed call
+includes recognition, planning, and publication.
+
+    cargo bench --locked -p umol-graph --bench transform -- stereo_adder --save-baseline stereo-s3a-adder --sample-size 30 --warm-up-time 0.1 --measurement-time 0.3 --nresamples 10000 --noplot
+
+All 20 cases were measured. Medians are microseconds per call:
+
+| Input | Consuming, shared | In-place, shared | Consuming, unique | In-place, unique |
+| --- | ---: | ---: | ---: | ---: |
+| Five-atom Th | 6.112 | 6.062 | 6.047 | 6.114 |
+| Six-atom Ct | 6.972 | 6.949 | 7.045 | 7.015 |
+| Positive Th/Ct evidence | 11.250 | 11.614 | 11.398 | 11.214 |
+| Retained Th, no additions | 0.451 | 0.335 | 0.463 | 0.349 |
+| 80 atoms, sixteen additions | 1666.205 | 1685.420 | 1667.052 | 1656.847 |
+
+The sixteen-site total is consistent with S2's phase measurements, where local
+projection and classification are the largest measured component. These totals
+do not isolate planning and publication from perception; no optimization is
+inferred from the small shared/unique differences in this synthetic domain.
 
 ### S4 — Properties, receiver methods, and Python
 

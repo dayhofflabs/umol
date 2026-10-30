@@ -1,4 +1,4 @@
-//! Transformations of determined molecular representations.
+//! Transformations of molecular representations.
 
 pub mod aromaticity;
 pub mod hydrogens;
@@ -11,13 +11,16 @@ pub use aromaticity::{
     MaximumMatchingAlgorithm,
 };
 pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};
-pub use stereo::{AddStereoConfig, EnumerateStereoConfig, RemoveStereoConfig, RemoveStereoMode};
+pub use stereo::{
+    AddStereoConfig, AddStereoError, EnumerateStereoConfig, RemoveStereoConfig, RemoveStereoMode,
+    StereoAdder,
+};
 use umol_graph_ir::ir::{AtomId, Molecule};
 
 use crate::ops::aromaticity::AromaticityConfig;
 use crate::ops::model::AromaticityModel;
 
-/// Rewrites a determined molecular representation.
+/// Transforms a molecular representation.
 ///
 /// Implemented by transformation engines. [`Transform`] provides the named methods on Molecule.
 ///
