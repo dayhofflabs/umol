@@ -11,7 +11,7 @@ pub use aromaticity::{
     MaximumMatchingAlgorithm,
 };
 pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};
-pub use stereo::AddStereoConfig;
+pub use stereo::{AddStereoConfig, RemoveStereoConfig, RemoveStereoMode};
 use umol_graph_ir::ir::{AtomId, Molecule};
 
 use crate::ops::aromaticity::AromaticityConfig;

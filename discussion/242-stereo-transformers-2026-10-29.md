@@ -154,6 +154,12 @@ errors, and tests; do not rename the variant UndeterminedCoset. A failed as_lit
 query is not by itself the Undetermined predicate: literal sets and symbolic
 forms retain their own meanings.
 
+RemoveStereoMode::matches takes a StereoConfigurationForm and tests the mode
+without calculating stereogenicity or resolving a coset. All accepts every
+configuration; Undetermined accepts only a known kind with an explicit
+StereoCoset::Undetermined. A configuration with an undetermined kind has no
+coset and does not satisfy that mode.
+
 Unrestricted All removal also handles kindless records without attempting a
 symmetry query that requires a known kind. An explicit kind set selects only
 records of those known kinds. Selection must not guess a kindless record's kind
@@ -242,6 +248,8 @@ silently supply a canonical order.
 | AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig | Shared selection and explicit algorithm choices; removal also has one mode |
 | AddStereoConfig::default | All sites; Th/Ct kinds; Stereogenic only; Nauty and RingConfig::default() |
 | RemoveStereoMode | All and Undetermined variants; Undetermined tests the coset |
+| RemoveStereoMode::matches | Tests the configuration against the mode without classification or resolution |
+| RemoveStereoConfig::default | All; unrestricted sites/kinds/stereogenicities; Nauty |
 | StereoAdder, StereoRemover, StereoEnumerator | Configured Transformer engines sharing StereoPerception |
 | EnumerateStereoIter | Owned operation-issued iterator, produced by StereoEnumerator::transform_iter |
 | AddStereoError, RemoveStereoError, EnumerateStereoError | Operation-specific rejection boundaries |
@@ -710,7 +718,7 @@ different outcome. The sixteen-site median differs by less than one percent.
   Prochiral/Symmetric selection, unrestricted stereogenicity, empty kinds,
   and unbound ids. All 2,817 graph unit tests and all-target/all-feature Clippy
   with warnings denied passed. Strict rustdoc, formatting, and diff checks
-  passed. S2c–S2e and the S2 gate remain outstanding.
+  passed.
 
 - **S2c — RemoveStereoMode and RemoveStereoConfig** — additive (green).
   Modules: the same stereo transformation module and config tests. [dep: S2a]
@@ -721,6 +729,21 @@ different outcome. The sixteen-site median differs by less than one percent.
   between an open coset and an unknown kind, and the unrestricted All route for
   kindless records. Configuration construction must not force an unnecessary
   symmetry calculation.
+
+  **Completed — 2026-10-30.** Added RemoveStereoMode's All/Undetermined
+  variants, its matches predicate on StereoConfigurationForm, and
+  RemoveStereoConfig with public selection, mode, and automorphism_algorithm
+  fields and Default. Both types are re-exported from ops::transform.
+  Default uses All, unrestricted selectors, and Nauty. Construction and mode
+  matching perform no molecule lookup, classification, or coset resolution.
+
+  The 63 mode/configuration cases cover Th/Ct and SquarePlanar configuration values,
+  literal and undetermined cosets, finite sets, symbolic terms, and unknown
+  kinds. They check uniform mode application, selector intersections, kind
+  exclusion at eligible sites, empty selections, and the unrestricted All
+  route with missing kind/classification values. All 2,880 graph unit tests and
+  all-target/all-feature Clippy with warnings denied passed. Strict rustdoc,
+  formatting, and diff checks passed. S2d–S2e and the S2 gate remain outstanding.
 
 - **S2d — EnumerateStereoConfig and explicit site order** — additive (green).
   Modules: the same stereo transformation module and config tests. [dep: S2a]
@@ -865,8 +888,10 @@ handling, and producers/consumers before declaring any engine complete.
   [dep: S2b, S2c, S2d]
   Bind StereoSite, StereoSelection, RemoveStereoMode, and the three operation
   configurations. Bind StereoSelection.kinds as well as sites and
-  stereogenicities, and bind matches as a direct Rust delegate with optional
-  kind and stereogenicity values. Preserve None/empty-set distinctions. Use
+  stereogenicities, and bind StereoSelection::matches as a direct Rust delegate
+  with optional kind and stereogenicity values. Bind RemoveStereoMode::matches
+  using the existing StereoConfigurationForm wrapper. Preserve None/empty-set
+  distinctions. Use
   from_rust/to_rust and the established immutable config conventions. Test exact values, selector
   intersections, both removal modes, imports, constructor failures, and attempted
   mutation. Reuse existing enum wrappers.

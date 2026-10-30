@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{RingConfig, StereoKind, Stereogenicity};
+use umol_graph_ir::ir::{
+    RingConfig, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
+};
 
 use crate::ops::stereo::StereoSelection;
 
@@ -38,10 +40,59 @@ impl Default for AddStereoConfig {
     }
 }
 
+/// Which configuration states stereo removal accepts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RemoveStereoMode {
+    /// Accept every configuration, including an undetermined kind.
+    All,
+    /// Accept only a known kind with an explicitly undetermined coset.
+    Undetermined,
+}
+
+impl RemoveStereoMode {
+    /// Whether the configuration satisfies this removal mode.
+    ///
+    /// Undetermined tests the coset state, independently of the known kind.
+    /// An unknown kind has no coset to test; finite sets and symbolic cosets
+    /// are not undetermined cosets. No classification or resolution is performed.
+    pub fn matches(self, configuration: &StereoConfigurationForm) -> bool {
+        match self {
+            Self::All => true,
+            Self::Undetermined => matches!(configuration.coset(), Some(StereoCoset::Undetermined)),
+        }
+    }
+}
+
+/// Site selection, removal mode, and algorithm for stereo removal.
+///
+/// Default accepts all configurations and leaves sites, kinds, and
+/// stereogenicities unrestricted. It uses Nauty. One mode applies uniformly
+/// to every selected site and kind.
+///
+/// Construction preserves the supplied selection without checking ids against
+/// a molecule or calculating symmetry. The executing operation checks ids
+/// before indexing or mutation and classifies sites only when selection needs it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoveStereoConfig {
+    pub selection: StereoSelection,
+    pub mode: RemoveStereoMode,
+    pub automorphism_algorithm: AutomorphismAlgorithm,
+}
+
+impl Default for RemoveStereoConfig {
+    fn default() -> Self {
+        Self {
+            selection: StereoSelection::default(),
+            mode: RemoveStereoMode::All,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AtomId, BondId};
+    use umol_graph_ir::ir::{AtomId, BondId, StereoTerm};
 
     use super::*;
     use crate::ops::stereo::StereoSite;
@@ -222,6 +273,200 @@ mod tests {
             })
             .map(|(site, _, _)| site)
             .collect();
+        assert_eq!(selected, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoCoset::Undetermined, true)]
+    #[case::literal_zero(StereoCoset::Lit(0), false)]
+    #[case::literal_one(StereoCoset::Lit(1), false)]
+    #[case::finite_set(StereoCoset::lit_set([0, 1]), false)]
+    #[case::singleton_set(StereoCoset::lit_set([1]), false)]
+    #[case::empty_set(StereoCoset::lit_set([]), false)]
+    #[case::symbolic(StereoCoset::term(StereoTerm::var("configuration")), false)]
+    fn test_remove_stereo_mode_matches(
+        #[case] coset: StereoCoset,
+        #[case] undetermined: bool,
+        #[values(
+            StereoKind::Tetrahedral,
+            StereoKind::CisTrans,
+            StereoKind::SquarePlanar
+        )]
+        kind: StereoKind,
+        #[values(RemoveStereoMode::All, RemoveStereoMode::Undetermined)] mode: RemoveStereoMode,
+    ) {
+        let configuration = StereoConfigurationForm::Kinded(kind, coset);
+        let expected = match mode {
+            RemoveStereoMode::All => true,
+            RemoveStereoMode::Undetermined => undetermined,
+        };
+        assert_eq!(mode.matches(&configuration), expected);
+    }
+
+    #[rstest]
+    #[case::all(RemoveStereoMode::All, true)]
+    #[case::undetermined(RemoveStereoMode::Undetermined, false)]
+    fn test_remove_stereo_mode_matches_kindless(
+        #[case] mode: RemoveStereoMode,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            mode.matches(&StereoConfigurationForm::Undetermined),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_remove_stereo_config_default() {
+        assert_eq!(
+            RemoveStereoConfig::default(),
+            RemoveStereoConfig {
+                selection: StereoSelection {
+                    sites: None,
+                    kinds: None,
+                    stereogenicities: None,
+                },
+                mode: RemoveStereoMode::All,
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            },
+        );
+    }
+
+    #[rstest]
+    #[case::unrestricted(
+        StereoSelection::default(),
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1)),
+            StereoSite::Atom(AtomId(2)), StereoSite::Atom(AtomId(3)),
+            StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1)),
+            StereoSite::Atom(AtomId(4)), StereoSite::Bond(BondId(2))],
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(3)), StereoSite::Bond(BondId(0))],
+    )]
+    #[case::tetrahedral(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), ..Default::default() },
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2))],
+        vec![StereoSite::Atom(AtomId(0))],
+    )]
+    #[case::cis_trans(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() },
+        vec![StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))],
+        vec![StereoSite::Bond(BondId(0))],
+    )]
+    #[case::both_kinds(
+        StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
+            ..Default::default() },
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2)),
+            StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))],
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(0))],
+    )]
+    #[case::site_kind_intersection(
+        StereoSelection {
+            sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(0)),
+                StereoSite::Bond(BondId(1))])),
+            kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
+            stereogenicities: None,
+        },
+        vec![StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))],
+        vec![StereoSite::Bond(BondId(0))],
+    )]
+    #[case::stereogenic(
+        StereoSelection {
+            kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
+            stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+            ..Default::default()
+        },
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(0))],
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(0))],
+    )]
+    #[case::non_stereogenic(
+        StereoSelection {
+            kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
+            stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral])),
+            ..Default::default()
+        },
+        vec![StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2)), StereoSite::Bond(BondId(1))],
+        vec![],
+    )]
+    #[case::empty_kinds(
+        StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() },
+        vec![], vec![],
+    )]
+    #[case::empty_sites(
+        StereoSelection { sites: Some(BTreeSet::new()), ..Default::default() },
+        vec![], vec![],
+    )]
+    fn test_remove_stereo_config_selection(
+        #[case] selection: StereoSelection,
+        #[case] all: Vec<StereoSite>,
+        #[case] undetermined: Vec<StereoSite>,
+        #[values(RemoveStereoMode::All, RemoveStereoMode::Undetermined)] mode: RemoveStereoMode,
+    ) {
+        let config = RemoveStereoConfig {
+            selection,
+            mode,
+            ..Default::default()
+        };
+        let candidates = [
+            (
+                StereoSite::Atom(AtomId(0)),
+                StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+                Some(Stereogenicity::Stereogenic),
+            ),
+            (
+                StereoSite::Atom(AtomId(1)),
+                StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                Some(Stereogenicity::Prochiral),
+            ),
+            (
+                StereoSite::Atom(AtomId(2)),
+                StereoConfigurationForm::Kinded(
+                    StereoKind::Tetrahedral,
+                    StereoCoset::lit_set([0, 1]),
+                ),
+                Some(Stereogenicity::Symmetric),
+            ),
+            (
+                StereoSite::Atom(AtomId(3)),
+                StereoConfigurationForm::Kinded(
+                    StereoKind::SquarePlanar,
+                    StereoCoset::Undetermined,
+                ),
+                None,
+            ),
+            (
+                StereoSite::Bond(BondId(0)),
+                StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined),
+                Some(Stereogenicity::Stereogenic),
+            ),
+            (
+                StereoSite::Bond(BondId(1)),
+                StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                Some(Stereogenicity::Symmetric),
+            ),
+            (
+                StereoSite::Atom(AtomId(4)),
+                StereoConfigurationForm::Undetermined,
+                None,
+            ),
+            (
+                StereoSite::Bond(BondId(2)),
+                StereoConfigurationForm::Undetermined,
+                None,
+            ),
+        ];
+        let selected: Vec<_> = candidates
+            .iter()
+            .filter(|(site, configuration, stereogenicity)| {
+                config.mode.matches(configuration)
+                    && config
+                        .selection
+                        .matches(*site, configuration.kind(), *stereogenicity)
+            })
+            .map(|(site, _, _)| *site)
+            .collect();
+        let expected = match mode {
+            RemoveStereoMode::All => all,
+            RemoveStereoMode::Undetermined => undetermined,
+        };
         assert_eq!(selected, expected);
     }
 }
