@@ -17,8 +17,9 @@ use umol_graph::ingest::{
 };
 use umol_graph::ops::stereo::StereoPerceptionError as GraphStereoPerceptionError;
 use umol_graph::ops::transform::{
-    AromatizeError as GraphAromatizeError, FoldHydrogensError as GraphFoldHydrogensError,
-    KekulizeError as GraphKekulizeError, UnfoldHydrogensError as GraphUnfoldHydrogensError,
+    AddStereoError as GraphAddStereoError, AromatizeError as GraphAromatizeError,
+    FoldHydrogensError as GraphFoldHydrogensError, KekulizeError as GraphKekulizeError,
+    RemoveStereoError as GraphRemoveStereoError, UnfoldHydrogensError as GraphUnfoldHydrogensError,
 };
 use umol_graph_ir::dsl::{MetadataError as GraphIrMetadataError, ParseError as GraphIrParseError};
 use umol_graph_ir::ir::{
@@ -363,6 +364,23 @@ pub(crate) fn stereo_perception_error(py: Python<'_>, error: GraphStereoPercepti
     match attach() {
         Ok(()) => exception,
         Err(error) => error,
+    }
+}
+
+/// Preserve addition's shared perception or inconsistency diagnostic.
+pub(crate) fn add_stereo_error(py: Python<'_>, error: GraphAddStereoError) -> PyErr {
+    match error {
+        GraphAddStereoError::Perception(error) => stereo_perception_error(py, error),
+        GraphAddStereoError::Inconsistency(error) => {
+            stereo_perception_error(py, GraphStereoPerceptionError::Inconsistency(error))
+        }
+    }
+}
+
+/// Preserve removal's shared perception diagnostic.
+pub(crate) fn remove_stereo_error(py: Python<'_>, error: GraphRemoveStereoError) -> PyErr {
+    match error {
+        GraphRemoveStereoError::Perception(error) => stereo_perception_error(py, error),
     }
 }
 

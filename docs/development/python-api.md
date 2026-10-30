@@ -28,8 +28,8 @@ Do not change the Rust API solely to legitimize a wrapper convenience.
 
 Python aliases do not follow Rust's move rules. Molecule remains reusable: edit, apply,
 tracked_apply, resolve, resolve_with_report, canonicalize, tracked_canonicalize, combine, and the
-base transformation methods below clone the Rust receiver and pass that clone to the consuming
-Rust operation. The Python source, its aliases, and its views remain unchanged on every outcome.
+copy-producing transformation methods below clone the Rust receiver and pass that clone to the
+consuming Rust operation. The Python source, its aliases, and its views remain unchanged on every outcome.
 The initial clone shares topology, entity tables, and constraints; shared payloads are copied
 when the operation modifies or takes ownership of them. This is the same ownership choice as a
 Rust caller explicitly cloning its input to keep it available. Python exposes named transformation
@@ -353,7 +353,7 @@ resolve_into's mutation, invalidation, and rollback selection contract.
 
 Rust's Transform extension trait supplies named methods on Molecule by delegating to
 Transformer implementations. Rust also exposes transform, transform_into, and transform_iter
-on these transformers. Python exposes the named Molecule methods and their configuration values:
+on these transformers. Python exposes named Molecule methods and their configuration values:
 
 | Copy-producing method | In-place method | Arguments after self |
 | --- | --- | --- |
@@ -362,19 +362,28 @@ on these transformers. Python exposes the named Molecule methods and their confi
 | delocalize_charge | delocalize_charge_into | none |
 | fold_hydrogens | fold_hydrogens_into | none |
 | unfold_hydrogens | unfold_hydrogens_into | none |
+| add_stereo | add_stereo_into | model, *, config=None |
+| remove_stereo | remove_stereo_into | model, *, config=None |
 
-model is an explicitly supplied AromaticityModel. node_order is an explicit sequence of atom
-indices determining the localization order. The methods do not choose a model or compute an order.
+model is an explicitly supplied AromaticityModel for aromatization or StereoModel for stereo
+addition/removal. node_order is an explicit sequence of atom indices determining the localization
+order. The methods do not choose a model or compute an order.
 Omitting config, or passing None, selects the corresponding Rust Default: AromaticityConfig for
-aromatization and KekulizeConfig for kekulization. Rust requires these configuration arguments
-explicitly; Python's keyword-only defaults follow the existing configuration calling convention.
+aromatization, KekulizeConfig for kekulization, and AddStereoConfig or RemoveStereoConfig for
+stereo addition/removal. Rust requires these configuration arguments explicitly; Python's
+keyword-only defaults follow the existing configuration calling convention.
+
+Configured transformer objects remain on the Rust side. Python supplies reusable models
+and configurations to named Molecule methods, keeping one receiver interface for these
+operations. Addition/removal use the pairs above; stereo enumeration uses the iterator
+method described below.
 
 KekulizeConfig accepts the keyword-only algorithm argument and exposes it as a read-only property.
 The default is MaximumMatchingAlgorithm.Edmonds(); MaximumMatchingAlgorithm.HopcroftKarp() is also
 available. Configuration and algorithm values are immutable and compare by value.
 
-Rust's base methods consume the molecule. Python's base methods clone the Rust receiver once,
-sharing storage initially, and return an independently mutable Molecule. Every outcome preserves
+For the method pairs above, Rust's base methods consume the molecule. Python's base methods
+clone the Rust receiver once, sharing storage initially, and return an independently mutable Molecule. Every outcome preserves
 the source, its aliases, and its views. The _into methods return None and change the receiver on
 success. Each operation plans before mutation, so rejection leaves the molecule exactly unchanged
 without a transaction or rollback. Starting in-place execution invalidates existing views and
@@ -445,9 +454,21 @@ silently modify a disconnected copy. Construction extracts iterable members into
 passing a selection to a configuration and reading it back copy its owned sets.
 The supplied values remain reusable, including the immutable getter results.
 
-StereoPerception(model) captures the model as Rust's constructor does. derive,
-skipped_stereo_bonds, derive_stereo_atom, and derive_stereo_bond delegate to Rust while
-borrowing the source molecule. They preserve the source and its existing views.
+StereoPerception(model) captures the model as Rust's constructor does. All queries delegate
+to Rust while borrowing the source molecule and preserve it and its existing views:
+
+| Query | Arguments after self | Result |
+| --- | --- | --- |
+| recognize | molecule, selection, automorphism_algorithm, ring_config | StereoDerivation |
+| classify | molecule, sites, automorphism_algorithm | dict[StereoSite, Stereogenicity] |
+| derive | molecule | StereoDerivation |
+| skipped_stereo_bonds | molecule | frozenset[int] |
+| derive_stereo_atom | molecule, atom, coset | ligand tuple and StereoAtomForm, or None |
+| derive_stereo_bond | molecule, bond, coset | ligand tuple and StereoBondForm, or None |
+
+recognize and classify require explicit algorithm arguments, matching Rust. classify accepts
+an iterable of typed sites and collects it into the native set; duplicates collapse. Its returned
+dict is independently mutable because Rust returns an owned map, not a borrowed observation.
 The frame builders require the coset explicitly and return None under the same exclusion
 or incompatibility conditions as Rust. Their successful results contain a ligand tuple
 and an ordinary, independently mutable entity form. Their ID bounds checks translate
@@ -474,6 +495,32 @@ StereoPerceptionError uses the existing exception classes and retains its Rust m
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
 | Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
 
+Addition and removal use this same mapping. Addition's separate inconsistency variant also
+produces ContradictionError with the typed inconsistency attribute. recognize retains evidence
+inconsistencies in its StereoDerivation result, matching Rust; the binding does not turn those
+result fields into exceptions.
+
+### Stereo enumeration
+
+Molecule.enumerate_stereo(model, site_order, *, config=None) constructs the native
+StereoEnumerator and returns its transform_iter result through the opaque Python iterator
+wrapper. model is explicit; site_order is a sequence of typed StereoSite values. Omitting
+config, or passing None, selects EnumerateStereoConfig's Rust default. Every selected existing
+stereo site must occur exactly once in the order; unselected order entries are ignored.
+
+The call borrows the molecule and preserves its aliases, views, and iterators. It stores
+EnumerateStereoIter directly and adds no molecule snapshot in the binding. The native iterator
+captures its source once, prepares the selected domains, and constructs independent Molecule
+values lazily. It outlives the temporary transformer and can outlive the source; later source
+mutation does not affect pending results. Its class is neither exported nor directly
+constructible. Use next(iterator) for the first consistent assignment. The native single-result
+and in-place methods remain Rust-only; Python exposes enumeration through independent results.
+
+Enumeration retains native order and multiplicity, including symmetry-equivalent assignments;
+it performs no deduplication. Preparation rejection or absence of a consistent assignment
+yields an empty iterator, matching Rust's infallible iterator items. Ordinary Python argument
+errors are raised before native execution. Enumeration has no separate exception mapping.
+
 ### Operation-issued iterator
 
 An operation-issued iterator captures one configured execution and cannot be constructed
@@ -484,9 +531,9 @@ reaction-wide precondition check and returns a one-shot iterator over product mo
 `Molecule.react` and `Molecule.react_all` return a one-shot iterator over product-component lists.
 These iterator classes are not exported or directly constructible.
 
-The iterator owns snapshots of every input needed by the operation, so mutating the source reaction
-or molecules after the call does not change the pending results. Matching is completed when the
-iterator is issued; products, realized reactions/spans, and product splitting are realized lazily
+Reaction iterators own snapshots of every input needed by the operation, so mutating the
+source reaction or molecules after the call does not change the pending results. Matching is
+completed when the iterator is issued; products, realized reactions/spans, and product splitting are realized lazily
 in match order.
 An eager reaction-wide failure is raised by the operation call. An execution failure while
 realizing a selected match is raised by `next` once and terminates the iterator. This placement

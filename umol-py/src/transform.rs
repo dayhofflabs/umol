@@ -1,13 +1,14 @@
-//! Python configuration values for molecular transformations.
+//! Transformation configuration values and the owned stereo iterator.
 
 use pyo3::prelude::*;
 use umol_graph::ops::transform::{
     AddStereoConfig as GraphAddStereoConfig, EnumerateStereoConfig as GraphEnumerateStereoConfig,
-    KekulizeConfig as GraphKekulizeConfig, RemoveStereoConfig as GraphRemoveStereoConfig,
-    RemoveStereoMode as GraphRemoveStereoMode,
+    EnumerateStereoIter as GraphEnumerateStereoIter, KekulizeConfig as GraphKekulizeConfig,
+    RemoveStereoConfig as GraphRemoveStereoConfig, RemoveStereoMode as GraphRemoveStereoMode,
 };
 
 use crate::algorithm::{AutomorphismAlgorithm, MaximumMatchingAlgorithm};
+use crate::molecule::Molecule;
 use crate::ring::RingConfig;
 use crate::stereo::{StereoConfigurationForm, StereoSelection};
 
@@ -236,6 +237,27 @@ impl EnumerateStereoConfig {
     }
     pub(crate) fn to_rust(&self) -> &GraphEnumerateStereoConfig {
         &self.0
+    }
+}
+
+#[pyclass(skip_from_py_object)]
+pub(crate) struct EnumerateStereoIter {
+    inner: GraphEnumerateStereoIter,
+}
+
+impl EnumerateStereoIter {
+    pub(crate) fn from_rust(inner: GraphEnumerateStereoIter) -> Self {
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl EnumerateStereoIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+    fn __next__(&mut self) -> Option<Molecule> {
+        self.inner.next().map(Molecule::from_rust)
     }
 }
 

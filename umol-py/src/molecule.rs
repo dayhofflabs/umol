@@ -15,7 +15,10 @@ use umol_graph::ops::resolve::{
     IsotopePolicy as GraphIsotopePolicy, ResolveConfig as GraphResolveConfig,
     Resolver as GraphResolver,
 };
-use umol_graph::ops::transform::Transform;
+use umol_graph::ops::transform::{
+    AddStereoConfig as GraphAddStereoConfig, RemoveStereoConfig as GraphRemoveStereoConfig,
+    StereoEnumerator as GraphStereoEnumerator, Transform,
+};
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr, Molecule as GraphIrMolecule,
@@ -34,9 +37,9 @@ use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    aromatize_error, fingerprint_error, fold_hydrogens_error, kekulize_error, metadata_error,
-    molecule_apply_error, parse_error, smiles_input_error, smiles_output_error,
-    unfold_hydrogens_error, InvalidStructureError, InvalidatedViewError,
+    add_stereo_error, aromatize_error, fingerprint_error, fold_hydrogens_error, kekulize_error,
+    metadata_error, molecule_apply_error, parse_error, remove_stereo_error, smiles_input_error,
+    smiles_output_error, unfold_hydrogens_error, InvalidStructureError, InvalidatedViewError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -46,6 +49,7 @@ use crate::fingerprint::value::{
 };
 use crate::metadata::MoleculeMetadata;
 use crate::model::aromaticity::{AromaticityConfig, AromaticityModel};
+use crate::model::stereo::StereoModel;
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
@@ -54,11 +58,13 @@ use crate::resolve::{ResolveConfig, ResolveContradiction, ResolveReport, Solutio
 use crate::ring::{RingConfig, RingModel, RingViews};
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{
-    StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand,
+    StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand, StereoSite,
 };
 use crate::substructure::SubstructureSearchConfig;
 use crate::transaction::{MoleculeEditor, RollbackMethod};
-use crate::transform::KekulizeConfig;
+use crate::transform::{
+    AddStereoConfig, EnumerateStereoConfig, EnumerateStereoIter, KekulizeConfig, RemoveStereoConfig,
+};
 
 /// A molecule: the owned graph-IR root.
 ///
@@ -763,6 +769,105 @@ impl Molecule {
         self.to_rust_mut()
             .unfold_hydrogens_into()
             .map_err(unfold_hydrogens_error)
+    }
+
+    /// Add selected stereo in an independent copy, preserving the source and its views.
+    #[pyo3(signature = (model, *, config=None))]
+    fn add_stereo(
+        &self,
+        py: Python<'_>,
+        model: &StereoModel,
+        config: Option<&AddStereoConfig>,
+    ) -> PyResult<Self> {
+        let config = config.map_or_else(GraphAddStereoConfig::default, |config| {
+            config.to_rust().clone()
+        });
+        self.to_rust()
+            .clone()
+            .add_stereo(&model.to_rust(), config)
+            .map(Self::from_rust)
+            .map_err(|error| add_stereo_error(py, error))
+    }
+
+    /// Add selected stereo in place. Rejection preserves the molecule.
+    ///
+    /// Execution invalidates existing views and iterators, including on rejection or a no-op.
+    #[pyo3(signature = (model, *, config=None))]
+    fn add_stereo_into(
+        &mut self,
+        py: Python<'_>,
+        model: &StereoModel,
+        config: Option<&AddStereoConfig>,
+    ) -> PyResult<()> {
+        let model = model.to_rust();
+        let config = config.map_or_else(GraphAddStereoConfig::default, |config| {
+            config.to_rust().clone()
+        });
+        self.advance_counter();
+        self.to_rust_mut()
+            .add_stereo_into(&model, config)
+            .map_err(|error| add_stereo_error(py, error))
+    }
+
+    /// Remove selected stereo in an independent copy, preserving the source and its views.
+    #[pyo3(signature = (model, *, config=None))]
+    fn remove_stereo(
+        &self,
+        py: Python<'_>,
+        model: &StereoModel,
+        config: Option<&RemoveStereoConfig>,
+    ) -> PyResult<Self> {
+        let config = config.map_or_else(GraphRemoveStereoConfig::default, |config| {
+            config.to_rust().clone()
+        });
+        self.to_rust()
+            .clone()
+            .remove_stereo(&model.to_rust(), config)
+            .map(Self::from_rust)
+            .map_err(|error| remove_stereo_error(py, error))
+    }
+
+    /// Remove selected stereo in place. Rejection preserves the molecule.
+    ///
+    /// Execution invalidates existing views and iterators, including on rejection or a no-op.
+    #[pyo3(signature = (model, *, config=None))]
+    fn remove_stereo_into(
+        &mut self,
+        py: Python<'_>,
+        model: &StereoModel,
+        config: Option<&RemoveStereoConfig>,
+    ) -> PyResult<()> {
+        let model = model.to_rust();
+        let config = config.map_or_else(GraphRemoveStereoConfig::default, |config| {
+            config.to_rust().clone()
+        });
+        self.advance_counter();
+        self.to_rust_mut()
+            .remove_stereo_into(&model, config)
+            .map_err(|error| remove_stereo_error(py, error))
+    }
+
+    /// Lazily enumerate consistent absolute stereo assignments in the supplied site order.
+    ///
+    /// Preserves this molecule and its views. The native iterator owns one source snapshot;
+    /// later source mutation does not affect it. Each result is independently mutable.
+    /// Preparation rejection yields an empty iterator. Assignments are not deduplicated.
+    #[pyo3(signature = (model, site_order, *, config=None))]
+    fn enumerate_stereo(
+        &self,
+        model: &StereoModel,
+        site_order: Vec<StereoSite>,
+        config: Option<&EnumerateStereoConfig>,
+    ) -> EnumerateStereoIter {
+        let model = model.to_rust();
+        let order = site_order.into_iter().map(StereoSite::to_rust).collect();
+        let transformer = match config {
+            Some(config) => {
+                GraphStereoEnumerator::with_config(&model, config.to_rust().clone(), order)
+            }
+            None => GraphStereoEnumerator::new(&model, order),
+        };
+        EnumerateStereoIter::from_rust(transformer.transform_iter(self.to_rust()))
     }
 
     /// Apply `reaction` and lazily emit one connected product-component list per match.

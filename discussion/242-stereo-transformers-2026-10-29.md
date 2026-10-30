@@ -20,8 +20,9 @@ This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
 S3's three transformer engines and absolute-assignment traversal, S4a's
-properties, S4b's receiver methods, and S4c's Python values and existing perception
-queries are implemented. S4d's Python operations remain future work.
+properties, S4b's receiver methods, S4c's Python values and existing perception
+queries, and S4d's Python operations are implemented. S5's documentation and
+performance closeout remain future work.
 External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
@@ -385,9 +386,12 @@ free-standing enumeration function attached to StereoAdder.
 Python follows the established named-Molecule-method ownership contract for
 addition and removal: the base method preserves its receiver and returns an
 independent result; the _into method mutates and returns None. Bind shared
-selectors and operation configurations faithfully. Preserve enumeration's single
-choice, lazy multiple results, ordering, and failure semantics when exposing
-its Rust operation; do not invent a different Python-only enumeration policy.
+selectors and operation configurations faithfully. Python exposes enumeration as
+Molecule.enumerate_stereo(model, site_order, *, config=None), returning the native
+owned iterator without exposing a transformer class. It preserves native lazy
+results, ordering, multiplicity, and exhaustion on rejection. next selects its
+first consistent result. The native single-result and in-place methods remain
+Rust-only; Python exposes enumeration through independent results.
 
 ### Native enumeration iterator
 
@@ -1478,14 +1482,14 @@ the small differences between consuming/in-place or shared/unique paths.
   and diff checks passed.
 
 - **S4d — Python operation bindings and iterator lifecycle** — additive (green).
-  Modules: umol-py/src/molecule.rs, src/transform.rs, src/error.rs, registration
-  and exports, and the transform/molecule tests. [dep: S3d, S4b, S4c]
+  Modules: umol-py/src/molecule.rs, src/transform.rs, src/error.rs,
+  src/stereo/perception.rs, and the transform/molecule/import tests. [dep: S3d, S4b, S4c]
   Bind the addition/removal receiver pairs with the established source-preserving
-  base and mutating _into behavior. Expose StereoEnumerator's single-result,
-  in-place, and lazy multi-result operation with the same configuration and
-  ordering as Rust. Store EnumerateStereoIter directly using the same wrapper
-  pattern as ReactionApplicationIter and ReactionProductsIter. The native
-  ownership contract is established in S3d; this item binds it without another
+  base and mutating _into behavior. Bind Molecule.enumerate_stereo as the native
+  lazy enumeration operation with the same configuration and ordering as Rust,
+  without exporting a transformer class. Store EnumerateStereoIter directly
+  using the same wrapper pattern as ReactionApplicationIter and ReactionProductsIter.
+  The native ownership contract is established in S3d; this item binds it without another
   source snapshot, prefix reconstruction, or eager collection. Review the
   Rust/Python surface against python-api.md. Map errors into the existing exception
   vocabulary; retain Transformer iterator exhaustion on rejection. Check source
@@ -1496,10 +1500,54 @@ the small differences between consuming/in-place or shared/unique paths.
   and source preservation; reconcile the existing perception methods in the
   same public-surface inventory.
 
+  **Completed — 2026-10-30.** Bound Molecule.add_stereo/remove_stereo and their
+  _into counterparts, Molecule.enumerate_stereo, and
+  StereoPerception.recognize/classify. The named receiver methods use the same
+  model/configuration convention as the existing transformers. Reusable models
+  and configurations supply settings without separate Python transformer
+  classes. enumerate_stereo(model, site_order, *, config=None) constructs the
+  native StereoEnumerator and returns its owned iterator. The operation retains
+  Rust defaults and contextual checks, with rejection producing an empty
+  iterator. Native single-result and in-place enumeration remain Rust-only;
+  Python callers select the first result with next. No transformer class is
+  registered or added to the export inventory.
+
+  Copy-producing methods clone the Rust input once and preserve source aliases
+  and views. In-place methods advance the existing invalidation counter before
+  native execution and preserve the molecule on rejection. The iterator wrapper
+  stores EnumerateStereoIter directly; no additional source snapshot, candidate
+  collection, or prefix reconstruction is introduced. It retains native order,
+  multiplicity, lazy independent outputs, and exhaustion on rejection, and can
+  outlive both source and transformer. Its class remains unexported and has no
+  independent constructor.
+
+  Perception queries borrow the source and retain explicit algorithm arguments.
+  classify collects typed iterable sites into the native set and returns an
+  independent dict for Rust's owned map. Shared perception and inconsistency
+  errors retain their existing exception classes and typed attributes for
+  addition/removal and perception queries. Enumeration preserves the native
+  iterator's exhaustion on rejection and has no exception adapter.
+  The Python API guide records all call-syntax, ownership, collection, and error
+  adaptations and inventories the complete perception surface.
+
+  Seventy-two new Python cases cover defaults, filters,
+  source/alias preservation, view invalidation, error payloads, explicit order,
+  fixed/finite/undetermined domains, iterator lifetime and independence, symmetry
+  multiplicity, and early stop after two results from 64 binary sites. On Python
+  3.13.16, the Rust binding suite passed 1,768 cases with two ignored, and the
+  freshly rebuilt extension passed 3,150 Python cases with two skipped.
+  All-target/all-feature binding Clippy, strict binding rustdoc, stereo-test Ruff,
+  formatting, and diff checks passed.
+
 S4 gate: the feature-gated stereo/transformer properties and focused Python
 binding tests pass. Rebuild the extension before Python tests. Record every
 Rust/Python surface or ownership adaptation and its specific justification;
 passing tests do not settle an unexplained difference.
+
+**S4 gate passed — 2026-10-30.** In addition to the binding suites above, all
+215 graph property cases and 683 resolution conformance cases passed with
+proptest and conformance explicitly enabled. The surface review found no
+unexplained Rust/Python differences in the implemented stereo operations.
 
 ### S5 — Documentation, performance evidence, and closeout
 

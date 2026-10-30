@@ -1,6 +1,6 @@
 //! Stereo processing sites, selections, and perception queries.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use pyo3::basic::CompareOp;
 use pyo3::prelude::*;
@@ -18,11 +18,13 @@ use umol_graph_ir::ir::{
 use super::{
     StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand, Stereogenicity,
 };
+use crate::algorithm::AutomorphismAlgorithm;
 use crate::convert::{hash_rust, FrozenSetItems, TupleItems};
 use crate::entity::EntityForm;
 use crate::error::stereo_perception_error;
 use crate::model::stereo::StereoModel;
 use crate::molecule::Molecule;
+use crate::ring::RingConfig;
 
 /// An atom or bond topology ID, independent of a molecule and of stored stereo.
 #[pyclass(frozen, from_py_object)]
@@ -433,6 +435,54 @@ impl StereoPerception {
     #[new]
     fn new(model: &StereoModel) -> Self {
         Self::from_rust(GraphStereoPerception::new(&model.to_rust()))
+    }
+
+    /// Recognize missing selected stereo entities using the supplied algorithms.
+    fn recognize(
+        &self,
+        py: Python<'_>,
+        molecule: &Molecule,
+        selection: &StereoSelection,
+        automorphism_algorithm: AutomorphismAlgorithm,
+        ring_config: RingConfig,
+    ) -> PyResult<StereoDerivation> {
+        self.to_rust()
+            .recognize(
+                molecule.to_rust(),
+                selection.to_rust(),
+                automorphism_algorithm.to_rust(),
+                ring_config.to_rust(),
+            )
+            .map(StereoDerivation::from_rust)
+            .map_err(|error| stereo_perception_error(py, error))
+    }
+
+    /// Classify existing arrangements at the supplied topology sites.
+    fn classify(
+        &self,
+        py: Python<'_>,
+        molecule: &Molecule,
+        sites: &Bound<'_, PyAny>,
+        automorphism_algorithm: AutomorphismAlgorithm,
+    ) -> PyResult<BTreeMap<StereoSite, Stereogenicity>> {
+        let sites = sites
+            .try_iter()?
+            .map(|site| Ok(site?.extract::<StereoSite>()?.to_rust()))
+            .collect::<PyResult<_>>()?;
+        self.to_rust()
+            .classify(molecule.to_rust(), &sites, automorphism_algorithm.to_rust())
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|(site, class)| {
+                        (
+                            StereoSite::from_rust(site),
+                            Stereogenicity::from_rust(class),
+                        )
+                    })
+                    .collect()
+            })
+            .map_err(|error| stereo_perception_error(py, error))
     }
 
     /// Derive source stereo evidence and check existing arrangements.

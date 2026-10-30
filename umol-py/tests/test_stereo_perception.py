@@ -1,7 +1,13 @@
 import pytest
 from umol import (
+    AtomFieldKind,
+    AutomorphismAlgorithm,
+    InvalidStructureError,
+    ModelConversionError,
     Molecule,
     MoleculeDefaults,
+    NumForm,
+    RingConfig,
     StereoAtomConstraintForm,
     StereoAtomForm,
     StereoBondConstraintForm,
@@ -9,13 +15,17 @@ from umol import (
     StereoConfigurationForm,
     StereoCoset,
     StereoDerivation,
+    Stereogenicity,
     StereogenicityForm,
     StereoInconsistency,
+    StereoKind,
     StereoLigand,
     StereoLigandKind,
     StereoModel,
     StereoPerception,
+    StereoSelection,
     StereoSite,
+    UnderdeterminedError,
 )
 
 
@@ -37,6 +47,166 @@ def test_stereo_perception_new(stereo_input):
     assert perception.derive_stereo_atom(molecule, 0, StereoCoset.Lit(1)) is None
     with pytest.raises(TypeError):
         StereoPerception("default")
+
+
+@pytest.mark.parametrize(
+    "selection,atom,bond",
+    [
+        (StereoSelection(), True, True),
+        (StereoSelection(sites=[StereoSite.Atom(0)]), True, False),
+        (StereoSelection(kinds=[StereoKind.CisTrans]), False, True),
+        (StereoSelection(stereogenicities=[Stereogenicity.Symmetric]), False, False),
+    ],
+)
+def test_stereo_perception_recognize(stereo_input, selection, atom, bond):
+    molecule = Molecule.parse(stereo_input, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    view = molecule.atoms[0]
+    iterator = iter(molecule.atoms)
+    result = StereoPerception(StereoModel.default()).recognize(
+        molecule, selection, AutomorphismAlgorithm.Nauty(), RingConfig()
+    )
+    expected = StereoDerivation(
+        stereo_atoms=(
+            [
+                (
+                    0,
+                    [StereoLigand(i, StereoLigandKind.Atom) for i in (1, 2, 3, 4)],
+                    StereoAtomForm.parse("Th1"),
+                )
+            ]
+            if atom
+            else []
+        ),
+        stereo_bonds=(
+            [
+                (
+                    4,
+                    [
+                        StereoLigand(7, StereoLigandKind.Atom),
+                        StereoLigand(5, StereoLigandKind.ImplicitHydrogen),
+                        StereoLigand(8, StereoLigandKind.Atom),
+                        StereoLigand(6, StereoLigandKind.ImplicitHydrogen),
+                    ],
+                    StereoBondForm.parse("Ct0"),
+                )
+            ]
+            if bond
+            else []
+        ),
+    )
+    assert result == expected
+    assert molecule == original
+    assert view.element == original.atoms[0].element
+    assert next(iterator).element == original.atoms[0].element
+
+
+@pytest.mark.parametrize(
+    "selection,error,field,value",
+    [
+        (
+            StereoSelection(sites=[StereoSite.Atom(9)]),
+            IndexError,
+            "site",
+            StereoSite.Atom(9),
+        ),
+        (
+            StereoSelection(kinds=[StereoKind.SquarePlanar]),
+            ModelConversionError,
+            "kind",
+            StereoKind.SquarePlanar,
+        ),
+    ],
+)
+def test_stereo_perception_recognize_error(
+    stereo_input, selection, error, field, value
+):
+    molecule = Molecule.parse(stereo_input, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    view = molecule.atoms[0]
+    with pytest.raises(error) as caught:
+        StereoPerception(StereoModel.default()).recognize(
+            molecule, selection, AutomorphismAlgorithm.Nauty(), RingConfig()
+        )
+    assert getattr(caught.value, field) == value
+    assert molecule == original
+    assert view.element == original.atoms[0].element
+
+
+def test_stereo_perception_recognize_field_error(stereo_input):
+    molecule = Molecule.parse(stereo_input, defaults=MoleculeDefaults.concrete())
+    molecule.atoms[0].implicit_hydrogens = NumForm.Undetermined()
+    original = molecule.copy()
+    with pytest.raises(UnderdeterminedError) as caught:
+        StereoPerception(StereoModel.default()).recognize(
+            molecule,
+            StereoSelection(sites=[StereoSite.Atom(0)]),
+            AutomorphismAlgorithm.Nauty(),
+            RingConfig(),
+        )
+    assert caught.value.atom == 0
+    assert caught.value.field == AtomFieldKind.ImplicitHydrogens
+    assert molecule == original
+
+
+@pytest.mark.parametrize(
+    "ligands,expected",
+    [
+        ('"F" "Cl" "Br" "I"', Stereogenicity.Stereogenic),
+        ('"F" "Cl" "H" "H"', Stereogenicity.Prochiral),
+        ('"H" "H" "H" "H"', Stereogenicity.Symmetric),
+    ],
+)
+def test_stereo_perception_classify(ligands, expected):
+    molecule = Molecule.parse(
+        f"""{{:atoms ["C" {ligands}]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{{:site 0 :ligands [1 2 3 4] :attrs "Th*"}}]}}""",
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = molecule.copy()
+    atom = molecule.atoms[0]
+    perception = StereoPerception(StereoModel.default())
+    sites = [StereoSite.Atom(0), StereoSite.Atom(0)]
+    result = perception.classify(molecule, iter(sites), AutomorphismAlgorithm.Nauty())
+    assert result == {StereoSite.Atom(0): expected}
+    assert type(result) is dict
+    result.clear()
+    assert perception.classify(molecule, sites, AutomorphismAlgorithm.Nauty()) == {
+        StereoSite.Atom(0): expected
+    }
+    assert perception.classify(molecule, [], AutomorphismAlgorithm.Nauty()) == {}
+    assert molecule == original
+    assert atom.element == original.atoms[0].element
+
+
+@pytest.mark.parametrize(
+    "site,error",
+    [
+        (StereoSite.Atom(0), InvalidStructureError),
+        (StereoSite.Bond(4), InvalidStructureError),
+        (StereoSite.Atom(9), IndexError),
+    ],
+)
+def test_stereo_perception_classify_error(stereo_input, site, error):
+    molecule = Molecule.parse(stereo_input, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    with pytest.raises(error) as caught:
+        StereoPerception(StereoModel.default()).classify(
+            molecule, [site], AutomorphismAlgorithm.Nauty()
+        )
+    assert caught.value.site == site
+    assert molecule == original
+
+
+@pytest.mark.parametrize("method", ["recognize", "classify"])
+def test_stereo_perception_argument_error(stereo_input, method):
+    molecule = Molecule.parse(stereo_input, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    selection = StereoSelection() if method == "recognize" else [StereoSite.Atom(0)]
+    with pytest.raises(TypeError):
+        getattr(StereoPerception(StereoModel.default()), method)(molecule, selection)
+    assert molecule == original
 
 
 def test_stereo_perception_derive(stereo_input):
