@@ -6,13 +6,14 @@ use std::iter;
 use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomHandle, BondHandle, Edits, Molecule, RingConfig, StereoConfigurationForm, StereoCoset,
-    StereoKind, Stereogenicity,
+    AtomConstraintKey, AtomHandle, BondConstraintKey, BondHandle, Edits, Molecule, RingConfig,
+    StereoAtomHandle, StereoBondHandle, StereoConfigurationForm, StereoCoset, StereoKind,
+    Stereogenicity,
 };
 
 use crate::ops::model::StereoModel;
 use crate::ops::stereo::{
-    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection,
+    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection, StereoSite,
 };
 use crate::ops::transform::Transformer;
 
@@ -207,6 +208,210 @@ impl Default for RemoveStereoConfig {
     }
 }
 
+/// Stereo removal could not interpret its selection or classify selected entities.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum RemoveStereoError {
+    #[error(transparent)]
+    Perception(#[from] StereoPerceptionError),
+}
+
+/// Remove selected stereo entities and their corresponding #T/#C assertions.
+///
+/// The mode and site/kind selectors apply before stereogenicity is calculated.
+/// Classification uses StereoPerception with the unchanged molecular context
+/// and is omitted when the class selector is unrestricted. Such removal accepts
+/// kindless, symbolic, and other-geometry records without interpreting them.
+/// Undetermined tests only an explicitly undetermined coset of a known kind.
+///
+/// Unrelated assertions, topology, and retained entity data are preserved;
+/// graph IR compacts entity ids and their references after removal. Invalid
+/// selected topology ids or unsupported required classification produce
+/// RemoveStereoError before any mutation. The iterator lazily yields one
+/// independent result on success and none on rejection.
+///
+/// # Semantic properties
+///
+/// Consuming and in-place results agree under structural equality. In-place
+/// rejection preserves the input under structural equality. Successful results
+/// preserve molecule integrity. Without a class filter, removal is idempotent
+/// for the same config.
+#[derive(Clone, Debug)]
+pub struct StereoRemover {
+    perception: StereoPerception,
+    config: RemoveStereoConfig,
+}
+
+impl StereoRemover {
+    /// Construct a remover with unrestricted All selection and default algorithms.
+    pub fn new(model: &StereoModel) -> Self {
+        Self::with_config(model, RemoveStereoConfig::default())
+    }
+
+    /// Store a model snapshot and explicit configuration for stereo removal.
+    ///
+    /// Site ids are checked against each input molecule during transformation.
+    pub fn with_config(model: &StereoModel, config: RemoveStereoConfig) -> Self {
+        Self {
+            perception: StereoPerception::new(model),
+            config,
+        }
+    }
+
+    fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, RemoveStereoError> {
+        let selection = &self.config.selection;
+        if let Some(sites) = &selection.sites {
+            for &site in sites {
+                let available = match site {
+                    StereoSite::Atom(atom) => molecule.atoms().get(atom).is_some(),
+                    StereoSite::Bond(bond) => molecule.bonds().get(bond).is_some(),
+                };
+                if !available {
+                    return Err(StereoPerceptionError::InvalidSite { site }.into());
+                }
+            }
+        }
+        if selection.sites.as_ref().is_some_and(BTreeSet::is_empty)
+            || selection.kinds.as_ref().is_some_and(BTreeSet::is_empty)
+            || selection
+                .stereogenicities
+                .as_ref()
+                .is_some_and(BTreeSet::is_empty)
+        {
+            return Ok(Edits::new());
+        }
+
+        let mut sites: BTreeSet<_> = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| {
+                (
+                    StereoSite::Atom(stereo.site_id()),
+                    &stereo.attributes().configuration,
+                )
+            })
+            .chain(molecule.stereo_bonds().iter().map(|stereo| {
+                (
+                    StereoSite::Bond(stereo.site_id()),
+                    &stereo.attributes().configuration,
+                )
+            }))
+            .filter(|(site, configuration)| {
+                self.config.mode.matches(configuration)
+                    && selection
+                        .sites
+                        .as_ref()
+                        .is_none_or(|sites| sites.contains(site))
+                    && selection.kinds.as_ref().is_none_or(|kinds| {
+                        configuration
+                            .kind()
+                            .is_some_and(|kind| kinds.contains(&kind))
+                    })
+            })
+            .map(|(site, _)| site)
+            .collect();
+        if let Some(classes) = &selection.stereogenicities {
+            let classifications =
+                self.perception
+                    .classify(molecule, &sites, self.config.automorphism_algorithm)?;
+            sites.retain(|site| classes.contains(&classifications[site]));
+        }
+
+        let mut edits = Edits::new();
+        let mut atoms = Vec::new();
+        let mut atom_constraints = Vec::new();
+        for stereo in molecule.stereo_atoms().iter() {
+            let atom = stereo.site_id();
+            if !sites.contains(&StereoSite::Atom(atom)) {
+                continue;
+            }
+            atoms.push((
+                StereoAtomHandle::Id(stereo.id()),
+                AtomHandle::Id(atom),
+                stereo
+                    .ligand_ids()
+                    .iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                stereo.attributes().clone(),
+            ));
+            if let Some(asserted) = molecule
+                .atom(atom)
+                .attributes()
+                .constraints
+                .get(AtomConstraintKey::TetrahedralStereo)
+            {
+                atom_constraints.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
+            }
+        }
+        let mut bonds = Vec::new();
+        let mut bond_constraints = Vec::new();
+        for stereo in molecule.stereo_bonds().iter() {
+            let bond = stereo.site_id();
+            if !sites.contains(&StereoSite::Bond(bond)) {
+                continue;
+            }
+            bonds.push((
+                StereoBondHandle::Id(stereo.id()),
+                BondHandle::Id(bond),
+                stereo
+                    .ligand_ids()
+                    .iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                stereo.attributes().clone(),
+            ));
+            if let Some(asserted) = molecule
+                .bond(bond)
+                .attributes()
+                .constraints
+                .get(BondConstraintKey::CisTransStereo)
+            {
+                bond_constraints.push((BondHandle::Id(bond), Some(asserted.clone()), None));
+            }
+        }
+        if !atoms.is_empty() {
+            edits.remove_stereo_atoms(atoms);
+        }
+        if !bonds.is_empty() {
+            edits.remove_stereo_bonds(bonds);
+        }
+        if !atom_constraints.is_empty() {
+            edits.modify_atom_constraints(AtomConstraintKey::TetrahedralStereo, atom_constraints);
+        }
+        if !bond_constraints.is_empty() {
+            edits.modify_bond_constraints(BondConstraintKey::CisTransStereo, bond_constraints);
+        }
+        Ok(edits)
+    }
+}
+
+impl Transformer for StereoRemover {
+    type Error = RemoveStereoError;
+
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, RemoveStereoError> {
+        let edits = self.plan_transform(&molecule)?;
+        let mut editor = molecule.edit();
+        editor
+            .apply(edits)
+            .expect("stereo removal plan applies to its input");
+        Ok(editor
+            .finish()
+            .expect("stereo removal plan preserves molecule integrity"))
+    }
+
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), RemoveStereoError> {
+        let edits = self.plan_transform(molecule)?;
+        if !edits.is_empty() {
+            molecule.mutate(edits);
+        }
+        Ok(())
+    }
+
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        iter::once_with(move || self.transform(molecule.clone()).ok()).flatten()
+    }
+}
+
 /// Site selection and algorithm for stereo enumeration.
 ///
 /// Default selects tetrahedral and cis/trans kinds, all topology sites, and
@@ -240,6 +445,7 @@ impl Default for EnumerateStereoConfig {
 #[cfg(test)]
 mod tests {
     mod adder;
+    mod remover;
 
     use rstest::rstest;
     use umol_graph_ir::ir::{AtomId, BondId, StereoTerm};

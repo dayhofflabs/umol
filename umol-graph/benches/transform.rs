@@ -6,20 +6,23 @@
 #[path = "transform/stereo.rs"]
 mod stereo;
 
+use std::collections::BTreeSet;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ops::model::{AromaticityModel, StereoModel};
+use umol_graph::ops::stereo::{StereoSelection, StereoSite};
 use umol_graph::ops::transform::{
-    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, StereoAdder,
-    Transformer,
+    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, RemoveStereoConfig,
+    RemoveStereoMode, StereoAdder, StereoRemover, Transformer,
 };
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, IntoIr, Molecule, MoleculeEntries, StereoAtomForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind,
+    AtomConstraintForm, AtomForm, AtomId, BondForm, IntoIr, Molecule, MoleculeEntries,
+    StereoAtomForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
+    TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
@@ -595,6 +598,211 @@ fn bench_stereo_adder(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_stereo_remover(c: &mut Criterion) {
+    let mixed = mol_dsl_concrete!(
+        r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C0#R!"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
+    );
+    let mut cases = vec![
+        (
+            "mixed_all",
+            mixed.clone(),
+            RemoveStereoConfig::default(),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]}"#
+            ),
+        ),
+        (
+            "mixed_undetermined",
+            mixed,
+            RemoveStereoConfig {
+                mode: RemoveStereoMode::Undetermined,
+                ..Default::default()
+            },
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
+                :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#
+            ),
+        ),
+    ];
+    let mut entries = MoleculeEntries::default();
+    let mut without_stereo = MoleculeEntries::default();
+    let mut without_first = MoleculeEntries::default();
+    for component in 0..16 {
+        let base = component * 5;
+        let plain = [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| AtomForm::from_element(element).into_concrete());
+        let mut asserted = plain.clone();
+        asserted[0] = asserted[0]
+            .clone()
+            .with_constraint(AtomConstraintForm::tetrahedral_stereo(
+                TetrahedralStereoForm::Stereo(StereoCoset::Undetermined),
+            ));
+        entries.atoms.extend(asserted.clone());
+        without_stereo.atoms.extend(plain.clone());
+        without_first
+            .atoms
+            .extend(if component == 0 { plain } else { asserted });
+        let bonds: Vec<_> = (1..=4)
+            .map(|ligand| {
+                (
+                    AtomId(base),
+                    AtomId(base + ligand),
+                    BondForm::from_order(1).into_concrete(),
+                )
+            })
+            .collect();
+        entries.bonds.extend(bonds.clone());
+        without_stereo.bonds.extend(bonds.clone());
+        without_first.bonds.extend(bonds);
+        let stereo = (
+            AtomId(base),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(base + ligand), StereoLigandKind::Atom))
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+        );
+        entries.stereo_atoms.push(stereo.clone());
+        if component > 0 {
+            without_first.stereo_atoms.push(stereo);
+        }
+    }
+    let input = Molecule::from_entries(entries);
+    let stripped = Molecule::from_entries(without_stereo);
+    cases.push((
+        "all_16",
+        input.clone(),
+        RemoveStereoConfig::default(),
+        stripped.clone(),
+    ));
+    cases.push((
+        "selected_1",
+        input.clone(),
+        RemoveStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        Molecule::from_entries(without_first),
+    ));
+    cases.push((
+        "stereogenic_16",
+        input,
+        RemoveStereoConfig {
+            selection: StereoSelection {
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        stripped,
+    ));
+
+    let mut group = c.benchmark_group("stereo_remover");
+    for (name, input, config, expected) in cases {
+        let transformer = StereoRemover::with_config(&StereoModel::default(), config.clone());
+        let entries = MoleculeEntries {
+            atoms: input
+                .atoms()
+                .iter()
+                .map(|atom| atom.attributes().clone())
+                .collect(),
+            bonds: input
+                .bonds()
+                .iter()
+                .map(|bond| {
+                    let [a, b] = bond.atom_ids();
+                    (a, b, bond.attributes().clone())
+                })
+                .collect(),
+            stereo_atoms: input
+                .stereo_atoms()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        stereo.attributes().clone(),
+                    )
+                })
+                .collect(),
+            stereo_bonds: input
+                .stereo_bonds()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        stereo.attributes().clone(),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        };
+        assert_eq!(Molecule::from_entries(entries.clone()), input, "{name}");
+        assert_eq!(
+            transformer.transform(input.clone()),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        assert_eq!(transformer.transform_into(&mut in_place), Ok(()), "{name}");
+        assert_eq!(in_place, expected, "{name}");
+        assert_eq!(
+            transformer.transform(Molecule::from_entries(entries.clone())),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        let mut unique = Molecule::from_entries(entries.clone());
+        assert_eq!(transformer.transform_into(&mut unique), Ok(()), "{name}");
+        assert_eq!(unique, expected, "{name}");
+        assert_eq!(
+            expected.clone().edit().finish(),
+            Ok(expected.clone()),
+            "{name}"
+        );
+        eprintln!("stereo_remover_input\t{name}\tatoms={}\tbonds={}\tstereo_atoms={}\tstereo_bonds={}\tremoved_stereo_atoms={}\tremoved_stereo_bonds={}\tmode={:?}\tselected_sites={:?}\tclasses={:?}\talgorithm=Nauty\tpara_stereo=false",
+            input.atoms().count(), input.bonds().count(), input.stereo_atoms().count(), input.stereo_bonds().count(),
+            input.stereo_atoms().count() - expected.stereo_atoms().count(), input.stereo_bonds().count() - expected.stereo_bonds().count(),
+            config.mode, config.selection.sites.as_ref().map(BTreeSet::len), config.selection.stereogenicities);
+        group.bench_function(BenchmarkId::new("transform_shared", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| transformer.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into_shared", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| transformer.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_unique", name), |b| {
+            b.iter_batched(
+                || Molecule::from_entries(entries.clone()),
+                |molecule| transformer.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into_unique", name), |b| {
+            b.iter_batched_ref(
+                || Molecule::from_entries(entries.clone()),
+                |molecule| transformer.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     transform,
     bench_transform,
@@ -602,6 +810,7 @@ criterion_group!(
     bench_unfold_hydrogens,
     bench_hydrogens_scaling,
     bench_stereo_adder,
+    bench_stereo_remover,
     stereo::bench_stereo
 );
 criterion_main!(transform);

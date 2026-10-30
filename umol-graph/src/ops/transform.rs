@@ -12,8 +12,8 @@ pub use aromaticity::{
 };
 pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};
 pub use stereo::{
-    AddStereoConfig, AddStereoError, EnumerateStereoConfig, RemoveStereoConfig, RemoveStereoMode,
-    StereoAdder,
+    AddStereoConfig, AddStereoError, EnumerateStereoConfig, RemoveStereoConfig, RemoveStereoError,
+    RemoveStereoMode, StereoAdder, StereoRemover,
 };
 use umol_graph_ir::ir::{AtomId, Molecule};
 

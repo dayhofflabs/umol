@@ -19,8 +19,8 @@ configuration values on existing entities.
 This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
-and S3a's StereoAdder are implemented. StereoRemover and StereoEnumerator remain
-future work. External implementations under materials/codes may supply
+and S3a/S3b's StereoAdder and StereoRemover are implemented. StereoEnumerator
+remains future work. External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -260,18 +260,29 @@ result, or no result on rejection.
 
 Remove only entities selected by StereoSelection and the All/Undetermined mode.
 Non-stereogenic-only removal is expressed by selecting Symmetric and
-Prochiral; a user may retain Prochiral by selecting Symmetric alone. All bypasses
-coset determination, and unrestricted selection does not require a
-stereogenicity calculation merely to remove an entity.
+Prochiral; a user may retain Prochiral by selecting Symmetric alone. Validate
+explicit topology ids, then apply mode, site, and kind filters before requesting
+classification. A class filter uses StereoPerception::classify once in the
+unchanged whole molecular context. With no class filter, both modes omit
+classification: All accepts any configuration, while Undetermined matches only
+an explicitly undetermined coset of a known kind. Kindless, symbolic, and
+other-geometry records can therefore be removed without interpretation where
+the mode and selectors admit them.
 
 Follow Kekulizer's assertion-removal behavior: removing a selected stereo entity
 also clears its corresponding atom #T or bond #C assertion, with no extra switch.
-Keep unrelated assertions. Use the existing graph-IR overlay removal and
+Keep unrelated assertions everywhere, and retain #T/#C hints at sites where no
+entity is removed. Use the existing graph-IR overlay removal and
 constraint-compaction machinery for references to removed entities.
 
 Removal preserves molecular topology and the retained entities' data, subject
-to ordinary id compaction and reference transport. Its iterator produces its
-single transformed result, or no result on rejection.
+to ordinary id compaction and reference transport. RemoveStereoError::Perception
+wraps StereoPerceptionError. Invalid selection ids and failures of required
+classification reject before publication; unsupported records excluded by the
+earlier filters do not themselves require classification. Its iterator produces
+its single transformed result, or no result on rejection. Without a class
+filter, removal is idempotent for the same config; class-filtered removal can
+change the context used by a later call.
 
 ### StereoEnumerator
 
@@ -321,9 +332,12 @@ silently supply a canonical order.
 | StereoAdder, StereoRemover, StereoEnumerator | Configured Transformer engines sharing StereoPerception |
 | StereoAdder::new, StereoAdder::with_config | Infallible model snapshot and owned configuration; topology ids checked during execution |
 | StereoAdder's Transformer implementation | Consuming, in-place, and lazy one-result operations; AddStereoError on singular rejection, no iterator result on rejection |
+| StereoRemover::new, StereoRemover::with_config | Infallible model snapshot and owned configuration; topology ids checked during execution |
+| StereoRemover's Transformer implementation | Consuming, in-place, and lazy one-result operations; RemoveStereoError on singular rejection, no iterator result on rejection |
 | EnumerateStereoIter | Owned operation-issued iterator, produced by StereoEnumerator::transform_iter |
 | AddStereoError, RemoveStereoError, EnumerateStereoError | Operation-specific rejection boundaries |
 | AddStereoError::Perception, AddStereoError::Inconsistency | Existing shared query/evidence causes, with From conversions; no parallel diagnostic vocabulary |
+| RemoveStereoError::Perception | Wraps StereoPerceptionError with a From conversion; no separate removal-specific diagnostic payload |
 
 StereoAdder and StereoRemover have new(model) and with_config(model, config)
 constructors, following Aromatizer. StereoEnumerator additionally receives the
@@ -1003,8 +1017,8 @@ synthetic domains. No optimization or para-stereo redesign is added here.
   Modules: the same implementation, remover tests, re-exports, and benchmark
   target. [dep: S2c, S2e]
   Implement all three Transformer methods. Intersect the operation's mode with the
-  shared site/kind/stereogenicity selectors; bypass classification when
-  unrestricted All does not need it. Remove corresponding #T/#C assertions on
+  shared site/kind/stereogenicity selectors; bypass classification when the
+  class selector is unrestricted. Remove corresponding #T/#C assertions on
   removed sites, following Kekulizer, and delegate entity/reference compaction to
   graph IR. Test All and Undetermined separately from stereogenicity, Th/Ct
   include/exclude selectors, known kinds with open cosets, unrestricted kindless
@@ -1013,6 +1027,35 @@ synthetic domains. No optimization or para-stereo redesign is added here.
   frames/attributes, transported constraint references, assertions at untouched
   sites, no-op results, and exact failure preservation. Add consuming/in-place
   measurements and selected-versus-unrestricted controls.
+
+  **Completed — 2026-10-30.** Added StereoRemover with new(model) and
+  with_config(model, config), all three Transformer methods, and the
+  RemoveStereoError::Perception wrapper. The engine and error are exported from
+  ops::transform and its stereo module. Explicit selection ids are checked
+  before empty-filter handling. Mode, site, and kind filters precede the
+  optional shared classify call, which uses the original whole molecule.
+  No class filter means no geometry, coset-domain, or groundness evaluation.
+  Planning records the exact stored frames and attributes for bulk graph-IR
+  removal, plus corresponding #T/#C assertion removals. The existing graph-IR
+  operations handle id compaction and constraint transport. No Molecule methods
+  or additional public planning surface are added.
+
+  The 104 remover cases cover All and Undetermined, shared selector
+  intersections and empty sets, Th/Ct and other kinds, kindless and symbolic
+  records, literal and finite cosets, invalid and empty domains, partial inherent
+  fields, symmetric/prochiral/stereogenic classes, remote stereo context,
+  retained frames and attributes, corresponding and untouched assertions,
+  transported atom/bond stereo constraint references, no-op results,
+  idempotence without a class filter, exact errors and unchanged inputs, and
+  independent iterator results. A later classification failure after a valid
+  selected site publishes no removals.
+
+  All 3,179 graph unit tests, 188 graph property tests, and 683 resolution
+  conformance cases passed. All-target/all-feature Clippy for graph and
+  graph-IR, strict graph rustdoc, formatting, and diff checks passed. All 20
+  remover benchmark cases passed their full-result checks for consuming and
+  in-place calls with shared and uniquely owned storage. The S4a transformer
+  properties and S4b receiver methods remain planned work.
 
 - **S3c — Absolute assignment enumeration** — additive (green).
   Modules: internal enumeration support in ops/transform/stereo.rs or a named
@@ -1094,6 +1137,44 @@ The sixteen-site total is consistent with S2's phase measurements, where local
 projection and classification are the largest measured component. These totals
 do not isolate planning and publication from perception; no optimization is
 inferred from the small shared/unique differences in this synthetic domain.
+
+#### S3b removal measurements
+
+Measured on S0b's host and optimization profile with rustc 1.99.1, the default
+stereo model, Nauty, and para_stereo=false. The nine-atom/seven-bond input has
+one fixed Th entity, one explicitly undetermined Ct coset, corresponding #T/#C
+assertions, and unrelated #D/#R assertions. All removes both entities;
+Undetermined removes only Ct. Three controls share an 80-atom/64-bond input
+containing sixteen disconnected C(F)(Cl)(Br)I components, each with Th* and
+#T+. All removes sixteen entities; explicit site selection removes one; a
+Stereogenic filter removes sixteen after classification. All and Stereogenic
+produce the same full result on this input.
+
+Each input is measured through consuming and in-place calls with shared and
+uniquely owned storage. Shared setup clones the fixture; unique setup builds a
+fresh molecule from owned entries. Setup and independent expected-result
+construction are outside timing. Full molecule equality and result integrity
+are checked before timing for all four paths. Timed calls include selection,
+classification when requested, planning, and publication.
+
+    cargo bench --locked -p umol-graph --bench transform -- stereo_remover --save-baseline stereo-s3b-remover --sample-size 30 --warm-up-time 0.1 --measurement-time 0.3 --nresamples 10000 --noplot
+
+All 20 cases were measured. Medians are microseconds per call:
+
+| Input and selection | Consuming, shared | In-place, shared | Consuming, unique | In-place, unique |
+| --- | ---: | ---: | ---: | ---: |
+| Th/Ct, All | 1.613 | 1.522 | 1.044 | 1.053 |
+| Th/Ct, Undetermined | 0.967 | 0.908 | 0.661 | 0.648 |
+| Sixteen Th, All | 5.047 | 4.997 | 3.807 | 3.772 |
+| Sixteen Th, one selected site | 3.487 | 3.413 | 1.585 | 1.587 |
+| Sixteen Th, Stereogenic | 1631.467 | 1634.271 | 1628.018 | 1624.589 |
+
+On the matched sixteen-site input, requesting classification adds about
+1.62 ms to a removal costing 3.8–5.0 µs without it. Restricting removal to one
+site reduces the unclassified total to 1.6–3.5 µs. These controls distinguish
+the cost of requested classification from raw selection/removal; they do not
+separate symmetry projection, edit planning, and publication internally or
+establish performance on a broader molecular domain.
 
 ### S4 — Properties, receiver methods, and Python
 
