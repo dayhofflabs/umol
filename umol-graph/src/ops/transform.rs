@@ -19,7 +19,7 @@ pub use stereo::{
 use umol_graph_ir::ir::{AtomId, Molecule};
 
 use crate::ops::aromaticity::AromaticityConfig;
-use crate::ops::model::AromaticityModel;
+use crate::ops::model::{AromaticityModel, StereoModel};
 
 /// Transforms a molecular representation.
 ///
@@ -178,6 +178,54 @@ pub trait Transform: Sized {
     ///
     /// Reports the same errors as [`Self::unfold_hydrogens`], leaving the receiver unchanged.
     fn unfold_hydrogens_into(&mut self) -> Result<(), UnfoldHydrogensError>;
+
+    /// Adds selected missing stereo entities using [`StereoAdder`].
+    ///
+    /// Existing arrangements and source assertions are preserved.
+    ///
+    /// # Errors
+    ///
+    /// Reports invalid selected sites, unsupported selected states, required but
+    /// undetermined input, or incompatible stereo evidence. Rejection drops the input.
+    fn add_stereo(
+        self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<Self, AddStereoError>;
+
+    /// Adds stereo entities in place using [`StereoAdder`].
+    ///
+    /// # Errors
+    ///
+    /// Reports the same errors as [`Self::add_stereo`], leaving the receiver unchanged.
+    fn add_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<(), AddStereoError>;
+
+    /// Removes selected stereo entities and their #T/#C assertions using [`StereoRemover`].
+    ///
+    /// # Errors
+    ///
+    /// Reports invalid selected sites or unsupported required classification.
+    /// Rejection drops the input.
+    fn remove_stereo(
+        self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<Self, RemoveStereoError>;
+
+    /// Removes stereo entities and their #T/#C assertions in place using [`StereoRemover`].
+    ///
+    /// # Errors
+    ///
+    /// Reports the same errors as [`Self::remove_stereo`], leaving the receiver unchanged.
+    fn remove_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<(), RemoveStereoError>;
 }
 
 impl Transform for Molecule {
@@ -235,6 +283,38 @@ impl Transform for Molecule {
 
     fn unfold_hydrogens_into(&mut self) -> Result<(), UnfoldHydrogensError> {
         HydrogenUnfolder.transform_into(self)
+    }
+
+    fn add_stereo(
+        self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<Self, AddStereoError> {
+        StereoAdder::with_config(model, config).transform(self)
+    }
+
+    fn add_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<(), AddStereoError> {
+        StereoAdder::with_config(model, config).transform_into(self)
+    }
+
+    fn remove_stereo(
+        self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<Self, RemoveStereoError> {
+        StereoRemover::with_config(model, config).transform(self)
+    }
+
+    fn remove_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<(), RemoveStereoError> {
+        StereoRemover::with_config(model, config).transform_into(self)
     }
 }
 

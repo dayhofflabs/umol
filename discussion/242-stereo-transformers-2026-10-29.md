@@ -19,8 +19,8 @@ configuration values on existing entities.
 This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
-S3's three transformer engines and absolute-assignment traversal, and S4a's
-properties are implemented. S4b's receiver methods and S4c/S4d's Python bindings
+S3's three transformer engines and absolute-assignment traversal, S4a's
+properties, and S4b's receiver methods are implemented. S4c/S4d's Python bindings
 remain future work. External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
@@ -1409,6 +1409,23 @@ the small differences between consuming/in-place or shared/unique paths.
   methods as the enumeration interface; do not replace it with the discarded
   free function or merge it back into addition. Test receiver/engine agreement
   and sequential publication without an extra molecule clone or validation pass.
+
+  **Completed — 2026-10-30.** Added the four agreed methods to Transform and its
+  Molecule implementation. Each accepts an explicit StereoModel and operation
+  configuration, constructs StereoAdder or StereoRemover, and directly forwards
+  the owned or borrowed receiver. The receiver methods reuse the existing errors
+  and add no molecule clone or validation pass. Enumeration remains on the
+  separately configured StereoEnumerator.
+
+  Eleven new receiver cases compare independently specified full molecules with
+  direct transformer results and consuming/in-place receiver results. They cover
+  model and selector forwarding, All/Undetermined removal, source assertion
+  preservation and removal, exact perception/inconsistency errors, and unchanged
+  receivers on rejection. A sequence of successful addition and removal followed
+  by rejected addition preserves the preceding result. All 3,516 graph unit
+  tests, 215 graph property cases, and 683 resolution conformance cases passed.
+  All-target/all-feature graph and graph-IR Clippy, strict graph rustdoc,
+  formatting, and diff checks passed.
 
 - **S4c — Python configuration and selector values** — additive (green).
   Modules: umol-py/src/transform.rs, relevant stereo/algorithm wrappers,

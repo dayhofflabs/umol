@@ -1,15 +1,21 @@
 pub(super) mod stereo;
 
+use std::collections::BTreeSet;
+
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
-use umol_graph_ir::ir::{AromaticSystemId, AtomId, Molecule};
+use umol_graph_ir::ir::{
+    AromaticSystemId, AtomId, BondId, Molecule, StereoAtomId, StereoKind, Stereogenicity,
+};
 use umol_graph_ir::mol_dsl_concrete;
 
 use crate::ops::aromaticity::{AromaticityConfig, AromaticityContradiction};
-use crate::ops::model::{AromaticityModel, AromaticityRule};
+use crate::ops::model::{AromaticityModel, AromaticityRule, StereoModel};
+use crate::ops::stereo::{StereoInconsistency, StereoPerceptionError, StereoSelection, StereoSite};
 use crate::ops::transform::{
-    AromatizeError, FoldHydrogensError, KekulizeConfig, KekulizeError, MaximumMatchingAlgorithm,
-    Transform, UnfoldHydrogensError,
+    AddStereoConfig, AddStereoError, AromatizeError, FoldHydrogensError, KekulizeConfig,
+    KekulizeError, MaximumMatchingAlgorithm, RemoveStereoConfig, RemoveStereoError,
+    RemoveStereoMode, StereoAdder, StereoRemover, Transform, Transformer, UnfoldHydrogensError,
 };
 
 #[fixture]
@@ -29,6 +35,30 @@ fn aromatic_benzene() -> Molecule {
         :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
         :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn stereo_input() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+    }"#
+    )
+}
+
+#[fixture]
+fn stereo_arrangements() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
     }"#
     )
 }
@@ -219,5 +249,236 @@ fn test_molecule_unfold_hydrogens_error(
     assert_eq!(input.clone().unfold_hydrogens(), Err(expected.clone()));
     let mut molecule = input.clone();
     assert_eq!(molecule.unfold_hydrogens_into(), Err(expected));
+    assert_eq!(molecule, input);
+}
+
+#[rstest]
+#[case::default(None, AddStereoConfig::default(), mol_dsl_concrete!(r#"{
+    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+}"#))]
+#[case::selection(None, AddStereoConfig {
+    selection: StereoSelection {
+        sites: Some(BTreeSet::from([StereoSite::Bond(BondId(4))])),
+        kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
+        ..AddStereoConfig::default().selection
+    },
+    ..Default::default()
+}, mol_dsl_concrete!(r#"{
+    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+}"#))]
+#[case::model(Some(StereoKind::CisTrans), AddStereoConfig::default(), mol_dsl_concrete!(r#"{
+    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+}"#))]
+fn test_molecule_add_stereo(
+    stereo_input: Molecule,
+    #[case] disabled_kind: Option<StereoKind>,
+    #[case] config: AddStereoConfig,
+    #[case] expected: Molecule,
+) {
+    let mut model = StereoModel::default();
+    if let Some(kind) = disabled_kind {
+        model.kind_models[kind as usize] = None;
+    }
+    let transformer = StereoAdder::with_config(&model, config.clone());
+    assert_eq!(
+        transformer.transform(stereo_input.clone()),
+        Ok(expected.clone())
+    );
+    assert_eq!(
+        stereo_input.clone().add_stereo(&model, config.clone()),
+        Ok(expected.clone())
+    );
+    let mut molecule = stereo_input;
+    assert_eq!(molecule.add_stereo_into(&model, config), Ok(()));
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::missing_site(stereo_input(), AddStereoConfig {
+    selection: StereoSelection {
+        sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(9))])),
+        ..AddStereoConfig::default().selection
+    },
+    ..Default::default()
+}, AddStereoError::Perception(StereoPerceptionError::InvalidSite {
+    site: StereoSite::Atom(AtomId(9)),
+}))]
+#[case::evidence(mol_dsl_concrete!(r#"{
+    :atoms ["C#T0" "F" "Cl" "Br" "I"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+}"#), AddStereoConfig::default(), AddStereoError::Inconsistency(
+    StereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(0), stereo_atom: StereoAtomId(0) }
+))]
+fn test_molecule_add_stereo_error(
+    #[case] input: Molecule,
+    #[case] config: AddStereoConfig,
+    #[case] expected: AddStereoError,
+) {
+    let model = StereoModel::default();
+    assert_eq!(
+        StereoAdder::with_config(&model, config.clone()).transform(input.clone()),
+        Err(expected.clone())
+    );
+    assert_eq!(
+        input.clone().add_stereo(&model, config.clone()),
+        Err(expected.clone())
+    );
+    let mut molecule = input.clone();
+    assert_eq!(molecule.add_stereo_into(&model, config), Err(expected));
+    assert_eq!(molecule, input);
+}
+
+#[rstest]
+fn test_molecule_add_stereo_into_sequence(stereo_input: Molecule) {
+    let model = StereoModel::default();
+    let mut molecule = stereo_input;
+    assert_eq!(
+        molecule.add_stereo_into(&model, AddStereoConfig::default()),
+        Ok(())
+    );
+    assert_eq!(
+        molecule,
+        mol_dsl_concrete!(
+            r#"{
+        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+    }"#
+        )
+    );
+    assert_eq!(
+        molecule.remove_stereo_into(&model, RemoveStereoConfig::default()),
+        Ok(())
+    );
+    let expected = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+                [5 6 "2"] [5 7 "1"] [6 8 "1"]]
+    }"#
+    );
+    assert_eq!(molecule, expected);
+    assert_eq!(
+        molecule.add_stereo_into(
+            &model,
+            AddStereoConfig {
+                selection: StereoSelection {
+                    sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(9))])),
+                    ..AddStereoConfig::default().selection
+                },
+                ..Default::default()
+            }
+        ),
+        Err(AddStereoError::Perception(
+            StereoPerceptionError::InvalidSite {
+                site: StereoSite::Atom(AtomId(9)),
+            }
+        ))
+    );
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::all(RemoveStereoConfig::default(), mol_dsl_concrete!(r#"{
+    :atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+            [5 6 "2"] [5 7 "1"] [6 8 "1"]]
+}"#))]
+#[case::undetermined(RemoveStereoConfig {
+    mode: RemoveStereoMode::Undetermined,
+    ..Default::default()
+}, mol_dsl_concrete!(r#"{
+    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+            [5 6 "2"] [5 7 "1"] [6 8 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+}"#))]
+#[case::selection(RemoveStereoConfig {
+    selection: StereoSelection {
+        sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+        kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
+        ..Default::default()
+    },
+    ..Default::default()
+}, mol_dsl_concrete!(r#"{
+    :atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
+}"#))]
+fn test_molecule_remove_stereo(
+    stereo_arrangements: Molecule,
+    #[case] config: RemoveStereoConfig,
+    #[case] expected: Molecule,
+) {
+    let model = StereoModel::default();
+    let transformer = StereoRemover::with_config(&model, config.clone());
+    assert_eq!(
+        transformer.transform(stereo_arrangements.clone()),
+        Ok(expected.clone())
+    );
+    assert_eq!(
+        stereo_arrangements
+            .clone()
+            .remove_stereo(&model, config.clone()),
+        Ok(expected.clone())
+    );
+    let mut molecule = stereo_arrangements;
+    assert_eq!(molecule.remove_stereo_into(&model, config), Ok(()));
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::missing_site(stereo_arrangements(), RemoveStereoConfig {
+    selection: StereoSelection {
+        sites: Some(BTreeSet::from([StereoSite::Bond(BondId(7))])),
+        ..Default::default()
+    },
+    ..Default::default()
+}, RemoveStereoError::Perception(StereoPerceptionError::InvalidSite {
+    site: StereoSite::Bond(BondId(7)),
+}))]
+#[case::classification(mol_dsl_concrete!(r#"{
+    :atoms ["Pt#c+2" "F" "Cl" "Br" "I"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
+}"#), RemoveStereoConfig {
+    selection: StereoSelection {
+        stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+        ..Default::default()
+    },
+    ..Default::default()
+}, RemoveStereoError::Perception(StereoPerceptionError::UnsupportedKind {
+    kind: StereoKind::SquarePlanar,
+}))]
+fn test_molecule_remove_stereo_error(
+    #[case] input: Molecule,
+    #[case] config: RemoveStereoConfig,
+    #[case] expected: RemoveStereoError,
+) {
+    let model = StereoModel::default();
+    assert_eq!(
+        StereoRemover::with_config(&model, config.clone()).transform(input.clone()),
+        Err(expected.clone())
+    );
+    assert_eq!(
+        input.clone().remove_stereo(&model, config.clone()),
+        Err(expected.clone())
+    );
+    let mut molecule = input.clone();
+    assert_eq!(molecule.remove_stereo_into(&model, config), Err(expected));
     assert_eq!(molecule, input);
 }
