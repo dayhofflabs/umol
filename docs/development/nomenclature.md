@@ -34,11 +34,13 @@ not license new abbreviations by analogy.
 Orientation, read once. The contrasts below are the ones most often collapsed; each participant has
 its own glossary entry.
 
-**Operations.** Three disjoint kinds: *resolution* fills undetermined state using a chemistry model;
-*transformation* rewrites one resolved representation into another; *validation* checks integrity,
+**Operations.** Three kinds: *resolution* fills undetermined state using a chemistry model;
+*transformation* explicitly changes molecular representation or state; *validation* checks integrity,
 model-independent invariants, and model-dependent conformance without mutation. Kekulization,
-aromatization, and charge delocalization are transformations, not resolver behaviour, because they
-alter determined representation.
+aromatization, charge delocalization, stereo addition/removal, and stereo enumeration are
+transformations. A transformation may retain or introduce undetermined values, or choose
+determined values; its input need not be fully determined. Construction and ordinary conversion
+preserve the supplied representation rather than perform these changes implicitly.
 
 **Integrity and validation tiers.** *Integrity* is the graph-IR-owned construction contract and is
 enforced by an integrity check. *Invariants* are model-independent semantic properties and
@@ -103,7 +105,7 @@ approximate.
 | `*Form` / `*Dsl` | lattice-shaped graph-IR value / boundary surface | 69 / 38 | graph-ir, py |
 
 `*Failure` has no member yet, but is named in settled vocabulary and expected to gain one.
-Transformer engine names follow the *Transformer naming* rule below.
+Transformer names follow the *Transformer naming* rule below.
 
 ### Stacking order
 
@@ -200,24 +202,30 @@ state.
 
 ### Transformer naming
 
-Transformer engines use agent nouns whether configured or parameterless: Kekulizer, Aromatizer,
-ChargeDelocalizer, HydrogenFolder, and HydrogenUnfolder. Having a config or error type does not
-change the engine naming rule.
+Name transformers for the operation they perform: Kekulizer, Aromatizer, ChargeDelocalizer,
+HydrogenFolder, HydrogenUnfolder, StereoAdder, StereoRemover, and StereoEnumerator.
+Apply this convention whether configured or parameterless.
 
-Run artifacts retain the verb-stem convention from *Operation names*: KekulizeConfig,
+Configuration and error types use the verb stems from *Operation names*: KekulizeConfig,
 KekulizeError, FoldHydrogensError, and UnfoldHydrogensError.
 
-Transformer is the common engine trait. Transform is the extension trait providing named
-operations on Molecule: aromatize, kekulize, delocalize_charge, fold_hydrogens, and
-unfold_hydrogens, each with its in-place _into counterpart.
+Transformers implement Transformer. Transform is the extension trait providing named
+operations on Molecule: aromatize, kekulize, delocalize_charge, fold_hydrogens,
+unfold_hydrogens, add_stereo, and remove_stereo, each with its in-place _into counterpart.
+Rust stereo enumeration uses StereoEnumerator's Transformer methods. Python exposes
+Molecule.enumerate_stereo, returning its native iterator; transformer classes remain Rust-only.
+
+## Argument names
+
+Name arguments for the values supplied. Use sites for a sequence of sites; describe how
+their sequence controls processing in the operation's contract.
 
 ## Module names
 
 A module exporting a result-object noun is named that noun (`coloring`, `embedding`,
-`matching`, `value`); an operation module whose only defining type is an agent is named the
-verb (`resolve`, `validate`, `transform`, `parse`, `edit`), with the agent noun inside
-(`resolve::Resolver`). Do not mix agent-noun and verb module names within one operation
-family.
+`matching`, `value`); a module defined by an operation type uses the verb
+(`resolve`, `validate`, `transform`, `parse`, `edit`), with the corresponding type inside
+(`resolve::Resolver`). Use verb names consistently within an operation family.
 
 A data module may take a concise adjective when that is the most direct description of its
 content (`oriented`, `dynamic`). Related modules are named recognizably alike.
@@ -241,7 +249,9 @@ spelling.
 | `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
 | `try_*` solely because an operation returns `Option` or `Result` | the ordinary operation name | fallibility is part of the signature; `try_*` distinguishes a checked counterpart or restricted dispatch |
 | `uncompact_participants` for a storage mutation | `restore_participants` | uncompaction returns translated ids or participant values without mutating storage |
-| agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
+| `agent` for an operation type | the specific type name; `engine` for resolvers and transformers collectively | no separate operation category is needed |
+| `engine` when a transformer is specifically meant | `transformer` | use the precise operation name |
+| type-name stems for errors and configs (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | name errors, configs, and state after the operation |
 | operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
 | `CanonicalizeLevel`, `CanonicalizationLevel` | private `DescriptionLevel` | the internal hierarchy describes represented prefixes; public canonicalization is complete-only |
 | `ground` for a molecule's or entity's chemistry-level determinedness | `concrete` | ground is the lattice term (constraint coordinates included) and risks the ground-state reading |
@@ -1284,38 +1294,33 @@ explicit context. Not chemical standardization, resolution, validation, or repai
 
 The allowed permutation carrying a ligand frame to its least presentation. In code:
 `CosetSpace::normalizer`, with `CosetSpace::allows` testing membership in the parent group. The
-noun names the returned action, not an engine; the frame selection it performs is reframe-side
-machinery despite the shared stem with *normalize*. **Not:** the group-theoretic normalizer
+name refers to the returned permutation; this frame selection belongs to reframing despite the
+shared stem with *normalize*. **Not:** the group-theoretic normalizer
 subgroup `N_P(R)`, which does not occur in code.
 
 ### Operation names
 
-An operation family has up to three stems — the verb (*resolve*), the agent noun (*resolver*),
-and the operation noun (*resolution*) — and composites choose by referent:
+Engine is the broader term for a resolver or transformer. Use the specific term when it is known.
 
-- The **agent noun** names the engine, its qualified engines, and agent classifications, and
-  nothing else: `Resolver`, `ValenceResolver`, `ConstraintValidator`, `ParserType`.
-- The **verb stem** names everything a run consumes, threads, or emits — configs, state,
-  reports, errors, contradictions: `ResolveConfig`, `ResolveState`, `ResolveReport`,
+Choose names according to what they describe:
+
+- Types that perform operations use names such as Resolver, ValenceResolver, and
+  ConstraintValidator. A selector names what it selects, as in ParserType.
+- Use the **verb stem** for configs, state, reports, errors, and contradictions:
+  `ResolveConfig`, `ResolveState`, `ResolveReport`,
   `ResolveError`, `ParseError`, `ValidateConfig`, `KekulizeConfig`. This is the default for
   operation-adjacent types.
 - The **operation noun** is reserved for prose and for result objects that name a completed act
   as data (`AromaticityDerivation`); when the result object has a more specific name
   (`ResolveReport`, a coloring, a matching), prefer it.
 
-Errors, configs, and state belong to the run, not to the engine that performs it — engines are
-built *from* configs and *produce* reports, so `ResolverError` misattributes.
+Implementations qualified by a method use `<Method><Domain>`: `CountsValence`,
+`AtomTypingValence`, `HueckelAromaticity`, `HmoAromaticity`, `ClarAromaticity`.
+The method and domain identify the implementation without an additional suffix.
 
-One level below the engine facade, method-qualified domain engines are named
-`<Method><Domain>` with no agent suffix: `CountsValence`, `AtomTypingValence`,
-`HueckelAromaticity`, `HmoAromaticity`, `ClarAromaticity`. The method qualifier does the
-naming work; appending the agent noun to a dispatch variant's payload adds length and
-stutters against the facade that selects it.
-
-**Not:** agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`,
-`KekulizerError`); operation-noun composites for run artifacts (`KekulizationConfig`); agent
-suffixes on method-qualified engines
-(`HueckelAromaticityPerceiver`).
+**Not:** type-name stems for errors and configs (`ResolverError`, `ValidatorError`,
+`KekulizerError`); operation nouns in config names (`KekulizationConfig`); redundant
+implementation suffixes (`HueckelAromaticityPerceiver`).
 **In code:** `Resolver`/`ResolveConfig`/`ResolveState`/`ResolveReport`, `ValidateError`,
 `KekulizeConfig`, `AromaticityPerceiver`, `CountsValence`.
 
@@ -1665,7 +1670,7 @@ relevant-cycle enumeration algorithm is operational configuration.
 
 ### Solution
 
-**`Solution<T, C, U = T>`** is the three-valued outcome of an engine pass: `Determined(T)`,
+**`Solution<T, C, U = T>`** represents three semantic outcomes: `Determined(T)`,
 `Underdetermined(U)`, or `Contradictory(C)`. The two-parameter form uses T for both
 non-contradictory outcomes. Setup and parameter failures travel separately in Result.
 
@@ -1795,9 +1800,11 @@ apply, probe, commit and rollback; Molecule::transact, Molecule::tracked_transac
 
 ### Transformation
 
-A **transformation** explicitly rewrites one valid representation into another. Kekulization,
-aromatization, and charge delocalization are transformations because they alter determined
-representation rather than fill undetermined state.
+A **transformation** explicitly changes molecular representation or state while preserving
+representation integrity. Its input may contain undetermined values. Stereo addition creates
+missing selected entities; removal strips selected entities and their source assertions;
+enumeration chooses consistent absolute configurations on existing entities. Construction and
+ordinary conversion do not perform these operations implicitly.
 
 Transformer::transform consumes its molecule and returns the result; failure drops the input.
 Both transform and transform_into derive a complete plan before mutation. Planning reports every
@@ -1806,11 +1813,12 @@ input must succeed. Transformer::transform_into applies the plan in place withou
 or rollback and leaves the molecule unchanged on rejection.
 Transformer::transform_iter borrows its source and lazily produces independent transformed copies.
 
-Transform supplies the corresponding named methods on Molecule, constructing an engine and
+Transform supplies the corresponding named methods on Molecule, constructing a transformer and
 delegating to it. A sequence of calls publishes each result independently; a later rejection
 leaves earlier successful transformations applied. Python exposes these named Molecule methods:
 base methods preserve the receiver and return an independent result, while _into methods mutate
-the receiver and return None.
+the receiver and return None. Python's Molecule.enumerate_stereo returns the native iterator
+over independent results, preserving order and multiplicity without symmetry deduplication.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.

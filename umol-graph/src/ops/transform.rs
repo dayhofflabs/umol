@@ -1,7 +1,8 @@
-//! Transformations of determined molecular representations.
+//! Transformations of molecular representations.
 
 pub mod aromaticity;
 pub mod hydrogens;
+pub mod stereo;
 
 use std::convert::Infallible;
 
@@ -10,14 +11,19 @@ pub use aromaticity::{
     MaximumMatchingAlgorithm,
 };
 pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};
+pub use stereo::{
+    AddStereoConfig, AddStereoError, EnumerateStereoConfig, EnumerateStereoError,
+    EnumerateStereoIter, RemoveStereoConfig, RemoveStereoError, RemoveStereoMode, StereoAdder,
+    StereoEnumerator, StereoRemover,
+};
 use umol_graph_ir::ir::{AtomId, Molecule};
 
 use crate::ops::aromaticity::AromaticityConfig;
-use crate::ops::model::AromaticityModel;
+use crate::ops::model::{AromaticityModel, StereoModel};
 
-/// Rewrites a determined molecular representation.
+/// Transforms a molecular representation.
 ///
-/// Implemented by transformation engines. [`Transform`] provides the named methods on Molecule.
+/// [`Transform`] provides the named methods on Molecule.
 ///
 /// Derives a complete plan before mutation, reporting every rejection during planning.
 /// The plan applies to its unchanged input and preserves representation integrity;
@@ -172,6 +178,60 @@ pub trait Transform: Sized {
     ///
     /// Reports the same errors as [`Self::unfold_hydrogens`], leaving the receiver unchanged.
     fn unfold_hydrogens_into(&mut self) -> Result<(), UnfoldHydrogensError>;
+
+    /// Adds selected missing stereo entities using [`StereoAdder`].
+    ///
+    /// Existing arrangements and source assertions are preserved.
+    /// The default configuration admits only stereogenic tetrahedral/cis-trans
+    /// sites; selectors may also admit prochiral or symmetric arrangements.
+    ///
+    /// # Errors
+    ///
+    /// Reports invalid selected sites, unsupported selected states, required but
+    /// undetermined input, or incompatible stereo evidence. Rejection drops the input.
+    fn add_stereo(
+        self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<Self, AddStereoError>;
+
+    /// Adds stereo entities in place using [`StereoAdder`].
+    ///
+    /// # Errors
+    ///
+    /// Reports the same errors as [`Self::add_stereo`], leaving the receiver unchanged.
+    fn add_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<(), AddStereoError>;
+
+    /// Removes selected stereo entities and their #T/#C assertions using [`StereoRemover`].
+    ///
+    /// The default removes all stored stereo. Undetermined mode removes only
+    /// explicitly undetermined cosets of known kinds. Site, kind, and
+    /// stereogenicity selectors intersect before removal.
+    ///
+    /// # Errors
+    ///
+    /// Reports invalid selected sites or unsupported required classification.
+    /// Rejection drops the input.
+    fn remove_stereo(
+        self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<Self, RemoveStereoError>;
+
+    /// Removes stereo entities and their #T/#C assertions in place using [`StereoRemover`].
+    ///
+    /// # Errors
+    ///
+    /// Reports the same errors as [`Self::remove_stereo`], leaving the receiver unchanged.
+    fn remove_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<(), RemoveStereoError>;
 }
 
 impl Transform for Molecule {
@@ -229,6 +289,38 @@ impl Transform for Molecule {
 
     fn unfold_hydrogens_into(&mut self) -> Result<(), UnfoldHydrogensError> {
         HydrogenUnfolder.transform_into(self)
+    }
+
+    fn add_stereo(
+        self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<Self, AddStereoError> {
+        StereoAdder::with_config(model, config).transform(self)
+    }
+
+    fn add_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: AddStereoConfig,
+    ) -> Result<(), AddStereoError> {
+        StereoAdder::with_config(model, config).transform_into(self)
+    }
+
+    fn remove_stereo(
+        self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<Self, RemoveStereoError> {
+        StereoRemover::with_config(model, config).transform(self)
+    }
+
+    fn remove_stereo_into(
+        &mut self,
+        model: &StereoModel,
+        config: RemoveStereoConfig,
+    ) -> Result<(), RemoveStereoError> {
+        StereoRemover::with_config(model, config).transform_into(self)
     }
 }
 

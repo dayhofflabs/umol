@@ -255,6 +255,31 @@ These methods return independent molecules and preserve their receivers. Their
 `_into` counterparts modify the receiver in place. Molecules also provide
 `aromatize`, `kekulize`, and `delocalize_charge`, with corresponding `_into` methods.
 
+Stereo addition creates missing tetrahedral and cis/trans entities, selecting only stereogenic
+sites by default. Removal defaults to all stored stereo and clears corresponding `#T`/`#C`
+assertions. Enumeration determines existing configurations in the supplied sequence of sites,
+preserving symmetry-equivalent assignments:
+
+```python
+from umol import Molecule, MoleculeDefaults, StereoModel, StereoSite
+
+source = Molecule.parse(
+    '{:atoms ["C" "F" "Cl" "Br" "I"] '
+    ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}',
+    defaults=MoleculeDefaults.concrete(),
+)
+model = StereoModel.default()
+stereo = source.add_stereo(model)
+isomers = list(stereo.enumerate_stereo(model, sites=[StereoSite.Atom(0)]))
+assert len(isomers) == 2
+assert stereo.remove_stereo(model) == source
+```
+
+Site, kind, and stereogenicity filters are shared across the three operations. A stereo entity
+may be symmetric or prochiral; its presence does not assert stereogenicity. The
+[Python API guide](docs/development/python-api.md#stereo-values-and-perception) describes
+selectors, undetermined-coset removal, and iterator ownership.
+
 ## Applying reactions
 
 A reaction can be read from mapped reaction SMILES or from umol notation.

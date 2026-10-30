@@ -1,5 +1,4 @@
-//! Cross-cutting infrastructure for umol: the workspace error trait and the
-//! three-valued engine-pass outcome.
+//! Shared utilities: the workspace error trait and semantic outcomes.
 
 pub mod error;
 pub mod solution;

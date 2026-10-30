@@ -1,10 +1,15 @@
 //! Stereo values, configurations, owned entity forms, and molecule-backed views.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
+mod perception;
+
 use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
+pub(crate) use perception::{
+    StereoDerivation, StereoInconsistency, StereoPerception, StereoSelection, StereoSite,
+};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;

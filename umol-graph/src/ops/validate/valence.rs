@@ -1,6 +1,6 @@
 //! Tier-3 valence conformance validator: the read-only twin of `ValenceResolver`.
-//! Dispatches on `ValenceModel` and folds each engine's per-atom classification
-//! over the atoms, surfacing the first mismatch as `Contradictory`.
+//! Uses `ValenceModel` to select atom typing or counts, then classifies every atom,
+//! surfacing the first mismatch as `Contradictory`.
 
 use thiserror::Error;
 use umol_graph_ir::ir::Molecule;
@@ -28,7 +28,7 @@ pub enum ValenceConformanceContradiction {
 pub enum ValenceConformanceError {}
 
 impl<'a> ValenceConformanceValidator<'a> {
-    /// Construct the validator engine selected by the valence model.
+    /// Construct the validator for the valence model.
     pub fn new(model: &'a ValenceModel) -> Self {
         match &model.candidates {
             ValenceCandidateSource::AtomTyping { registry } => {
@@ -51,10 +51,10 @@ impl<'a> ValenceConformanceValidator<'a> {
         let mut any_undetermined = false;
         for id in molecule.atoms().ids() {
             let outcome = match self {
-                Self::AtomTyping(engine) => engine
+                Self::AtomTyping(valence) => valence
                     .classify_molecule_atom(molecule, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
-                Self::Counts(engine) => engine
+                Self::Counts(valence) => valence
                     .classify_molecule_atom(molecule, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
             };

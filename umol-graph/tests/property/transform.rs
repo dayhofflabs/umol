@@ -3,8 +3,8 @@
 //! Aromaticity properties cover publication, valence, and assertion preservation.
 //! Hydrogen properties use independent representations, conservation laws, and
 //! count/stereo rejection domains.
+//! Stereo properties compare independent finite domains, publication, and id/frame transport.
 
-#[path = "transform/aromaticity.rs"]
 mod aromaticity;
-#[path = "transform/hydrogens.rs"]
 mod hydrogens;
+mod stereo;

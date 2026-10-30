@@ -1,11 +1,11 @@
-//! Three-valued outcome of an engine pass.
+//! Determined, underdetermined, and contradictory outcomes.
 //!
 //! `Solution<T, C, U = T>` distinguishes a fully-determined result carrying `T`,
 //! an underdetermined outcome carrying `U`, and a chemistry-level contradiction
 //! with a typed diagnostic payload `C`. The two-parameter form uses `T` for both
 //! non-contradictory outcomes.
 //!
-//! Engine setup or parameter-table errors travel separately in `Result<_, _>`
+//! Setup and parameter-table errors travel separately in `Result<_, _>`
 //! and never collapse into `Solution`.
 
 /// Semantic outcome with separate determined, underdetermined, and contradiction payloads.
@@ -54,8 +54,7 @@ impl<T, C, U> Solution<T, C, U> {
         }
     }
 
-    /// Transform the contradiction payload type. Used by composite engines
-    /// to wrap a sub-engine's contradiction in their union enum.
+    /// Transform the contradiction payload type.
     pub fn map_contradiction<D, F>(self, f: F) -> Solution<T, D, U>
     where
         F: FnOnce(C) -> D,

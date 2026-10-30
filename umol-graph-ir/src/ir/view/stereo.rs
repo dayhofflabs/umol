@@ -1202,7 +1202,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_stereo_queries() {
+    fn test_stereo_atom_view_stereo_queries(
+        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
+        coset: StereoCoset,
+    ) {
         // A clean stereocenter: C bonded to four distinct halogens.
         let mol = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
@@ -1223,7 +1226,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
             )],
             ..Default::default()
         });

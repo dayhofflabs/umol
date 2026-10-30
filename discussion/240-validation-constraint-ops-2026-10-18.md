@@ -1,19 +1,22 @@
 # 240 — Validation and constraint operations
 
-Status: Proposed
+Status: In Progress
 Date: 2026-10-18
 Relates: [166](166-molecule-ops-2026-07-27.md),
 [118](118-validator-architecture-2026-06-20.md),
 [195](195-molecule-constraint-matching-2026-08-12.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
-[237](237-release-0-10-scope-2026-10-15.md)
+[237](237-release-0-10-scope-2026-10-15.md),
+[242](242-stereo-transformers-2026-10-29.md)
 
 ## Scope
 
 S13, S14, and S16 have moved here from doc 166 and are outside the 0.10 release.
 They cover invariant validation and stereo ligand construction, constraint
 relocation, and explicit constraint discharge. Their subitem identifiers are
-retained so existing references remain usable. None is implemented by this move.
+retained so existing references remain usable. S13c's stereo-perception ligand
+construction is implemented; the remaining validation and constraint work is
+outstanding.
 S15a, the counts-resolver valence-capacity correction, remains in doc 166 and
 in scope for 0.10.
 
@@ -108,26 +111,27 @@ id in the frame, is not included in the implicit-hydrogen count, and is not a
 virtual ligand.
 
 A non-literal inherent count makes the corresponding equality
-underdetermined. A literal mismatch or an incomplete or extraneous
-actual-atom ligand set produces a typed
+underdetermined. A literal count mismatch or a missing or extraneous
+actual-atom ligand produces a typed
 `StereoLigandInvariantsContradiction` naming the stereo entity, bearer atom,
 and mismatch. Representation integrity already limits each virtual-ligand kind
 to zero or one occurrence within a stereo-atom frame or stereo-bond endpoint.
 Consequently, an inherent implicit-hydrogen or lone-pair count greater than one
-contradicts an existing stereo entity because that entity cannot contain the
-complete ligand census. This validator imposes no corresponding restriction on
+contradicts an existing stereo entity because that entity cannot represent all
+of the atom's ligands. This validator imposes no corresponding restriction on
 an atom that is not the bearer of a stereo entity.
 
-The check is tier 2, not `Molecule` integrity. An incomplete or inconsistent
-frame remains structurally interpretable and does not make ordinary graph-IR
-operations unsafe; it is a model-independent semantic contradiction.
+The check is tier 2, not `Molecule` integrity. A ligand list that disagrees with
+the site's neighbors or counts remains structurally interpretable and does not
+make ordinary graph-IR operations unsafe; it is a model-independent semantic
+contradiction.
 The existing integrity rule allowing at most one equal virtual ligand within a
 stereo-atom frame or stereo-bond endpoint remains unchanged. Producers of
-stereo entities, including stereo perception, must construct the same complete
-census. They collect every actual ligand and add a virtual ligand for each
-implicit-hydrogen or lone-pair count of exactly one. A count greater than one
-precludes producing the stereo entity; it is not truncated to one virtual
-ligand.
+stereo entities, including stereo perception, must construct ligand lists that
+agree with those neighbors and counts. They collect every actual ligand and
+add a virtual ligand for each implicit-hydrogen or lone-pair count of exactly
+one. A count greater than one precludes producing the stereo entity; it is not
+truncated to one virtual ligand.
 
 `HydrogenUnfolder` enforces the implicit-hydrogen requirement directly as an
 operation precondition and returns `UnfoldHydrogensError` on disagreement. It
@@ -402,8 +406,8 @@ rejected EntityFieldInvariantsValidator inventory is not an implementation targe
 - **S13b — StereoLigandInvariantsValidator** — additive (green).
   Modules: new `umol-graph/src/ops/validate/stereo_ligand.rs` and
   `umol-graph/src/ops/validate.rs`. [dep: none; existing Molecule views]
-  Implement the validator and its two outcome types using the complete
-  actual/virtual ligand census above. Check stereo atoms and each stereo-bond
+  Implement the validator and its two outcome types using the neighbor and
+  virtual-ligand count checks above. Check stereo atoms and each stereo-bond
   endpoint block, excluding the opposite site endpoint. Count explicit
   hydrogens as actual atom ligands. Compare virtual hydrogen/lone-pair counts
   with the bearer's inherent counts; non-literal counts contribute
@@ -412,7 +416,7 @@ rejected EntityFieldInvariantsValidator inventory is not an implementation targe
   integrity for references, incidence, and duplicate-ligand admission rather
   than adding another whole-molecule integrity pass.
 
-  Establish exact cases for complete frames, omitted actual neighbors,
+  Establish exact cases for matching ligand lists, omitted actual neighbors,
   explicit hydrogen ligands, zero/one virtual ligands, and count mismatches,
   including counts greater than one. Cover both stereo entity kinds, both
   endpoint blocks, their allowed stored orders, no stereo entities, and
@@ -421,11 +425,11 @@ rejected EntityFieldInvariantsValidator inventory is not an implementation targe
   APIs without invalid references or bypassing integrity. Add rustdoc and run
   the focused unit tests; this check is independent of S13a.
 
-- **S13c — Complete ligand construction in stereo perception** — additive (green).
+- **S13c — Stereo ligand construction** — additive (green).
   Module: `umol-graph/src/ops/stereo.rs`, with affected resolver and conformance
   tests. [dep: none; existing stereo perception and the settled ligand contract]
-  Make derive_stereo_atom and bond_side_ligands construct the complete actual
-  and virtual ligand list. Read the inherent hydrogen and lone-pair counts;
+  Make derive_stereo_atom and bond_side_ligands construct the actual and virtual
+  ligand list. Read the inherent hydrogen and lone-pair counts;
   literal zero contributes no virtual ligand, one contributes the corresponding
   ligand, and any other or non-literal count prevents a determined construction.
   Collect every actual neighbor, excluding the opposite site for a stereo-bond
@@ -441,20 +445,46 @@ rejected EntityFieldInvariantsValidator inventory is not an implementation targe
   resolver error/keep/remove policy behavior on unsuccessful construction.
   Run focused perception, resolution, and stereo-conformance tests.
 
+  **Completed — 2026-10-29.** StereoPerception now collects every actual
+  neighbor and adds virtual hydrogen and lone pair independently for literal
+  counts of one. Both counts must be literal zero or one, including when actual
+  neighbors alone fill the frame. The ligand list must contain four
+  positions for Th or two per Ct endpoint; the opposite endpoint is excluded.
+  Ct endpoint frames sharing an actual ligand are unrepresentable and rejected.
+  Existing neighbor order is preserved, with hydrogen before lone pair.
+
+  Exact cases cover explicit H atoms, omitted extra neighbors, zero/one,
+  negative, greater-than-one and non-literal counts, both virtual kinds together,
+  both Ct endpoints, and preservation of literal and undetermined cosets.
+  Resolver tests check Error/Keep/Remove for both assertions and stored entities,
+  consuming/in-place agreement, and unchanged input on Error and Keep.
+  Stereo-conformance tests cover the new successful frames and failures.
+  The stereo-discharge property now supplies explicit zero lone-pair counts
+  at its bearers while retaining its discharge, preservation and idempotence
+  assertions and unrelated open inherent fields.
+
+  Validation passed: 2,779 graph unit tests, 186 graph property tests, 683
+  resolution-conformance tests, and all-target/all-feature Clippy for graph
+  and graph IR. Public signatures and outcome types are unchanged; no standalone
+  validator was added. S13b and S13d remain outstanding. The S1 benchmark
+  measurements are recorded directly in
+  [242](242-stereo-transformers-2026-10-29.md#s1--shared-stereo-foundations).
+
 - **S13d — Validator and producer properties and verification** — additive (green).
   Modules: `umol-graph/tests/property.rs`, new
   `umol-graph/tests/property/validate.rs`, and the S13 public rustdoc/exports.
   [dep: S13a, S13b, S13c]
   Generate integrity-valid molecules with independently chosen field values
-  and complete or incomplete ligand censuses. Check agreement with the
-  declared numeric domains and independently constructed neighbor/virtual
-  counts, preservation of the input, and independence from fields outside
-  each validator's scope. Check outcome classification under atom/entity
+  and ligand lists that agree or disagree with the neighbors and counts. Check
+  agreement with the declared numeric domains and independently constructed
+  neighbor and virtual-ligand counts, preservation of the input, and independence
+  from fields outside each validator's scope. Check outcome classification under atom/entity
   relabeling and allowed ligand-frame permutations. Check transported
   diagnostic ids on cases with one violation; do not require an unchanged
   first-reported contradiction when several violations are reordered.
-  Check that frames produced by StereoPerception satisfy the complete-ligand
-  validator, with independently generated neighbor and virtual-ligand counts.
+  Check that frames produced by StereoPerception satisfy
+  StereoLigandInvariantsValidator, with independently generated neighbor and
+  virtual-ligand counts.
 
   Run the affected validator unit-test groups and the new proptest suite
   explicitly, then review public symbols and rustdoc against S13b's inventory
@@ -758,9 +788,9 @@ subitems are required.
 
 - S13a's replacement is agreed, implemented, and verified against its explicit
   predicates without integer-width checks.
-- The standalone stereo-ligand validator checks complete actual and virtual
-  ligand censuses without imposing a chemistry model. Stereo perception
-  constructs the same complete census.
+- The standalone stereo-ligand validator checks ligand lists against actual
+  neighbors and inherent hydrogen/lone-pair counts without imposing a chemistry
+  model. Stereo perception constructs ligand lists satisfying those checks.
 - ConstraintLifter and ConstraintInliner replace the inherent graph-IR methods.
   Lifting discards vacuous kindless stereo payloads and either relocates all
   meaningful assertions or errors. Inlining moves every bare top-level entity

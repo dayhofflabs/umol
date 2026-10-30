@@ -28,12 +28,12 @@ Do not change the Rust API solely to legitimize a wrapper convenience.
 
 Python aliases do not follow Rust's move rules. Molecule remains reusable: edit, apply,
 tracked_apply, resolve, resolve_with_report, canonicalize, tracked_canonicalize, combine, and the
-base transformation methods below clone the Rust receiver and pass that clone to the consuming
-Rust operation. The Python source, its aliases, and its views remain unchanged on every outcome.
+copy-producing transformation methods below clone the Rust receiver and pass that clone to the
+consuming Rust operation. The Python source, its aliases, and its views remain unchanged on every outcome.
 The initial clone shares topology, entity tables, and constraints; shared payloads are copied
 when the operation modifies or takes ownership of them. This is the same ownership choice as a
 Rust caller explicitly cloning its input to keep it available. Python exposes named transformation
-methods on Molecule without Transformer engine classes. The project operation remains Rust-only.
+methods on Molecule without separate transformer classes. The project operation remains Rust-only.
 
 Edits retains consumption on transfer: implicitly cloning a complete batch would copy its entries
 and payloads, so callers request Edits.copy() when they need reuse. MoleculeEditor.finish consumes
@@ -351,9 +351,9 @@ resolve_into's mutation, invalidation, and rollback selection contract.
 
 ### Transformations
 
-Rust's Transform extension trait supplies named methods on Molecule, delegating to engines that
-implement Transformer. Transformer retains transform, transform_into, and transform_iter for
-configured engine use. Python exposes the named Molecule methods and their configuration values:
+Rust's Transform extension trait supplies named methods on Molecule by delegating to
+Transformer implementations. Rust also exposes transform, transform_into, and transform_iter
+on these transformers. Python exposes named Molecule methods and their configuration values:
 
 | Copy-producing method | In-place method | Arguments after self |
 | --- | --- | --- |
@@ -362,19 +362,28 @@ configured engine use. Python exposes the named Molecule methods and their confi
 | delocalize_charge | delocalize_charge_into | none |
 | fold_hydrogens | fold_hydrogens_into | none |
 | unfold_hydrogens | unfold_hydrogens_into | none |
+| add_stereo | add_stereo_into | model, *, config=None |
+| remove_stereo | remove_stereo_into | model, *, config=None |
 
-model is an explicitly supplied AromaticityModel. node_order is an explicit sequence of atom
-indices determining the localization order. The methods do not choose a model or compute an order.
+model is an explicitly supplied AromaticityModel for aromatization or StereoModel for stereo
+addition/removal. node_order is an explicit sequence of atom indices determining the localization
+order. The methods do not choose a model or compute an order.
 Omitting config, or passing None, selects the corresponding Rust Default: AromaticityConfig for
-aromatization and KekulizeConfig for kekulization. Rust requires these configuration arguments
-explicitly; Python's keyword-only defaults follow the existing configuration calling convention.
+aromatization, KekulizeConfig for kekulization, and AddStereoConfig or RemoveStereoConfig for
+stereo addition/removal. Rust requires these configuration arguments explicitly; Python's
+keyword-only defaults follow the existing configuration calling convention.
+
+Configured transformer objects remain on the Rust side. Python supplies reusable models
+and configurations to named Molecule methods, keeping one receiver interface for these
+operations. Addition/removal use the pairs above; stereo enumeration uses the iterator
+method described below.
 
 KekulizeConfig accepts the keyword-only algorithm argument and exposes it as a read-only property.
 The default is MaximumMatchingAlgorithm.Edmonds(); MaximumMatchingAlgorithm.HopcroftKarp() is also
 available. Configuration and algorithm values are immutable and compare by value.
 
-Rust's base methods consume the molecule. Python's base methods clone the Rust receiver once,
-sharing storage initially, and return an independently mutable Molecule. Every outcome preserves
+For the method pairs above, Rust's base methods consume the molecule. Python's base methods
+clone the Rust receiver once, sharing storage initially, and return an independently mutable Molecule. Every outcome preserves
 the source, its aliases, and its views. The _into methods return None and change the receiver on
 success. Each operation plans before mutation, so rejection leaves the molecule exactly unchanged
 without a transaction or rollback. Starting in-place execution invalidates existing views and
@@ -415,6 +424,133 @@ Both methods in a pair use the same exceptions and retain the complete Rust diag
 Charge delocalization has no operation error. Ordinary Python argument-extraction errors retain
 their existing behavior.
 
+### Stereo values and perception
+
+StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
+IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
+the executing operation performs contextual checks. StereoSite, StereoInconsistency,
+and AtomFieldKind retain Rust equality, ordering, and hashing. Named inconsistency fields
+retain their Rust names; StereoSite's tuple payload is available as _0.
+
+StereoSelection accepts keyword-only sites, kinds, and stereogenicities. Each accepts
+None or an iterable of the corresponding typed values. None is unrestricted and an
+empty iterable selects nothing; the filters intersect. Properties return None or
+frozensets. matches(site, kind=None, stereogenicity=None) delegates to Rust, with omitted
+optional arguments supplying its absent values. This permits callers to test the
+information they have without calculating missing values in the binding.
+
+AddStereoConfig, RemoveStereoConfig, and EnumerateStereoConfig expose the corresponding
+Rust fields through immutable properties. Keyword-only construction supplies Rust defaults
+for omitted configuration fields. selection=None selects the operation's default selection;
+an explicit StereoSelection() supplies unrestricted filters. AddStereoConfig also exposes
+ring_config, and RemoveStereoConfig exposes mode. All three expose automorphism_algorithm.
+RemoveStereoMode.All and RemoveStereoMode.Undetermined preserve the Rust matching predicate:
+Undetermined accepts only an explicitly undetermined coset of a known kind, including kinds
+that perception does not process. Its matches method accepts StereoConfigurationForm.
+
+All three configurations select all topology sites by default. Their other defaults are:
+
+| Configuration | Kinds | Stereogenicities | Removal mode |
+| --- | --- | --- | --- |
+| AddStereoConfig | Tetrahedral, CisTrans | Stereogenic | none |
+| RemoveStereoConfig | unrestricted | unrestricted | All |
+| EnumerateStereoConfig | Tetrahedral, CisTrans | unrestricted | none |
+
+All three default to AutomorphismAlgorithm.Nauty(); addition also uses RingConfig's
+Rust default.
+
+Addition creates missing selected entities and preserves existing arrangements and source
+assertions. Positive #T/#C evidence supplies the coset; otherwise the added coset remains
+undetermined. Symmetric and prochiral arrangements are permitted when selected explicitly.
+Removal clears the corresponding #T/#C assertion at each removed entity's site, preserving
+other assertions and topology. Undetermined mode excludes finite coset sets, symbolic
+configurations, and kindless forms. A stereogenicity filter requests classification;
+unrestricted removal can strip unsupported geometries without interpreting them.
+
+Addition is idempotent for the same model/configuration. Removal is idempotent without a
+stereogenicity filter; removing entities can change the classifications of remaining entities.
+These equalities use structural Molecule equality.
+
+The immutable configuration values replace Rust's mutable public fields with constructor
+arguments and read-only observations, so assigning through a returned selection cannot
+silently modify a disconnected copy. Construction extracts iterable members into owned sets;
+passing a selection to a configuration and reading it back copy its owned sets.
+The supplied values remain reusable, including the immutable getter results.
+
+StereoPerception(model) captures the model as Rust's constructor does. All queries delegate
+to Rust while borrowing the source molecule and preserve it and its existing views:
+
+| Query | Arguments after self | Result |
+| --- | --- | --- |
+| recognize | molecule, selection, automorphism_algorithm, ring_config | StereoDerivation |
+| classify | molecule, sites, automorphism_algorithm | dict[StereoSite, Stereogenicity] |
+| derive | molecule | StereoDerivation |
+| skipped_stereo_bonds | molecule | frozenset[int] |
+| derive_stereo_atom | molecule, atom, coset | ligand tuple and StereoAtomForm, or None |
+| derive_stereo_bond | molecule, bond, coset | ligand tuple and StereoBondForm, or None |
+
+recognize and classify require explicit algorithm arguments, matching Rust. classify accepts
+an iterable of typed sites and collects it into the native set; duplicates collapse. Its returned
+dict is independently mutable because Rust returns an owned map, not a borrowed observation.
+The frame builders require the coset explicitly and return None under the same exclusion
+or incompatibility conditions as Rust. Their successful results contain a ligand tuple
+and an ordinary, independently mutable entity form. Their ID bounds checks translate
+Rust's asserted indexing prerequisite into IndexError before calling the query.
+
+StereoDerivation preserves the four public Rust fields and supports their independent
+construction, with empty sequences by default. It does not validate the supplied rows
+against a molecule. Its immutable properties expose tuples, retaining sequence order and
+duplicates. Each stereo row remains a (site ID, ligand tuple, entity form) triple.
+Construction copies supplied forms to isolate them from later caller mutation. A Rust query's
+derivation moves into the wrapper; reading a row collection copies its forms into the existing
+read-only owned form wrappers, so nested observations reject mutation. The returned form's
+copy() supplies an explicitly mutable value.
+
+StereoPerceptionError uses the existing exception classes and retains its Rust message:
+
+| Rust failure | Python exception | Additional attributes |
+| --- | --- | --- |
+| InvalidSite | IndexError | site: StereoSite |
+| MissingStereoEntity | InvalidStructureError | site: StereoSite |
+| UnsupportedKind, UnsupportedFluxionality | ModelConversionError | kind: StereoKind |
+| UnsupportedConfiguration | ModelConversionError | site: StereoSite |
+| UnderdeterminedAtomField | UnderdeterminedError | atom: int, field: AtomFieldKind |
+| UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
+| Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
+
+Addition and removal use this same mapping. Addition's separate inconsistency variant also
+produces ContradictionError with the typed inconsistency attribute. recognize retains evidence
+inconsistencies in its StereoDerivation result, matching Rust; the binding does not turn those
+result fields into exceptions.
+
+### Stereo enumeration
+
+Molecule.enumerate_stereo(model, sites, *, config=None) constructs the native
+StereoEnumerator and returns its transform_iter result through the opaque Python iterator
+wrapper. model is explicit; sites is a sequence of typed StereoSite values. Omitting
+config, or passing None, selects EnumerateStereoConfig's Rust default. Every selected existing
+stereo site must occur exactly once in the order; unselected order entries are ignored.
+The sequence controls traversal; selection is supplied separately through the configuration.
+
+Enumeration processes existing arrangements and preserves topology, ligand frames, and source
+assertions. Fixed cosets are retained; undetermined cosets and finite absolute sets supply their
+admitted values. Constant expressions are normalized; variable expressions and selected
+unsupported geometries reject processing. Compatible symmetric/prochiral arrangements remain
+eligible. Empty selected work yields one unchanged result when its checks are consistent.
+
+The call borrows the molecule and preserves its aliases, views, and iterators. It stores
+EnumerateStereoIter directly and adds no molecule snapshot in the binding. The native iterator
+captures its source once, prepares the selected domains, and constructs independent Molecule
+values lazily. It outlives the temporary transformer and can outlive the source; later source
+mutation does not affect pending results. Its class is neither exported nor directly
+constructible. Use next(iterator) for the first consistent assignment. The native single-result
+and in-place methods remain Rust-only; Python exposes enumeration through independent results.
+
+Enumeration retains native order and multiplicity, including symmetry-equivalent assignments;
+it performs no deduplication. Preparation rejection or absence of a consistent assignment
+yields an empty iterator, matching Rust's infallible iterator items. Ordinary Python argument
+errors are raised before native execution. Enumeration has no separate exception mapping.
+
 ### Operation-issued iterator
 
 An operation-issued iterator captures one configured execution and cannot be constructed
@@ -425,9 +561,9 @@ reaction-wide precondition check and returns a one-shot iterator over product mo
 `Molecule.react` and `Molecule.react_all` return a one-shot iterator over product-component lists.
 These iterator classes are not exported or directly constructible.
 
-The iterator owns snapshots of every input needed by the operation, so mutating the source reaction
-or molecules after the call does not change the pending results. Matching is completed when the
-iterator is issued; products, realized reactions/spans, and product splitting are realized lazily
+Reaction iterators own snapshots of every input needed by the operation, so mutating the
+source reaction or molecules after the call does not change the pending results. Matching is
+completed when the iterator is issued; products, realized reactions/spans, and product splitting are realized lazily
 in match order.
 An eager reaction-wide failure is raised by the operation call. An execution failure while
 realizing a selected match is raised by `next` once and terminates the iterator. This placement

@@ -24,6 +24,7 @@
 //!
 //! Stereo discharge is checked against independent results for mixtures of stored
 //! and newly added tetrahedral and cis-trans entities with literal or open configurations.
+//! Bearer hydrogen and lone-pair counts are explicit; unrelated inherent fields remain open.
 //! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
 //!
 //! Skeleton properties compare each determined standalone or composite result's exact
@@ -147,9 +148,9 @@ proptest! {
             let c = AtomId::from(offset + 2);
             let d = AtomId::from(offset + 3);
             let mut atoms = if cis_trans {
-                vec![atom_dsl!("C#h"), atom_dsl!("C#h"), atom_dsl!("F"), atom_dsl!("Cl")]
+                vec![atom_dsl!("C#h#n0"), atom_dsl!("C#h#n0"), atom_dsl!("F"), atom_dsl!("Cl")]
             } else {
-                vec![atom_dsl!("C#h"), atom_dsl!("F"), atom_dsl!("Cl"), atom_dsl!("Br")]
+                vec![atom_dsl!("C#h#n0"), atom_dsl!("F"), atom_dsl!("Cl"), atom_dsl!("Br")]
             };
             atoms[0].constraints.set(AtomConstraintForm::Valence(NumForm::Lit(3)));
             let mut bonds = if cis_trans {

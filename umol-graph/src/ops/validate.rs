@@ -6,7 +6,7 @@
 //! `Underdetermined` are both successful outcomes, only `Contradictory(C)` is a
 //! `Solution`-side failure; setup-level failures live in `Err(E)`. The composite
 //! [`Validator`] carries the chemistry model, runs the tiers in order (stereo
-//! last), and lifts each engine's contradiction/error into unions via `From`.
+//! last), and combines the validators' contradictions and errors via `From`.
 
 pub mod aromaticity;
 pub mod connectivity;

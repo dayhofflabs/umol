@@ -1,13 +1,19 @@
 //! Stereo graph IR semantic properties.
 
-use std::iter;
+use std::{array, iter};
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{ConstitutionColoring, GraphSymmetryConfig};
+use umol_graph_ir::ir::{
+    AtomForm, AtomId, BondForm, ConstitutionColoring, GraphSymmetryConfig, Lattice,
+    LigandPermutation, Molecule, MoleculeEntries, StereoAtomForm, StereoAtomId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    StereoLigandPair, StereoLigandPosition,
+};
 
-use crate::strategies::*;
+use crate::strategies::{element_strategy, ligand_symmetry_strategy, permutation_strategy};
 
 proptest! {
     #![proptest_config(Config {
@@ -44,9 +50,13 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_symmetry_stereogenicity_agrees_with_coset_action(
+    fn test_stereo_symmetry_is_stereogenic(
         elements in prop::collection::vec(element_strategy(), 4),
-        coset in 0u32..2,
+        coset in prop_oneof![
+            Just(StereoCoset::Undetermined),
+            (0u32..2).prop_map(StereoCoset::Lit),
+            Just(StereoCoset::lit_set([0, 1])),
+        ],
     ) {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: iter::once(AtomForm::from_element(Element::C))
@@ -72,12 +82,10 @@ proptest! {
         });
         let symmetry = molecule.stereo_atom_symmetry(&graph, StereoAtomId(0));
         let expected = symmetry.group().elements().iter().all(|operation| {
-            symmetry
-                .kind()
-                .class_key()
-                .space()
-                .reindex(coset, operation.permutation())
-                == Some(coset)
+            let image = array::from_fn(|position| operation.permutation().apply(position));
+            (0..2).all(|index| {
+                super::reference::binary_coset_action(StereoKind::Tetrahedral, index, &image) == Some(index)
+            })
         });
 
         prop_assert_eq!(symmetry.is_stereogenic(), expected);

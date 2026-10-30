@@ -7,6 +7,7 @@ import umol._native as native
 
 PUBLIC_EXPORTS = frozenset(
     """
+    AddStereoConfig
     AromaticSystemForm
     AromaticSystemUpdate
     AromaticSystemConstraintForm
@@ -25,6 +26,7 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityRule
     AromaticityTieBreak
     AromaticityResolveConfig
+    AtomFieldKind
     AtomForm
     AtomUpdate
     AtomCompletions
@@ -93,6 +95,7 @@ PUBLIC_EXPORTS = frozenset(
     Element
     ElementForm
     ElementScope
+    EnumerateStereoConfig
     Entity
     FluxionalityForm
     HashedFeatureSet
@@ -165,6 +168,8 @@ PUBLIC_EXPORTS = frozenset(
     ResolveConfig
     ResolveContradiction
     ResolveReport
+    RemoveStereoConfig
+    RemoveStereoMode
     RingAtomView
     RingBondView
     RingConfig
@@ -210,15 +215,20 @@ PUBLIC_EXPORTS = frozenset(
     StereoConfigurationForm
     StereoConfigurationUpdate
     StereoCoset
+    StereoDerivation
     StereoFailurePolicy
+    StereoInconsistency
     StereoKind
     StereoKindModel
     StereoLigand
     StereoLigandKind
     StereoLigandPair
     StereoModel
+    StereoPerception
     StereoResolveConfig
     StereoTerm
+    StereoSelection
+    StereoSite
     Stereogenicity
     StereogenicityForm
     StructuralFeatureSet
@@ -394,6 +404,7 @@ def test_deferred_member(owner, name):
         (umol.Molecule.combine_all, "(molecules)"),
         (umol.Molecule.react, "(self, /, reaction, *, config=None)"),
         (umol.Molecule.react_all, "(reactants, reaction, *, config=None)"),
+        (umol.Molecule.enumerate_stereo, "(self, /, model, sites, *, config=None)"),
         (umol.Molecule.split, "(self, /)"),
         (umol.Molecule.tracked_split, "(self, /)"),
         (umol.Molecule.extract, "(self, /, selection)"),
