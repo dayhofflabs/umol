@@ -240,6 +240,7 @@ silently supply a canonical order.
 | StereoSelection | Shared open site/kind/stereogenicity selector |
 | StereoSelection::default, StereoSelection::matches | Unrestricted default and intersection predicate over supplied values; no molecule lookup |
 | AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig | Shared selection and explicit algorithm choices; removal also has one mode |
+| AddStereoConfig::default | All sites; Th/Ct kinds; Stereogenic only; Nauty and RingConfig::default() |
 | RemoveStereoMode | All and Undetermined variants; Undetermined tests the coset |
 | StereoAdder, StereoRemover, StereoEnumerator | Configured Transformer engines sharing StereoPerception |
 | EnumerateStereoIter | Owned operation-issued iterator, produced by StereoEnumerator::transform_iter |
@@ -686,7 +687,7 @@ different outcome. The sixteen-site median differs by less than one percent.
   intersections, missing values, and unbound ids. Exact expected selections
   retain caller-supplied order. Validation passed: all 2,805 graph unit tests
   and all-target/all-feature Clippy with warnings denied. Strict rustdoc,
-  formatting, and diff checks passed. S2b–S2e and the S2 gate remain outstanding.
+  formatting, and diff checks passed.
 
 - **S2b — AddStereoConfig** — additive (green).
   Modules: umol-graph/src/ops/transform/stereo.rs and config tests. [dep: S2a]
@@ -696,6 +697,20 @@ different outcome. The sixteen-site median differs by less than one percent.
   Stereogenic, and sites to unrestricted. Verify kind include/exclude filters,
   their intersection with the other selectors, and explicit opt-in to
   Prochiral/Symmetric.
+
+  **Completed — 2026-10-30.** Added AddStereoConfig under
+  ops::transform::stereo and re-exported it from ops::transform. Its public
+  surface is selection, automorphism_algorithm, ring_config, and Default.
+  Default selects all sites, Tetrahedral/CisTrans kinds, and Stereogenic only,
+  with Nauty and RingConfig::default(). Struct construction preserves supplied
+  selectors without checking ids against a molecule.
+
+  The 12 configuration cases check the exact default value, atom/bond site
+  restrictions, kind inclusion/exclusion, selector intersections, explicit
+  Prochiral/Symmetric selection, unrestricted stereogenicity, empty kinds,
+  and unbound ids. All 2,817 graph unit tests and all-target/all-feature Clippy
+  with warnings denied passed. Strict rustdoc, formatting, and diff checks
+  passed. S2c–S2e and the S2 gate remain outstanding.
 
 - **S2c — RemoveStereoMode and RemoveStereoConfig** — additive (green).
   Modules: the same stereo transformation module and config tests. [dep: S2a]

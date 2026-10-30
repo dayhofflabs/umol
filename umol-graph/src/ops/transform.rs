@@ -2,6 +2,7 @@
 
 pub mod aromaticity;
 pub mod hydrogens;
+pub mod stereo;
 
 use std::convert::Infallible;
 
@@ -10,6 +11,7 @@ pub use aromaticity::{
     MaximumMatchingAlgorithm,
 };
 pub use hydrogens::{FoldHydrogensError, HydrogenFolder, HydrogenUnfolder, UnfoldHydrogensError};
+pub use stereo::AddStereoConfig;
 use umol_graph_ir::ir::{AtomId, Molecule};
 
 use crate::ops::aromaticity::AromaticityConfig;
