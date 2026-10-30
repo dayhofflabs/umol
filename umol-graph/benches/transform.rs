@@ -1127,6 +1127,29 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
                 );
             });
         }
+        if name == "selected_1_of_128" {
+            group.bench_function(BenchmarkId::new("iter_first_per_iteration", name), |b| {
+                b.iter_batched(
+                    || transformer.transform_iter(&input),
+                    |mut run| run.next().unwrap(),
+                    BatchSize::PerIteration,
+                );
+            });
+            group.bench_function(BenchmarkId::new("iter_prefix_4_per_iteration", name), |b| {
+                b.iter_batched(
+                    || transformer.transform_iter(&input),
+                    |run| run.take(4).collect::<Vec<_>>(),
+                    BatchSize::PerIteration,
+                );
+            });
+            group.bench_function(BenchmarkId::new("iter_all_per_iteration", name), |b| {
+                b.iter_batched(
+                    || transformer.transform_iter(&input),
+                    |run| run.collect::<Vec<_>>(),
+                    BatchSize::PerIteration,
+                );
+            });
+        }
     }
     group.finish();
 }

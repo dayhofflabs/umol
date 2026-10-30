@@ -1,6 +1,6 @@
 # 242 — Stereo addition, removal, and enumeration
 
-Status: In Progress
+Status: Completed
 Date: 2026-10-29
 Relates: [166](166-molecule-ops-2026-07-27.md),
 [240](240-validation-constraint-ops-2026-10-18.md),
@@ -22,7 +22,8 @@ ligand-construction corrections, S2's selectors/configurations/shared queries,
 S3's three transformer engines and absolute-assignment traversal, S4a's
 properties, S4b's receiver methods, S4c's Python values and existing perception
 queries, S4d's Python operations, and S5a's public contracts and examples are
-implemented. S5b's measurements and final verification remain future work.
+implemented. S5b's measurements, public-surface review, and final verification
+passed on 2026-10-30. All agreed non-deferred work is complete.
 External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
@@ -52,11 +53,10 @@ occurrences do not acquire separate positions or identities. A use case needing
 distinguishable hydrogen positions uses explicit atoms. Addition does not
 implicitly unfold hydrogens or weaken frame integrity.
 
-StereoPerception currently materializes positive atom/bond stereo evidence and
-checks existing entities. Extend the same object with the identification and
-classification required by these transformers. Preserve the evidence-driven
-resolver contract: extending discovery must not make ordinary stereo resolution
-start adding every unasserted candidate. Recovery policies and edit construction
+StereoPerception materializes positive atom/bond stereo evidence, checks existing
+entities, recognizes missing selected entities, and classifies arrangements.
+The resolver retains the evidence-driven derive contract; ordinary stereo
+resolution does not add every unasserted candidate. Recovery policies and edit construction
 remain outside perception; graph symmetry and coset algebra retain their
 graph-IR and umol-perm owners.
 
@@ -421,11 +421,10 @@ or collect all results. The Rust operation owns this run state, as the existing
 reaction iterators do.
 
 No new molecule notation or stored stereo form is introduced. Existing kinds,
-cosets, constraints, and frame transport remain the representation. Update
-living operation and naming documentation to cover creation/removal of entities
-and determination of their configuration fields; the current description of
-all transformations as rewrites of determined representations is too narrow for
-these operations.
+cosets, constraints, and frame transport remain the representation. Living
+operation and naming documentation covers creation/removal of entities and
+determination of their configuration fields. Transformations do not require
+fully determined input; construction and ordinary conversion remain separate.
 
 ## Algorithm
 
@@ -1598,6 +1597,183 @@ unexplained Rust/Python differences in the implemented stereo operations.
   errors, supported-kind coverage, DSL consequences, and stale lifecycle text.
   Update completed subitems and synchronize this record's header and status
   index only after all agreed work passes; do not close independent work in 240.
+
+  **Completed — 2026-10-30.** Measured all 360 existing stereo benchmark paths
+  against their saved S0/S2/S3 estimates, repeated the 31 enumeration controls
+  with longer samples, and sampled three release benchmark processes. Added
+  three per-iteration controls to explain the large-input batching sensitivity
+  described below, without changing the production algorithms or original
+  benchmark paths. All 363 stereo paths passed their result checks.
+
+  Final review reconciled public constructors, contextual checks, visibility,
+  consumers, shared errors, and Rust/Python adaptations. The shared selectors
+  retain sites, kinds, and stereogenicities; All is the removal default;
+  Undetermined tests a known kind's explicitly undetermined coset. Only Th/Ct
+  recognition/classification/enumeration is required; unrestricted removal
+  retains its wider applicability. Enumeration preserves multiplicity and its
+  ordered first-result contract. Python exposes Molecule.enumerate_stereo with
+  the sites argument and a native owned iterator, without a transformer class.
+  No DSL form or constructor invariant was added. The final gate below passed;
+  the declared variable/relative, deduplication, additional-kind, and para-stereo
+  exclusions remain outside this completed scope.
+
+#### S5b final measurements
+
+Production revision: 36d669ced862. Compiler, optimization profile, and operation
+configuration match the earlier runs: rustc 1.99.1, optimized code with debug
+information, Nauty, full constitution coloring, para_stereo=false, and minimum
+ring size eight. The run used macOS 15.7.3 arm64. All input manifests and expected
+result checks remain those described in S0, S2, and S3 above.
+
+The 360-path run used 30 samples, 100 ms warm-up, 300 ms measurement, and 10,000
+bootstrap resamples. Comparisons use the saved stereo-s0b-45f007db,
+stereo-s2e-final, stereo-s3a-adder, stereo-s3b-remover, and stereo-s3d-enumerator
+estimates for the corresponding groups.
+
+    cargo bench --locked -p umol-graph --bench transform -- stereo --save-baseline stereo-s5b-final --sample-size 30 --warm-up-time 0.1 --measurement-time 0.3 --nresamples 10000 --noplot
+
+Selected S0 comparisons follow. Values are medians in microseconds per call.
+
+| Input and phase | S0b | Final |
+| --- | ---: | ---: |
+| Five-atom Th*, perception | 0.223 | 0.225 |
+| Five-atom Th*, classification | 0.358 | 0.259 |
+| Hydrogen plus lone pair, perception | 0.150 | 0.215 |
+| 132 atoms, one Th*, graph symmetry | 74.698 | 75.700 |
+| 80 atoms, sixteen Th*, local projection | 1390.284 | 1423.589 |
+
+The two corrected cases do different work from S0: Th* now classifies as
+Stereogenic, and the hydrogen/lone-pair frame now succeeds. Their timing changes
+are not comparisons of equivalent results.
+
+The S2 phase comparisons below use the complete saved stereo-s2e-final run;
+the earlier S2 table used isolated repeats for some controls. Each cell is
+baseline -> final, in microseconds.
+
+| Input | Local candidates | Graph symmetry | Local classification | classify | Filtered recognize |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 132 atoms, one candidate | 4.239 -> 4.376 | 75.147 -> 74.168 | 27.733 -> 27.420 | 102.686 -> 102.146 | 108.276 -> 107.574 |
+| 80 atoms, sixteen sites | 2.908 -> 2.843 | 212.882 -> 209.570 | 1425.375 -> 1405.721 | 1631.235 -> 1619.726 | 1659.985 -> 1643.824 |
+| Twelve-membered ring | 17.072 -> 16.734 | 7.626 -> 7.461 | 3.060 -> 2.996 | 11.023 -> 10.684 | 28.949 -> 28.289 |
+
+These phases remain distinct parts of the operation. The sixteen-site query
+performs one whole-molecule symmetry query and sixteen local projections;
+local projection/classification costs 6.7 times whole-molecule symmetry there.
+Whole-molecule symmetry is the largest phase on the 132-atom chain. The ring
+input's local-candidate phase includes ring perception and remains its largest
+recognition component.
+
+The final operation totals below use the same in-place, uniquely owned paths
+as S3. Setup and independent expected-result construction remain outside timing.
+
+| Operation and input | S3 | Final |
+| --- | ---: | ---: |
+| Addition, five-atom Th | 6.114 | 6.102 |
+| Addition, six-atom Ct | 7.015 | 6.994 |
+| Addition, positive Th/Ct evidence | 11.214 | 11.312 |
+| Addition, retained Th | 0.349 | 0.355 |
+| Addition, sixteen missing Th | 1656.847 | 1665.149 |
+| Removal, mixed All | 1.053 | 1.095 |
+| Removal, mixed Undetermined | 0.648 | 0.681 |
+| Removal, sixteen Th All | 3.772 | 3.752 |
+| Removal, one of sixteen Th | 1.587 | 1.624 |
+| Removal, sixteen Th Stereogenic | 1624.589 | 1632.315 |
+
+The matched sixteen-site removal still costs about 1.63 ms when classification
+is requested, versus 3.75 microseconds without it. Its classification scope is
+the unchanged molecule, before removal.
+
+Enumeration uses the S3d domains and emitted counts: mixed 4/4, evidenced 4/1,
+symmetric_2 4/4, all_8 and classified_8 256/256, selected_1_of_128 2/2, and
+prefix_128 a four-result prefix of 2^128 assignments. The 128-site full drain
+remains deliberately omitted. Setup, first, prefix, and full are separate
+measurements, not an additive decomposition.
+
+The four larger enumeration inputs were repeated with 50 samples, 300 ms
+warm-up, and one-second measurement. Their final values below use that repeat;
+the three smaller inputs use the complete 30-sample run. Every cell is
+S3d -> final, in microseconds. First/prefix/full exclude prepared-run setup.
+
+    cargo bench --locked -p umol-graph --bench transform -- 'stereo_enumerator/.*/(all_8|classified_8|selected_1_of_128|prefix_128)$' --save-baseline stereo-s5b-controls --sample-size 50 --warm-up-time 0.3 --measurement-time 1 --nresamples 10000 --noplot
+
+| Input | Iterator setup | First after setup | Prefix after setup | Full after setup |
+| --- | ---: | ---: | ---: | ---: |
+| mixed | 0.460 -> 0.478 | 0.514 -> 0.538 | 2.018 -> 2.040 | 2.046 -> 2.069 |
+| evidenced | 0.685 -> 0.688 | 3.369 -> 3.358 | 3.352 -> 3.327 | 3.346 -> 3.375 |
+| symmetric_2 | 0.472 -> 0.466 | 0.405 -> 0.395 | 1.434 -> 1.504 | 1.492 -> 1.547 |
+| all_8 | 1.390 -> 1.379 | 0.856 -> 1.027 | 3.075 -> 3.083 | 204.864 -> 196.781 |
+| classified_8 | 226.815 -> 223.570 | 1.009 -> 1.070 | 3.131 -> 3.102 | 202.640 -> 204.825 |
+| selected_1_of_128 | 1.227 -> 1.235 | 1.903 -> 5.233 | 3.766 -> 5.147 | 3.780 -> 6.263 |
+| prefix_128 | 23.127 -> 23.092 | 10.714 -> 13.347 | 39.572 -> 39.342 | Omitted |
+
+The all_8/classified_8 controls again place classification cost in preparation:
+setup changes from 1.379 to 223.570 microseconds, while the prepared 256-result
+drains take 196.781 and 204.825 microseconds. The evidenced case tries four
+assignments, rejects three, and emits one. The symmetric case retains all four
+assignments without deduplication.
+
+#### Batching control and profiles
+
+The first complete run measured selected_1_of_128's full drain at 9.607
+microseconds, versus S3d's 3.780; the longer repeat gave 6.263. Criterion 0.8.1's
+SmallInput loop stages multiple prepared inputs and retains returned outputs
+until the batch ends. Added controls use PerIteration, preparing one input and
+disposing of its returned output before the next iteration. Input construction
+and returned-output disposal are excluded from both timings.
+
+The same binary, source molecule, configuration, and routine were measured
+with both lifetimes, using 50 samples, 300 ms warm-up, and one-second measurement.
+Medians and 95% bootstrap intervals are microseconds per call:
+
+| Prepared selected_1_of_128 operation | SmallInput | PerIteration |
+| --- | ---: | ---: |
+| First result | 5.211 [4.604, 5.369] | 1.731 [1.721, 1.736] |
+| Prefix, two available results | 5.173 [3.837, 5.409] | 3.545 [3.531, 3.556] |
+| Full drain, two results | 6.053 [5.770, 6.841] | 3.551 [3.538, 3.560] |
+
+    cargo bench --locked -p umol-graph --bench transform -- 'stereo_enumerator/iter_(first|prefix_4|all)(_per_iteration)?/selected_1_of_128$' --save-baseline stereo-s5b-batching --sample-size 50 --warm-up-time 0.3 --measurement-time 1 --nresamples 10000 --noplot
+
+The change is sensitive to queued input/output lifetimes, so the batched
+large-input measurements are not treated as isolated per-call throughput.
+The three added controls retain that distinction without replacing the original
+360 paths or changing the library. The smaller all_8 full-drain increase in the
+first run did not persist in the longer repeat (235.124 -> 196.781 microseconds).
+
+Three macOS sample captures used five seconds at a one-millisecond interval
+against the release benchmark in Criterion's --profile-time 10 mode. These
+profiles used the original batched paths. Counts below are inclusive samples
+within the named production call; nested percentages must not be added.
+
+| Profile | Sampled work | Samples / parent | Share |
+| --- | --- | ---: | ---: |
+| Sixteen-site classified removal | Local stereo projection within transform_into | 3432 / 4009 | 85.6% |
+| Same removal | Carrier stabilizer within transform_into | 3165 / 4009 | 78.9% |
+| Eight-site full drain | Stereo-atom relation copy within StereoEnumeration::next | 1215 / 2875 | 42.3% |
+| 128-site prefix | Stereo-atom relation copy within StereoEnumeration::next | 628 / 2345 | 26.8% |
+
+The removal profile places most sampled work in local projection and its Nauty
+carrier-stabilizer calculation, matching the isolated phase measurements.
+The enumeration profiles identify copying shared stereo-atom storage on first
+write as a material output-construction cost. They do not attribute all other
+costs or establish performance beyond the stated synthetic domains. No
+production optimization is required by this scope or inferred from the small
+shared/unique timing differences.
+
+#### Final verification
+
+The final gate ran on Python 3.13.16 after the benchmark controls were added.
+
+| Check | Result |
+| --- | --- |
+| Workspace Rust tests and doctests | 25,379 passed, nine ignored |
+| Workspace Clippy, all targets and all features | Passed with warnings denied |
+| Graph-IR stereo properties, proptest enabled | 99 passed |
+| Graph properties, proptest enabled | 215 passed |
+| Resolution conformance, conformance enabled | 683 passed |
+| Rust binding suite | 1,768 passed, two ignored |
+| Python suite, freshly rebuilt extension | 3,150 passed, two skipped |
+| Stereo benchmark result checks | 363 passed |
+| Nightly formatting and diff checks | Passed |
 
 ## Verification commands and completion boundary
 
