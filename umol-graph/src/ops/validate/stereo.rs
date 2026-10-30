@@ -364,6 +364,16 @@ mod tests {
 
     #[rstest]
     #[case::bare(CFCLBRI, (|_: &mut Molecule| {}) as fn(&mut Molecule))]
+    #[case::atom_hydrogen_and_lone_pair(
+        r#"{:atoms ["P#h#n#T1" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:lp 0]] :attrs "Th1"}]}"#,
+        (|_: &mut Molecule| {}) as fn(&mut Molecule),
+    )]
+    #[case::bond_hydrogen_and_lone_pair(
+        r#"{:atoms ["N#h#n" "N#h#n"] :bonds [[0 1 "2#C1"]]
+            :stereo-bonds [{:site 0 :ligands [[:h 0] [:lp 0] [:h 1] [:lp 1]] :attrs "Ct1"}]}"#,
+        (|_: &mut Molecule| {}) as fn(&mut Molecule),
+    )]
     #[case::matching_stereogenicity(
         CFCLBRI,
         (|molecule: &mut Molecule| {
@@ -603,6 +613,24 @@ mod tests {
             asserted: StereogenicityForm::Lit(Stereogenicity::Prochiral),
             derived: Stereogenicity::Stereogenic,
         }
+    )]
+    #[case::atom_extra_hydrogen(
+        r#"{:atoms ["C#h#T1" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
+        (|_: &mut Molecule| {}) as fn(&mut Molecule),
+        StereoConformanceContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) },
+        ),
+    )]
+    #[case::bond_extra_neighbor(
+        r#"{:atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
+            :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"}]}"#,
+        (|_: &mut Molecule| {}) as fn(&mut Molecule),
+        StereoConformanceContradiction::Inconsistency(
+            StereoInconsistency::CisTransStereoFailure { bond: BondId(0) },
+        ),
     )]
     #[case::stereogenicity_mismatch(
         CFCLBRI,

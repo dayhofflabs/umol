@@ -1230,6 +1230,26 @@ mod tests {
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct*"}]
         }"#)
     )]
+    #[case::tetrahedral_hydrogen_and_lone_pair(
+        mol_dsl_concrete!(r#"{
+            :atoms ["P#h#n#T1" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["P#h#n" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:lp 0]] :attrs "Th1"}]
+        }"#)
+    )]
+    #[case::cis_trans_hydrogen_and_lone_pair(
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#h#n" "N#h#n"] :bonds [[0 1 "2#C1"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#h#n" "N#h#n"] :bonds [[0 1 "2"]]
+            :stereo-bonds [{:site 0 :ligands [[:h 0] [:lp 0] [:h 1] [:lp 1]] :attrs "Ct1"}]
+        }"#)
+    )]
     #[case::mixed_stored_and_added(
         mol_dsl_concrete!(r#"{
             :atoms ["C#h#T0#v3" "F" "Cl" "Br" "C#h#T1" "F" "Cl" "Br"
@@ -1273,6 +1293,96 @@ mod tests {
             resolver.resolve(molecule),
             Ok(Solution::Determined(expected))
         );
+    }
+
+    #[rstest]
+    #[case::atom_assertion(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#T1" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        }"#),
+        StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) },
+    )]
+    #[case::atom_entity(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        }"#),
+        StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) },
+    )]
+    #[case::bond_assertion(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
+            :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
+        }"#),
+        StereoInconsistency::CisTransStereoFailure { bond: BondId(0) },
+    )]
+    #[case::bond_entity(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
+        }"#),
+        StereoInconsistency::StereoBondFailure { stereo_bond: StereoBondId(0) },
+    )]
+    fn test_stereo_resolver_resolve_ligands(
+        stereo_model: StereoModel,
+        #[case] mut molecule: Molecule,
+        #[case] removed: Molecule,
+        #[case] inconsistency: StereoInconsistency,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        policy: StereoFailurePolicy,
+    ) {
+        let original = molecule.clone();
+        let resolver = StereoResolver::with_config(
+            &stereo_model,
+            StereoResolveConfig {
+                tetrahedral_stereo_failure: policy,
+                stereo_atom_failure: policy,
+                cis_trans_stereo_failure: policy,
+                stereo_bond_failure: policy,
+            },
+        );
+        let expected = if policy == StereoFailurePolicy::Remove {
+            removed
+        } else {
+            original.clone()
+        };
+        let (consuming, in_place) = if policy == StereoFailurePolicy::Error {
+            (
+                Solution::Contradictory(inconsistency.into()),
+                Solution::Contradictory(inconsistency.into()),
+            )
+        } else {
+            (
+                Solution::Determined(expected.clone()),
+                Solution::Determined(()),
+            )
+        };
+        assert_eq!(resolver.resolve(original), Ok(consuming));
+        assert_eq!(resolver.resolve_into(&mut molecule), Ok(in_place));
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]

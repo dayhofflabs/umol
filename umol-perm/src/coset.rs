@@ -174,7 +174,7 @@ impl CosetSpace {
     /// An allowed permutation taking `frame` to its lexicographically least presentation.
     ///
     /// Returns `None` when the frame length differs from the space degree. Unrestricted parent
-    /// groups sort the complete frame. The restricted four-position parent sorts each two-position
+    /// groups sort the frame. The restricted four-position parent sorts each two-position
     /// block and then orders the blocks.
     ///
     /// # Establishes

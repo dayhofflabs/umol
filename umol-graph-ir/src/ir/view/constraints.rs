@@ -1053,7 +1053,7 @@ mod tests {
             TetrahedralStereoForm::stereo(StereoCoset::Lit(1)),
         )),
     )]
-    #[case::tetrahedral_incomplete_frame(
+    #[case::tetrahedral_wrong_arity(
         mol_dsl!(r#"{
             :atoms ["C#T1" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]

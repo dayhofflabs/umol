@@ -71,7 +71,7 @@ pub enum BondConfiguration {
 /// The relative sides of two reference substituents at a stereo bond.
 ///
 /// This is frame-relative, independent of CIP ranking, drawing orientation, and SMILES traversal.
-/// In complete endpoint ligand blocks `[a, b]; [c, d]` with references `[a, c]`, SameSide is
+/// In endpoint ligand blocks `[a, b]; [c, d]` with references `[a, c]`, SameSide is
 /// [`ClassKey::CisTrans`](umol_perm::ClassKey::CisTrans) coset 0 and OppositeSide is coset 1.
 /// The correspondence does not depend on enum discriminants.
 ///

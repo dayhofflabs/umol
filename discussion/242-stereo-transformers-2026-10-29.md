@@ -17,9 +17,9 @@ tasks: addition creates missing stereo entities; enumeration determines selected
 configuration values on existing entities.
 
 This record contains the agreed semantics, interfaces, and nomenclature.
-S0's fixtures/references/baselines and S1a's binary classification correction are
-implemented; the ligand-census correction and transformer engines remain future
-work. External implementations under
+S0's fixtures/references/baselines and S1's binary classification and
+ligand-construction corrections are implemented; shared identification and the
+transformer engines remain future work. External implementations under
 materials/codes may supply algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -42,7 +42,7 @@ Stereogenicity values: Symmetric, Prochiral, and Stereogenic. Selection by those
 values is an operation policy, not an additional stored assertion.
 
 Keep the settled frame contract from
-[214](214-aggregate-frame-semantics-2026-08-28.md): complete StereoLigand values
+[214](214-aggregate-frame-semantics-2026-08-28.md): StereoLigand values
 are pairwise-distinct, and frames are bounded by MAX_DEGREE. Equal virtual-H
 occurrences do not acquire separate positions or identities. A use case needing
 distinguishable hydrogen positions uses explicit atoms. Addition does not
@@ -64,7 +64,8 @@ coset. This is distinct from an undetermined stereo kind. Preserve meaningful
 classification of explicit prochiral and symmetric arrangements. No non-binary
 classification redesign is required here.
 
-Use the complete actual/virtual ligand census specified by
+Construct ligand lists from actual neighbors and inherent hydrogen/lone-pair
+counts as specified by
 [240, S13c](240-validation-constraint-ops-2026-10-18.md#s13--invariant-validation-and-stereo-ligand-construction).
 That producer correction is an explicit dependency; the broader validators and
 constraint transformations in 240 are independent work.
@@ -164,9 +165,10 @@ site evidence. A new entity receives its known kind and perceived ligand frame;
 its coset remains undetermined unless evidence supplies a literal or restricted
 value. Do not choose a determined isomer during addition.
 
-New entities must satisfy the complete ligand census and representation
-integrity. Report incompatible selected evidence or competing incompatible
-kind assignments before mutation. Successful addition is idempotent for the
+New entities must have ligand lists agreeing with the site's neighbors and
+hydrogen/lone-pair counts and satisfy representation integrity. Report incompatible
+selected evidence or competing incompatible kind assignments before mutation.
+Successful addition is idempotent for the
 same model and configuration. Its iterator produces its single transformed
 result, or no result on rejection.
 
@@ -317,12 +319,12 @@ Implementation progress and measurements are recorded in the plan below.
    valence shorthand. These automatic-discovery rules do not change what an
    asserted arrangement may represent or require removing existing records.
 
-2. **Build complete Th frames.** Collect actual neighbors in the established
+2. **Build Th frames.** Collect actual neighbors in the established
    order and add the permitted virtual hydrogen/lone-pair positions from the
    inherent counts. Require exactly four positions and the existing distinct
    ligand contract. Do not import a toolkit's duplicate-ligand or multiple-total-H
    rejection into this frame builder: explicit equivalent ligands remain useful
-   for symmetric and prochiral entities. The S13c census supplies the shared
+   for symmetric and prochiral entities. S13c supplies the shared
    frame mechanics; the local chemistry screen is additional discovery work.
 
 3. **Build Ct candidates from double bonds.** Require a localized bond of literal
@@ -495,15 +497,6 @@ The complete input domains are:
 | Site-count series | 5 | Fixed 80 atoms/64 bonds in 16 identical disconnected C(F)(Cl)(Br)I components; 1, 2, 4, 8, or 16 stored Th* sites |
 | Ring series | 4 | One simple 4-, 6-, 8-, or 12-membered ring with one double bond, a positive #C assertion, and a stored Ct* entity |
 
-The [input manifest](../scratch/stereo-s0b-2026-10-29/inputs.tsv) records atom,
-bond, and stored-site counts, ring sizes, observed proper-atom-orbit histograms,
-configurations, perception outcomes, and classifications. The
-[run metadata](../scratch/stereo-s0b-2026-10-29/run.json) records the command and
-source hashes; [all estimates](../scratch/stereo-s0b-2026-10-29/estimates.tsv)
-include 95% bootstrap confidence intervals. Raw samples and logs accompany the
-[complete timing table](../scratch/stereo-s0b-2026-10-29/results.md).
-The saved Criterion baseline is stereo-s0b-45f007db.
-
 Selected medians below are microseconds per iteration. Local projection and
 classification process all stored sites. Parsing, construction, validation,
 and manifest generation are outside timing; each phase is measured separately.
@@ -532,9 +525,10 @@ synthetic domains; the transformer and discovery costs are measured in S2/S3.
 
 At the S0 baseline, the four-distinct-ligand Th* and Ct* fixtures classified as
 Symmetric, while their literal controls classified as Stereogenic. S1a corrects
-this undetermined-coset defect. The S0 manifest also records producer failures,
-including the hydrogen-plus-lone-pair case assigned to S13c, so changed work
-after the foundation corrections remains visible alongside timing.
+this undetermined-coset defect. The hydrogen-plus-lone-pair fixture produced
+StereoAtomFailure at S0; S1b constructs its frame without an
+inconsistency. Its perception timing therefore includes successful construction
+instead of failure.
 
 ### S1 — Shared stereo foundations
 
@@ -580,12 +574,9 @@ after the foundation corrections remains visible alongside timing.
   refinement settings. It checks ligand-equality predictions, the independent
   binary action, and preservation of the supplied coset.
 
-  The [S1a phase comparison](../scratch/stereo-s1a-2026-10-29/verified/results.md)
-  repeats 30 affected phase/input cases with S0's sampling settings. The
-  [metadata](../scratch/stereo-s1a-2026-10-29/verified/run.json) records commands,
-  source hashes, and longer confirmation runs (50 samples, 300 ms warm-up,
-  one-second measurement) for the large-chain and many-site cases. The primary
-  comparison and confirmation samples are retained beside that record.
+  The S1a phase comparison repeated 30 affected phase/input cases with S0's
+  sampling settings. Longer confirmation runs used 50 samples, 300 ms warm-up,
+  and one-second measurement for the large-chain and many-site cases.
 
   Selected medians in microseconds compare the same phase and input:
 
@@ -603,21 +594,57 @@ after the foundation corrections remains visible alongside timing.
   Their classification costs therefore reflect corrected work. The longer
   confirmations place local-projection cost about one percent above S0 in the
   two larger domains; local projection remains the largest phase on the
-  many-site input. S1b and the complete S1 gate remain outstanding.
+  many-site input.
 
-- **S1b — Complete perceived ligand frames** — additive (green).
+- **S1b — Stereo ligand construction** — additive (green).
   Modules: umol-graph/src/ops/stereo.rs and its resolver/conformance tests.
   [dep: S0a; external: 240/S13c]
-  Reuse the existing S13c work item for the complete neighbor and virtual-ligand
-  census. If it is still outstanding, implement and verify that item in its
+  Reuse the existing S13c work item for stereo ligand construction.
+  If it is still outstanding, implement and verify that item in its
   owning record before proceeding; do not maintain a second implementation or
   mark 240's independent validator work complete. Read zero/one hydrogen and
-  lone-pair counts exactly, preserve frame order, and reject incomplete or
-  unrepresentable completions through the established perception outcomes.
+  lone-pair counts exactly, preserve frame order, and reject inputs whose
+  required ligands cannot form a Th or Ct frame through the established
+  perception outcomes.
+
+  **Completed — 2026-10-29.** Implemented and verified under
+  [240, S13c](240-validation-constraint-ops-2026-10-18.md#s13--invariant-validation-and-stereo-ligand-construction).
+  Perception now uses all actual neighbors and exact zero/one
+  hydrogen and lone-pair counts, including both virtual kinds together.
+  Wrong arity, a repeated ligand across Ct endpoints, and unsupported or
+  non-literal counts use the existing absence and inconsistency outcomes.
+  Public interfaces and resolver failure policies are preserved. No standalone
+  validator is part of this completion.
 
 S1 gate: focused IR symmetry/stereo properties and graph perception, stereo
 resolve, and stereo-conformance tests pass. Re-run the relevant baseline cases
 once after these changes; investigate a measured change before optimizing it.
+
+**Passed — 2026-10-29.** The graph suite passed 2,779 unit tests, 186 property
+tests and 683 resolution-conformance tests. The feature-gated graph-IR property
+target passed 99 stereo-filtered tests. Clippy passed for both crates with all
+targets and features and warnings denied. All 140 S0 benchmark cases passed
+in test mode. The stereo-discharge property retains its assertions and uses
+explicit zero lone-pair counts for its realizable input frames.
+
+All 28 perception cases were measured with S0's host, build, model, and sampling
+settings. Valid Ct endpoint frames use inline storage. Selected medians below
+are microseconds; the brackets give the S1b median's 95% bootstrap interval.
+
+| Perception input | S0b | S1b [95% interval] |
+| --- | ---: | ---: |
+| Five-atom Th* | 0.223 | 0.224 [0.220, 0.228] |
+| Th* with implicit H | 0.230 | 0.237 [0.235, 0.237] |
+| Th* with lone pair | 0.229 | 0.235 [0.235, 0.237] |
+| Th* with H and lone pair | 0.150 | 0.226 [0.225, 0.229] |
+| Six-atom Ct* | 0.228 | 0.240 [0.239, 0.241] |
+| Imine Ct* | 0.204 | 0.216 [0.215, 0.217] |
+| 80 atoms / 16 Th* sites | 3.537 | 3.525 [3.511, 3.534] |
+
+The small Ct and imine inputs each take about 12 ns more than S0. The
+hydrogen-plus-lone-pair input now constructs a frame and has no
+inconsistency, rather than yielding StereoAtomFailure; its timing measures a
+different outcome. The sixteen-site median differs by less than one percent.
 
 ### S2 — Selectors, configurations, and shared identification
 
@@ -677,8 +704,8 @@ once after these changes; investigate a measured change before optimizing it.
   scope, and honor the model's element and ring rules. Preserve derive's
   evidence-driven resolver behavior and all source assertion/frame transport.
   Implement the local Th/Ct discovery screens described above separately from
-  assertion realization. In particular, test unmarked double bonds, the complete
-  endpoint census, and ring eligibility without
+  assertion realization. In particular, test unmarked double bonds, endpoint
+  ligand lists against their neighbors and counts, and ring eligibility without
   relying on the assertion-only skipped-bond scan. Retain symmetric/prochiral
   candidates until selector application. Keep current para-stereo behavior and
   limits; improving them is outside this stage.

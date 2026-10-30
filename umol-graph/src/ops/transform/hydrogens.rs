@@ -478,8 +478,8 @@ pub enum UnfoldHydrogensError {
 ///
 /// Reports any negative literal implicit-hydrogen count, a non-literal count
 /// backing a virtual hydrogen, or a disagreement between a stereo bearer's
-/// literal count and its frame's virtual hydrogen census. Each stereo-atom frame
-/// and stereo-bond endpoint supplies the complete census for its bearer.
+/// literal count and the number of virtual hydrogen ligands at that stereo-atom
+/// site or stereo-bond endpoint.
 /// All rejections precede mutation. Consuming failure drops the input; in-place
 /// failure leaves it unchanged. Iteration lazily yields one independent result
 /// on success and no result on rejection.
@@ -687,7 +687,7 @@ fn unfold_ligands(
                 if ligand.kind == StereoLigandKind::ImplicitHydrogen {
                     let index = hydrogens
                         .binary_search_by_key(&ligand.atom_id, |&(atom, _)| atom)
-                        .expect("the checked stereo census has one planned hydrogen per bearer");
+                        .expect("each virtual hydrogen has a planned replacement");
                     (AtomHandle::New(hydrogens[index].1), StereoLigandKind::Atom)
                 } else {
                     (AtomHandle::Id(ligand.atom_id), ligand.kind)
