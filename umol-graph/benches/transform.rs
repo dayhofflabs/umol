@@ -3,6 +3,9 @@
 //! Inputs share storage with their fixtures unless labeled unique; shared mutation includes
 //! storage detachment.
 
+#[path = "transform/stereo.rs"]
+mod stereo;
+
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
@@ -421,6 +424,7 @@ criterion_group!(
     bench_transform,
     bench_fold_hydrogens,
     bench_unfold_hydrogens,
-    bench_hydrogens_scaling
+    bench_hydrogens_scaling,
+    stereo::bench_stereo
 );
 criterion_main!(transform);

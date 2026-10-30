@@ -17,8 +17,8 @@ tasks: addition creates missing stereo entities; enumeration determines selected
 configuration values on existing entities.
 
 This record contains the agreed semantics, interfaces, and nomenclature.
-S0a's test fixtures and finite references are implemented; the transformer
-engines remain future work. External implementations under
+S0's test fixtures, finite references, and baseline benchmarks are implemented;
+the transformer engines remain future work. External implementations under
 materials/codes may supply algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -441,7 +441,7 @@ success, rejection, preservation, and iterator cases.
   Ct endpoint blocks. Open-coset classification assertions remain with S1a.
   Validation passed: 265 transformer unit tests, 29 feature-gated IR stereo
   tests, and Clippy for both crates' libraries/tests with proptest enabled and
-  warnings denied. S0b baseline measurements remain outstanding.
+  warnings denied.
 
 - **S0b — Existing perception and symmetry baselines** — additive (green).
   Modules: umol-graph/benches/transform.rs and its existing benchmark setup;
@@ -456,10 +456,84 @@ success, rejection, preservation, and iterator cases.
   symmetries, recording the input characteristics above with each result. Do
   not time unavailable transformer stubs.
 
+  **Completed — 2026-10-29.** The existing transform benchmark registers
+  [stereo baselines](../umol-graph/benches/transform/stereo.rs) for 28 inputs and
+  five separately timed operations: unchanged-input control, perception,
+  whole-molecule symmetry, all local projections, and classification over
+  precomputed local symmetries. Setup validates input integrity, retained input
+  equality, positive source evidence, known-literal classifications, and ring
+  sizes. Observed open-coset results are recorded without asserting them.
+  All 140 benchmark cases pass test mode; benchmark Clippy passes with warnings
+  denied. The 47 graph reference/fixture tests and two exhaustive IR reference
+  tests also pass. These operations borrow their inputs; copying and storage
+  detachment are measured with the engine stages.
+
 S0 gate: the new reference support passes, fixtures construct through public
 integrity-valid APIs, and the baseline benchmark target builds and runs in test
 mode. Save the baseline command, input manifest, and measurements with the
-implementation evidence.
+implementation evidence. **Passed — 2026-10-29.**
+
+#### S0 baseline measurements
+
+Production revision: 45f007dbd1b43636644cc38fc62a9a70f05a29ab. Host: Apple M1 Pro
+(10 cores, 32 GB), macOS 15.7.3 arm64. Compiler: rustc 1.99.1 (58cf8f9c3).
+The bench profile enables optimization and debug information. Configuration:
+Nauty, ConstitutionColoring::full(), para_stereo=false, max_iterations=16,
+and the default stereo model's minimum ring size of eight. Criterion used
+30 samples, 100 ms warm-up, 300 ms measurement, and 10,000 bootstrap resamples.
+
+    cargo bench --locked -p umol-graph --bench transform -- stereo_baseline --save-baseline stereo-s0b-45f007db --sample-size 30 --warm-up-time 0.1 --measurement-time 0.3 --nresamples 10000 --noplot
+
+The complete input domains are:
+
+| Domain | Cases | Construction |
+| --- | ---: | --- |
+| S0a fixtures | 13 | The stored arrangements, explicit/virtual ligands, source assertions, partial state, and retained square-planar record in the shared corpus |
+| Literal controls | 2 | The tetrahedral and cis/trans fixtures with coset zero |
+| Atom-count series | 4 | One Th* site with F, Cl, Br, and an alkyl chain; 5, 12, 36, or 132 atoms |
+| Site-count series | 5 | Fixed 80 atoms/64 bonds in 16 identical disconnected C(F)(Cl)(Br)I components; 1, 2, 4, 8, or 16 stored Th* sites |
+| Ring series | 4 | One simple 4-, 6-, 8-, or 12-membered ring with one double bond, a positive #C assertion, and a stored Ct* entity |
+
+The [input manifest](../scratch/stereo-s0b-2026-10-29/inputs.tsv) records atom,
+bond, and stored-site counts, ring sizes, observed proper-atom-orbit histograms,
+configurations, perception outcomes, and classifications. The
+[run metadata](../scratch/stereo-s0b-2026-10-29/run.json) records the command and
+source hashes; [all estimates](../scratch/stereo-s0b-2026-10-29/estimates.tsv)
+include 95% bootstrap confidence intervals. Raw samples and logs accompany the
+[complete timing table](../scratch/stereo-s0b-2026-10-29/results.md).
+The saved Criterion baseline is stereo-s0b-45f007db.
+
+Selected medians below are microseconds per iteration. Local projection and
+classification process all stored sites. Parsing, construction, validation,
+and manifest generation are outside timing; each phase is measured separately.
+The unchanged-input control's median ranges from 0.522 to 0.533 ns.
+
+| Input | Perception | Graph symmetry | Local projection | Classification |
+| --- | ---: | ---: | ---: | ---: |
+| Five-atom Th* | 0.223 | 2.959 | 1.151 | 0.358 |
+| Five-atom Th0 | 0.226 | 3.092 | 1.160 | 0.255 |
+| Six-atom Ct0 | 0.233 | 3.363 | 1.228 | 0.180 |
+| Explicit methane, Th0 | 0.231 | 10.732 | 11.108 | 4.928 |
+| 132 atoms, one Th* site | 1.932 | 74.698 | 26.888 | 0.358 |
+| 80 atoms, one Th* site | 1.125 | 167.453 | 75.282 | 0.359 |
+| 80 atoms, four Th* sites | 1.547 | 171.018 | 276.266 | 1.446 |
+| 80 atoms, sixteen Th* sites | 3.537 | 210.334 | 1390.284 | 5.713 |
+| Four-membered asserted ring | 3.747 | 3.996 | 1.892 | 0.343 |
+| Twelve-membered asserted ring | 16.645 | 7.506 | 2.945 | 0.342 |
+
+Local projection dominates the 80-atom/16-site case at 6.6 times the whole-molecule
+symmetry cost. Its input already includes the precomputed GraphSymmetry; the
+current projection computes a carrier stabilizer for every stored site.
+Whole-molecule symmetry dominates the 132-atom acyclic case. Ring calculation
+within perception is material on the asserted-ring series: perception is the
+largest measured phase for the twelve-membered ring. These are measured
+synthetic domains; the transformer and discovery costs are measured in S2/S3.
+
+The four-distinct-ligand Th* and Ct* fixtures currently classify as Symmetric,
+while their literal controls classify as Stereogenic. This records the known
+undetermined-coset defect for S1a. The manifest also records current producer
+failures, including the hydrogen-plus-lone-pair case assigned to S13c, so changed
+work after the foundation corrections remains visible alongside timing.
 
 ### S1 — Shared stereo foundations
 
