@@ -315,14 +315,17 @@ impl StereoPerception {
     ///
     /// Reports unavailable topology ids, missing stereo entities, unsupported
     /// kinds/configurations or fluxionality, and incompatible ligand arity.
-    /// Classification supports Th/Ct with literal, undetermined, or
-    /// nonempty finite absolute coset domains. Symbolic cosets are unsupported.
+    /// Classification supports Th atoms and Ct bonds with literal, undetermined,
+    /// or nonempty finite absolute coset domains. Symbolic cosets are unsupported.
     ///
     /// # Semantic properties
     ///
     /// The returned keys equal the supplied sites. Classification does not
     /// change configurations or any other input data. It uses the projected
     /// ligand symmetry without choosing a coset.
+    /// Relabeling sites and assertion frames transports the returned keys without
+    /// changing their classes. Compatible stored ligand-frame actions preserve
+    /// the classes at the same sites.
     pub fn classify(
         &self,
         molecule: &Molecule,
@@ -363,6 +366,13 @@ impl StereoPerception {
                 return Err(StereoPerceptionError::UnsupportedConfiguration { site });
             };
             check_kind(self, *kind)?;
+            if !matches!(
+                (site, kind),
+                (StereoSite::Atom(_), StereoKind::Tetrahedral)
+                    | (StereoSite::Bond(_), StereoKind::CisTrans)
+            ) {
+                return Err(StereoPerceptionError::UnsupportedConfiguration { site });
+            }
             if degree != kind.degree() {
                 return Err(failure.into());
             }

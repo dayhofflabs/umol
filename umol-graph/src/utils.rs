@@ -1,4 +1,4 @@
-//! General-purpose vocabulary shared across the crate's engines.
+//! Shared utility types.
 
 /// Direction of a sort key component: `Ascending` is the field's natural
 /// order, `Descending` its reverse.

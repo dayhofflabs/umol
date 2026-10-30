@@ -23,7 +23,7 @@ use crate::ops::model::AromaticityModel;
 
 /// Transforms a molecular representation.
 ///
-/// Implemented by transformation engines. [`Transform`] provides the named methods on Molecule.
+/// [`Transform`] provides the named methods on Molecule.
 ///
 /// Derives a complete plan before mutation, reporting every rejection during planning.
 /// The plan applies to its unchanged input and preserves representation integrity;

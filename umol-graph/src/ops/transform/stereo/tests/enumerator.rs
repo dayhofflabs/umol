@@ -53,7 +53,7 @@ fn test_stereo_enumerator_new(
     #[case] order: Vec<StereoSite>,
     #[case] expected: Vec<Molecule>,
 ) {
-    let engine = StereoEnumerator::new(&StereoModel::default(), order.clone());
+    let transformer = StereoEnumerator::new(&StereoModel::default(), order.clone());
     let configured = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig::default(),
@@ -61,7 +61,7 @@ fn test_stereo_enumerator_new(
     );
     let original = molecule.clone();
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         expected
     );
     assert_eq!(
@@ -69,12 +69,15 @@ fn test_stereo_enumerator_new(
         expected
     );
     assert_eq!(
-        Transformer::transform_iter(&engine, &molecule).collect::<Vec<_>>(),
+        Transformer::transform_iter(&transformer, &molecule).collect::<Vec<_>>(),
         expected
     );
-    assert_eq!(engine.transform(molecule.clone()), Ok(expected[0].clone()));
+    assert_eq!(
+        transformer.transform(molecule.clone()),
+        Ok(expected[0].clone())
+    );
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(molecule, original);
     for result in expected {
@@ -101,7 +104,7 @@ fn test_stereo_enumerator_with_config(
     #[case] selection: StereoSelection,
     #[case] values: Vec<(Option<u32>, Option<u32>)>,
 ) {
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection,
@@ -135,15 +138,17 @@ fn test_stereo_enumerator_with_config(
         .collect();
     let original = mixed_stereo.clone();
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         expected
     );
     assert_eq!(
-        engine.transform(mixed_stereo.clone()),
+        transformer.transform(mixed_stereo.clone()),
         Ok(expected[0].clone())
     );
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(mixed_stereo, original);
 }
@@ -155,7 +160,7 @@ fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
         stereo_bond_minimum_ring_size: 64,
         ..Default::default()
     };
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &model,
         EnumerateStereoConfig {
             selection: StereoSelection {
@@ -185,11 +190,13 @@ fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
         })
         .collect();
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         expected
     );
     assert_eq!(
-        engine.transform(mixed_stereo.clone()),
+        transformer.transform(mixed_stereo.clone()),
         Ok(expected[0].clone())
     );
     let other = StereoEnumerator::with_config(
@@ -253,7 +260,7 @@ fn test_stereo_enumerator_transform_domains(
             molecule
         })
         .collect();
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection: StereoSelection {
@@ -267,15 +274,17 @@ fn test_stereo_enumerator_transform_domains(
     );
     let original = mixed_stereo.clone();
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         expected
     );
     assert_eq!(
-        engine.transform(mixed_stereo.clone()),
+        transformer.transform(mixed_stereo.clone()),
         Ok(expected[0].clone())
     );
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(mixed_stereo, original);
 }
@@ -298,7 +307,7 @@ fn test_stereo_enumerator_transform_expression(
         .stereo_atom_mut(StereoAtomId(0))
         .attributes_mut()
         .configuration = (StereoKind::Tetrahedral, expected_value).into();
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection: StereoSelection {
@@ -312,14 +321,16 @@ fn test_stereo_enumerator_transform_expression(
     );
     let original = mixed_stereo.clone();
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         vec![expected.clone()]
     );
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected);
     assert_eq!(mixed_stereo, original);
-    assert_eq!(engine.transform(mixed_stereo), Ok(expected));
+    assert_eq!(transformer.transform(mixed_stereo), Ok(expected));
 }
 
 #[rstest]
@@ -361,19 +372,21 @@ fn test_stereo_enumerator_transform_evidence(
             molecule
         })
         .collect();
-    let engine = StereoEnumerator::new(
+    let transformer = StereoEnumerator::new(
         &StereoModel::default(),
         vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))],
     );
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         expected
     );
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(mixed_stereo, original);
-    assert_eq!(engine.transform(mixed_stereo), Ok(expected[0].clone()));
+    assert_eq!(transformer.transform(mixed_stereo), Ok(expected[0].clone()));
 }
 
 #[rstest]
@@ -428,20 +441,20 @@ fn test_stereo_enumerator_transform_constraint(
     })
     .collect();
     let sites = [StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))];
-    let engine = StereoEnumerator::new(
+    let transformer = StereoEnumerator::new(
         &StereoModel::default(),
         order.into_iter().map(|index| sites[index]).collect(),
     );
     let original = molecule.clone();
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         expected
     );
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(molecule, original);
-    assert_eq!(engine.transform(molecule), Ok(expected[0].clone()));
+    assert_eq!(transformer.transform(molecule), Ok(expected[0].clone()));
 }
 
 #[rstest]
@@ -460,7 +473,7 @@ fn test_stereo_enumerator_transform_scope(
         .stereo_bond_mut(StereoBondId(0))
         .attributes_mut()
         .configuration = retained;
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection: StereoSelection {
@@ -489,15 +502,17 @@ fn test_stereo_enumerator_transform_scope(
         .collect();
     let original = mixed_stereo.clone();
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         expected
     );
     assert_eq!(
-        engine.transform(mixed_stereo.clone()),
+        transformer.transform(mixed_stereo.clone()),
         Ok(expected[0].clone())
     );
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(mixed_stereo, original);
 }
@@ -542,7 +557,7 @@ fn test_stereo_enumerator_transform_stereogenicity(
     } else {
         vec![molecule.clone()]
     };
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection: StereoSelection {
@@ -555,14 +570,14 @@ fn test_stereo_enumerator_transform_stereogenicity(
     );
     let original = molecule.clone();
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         expected
     );
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
     assert_eq!(molecule, original);
-    assert_eq!(engine.transform(molecule), Ok(expected[0].clone()));
+    assert_eq!(transformer.transform(molecule), Ok(expected[0].clone()));
 }
 
 #[rstest]
@@ -583,12 +598,13 @@ fn test_stereo_enumerator_transform_ring() {
             result
         })
         .collect();
-    let engine = StereoEnumerator::new(&StereoModel::default(), vec![StereoSite::Bond(BondId(0))]);
+    let transformer =
+        StereoEnumerator::new(&StereoModel::default(), vec![StereoSite::Bond(BondId(0))]);
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         expected
     );
-    assert_eq!(engine.transform(molecule), Ok(expected[0].clone()));
+    assert_eq!(transformer.transform(molecule), Ok(expected[0].clone()));
 }
 
 #[rstest]
@@ -614,23 +630,23 @@ fn test_stereo_enumerator_transform_rejection(
         .attributes_mut()
         .constraints
         .set(AtomConstraintForm::TetrahedralStereo(asserted));
-    let engine = StereoEnumerator::new(
+    let transformer = StereoEnumerator::new(
         &StereoModel::default(),
         vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))],
     );
     let original = mixed_stereo.clone();
     let mut in_place = mixed_stereo.clone();
     assert_eq!(
-        engine.transform_into(&mut in_place),
+        transformer.transform_into(&mut in_place),
         Err(EnumerateStereoError::NoAssignment)
     );
     assert_eq!(in_place, original);
-    let mut iter = engine.transform_iter(&mixed_stereo);
+    let mut iter = transformer.transform_iter(&mixed_stereo);
     assert_eq!(iter.next(), None);
     assert_eq!(iter.next(), None);
     assert_eq!(mixed_stereo, original);
     assert_eq!(
-        engine.transform(mixed_stereo),
+        transformer.transform(mixed_stereo),
         Err(EnumerateStereoError::NoAssignment)
     );
 }
@@ -650,18 +666,21 @@ fn test_stereo_enumerator_transform_error(
     #[case] order: Vec<StereoSite>,
     #[case] cause: StereoPerceptionError,
 ) {
-    let engine = StereoEnumerator::new(&StereoModel::default(), order);
+    let transformer = StereoEnumerator::new(&StereoModel::default(), order);
     let error = EnumerateStereoError::Perception(cause);
     let original = molecule.clone();
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Err(error.clone()));
+    assert_eq!(
+        transformer.transform_into(&mut in_place),
+        Err(error.clone())
+    );
     assert_eq!(in_place, original);
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         Vec::<Molecule>::new()
     );
     assert_eq!(molecule, original);
-    assert_eq!(engine.transform(molecule), Err(error));
+    assert_eq!(transformer.transform(molecule), Err(error));
 }
 
 #[rstest]
@@ -685,21 +704,25 @@ fn test_stereo_enumerator_transform_constraint_error() {
     ]));
     let molecule = editor.finish().unwrap();
     let original = molecule.clone();
-    let engine = StereoEnumerator::new(&StereoModel::default(), vec![StereoSite::Atom(AtomId(0))]);
+    let transformer =
+        StereoEnumerator::new(&StereoModel::default(), vec![StereoSite::Atom(AtomId(0))]);
     let error = EnumerateStereoError::Constraint(
         ConstraintInvariantsError::DativeBondRingMembershipUnsupported {
             bond: DativeBondId(0),
         },
     );
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Err(error.clone()));
+    assert_eq!(
+        transformer.transform_into(&mut in_place),
+        Err(error.clone())
+    );
     assert_eq!(in_place, original);
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         Vec::<Molecule>::new()
     );
     assert_eq!(molecule, original);
-    assert_eq!(engine.transform(molecule), Err(error));
+    assert_eq!(transformer.transform(molecule), Err(error));
 }
 
 #[rstest]
@@ -715,15 +738,15 @@ fn test_stereo_enumerator_transform_identity(
     #[case] molecule: Molecule,
     #[case] order: Vec<StereoSite>,
 ) {
-    let engine = StereoEnumerator::new(&StereoModel::default(), order);
-    let mut results = engine.transform_iter(&molecule);
+    let transformer = StereoEnumerator::new(&StereoModel::default(), order);
+    let mut results = transformer.transform_iter(&molecule);
     assert_eq!(results.next(), Some(molecule.clone()));
     assert_eq!(results.next(), None);
     assert_eq!(results.next(), None);
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, molecule);
-    assert_eq!(engine.transform(molecule.clone()), Ok(molecule));
+    assert_eq!(transformer.transform(molecule.clone()), Ok(molecule));
 }
 
 #[rstest]
@@ -737,20 +760,23 @@ fn test_stereo_enumerator_transform_order(
     #[case] missing: Vec<StereoSite>,
     #[case] duplicates: Vec<StereoSite>,
 ) {
-    let engine = StereoEnumerator::new(&StereoModel::default(), order);
+    let transformer = StereoEnumerator::new(&StereoModel::default(), order);
     let error = EnumerateStereoError::InvalidSiteOrder {
         missing,
         duplicates,
     };
     let original = mixed_stereo.clone();
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Err(error.clone()));
+    assert_eq!(
+        transformer.transform_into(&mut in_place),
+        Err(error.clone())
+    );
     assert_eq!(in_place, original);
-    let mut iter = engine.transform_iter(&mixed_stereo);
+    let mut iter = transformer.transform_iter(&mixed_stereo);
     assert_eq!(iter.next(), None);
     assert_eq!(iter.next(), None);
     assert_eq!(mixed_stereo, original);
-    assert_eq!(engine.transform(mixed_stereo), Err(error));
+    assert_eq!(transformer.transform(mixed_stereo), Err(error));
 }
 
 #[rstest]
@@ -772,7 +798,7 @@ fn test_stereo_enumerator_transform_configuration(
         .attributes_mut()
         .configuration = configuration;
     let original = mixed_stereo.clone();
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection: StereoSelection {
@@ -786,14 +812,19 @@ fn test_stereo_enumerator_transform_configuration(
     );
     let error = EnumerateStereoError::Perception(cause);
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Err(error.clone()));
+    assert_eq!(
+        transformer.transform_into(&mut in_place),
+        Err(error.clone())
+    );
     assert_eq!(in_place, original);
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         Vec::<Molecule>::new()
     );
     assert_eq!(mixed_stereo, original);
-    assert_eq!(engine.transform(mixed_stereo), Err(error));
+    assert_eq!(transformer.transform(mixed_stereo), Err(error));
 }
 
 #[rstest]
@@ -805,7 +836,7 @@ fn test_stereo_enumerator_transform_selection(
     #[case] selection: StereoSelection,
     #[case] site: StereoSite,
 ) {
-    let engine = StereoEnumerator::with_config(
+    let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection,
@@ -815,13 +846,18 @@ fn test_stereo_enumerator_transform_selection(
     );
     let error = EnumerateStereoError::Perception(StereoPerceptionError::InvalidSite { site });
     let mut in_place = mixed_stereo.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Err(error.clone()));
+    assert_eq!(
+        transformer.transform_into(&mut in_place),
+        Err(error.clone())
+    );
     assert_eq!(in_place, mixed_stereo);
     assert_eq!(
-        engine.transform_iter(&mixed_stereo).collect::<Vec<_>>(),
+        transformer
+            .transform_iter(&mixed_stereo)
+            .collect::<Vec<_>>(),
         Vec::<Molecule>::new()
     );
-    assert_eq!(engine.transform(mixed_stereo), Err(error));
+    assert_eq!(transformer.transform(mixed_stereo), Err(error));
 }
 
 #[rstest]
@@ -875,7 +911,7 @@ fn test_stereo_enumerator_transform_reference(
         result
     })
     .collect();
-    let engine = StereoEnumerator::new(
+    let transformer = StereoEnumerator::new(
         &StereoModel::default(),
         order
             .into_iter()
@@ -883,12 +919,15 @@ fn test_stereo_enumerator_transform_reference(
             .collect(),
     );
     assert_eq!(
-        engine.transform_iter(&molecule).collect::<Vec<_>>(),
+        transformer.transform_iter(&molecule).collect::<Vec<_>>(),
         expected
     );
-    assert_eq!(engine.transform(molecule.clone()), Ok(expected[0].clone()));
+    assert_eq!(
+        transformer.transform(molecule.clone()),
+        Ok(expected[0].clone())
+    );
     let mut in_place = molecule.clone();
-    assert_eq!(engine.transform_into(&mut in_place), Ok(()));
+    assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
     assert_eq!(in_place, expected[0]);
 }
 
@@ -897,11 +936,11 @@ fn test_stereo_enumerator_transform_iter(mixed_stereo: Molecule) {
     let original = mixed_stereo.clone();
     let mut source = mixed_stereo;
     let mut iter: EnumerateStereoIter = {
-        let engine = StereoEnumerator::new(
+        let transformer = StereoEnumerator::new(
             &StereoModel::default(),
             vec![StereoSite::Bond(BondId(4)), StereoSite::Atom(AtomId(0))],
         );
-        engine.transform_iter(&source)
+        transformer.transform_iter(&source)
     };
     source.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(1);
     source
@@ -961,7 +1000,7 @@ fn test_stereo_enumerator_transform_iter_prefix() {
         ));
     }
     let source = Molecule::from_entries(entries);
-    let engine = StereoEnumerator::new(
+    let transformer = StereoEnumerator::new(
         &StereoModel::default(),
         (0..128)
             .map(|index| StereoSite::Atom(AtomId(index * 5)))
@@ -977,8 +1016,8 @@ fn test_stereo_enumerator_transform_iter_prefix() {
         .stereo_atom_mut(StereoAtomId(127))
         .attributes_mut()
         .configuration = (StereoKind::Tetrahedral, 1).into();
-    let mut iter = engine.transform_iter(&source);
+    let mut iter = transformer.transform_iter(&source);
     assert_eq!(iter.next(), Some(first.clone()));
     assert_eq!(iter.next(), Some(second));
-    assert_eq!(engine.transform(source), Ok(first));
+    assert_eq!(transformer.transform(source), Ok(first));
 }

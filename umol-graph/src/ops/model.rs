@@ -1,11 +1,7 @@
-//! Chemistry model: top-level configuration consumed by the resolver and
-//! validator engines.
+//! Chemistry models used by resolvers and validators.
 //!
-//! `ChemistryModel` combines a `ValenceModel` (atom-typing or counts), an
-//! `AromaticityModel` (Hückel rule, HMO, or Clar), and a `StereoModel`. Engines
-//! read this; engines and configs are kept as distinct types so multiple engine
-//! instances can share one model. The model carries no resolution behavior of
-//! its own — the resolver and validator engines do the work.
+//! `ChemistryModel` combines connectivity, valence, aromaticity, and stereo models.
+//! Multiple resolvers and validators can share the same model.
 
 use std::array;
 use std::borrow::Cow;
@@ -310,7 +306,7 @@ impl Default for StereoModel {
 }
 
 /// Setup-time errors constructing or loading atom-type registries and valence tables.
-/// Distinct from the per-engine `*Error` types that surface at resolve time.
+/// Distinct from the error types returned during resolution.
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ConfigError {
     #[error("invalid atom type registry: {0}")]

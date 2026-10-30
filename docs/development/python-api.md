@@ -33,7 +33,7 @@ Rust operation. The Python source, its aliases, and its views remain unchanged o
 The initial clone shares topology, entity tables, and constraints; shared payloads are copied
 when the operation modifies or takes ownership of them. This is the same ownership choice as a
 Rust caller explicitly cloning its input to keep it available. Python exposes named transformation
-methods on Molecule without Transformer engine classes. The project operation remains Rust-only.
+methods on Molecule without separate transformer classes. The project operation remains Rust-only.
 
 Edits retains consumption on transfer: implicitly cloning a complete batch would copy its entries
 and payloads, so callers request Edits.copy() when they need reuse. MoleculeEditor.finish consumes
@@ -351,9 +351,9 @@ resolve_into's mutation, invalidation, and rollback selection contract.
 
 ### Transformations
 
-Rust's Transform extension trait supplies named methods on Molecule, delegating to engines that
-implement Transformer. Transformer retains transform, transform_into, and transform_iter for
-configured engine use. Python exposes the named Molecule methods and their configuration values:
+Rust's Transform extension trait supplies named methods on Molecule by delegating to
+Transformer implementations. Rust also exposes transform, transform_into, and transform_iter
+on these transformers. Python exposes the named Molecule methods and their configuration values:
 
 | Copy-producing method | In-place method | Arguments after self |
 | --- | --- | --- |

@@ -1,4 +1,11 @@
 //! Stereo transformations and their configuration.
+//!
+//! Generated finite Th/Ct cases check publication and preservation against
+//! independently constructed entries, and enumeration against exhaustive binary
+//! assignments. Relabeling transports ids and implicit #T/#C assertion frames;
+//! allowed ligand-frame actions transport stored configurations. Comparisons of
+//! full result collections preserve multiplicity, while the first choice remains
+//! dependent on the supplied processing order and ligand frames.
 
 mod enumeration;
 
@@ -78,6 +85,9 @@ pub enum AddStereoError {
 /// Addition is idempotent for the same model and configuration. Consuming and
 /// in-place results agree under structural equality. An in-place rejection
 /// leaves the molecule unchanged, and every result preserves its integrity.
+/// Atom relabeling, with corresponding selectors and transported #T/#C frames,
+/// preserves the represented result under framed_eq_under with the induced
+/// entity correspondence.
 #[derive(Clone, Debug)]
 pub struct StereoAdder {
     perception: StereoPerception,
@@ -239,6 +249,9 @@ pub enum RemoveStereoError {
 /// rejection preserves the input under structural equality. Successful results
 /// preserve molecule integrity. Without a class filter, removal is idempotent
 /// for the same config.
+/// Relabeling sites and #T/#C frames transports the result under structural
+/// equality after id transport. Compatible stored-frame actions preserve the
+/// represented result under framed_eq.
 #[derive(Clone, Debug)]
 pub struct StereoRemover {
     perception: StereoPerception,
@@ -485,6 +498,12 @@ pub enum EnumerateStereoError {
 /// assignment without symmetry deduplication. Empty work yields one unchanged
 /// result when its checks are consistent; no solution rejects singular calls
 /// and yields no iterator results. Every result preserves molecule integrity.
+/// Every emitted selected value belongs to its source domain and satisfies the
+/// checked constraints; every admitted assignment appears once in its stored
+/// frame, including symmetry-equivalent assignments. Relabeling ids, selectors,
+/// order, and #T/#C frames, or applying compatible stored-frame actions,
+/// transports full result collections including multiplicity. The first chosen
+/// representation remains frame dependent.
 #[derive(Clone, Debug)]
 pub struct StereoEnumerator {
     model: StereoModel,
@@ -519,7 +538,7 @@ impl StereoEnumerator {
     ///
     /// Captures the source snapshot and prepares selection and domains now;
     /// constructs candidate molecules lazily on next. The issued run can outlive
-    /// both engine and source and is unaffected by their subsequent mutation.
+    /// both transformer and source and is unaffected by their subsequent mutation.
     /// Preparation rejection or no consistent assignment produces an empty
     /// iterator; singular Transformer methods report the rejection cause.
     pub fn transform_iter(&self, molecule: &Molecule) -> EnumerateStereoIter {

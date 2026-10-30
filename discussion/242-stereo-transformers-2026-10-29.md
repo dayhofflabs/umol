@@ -19,9 +19,9 @@ configuration values on existing entities.
 This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
-and S3's three transformer engines and absolute-assignment traversal are
-implemented. S4's properties, receiver methods, and Python bindings remain
-future work. External implementations under materials/codes may supply
+S3's three transformer engines and absolute-assignment traversal, and S4a's
+properties are implemented. S4b's receiver methods and S4c/S4d's Python bindings
+remain future work. External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -93,11 +93,12 @@ classify requires an existing entity at every supplied topology site. It
 calculates one whole-molecule GraphSymmetry and a local projection per supplied
 site. It does not impose automatic recognition eligibility or the model's
 element scopes on stored arrangements; classification also works when their
-producer kinds are disabled. It supports Th/Ct with Undetermined, literal zero
-or one, or a nonempty finite subset of those values. Kindless configurations,
-symbolic cosets, invalid coset domains, and other geometries report unsupported
-input. Empty input returns an empty map. Both queries retain the current
-para-stereo behavior and leave the input unchanged.
+producer kinds are disabled. It supports Th atoms and Ct bonds with Undetermined,
+literal zero or one, or a nonempty finite subset of those values. Kindless
+configurations, symbolic cosets, invalid coset domains, incompatible site/kind
+combinations, and other geometries report unsupported input. Empty input returns
+an empty map. Both queries retain the current para-stereo behavior and leave the
+input unchanged.
 
 StereoPerception's existing new, derive, derive_stereo_atom, derive_stereo_bond,
 and skipped_stereo_bonds signatures remain unchanged. derive stays driven by
@@ -1202,8 +1203,8 @@ synthetic domains. No optimization or para-stereo redesign is added here.
   strict graph rustdoc, formatting, and diff checks passed. The transform target's
   360 stereo benchmark paths passed in test mode, including all 55 new
   enumerator paths with full expected-result and integrity checks. Enumeration
-  measurements are recorded below. S4a's cross-engine properties, S4b's receiver
-  methods, and S4c/S4d's Python surface remain planned work.
+  measurements and S4a's properties are recorded below. S4b's receiver methods
+  and S4c/S4d's Python surface remain planned work.
 
 S3 gate: the complete transformer unit group and the new stereo benchmark cases
 pass in test mode. Audit all public exports and error variants, source assertion
@@ -1363,6 +1364,42 @@ the small differences between consuming/in-place or shared/unique paths.
   asserting that the first chosen
   representation is frame invariant. Keep the bounded exhaustive comparison
   independent of the production traversal.
+
+  **Completed — 2026-10-30.** Added 27 generative property cases with local
+  strategies and independent references. Inputs contain zero to four explicit
+  Th/Ct sites with H/F/Cl/Br/I terminal atoms, arbitrary stored frames, site, kind,
+  and stereogenicity selections, source #T/#C assertions, and an unrelated Ne atom
+  with symbolic charge. Addition and classification use explicitly undetermined
+  cosets, with ligand classes supplied by terminal-element equality. Raw removal
+  and enumeration also vary fixed cosets and finite sets, including empty sets.
+  Unsupported kinds, kindless configurations, invalid indices, symbolic/relative
+  cosets, and incompatible site/kind combinations are explicit cases on generated
+  frames.
+
+  Independently constructed entries check preservation, removal's record-id and
+  constraint compaction, consuming/in-place agreement, failure without
+  publication, and result independence. Idempotence is checked for addition and
+  removal without a stereogenicity filter. An exhaustive binary-mask reference
+  checks enumeration's ordered results, source-domain membership, source-frame
+  assertions, joint selected constraints, completeness, multiplicity, and first
+  result. It does not call perception, validation, or the production traversal.
+
+  Atom relabeling transports ids, selectors, order, and implicit #T/#C assertion
+  frames. Stored-frame transport uses producer-issued representative actions and
+  nonempty absolute domains. Classification and represented addition/removal
+  results are compared with their stated equality relations; enumeration compares
+  full collections with multiplicity, without a first-choice frame-invariance
+  assertion. Public rustdoc states these laws and their equality relations.
+
+  Shared StereoPerception::classify now rejects Th on bonds and Ct on atoms with
+  UnsupportedConfiguration, matching the supported site/kind boundary already
+  enforced by enumeration. Class-filtered removal propagates that shared error;
+  unrestricted All removal still strips those records. No public symbols,
+  constructors, or Molecule methods were added.
+
+  All 3,505 graph unit tests, 215 graph property cases, and 683 resolution
+  conformance cases passed. All-target/all-feature graph and graph-IR Clippy,
+  strict graph rustdoc, formatting, and diff checks passed.
 
 - **S4b — Transform receiver interface** — additive (green).
   Modules: umol-graph/src/ops/transform.rs and its tests. [dep: S3a, S3b]

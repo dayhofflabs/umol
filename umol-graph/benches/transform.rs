@@ -991,7 +991,8 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
     }
     let mut group = c.benchmark_group("stereo_enumerator");
     for (name, input, config, order, expected, full) in cases {
-        let engine = StereoEnumerator::with_config(&StereoModel::default(), config.clone(), order);
+        let transformer =
+            StereoEnumerator::with_config(&StereoModel::default(), config.clone(), order);
         let entries = MoleculeEntries {
             atoms: input
                 .atoms()
@@ -1032,29 +1033,32 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
         };
         assert_eq!(Molecule::from_entries(entries.clone()), input, "{name}");
         assert_eq!(
-            engine.transform(input.clone()),
+            transformer.transform(input.clone()),
             Ok(expected[0].clone()),
             "{name}"
         );
         let mut in_place = input.clone();
-        assert_eq!(engine.transform_into(&mut in_place), Ok(()), "{name}");
+        assert_eq!(transformer.transform_into(&mut in_place), Ok(()), "{name}");
         assert_eq!(in_place, expected[0], "{name}");
         assert_eq!(
-            engine.transform(Molecule::from_entries(entries.clone())),
+            transformer.transform(Molecule::from_entries(entries.clone())),
             Ok(expected[0].clone()),
             "{name}"
         );
         let mut unique = Molecule::from_entries(entries.clone());
-        assert_eq!(engine.transform_into(&mut unique), Ok(()), "{name}");
+        assert_eq!(transformer.transform_into(&mut unique), Ok(()), "{name}");
         assert_eq!(unique, expected[0], "{name}");
         assert_eq!(
-            engine.transform_iter(&input).take(4).collect::<Vec<_>>(),
+            transformer
+                .transform_iter(&input)
+                .take(4)
+                .collect::<Vec<_>>(),
             expected[..expected.len().min(4)],
             "{name}"
         );
         if full {
             assert_eq!(
-                engine.transform_iter(&input).collect::<Vec<_>>(),
+                transformer.transform_iter(&input).collect::<Vec<_>>(),
                 expected,
                 "{name}"
             );
@@ -1072,44 +1076,44 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("transform_shared", name), |b| {
             b.iter_batched(
                 || input.clone(),
-                |molecule| engine.transform(black_box(molecule)).unwrap(),
+                |molecule| transformer.transform(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
         group.bench_function(BenchmarkId::new("transform_into_shared", name), |b| {
             b.iter_batched_ref(
                 || input.clone(),
-                |molecule| engine.transform_into(black_box(molecule)).unwrap(),
+                |molecule| transformer.transform_into(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
         group.bench_function(BenchmarkId::new("transform_unique", name), |b| {
             b.iter_batched(
                 || Molecule::from_entries(entries.clone()),
-                |molecule| engine.transform(black_box(molecule)).unwrap(),
+                |molecule| transformer.transform(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
         group.bench_function(BenchmarkId::new("transform_into_unique", name), |b| {
             b.iter_batched_ref(
                 || Molecule::from_entries(entries.clone()),
-                |molecule| engine.transform_into(black_box(molecule)).unwrap(),
+                |molecule| transformer.transform_into(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
         group.bench_function(BenchmarkId::new("iter_setup", name), |b| {
-            b.iter(|| engine.transform_iter(black_box(&input)));
+            b.iter(|| transformer.transform_iter(black_box(&input)));
         });
         group.bench_function(BenchmarkId::new("iter_first", name), |b| {
             b.iter_batched(
-                || engine.transform_iter(&input),
+                || transformer.transform_iter(&input),
                 |mut run| run.next().unwrap(),
                 BatchSize::SmallInput,
             );
         });
         group.bench_function(BenchmarkId::new("iter_prefix_4", name), |b| {
             b.iter_batched(
-                || engine.transform_iter(&input),
+                || transformer.transform_iter(&input),
                 |run| run.take(4).collect::<Vec<_>>(),
                 BatchSize::SmallInput,
             );
@@ -1117,7 +1121,7 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
         if full {
             group.bench_function(BenchmarkId::new("iter_all", name), |b| {
                 b.iter_batched(
-                    || engine.transform_iter(&input),
+                    || transformer.transform_iter(&input),
                     |run| run.collect::<Vec<_>>(),
                     BatchSize::SmallInput,
                 );
