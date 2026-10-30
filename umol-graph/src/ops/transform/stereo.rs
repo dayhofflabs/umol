@@ -89,6 +89,36 @@ impl Default for RemoveStereoConfig {
     }
 }
 
+/// Site selection and algorithm for stereo enumeration.
+///
+/// Default selects tetrahedral and cis/trans kinds, all topology sites, and
+/// all stereogenicity values. It uses Nauty. Processing order is supplied
+/// separately from this configuration.
+///
+/// Construction preserves the supplied selection without checking ids against
+/// a molecule. The executing operation checks ids before indexing or mutation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EnumerateStereoConfig {
+    pub selection: StereoSelection,
+    pub automorphism_algorithm: AutomorphismAlgorithm,
+}
+
+impl Default for EnumerateStereoConfig {
+    fn default() -> Self {
+        Self {
+            selection: StereoSelection {
+                sites: None,
+                kinds: Some(BTreeSet::from([
+                    StereoKind::Tetrahedral,
+                    StereoKind::CisTrans,
+                ])),
+                stereogenicities: None,
+            },
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -467,6 +497,161 @@ mod tests {
             RemoveStereoMode::All => all,
             RemoveStereoMode::Undetermined => undetermined,
         };
+        assert_eq!(selected, expected);
+    }
+
+    #[rstest]
+    fn test_enumerate_stereo_config_default() {
+        assert_eq!(
+            EnumerateStereoConfig::default(),
+            EnumerateStereoConfig {
+                selection: StereoSelection {
+                    sites: None,
+                    kinds: Some(BTreeSet::from([
+                        StereoKind::Tetrahedral,
+                        StereoKind::CisTrans,
+                    ])),
+                    stereogenicities: None,
+                },
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            },
+        );
+    }
+
+    #[rstest]
+    #[case::default(
+        EnumerateStereoConfig::default(),
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2)),
+            StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))],
+    )]
+    #[case::tetrahedral(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2))],
+    )]
+    #[case::cis_trans(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))],
+    )]
+    #[case::sites(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(1)), StereoSite::Bond(BondId(1))])),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![StereoSite::Atom(AtomId(1)), StereoSite::Bond(BondId(1))],
+    )]
+    #[case::intersection(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0)),
+                    StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))])),
+                kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+            },
+            ..Default::default()
+        },
+        vec![StereoSite::Bond(BondId(0))],
+    )]
+    #[case::prochiral(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![StereoSite::Atom(AtomId(1))],
+    )]
+    #[case::symmetric(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![StereoSite::Atom(AtomId(2)), StereoSite::Bond(BondId(1))],
+    )]
+    #[case::empty_kinds(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                kinds: Some(BTreeSet::new()),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![],
+    )]
+    #[case::unbound_sites(
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(u32::MAX)),
+                    StereoSite::Bond(BondId(u32::MAX))])),
+                ..EnumerateStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+        vec![],
+    )]
+    fn test_enumerate_stereo_config_selection(
+        #[case] config: EnumerateStereoConfig,
+        #[case] expected: Vec<StereoSite>,
+    ) {
+        let candidates = [
+            (
+                StereoSite::Atom(AtomId(0)),
+                StereoKind::Tetrahedral,
+                Stereogenicity::Stereogenic,
+            ),
+            (
+                StereoSite::Atom(AtomId(1)),
+                StereoKind::Tetrahedral,
+                Stereogenicity::Prochiral,
+            ),
+            (
+                StereoSite::Atom(AtomId(2)),
+                StereoKind::Tetrahedral,
+                Stereogenicity::Symmetric,
+            ),
+            (
+                StereoSite::Atom(AtomId(3)),
+                StereoKind::SquarePlanar,
+                Stereogenicity::Stereogenic,
+            ),
+            (
+                StereoSite::Bond(BondId(0)),
+                StereoKind::CisTrans,
+                Stereogenicity::Stereogenic,
+            ),
+            (
+                StereoSite::Bond(BondId(1)),
+                StereoKind::CisTrans,
+                Stereogenicity::Symmetric,
+            ),
+        ];
+        let selected: Vec<_> = candidates
+            .into_iter()
+            .filter(|&(site, kind, stereogenicity)| {
+                config
+                    .selection
+                    .matches(site, Some(kind), Some(stereogenicity))
+            })
+            .map(|(site, _, _)| site)
+            .collect();
         assert_eq!(selected, expected);
     }
 }

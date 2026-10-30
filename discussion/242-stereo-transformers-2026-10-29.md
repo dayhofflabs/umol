@@ -250,6 +250,7 @@ silently supply a canonical order.
 | RemoveStereoMode | All and Undetermined variants; Undetermined tests the coset |
 | RemoveStereoMode::matches | Tests the configuration against the mode without classification or resolution |
 | RemoveStereoConfig::default | All; unrestricted sites/kinds/stereogenicities; Nauty |
+| EnumerateStereoConfig::default | Th/Ct; all sites and stereogenicities; Nauty; processing order supplied separately |
 | StereoAdder, StereoRemover, StereoEnumerator | Configured Transformer engines sharing StereoPerception |
 | EnumerateStereoIter | Owned operation-issued iterator, produced by StereoEnumerator::transform_iter |
 | AddStereoError, RemoveStereoError, EnumerateStereoError | Operation-specific rejection boundaries |
@@ -743,20 +744,29 @@ different outcome. The sixteen-site median differs by less than one percent.
   exclusion at eligible sites, empty selections, and the unrestricted All
   route with missing kind/classification values. All 2,880 graph unit tests and
   all-target/all-feature Clippy with warnings denied passed. Strict rustdoc,
-  formatting, and diff checks passed. S2d–S2e and the S2 gate remain outstanding.
+  formatting, and diff checks passed.
 
-- **S2d — EnumerateStereoConfig and explicit site order** — additive (green).
+- **S2d — EnumerateStereoConfig** — additive (green).
   Modules: the same stereo transformation module and config tests. [dep: S2a]
-  Add EnumerateStereoConfig and the explicit order input. Reuse the shared
+  Add EnumerateStereoConfig with Default selecting Th/Ct, all sites, and all
+  stereogenicity values, using Nauty. Reuse the shared
   site/kind/stereogenicity selector. No deduplication or relative-variable
-  options are introduced. Use the constructor/order argument layout above,
-  following Kekulizer's
-  separation of selection and processing order. Test missing and duplicate
-  selected sites, empty work, both site families, and order entries outside the
-  selected processing set. Excluded kinds must not create order requirements.
-  Check agreement between constructors and the documented default configuration.
-  The concrete native iterator producer and ownership contract above are fixed
-  before S3d, following the existing reaction iterator pattern.
+  options are introduced. Test exact defaults, the shared selector's field
+  overrides and intersections, empty selections, and construction with unbound
+  ids. Keep processing order as the separate constructor argument above,
+  following Kekulizer. Traversal-order tests belong to S3c; constructors and
+  contextual order validation belong to the executing engine in S3d, where the
+  selected processing sites are available. The native iterator producer and
+  ownership contract above remain fixed.
+
+  **Completed — 2026-10-30.** Added EnumerateStereoConfig's public selection
+  and automorphism_algorithm fields and Default under ops::transform::stereo,
+  re-exported from ops::transform. Construction is infallible and does not bind
+  ids to a molecule. Its ten configuration cases cover the exact defaults,
+  atom/bond site restrictions, kind selection, all stereogenicity values,
+  selector intersections, empty kinds, and unbound ids. All 2,890 graph unit
+  tests and all-target/all-feature Clippy with warnings denied passed. Strict
+  rustdoc, formatting, and diff checks passed. S2e and the S2 gate remain outstanding.
 
 - **S2e — Shared identification and classification** — additive (green).
   Modules: umol-graph/src/ops/stereo.rs, with focused resolver and validator
@@ -833,12 +843,20 @@ Record the discovery/classification measurements before proceeding to engines.
   Reuse existing normalization when a constant expression already reduces to
   an admitted absolute value; do not implement a variable solver. Compare exact
   sequences with S0a's bounded exhaustive oracle, including empty and rejected
-  domains, included/excluded kinds, and symmetry-equivalent assignments. Verify
-  early stop without retaining the full Cartesian product.
+  domains, included/excluded kinds, and symmetry-equivalent assignments. Test
+  different supplied orders over atom and bond sites and preserve their traversal
+  order. Verify early stop without retaining the full Cartesian product.
 
 - **S3d — StereoEnumerator and EnumerateStereoError** — additive (green).
   Modules: the stereo engine module, enumerator tests, ops/transform.rs
   re-exports, and the transform benchmark. [dep: S3c]
+  Add new(model, site_order) and with_config(model, config, site_order), storing
+  configuration and order without contextual validation. Check that new agrees
+  with with_config using EnumerateStereoConfig::default(). At execution, project
+  the caller's order onto selected processing sites, following Kekulizer;
+  reject missing or duplicate selected sites and ignore entries outside that
+  set. Test empty work, both site families, and excluded kinds that create no
+  order requirements. Validate supplied selection ids before indexing or mutation.
   Expose the configured/order-bearing Transformer. Consuming and in-place
   methods select the first complete admissible assignment; the iterator uses
   that same traversal for all assignments. Add EnumerateStereoIter with owned
