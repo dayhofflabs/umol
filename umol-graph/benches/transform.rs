@@ -14,15 +14,16 @@ use umol_chem::element::Element;
 use umol_graph::ops::model::{AromaticityModel, StereoModel};
 use umol_graph::ops::stereo::{StereoSelection, StereoSite};
 use umol_graph::ops::transform::{
-    Aromatizer, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer, RemoveStereoConfig,
-    RemoveStereoMode, StereoAdder, StereoRemover, Transformer,
+    Aromatizer, EnumerateStereoConfig, HydrogenFolder, HydrogenUnfolder, KekulizeConfig, Kekulizer,
+    RemoveStereoConfig, RemoveStereoMode, StereoAdder, StereoEnumerator, StereoRemover,
+    Transformer,
 };
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomForm, AtomId, BondForm, IntoIr, Molecule, MoleculeEntries,
-    StereoAtomForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
-    TetrahedralStereoForm,
+    AtomConstraintForm, AtomForm, AtomId, BondForm, BondId, IntoIr, Molecule, MoleculeEntries,
+    StereoAtomForm, StereoAtomId, StereoBondId, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, Stereogenicity, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
@@ -803,6 +804,329 @@ fn bench_stereo_remover(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_stereo_enumerator(c: &mut Criterion) {
+    let mixed = mol_dsl_concrete!(
+        r#"{:atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th*"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
+    );
+    let mixed_expected: Vec<_> = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        .into_iter()
+        .map(|(atom, bond)| {
+            let mut result = mixed.clone();
+            result
+                .stereo_atom_mut(StereoAtomId(0))
+                .attributes_mut()
+                .configuration = (StereoKind::Tetrahedral, atom).into();
+            result
+                .stereo_bond_mut(StereoBondId(0))
+                .attributes_mut()
+                .configuration = (StereoKind::CisTrans, bond).into();
+            result
+        })
+        .collect();
+    let evidenced = mol_dsl_concrete!(
+        r#"{:atoms ["C#D4#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!#C1"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th*"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
+    );
+    let evidenced_expected = mol_dsl_concrete!(
+        r#"{:atoms ["C#D4#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!#C1"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct1"}]}"#
+    );
+    let symmetric = mol_dsl_concrete!(
+        r#"{:atoms ["C" "H" "H" "H" "H" "C" "H" "H" "H" "H"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [5 9 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"} {:site 5 :ligands [6 7 8 9] :attrs "Th*"}]}"#
+    );
+    let symmetric_expected: Vec<_> = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        .into_iter()
+        .map(|(first, second)| {
+            let mut result = symmetric.clone();
+            result
+                .stereo_atom_mut(StereoAtomId(0))
+                .attributes_mut()
+                .configuration = (StereoKind::Tetrahedral, first).into();
+            result
+                .stereo_atom_mut(StereoAtomId(1))
+                .attributes_mut()
+                .configuration = (StereoKind::Tetrahedral, second).into();
+            result
+        })
+        .collect();
+    let mut cases = vec![
+        (
+            "mixed",
+            mixed,
+            EnumerateStereoConfig::default(),
+            vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))],
+            mixed_expected,
+            true,
+        ),
+        (
+            "evidenced",
+            evidenced,
+            EnumerateStereoConfig::default(),
+            vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))],
+            vec![evidenced_expected],
+            true,
+        ),
+        (
+            "symmetric_2",
+            symmetric,
+            EnumerateStereoConfig::default(),
+            vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(5))],
+            symmetric_expected,
+            true,
+        ),
+    ];
+    for count in [8u32, 128] {
+        let mut entries = MoleculeEntries::default();
+        for component in 0..count {
+            let base = component * 5;
+            entries.atoms.extend(
+                [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+                    .map(|element| AtomForm::from_element(element).into_concrete()),
+            );
+            entries.bonds.extend((1..5).map(|ligand| {
+                (
+                    AtomId(base),
+                    AtomId(base + ligand),
+                    BondForm::from_order(1).into_concrete(),
+                )
+            }));
+            entries.stereo_atoms.push((
+                AtomId(base),
+                (1..5)
+                    .map(|ligand| StereoLigand::new(AtomId(base + ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+            ));
+        }
+        let input = Molecule::from_entries(entries);
+        let order: Vec<_> = (0..count)
+            .map(|index| StereoSite::Atom(AtomId(index * 5)))
+            .collect();
+        let full = count == 8;
+        let expected: Vec<_> = (0u32..if full { 256 } else { 4 })
+            .map(|bits| {
+                let mut result = input.clone();
+                for index in 0..count {
+                    let shift = count - 1 - index;
+                    let value = if shift < u32::BITS {
+                        (bits >> shift) & 1
+                    } else {
+                        0
+                    };
+                    result
+                        .stereo_atom_mut(StereoAtomId(index))
+                        .attributes_mut()
+                        .configuration = (StereoKind::Tetrahedral, value).into();
+                }
+                result
+            })
+            .collect();
+        if full {
+            cases.push((
+                "all_8",
+                input.clone(),
+                EnumerateStereoConfig::default(),
+                order.clone(),
+                expected.clone(),
+                true,
+            ));
+            cases.push((
+                "classified_8",
+                input,
+                EnumerateStereoConfig {
+                    selection: StereoSelection {
+                        stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                order,
+                expected,
+                true,
+            ));
+        } else {
+            let selected_expected: Vec<_> = [0, 1]
+                .into_iter()
+                .map(|value| {
+                    let mut result = input.clone();
+                    result
+                        .stereo_atom_mut(StereoAtomId(0))
+                        .attributes_mut()
+                        .configuration = (StereoKind::Tetrahedral, value).into();
+                    result
+                })
+                .collect();
+            cases.push((
+                "selected_1_of_128",
+                input.clone(),
+                EnumerateStereoConfig {
+                    selection: StereoSelection {
+                        sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                order.clone(),
+                selected_expected,
+                true,
+            ));
+            cases.push((
+                "prefix_128",
+                input,
+                EnumerateStereoConfig::default(),
+                order,
+                expected,
+                false,
+            ));
+        }
+    }
+    let mut group = c.benchmark_group("stereo_enumerator");
+    for (name, input, config, order, expected, full) in cases {
+        let engine = StereoEnumerator::with_config(&StereoModel::default(), config.clone(), order);
+        let entries = MoleculeEntries {
+            atoms: input
+                .atoms()
+                .iter()
+                .map(|atom| atom.attributes().clone())
+                .collect(),
+            bonds: input
+                .bonds()
+                .iter()
+                .map(|bond| {
+                    let [a, b] = bond.atom_ids();
+                    (a, b, bond.attributes().clone())
+                })
+                .collect(),
+            stereo_atoms: input
+                .stereo_atoms()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        stereo.attributes().clone(),
+                    )
+                })
+                .collect(),
+            stereo_bonds: input
+                .stereo_bonds()
+                .iter()
+                .map(|stereo| {
+                    (
+                        stereo.site_id(),
+                        stereo.ligand_ids().to_vec(),
+                        stereo.attributes().clone(),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        };
+        assert_eq!(Molecule::from_entries(entries.clone()), input, "{name}");
+        assert_eq!(
+            engine.transform(input.clone()),
+            Ok(expected[0].clone()),
+            "{name}"
+        );
+        let mut in_place = input.clone();
+        assert_eq!(engine.transform_into(&mut in_place), Ok(()), "{name}");
+        assert_eq!(in_place, expected[0], "{name}");
+        assert_eq!(
+            engine.transform(Molecule::from_entries(entries.clone())),
+            Ok(expected[0].clone()),
+            "{name}"
+        );
+        let mut unique = Molecule::from_entries(entries.clone());
+        assert_eq!(engine.transform_into(&mut unique), Ok(()), "{name}");
+        assert_eq!(unique, expected[0], "{name}");
+        assert_eq!(
+            engine.transform_iter(&input).take(4).collect::<Vec<_>>(),
+            expected[..expected.len().min(4)],
+            "{name}"
+        );
+        if full {
+            assert_eq!(
+                engine.transform_iter(&input).collect::<Vec<_>>(),
+                expected,
+                "{name}"
+            );
+        }
+        for result in &expected {
+            assert_eq!(result.clone().edit().finish(), Ok(result.clone()), "{name}");
+        }
+        let selected = config.selection.sites.as_ref().map_or(
+            input.stereo_atoms().count() + input.stereo_bonds().count(),
+            BTreeSet::len,
+        );
+        eprintln!("stereo_enumerator_input\t{name}\tatoms={}\tbonds={}\tstereo_atoms={}\tstereo_bonds={}\tselected_sites={}\tdomain_product=2^{}\tfull_results={:?}\tprefix_results={}\tclasses={:?}\talgorithm=Nauty\tpara_stereo=false",
+            input.atoms().count(), input.bonds().count(), input.stereo_atoms().count(), input.stereo_bonds().count(), selected,
+            selected, full.then_some(expected.len()), expected.len().min(4), config.selection.stereogenicities);
+        group.bench_function(BenchmarkId::new("transform_shared", name), |b| {
+            b.iter_batched(
+                || input.clone(),
+                |molecule| engine.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into_shared", name), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |molecule| engine.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_unique", name), |b| {
+            b.iter_batched(
+                || Molecule::from_entries(entries.clone()),
+                |molecule| engine.transform(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("transform_into_unique", name), |b| {
+            b.iter_batched_ref(
+                || Molecule::from_entries(entries.clone()),
+                |molecule| engine.transform_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("iter_setup", name), |b| {
+            b.iter(|| engine.transform_iter(black_box(&input)));
+        });
+        group.bench_function(BenchmarkId::new("iter_first", name), |b| {
+            b.iter_batched(
+                || engine.transform_iter(&input),
+                |mut run| run.next().unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+        group.bench_function(BenchmarkId::new("iter_prefix_4", name), |b| {
+            b.iter_batched(
+                || engine.transform_iter(&input),
+                |run| run.take(4).collect::<Vec<_>>(),
+                BatchSize::SmallInput,
+            );
+        });
+        if full {
+            group.bench_function(BenchmarkId::new("iter_all", name), |b| {
+                b.iter_batched(
+                    || engine.transform_iter(&input),
+                    |run| run.collect::<Vec<_>>(),
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     transform,
     bench_transform,
@@ -811,6 +1135,7 @@ criterion_group!(
     bench_hydrogens_scaling,
     bench_stereo_adder,
     bench_stereo_remover,
+    bench_stereo_enumerator,
     stereo::bench_stereo
 );
 criterion_main!(transform);

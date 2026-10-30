@@ -19,9 +19,9 @@ configuration values on existing entities.
 This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
-and S3a/S3b's StereoAdder and StereoRemover are implemented. StereoEnumerator
-remains future work; S3c's internal absolute-assignment traversal and checks are
-implemented. External implementations under materials/codes may supply
+and S3's three transformer engines and absolute-assignment traversal are
+implemented. S4's properties, receiver methods, and Python bindings remain
+future work. External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -343,10 +343,17 @@ silently supply a canonical order.
 | StereoAdder's Transformer implementation | Consuming, in-place, and lazy one-result operations; AddStereoError on singular rejection, no iterator result on rejection |
 | StereoRemover::new, StereoRemover::with_config | Infallible model snapshot and owned configuration; topology ids checked during execution |
 | StereoRemover's Transformer implementation | Consuming, in-place, and lazy one-result operations; RemoveStereoError on singular rejection, no iterator result on rejection |
+| StereoEnumerator::new, StereoEnumerator::with_config | Infallible model snapshot, owned configuration, and separate site order; selected ids/order checked during execution |
+| StereoEnumerator::transform_iter | Issues EnumerateStereoIter with an owned source snapshot and prepared traversal; rejection yields an empty iterator |
+| StereoEnumerator's Transformer implementation | Consuming and in-place calls publish the first checked assignment; trait iteration delegates to the inherent owned iterator |
 | EnumerateStereoIter | Owned operation-issued iterator, produced by StereoEnumerator::transform_iter |
+| EnumerateStereoIter's Iterator and FusedIterator implementations | Independent Molecule items in supplied site order with ascending stored-frame values; exhaustion or rejection is permanent; no public constructor |
 | AddStereoError, RemoveStereoError, EnumerateStereoError | Operation-specific rejection boundaries |
 | AddStereoError::Perception, AddStereoError::Inconsistency | Existing shared query/evidence causes, with From conversions; no parallel diagnostic vocabulary |
 | RemoveStereoError::Perception | Wraps StereoPerceptionError with a From conversion; no separate removal-specific diagnostic payload |
+| EnumerateStereoError::Perception, EnumerateStereoError::Constraint | Wrap shared StereoPerceptionError and ConstraintInvariantsError causes with From conversions |
+| EnumerateStereoError::InvalidSiteOrder | Reports missing selected sites and duplicate selected entries, ignoring unselected order entries |
+| EnumerateStereoError::NoAssignment | No selected absolute assignment satisfies the checked constraints, including an empty selected domain |
 
 StereoAdder and StereoRemover have new(model) and with_config(model, config)
 constructors, following Aromatizer. StereoEnumerator additionally receives the
@@ -1122,11 +1129,10 @@ synthetic domains. No optimization or para-stereo redesign is added here.
 
   All 3,400 graph unit tests, 188 graph property tests, and 683 resolution
   conformance cases passed. All-target/all-feature Clippy for graph and graph-IR,
-  strict graph rustdoc, formatting, and diff checks passed. No public symbols or
-  Molecule methods are added here. The module has no non-test caller until S3d;
-  its declaration carries a non-test dead_code expectation. S3d still owns the
-  public engine, contextual selection/order checks, owned iterator, publication,
-  and enumeration measurements. S4a's transformer properties remain future work.
+  strict graph rustdoc, formatting, and diff checks passed. S3c added no public
+  symbols or Molecule methods. S3d connects the module to the public engine and
+  removes its temporary non-test dead_code expectation. S4a's transformer
+  properties remain future work.
 
 - **S3d — StereoEnumerator and EnumerateStereoError** — additive (green).
   Modules: the stereo engine module, enumerator tests, ops/transform.rs
@@ -1153,9 +1159,58 @@ synthetic domains. No optimization or para-stereo redesign is added here.
   first-result latency, bounded prefixes, and complete enumeration separately;
   cover products with duplicate molecular isomers to confirm no hidden dedup.
 
+  **Completed — 2026-10-30.** Added StereoEnumerator, EnumerateStereoIter,
+  and EnumerateStereoError, exported from ops::transform and its stereo module.
+  new(model, site_order) delegates to with_config with the default config.
+  Constructors capture a model snapshot and own the configuration and order;
+  they perform no contextual lookup. Execution validates explicit selection ids
+  before empty-filter handling, applies site/kind filters, and requests shared
+  classification only when needed. A temporary input normalizes constant
+  selected expressions for classification without changing the source. The
+  caller's order is projected onto the selected entities; missing and duplicate
+  selected entries reject, while other entries are ignored. Existing entities
+  are independent of automatic recognition eligibility, enabled discovery kinds,
+  and the discovery ring threshold. Required fluxional processing remains
+  unsupported.
+
+  Consuming and in-place operations use the same prepared traversal to find the
+  first checked candidate and its Edits plan. The probe is discarded before
+  publication through the original receiver's editor or direct mutation;
+  rejection leaves a borrowed receiver unchanged. Edits change only selected
+  configurations. The inherent transform_iter captures an owned source snapshot
+  and prepared domains/order/checks. next constructs candidates lazily, retains
+  symmetry-equivalent assignments, and terminates permanently on exhaustion or
+  rejection. The trait method delegates to it. The iterator has no public
+  constructor or borrowed engine/source state. No Molecule methods or Python
+  bindings are added in this item.
+
+  The error boundary wraps shared perception and constraint-evaluation causes;
+  InvalidSiteOrder supplies missing and duplicate site vectors, and NoAssignment
+  covers empty or unsatisfied domains. The 105 cases cover full Th/Ct outputs,
+  constructor agreement, selector intersections and empty sets, fixed/finite
+  domains, constant expressions, unsupported variables/kinds, model snapshots
+  and scope, source assertions in retained frames, joint logical constraints,
+  partial and opaque unselected data, exact errors and unchanged inputs,
+  both cosets on symmetric/prochiral entities, and native/trait iteration
+  agreement. Ordered molecule sequences match S0a's exhaustive oracle through
+  eight sites. An issued iterator survives engine/source destruction and source
+  mutation; yielded results are independently mutable. The 128-site prefix case
+  checks lazy output and first-result agreement without collecting the product.
+
+  All 3,505 graph unit tests, 188 graph property tests, and 683 resolution
+  conformance cases passed. All-target/all-feature Clippy for graph and graph-IR,
+  strict graph rustdoc, formatting, and diff checks passed. The transform target's
+  360 stereo benchmark paths passed in test mode, including all 55 new
+  enumerator paths with full expected-result and integrity checks. Enumeration
+  measurements are recorded below. S4a's cross-engine properties, S4b's receiver
+  methods, and S4c/S4d's Python surface remain planned work.
+
 S3 gate: the complete transformer unit group and the new stereo benchmark cases
 pass in test mode. Audit all public exports and error variants, source assertion
 handling, and producers/consumers before declaring any engine complete.
+**Passed — 2026-10-30.** All three engines, their exports and failure boundaries,
+source assertion handling, and the owned iterator's production and consumption
+have been checked against the agreed contracts.
 
 #### S3a addition measurements
 
@@ -1229,6 +1284,70 @@ site reduces the unclassified total to 1.6–3.5 µs. These controls distinguish
 the cost of requested classification from raw selection/removal; they do not
 separate symmetry projection, edit planning, and publication internally or
 establish performance on a broader molecular domain.
+
+#### S3d enumeration measurements
+
+Measured on S0b's host and optimization profile with rustc 1.99.1, the default
+stereo model, Nauty, and para_stereo=false. Each selected configuration is an
+explicitly undetermined Th or Ct coset. The input manifest is:
+
+| Input | Atoms/bonds | Selected entities | Assignment product | Emitted results |
+| --- | ---: | --- | --- | --- |
+| mixed | 9/7 | One Th and one Ct | 4 | 4 |
+| evidenced | 9/7 | Same sites with #T0/#C1 assertions | 4 | 1, the last attempted assignment |
+| symmetric_2 | 10/8 | Two Th entities on explicit C(H)(H)(H)H components | 4 | 4, including symmetry-equivalent assignments |
+| all_8 | 40/32 | Eight Th entities on C(F)(Cl)(Br)I components | 256 | 256 |
+| classified_8 | 40/32 | Same sites and input, Stereogenic filter | 256 | 256 |
+| selected_1_of_128 | 640/512 | One of 128 existing Th entities | 2 | 2; other cosets remain undetermined |
+| prefix_128 | 640/512 | All 128 Th entities | 2^128 | First four only; full collection is omitted |
+
+All inputs are acyclic. The mixed inputs retain unrelated #D/#R assertions and
+non-default stored frames. Expected configurations are specified independently
+of the transformer, outside timing. Before timing, the four singular paths and
+native prefix/full output sequences are checked under full molecule equality;
+expected results pass integrity checking. Shared singular setup clones the
+fixture, while unique setup reconstructs fresh owned entries. Both are excluded
+from timing.
+
+Iterator setup measures issuance and disposal of an unconsumed run. Other
+iterator timings receive prepared runs with setup excluded: first requests one
+result, prefix collects at most four, and full collects every result. The
+candidate checks, output construction, and collection work are included.
+These separate measurements are not an additive timing decomposition.
+
+    cargo bench --locked -p umol-graph --bench transform -- stereo_enumerator --save-baseline stereo-s3d-enumerator --sample-size 30 --warm-up-time 0.1 --measurement-time 0.3 --nresamples 10000 --noplot
+
+All 55 paths were measured. Medians are microseconds per call:
+
+| Input | Consuming, shared | In-place, shared | Consuming, unique | In-place, unique |
+| --- | ---: | ---: | ---: | ---: |
+| mixed | 1.556 | 1.444 | 1.239 | 1.278 |
+| evidenced | 4.785 | 4.561 | 4.316 | 4.269 |
+| symmetric_2 | 1.303 | 1.211 | 1.095 | 1.131 |
+| all_8 | 3.268 | 3.012 | 2.743 | 2.866 |
+| classified_8 | 225.442 | 230.278 | 226.152 | 227.962 |
+| selected_1_of_128 | 11.503 | 10.890 | 9.588 | 9.569 |
+| prefix_128 | 47.182 | 43.094 | 40.111 | 42.314 |
+
+| Input | Iterator setup | First after setup | Prefix after setup | Full after setup |
+| --- | ---: | ---: | ---: | ---: |
+| mixed | 0.460 | 0.514 | 2.018 | 2.046 |
+| evidenced | 0.685 | 3.369 | 3.352 | 3.346 |
+| symmetric_2 | 0.472 | 0.405 | 1.434 | 1.492 |
+| all_8 | 1.390 | 0.856 | 3.075 | 204.864 |
+| classified_8 | 226.815 | 1.009 | 3.131 | 202.640 |
+| selected_1_of_128 | 1.227 | 1.903 | 3.766 | 3.780 |
+| prefix_128 | 23.127 | 10.714 | 39.572 | Omitted |
+
+The matched eight-site controls place the extra classification cost at
+preparation: setup increases from 1.390 to 226.815 µs, while collecting all 256
+prepared results takes about 203–205 µs in both controls. The first four results
+from 128 selected sites cost 39.572 µs after setup; no product-sized preparation
+or full result collection is performed. These synthetic inputs distinguish
+selection/classification setup from lazy traversal and output volume. They do
+not isolate every allocation, constraint check, or publication cost, or establish
+performance for a broader molecular domain. No optimization is inferred from
+the small differences between consuming/in-place or shared/unique paths.
 
 ### S4 — Properties, receiver methods, and Python
 

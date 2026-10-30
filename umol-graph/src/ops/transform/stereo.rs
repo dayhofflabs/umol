@@ -1,24 +1,25 @@
 //! Stereo transformations and their configuration.
 
-#[cfg_attr(not(test), expect(dead_code))]
 mod enumeration;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
 use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomConstraintKey, AtomHandle, BondConstraintKey, BondHandle, Edits, Molecule, RingConfig,
-    StereoAtomHandle, StereoBondHandle, StereoConfigurationForm, StereoCoset, StereoKind,
-    Stereogenicity,
+    AtomConstraintKey, AtomHandle, BondConstraintKey, BondHandle, ConstitutionColoring, Edits,
+    GraphSymmetryConfig, Molecule, Normalize, RingConfig, StereoAtomHandle, StereoBondHandle,
+    StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
 };
 
+use self::enumeration::{AbsoluteStereoAssignments, StereoAssignmentChecks};
 use crate::ops::model::StereoModel;
 use crate::ops::stereo::{
     StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection, StereoSite,
 };
 use crate::ops::transform::Transformer;
+use crate::ops::validate::constraint::ConstraintInvariantsError;
 
 /// Site selection and algorithms for stereo addition.
 ///
@@ -445,9 +446,387 @@ impl Default for EnumerateStereoConfig {
     }
 }
 
+/// Stereo enumeration could not prepare or satisfy the selected input.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum EnumerateStereoError {
+    #[error(transparent)]
+    Perception(#[from] StereoPerceptionError),
+    #[error(transparent)]
+    Constraint(#[from] ConstraintInvariantsError),
+    #[error("stereo site order has missing sites {missing:?} and duplicate sites {duplicates:?}")]
+    InvalidSiteOrder {
+        missing: Vec<StereoSite>,
+        duplicates: Vec<StereoSite>,
+    },
+    #[error("no consistent absolute stereo assignment")]
+    NoAssignment,
+}
+
+/// Determine selected absolute tetrahedral and cis/trans configurations.
+///
+/// Visits existing selected entities in the supplied site order, trying admitted
+/// cosets in ascending order in their stored frames. Fixed cosets are preserved;
+/// undetermined cosets and finite literal sets supply their finite domains.
+/// Constant expressions are normalized under their kind. Variable expressions
+/// and other geometries are unsupported when selected for processing.
+///
+/// Site, kind, and stereogenicity selectors intersect. Classification uses
+/// StereoPerception in the whole molecular context when requested. Automatic
+/// recognition rules do not reject existing arrangements. Selected sites must
+/// occur exactly once in the order; entries outside that set are ignored.
+/// Source assertions, topology, retained configurations, and ligand frames are
+/// preserved. Consistency checks allow unrelated undetermined fields.
+///
+/// # Semantic properties
+///
+/// Consuming and in-place methods select the same first consistent assignment
+/// under structural equality. In-place rejection leaves the input unchanged.
+/// The iterator starts with that same result and emits every consistent
+/// assignment without symmetry deduplication. Empty work yields one unchanged
+/// result when its checks are consistent; no solution rejects singular calls
+/// and yields no iterator results. Every result preserves molecule integrity.
+#[derive(Clone, Debug)]
+pub struct StereoEnumerator {
+    model: StereoModel,
+    config: EnumerateStereoConfig,
+    site_order: Vec<StereoSite>,
+}
+
+impl StereoEnumerator {
+    /// Store a model snapshot and processing order with the default config.
+    ///
+    /// Contextual site and order checks occur during execution.
+    pub fn new(model: &StereoModel, site_order: Vec<StereoSite>) -> Self {
+        Self::with_config(model, EnumerateStereoConfig::default(), site_order)
+    }
+
+    /// Store a model snapshot, owned configuration, and processing order.
+    ///
+    /// Construction does not check the order or bind ids to a molecule.
+    pub fn with_config(
+        model: &StereoModel,
+        config: EnumerateStereoConfig,
+        site_order: Vec<StereoSite>,
+    ) -> Self {
+        Self {
+            model: model.clone(),
+            config,
+            site_order,
+        }
+    }
+
+    /// Issue an owned iterator over the input's consistent absolute assignments.
+    ///
+    /// Captures the source snapshot and prepares selection and domains now;
+    /// constructs candidate molecules lazily on next. The issued run can outlive
+    /// both engine and source and is unaffected by their subsequent mutation.
+    /// Preparation rejection or no consistent assignment produces an empty
+    /// iterator; singular Transformer methods report the rejection cause.
+    pub fn transform_iter(&self, molecule: &Molecule) -> EnumerateStereoIter {
+        EnumerateStereoIter {
+            source: molecule.clone(),
+            enumeration: self.prepare(molecule).ok(),
+        }
+    }
+
+    fn prepare(&self, molecule: &Molecule) -> Result<StereoEnumeration, EnumerateStereoError> {
+        let selection = &self.config.selection;
+        if let Some(sites) = &selection.sites {
+            for &site in sites {
+                let available = match site {
+                    StereoSite::Atom(atom) => molecule.atoms().get(atom).is_some(),
+                    StereoSite::Bond(bond) => molecule.bonds().get(bond).is_some(),
+                };
+                if !available {
+                    return Err(StereoPerceptionError::InvalidSite { site }.into());
+                }
+            }
+        }
+        let mut configurations: BTreeMap<_, _> = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| {
+                (
+                    StereoSite::Atom(stereo.site_id()),
+                    stereo.attributes().configuration.clone(),
+                )
+            })
+            .chain(molecule.stereo_bonds().iter().map(|stereo| {
+                (
+                    StereoSite::Bond(stereo.site_id()),
+                    stereo.attributes().configuration.clone(),
+                )
+            }))
+            .filter(|(site, configuration)| {
+                selection
+                    .sites
+                    .as_ref()
+                    .is_none_or(|sites| sites.contains(site))
+                    && selection.kinds.as_ref().is_none_or(|kinds| {
+                        configuration
+                            .kind()
+                            .is_some_and(|kind| kinds.contains(&kind))
+                    })
+            })
+            .collect();
+        if let Some(classes) = &selection.stereogenicities {
+            if classes.is_empty() {
+                configurations.clear();
+            } else {
+                let mut normalized = molecule.clone();
+                for (&site, configuration) in &configurations {
+                    if matches!(
+                        (site, configuration.kind()),
+                        (StereoSite::Atom(_), Some(StereoKind::CisTrans))
+                            | (StereoSite::Bond(_), Some(StereoKind::Tetrahedral))
+                    ) {
+                        return Err(StereoPerceptionError::UnsupportedConfiguration { site }.into());
+                    }
+                    if let Ok(configuration) = configuration.clone().normalize() {
+                        match site {
+                            StereoSite::Atom(atom) => {
+                                let id = normalized
+                                    .stereo_atoms()
+                                    .at(atom)
+                                    .expect("selected stereo atom")
+                                    .id();
+                                normalized
+                                    .stereo_atom_mut(id)
+                                    .attributes_mut()
+                                    .configuration = configuration;
+                            }
+                            StereoSite::Bond(bond) => {
+                                let id = normalized
+                                    .stereo_bonds()
+                                    .at(bond)
+                                    .expect("selected stereo bond")
+                                    .id();
+                                normalized
+                                    .stereo_bond_mut(id)
+                                    .attributes_mut()
+                                    .configuration = configuration;
+                            }
+                        }
+                    }
+                }
+                let sites = configurations.keys().copied().collect();
+                let classifications = StereoPerception::new(&self.model).classify(
+                    &normalized,
+                    &sites,
+                    self.config.automorphism_algorithm,
+                )?;
+                configurations.retain(|site, _| classes.contains(&classifications[site]));
+            }
+        }
+        let sites: BTreeSet<_> = configurations.keys().copied().collect();
+        let mut seen = BTreeSet::new();
+        let mut duplicates = Vec::new();
+        let mut ordered = Vec::new();
+        for &site in self.site_order.iter().filter(|site| sites.contains(site)) {
+            if seen.insert(site) {
+                ordered.push(site);
+            } else if !duplicates.contains(&site) {
+                duplicates.push(site);
+            }
+        }
+        let missing: Vec<_> = sites.difference(&seen).copied().collect();
+        if !missing.is_empty() || !duplicates.is_empty() {
+            return Err(EnumerateStereoError::InvalidSiteOrder {
+                missing,
+                duplicates,
+            });
+        }
+        for configuration in configurations.values() {
+            if let Some(kind) = configuration.kind() {
+                if self
+                    .model
+                    .kind_model(kind)
+                    .is_some_and(|model| model.fluxionality)
+                {
+                    return Err(StereoPerceptionError::UnsupportedFluxionality { kind }.into());
+                }
+            }
+        }
+        let assignments = AbsoluteStereoAssignments::new(ordered.into_iter().map(|site| {
+            (
+                site,
+                configurations
+                    .remove(&site)
+                    .expect("ordered selected configuration"),
+            )
+        }))?;
+        let checks = StereoAssignmentChecks::new(molecule, &sites)?;
+        Ok(StereoEnumeration {
+            assignments,
+            checks,
+            symmetry_config: GraphSymmetryConfig {
+                coloring: ConstitutionColoring::full(),
+                iterate_to_fixpoint: self.model.para_stereo,
+                max_iterations: 16,
+                automorphism_algorithm: self.config.automorphism_algorithm,
+            },
+        })
+    }
+
+    fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, EnumerateStereoError> {
+        let (_, edits) = self
+            .prepare(molecule)?
+            .next(molecule)?
+            .ok_or(EnumerateStereoError::NoAssignment)?;
+        Ok(edits)
+    }
+}
+
+impl Transformer for StereoEnumerator {
+    type Error = EnumerateStereoError;
+
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error> {
+        let edits = self.plan_transform(&molecule)?;
+        let mut editor = molecule.edit();
+        editor
+            .apply(edits)
+            .expect("stereo enumeration plan applies to its input");
+        Ok(editor
+            .finish()
+            .expect("stereo enumeration plan preserves molecule integrity"))
+    }
+
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
+        let edits = self.plan_transform(molecule)?;
+        if !edits.is_empty() {
+            molecule.mutate(edits);
+        }
+        Ok(())
+    }
+
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        StereoEnumerator::transform_iter(self, molecule)
+    }
+}
+
+/// Owned consistent assignments issued by StereoEnumerator::transform_iter.
+///
+/// Has no independent public constructor. Owns a source snapshot, prepared
+/// domains, order, and cursor. Candidates are constructed lazily and yielded
+/// results are independently mutable. Rejection and exhaustion terminate the
+/// iterator permanently. Symmetry-equivalent assignments remain distinct items.
+pub struct EnumerateStereoIter {
+    source: Molecule,
+    enumeration: Option<StereoEnumeration>,
+}
+
+impl Iterator for EnumerateStereoIter {
+    type Item = Molecule;
+
+    fn next(&mut self) -> Option<Molecule> {
+        match self.enumeration.as_mut()?.next(&self.source) {
+            Ok(Some((molecule, _))) => Some(molecule),
+            Ok(None) | Err(_) => {
+                self.enumeration = None;
+                None
+            }
+        }
+    }
+}
+
+impl iter::FusedIterator for EnumerateStereoIter {}
+
+struct StereoEnumeration {
+    assignments: AbsoluteStereoAssignments,
+    checks: StereoAssignmentChecks,
+    symmetry_config: GraphSymmetryConfig<ConstitutionColoring>,
+}
+
+impl StereoEnumeration {
+    fn next(
+        &mut self,
+        source: &Molecule,
+    ) -> Result<Option<(Molecule, Edits)>, EnumerateStereoError> {
+        for assignment in self.assignments.by_ref() {
+            let mut candidate = source.clone();
+            for (site, configuration) in &assignment {
+                match site {
+                    StereoSite::Atom(atom) => {
+                        let id = candidate
+                            .stereo_atoms()
+                            .at(*atom)
+                            .expect("prepared stereo atom")
+                            .id();
+                        if candidate.stereo_atom(id).attributes().configuration != *configuration {
+                            candidate.stereo_atom_mut(id).attributes_mut().configuration =
+                                configuration.clone();
+                        }
+                    }
+                    StereoSite::Bond(bond) => {
+                        let id = candidate
+                            .stereo_bonds()
+                            .at(*bond)
+                            .expect("prepared stereo bond")
+                            .id();
+                        if candidate.stereo_bond(id).attributes().configuration != *configuration {
+                            candidate.stereo_bond_mut(id).attributes_mut().configuration =
+                                configuration.clone();
+                        }
+                    }
+                }
+            }
+            if !self
+                .checks
+                .is_consistent(&candidate, &self.symmetry_config)?
+            {
+                continue;
+            }
+            let mut atoms = Vec::new();
+            let mut bonds = Vec::new();
+            for (site, configuration) in assignment {
+                match site {
+                    StereoSite::Atom(atom) => {
+                        let stereo = source
+                            .stereo_atoms()
+                            .at(atom)
+                            .expect("prepared stereo atom");
+                        let old = &stereo.attributes().configuration;
+                        if *old != configuration {
+                            atoms.push((
+                                StereoAtomHandle::Id(stereo.id()),
+                                old.clone(),
+                                configuration,
+                            ));
+                        }
+                    }
+                    StereoSite::Bond(bond) => {
+                        let stereo = source
+                            .stereo_bonds()
+                            .at(bond)
+                            .expect("prepared stereo bond");
+                        let old = &stereo.attributes().configuration;
+                        if *old != configuration {
+                            bonds.push((
+                                StereoBondHandle::Id(stereo.id()),
+                                old.clone(),
+                                configuration,
+                            ));
+                        }
+                    }
+                }
+            }
+            let mut edits = Edits::new();
+            if !atoms.is_empty() {
+                edits.modify_stereo_atom_configurations(atoms);
+            }
+            if !bonds.is_empty() {
+                edits.modify_stereo_bond_configurations(bonds);
+            }
+            return Ok(Some((candidate, edits)));
+        }
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     mod adder;
+    mod enumerator;
     mod remover;
 
     use rstest::rstest;
