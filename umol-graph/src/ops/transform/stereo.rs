@@ -1,5 +1,8 @@
 //! Stereo transformations and their configuration.
 
+#[cfg_attr(not(test), expect(dead_code))]
+mod enumeration;
+
 use std::collections::BTreeSet;
 use std::iter;
 

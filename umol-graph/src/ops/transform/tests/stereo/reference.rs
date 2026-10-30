@@ -8,7 +8,7 @@ use rstest::rstest;
 use umol_graph_ir::ir::{StereoCoset, StereoTerm};
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum ReferenceError {
+pub(in crate::ops::transform) enum ReferenceError {
     UnavailableSite(usize),
     InvalidOrder {
         missing: Vec<usize>,
@@ -18,7 +18,7 @@ pub(super) enum ReferenceError {
     TooManySites(usize),
 }
 
-pub(super) fn absolute_assignments(
+pub(in crate::ops::transform) fn absolute_assignments(
     source: &[StereoCoset],
     selected: &BTreeSet<usize>,
     order: &[usize],

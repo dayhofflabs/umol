@@ -1,4 +1,4 @@
-mod stereo;
+pub(super) mod stereo;
 
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};

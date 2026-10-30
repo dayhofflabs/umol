@@ -1,7 +1,7 @@
 //! Stored arrangement fixtures and an independent bounded assignment reference.
 
 mod fixtures;
-mod reference;
+pub(in crate::ops::transform) mod reference;
 
 use fixtures::{
     cis_trans, evidenced_stereo, hydrogen_and_lone_pair, imine, implicit_hydrogen, lone_pair,

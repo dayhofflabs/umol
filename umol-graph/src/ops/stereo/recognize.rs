@@ -23,7 +23,7 @@ pub enum StereoPerceptionError {
     MissingStereoEntity { site: StereoSite },
     #[error("stereo processing does not support kind {kind:?}")]
     UnsupportedKind { kind: StereoKind },
-    #[error("stereo configuration at {site:?} is not supported for classification")]
+    #[error("stereo configuration at {site:?} is not supported")]
     UnsupportedConfiguration { site: StereoSite },
     #[error("fluxional stereo processing is not implemented for {kind:?}")]
     UnsupportedFluxionality { kind: StereoKind },

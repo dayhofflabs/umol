@@ -20,7 +20,8 @@ This record contains the agreed semantics, interfaces, and nomenclature.
 S0's fixtures/references/baselines, S1's binary classification and
 ligand-construction corrections, S2's selectors/configurations/shared queries,
 and S3a/S3b's StereoAdder and StereoRemover are implemented. StereoEnumerator
-remains future work. External implementations under materials/codes may supply
+remains future work; S3c's internal absolute-assignment traversal and checks are
+implemented. External implementations under materials/codes may supply
 algorithms, counterexamples, and comparison cases;
 their public API organization does not determine umol's operation boundaries.
 
@@ -292,6 +293,14 @@ the kind's finite domain and selected literal sets over their admitted members.
 Check supported input constraints; selecting a variable or a relative symbolic
 configuration reports unsupported input. Do not infer variables' correlations
 or treat expressions as independent free choices.
+
+Check #T/#C through graph-IR evidence readings, retaining their transport from
+the stored ligand frames. Check Th/Ct stereogenicity, topicity, and ligand-symmetry
+assertions against molecular and local symmetry, including assertions on retained
+entities. Evaluate affected logical constraints with other leaves handled by
+the existing constraint evaluator. Retained open fields may leave a claim
+undecided; they need not become determined. Reject a decided contradiction.
+Unrelated standalone constraints are preserved without reevaluation.
 
 Choose one result as follows:
 
@@ -1073,6 +1082,51 @@ synthetic domains. No optimization or para-stereo redesign is added here.
   domains, included/excluded kinds, and symmetry-equivalent assignments. Test
   different supplied orders over atom and bond sites and preserve their traversal
   order. Verify early stop without retaining the full Cartesian product.
+
+  **Completed — 2026-10-30.** Added the private
+  ops/transform/stereo/enumeration.rs module with AbsoluteStereoAssignments and
+  StereoAssignmentChecks. The traversal takes the selected configurations in
+  processing order, normalizes constant expressions through the existing
+  kind-aware implementation, and prepares finite ascending domains. Literal
+  cosets stay fixed; an empty absolute domain produces no assignments. Variables,
+  including finite or empty variable domains, remain unsupported. Invalid
+  indices, unsupported kinds, and incompatible site/kind combinations reuse
+  StereoPerceptionError. Its UnsupportedConfiguration display text now applies
+  to stereo processing generally, without adding another diagnostic type.
+
+  The cursor stores one position and at most two values per selected site. It
+  yields the ordered product incrementally, including the single empty
+  assignment for empty work, and remains exhausted after completion. There is
+  no symmetry deduplication or Cartesian-product collection. Constraint checks
+  use the supplied candidate without changing its configuration or any retained
+  data. Source #T/#C assertions use the existing evidence readings, including
+  stored-frame transport and retained source restrictions in logical clauses.
+  Th/Ct symmetry assertions use the same molecular/local symmetry machinery as
+  perception, with one lazy molecular symmetry query and cached local results
+  per candidate. Other leaves inside affected logical constraints use the
+  existing model-independent evaluator. Every branch is evaluated so an
+  unsupported operation cannot be hidden by a preceding true disjunct or false
+  conjunct. Open retained fields are allowed; fluxional dynamics and the current
+  para-stereo limitations are unchanged.
+
+  The 221 cases cover exact ordered sequences against S0a's independent oracle
+  through eight binary sites, mixed atom/bond orders, fixed and finite domains,
+  rejected and empty domains, constant expressions and unsupported variables,
+  unavailable sites and incompatible frames, frame parity, joint logical
+  admissibility, retained source evidence and partial fields, inline and
+  molecule-scope symmetry assertions, and retention of both cosets on symmetric
+  and prochiral entities. A 128-site case checks the first two results and cursor
+  state without materializing the product. The existing oracle's visibility is
+  widened only within the transform test modules; its algorithm and assertions
+  are unchanged.
+
+  All 3,400 graph unit tests, 188 graph property tests, and 683 resolution
+  conformance cases passed. All-target/all-feature Clippy for graph and graph-IR,
+  strict graph rustdoc, formatting, and diff checks passed. No public symbols or
+  Molecule methods are added here. The module has no non-test caller until S3d;
+  its declaration carries a non-test dead_code expectation. S3d still owns the
+  public engine, contextual selection/order checks, owned iterator, publication,
+  and enumeration measurements. S4a's transformer properties remain future work.
 
 - **S3d — StereoEnumerator and EnumerateStereoError** — additive (green).
   Modules: the stereo engine module, enumerator tests, ops/transform.rs
