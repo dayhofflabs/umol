@@ -1,0 +1,11 @@
+; HW I, p. 468; Grant et al. (2010), doi:10.1021/ic901956g, p. 265 (XeF5+ core).
+; Present work: F#c-#n2#d2 donates one pair to each Xe#c+#n#v#t#m4 site.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c+" "Xe#c+" "F#c-" "F" "F" "F" "F" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 3 :single] [1 8 :single]]
+         :multicenter-bonds [{:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [6 0 7] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [9 1 10] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [11 1 12] :attrs "[1,2,1]#c0#u0#s1"}]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 1 :attrs "1"}]}}

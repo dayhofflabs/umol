@@ -1,0 +1,7 @@
+; HW I, p. 468; Adam et al. (1996), doi:10.1002/chem.19960020408 (structure).
+; Selected Xe#c-2#n#m8 description: eight F in a nine-center/sixteen-electron unit.
+; Counts is outside its supported bonding scope.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c-2" "F" "F" "F" "F" "F" "F" "F" "F"]
+         :bonds []
+         :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[8,1,1,1,1,1,1,1,1]#c0#u0#s1"}]}}

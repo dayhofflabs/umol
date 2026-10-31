@@ -1,0 +1,5 @@
+; HW I, pp. 468-469; Kr#n3#m2.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Kr" "F" "F"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}]}}

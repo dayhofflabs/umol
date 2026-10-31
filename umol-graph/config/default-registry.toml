@@ -1,4 +1,18 @@
-# HW: Holleman/Wiberg, Anorganische Chemie, 103rd ed.; I/II denote the volume.
+# Sources (printed page numbers).
+# Key | Reference
+# --- | ---
+# HW  | Holleman/Wiberg, Anorganische Chemie, 103rd ed.; I/II denote the volume.
+# PW  | Present work — calculations and adopted assignments.
+# B72 | Bartlett et al., Inorg. Chem. 11 (1972), 1124-1127; doi:10.1021/ic50111a042
+# M73 | McKee, Zalkin and Bartlett, Inorg. Chem. 12 (1973), 1713-1717; doi:10.1021/ic50126a001
+# W75 | Willett, LaBonville and Ferraro, J. Chem. Phys. 63 (1975), 1474-1478; doi:10.1063/1.431510
+# C91 | Christe et al., J. Am. Chem. Soc. 113 (1991), 3351-3361; doi:10.1021/ja00009a021
+# M93 | Mercier et al., Inorg. Chem. 32 (1993), 386-393; doi:10.1021/ic00056a009
+# B00 | Baran, J. Fluorine Chem. 101 (2000), 61-63; doi:10.1016/S0022-1139(99)00194-3
+# P06 | Pointner, Suontamo and Schrobilgen, Inorg. Chem. 45 (2006), 1517-1534; doi:10.1021/ic0510260
+# B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
+# G10 | Grant et al., Inorg. Chem. 49 (2010), 261-270; doi:10.1021/ic901956g
+# G16 | Goettel et al., Angew. Chem. Int. Ed. 55 (2016), 13780-13783; doi:10.1002/anie.201607583
 
 [H]
 0 = [
@@ -115,7 +129,7 @@
     "N #n #v2 #a",   # C5H5N
     "N #v3 #a2",     # C4H4NX, C4H4NH
     "N #v2 #a2 #h",  # C4H4NH
-    "N #v3 #d",      # N dative bond
+    "N #v3 #d",      # N dative bond; HW I, p. 470
     "N #u #v2 #a2",  # pyrrolyl radical
     "N #n #u #v2",   # NX2, NH2, NO
     "N #n #u #v #h", # NXH
@@ -141,6 +155,10 @@
     "N #c- #n2 #v2",   # [NX2]-, [NH2]-
     "N #c- #n2 #v #h", # NXH-
     "N #c- #n2 #h2",   # [NH2]-
+]
+-2 = [
+    "N #c-2 #n3 #v",   # [NX]2-
+    "N #c-2 #n3 #h",   # [NH]2-
 ]
 -3 = [
     "N #c-3 #n4", # N3-
@@ -176,12 +194,13 @@
 [F]
 0 = [
     "F #n3 #v", # F2, HF, FX
-    "F #n3 #m", # multicenter F in XeF2, KrF2
+    "F #n3 #m", # multicenter F in XeF2, KrF2; HW I, pp. 465, 469
     "F #n3 #h", # HF
     "F #n3 #u", # F atom, s2p5
 ]
 -1 = [
-    "F #c- #n4", # F-
+    "F #c- #n4",     # F-
+    "F #c- #n2 #d2", # bridging F- in [Xe2F11]+; HW I, p. 468; assignment: PW
 ]
 
 [Ne]
@@ -554,7 +573,7 @@
 ]
 1 = [
     "Kr #c+ #n3 #v",    # KrF+; HW I, p. 469
-    "Kr #c+ #n3 #t #v", # FKrF->KrF+, HCN->KrF; HW I, p. 469
+    "Kr #c+ #n3 #t #v", # FKrF->KrF+, HCN->KrF+; HW I, p. 469
 ]
 
 [Rb]
@@ -733,40 +752,36 @@
 [Xe]
 0 = [
     "Xe #n3 #m2",          # XeF2, XeCl2, XeX2; HW I, pp. 465, 469
-    "Xe #n2 #m4",          # XeF4, XeOF2; HW I, pp. 467, 471
-    "Xe #n #m6",           # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-; HW I, pp. 467-471
-    "Xe #n #t #m6",        # MeCN->XeO3; HW I, p. 470
-    "Xe #m8",              # XeO2F4, XeO3F2, XeO4, H4XeO6, [HXeO6]3-, [XeO6]4-; HW I, pp. 470-471
-    "Xe #n #v6",           # XeO3; HW I, pp. 469-470
-    "Xe #v8",              # XeO4, [XeO6]4-; HW I, pp. 470-471
-    "Xe #n2 #v2 #m2",      # XeOF2; HW I, p. 471
-    "Xe #n #v2 #m4",       # XeOF4; HW I, p. 471
-    "Xe #n #v4 #m2",       # XeO2F2; HW I, p. 471
-    "Xe #v6 #m2",          # XeO3F2; HW I, p. 471
-    "Xe #v4 #m4",          # XeO2F4 (mass spectrometry); HW I, pp. 465, 471
-    "Xe #t #m8",           # MeCN->XeO4; HW I, p. 471
-    "Xe #n #v6 #t",        # MeCN->XeO3; HW I, p. 470
-    "Xe #v8 #t",           # MeCN->XeO4; HW I, p. 471
+    "Xe #n2 #m4",          # XeF4; HW I, p. 467
+    "Xe #n #m6",           # XeF6; HW I, p. 468
+    "Xe #n #v6",           # XeO3; HW I, pp. 469-470; B72, p. 1127
+    "Xe #v8",              # XeO4 (B72, p. 1127), [XeO6]4- (assignment: PW); HW I, pp. 470-471
+    "Xe #n2 #v2 #m2",      # XeOF2; HW I, p. 471; B07, pp. 3601, 3607
+    "Xe #n #v2 #m4",       # XeOF4; HW I, p. 471; W75, p. 1477
+    "Xe #n #v4 #m2",       # XeO2F2; HW I, p. 471; W75, p. 1477
+    "Xe #v6 #m2",          # XeO3F2; HW I, p. 471; W75, p. 1477; assignment: PW
+    "Xe #v4 #m4",          # XeO2F4 (mass spectrometry); HW I, pp. 465, 471; assignment: PW
+    "Xe #n #v6 #t",        # MeCN->XeO3; HW I, p. 470; G16, pp. 13780-13782
     "Xe #n4",              # Xe atom, s2p6; HW I, p. 461
 ]
 1 = [
     "Xe #c+ #n3 #v",       # XeF+, XeCl+, XeX+; HW I, pp. 466, 469, 473
     "Xe #c+ #n3 #t #v",    # HF->XeF+, HCN->XeF+, MeCN->XeF+; HW I, pp. 466, 473
-    "Xe #c+ #n2 #v #m2",   # [XeF3]+, [XeF2X]+; HW I, pp. 467, 473
-    "Xe #c+ #n #v #m4",    # [XeF5]+, [XeOF3]+, XeO2F+; HW I, pp. 468, 471
-    "Xe #c+ #n #t #v #m4", # F5XeF->[XeF5]+; HW I, p. 468
-    "Xe #c+ #n #v5",       # XeO2F+; HW I, p. 471
-    "Xe #c+ #n #v3 #m2",   # XeOF3+; HW I, p. 471
+    "Xe #c+ #n2 #v #m2",   # [XeF3]+, [XeF2X]+; HW I, pp. 467, 473; M73, p. 1716
+    "Xe #c+ #n #v #m4",    # [XeF5]+; HW I, p. 468; G10, p. 265
+    "Xe #c+ #n #t #v #m4", # [Xe2F11]+; HW I, p. 468; G10, p. 265
+    "Xe #c+ #n #v5",       # XeO2F+; HW I, p. 471; P06, p. 1531
+    "Xe #c+ #n #v3 #m2",   # XeOF3+; HW I, p. 471; M93, pp. 388, 391
 ]
 -1 = [
-    "Xe #c- #n2 #v #m4",   # [XeF5]-; HW I, p. 467
-    "Xe #c- #n #v #m6",    # [XeF7]-, [XeO2F3]-, [XeOF5]-; HW I, pp. 468, 471
-    "Xe #c- #n2 #v3 #m2",  # XeOF3-; HW I, p. 471
-    "Xe #c- #n #v3 #m4",   # XeOF5-; HW I, p. 471
-    "Xe #c- #n #v5 #m2",   # XeO2F3-; HW I, p. 471
+    "Xe #c- #n2 #m5",      # [XeF5]-; HW I, p. 467; C91, p. 3360
+    "Xe #c- #n #m7",       # [XeF7]-; HW I, p. 468; assignment: PW
+    "Xe #c- #n2 #v2 #m3",  # XeOF3-; HW I, p. 471; assignment: PW
+    "Xe #c- #n #v2 #m5",   # XeOF5-; HW I, p. 471; B00, p. 62
+    "Xe #c- #n #v4 #m3",   # XeO2F3-; HW I, p. 471; assignment: PW
 ]
 -2 = [
-    "Xe #c-2 #n #v2 #m6",  # [XeF8]2-; HW I, p. 468
+    "Xe #c-2 #n #m8",      # [XeF8]2-; HW I, p. 468; assignment: PW
 ]
 
 [Cs]
@@ -1033,13 +1048,7 @@
 
 [Rn]
 0 = [
-    "Rn #n3 #m2",  # RnF2; HW I, p. 469
-    "Rn #n2 #m4",  # RnF4; HW I, pp. 465, 469
-    "Rn #n #m6",   # RnF6, RnO3; HW I, pp. 465, 469
-    "Rn #n4",      # Rn atom, s2p6; HW I, p. 461
-]
-2 = [
-    "Rn #c+2 #n3", # ionic RnF2, cation exchange; HW I, p. 469
+    "Rn #n4", # Rn atom, s2p6; HW I, p. 461
 ]
 
 [Fr]

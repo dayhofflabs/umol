@@ -4,18 +4,27 @@ Status: In Progress
 Date: 2026-03-07
 Relates: [217](217-rhea-participant-failures-2026-08-30.md)
 
-The [HW extraction](#hw-extraction-spike-2026-10-31) records noble-gas source
-data and the approved additions. The March planning and implementation notes
-below are historical.
+The [HW extraction](#hw-extraction-spike-2026-10-31) records noble-gas evidence and
+halogen candidates. The noble-gas audit covers earlier and newly added entries;
+the supplied primary-paper PDFs have been reviewed. The noble-gas review and
+selections are complete. Halogen implementation is paused while overlapping
+representations are clarified.
+The March planning and implementation notes below are historical; later updates to
+the tracking table are dated.
 
 This document tracks incremental, reviewable expansion of the default atom type registry.
 Registry entries are treated as code: explicit scope, per-entry review, and matching conformance coverage.
 
 ## Project Status (2026-10-31)
 
-**702 conformance cases pass.** Each EDN input runs through AtomTyping and Counts
-with both Strict and MostSaturated policies. The selected noble-gas HW additions
-are implemented; chapter-by-chapter extraction continues.
+**Last implementation check: 711 conformance cases and 366 valence unit tests passed.**
+Each EDN input runs through AtomTyping and Counts with both Strict and MostSaturated policies. The selected
+noble-gas HW additions and six xenon-anion replacements are implemented. Perxenate
+uses Xe#v8 as an accepted assumption. All Rn compound entries, neutral Xe#m8
+and the XeO4 adduct entries/fixtures are removed; MeCN→XeO3 uses only the Xe=O description.
+Registry references are complete for this slice: HW, selected primary sources and PW assignment markers.
+All 33 retained noble-gas states and the three F/N companion states have conformance coverage.
+Overlapping halogen descriptions need clarification before implementation.
 
 ### Conformance suite breakdown
 
@@ -24,8 +33,8 @@ are implemented; chapter-by-chapter extraction continues.
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
 | `atomic_ions/` | 127 | Atomic ions and Hg₂²⁺ |
 | `hydrides/` | 17 | Hydrides with implicit H, plus explicit H₂ |
-| `inorganic_small/` | 73 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 35 | Inorganic ions |
+| `inorganic_small/` | 75 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 42 | Inorganic ions |
 | `donor_acceptor/` | 4 | Donor–acceptor adducts with dative bonds |
 | `hydrocarbons/` | 53 | C/H compounds |
 | `functional_groups/` | 73 | Organic heteroatom groups (halides, amines, etc.) |
@@ -36,7 +45,7 @@ are implemented; chapter-by-chapter extraction continues.
 | `transition_metals/` | 7 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **702** | |
+| **Total** | **711** | |
 
 ## March 2026 record
 
@@ -63,6 +72,8 @@ are implemented; chapter-by-chapter extraction continues.
 
 ## Tracking Table
 
+Noble-gas and F/N companion rows updated 2026-10-31; other rows retain the March record.
+
 Status values:
 
 - `todo`: not started
@@ -73,15 +84,15 @@ Status values:
 | Element | Ground state | Discrete ions | Typical valences | Conformance added | Status | Notes |
 |---|---|---|---|---|---|---|
 | H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `atomic_ions/h+1.toml`, hydrides) | done |  |
-| He | yes | no | n/a | yes (`atoms/he.toml`) | done | |
+| He | yes | no | n/a | yes (`atoms/he.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `atomic_ions/li+1.toml`) | done |  |
 | Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `atomic_ions/be+2.toml`) | done |  |
 | B | yes | no | no | yes (`atoms/b.toml`) | done |  |
 | C | yes | no | no | yes (`atoms/c.toml`) | done |  |
-| N | yes | yes (-3) | no | yes (`atoms/n.toml`, `atomic_ions/n-3.toml`) | done |  |
+| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/mecn-xeo3.edn`) | done | Noble-gas companion addition: N#v3#d |
 | O | yes | yes (-2) | no | yes (`atoms/o.toml`, `atomic_ions/o-2.toml`) | done |  |
-| F | yes | yes (-1) | no | yes (`atoms/f.toml`, `atomic_ions/f-1.toml`, hydrides) | done |  |
-| Ne | yes | no | n/a | yes (`atoms/ne.toml`) | done |  |
+| F | yes | yes (-1) | partial | yes (`atoms/f.edn`, `atomic_ions/f-.edn`, hydrides, `inorganic_small/xef2.edn`, `donor_acceptor/xe2f11+.edn`) | done | Noble-gas companion additions: F#n3#m and F#c-#n2#d2; halogen review remains open |
+| Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `atomic_ions/na+1.toml`) | done |  |
 | Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `atomic_ions/mg+2.toml`) | done |  |
 | Al | yes | yes (+3) | no | yes (`atoms/al.toml`, `atomic_ions/al+3.toml`) | done |  |
@@ -89,7 +100,7 @@ Status values:
 | P | yes | yes (-3) | no | yes (`atoms/p.toml`, `atomic_ions/p-3.toml`) | done |  |
 | S | yes | yes (-2) | no | yes (`atoms/s.toml`, `atomic_ions/s-2.toml`) | done |  |
 | Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `atomic_ions/cl-1.toml`) | done |  |
-| Ar | yes | no | n/a | yes (`atoms/ar.toml`) | done |  |
+| Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
 | K | yes | yes (+1) | no | yes (`atoms/k.toml`, `atomic_ions/k+1.toml`) | done |  |
 | Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `atomic_ions/ca+2.toml`) | done |  |
 | Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `atomic_ions/sc+3.toml`) | done |  |
@@ -107,7 +118,7 @@ Status values:
 | As | yes | yes (-3) | no | yes (`atoms/as.toml`, `atomic_ions/as-3.toml`) | done |  |
 | Se | yes | yes (-2) | no | yes (`atoms/se.toml`, `atomic_ions/se-2.toml`) | done |  |
 | Br | yes | yes (-1) | no | yes (`atoms/br.toml`, `atomic_ions/br-1.toml`, hydrides) | done |  |
-| Kr | yes | no | n/a | yes (`atoms/kr.toml`) | done |  |
+| Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1) | no | yes (`atoms/rb.toml`, `atomic_ions/rb+1.toml`) | done |  |
 | Sr | yes | yes (+2) | no | yes (`atoms/sr.toml`, `atomic_ions/sr+2.toml`) | done |  |
 | Y | yes | yes (+3) | no | yes (`atoms/y.toml`, `atomic_ions/y+3.toml`) | done |  |
@@ -125,7 +136,7 @@ Status values:
 | Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `atomic_ions/sb-3.toml`) | done |  |
 | Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `atomic_ions/te-2.toml`) | done |  |
 | I | yes | yes (-1) | no | yes (`atoms/i.toml`, `atomic_ions/i-1.toml`, hydrides) | done |   |
-| Xe | yes | no | partial | yes (`atoms/xe.toml`) | done |  |
+| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | HW review complete; all 25 retained states covered; HW/primary/PW references added |
 | Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `atomic_ions/cs+1.toml`) | done |  |
 | Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `atomic_ions/ba+2.toml`) | done |  |
 | Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `atomic_ions/tl+1.toml`, `atomic_ions/tl+3.toml`) | done |  |
@@ -133,7 +144,7 @@ Status values:
 | Bi | yes | yes (+3) | no | yes (`atoms/bi.toml`, `atomic_ions/bi+3.toml`) | done |  |
 | Po | yes | yes (-2) | no | yes (`atoms/po.toml`, `atomic_ions/po-2.toml`) | done |  |
 | At | yes | yes (-1) | no | yes (`atoms/at.toml`, `atomic_ions/at-1.toml`) | done |  |
-| Rn | yes | no | no | yes (`atoms/rn.toml`) | done |  |
+| Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
 | La | yes | yes (+3) | no | yes (`atoms/la.toml`, `atomic_ions/la+3.toml`) | done |  |
 | Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `atomic_ions/ce+3.toml`, `atomic_ions/ce+4.toml`) | done |  |
 | Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `atomic_ions/pr+3.toml`, `atomic_ions/pr+4.toml`) | done | Counts requires `Pr` valence-table support for +4 |
@@ -285,55 +296,219 @@ handling follows those defaults and explicit atom predicates.
 
 ## HW extraction spike (2026-10-31)
 
+For each description, distinguish evidence for the species from evidence for the
+bonding used to construct its encoding. Where HW is insufficient, follow its
+references to primary papers (through reviews where necessary), or search independently.
+Record the supporting passage and flag unresolved assignments. Electron conservation
+and conformance checks do not establish source support for a bonding description.
+
+Registry comments use HW volume/page references as the baseline. A source table at
+the top of the registry defines short keys; primary references supplement HW only
+where they add information used in an assignment. PW means “Present work —
+calculations and adopted assignments,” marked as `assignment: PW` on the relevant
+examples. Methods, results and assumptions are recorded here.
+
+### Noble Gases
+
 Source: [Holleman/Wiberg 103, Band 1, chapter XI](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=497>),
 printed pp. 459–474, PDF pp. 497–512. Page references below are printed pages.
-Atom strings use AtomTypeRegistry::raise_defaults. The selection column records
-the user's decisions.
+Atom strings use AtomTypeRegistry::raise_defaults. This audit covers all **33 current
+noble-gas entries**, plus the F/N companions. Earlier and newly added entries use the
+same evidence criterion. These are evidence findings; registry selections remain with
+the user.
 
-### Existing noble-gas entries
+Current tally: **27 supported**, **6 inferred** and **0 open**.
+F#n3#m and N#v3#d are supported. F#c-#n2#d2 is also selected for the
+Xe2F11+ bridge as a constructed donor–acceptor description.
 
-| Atom descriptions | Examples / source qualification | HW pages |
+#### Current entries: evidence review
+
+**Supported** means the indicated source description supports the constructed atom
+state. **Inferred** means selected under the construction convention below, without
+a verified individual bonding assignment. **Open** identifies incomplete bonding
+evidence. References are listed below.
+
+For neutral/cationic Xe, the selected construction convention assigns #v2 to each
+Xe=O, #m<2m> to even fluoride sets, and #v to a localized Xe–F unit as in XeF+,
+combined as needed. For the retained monocations, one Xe–F contributes #v and the
+remaining even F set contributes #m. Source-specific localized bonds are retained.
+For the selected anions, all F contribute to #m, with #v2 for each Xe=O.
+
+| Atom descriptions | Evidence status and example | Source |
 | --- | --- | --- |
-| He; Ne; Ar; Kr#n4; Xe#n4; Rn#n4 | Free atoms | 461 |
-| Kr#n3#m2; Xe#n3#m2; Rn#n3#m2 | KrF2, XeF2, RnF2; HW explicitly describes XeF2 as 3-center/4-electron | 465, 469 |
-| Xe#n2#m4; Rn#n2#m4 | XeF4; RnF4 marked probable in Table 11.1 | 465, 467 |
-| Xe#n#m6; Rn#n#m6 | XeF6; RnF6 marked probable, RnO3 incompletely characterized | 465, 468–469 |
-| Xe#m8 | Existing oxide/perxenate encoding: XeO4, XeO6⁴− and protonated forms | 470–471 |
-| Kr#c+#n3#v; Xe#c+#n3#v | KrF+, XeF+, XeCl+ | 466, 469 |
-| Kr#c+#n3#v#t; Xe#c+#n3#v#t | Nitrile/HF acceptor adducts | 466, 469, 473 |
-| Xe#c+#n2#v#m2 | XeF3+, C6F5XeF2+ | 467, 473 |
-| Xe#c+#n#v#m4; Xe#c+#n#v#t#m4 | XeF5+ and its acceptor adducts | 468 |
-| Xe#c-#n2#v#m4 | XeF5− | 467 |
-| Xe#c-#n#v#m6 | XeF7− | 468 |
-| Xe#c-2#n#v2#m6 | XeF8²− | 468 |
-| Xe#n#t#m6 | Existing encoding of MeCN→XeO3 | 470 |
+| He; Ne; Ar; Kr#n4; Xe#n4; Rn#n4 | Supported: free atoms, retaining the user's He/Ne/Ar zero-lone-pair convention | HW 461 |
+| Kr#n3#m2; Xe#n3#m2 | Supported: KrF2/XeF2, three-center/four-electron description; Kr mapping by analogy | HW 465, 469; C64, pp. 1445–1448 |
+| Xe#n2#m4; Xe#n#m6 | Supported by XeF4/XeF6 | HW 467–468; C64, pp. 1445–1448 |
+| Kr#c+#n3#v; Xe#c+#n3#v | Supported: KrF+, XeF+, XeCl+ | HW 466, 469 |
+| Kr#c+#n3#v#t; Xe#c+#n3#v#t | Supported: nitrile donor adducts; HW explicitly gives HCN→KrF+ | HW 466, 469, 473; B07, p. 3608 |
+| Xe#c+#n2#v#m2 | Supported: M73 explicitly describes axial three-center bonding, an equatorial electron-pair bond and two Xe lone pairs in XeF3+. K14 independently supports C6F5XeF2+ | HW 467, 473; M73, pp. 1714, 1716; K14, pp. 11656–11657 |
+| Xe#c+#n#v#m4 | Supported: G10 explicitly describes XeF5+ with two equatorial three-center/four-electron bonds, one covalent axial Xe–F bond and one Xe lone pair | HW 468; G10, p. 265 |
+| Xe#c+#n#v#t#m4 | Supported as a constructed donor–acceptor description: H10 describes Xe2F11+ as two XeF5+ units sharing a fluoride ion; each Xe accepts one pair from that F−, retaining the G10 core description | HW 468; G10, p. 265; H10, pp. 3504, 3513 |
+| Xe#c-#n2#m5 | Supported: XeF5−, all five equivalent F in the multicenter unit, with two Xe lone pairs | HW 467; C91, pp. 3351, 3360 |
+| Xe#c-#n#m7 | Inferred, selected: XeF7− with one Xe lone pair and all seven F in #m7. P64/P66 establish the salts; E96/G10 establish structures. The Wiberg comparison below supports the selection | HW 468; P64; P66; E96, pp. 1123–1124; G10, pp. 265–266 |
+| Xe#c-2#n#m8 | Inferred, selected: XeF8²− with one Xe lone pair and all eight F in the multicenter description, by analogy with XeF2/XeF+ and the D4d geometry. A96 establishes the species, geometry and inactive lone pair; the calculation check below supports the lone pair | HW 468; A96, pp. 400–401 |
+| Xe#n#v6; Xe#n#v6#t | Supported: XeO3 and its 1:1 nitrile adduct; B72 explicitly allows Xe=O, and G16 uses Xe=O bonds, one Xe lone pair and N-lone-pair donation | HW 469–470; B72, p. 1127; G16, pp. 13780–13782 |
+| Xe#v8 | Supported by XeO4: B72 explicitly permits four Xe=O bonds; G70 favors the double-bond description from bond lengths. Perxenate [XeO6]4− is also selected, using the two-double/four-single encoding as an accepted assumption | HW 470–471; B72, p. 1127; G70, pp. 814–815 |
+| Xe#n2#v2#m2 | Supported as a formal description of XeOF2: B07 includes Xe=O valence structures and explicitly describes F–Xe–F as three-center/four-electron | HW 471; B07, pp. 3601, 3607 |
+| Xe#n#v2#m4 | Supported as a formal description of XeOF4: HW supplies Xe=O; W75 explicitly uses Rundle three-center/four-electron fluoride bonding in this series | HW 471; W75, p. 1477; H11, p. 666 |
+| Xe#n#v4#m2 | Supported as a formal description of XeO2F2: P06 supports the two Xe=O contributors; W75 supplies the three-center/four-electron F–Xe–F description | HW 471; W75, p. 1477; P06, pp. 1529, 1532; SI p. S2 |
+| Xe#v6#m2 | Inferred: XeO3F2 with three Xe=O and an F–Xe–F multicenter unit. CH71 establishes geometry and W75 supports the fluoride assignment; the Xe=O assignments use the construction convention | HW 471; CH71, pp. 1506–1507; W75, p. 1477 |
+| Xe#v4#m4 | Inferred: XeO2F4 with two Xe=O and four multicenter F contributions. H82 establishes detection and volatility; the bonding assignment uses the construction convention | HW 465, 471; H82, pp. 687–688 |
+| Xe#c+#n#v5 | Supported as a formal description of XeO2F+: P06 gives two Xe=O bonds, one Xe–F bond and one Xe lone pair; its bonding analysis includes this Lewis structure | HW 471; P06, pp. 1519, 1531 |
+| Xe#c+#n#v3#m2 | Supported: M93 explicitly assigns axial three-center/four-electron F–Xe–F and equatorial two-center/two-electron Xe–F, and discusses the Xe=O multiple bond in XeOF3+ | HW 471; M93, pp. 388, 391 |
+| Xe#c-#n2#v2#m3 | Inferred, selected: XeOF3− with Xe=O, two Xe lone pairs and all three F in #m3. B10 distributes fluoride bonding over all three F; the Wiberg comparison below supports this construction | HW 471; B10, p. 10940; SI p. S9 |
+| Xe#c-#n#v2#m5 | Supported as a formal description of XeOF5−: one Xe=O, one Xe lone pair and all five equatorial F in a six-center/ten-electron unit | HW 471; C95, pp. 1873–1874; E95, pp. 1586–1587; B00, p. 62 |
+| Xe#c-#n#v4#m3 | Inferred, selected: XeO2F3− with two Xe=O, one Xe lone pair and all three F in #m3. C88 establishes the cis assignment; the Wiberg comparison below supports the selection | HW 471; C88, pp. 3767–3768 |
+| F#n3#m; N#v3#d | Supported: terminal F in the multicenter fluorides; nitrile donor N | HW 465–466, 469; C64; B07; G16 |
+| F#c-#n2#d2 | Inferred, selected: bridging F− donates one pair to each of two XeF5+ units in Xe2F11+ | HW 468; H10, pp. 3504, 3513; PW |
 
-### Additional descriptions
+#### Primary sources read
 
-HW explicitly discusses XeOF4 double-bond character on p. 471. The accepted
-Xe(VIII) adduct description is Xe#v8#t, with zero lone pairs.
+PDFs are retained in [materials/valence](../materials/valence/); text extracts and
+page images are temporary scratch intermediates.
 
-| Atom descriptions | Example / qualification | HW pages | Selection |
+- **C64:** Coulson, “The Nature of the Bonding in Xenon Fluorides,” *J. Chem. Soc.* (1964), 1442–1454. [DOI](https://doi.org/10.1039/JR9640001442).
+- **P64:** Peacock, Selig and Sheft, “Complex Fluoroxenates(VI),” *Proc. Chem. Soc.* (1964), 285. [PDF](../materials/valence/Peacock-1964-fluoroxenates.pdf).
+- **P66:** Peacock, Selig and Sheft, “Complex Compounds of Xenon Hexafluoride with the Alkali Fluorides,” *J. Inorg. Nucl. Chem.* **28** (1966), 2561–2567. [DOI](https://doi.org/10.1016/0022-1902(66)80380-9).
+- **G70:** Gundersen, Hedberg and Huston, “Molecular Structure of Xenon Tetroxide, XeO4,” *J. Chem. Phys.* **52** (1970), 812–815. [DOI](https://doi.org/10.1063/1.1673060).
+- **CH71:** Claassen and Huston, “Matrix-Isolation Raman and Infrared Spectra, Molecular Structure, and Force Constants for XeO3F2,” *J. Chem. Phys.* **55** (1971), 1505–1507. [DOI](https://doi.org/10.1063/1.1676271).
+- **B72:** Bartlett et al., “The Crystal Structure of Xenon(II) Fluoride Fluorosulfate, FXeOSO2F,” *Inorg. Chem.* **11** (1972), 1124–1127. [DOI](https://doi.org/10.1021/ic50111a042).
+- **M73:** McKee, Zalkin and Bartlett, “Crystal Structure of [XeF3+][Sb2F11−],” *Inorg. Chem.* **12** (1973), 1713–1717. [DOI](https://doi.org/10.1021/ic50126a001); [PDF](../materials/valence/McKee-1973-XeF3-cation.pdf).
+- **W75:** Willett, LaBonville and Ferraro, “Normal Coordinate Treatment of XeO2F2,” *J. Chem. Phys.* **63** (1975), 1474–1478. [DOI](https://doi.org/10.1063/1.431510).
+- **H82:** Huston, “Chemical and Physical Properties of Some Xenon Compounds,” *Inorg. Chem.* **21** (1982), 685–688. [DOI](https://doi.org/10.1021/ic00132a043).
+- **S85:** Stein, “New Evidence that Radon is a Metalloid Element: Ion-exchange Reactions of Cationic Radon,” *J. Chem. Soc., Chem. Commun.* (1985), 1631–1632. [DOI](https://doi.org/10.1039/C39850001631).
+- **C88:** Christe and Wilson, “New Syntheses and Properties of XeO2F2, Cs+XeO2F3−, and NO2+[XeO2F3·nXeO2F2]−,” *Inorg. Chem.* **27** (1988), 3763–3768. [DOI](https://doi.org/10.1021/ic00294a019).
+- **C91:** Christe et al., “The Pentafluoroxenate(IV) Anion, XeF5−: The First Example of a Pentagonal Planar AX5 Species,” *JACS* **113** (1991), 3351–3361. [DOI](https://doi.org/10.1021/ja00009a021).
+- **M93:** Mercier et al., “The Oxotrifluoroxenon(VI) Cation: X-ray Crystal Structure of XeOF3+SbF6− and a Solution 17O and 129Xe Nuclear Magnetic Resonance Study of the 17,18O-Enriched XeOF3+ Cation,” *Inorg. Chem.* **32** (1993), 386–393. [DOI](https://doi.org/10.1021/ic00056a009).
+- **C95:** Christe et al., “On the Structure of the [XeOF5]− Anion and of Heptacoordinated Complex Fluorides Containing One or Two Highly Repulsive Ligands or Sterically Active Free Valence Electron Pairs,” *Inorg. Chem.* **34** (1995), 1868–1874. [DOI](https://doi.org/10.1021/ic00111a039).
+- **E95:** Ellern and Seppelt, “XeOF5−, an Anion with Pentagonal-Pyramidal Structure,” *Angew. Chem. Int. Ed. Engl.* **34** (1995), 1586–1587. [DOI](https://doi.org/10.1002/anie.199515861). Reports five approximately coplanar F and apical O; assigns partial Xe–O double-bond character and a trans lone pair.
+- **A96:** Adam, Ellern and Seppelt, “Structural Principles of the Coordination Number Eight: WF8²−, ReF8²−, and XeF8²−,” *Chem. Eur. J.* **2** (1996), 398–402. [DOI](https://doi.org/10.1002/chem.19960020408); [PDF](../materials/valence/Adam-1996-XeF8-structure.pdf).
+- **E96:** Ellern, Mahjoub and Seppelt, “Structures of XeF7− and Xe2F13−,” *Angew. Chem. Int. Ed. Engl.* **35** (1996), 1123–1125. [DOI](https://doi.org/10.1002/anie.199611231).
+- **B00:** Baran, “Mean Amplitudes of Vibration of the Pentagonal Pyramidal XeOF5− and IOF5²− Anions,” *J. Fluorine Chem.* **101** (2000), 61–63. [DOI](https://doi.org/10.1016/S0022-1139(99)00194-3).
+- **P06:** Pointner, Suontamo and Schrobilgen, “Syntheses and X-ray Crystal Structures… and Computational Studies of the XeO2F+ and FO2XeFXeO2F+ Cations and Related Species,” *Inorg. Chem.* **45** (2006), 1517–1534. [DOI](https://doi.org/10.1021/ic0510260); [SI](https://doi.org/10.1021/ic0510260.s002), p. S2 and Table S8.
+- **B07:** Brock et al., “XeOF2, F2OXeN≡CCH3, and XeOF2·nHF: Rare Examples of Xe(IV) Oxide Fluorides,” *JACS* **129** (2007), 3598–3611. [DOI](https://doi.org/10.1021/ja0673480).
+- **B10:** Brock et al., “XeOF3−, an Example of an AX3YE2 Valence Shell Electron Pair Repulsion Arrangement…,” *JACS* **132** (2010), 10935–10943. [DOI](https://doi.org/10.1021/ja103730c); [SI](https://doi.org/10.1021/ja103730c.s001), p. S9, Scheme S1.
+- **G10:** Grant et al., “Heats of Formation of XeF3+, XeF3−, XeF5+, XeF7+, XeF7−, and XeF8 from High Level Electronic Structure Calculations,” *Inorg. Chem.* **49** (2010), 261–270. [DOI](https://doi.org/10.1021/ic901956g); [SI](../materials/valence/Grant-2010-xenon-fluoride-ions-SI.pdf), Table SM-3.
+- **H10:** Hughes, Mercier and Schrobilgen, “Syntheses, Raman Spectra, and X-ray Crystal Structures of [XeF5][μ-F(OsO3F2)2] and [M][OsO3F3] (M = XeF5+, Xe2F11+),” *Inorg. Chem.* **49** (2010), 3501–3515. [DOI](https://doi.org/10.1021/ic100062x).
+- **H11:** Hughes et al., “A Raman Spectroscopic Study of the XeOF4/XeF2 System and the X-ray Crystal Structure of α-XeOF4·XeF2,” *J. Fluorine Chem.* **132** (2011), 660–668. [DOI](https://doi.org/10.1016/j.jfluchem.2011.05.010).
+- **P13:** Papakondylis, “Xenon oxides, sulfides, and oxysulfides,” *Comput. Theor. Chem.* **1015** (2013), 15–20. [DOI](https://doi.org/10.1016/j.comptc.2013.03.030).
+- **K14:** Koppe et al., “Xenon(IV)–Carbon Bond of [C6F5XeF2]+; Structural Characterization and Bonding…,” *Inorg. Chem.* **53** (2014), 11640–11661. [DOI](https://doi.org/10.1021/ic501831j).
+- **G16:** Goettel et al., “Syntheses and Structures of Xenon Trioxide Alkylnitrile Adducts,” *Angew. Chem. Int. Ed.* **55** (2016), 13780–13783. [DOI](https://doi.org/10.1002/anie.201607583).
+
+Full text not retrieved (2026-10-31):
+
+- **P88:** Popov, A. I.; Fadeeva, N. E.; Kiselev, Yu. M., “Oxidimetric determination of active fluorine in fluorides used as fluorinating and oxidizing agents,” *Zhurnal Analiticheskoi Khimii* **43**(3) (1988), 465–471. User-supplied reference from the XeF8²− compound searches; no online full text located, bonding content unassessed.
+
+#### XeF8²− calculation check (2026-10-31)
+
+PySCF 2.14.0, RHF/def2-TZVPP with the 28-electron Xe def2 ECP, at the
+user-supplied MP2 geometry: D4d, Xe–F = 2.04889054 Å, upper-square polar angle
+57.32284694°, lower square reflected in z and rotated 45°. XeF2 (linear) and
+XeF+ references use that same distance without optimization. Wiberg indices use
+the spin-summed density in PySCF's orthonormal NAO basis.
+
+| Species | Xe–F Wiberg index per contact | Sum at Xe |
+| --- | --- | --- |
+| XeF8²− | 0.38480 | 3.07842 |
+| XeF2 | 0.48208 | 0.96417 |
+| XeF+ | 0.93872 | 0.93872 |
+
+XeF8²−: 298 basis functions, 100 explicit electrons; converged RHF energy
+−1123.50405686658 Eh. HOMO/LUMO energies agree with the supplied TURBOMOLE
+output within 1 × 10⁻⁶ Eh. PySCF's Xe NAO charge is +3.70911, versus +3.66218
+in TURBOMOLE; the population analyses are not numerically identical.
+TURBOMOLE gives the Xe 5s NAO an occupation of 1.99841 electrons. The user selected
+Xe#c-2#n#m8 by analogy with XeF2/XeF+ and the D4d geometry; the indices are supporting
+comparisons, not a rule assigning integer #v/#m values.
+
+#### Remaining-anion calculation checks (2026-10-31)
+
+The same RHF/def2-TZVPP/ECP28 and PySCF NAO Wiberg calculation gives:
+
+| Anion | Geometry used | Xe–F Wiberg indices | Xe–O Wiberg indices |
 | --- | --- | --- | --- |
-| F#n3#m | F in multicenter KrF2/XeF2 | 465, 469 | Default; added |
-| N#v3#d | Nitrile donor in HCN→XeF+/KrF+ | 466, 469 | Default; added |
-| Xe#n#v6 | XeO3, three Xe=O encoding | 469–470 | Default; added |
-| Xe#v8 | XeO4; XeO6⁴− with two Xe=O and four Xe–O− | 470–471 | Default; added |
-| Xe#c+#n#v5 | XeO2F+, two Xe=O encoding | 471 | Default; added |
-| Xe#n2#v2#m2 | XeOF2; HW describes an O-bridged polymer | 471 | Default; added |
-| Xe#n#v2#m4; Xe#n#v4#m2 | XeOF4, XeO2F2; Xe=O and multicenter fluoride contributions | 471 | Default; added |
-| Xe#v6#m2; Xe#v4#m4 | XeO3F2, XeO2F4; the latter has mass-spectrometric evidence in Table 11.1 | 465, 471 | Default; added |
-| Xe#c+#n#v3#m2 | XeOF3+ | 471 | Default; added |
-| Xe#c-#n2#v3#m2 | XeOF3− | 471 | Default; added |
-| Xe#c-#n#v3#m4; Xe#c-#n#v5#m2 | XeOF5−, XeO2F3− | 471 | Default; added |
-| Xe#t#m8 | MeCN→XeO4, extending the existing multicenter oxide encoding | 471 | Default; added |
-| Xe#n#v6#t; Xe#v8#t | MeCN→XeO3/XeO4, Xe=O encodings | 470–471 | Default; added |
-| Xe#n3#d | Xe donation in AuXe4²+, Au/Xe and Hg/Xe complexes | 473 | Not selected |
-| Rn#c+2#n3 | Ionic RnF2; cation exchange from liquid C2Cl3F3 | 469 | Default; added |
-| Xe#c+#n3#m | Xe₂⁺; trial 2-center/3-electron encoding with Xe#n3#m2 | 472 | Not selected |
-| Xe#c+2#n3#t2 | Xe(FH)2²+ is a proposed interpretation in HW | 466 | Not selected |
+| XeF7− | G10, SI Table SM-3, C3v CCSD(T)/aVTZ | cap 0.36048; near triangle 0.43215 × 3; far triangle 0.47983 × 3 | — |
+| XeOF3− | B10, Table 3, C2v MP2/aug-cc-pVTZ(-PP) | Fa 0.39454 × 2; Fb trans to O 0.20643 | 1.11069 |
+| XeO2F3− | New converged MP2/def2-TZVPP geometry | axial 0.39019, 0.39016; equatorial 0.24292 | O trans to F 1.06450; other O 1.13495 |
 
-### Further extracted examples and qualifications
+E96 establishes a C3v crystal structure of CsXeF7. G10's gas-phase C2v and C3v
+structures differ by only 0.02 kcal/mol; the calculation here samples C3v only.
+B10 establishes XeOF3− by Raman spectroscopy and calculation, without a crystal
+structure. C88 assigns cis XeO2F3− from vibrational spectra; no atomic coordinates
+were found in the reviewed sources.
+
+Published geometry parameters reconstructed for these checks (Å, degrees):
+XeF7− cap r = 2.0441; near triangle r = 2.0046, polar angle 75.4; far triangle
+r = 1.9667, polar angle 131.3, azimuth offset 60. XeOF3− r(Xe–O) = 1.821,
+r(Xe–Fa) = 2.060, r(Xe–Fb) = 2.129, O–Xe–Fa = 94.8, O–Xe–Fb = 180.
+The latter reconstruction gives Fa–Xe–Fa = 170.4°, versus the independently
+rounded 170.3° in B10. All three RHF calculations converged; density normalization,
+NAO orthogonality and closed-shell idempotency checks passed.
+B10 SI Table S7 labels its quantities NBO bond orders, without identifying them
+as Wiberg indices; they are not used as the numerical reference here.
+
+XeO2F3− uses an unconstrained MP2/def2-TZVPP optimization with Xe ECP28 and all
+explicit electrons correlated, starting from C88's cis topology with estimated
+distances. It converged in 11 evaluations: E = −778.15641465 Eh, maximum gradient
+component 0.00004959 Eh/bohr; no frequency calculation was performed. Coordinates
+used (Å, rigidly aligned; O trans to F first, equatorial F last):
+
+```text
+Xe   0.00000000   0.00000000   0.00000000
+O    1.76385519   0.00000000   0.00000000
+O   -0.28197632   1.70408983   0.00000000
+F   -0.11278732  -0.11252632   1.99680396
+F   -0.11285876  -0.11151882  -1.99689469
+F   -2.07556951  -0.26762219   0.00005425
+```
+
+Compared with the preliminary calculation at evaluation 7, the largest Wiberg-index
+change is 0.00276. The selected registry replacements put all F contributions in
+#m and retain #v2 per Xe=O.
+
+#### Selections applied
+
+Perxenate [XeO6]4− retains Xe#v8 as an accepted assumption. Its existing
+[conformance input](../umol-graph/tests/resolution/data/inorganic_ions/xeo64-.edn)
+uses two Xe=O and four Xe–O− bonds, with neutral Xe. This settles the final
+noble-gas example; the atom state already has independent support from XeO4.
+
+F#c-#n2#d2 is added for the Xe2F11+ bridge, donating one pair to each
+Xe#c+#n#v#t#m4 center. Its lone-pair count is left for resolution in the
+[conformance input](../umol-graph/tests/resolution/data/donor_acceptor/xe2f11+.edn).
+
+| Implemented replacement | Replaced entry | Example |
+| --- | --- | --- |
+| Xe#c-#n2#m5 | Xe#c-#n2#v#m4 | XeF5− |
+| Xe#c-#n#v2#m5 | Xe#c-#n#v3#m4 | XeOF5− |
+| Xe#c-2#n#m8 | Xe#c-2#n#v2#m6 | XeF8²− |
+| Xe#c-#n#m7 | Xe#c-#n#v#m6 | XeF7− |
+| Xe#c-#n2#v2#m3 | Xe#c-#n2#v3#m2 | XeOF3− |
+| Xe#c-#n#v4#m3 | Xe#c-#n#v5#m2 | XeO2F3− |
+
+These mappings retain the formal charge on Xe and use the existing F#n3#m
+description. Each n-fluoride multicenter unit contains 2n electrons. The states
+conserve electrons under the registry defaults; multicenter descriptions remain
+outside the Counts comparison.
+
+Rn#c+2#n3 is excluded by the user: S85, pp. 1631–1632, proposes Rn²⁺ but does
+not distinguish it from RnF+. The default entry and ionic RnF2 conformance fixture
+are removed. Rn#n3#m2, Rn#n2#m4 and Rn#n#m6 are also removed for insufficient
+support for their compound descriptions (HW 465, 469; S85); only Rn#n4 remains.
+
+Xe#m8 is removed: its oxide/perxenate examples lack support for an all-multicenter
+description (HW 470–471; P13). Neutral XeF8 is unestablished in HW and was not an
+example for this entry. Obsolete oxide examples are removed from retained fluoride
+entries; B07 supersedes HW's polymeric XeOF2 interpretation.
+
+Xe#t#m8 and Xe#v8#t and their MeCN→XeO4 fixtures are removed by the user's
+decision: no verified XeO4 adduct was found; G16, p. 13780, eq. 2, instead gives
+MeCN→XeO3 + ½O2. N#v3#d is retained for supported N-donor complexes.
+
+MeCN→XeO3 retains only Xe#n#v6#t, supported by G16. The conflicting
+Xe#n#t#m6 entry is removed.
+
+#### Further extracted examples and qualifications
 
 | Examples | Source detail | HW pages |
 | --- | --- | --- |
@@ -344,27 +519,154 @@ Xe(VIII) adduct description is Xe#v8#t, with zero lone pairs.
 | Kr(OTeF5)2; Xe(OTeF5)2/4/6; XeF(OAc), Xe(OAc)2; XeF[N(SO2F)2], Xe[N(SO2F)2]2 | Further O/N ligand examples | 472–473 |
 | C6F5Xe+ and MeCN adduct; C6F5XeF/Cl/CN, C6F5XeOCO(C6F5), Xe(C6F5)2, C6F5XeF2+ | Xe–C examples | 473 |
 
+Not selected: Xe#n3#d for AuXe4²+/Au–Xe/Hg–Xe complexes (HW 473);
+Xe#c+#n3#m for Xe₂⁺ (trial encoding, HW 472); Xe#c+2#n3#t2 for
+Xe(FH)2²+ (proposed interpretation in HW 466).
+
 He#n, Ne#n4 and Ar#n4 are excluded by the user: retain the zero-lone-pair
 descriptions and current valence limits. The trial descriptions He#c+#v,
 Ne#c+#n3#v, Ar#c+#n3#v, Ne#n3#m2, Ar#n3#m2 and Ne#c+#n3#m are not selected.
 
 HW marks ArF2, KrF4, neutral XeF8 and XeF7+ as unestablished; ArF+ and XeOF6
 are questioned. XeO, XeO2 and Xe(OH)2 occur as possible intermediates.
-The registry comment `[XeO6]3-` is corrected to `[HXeO6]3-` (p. 471).
 
-### Implemented additions and checks
+#### Implementation checks
 
-F#n3#m, N#v3#d, the 15 selected Xe descriptions and Rn#c+2#n3 are in the
-default registry. All noble-gas entries carry HW volume/page references.
-The Xe/Rn increment adds 17 conformance inputs, including
+F#n3#m, F#c-#n2#d2, N#v3#d and the selected noble-gas descriptions are in the default registry.
+All noble-gas entries carry HW volume/page references. After the selections above,
+the noble-gas increment retains 26 conformance inputs, including
 [XeO3](../umol-graph/tests/resolution/data/inorganic_small/xeo3.edn),
 [XeOF4](../umol-graph/tests/resolution/data/inorganic_small/xeof4.edn),
-[MeCN→XeO4](../umol-graph/tests/resolution/data/donor_acceptor/mecn-xeo4.edn) and
-[ionic RnF2](../umol-graph/tests/resolution/data/inorganic_small/rnf2.edn).
-Both AtomTyping policies match the independently specified states.
-**702 conformance cases and 366 valence unit tests pass**, preserving all 685
-earlier conformance snapshots.
+[XeF5−](../umol-graph/tests/resolution/data/inorganic_ions/xef5-.edn),
+[XeOF5−](../umol-graph/tests/resolution/data/inorganic_ions/xeof5-.edn),
+[XeF8²−](../umol-graph/tests/resolution/data/inorganic_ions/xef8-2.edn) and
+[XeF7−](../umol-graph/tests/resolution/data/inorganic_ions/xef7-.edn).
+The existing [XeOF3−](../umol-graph/tests/resolution/data/inorganic_ions/xeof3-.edn)
+and [XeO2F3−](../umol-graph/tests/resolution/data/inorganic_ions/xeo2f3-.edn) inputs
+also use the selected replacements. Nine further fixtures cover KrF2, KrF+,
+HCN→KrF+, XeF4, XeF6, XeF+, XeF3+, XeF5+ and Xe2F11+. All **33 retained
+noble-gas states** and the three F/N companions are now exercised. Both AtomTyping
+policies match the specified states, including two lone pairs on the bridging F−
+and one on each Xe in Xe2F11+.
+All **711 conformance cases and 366 valence unit tests pass**,
+preserving the 685 cases preceding the HW increment.
+The perxenate encoding resolves under both policies with AtomTyping and Counts.
+No noble-gas selections remain open.
 
-Counts probes with explicit H=0 matched the XeO3, XeO4, XeO6⁴− and ionic Rn(II)
+Earlier Counts probes with explicit H=0 matched the XeO3, XeO4 and XeO6⁴−
 encodings. Multicenter/dative cases remain outside its supported scope.
 ValenceTable is unchanged.
+
+### Halogens
+
+Source: [HW 103, Band 1, chapter XII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=513>),
+printed pp. 475–552, PDF pp. 513–590. References below are printed HW I pages.
+Descriptions use AtomTypeRegistry::raise_defaults; the formulas are source examples,
+and the atom strings are constructed encodings. The user's L-table selections are
+recorded below; **implementation is paused for clarification of overlapping descriptions**.
+The M and D tables remain unreviewed except for the F entry in D04, now implemented
+for Xe2F11+ in the noble-gas slice.
+
+#### Existing coverage
+
+The registry has 37 halogen descriptions: F 6, Cl 11, Br 9, I 9, At 2.
+
+| Existing descriptions | Examples / source qualification | HW pages |
+| --- | --- | --- |
+| X#n3#v; X#n3#u (X = F, Cl, Br, I, At); X#n3#h (X = F, Cl, Br, I) | X2, HX, interhalogens, terminal halogens and free atoms; At chemistry rests on tracer experiments | 477, 483, 486, 489–490, 496–506 |
+| X#c-#n4 (X = F, Cl, Br, I) | Halide salts | 493, 498–505 |
+| X#c+#n3; X#c+#n2#v2 (X = Cl, Br, I) | Atomic cations; X3+ and XF2+ salts. HW distinguishes free gas-phase I+ from condensed-phase complexes | 491–492, 510 |
+| X#n2#v3; X#n#v5; X#v7 (X = Cl, Br, I) | XF3/XF5, IF7; oxoacids/oxoanions, oxides and fluoride oxides; I(OTeF5)3/5 | 508–510, 512–546 |
+| Cl#n#u#v4; Cl#u#v6 | ClO2; transient ClO3 | 531, 536–540 |
+| F#n3#m | Multicenter terminal F, added in the noble-gas slice | 465, 469 |
+| F#c-#n2#d2 | Bridging F− in Xe2F11+, added in the noble-gas slice; covers the F entry in D04 | 468 |
+
+#### Descriptions and selection status
+
+Each X expands only over the elements specified in its row. Examples in these tables
+also supply candidates for conformance inputs. The user accepted L01–L09 and L11,
+with separate At oxoanion entries required in L03. L10 is covered by the user's
+N#c-2#n3#v addition. These selections do not approve adding both representations of
+the same examples. The following overlaps were not resolved in the extraction:
+
+| Rows requiring clarification | Overlap / source uncertainty |
+| --- | --- |
+| L04 fluoride examples | The cited ion list establishes XF4+/XF6+ species; the extraction did not verify their localized bond description. Oxide cations and I(OH)6+ are separate examples in this row |
+| L05 ↔ M02 | Alternative descriptions of X3− and XY2−. HW explicitly discusses 3-center/4-electron bonding for I3− on p. 494; L05 was not independently justified by that example |
+| L06 ↔ M03, M04, M11, M12 | Alternative descriptions of the same polyhalides and oxofluorides. H2IO4− is a separate example for I#c-#n#v6 |
+| L07 ↔ M05, M13 | IF8− overlaps M05; IOF6−/IO2F4− overlap M13. The extraction did not establish which bond description the cited source supports |
+| M06–M10 ↔ existing localized entries | Alternative encodings of XF3/XF5/IF7 and fluoride oxides already represented in the registry. The specific multicenter partitions were constructed, not verified from the cited passages |
+
+The overlapping descriptions are **unresolved alternatives**, not independent additions.
+
+| ID | Localized descriptions | Examples / source qualification | HW pages |
+| --- | --- | --- | --- |
+| L01 | F#c+#n2#v2; F#c+#n2#v#h; F#c+#n2#h2 | H2F+ in liquid HF; explicit, mixed and implicit H | 498–499 |
+| L02 | At#c-#n4; At#c+#n3 | Astatides; At+ precipitation as At2S and cathodic deposition; tracer chemistry | 490, 492, 499, 502 |
+| L03 | At#n2#v3; At#n#v5; At#v7 | HAtO2/HAtO3/HAtO4 in the general oxoacid series; AtO3−/AtO4− in the redox diagram | 512–513 |
+| L04 | X#c+#n#v4; X#c+#v6 (X = Cl, Br, I) | XF4+/XF6+ salts; ClO2+, IO2+, ClO2F2+, I(OH)6+ | 510, 528, 540, 543, 545 |
+| L05 | X#c-#n3#v2 (X = Cl, Br, I, At) | X3− (Cl, Br, I); ClF2−/BrF2−/IF2−, BrCl2−, ICl2−, IBr2−, AtBr2−/AtI2− | 493–494, 510 |
+| L06 | X#c-#n2#v4; X#c-#n#v6 (X = Cl, Br, I) | XF4−, BrCl4−/ICl4−/IBr4−; BrF6−/IF6−, ClO2F2−/BrO2F2−, BrOF4−, H2IO4− | 510, 527, 545 |
+| L07 | I#c-#v8 | IF8−, IOF6−, cis-/trans-IO2F4− | 510–511, 546 |
+| L08 | X#n2#u#v2 (X = Cl, Br, I) | XO radicals with X=O and the unpaired electron on X; transient/matrix species, HW discusses delocalization | 530–531 |
+| L09 | X#n#u#v4; X#u#v6 (X = Br, I) | XO2/XO3 radicals; transient/matrix species | 531 |
+| L10 | N#c-2#n3#v | N in [ClO3N]2−, retaining three Cl=O and one Cl–N; HW reports K2[ClO3N] | 546 |
+| L11 | At#n3#h | HAt mentioned in the HX redox series; no preparation or structural evidence supplied there | 502 |
+
+| ID | Multicenter descriptions | Examples / source qualification | HW pages |
+| --- | --- | --- | --- |
+| M01 | X#n3#m (X = Cl, Br, I) | Terminal X in X3− and mixed polyhalides; terminal F already covered | 493–494, 510–511 |
+| M02 | X#c-#n3#m2 (X = F, Cl, Br, I, At) | Central X in X3− (F, Cl, Br, I), XY2−; F3− only in a 15 K matrix, decomposes at 40 K; AtBr2−/AtI2− | 493–494, 510 |
+| M03 | X#c-#n2#m4 (X = Cl, Br, I) | XF4− and BrCl4−/ICl4−/IBr4− | 510–511 |
+| M04 | X#c-#n#m6 (X = Br, I) | BrF6−/IF6− | 510–511 |
+| M05 | I#c-#m8 | IF8− | 510–511 |
+| M06 | X#n2#v#m2; X#n#v#m4 (X = Cl, Br, I) | XF3/XF5; one localized X–F, remaining F in multicenter bonds | 508–509 |
+| M07 | I#v#m6 | IF7 with one localized I–F | 508–509 |
+| M08 | X#n#v3#m2 (X = Cl, Br, I) | XOF3 with X=O and one localized X–F | 544–545 |
+| M09 | X#v5#m2 (X = Cl, I) | ClO2F3 and monomeric IO2F3 above 100 °C, with two X=O and one localized X–F; IO2F3 forms an O-bridged dimer below 100 °C | 544–546 |
+| M10 | I#v3#m4 | IOF5 with I=O and one localized I–F | 544, 546 |
+| M11 | X#c-#n#v4#m2 (X = Cl, Br) | ClO2F2−/BrO2F2− with two X=O | 545 |
+| M12 | Br#c-#n#v2#m4 | BrOF4− with Br=O | 545 |
+| M13 | I#c-#v2#m6; I#c-#v4#m4 | IOF6−; cis-/trans-IO2F4−, with I=O | 546 |
+
+| ID | Donor–acceptor descriptions | Examples / source qualification | HW pages |
+| --- | --- | --- | --- |
+| D01 | X#c+#n3#t2 (X = Br, I, At) | [X(py)2]+, two N→X bonds; py = pyridine | 491–492 |
+| D02 | I#n3#v#t | Me3N→I2; HW describes a charge-transfer complex | 494–495 |
+| D03 | X#c-#n3#d (X = F, Cl, Br, I, At) | Monodentate halogenido ligands, using X− donation | 499 |
+| D04 | X#c-#n2#d2 (X = F, Cl, Br, I) | Bridging halogenido ligands, two donations; Nb fluoride, Al halides, Co–I–Co examples | 495–496, 499 |
+| D05 | X#c-#n#d3 (X = F, Cl) | Three donations: [F(XeOF4)3]−, [F(SbF5)3]−, bridging Cl in TeCl4 | 499 |
+| D06 | X#n2#v#d (X = F, Cl, Br, I) | Covalent bond plus donation in halide bridges; I2 donation in polymeric Ag(I2)+ | 489, 495–496, 499 |
+| D07 | X#n2#v3#t (X = Br, I) | BrF3 polymer contacts; I acceptor in I2Cl6 with Cl donor D06 | 508–509 |
+| D08 | I#n2#v3#t2; I#n#v5#t | IF3 polymer contacts; Me2SO adduct of HIO3 | 509, 527 |
+| D09 | Cl#n#u#v4#t | Stable ClO2·py adduct, if encoded with N→Cl; HW does not specify the attachment in this passage | 538 |
+| D10 | N#v2#a#d | Pyridine donor for D01/D09; N#v3#d for Me3N already exists | 491–492, 538 |
+| D11 | O#n#v2#d | Me2SO donor for D08, using S=O and O→I | 527 |
+
+#### Further examples and source qualifications
+
+| Examples | Extraction result / unresolved encoding | HW pages |
+| --- | --- | --- |
+| Br2+/I2+, Cl4+, I4²+, Br5+/I5+, I15³+ | Isolated salts; Cl4+ decomposes above −78 °C. HW describes bond order 1.5 for X2+ and multicenter links in larger cations. Atom descriptions remain open | 490–493 |
+| X2− (X = F, Cl, Br, I) | Irradiated glasses/matrices; M01/M02 (existing F#n3#m) provide a 2-center/3-electron encoding, with the unpaired electron on the bond | 493–494 |
+| Br5−; higher polyiodides | Aggregates with linear, branched or extended structures; complete encodings remain open | 493–494 |
+| HF2−, [HnFn+1]− (n = 1, 2, 3, 4, 5, 7) | Salts and hydrogen-bonded aggregates; encoding remains open | 498 |
+| Br2·toluene; F2/Cl2/Br2/ClF/BrCl with H2O, H2S or NH3 | Charge-transfer complex or short-lived prereactive associates; no dative description assigned solely from the contact | 494–495 |
+| ClO4, Cl2O2+; polymeric IO+, IO2+, I3O6+ and iodine oxides | ClO4 transient; Cl2O2+ salt has a π*–π* association. Local oxide units reuse existing states/L04; full association encodings remain open | 531, 539, 542–544 |
+| ClF7, BrF7, F3+, I(OAc)7; I7+, I(OSO2F)5, XO3+ | First four unestablished in HW; last three possible or questioned | 491–492, 508–510, 545 |
+
+#### Registry and ValenceTable comparison
+
+The initial extraction contained **92 distinct candidate descriptions** (89 halogen,
+3 N/O companions), none then present under the registry's loading defaults; L10 has
+since been added by the user. All pass electron conservation. This check does not
+establish source support for a bond description or settle the alternatives above.
+All 34 localized descriptions pass Counts classification with their literal H counts;
+no ValenceTable exclusion was found for this set, including I#c-#v8. Multicenter and
+dative descriptions are outside this Counts comparison.
+
+Counts uses saturation targets, not an allowed-valence whitelist. Both policies
+resolve H2F+, ClF4+, localized I3−/IF8− and BrO with H=0 in probes. With both H and
+spin unspecified, BrO is underdetermined under Strict and receives H under
+MostSaturated; supplying the radical or H=0 retains BrO. No registry, ValenceTable
+or conformance changes have been made for this chapter.

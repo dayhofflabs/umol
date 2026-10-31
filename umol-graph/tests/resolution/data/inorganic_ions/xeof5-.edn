@@ -1,7 +1,7 @@
-; Holleman/Wiberg 103, Band 1, pp. 471.
-; Xe registry state: Xe#c-#n#v3#m4.
+; HW I, p. 471; Baran (2000), doi:10.1016/S0022-1139(99)00194-3.
+; Xe#c-#n#v2#m5: Xe=O and a six-center/ten-electron XeF5 unit.
 ; Counts is outside its supported bonding scope.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
  :input {:atoms ["Xe#c-" "O" "F" "F" "F" "F" "F"]
-         :bonds [[0 1 :double] [0 6 :single]]
-         :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]#c0#u0#s1"} {:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}]}}
+         :bonds [[0 1 :double]]
+         :multicenter-bonds [{:atoms [0 2 3 4 5 6] :attrs "[5,1,1,1,1,1]#c0#u0#s1"}]}}

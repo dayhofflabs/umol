@@ -1,0 +1,113 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Xe#c+#n"
+        "Xe#c+#n"
+        "F#c-#n2"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
+      :bonds [[0 3 :single] [1 8 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}]
+      :multicenter-bonds [
+        {:atoms [4 0 5] :attrs "[1,2,1]"}
+        {:atoms [6 0 7] :attrs "[1,2,1]"}
+        {:atoms [9 1 10] :attrs "[1,2,1]"}
+        {:atoms [11 1 12] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Xe#c+#n"
+        "Xe#c+#n"
+        "F#c-#n2"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
+      :bonds [[0 3 :single] [1 8 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}]
+      :multicenter-bonds [
+        {:atoms [4 0 5] :attrs "[1,2,1]"}
+        {:atoms [6 0 7] :attrs "[1,2,1]"}
+        {:atoms [9 1 10] :attrs "[1,2,1]"}
+        {:atoms [11 1 12] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Xe#c+#n3"
+        "Xe#c+#n3"
+        "F#c-#n4"
+        "F#n3"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"]
+      :bonds [[0 3 :single] [1 8 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}]
+      :multicenter-bonds [
+        {:atoms [4 0 5] :attrs "[1,2,1]"}
+        {:atoms [6 0 7] :attrs "[1,2,1]"}
+        {:atoms [9 1 10] :attrs "[1,2,1]"}
+        {:atoms [11 1 12] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Xe#c+#n3"
+        "Xe#c+#n3"
+        "F#c-#n4"
+        "F#n3"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"
+        "F#n3#u"]
+      :bonds [[0 3 :single] [1 8 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}]
+      :multicenter-bonds [
+        {:atoms [4 0 5] :attrs "[1,2,1]"}
+        {:atoms [6 0 7] :attrs "[1,2,1]"}
+        {:atoms [9 1 10] :attrs "[1,2,1]"}
+        {:atoms [11 1 12] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}}

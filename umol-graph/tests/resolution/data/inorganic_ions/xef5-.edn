@@ -1,0 +1,7 @@
+; HW I, p. 467; Christe et al. (1991), doi:10.1021/ja00009a021.
+; Xe#c-#n2#m5: all five F in a six-center/ten-electron unit.
+; Counts is outside its supported bonding scope.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c-" "F" "F" "F" "F" "F"]
+         :bonds []
+         :multicenter-bonds [{:atoms [0 1 2 3 4 5] :attrs "[5,1,1,1,1,1]#c0#u0#s1"}]}}

@@ -1,0 +1,6 @@
+; HW I, p. 467; McKee et al. (1973), doi:10.1021/ic50126a001, p. 1716.
+; Xe#c+#n2#v#m2: one localized Xe-F and one F-Xe-F multicenter unit.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c+" "F" "F" "F"]
+         :bonds [[0 1 :single]]
+         :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]#c0#u0#s1"}]}}

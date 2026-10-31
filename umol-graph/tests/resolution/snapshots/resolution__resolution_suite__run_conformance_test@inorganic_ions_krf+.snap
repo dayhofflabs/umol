@@ -4,18 +4,18 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
   :atom-typing-most-saturated {
-    :output {:atoms ["Rn#c+2#n3" "F#c-#n4" "F#c-#n4"] :bonds []}
+    :output {:atoms ["Kr#c+#n3" "F#n3"] :bonds [[0 1 :single]]}
     :success true
     :tie-breaks []}
   :atom-typing-strict {
-    :output {:atoms ["Rn#c+2#n3" "F#c-#n4" "F#c-#n4"] :bonds []}
+    :output {:atoms ["Kr#c+#n3" "F#n3"] :bonds [[0 1 :single]]}
     :success true
     :tie-breaks []}
   :counts-most-saturated {
-    :output {:atoms ["Rn#c+2#n3" "F#c-#n4" "F#c-#n4"] :bonds []}
+    :output {:atoms ["Kr#c+#n3" "F#n3"] :bonds [[0 1 :single]]}
     :success true
     :tie-breaks []}
   :counts-strict {
-    :output {:atoms ["Rn#c+2#n3" "F#c-#n4" "F#c-#n4"] :bonds []}
+    :output {:atoms ["Kr#c+#n3" "F#n3"] :bonds [[0 1 :single]]}
     :success true
     :tie-breaks []}}

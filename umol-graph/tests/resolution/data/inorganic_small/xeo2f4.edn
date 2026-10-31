@@ -1,5 +1,5 @@
 ; Holleman/Wiberg 103, Band 1, pp. 471.
-; Xe registry state: Xe#v4#m4.
+; Xe#v4#m4: inferred from the neutral Xe=O / even-fluoride construction convention.
 ; HW Table 11.1 gives mass-spectrometric evidence.
 ; Counts is outside its supported bonding scope.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
