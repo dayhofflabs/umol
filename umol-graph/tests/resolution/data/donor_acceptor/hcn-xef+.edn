@@ -1,0 +1,6 @@
+; Holleman/Wiberg 103, Band 1, p. 466: nitrile donation in HCN -> XeF+.
+; AtomTyping: Xe#c+#n3, F#n3, N, C, H. Counts is outside its supported bonding scope.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c+" "F" "N" "C" "H"]
+         :bonds [[0 1 :single] [2 3 :triple] [3 4 :single]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}]}}

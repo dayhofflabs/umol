@@ -7,7 +7,8 @@ Relates: [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
 [174](174-aromatic-hydrogen-resolution-2026-07-31.md),
 [216](216-canonicalization-performance-2026-08-30.md),
 [data types guide](../docs/development/data-types.md),
-[224](224-smiles-ring-closure-frame-2026-09-08.md)
+[224](224-smiles-ring-closure-frame-2026-09-08.md),
+[056](056-default-registry-2026-03-07.md)
 
 ## Purpose
 

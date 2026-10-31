@@ -1,0 +1,5 @@
+; Holleman/Wiberg 103, Band 1, pp. 470-471.
+; Xe registry state: Xe#v8.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe" "O" "O" "O" "O"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :double] [0 4 :double]]}}

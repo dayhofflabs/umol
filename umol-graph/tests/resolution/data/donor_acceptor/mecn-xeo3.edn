@@ -1,0 +1,7 @@
+; Holleman/Wiberg 103, Band 1, pp. 470.
+; Xe registry state: Xe#n#v6#t.
+; Counts is outside its supported bonding scope.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe" "O" "O" "O" "N" "C" "C#h3"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :double] [4 5 :triple] [5 6 :single]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"}]}}

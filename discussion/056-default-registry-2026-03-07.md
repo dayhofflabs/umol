@@ -1,27 +1,44 @@
-# Default Registry Rollout Plan (2026-03-07)
+# 056 — Default atom-type registry
+
+Status: In Progress
+Date: 2026-03-07
+Relates: [217](217-rhea-participant-failures-2026-08-30.md)
+
+The [HW extraction](#hw-extraction-spike-2026-10-31) records noble-gas source
+data and the approved additions. The March planning and implementation notes
+below are historical.
 
 This document tracks incremental, reviewable expansion of the default atom type registry.
 Registry entries are treated as code: explicit scope, per-entry review, and matching conformance coverage.
 
-## Project Status (2026-03-12)
+## Project Status (2026-10-31)
 
-**605 conformance tests.** Status refresh pending after adding `carbonyl_derivatives` and extending `functional_groups`.
+**702 conformance cases pass.** Each EDN input runs through AtomTyping and Counts
+with both Strict and MostSaturated policies. The selected noble-gas HW additions
+are implemented; chapter-by-chapter extraction continues.
 
 ### Conformance suite breakdown
 
-| Category | Files | `implicit_h` | Description |
-|---|---|---|---|
-| `atoms/` | 108 | n/a | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 127 | n/a | Single-atom ions with discrete charge states |
-| `hydrides/` | 17 | true | One-atom graphs with implicit H (`?{EHn}`) |
-| `inorganic_small/` | 65 | false | Neutral small inorganics, all H explicit |
-| `inorganic_ions/` | 28 | false | Molecular ions, all H explicit |
-| `hydrocarbons/` | 53 | true | C/H only, `?{CHn}` queries |
-| `functional_groups/` | 73 | true | Organic heteroatom groups (halides, amines, etc.) |
-| `carbonyl_derivatives/` | 62 | true | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
-| `heterocycles/` | 52 | true | Non-aromatic O/N/S heterocycles, crown ethers |
-| `hypervalent/` | 20 | false | Expanded-octet species (S, P, Cl, I) |
-| **Total** | **605** | | |
+| Category | Files | Description |
+|---|---|---|
+| `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
+| `atomic_ions/` | 127 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 17 | Hydrides with implicit H, plus explicit H₂ |
+| `inorganic_small/` | 73 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 35 | Inorganic ions |
+| `donor_acceptor/` | 4 | Donor–acceptor adducts with dative bonds |
+| `hydrocarbons/` | 53 | C/H compounds |
+| `functional_groups/` | 73 | Organic heteroatom groups (halides, amines, etc.) |
+| `carbonyl_derivatives/` | 62 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
+| `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
+| `aromatic/` | 34 | Aromatic carbocycles, heterocycles and ions |
+| `hypervalent/` | 20 | Expanded-octet species (S, P, Cl, I) |
+| `transition_metals/` | 7 | Transition-metal complexes |
+| `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
+| `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
+| **Total** | **702** | |
+
+## March 2026 record
 
 ### Key code files
 
@@ -43,68 +60,6 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 - Validation criterion for accepted conformance snapshots:
   - `atom_typing.success: true`
   - `counts.success: true`
-
-### TOML input format
-
-```toml
-atoms = "?{CH2} ?{CH2} ?{OH0}"   # space-separated atom type queries
-bonds = "0-1 1=2 2-0"            # index pairs with - = # : for bond order
-implicit_h = true                 # whether resolver infers implicit H
-```
-
-Query syntax: `?{Element[charge][/lone_pairs][^unpaired][Hn][vn]}`. Examples: `?{CH3}` (C with 3 H), `?{N+}` (N with +1 charge), `?{OH0}` (O with 0 H, used for ethers/carbonyls), `?{SH0}` (thioether S), `?{N^1}` (N with 1 unpaired electron).
-
-### Disambiguation lessons learned
-
-- Carbonyl/ether O must use `?{OH0}` (not bare `?{O}`) to avoid ambiguity with `{O+/1H1v2}` in the registry.
-- Charged atoms in Lewis structures (nitro, azide, isocyanide, ozone, N2O, N2O4) must have explicit formal charges in queries.
-- `compute_implicit_hydrogens` uses `element.shift(-charge)` to look up isoelectronic element's allowed valences for charged atoms.
-
-### ValenceMatchPolicy extension: `SelectBest` (proposed)
-
-Current `ValenceMatchPolicy` behavior is binary (`Error` or `Ignore`) and treats any multi-match as either hard failure or pass-through. For conformance and chemistry-review workflows, `Error` remains the default because it forces explicit input and registry disambiguation.
-
-Add a third policy, `SelectBest`, as an explicit opt-in for ingestion and interoperability scenarios where ambiguous inputs must still resolve to one state. This policy should not change matching; it only defines post-match tie-breaking when multiple candidates survive.
-
-Provisions:
-
-- Keep `Error` as default policy for ambiguity in resolver defaults and conformance suite runs.
-- Use `SelectBest` only when caller explicitly enables it in `ResolveConfig`.
-- Apply tie-breaking only after exact constraints are matched; never admit non-matching candidates.
-- Prefer candidates with explicit query agreement in this order: charge > unpaired electrons > lone pairs > hydrogens > valence.
-- If top-ranked candidates remain tied, return `ValenceAmbiguous` (do not silently choose).
-- Snapshot/reporting should record when `SelectBest` was used and which candidates were considered.
-
-### What's next (not started)
-
-- Aromatic heterocycles (pyridine, pyrrole, furan, thiophene, imidazole, etc.)
-- Carbonyl-derivatives snapshot/registry review (new category coverage just added)
-- Adding the 5 missing registry atom type specs listed above
-
-## Scope and Ordering
-
-Implementation proceeds in this order:
-
-1. Atomic ground states
-2. Well-defined discrete ions (especially metals)
-3. Typical valences for non-metals
-
-## Review Rules
-
-- Every new registry spec must be accompanied by conformance input(s).
-- No bulk "periodic table dump" commits.
-- Each element is added in a small, auditable change set.
-- Deviations from expected chemistry behavior are documented explicitly.
-- Registry edits and conformance edits are reviewed together.
-
-## Change Unit (Per Element)
-
-For each element `E`, a minimal unit of work is:
-
-1. Add/adjust `E` entries in `umol-models-graph/config/default-registry.toml`
-2. Add/adjust `E` conformance files in `umol-models-graph/tests/resolution/data/`
-3. Update/accept corresponding snapshots
-4. Record status in this document
 
 ## Tracking Table
 
@@ -266,19 +221,12 @@ Conventions:
 
 ## Categories
 
-Use resolution data categories:
+The [conformance suite breakdown](#conformance-suite-breakdown) lists the current
+categories. Donor–acceptor adducts use `donor_acceptor/`, including charged adducts.
 
-- `atoms/` — free atoms (ground and valence/excited states).
-- `atomic_ions/` — single-atom ions (discrete charge states).
-- `hydrides/` — one-atom graphs with implicit H (`?{EHn}`, `implicit_h=true`); no explicit H atoms.
-- `inorganic_small/` — small neutral inorganic molecules (including sextet species); explicit H only (`implicit_h=false`). Split from former `covalent/`.
-- `inorganic_ions/` — small molecular ions (e.g. NH4+, OH3+); explicit H only. Split from former `covalent/`.
-- `hydrocarbons/` — C/H only, implicit H (`?{CHn}`, `implicit_h=true`).
-- `functional_groups/` — organic molecules with heteroatom functional groups; implicit H (`?{CHn}`, `?{OH}`, `?{NH2}`, `?{SH}`, etc., `implicit_h=true`).
-- `carbonyl_derivatives/` — carbonyl-centered organics; implicit H (`?{CHn}`, `?{OH0}`, `?{NH0}`, etc., `implicit_h=true`).
-- `heterocycles/` — non-aromatic heterocycles; implicit H (`?{CHn}`, `?{OH0}`, `?{NH}`, `?{SH0}`, etc., `implicit_h=true`).
-
-Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic_ions, and hydrocarbons use explicit H where present, except hydrocarbons where H is in the query.
+The former `implicit_h=true/false` setting was the precursor to atom defaults.
+EDN inputs use MoleculeDefaults with per-input `:config-overrides`; hydrogen
+handling follows those defaults and explicit atom predicates.
 
 ## Current Conformance Set
 
@@ -334,3 +282,89 @@ Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic
 - Added new `carbonyl_derivatives/` conformance category (62 files, non-aromatic) covering aldehydes, ketones, acids, esters, amides, acyl halides, anhydrides, carboxylates, lactones/thioesters, and C=N derivatives tied to carbonyl chemistry.
 - Added 6 `functional_groups/` compounds requested for S/N chemistry expansion: dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene.
 - Moved `beta-lactam` and `succinimide` from `heterocycles/` into `carbonyl_derivatives/` to keep carbonyl-centered compounds in one category.
+
+## HW extraction spike (2026-10-31)
+
+Source: [Holleman/Wiberg 103, Band 1, chapter XI](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=497>),
+printed pp. 459–474, PDF pp. 497–512. Page references below are printed pages.
+Atom strings use AtomTypeRegistry::raise_defaults. The selection column records
+the user's decisions.
+
+### Existing noble-gas entries
+
+| Atom descriptions | Examples / source qualification | HW pages |
+| --- | --- | --- |
+| He; Ne; Ar; Kr#n4; Xe#n4; Rn#n4 | Free atoms | 461 |
+| Kr#n3#m2; Xe#n3#m2; Rn#n3#m2 | KrF2, XeF2, RnF2; HW explicitly describes XeF2 as 3-center/4-electron | 465, 469 |
+| Xe#n2#m4; Rn#n2#m4 | XeF4; RnF4 marked probable in Table 11.1 | 465, 467 |
+| Xe#n#m6; Rn#n#m6 | XeF6; RnF6 marked probable, RnO3 incompletely characterized | 465, 468–469 |
+| Xe#m8 | Existing oxide/perxenate encoding: XeO4, XeO6⁴− and protonated forms | 470–471 |
+| Kr#c+#n3#v; Xe#c+#n3#v | KrF+, XeF+, XeCl+ | 466, 469 |
+| Kr#c+#n3#v#t; Xe#c+#n3#v#t | Nitrile/HF acceptor adducts | 466, 469, 473 |
+| Xe#c+#n2#v#m2 | XeF3+, C6F5XeF2+ | 467, 473 |
+| Xe#c+#n#v#m4; Xe#c+#n#v#t#m4 | XeF5+ and its acceptor adducts | 468 |
+| Xe#c-#n2#v#m4 | XeF5− | 467 |
+| Xe#c-#n#v#m6 | XeF7− | 468 |
+| Xe#c-2#n#v2#m6 | XeF8²− | 468 |
+| Xe#n#t#m6 | Existing encoding of MeCN→XeO3 | 470 |
+
+### Additional descriptions
+
+HW explicitly discusses XeOF4 double-bond character on p. 471. The accepted
+Xe(VIII) adduct description is Xe#v8#t, with zero lone pairs.
+
+| Atom descriptions | Example / qualification | HW pages | Selection |
+| --- | --- | --- | --- |
+| F#n3#m | F in multicenter KrF2/XeF2 | 465, 469 | Default; added |
+| N#v3#d | Nitrile donor in HCN→XeF+/KrF+ | 466, 469 | Default; added |
+| Xe#n#v6 | XeO3, three Xe=O encoding | 469–470 | Default; added |
+| Xe#v8 | XeO4; XeO6⁴− with two Xe=O and four Xe–O− | 470–471 | Default; added |
+| Xe#c+#n#v5 | XeO2F+, two Xe=O encoding | 471 | Default; added |
+| Xe#n2#v2#m2 | XeOF2; HW describes an O-bridged polymer | 471 | Default; added |
+| Xe#n#v2#m4; Xe#n#v4#m2 | XeOF4, XeO2F2; Xe=O and multicenter fluoride contributions | 471 | Default; added |
+| Xe#v6#m2; Xe#v4#m4 | XeO3F2, XeO2F4; the latter has mass-spectrometric evidence in Table 11.1 | 465, 471 | Default; added |
+| Xe#c+#n#v3#m2 | XeOF3+ | 471 | Default; added |
+| Xe#c-#n2#v3#m2 | XeOF3− | 471 | Default; added |
+| Xe#c-#n#v3#m4; Xe#c-#n#v5#m2 | XeOF5−, XeO2F3− | 471 | Default; added |
+| Xe#t#m8 | MeCN→XeO4, extending the existing multicenter oxide encoding | 471 | Default; added |
+| Xe#n#v6#t; Xe#v8#t | MeCN→XeO3/XeO4, Xe=O encodings | 470–471 | Default; added |
+| Xe#n3#d | Xe donation in AuXe4²+, Au/Xe and Hg/Xe complexes | 473 | Not selected |
+| Rn#c+2#n3 | Ionic RnF2; cation exchange from liquid C2Cl3F3 | 469 | Default; added |
+| Xe#c+#n3#m | Xe₂⁺; trial 2-center/3-electron encoding with Xe#n3#m2 | 472 | Not selected |
+| Xe#c+2#n3#t2 | Xe(FH)2²+ is a proposed interpretation in HW | 466 | Not selected |
+
+### Further extracted examples and qualifications
+
+| Examples | Source detail | HW pages |
+| --- | --- | --- |
+| Xe2F3+, Kr2F3+, Xe2F11+, Xe2F13−; oligomeric XeF6 | Bridging/association; Kr2F3+ is asymmetric | 466, 468–469 |
+| XeCl2, XeCl4, XeBr2, XeClF | XeCl2 in a cold condensate; XeCl2/4 and XeBr2 as decay products; XeClF mentioned | 465, 469 |
+| HeH+, EgH+, HArF, HKrCl, HKrCN, HXeCl/Br/I/CN/NC/C2H, XeH2 | Gas-phase and matrix chemistry; HW describes HArF as H–Ar+ / F− | 472 |
+| Ne₂⁺, Ar₂⁺, Kr₂⁺, Xe₂⁺ | Mass spectrometry; an Xe₂⁺ salt is also reported | 472 |
+| Kr(OTeF5)2; Xe(OTeF5)2/4/6; XeF(OAc), Xe(OAc)2; XeF[N(SO2F)2], Xe[N(SO2F)2]2 | Further O/N ligand examples | 472–473 |
+| C6F5Xe+ and MeCN adduct; C6F5XeF/Cl/CN, C6F5XeOCO(C6F5), Xe(C6F5)2, C6F5XeF2+ | Xe–C examples | 473 |
+
+He#n, Ne#n4 and Ar#n4 are excluded by the user: retain the zero-lone-pair
+descriptions and current valence limits. The trial descriptions He#c+#v,
+Ne#c+#n3#v, Ar#c+#n3#v, Ne#n3#m2, Ar#n3#m2 and Ne#c+#n3#m are not selected.
+
+HW marks ArF2, KrF4, neutral XeF8 and XeF7+ as unestablished; ArF+ and XeOF6
+are questioned. XeO, XeO2 and Xe(OH)2 occur as possible intermediates.
+The registry comment `[XeO6]3-` is corrected to `[HXeO6]3-` (p. 471).
+
+### Implemented additions and checks
+
+F#n3#m, N#v3#d, the 15 selected Xe descriptions and Rn#c+2#n3 are in the
+default registry. All noble-gas entries carry HW volume/page references.
+The Xe/Rn increment adds 17 conformance inputs, including
+[XeO3](../umol-graph/tests/resolution/data/inorganic_small/xeo3.edn),
+[XeOF4](../umol-graph/tests/resolution/data/inorganic_small/xeof4.edn),
+[MeCN→XeO4](../umol-graph/tests/resolution/data/donor_acceptor/mecn-xeo4.edn) and
+[ionic RnF2](../umol-graph/tests/resolution/data/inorganic_small/rnf2.edn).
+Both AtomTyping policies match the independently specified states.
+**702 conformance cases and 366 valence unit tests pass**, preserving all 685
+earlier conformance snapshots.
+
+Counts probes with explicit H=0 matched the XeO3, XeO4, XeO6⁴− and ionic Rn(II)
+encodings. Multicenter/dative cases remain outside its supported scope.
+ValenceTable is unchanged.

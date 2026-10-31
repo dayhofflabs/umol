@@ -1,0 +1,4 @@
+; Holleman/Wiberg 103, Band 1, p. 469: ionic RnF2, cation-exchange evidence.
+; Expected: Rn#c+2#n3 and two F#c-#n4.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rn#c+2" "F#c-" "F#c-"] :bonds []}}
