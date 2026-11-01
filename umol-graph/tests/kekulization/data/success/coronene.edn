@@ -1,0 +1,54 @@
+{:input {:atoms ["C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"]
+         :bonds [[0 17 :aromatic]
+                 [0 1 :aromatic]
+                 [1 2 :aromatic]
+                 [2 19 :aromatic]
+                 [2 3 :aromatic]
+                 [3 4 :aromatic]
+                 [4 5 :aromatic]
+                 [5 20 :aromatic]
+                 [5 6 :aromatic]
+                 [6 7 :aromatic]
+                 [7 8 :aromatic]
+                 [8 21 :aromatic]
+                 [8 9 :aromatic]
+                 [9 10 :aromatic]
+                 [10 11 :aromatic]
+                 [11 22 :aromatic]
+                 [11 12 :aromatic]
+                 [12 13 :aromatic]
+                 [13 14 :aromatic]
+                 [14 23 :aromatic]
+                 [14 15 :aromatic]
+                 [15 16 :aromatic]
+                 [16 17 :aromatic]
+                 [17 18 :aromatic]
+                 [18 23 :aromatic]
+                 [18 19 :aromatic]
+                 [19 20 :aromatic]
+                 [20 21 :aromatic]
+                 [21 22 :aromatic]
+                 [22 23 :aromatic]]}}

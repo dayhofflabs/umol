@@ -1,0 +1,4 @@
+; Tellurite; HW I, pp. 703, 723; localized oxo description.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te" "O" "O#c-" "O#c-"]
+         :bonds [[0 1 :double] [0 2 :single] [0 3 :single]]}}

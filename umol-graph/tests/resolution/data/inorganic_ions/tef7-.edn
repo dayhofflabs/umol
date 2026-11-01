@@ -1,0 +1,5 @@
+; TeF7-; HW I, p. 710; doi:10.1021/ja00074a011. Selected no-lone-pair convention (PW).
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#c-" "F" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]
+                 [0 5 :single] [0 6 :single] [0 7 :single]]}}

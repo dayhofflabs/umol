@@ -1,0 +1,16 @@
+; Se4Cl16 cubane; HW I, pp. 707, 711: four SeCl3+ units and four triply bridging Cl- donors.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se#c+" "Se#c+" "Se#c+" "Se#c+" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 8 :single] [0 9 :single] [0 10 :single] [1 11 :single] [1 12 :single] [1 13 :single] [2 14 :single] [2 15 :single] [2 16 :single] [3 17 :single] [3 18 :single] [3 19 :single]]
+         :dative-bonds [{:donors [4] :acceptor 1 :attrs "1"}
+                        {:donors [4] :acceptor 2 :attrs "1"}
+                        {:donors [4] :acceptor 3 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 2 :attrs "1"}
+                        {:donors [5] :acceptor 3 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 1 :attrs "1"}
+                        {:donors [6] :acceptor 3 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 1 :attrs "1"}
+                        {:donors [7] :acceptor 2 :attrs "1"}]}}

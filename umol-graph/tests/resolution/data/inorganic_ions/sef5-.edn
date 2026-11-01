@@ -1,0 +1,6 @@
+; SeF5-; HW I, p. 707; two basal 3c4e units: doi:10.1021/ic50113a046, p. 1682.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se#c-" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 :single]]
+         :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}]}}

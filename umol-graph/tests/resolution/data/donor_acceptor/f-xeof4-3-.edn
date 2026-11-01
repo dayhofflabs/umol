@@ -1,0 +1,13 @@
+; [F(XeOF4)3]-; HW I, pp. 471, 499; three F- donations.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["F#c-" "Xe" "O" "F" "F" "F" "F" "Xe" "O" "F" "F" "F" "F" "Xe" "O" "F" "F" "F" "F"]
+         :bonds [[1 2 :double] [7 8 :double] [13 14 :double]]
+         :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}
+                        {:donors [0] :acceptor 7 :attrs "1"}
+                        {:donors [0] :acceptor 13 :attrs "1"}]
+         :multicenter-bonds [{:atoms [3 1 4] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [5 1 6] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [9 7 10] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [11 7 12] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [15 13 16] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [17 13 18] :attrs "[1,2,1]#c0#u0#s1"}]}}

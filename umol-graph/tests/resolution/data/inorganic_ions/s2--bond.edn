@@ -1,0 +1,3 @@
+; S2-, bond charge/spin on the S2 reference graph; HW I, p. 622; encoding: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "S"] :bonds [[0 1 "2#c-#s2"]]}}

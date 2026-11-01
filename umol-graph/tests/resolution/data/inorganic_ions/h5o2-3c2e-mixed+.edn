@@ -1,0 +1,6 @@
+; H5O2+, 3c2e bridge; M17 (doi:10.1039/C7CE00501F).
+; Contributions [2,0,0] and the remaining pair on atom 2: assignment PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#h" "H#c+" "O#h" "H" "H"]
+         :bonds [[0 3 :single] [2 4 :single]]
+         :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}}

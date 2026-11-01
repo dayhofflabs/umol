@@ -1,0 +1,7 @@
+; Se4N4: eight Se-N singles and a 12-electron multicenter contribution.
+; HW I, p. 725; S4N4 analogy and contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se#c+" "N#c-" "Se#c+" "N#c-" "Se#c+" "N#c-" "Se#c+" "N#c-"]
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single]
+                 [4 5 :single] [5 6 :single] [6 7 :single] [7 0 :single]]
+         :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7] :attrs "[1,2,1,2,1,2,1,2]"}]}}

@@ -1,0 +1,4 @@
+; S3-, localized charge/spin contributor; HW I, p. 622; encoding: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#c-" "S" "S"]
+         :bonds [[0 1 :single] [1 2 :single]]}}

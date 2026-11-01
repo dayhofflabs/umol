@@ -1,0 +1,6 @@
+; S3-: two S-S single bonds and a 3c5e pi system, with system charge/spin.
+; HW I, p. 622 (ozonide analogy); contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "S" "S"]
+         :bonds [[0 1 :single] [1 2 :single]]
+         :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,2,1]#c-#s2"}]}}
