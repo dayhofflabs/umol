@@ -1429,6 +1429,7 @@ mod tests {
     ) {
         let model = ChemistryModel {
             valence: ValenceModel::smiles(),
+            aromaticity: AromaticityModel::daylight(),
             ..ChemistryModel::default()
         };
         assert_eq!(

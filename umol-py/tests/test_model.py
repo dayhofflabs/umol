@@ -1317,7 +1317,7 @@ def test_chemistry_model_default():
 
     assert model.connectivity == ConnectivityModel.default()
     assert model.valence == ValenceModel.atom_typing(AtomTypeRegistry.default())
-    assert model.aromaticity == AromaticityModel.daylight()
+    assert model.aromaticity == AromaticityModel.permissive()
     assert model.stereo == StereoModel.default()
     assert model == ChemistryModel.default()
     assert model == ChemistryModel(
@@ -1409,18 +1409,12 @@ def test_chemistry_model_new_error():
                 allow_disconnected_constraints=True,
             ),
             valence=ChemistryModel.default().valence,
-            aromaticity=AromaticityModel.daylight(),
+            aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel.default(),
         ),
         ChemistryModel(
             connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.counts(ValenceTable(entries={})),
-            aromaticity=AromaticityModel.daylight(),
-            stereo=StereoModel.default(),
-        ),
-        ChemistryModel(
-            connectivity=ChemistryModel.default().connectivity,
-            valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
             aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel.default(),
         ),
@@ -1428,6 +1422,12 @@ def test_chemistry_model_new_error():
             connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
             aromaticity=AromaticityModel.daylight(),
+            stereo=StereoModel.default(),
+        ),
+        ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
+            valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
+            aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel(
                 kind_models={},
                 para_stereo=False,

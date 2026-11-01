@@ -15,6 +15,9 @@ use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 use crate::ops::validate::ConnectivityModel;
 use crate::utils::SortingDirection;
 
+/// Semantic configuration for molecular resolution and conformance.
+///
+/// The default uses the atom-type registry and permissive Hückel aromaticity.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChemistryModel {
     pub connectivity: ConnectivityModel,
@@ -28,7 +31,7 @@ impl Default for ChemistryModel {
         Self {
             connectivity: ConnectivityModel::default(),
             valence: ValenceModel::default(),
-            aromaticity: AromaticityModel::daylight(),
+            aromaticity: AromaticityModel::permissive(),
             stereo: StereoModel::default(),
         }
     }
@@ -336,7 +339,7 @@ mod tests {
                 valence: ValenceModel::atom_typing(Cow::Borrowed(
                     AtomTypeRegistry::default_registry()
                 )),
-                aromaticity: AromaticityModel::daylight(),
+                aromaticity: AromaticityModel::permissive(),
                 stereo: StereoModel::default(),
             },
         );
