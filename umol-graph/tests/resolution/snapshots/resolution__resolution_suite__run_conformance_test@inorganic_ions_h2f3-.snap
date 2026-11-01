@@ -1,0 +1,33 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["F#c-#n2" "H#c+" "F#c-#n3" "H#c+" "F#c-#n3"]
+      :bonds []
+      :multicenter-bonds [{:atoms [2 1 0] :attrs "[2,0,2]"} {:atoms [4 3 0] :attrs "[2,0,2]"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["F#c-#n2" "H#c+" "F#c-#n3" "H#c+" "F#c-#n3"]
+      :bonds []
+      :multicenter-bonds [{:atoms [2 1 0] :attrs "[2,0,2]"} {:atoms [4 3 0] :attrs "[2,0,2]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["F#c-#n4" "H#c+" "F#c-#n4" "H#c+" "F#c-#n4"]
+      :bonds []
+      :multicenter-bonds [{:atoms [2 1 0] :attrs "[2,0,2]"} {:atoms [4 3 0] :attrs "[2,0,2]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["F#c-#n4" "H#c+" "F#c-#n4" "H#c+" "F#c-#n4"]
+      :bonds []
+      :multicenter-bonds [{:atoms [2 1 0] :attrs "[2,0,2]"} {:atoms [4 3 0] :attrs "[2,0,2]"}]}
+    :success true
+    :tie-breaks []}}

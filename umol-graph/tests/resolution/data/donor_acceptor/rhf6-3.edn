@@ -1,0 +1,10 @@
+; [RhF6]3-; HW II, p. 2012; terminal F- donation: HW I, p. 499.
+{:config-overrides {:atom {:implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c+3" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-"]
+         :bonds []
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

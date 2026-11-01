@@ -1,0 +1,4 @@
+; XF6+; HW I, pp. 510-511; doi:10.1021/ic040015o, pp. 6917-6919.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Br#c+" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single] [0 5 :single] [0 6 :single]]}}

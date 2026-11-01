@@ -1,0 +1,4 @@
+; HW I, pp. 512-513; selected central At- and At=O convention.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["At#c-" "O" "O" "O"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :double]]}}

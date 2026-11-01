@@ -1,0 +1,33 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["I#n3" "I#n3" "N" "C#h3" "C#h3" "C#h3"]
+      :bonds [[0 1 :single] [2 3 :single] [2 4 :single] [2 5 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["I#n3" "I#n3" "N" "C#h3" "C#h3" "C#h3"]
+      :bonds [[0 1 :single] [2 3 :single] [2 4 :single] [2 5 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["I#n3" "I#n3" "N#n" "C#h3" "C#h3" "C#h3"]
+      :bonds [[0 1 :single] [2 3 :single] [2 4 :single] [2 5 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["I#n3" "I#n3" "N#n" "C#h3" "C#h3" "C#h3"]
+      :bonds [[0 1 :single] [2 3 :single] [2 4 :single] [2 5 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}}

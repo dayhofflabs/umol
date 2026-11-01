@@ -1,0 +1,4 @@
+; Formal Cl+ electrophile in reaction mechanisms.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cl#c+"]
+         :bonds []}}

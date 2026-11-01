@@ -1,0 +1,4 @@
+; Astatine oxoacids; HW I, pp. 512-513.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["At" "O" "O#h"]
+         :bonds [[0 1 :double] [0 2 :single]]}}

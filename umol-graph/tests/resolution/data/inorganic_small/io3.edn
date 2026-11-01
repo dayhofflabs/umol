@@ -1,0 +1,4 @@
+; Halogen oxide radicals; HW I, pp. 530-531.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I" "O" "O" "O"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :double]]}}

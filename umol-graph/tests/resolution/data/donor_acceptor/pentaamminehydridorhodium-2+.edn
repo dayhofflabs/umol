@@ -1,0 +1,17 @@
+; [RhH(NH3)5]2+; HW II, pp. 2068, 2071: hydride lone-pair donation.
+; AtomTyping resolves H#c-#d and Rh#c+3#n3#t6 (assignment PW).
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c+3" "H#c-" "N" "N" "N" "N" "N"
+                 "H" "H" "H" "H" "H" "H" "H" "H" "H"
+                 "H" "H" "H" "H" "H" "H"]
+         :bonds [[2 7 :single] [2 8 :single] [2 9 :single]
+                 [3 10 :single] [3 11 :single] [3 12 :single]
+                 [4 13 :single] [4 14 :single] [4 15 :single]
+                 [5 16 :single] [5 17 :single] [5 18 :single]
+                 [6 19 :single] [6 20 :single] [6 21 :single]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

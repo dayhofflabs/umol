@@ -1,0 +1,12 @@
+; [Ag2(I2)4]2+; Malinowski et al. (2016), doi:10.1002/anie.201603913, pp. 9263-9264, Fig. 1 (3).
+; Two bridging and two terminal I2 ligands; the I...I halogen contact is noncovalent.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ag#c+" "Ag#c+" "I" "I" "I" "I" "I" "I" "I" "I"]
+         :bonds [[2 3 :single] [4 5 :single] [6 7 :single] [8 9 :single]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 1 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 1 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 1 :attrs "1"}]
+         :noncovalent-bonds [{:atoms [7 4] :attrs "Xbd"}]}}

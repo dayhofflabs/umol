@@ -1,5 +1,5 @@
 ; Holleman/Wiberg 103, Band 1, p. 465: three-center/four-electron F-Xe-F.
-; AtomTyping: Xe#n3, F#n3, F#n3. Counts is outside its supported bonding scope.
+; AtomTyping: Xe#n3, F#n3, F#n3.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
  :input {:atoms ["Xe" "F" "F"]
          :bonds []

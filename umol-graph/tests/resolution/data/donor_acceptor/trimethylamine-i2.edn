@@ -1,0 +1,5 @@
+; Me3N->I2; HW I, pp. 494-495.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I" "I" "N" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 :single] [2 3 :single] [2 4 :single] [2 5 :single]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}]}}

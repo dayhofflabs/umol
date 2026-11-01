@@ -1,0 +1,4 @@
+; (IO2F3)2 crystal dimer; doi:10.1039/C39770000519; selected localized I#v7 assignment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I" "I" "O" "O" "O" "O" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 2 :double] [1 3 :double] [0 4 :single] [1 4 :single] [0 5 :single] [1 5 :single] [0 6 :single] [0 7 :single] [0 8 :single] [1 9 :single] [1 10 :single] [1 11 :single]]}}

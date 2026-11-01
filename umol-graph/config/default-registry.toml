@@ -6,6 +6,7 @@
 # B72 | Bartlett et al., Inorg. Chem. 11 (1972), 1124-1127; doi:10.1021/ic50111a042
 # M73 | McKee, Zalkin and Bartlett, Inorg. Chem. 12 (1973), 1713-1717; doi:10.1021/ic50126a001
 # W75 | Willett, LaBonville and Ferraro, J. Chem. Phys. 63 (1975), 1474-1478; doi:10.1063/1.431510
+# D79 | Darensbourg and Incorvia, Inorg. Chem. 18 (1979), 18-22; doi:10.1021/ic50191a004
 # C91 | Christe et al., J. Am. Chem. Soc. 113 (1991), 3351-3361; doi:10.1021/ja00009a021
 # M93 | Mercier et al., Inorg. Chem. 32 (1993), 386-393; doi:10.1021/ic00056a009
 # B00 | Baran, J. Fluorine Chem. 101 (2000), 61-63; doi:10.1016/S0022-1139(99)00194-3
@@ -13,17 +14,42 @@
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
 # G10 | Grant et al., Inorg. Chem. 49 (2010), 261-270; doi:10.1021/ic901956g
 # G16 | Goettel et al., Angew. Chem. Int. Ed. 55 (2016), 13780-13783; doi:10.1002/anie.201607583
+# C68 | Christe and Sawodny, Z. Anorg. Allg. Chem. 357 (1968), 125-133; doi:10.1002/zaac.19683570303
+# C72D | Christe and Curtis, Inorg. Chem. 11 (1972), 35-39; doi:10.1021/ic50107a009
+# CN73 | Christe and Naumann, Inorg. Chem. 12 (1973), 59-62; doi:10.1021/ic50119a016
+# C73 | Christe, Wilson and Curtis, Inorg. Chem. 12 (1973), 1358-1362; doi:10.1021/ic50124a029
+# Sh73 | Shaw, Carroll and Thomas, J. Am. Chem. Soc. 95 (1973), 5870-5875; doi:10.1021/ja00799a006
+# GS76 | Gillespie and Spekkens, J. Chem. Soc., Dalton Trans. (1976), 2391-2396; doi:10.1039/DT9760002391
+# C78 | Christe, Curtis and Bougon, Inorg. Chem. 17 (1978), 1533-1539; doi:10.1021/ic50184a029
+# C78T | Christe et al., Inorg. Chem. 17 (1978), 533-538; doi:10.1021/ic50181a003
+# C81 | Christe, Wilson and Schack, Inorg. Chem. 20 (1981), 2104-2114; doi:10.1021/ic50221a034
+# OC82 | Oberhammer and Christe, Inorg. Chem. 21 (1982), 273-275; doi:10.1021/ic00131a050
+# C93A | Christe et al., J. Am. Chem. Soc. 115 (1993), 2696-2706; doi:10.1021/ja00060a019
+# Li96 | Li, Irle and Schwarz, Inorg. Chem. 35 (1996), 100-109; doi:10.1021/ic950305s
+# L97 | Landrum, Goldberg and Hoffmann, J. Chem. Soc., Dalton Trans. (1997), 3605-3613; doi:10.1039/A703736H
+# C01 | Christe et al., J. Am. Chem. Soc. 123 (2001), 6338-6348; doi:10.1021/ja003347a
+# Le04 | Lehmann et al., Inorg. Chem. 43 (2004), 6905-6921; doi:10.1021/ic040015o
+# D08 | Dixon et al., Inorg. Chem. 47 (2008), 5485-5494; doi:10.1021/ic800021h
+# S20 | Scheibe et al., Eur. J. Inorg. Chem. (2020), 4483-4496; doi:10.1002/ejic.202000845
+# R20 | Reiersolmoen et al., Chem. Sci. 11 (2020), 7979-7990; doi:10.1039/D0SC02076A
+# M16 | Malinowski, Himmel and Krossing, Angew. Chem. Int. Ed. 55 (2016), 9262-9266; doi:10.1002/anie.201603913
+# BW54 | Boswijk and Wiebenga, Acta Cryst. 7 (1954), 417-423; doi:10.1107/S0365110X54001260
 
 [H]
 0 = [
-    "H #v", # HX, H2
-    "H #u", # H atom, s1
+    "H #v", # HX, H2; HW I, pp. 289, 311
+    "H #h", # H2; HW I, pp. 287-290
+    "H #m", # B2H6 bridge; HW I, pp. 311, 1236; assignment: PW
+    "H #u", # H atom, s1; HW I, pp. 295-298
 ]
 1 = [
-    "H #c+", # H+
+    "H #c+",     # H+; HW I, p. 290
+    "H #c+ #m0", # HF2-, H3+; HW I, pp. 174-176, 290; assignment: PW
 ]
 -1 = [
-    "H #c- #n", # H-
+    "H #c- #n",  # H-, ionic hydrides; HW I, pp. 290, 306-308
+    "H #c- #d",  # [RhH(NH3)5]2+; HW II, pp. 2068, 2071
+    "H #c- #m2", # [HCr2(CO)10]-; HW II, pp. 2069-2071; D79; assignment: PW
 ]
 
 [He]
@@ -59,6 +85,7 @@
     "B #u1 #h2",    # BH2
     "B #n1 #v",     # BX, BH, BF
     "B #n1 #u",     # B atom, s2p1
+    "B #v2 #m",     # B2H6; HW I, pp. 311, 1236; assignment: PW
     "B #v3 #a0",    # neutral aromatic B with substituent: borepin BR, boroxine BR3, 1-substituted 1,2-azaborine
     "B #v2 #a0 #h", # neutral aromatic B with H: borazine BH, 1,2-azaborine BH, borepin BH
 ]
@@ -113,6 +140,7 @@
 ]
 -1 = [
     "C #c- #n #v3",     # [CX3]-, CN-
+    "C #c- #v3 #d",     # CO donor in [HCr2(CO)10]-; D79; assignment: PW
     "C #c- #n #v2 #h",  # CX2H-
     "C #c- #n #v #h2",  # [XCH2]-
     "C #c- #n #h3",     # [CH3]-
@@ -130,6 +158,7 @@
     "N #v3 #a2",     # C4H4NX, C4H4NH
     "N #v2 #a2 #h",  # C4H4NH
     "N #v3 #d",      # N dative bond; HW I, p. 470
+    "N #v2 #a #m2",  # [X(py)2]+ (X = Br, I); R20, pp. 7983-7986; assignment: PW
     "N #u #v2 #a2",  # pyrrolyl radical
     "N #n #u #v2",   # NX2, NH2, NO
     "N #n #u #v #h", # NXH
@@ -193,13 +222,23 @@
 
 [F]
 0 = [
-    "F #n3 #v", # F2, HF, FX
+    "F #n3 #v", # F2, HF, ClF; HW I, pp. 477, 497, 506
     "F #n3 #m", # multicenter F in XeF2, KrF2; HW I, pp. 465, 469
-    "F #n3 #h", # HF
-    "F #n3 #u", # F atom, s2p5
+    "F #n3 #h", # HF; HW I, p. 497
+    "F #n3 #u", # F atom, s2p5; HW I, pp. 530-531
+]
+1 = [
+    "F #c+ #n2 #v2",   # H2F+; HW I, pp. 498-499
+    "F #c+ #n2 #v #h", # H2F+; HW I, pp. 498-499
+    "F #c+ #n2 #h2",   # H2F+; HW I, pp. 498-499
 ]
 -1 = [
-    "F #c- #n4",     # F-
+    "F #c- #n4",     # F-; HW I, pp. 493, 498
+    "F #c- #n3 #m2", # HF2-; HW I, pp. 174-176, 498; assignment: PW
+    "F #c- #n2 #m4", # H2F3-; HW I, pp. 174-176, 498; assignment: PW
+    "F #c- #n #m6",  # H3F4-; HW I, pp. 174-176, 498; assignment: PW
+    "F #c- #m8",     # H4F5-; HW I, pp. 174-176, 498; assignment: PW
+    "F #c- #n3 #d",  # terminal fluorido ligand; HW I, p. 499
     "F #c- #n2 #d2", # bridging F- in [Xe2F11]+; HW I, p. 468; assignment: PW
 ]
 
@@ -314,21 +353,37 @@
 
 [Cl]
 0 = [
-    "Cl #n3 #v",     # ClH, ClX, HOCl
-    "Cl #n3 #h",     # ClH
-    "Cl #n2 #v3",    # ClF3, HOClO
-    "Cl #n1 #u #v4", # ClO2
-    "Cl #n1 #v5",    # ClF5, HOClO2
-    "Cl #u1 #v6",    # ClO3
-    "Cl #v7",        # HOClO3
-    "Cl #n3 #u1",    # Cl atom, s2p5
+    "Cl #n3 #v",     # Cl2, HCl, HOCl; HW I, pp. 501, 506, 512-513
+    "Cl #n3 #h",     # HCl; HW I, p. 501
+    "Cl #n2 #v3",    # HOClO; HW I, pp. 512-513
+    "Cl #n1 #u #v4", # ClO2; HW I, pp. 531, 536-538
+    "Cl #n1 #v5",    # HOClO2; HW I, pp. 512-513
+    "Cl #u1 #v6",    # ClO3; HW I, pp. 531, 539
+    "Cl #v7",        # HOClO3, ClO2F3; HW I, pp. 512-513, 545-546; assignment: PW
+    "Cl #n3 #u1",    # Cl atom, s2p5; HW I, pp. 530-531
+    "Cl #n2 #u #v2", # ClO; HW I, pp. 530-531
+    "Cl #n3 #m",     # terminal Cl in Cl3-, BrCl2-, ICl2-; HW I, pp. 493-494, 510-511; L97
+    "Cl #n2 #v #m2", # ClF3; HW I, pp. 508-509; Sh73, pp. 5873-5875
+    "Cl #n #v #m4",  # ClF5; HW I, pp. 508-509; C68, pp. 132-133
+    "Cl #n #v3 #m2", # ClOF3; HW I, pp. 544-545; OC82, p. 275
 ]
 1 = [
-    "Cl #c+ #n3",     # Cl+
-    "Cl #c+ #n2 #v2", # Cl-Cl(+)-Cl (DOI: 10.1021/ic950305s)
+    "Cl #c+ #n3",        # Cl+ mechanism fragment; assignment: PW
+    "Cl #c+ #n2 #v2",    # Cl3+, ClF2+; HW I, pp. 492, 510-511; Li96; S20, p. 4493
+    "Cl #c+ #n #v4",     # ClO2+; HW I, p. 540
+    "Cl #c+ #v6",        # ClF6+, ClO2F2+; HW I, pp. 510, 545; Le04, pp. 6917-6919; C73, p. 1362
+    "Cl #c+ #n #v2 #m2", # ClF4+; HW I, pp. 510-511; C01, p. 6347
 ]
 -1 = [
-    "Cl #c- #n4", # Cl-
+    "Cl #c- #n4",        # Cl-; HW I, pp. 493, 502
+    "Cl #c- #n3 #m2",    # Cl3-, ClF2-; HW I, pp. 493-494, 510-511; L97; assignment: PW
+    "Cl #c- #n2 #m4",    # ClF4-; HW I, pp. 510-511; C68, pp. 132-133
+    "Cl #c- #n #m6",     # ClF6-; HW I, p. 498; D08, pp. 5486-5488; assignment: PW
+    "Cl #c- #n #v4 #m2", # ClO2F2-; HW I, p. 545; C72D, pp. 38-39
+    "Cl #c- #n #v2 #m4", # ClOF4-; HW I, p. 545; C78T, pp. 537-538; assignment: PW
+    "Cl #c- #n3 #d",     # terminal chlorido ligand; HW I, p. 499
+    "Cl #c- #n2 #d2",    # doubly bridging chlorido ligand; HW I, p. 499
+    "Cl #c- #n #d3",     # Te4Cl16 bridges; HW I, pp. 499, 711
 ]
 
 [Ar]
@@ -385,7 +440,8 @@
 
 [Cr]
 0 = [
-    "Cr #u6", # Cr atom, s1d5
+    "Cr #u6",         # Cr atom, s1d5
+    "Cr #n3 #t5 #m0", # [HCr2(CO)10]-; HW II, p. 2069; D79; assignment: PW
 ]
 2 = [
     "Cr #c+2 #u4",    # Cr2+, d4 high-spin
@@ -551,19 +607,37 @@
 
 [Br]
 0 = [
-    "Br #n3 #v",  # Br2, HBr, BrX, HOBr
-    "Br #n3 #h",  # BrH
-    "Br #n2 #v3", # BrF3, HOBrO
-    "Br #n #v5",  # BrF5, HOBrO2
-    "Br #v7",     # HOBrO3
-    "Br #n3 #u",  # Br atom, s2p5
+    "Br #n3 #v",     # Br2, HBr, BrCl, HOBr; HW I, pp. 503, 506, 512-513
+    "Br #n3 #h",     # HBr; HW I, p. 503
+    "Br #n2 #v3",    # HOBrO; HW I, pp. 512-513
+    "Br #n #v5",     # HOBrO2; HW I, pp. 512-513
+    "Br #v7",        # HOBrO3; HW I, pp. 512-513
+    "Br #n3 #u",     # Br atom, s2p5; HW I, pp. 530-531
+    "Br #n2 #u #v2", # BrO; HW I, pp. 530-531
+    "Br #n #u #v4",  # BrO2; HW I, p. 531
+    "Br #u #v6",     # BrO3; HW I, p. 531
+    "Br #n3 #m",     # terminal Br in Br3-, IBr2-; HW I, pp. 493-494, 510-511; L97
+    "Br #n2 #v #m2", # BrF3; HW I, pp. 508-509; assignment: PW
+    "Br #n #v #m4",  # BrF5; HW I, pp. 508-509; assignment: PW
+    "Br #n #v3 #m2", # BrOF3; HW I, pp. 544-545; C78, pp. 1537-1538
+    "Br #n3 #v #t",  # Br2 acceptor in Br5-; HW I, pp. 493-494
 ]
 1 = [
-    "Br #c+ #n3",     # Br+
-    "Br #c+ #n2 #v2", # Br-Br(+)-Br, X-Br(+)-X  (DOI: 10.1021/ic950305s)
+    "Br #c+ #n3",        # Br+ mechanism fragment; assignment: PW
+    "Br #c+ #n2 #v2",    # Br3+, BrF2+; HW I, pp. 492, 510-511; Li96
+    "Br #c+ #v6",        # BrF6+; HW I, pp. 510-511; Le04, pp. 6917-6919
+    "Br #c+ #n #v2 #m2", # BrF4+; HW I, pp. 510-511; C01, p. 6347
+    "Br #c+ #n3 #m0",    # [Br(py)2]+; HW I, p. 492; R20, pp. 7984-7986; assignment: PW
 ]
 -1 = [
-    "Br #c- #n4", # Br-
+    "Br #c- #n4",        # Br-; HW I, pp. 493, 502
+    "Br #c- #n3 #m2",    # Br3-, BrF2-, BrCl2-; HW I, pp. 493-494, 510-511; L97; assignment: PW
+    "Br #c- #n2 #m4",    # BrF4- (BrCl4-: PW); HW I, pp. 510-511; CN73, pp. 61-62
+    "Br #c- #n #m6",     # BrF6-; HW I, pp. 510-511; D08, pp. 5486-5488; assignment: PW
+    "Br #c- #n #v4 #m2", # BrO2F2-; HW I, p. 545; GS76, p. 2393; assignment: PW
+    "Br #c- #n #v2 #m4", # BrOF4-; HW I, p. 545; C78T, pp. 537-538; assignment: PW
+    "Br #c- #n3 #d",     # terminal bromido ligand; HW I, p. 499
+    "Br #c- #n2 #d2",    # doubly bridging bromido ligand; HW I, p. 499
 ]
 
 [Kr]
@@ -652,7 +726,8 @@
     "Rh #c+2 #n3 #u", # Rh2+, d7 low-spin
 ]
 3 = [
-    "Rh #c+3 #n3", # Rh3+, d6 low-spin
+    "Rh #c+3 #n3",     # Rh3+, d6 low-spin
+    "Rh #c+3 #n3 #t6", # [RhH(NH3)5]2+; HW II, pp. 2068, 2071; assignment: PW
 ]
 
 [Pd]
@@ -668,7 +743,8 @@
     "Ag #n5 #u", # Ag atom, s1d10
 ]
 1 = [
-    "Ag #c+ #n5", # Ag+, d10
+    "Ag #c+ #n5",     # Ag+, d10
+    "Ag #c+ #n5 #t3", # [Ag2(I2)4]2+; M16, pp. 9263-9264, Fig. 1
 ]
 2 = [
     "Ag #c+2 #n4 #u", # Ag2+, d9
@@ -726,7 +802,8 @@
     "Te #c- #n3 #v", # TeX-
 ]
 1 = [
-    "Te #c+ #n #v3", # [TeX3]+
+    "Te #c+ #n #v3",     # [TeX3]+
+    "Te #c+ #n #v3 #t3", # Te4Cl16; HW I, p. 711
 ]
 -2 = [
     "Te #c-2 #n4", # Te2-
@@ -734,19 +811,41 @@
 
 [I]
 0 = [
-    "I #n3 #v",  # I2, IX, IH, HOI
-    "I #n3 #h",  # IH
-    "I #n2 #v3", # IF3, HOIO
-    "I #n #v5",  # IF5, HOIO2
-    "I #v7",     # IF7, HOIO3
-    "I #n3 #u",  # I atom, s2p5
+    "I #n3 #v",     # I2, ICl, HI, HOI; HW I, pp. 505-506, 512-513
+    "I #n3 #h",     # HI; HW I, p. 505
+    "I #n2 #v3",    # HOIO; HW I, pp. 512-513
+    "I #n #v5",     # HOIO2; HW I, pp. 512-513
+    "I #v7",        # IF7, HOIO3, IOF5, IO2F3; HW I, pp. 508-509, 527-528, 546; Le04; assignment: PW
+    "I #n3 #u",     # I atom, s2p5; HW I, pp. 530-531
+    "I #n2 #u #v2", # IO; HW I, pp. 530-531
+    "I #n #u #v4",  # IO2; HW I, p. 531
+    "I #u #v6",     # IO3; HW I, p. 531
+    "I #n3 #m",     # terminal I in I3-; HW I, pp. 493-494, 510-511; L97
+    "I #n2 #v #m2", # IF3; HW I, pp. 508-509; assignment: PW
+    "I #n #v #m4",  # IF5; HW I, pp. 508-509; C93A, pp. 2705-2706
+    "I #n #v3 #m2", # IOF3; HW I, p. 545; assignment: PW
+    "I #n3 #v #t",  # Me3N->I2; HW I, pp. 494-495
+    "I #n2 #v #d",  # I2 ligand; HW I, p. 489; M16, pp. 9263-9264
 ]
 1 = [
-    "I #c+ #n3",     # I+
-    "I #c+ #n2 #v2", # I-I(+)-I, X-I(+)-X  (DOI: 10.1021/ic950305s)
+    "I #c+ #n3",         # I+ mechanism fragment; assignment: PW
+    "I #c+ #n2 #v2",     # I3+, IF2+; HW I, pp. 491-492, 510-511; Li96
+    "I #c+ #n #v4",      # IO2+ unit; HW I, p. 545
+    "I #c+ #v6",         # IF6+, I(OH)6+; HW I, pp. 510-511, 528; Le04, pp. 6917-6919
+    "I #c+ #n #v2 #m2",  # IF4+; HW I, pp. 510-511; C01, p. 6347
+    "I #c+ #n3 #m0",     # [I(py)2]+; HW I, p. 491; R20, pp. 7984-7986; assignment: PW
+    "I #c+ #n2 #v2 #t2", # I2Cl6; HW I, pp. 508-509; BW54, pp. 421-423; assignment: PW
 ]
 -1 = [
-    "I #c- #n4", # I-
+    "I #c- #n4",        # I-; HW I, pp. 493, 505
+    "I #c- #n #v6",     # IO3-, H2IO4-; HW I, p. 527; charge on I: PW
+    "I #c- #v8",        # IO4-, IF8-, IOF6-, IO2F4-; HW I, pp. 510-511, 527-528, 546; C81, p. 2109; assignment: PW
+    "I #c- #n3 #m2",    # I3-, IF2-, ICl2-, IBr2-; HW I, pp. 493-494, 510-511; L97; assignment: PW
+    "I #c- #n2 #m4",    # IF4- (ICl4-/IBr4-: PW); HW I, pp. 510-511; CN73, pp. 61-62
+    "I #c- #n #m6",     # IF6-; HW I, pp. 510-511; D08, pp. 5487-5488; assignment: PW
+    "I #c- #n #v2 #m4", # IOF4-; HW I, p. 545; C93A, pp. 2705-2706
+    "I #c- #n3 #d",     # terminal iodido ligand; HW I, p. 499
+    "I #c- #n2 #d2",    # doubly bridging iodido ligand; HW I, p. 499
 ]
 
 [Xe]
@@ -762,6 +861,7 @@
     "Xe #v6 #m2",          # XeO3F2; HW I, p. 471; W75, p. 1477; assignment: PW
     "Xe #v4 #m4",          # XeO2F4 (mass spectrometry); HW I, pp. 465, 471; assignment: PW
     "Xe #n #v6 #t",        # MeCN->XeO3; HW I, p. 470; G16, pp. 13780-13782
+    "Xe #n #v2 #t #m4",    # [F(XeOF4)3]-; HW I, pp. 471, 499; W75, p. 1477
     "Xe #n4",              # Xe atom, s2p6; HW I, p. 461
 ]
 1 = [
@@ -1042,8 +1142,21 @@
 
 [At]
 0 = [
-    "At #n3 #v", # At2
-    "At #n3 #u", # At atom, s2p5
+    "At #n3 #v",  # AtBr, AtI; HW I, p. 506
+    "At #n3 #u",  # At atom, s2p5; HW I, pp. 530-531
+    "At #n3 #h",  # HAt; HW I, p. 502
+    "At #n2 #v3", # HAtO2; HW I, pp. 512-513
+    "At #n #v5",  # HAtO3; HW I, pp. 512-513
+    "At #v7",     # HAtO4; HW I, pp. 512-513
+]
+1 = [
+    "At #c+ #n3", # At+; HW I, pp. 490, 492, 499
+]
+-1 = [
+    "At #c- #n4",     # astatides; HW I, pp. 490, 492, 499
+    "At #c- #n #v6",  # AtO3-; HW I, pp. 512-513; assignment: PW
+    "At #c- #v8",     # AtO4-; HW I, pp. 512-513; assignment: PW
+    "At #c- #n3 #m2", # AtBr2-, AtI2-; HW I, pp. 510-511; assignment: PW
 ]
 
 [Rn]

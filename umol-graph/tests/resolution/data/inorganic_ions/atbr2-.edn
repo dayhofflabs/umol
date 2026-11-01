@@ -1,0 +1,5 @@
+; HW I, pp. 510-511; selected trihalide analogy.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["At#c-" "Br" "Br"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}]}}

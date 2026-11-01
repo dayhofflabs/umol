@@ -1,6 +1,5 @@
 ; HW I, p. 471; Brock et al. (2010), doi:10.1021/ja103730c (structure).
 ; Selected Xe#c-#n2#v2#m3 description: Xe=O and a four-center/six-electron XeF3 unit.
-; Counts is outside its supported bonding scope.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
  :input {:atoms ["Xe#c-" "O" "F" "F" "F"]
          :bonds [[0 1 :double]]

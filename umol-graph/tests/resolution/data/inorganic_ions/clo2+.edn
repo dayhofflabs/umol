@@ -1,0 +1,4 @@
+; XO2+; HW I, pp. 540, 543, 545.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cl#c+" "O" "O"]
+         :bonds [[0 1 :double] [0 2 :double]]}}

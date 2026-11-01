@@ -1,3 +1,6 @@
+; HW I, pp. 508-509; doi:10.1021/ja00060a019, pp. 2705-2706.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
  :input {:atoms ["I" "F" "F" "F" "F" "F"]
-         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single] [0 5 :single]]}}
+         :bonds [[0 1 :single]]
+         :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}]}}

@@ -1,6 +1,5 @@
 ; HW I, p. 471; Baran (2000), doi:10.1016/S0022-1139(99)00194-3.
 ; Xe#c-#n#v2#m5: Xe=O and a six-center/ten-electron XeF5 unit.
-; Counts is outside its supported bonding scope.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
  :input {:atoms ["Xe#c-" "O" "F" "F" "F" "F" "F"]
          :bonds [[0 1 :double]]

@@ -1,0 +1,9 @@
+; I2Cl6 dimer; HW I, pp. 508-509; Boswijk and Wiebenga (1954), doi:10.1107/S0365110X54001260, pp. 421-423.
+; Two ICl2+ cores joined by two doubly donating Cl- bridges; adopted halide-donor convention.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I#c+" "I#c+" "Cl#c-" "Cl#c-" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 4 :single] [0 5 :single] [1 6 :single] [1 7 :single]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 1 :attrs "1"}]}}

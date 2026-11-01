@@ -1,0 +1,5 @@
+; Trihalide; HW I, pp. 493-494, 510-511; doi:10.1039/A703736H; selected [1,2,1] contributions.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I#c-" "I" "I"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}]}}

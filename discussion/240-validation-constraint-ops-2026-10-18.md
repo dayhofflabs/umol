@@ -7,7 +7,8 @@ Relates: [166](166-molecule-ops-2026-07-27.md),
 [195](195-molecule-constraint-matching-2026-08-12.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
 [237](237-release-0-10-scope-2026-10-15.md),
-[242](242-stereo-transformers-2026-10-29.md)
+[242](242-stereo-transformers-2026-10-29.md),
+[056](056-default-registry-2026-03-07.md)
 
 ## Scope
 
@@ -19,6 +20,9 @@ construction is implemented; the remaining validation and constraint work is
 outstanding.
 S15a, the counts-resolver valence-capacity correction, remains in doc 166 and
 in scope for 0.10.
+
+This record also tracks the proposed Counts electron-accounting correction
+identified during the hydrogen registry work in doc 056.
 
 The relocation and discharge contracts below carry forward the agreed design.
 S13a records the rejected grouping and the replacement proposal separately.
@@ -48,6 +52,38 @@ There is no corresponding upper bound of four for dative orders. Extending
 ValenceInvariantsValidator would also affect the composite Validator that uses
 it; the former promise of unchanged composite behavior cannot be carried over
 to that proposal without review.
+
+## Counts electron accounting
+
+Proposed work item, added 2026-10-31; implementation has not started.
+
+The [hydrogen fixtures in 056](056-default-registry-2026-03-07.md#conformance-coverage)
+supply explicit dative orders and multicenter electron contributions. Counts nevertheless
+assigns #n1 to the bridging H− and each CO carbon in [HCr2(CO)10]−, where the supplied
+contributions require #n0. This is an accounting omission, not missing input data.
+
+[ValenceInvariants](../umol-graph/src/ops/invariant.rs) already includes donated pairs
+and multicenter contributions in its conservation equation. Counts does not call it;
+[CountsValence](../umol-graph/src/ops/valence/counts.rs) independently derives the
+nonbonding budget in candidate_states and infer_implicit_hydrogens. Both omit those
+terms. The separation is recorded in [099](099-counts-as-invariants-2026-05-23.md).
+
+- Align both Counts paths with the existing conservation equation:
+  `2*n + u = valence_electrons - charge - v - h - a - m - 2*d`, where d counts
+  donated pairs and m counts contributed multicenter electrons. Preserve the
+  table-driven candidate selection and accepted-pair accounting.
+- Read supplied contributions consistently with atom constraints and relation evidence.
+  Preserve underdetermination when required contributions remain unknown; a multi-donor
+  bond's total order alone does not specify each donor's contribution.
+- Cover admission, classification and implicit-H inference, including known-zero,
+  supplied, unknown and contradictory contributions. Use the hydrogen fixtures and
+  affected noble-gas cases; check corrected determined assignments independently with
+  ValenceInvariantsValidator and review the changed conformance expectations under both
+  Strict and MostSaturated.
+
+The implementation must reconcile the two accounting paths; changing only
+ValenceInvariants would leave the current Counts calculation untouched. Sharing the
+equation does not require adopting ValenceInvariants::enumerate_atom's broader search.
 
 ## Stereo-ligand validator API
 
@@ -786,6 +822,8 @@ subitems are required.
 
 ## Completion criteria
 
+- Counts accounts for supplied donated pairs and multicenter contributions in both
+  candidate generation and implicit-H inference, with the regression coverage above.
 - S13a's replacement is agreed, implemented, and verified against its explicit
   predicates without integer-width checks.
 - The standalone stereo-ligand validator checks ligand lists against actual

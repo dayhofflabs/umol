@@ -1,0 +1,4 @@
+; H2IO4-; HW I, p. 527.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I#c-" "O" "O" "O#h" "O#h"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :single] [0 4 :single]]}}

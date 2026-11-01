@@ -2,13 +2,14 @@
 
 Status: In Progress
 Date: 2026-03-07
-Relates: [217](217-rhea-participant-failures-2026-08-30.md)
+Relates: [217](217-rhea-participant-failures-2026-08-30.md),
+[240](240-validation-constraint-ops-2026-10-18.md)
 
-The [HW extraction](#hw-extraction-spike-2026-10-31) records noble-gas evidence and
-halogen candidates. The noble-gas audit covers earlier and newly added entries;
-the supplied primary-paper PDFs have been reviewed. The noble-gas review and
-selections are complete. Halogen implementation is paused while overlapping
-representations are clarified.
+The [HW extraction](#hw-extraction-spike-2026-10-31) records hydrogen selections,
+noble-gas evidence and halogen candidates. The noble-gas audit covers earlier and
+newly added entries; the supplied primary-paper PDFs have been reviewed. The selected
+hydrogen, noble-gas and halogen passes are complete. Unselected halogen candidates
+remain in the extraction table.
 The March planning and implementation notes below are historical; later updates to
 the tracking table are dated.
 
@@ -17,35 +18,49 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 
 ## Project Status (2026-10-31)
 
-**Last implementation check: 711 conformance cases and 366 valence unit tests passed.**
+**Last implementation check: 793 conformance cases and 3516 graph unit tests passed.**
 Each EDN input runs through AtomTyping and Counts with both Strict and MostSaturated policies. The selected
 noble-gas HW additions and six xenon-anion replacements are implemented. Perxenate
 uses Xe#v8 as an accepted assumption. All Rn compound entries, neutral Xe#m8
 and the XeO4 adduct entries/fixtures are removed; MeCN→XeO3 uses only the Xe=O description.
 Registry references are complete for this slice: HW, selected primary sources and PW assignment markers.
-All 33 retained noble-gas states and the three F/N companion states have conformance coverage.
-Overlapping halogen descriptions need clarification before implementation.
+All 34 retained noble-gas states and the original three F/N companion states have conformance coverage.
+Hydrogen H05–H09 and the B/C/F/Cr/Rh companions are implemented, with seven new fixtures;
+all nine current H states have coverage, including H#c+#m0 in HF2−/H3+ and
+H#c-#m2 in [HCr2(CO)10]−. The accepted halogen additions contribute 58 states,
+60 new fixtures and two revised fixtures (ClF3 and IF5). All 58 added states have
+conformance coverage, including the six oxyfluoride cases in five valence graphs
+and H2F3−, branched H3F4− and H4F5− under the selected shared-proton convention.
+The donor–acceptor pass retains 18 states and twelve fixtures covering 17 of them;
+the XeOF4 acceptor companion has no remaining fixture. Terminal F−/Cl−/Br−/I−
+donors are general ligand states, tested with Rh(III) complexes using the existing Rh state.
+Terminal At− donors, [At(py)2]+ and HIO3·DMSO are not selected for the default.
+The retained Cl+/Br+/I+ mechanism states have three new atomic-ion fixtures.
+Further extracted candidates are recorded below.
+The [citation and default-scope audit](#whole-registry-audit-2026-10-31) reviewed
+all 112 halogen states, including 37 pre-existing entries. F#c-#n#d3 and
+Cl#c+#n3#m0 are removed for now, leaving 110 states.
 
 ### Conformance suite breakdown
 
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 127 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 17 | Hydrides with implicit H, plus explicit H₂ |
-| `inorganic_small/` | 75 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 42 | Inorganic ions |
-| `donor_acceptor/` | 4 | Donor–acceptor adducts with dative bonds |
+| `atomic_ions/` | 133 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 19 | Hydrides with implicit H, plus explicit H₂ |
+| `inorganic_small/` | 83 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 79 | Inorganic ions |
+| `donor_acceptor/` | 18 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrocarbons/` | 53 | C/H compounds |
 | `functional_groups/` | 73 | Organic heteroatom groups (halides, amines, etc.) |
 | `carbonyl_derivatives/` | 62 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
 | `aromatic/` | 34 | Aromatic carbocycles, heterocycles and ions |
-| `hypervalent/` | 20 | Expanded-octet species (S, P, Cl, I) |
+| `hypervalent/` | 35 | Expanded-octet and multicenter species (S, P, Cl, Br, I, At) |
 | `transition_metals/` | 7 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **711** | |
+| **Total** | **793** | |
 
 ## March 2026 record
 
@@ -72,7 +87,7 @@ Overlapping halogen descriptions need clarification before implementation.
 
 ## Tracking Table
 
-Noble-gas and F/N companion rows updated 2026-10-31; other rows retain the March record.
+Hydrogen, noble-gas, halogen and companion rows updated 2026-10-31; other rows retain the March record.
 
 Status values:
 
@@ -83,15 +98,15 @@ Status values:
 
 | Element | Ground state | Discrete ions | Typical valences | Conformance added | Status | Notes |
 |---|---|---|---|---|---|---|
-| H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `atomic_ions/h+1.toml`, hydrides) | done |  |
+| H | yes | yes (+1, −1) | yes (selected) | yes (all nine states; see [hydrogen fixtures](#conformance-coverage)) | done | H05–H09 implemented; selected hydrogen scope complete |
 | He | yes | no | n/a | yes (`atoms/he.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `atomic_ions/li+1.toml`) | done |  |
 | Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `atomic_ions/be+2.toml`) | done |  |
-| B | yes | no | no | yes (`atoms/b.toml`) | done |  |
-| C | yes | no | no | yes (`atoms/c.toml`) | done |  |
-| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/mecn-xeo3.edn`) | done | Noble-gas companion addition: N#v3#d |
+| B | yes | no | partial | yes (`atoms/b.edn`, `hydrides/bh3.edn`, `inorganic_small/b2h6.edn`) | done | Hydrogen companion addition: B#v2#m |
+| C | yes | no | partial | yes (`atoms/c.edn`, `donor_acceptor/hcr2-co10-.edn`) | done | Hydrogen companion addition: C#c-#v3#d |
+| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`) | done | Companion additions: N#v3#d and N#v2#a#m2 |
 | O | yes | yes (-2) | no | yes (`atoms/o.toml`, `atomic_ions/o-2.toml`) | done |  |
-| F | yes | yes (-1) | partial | yes (`atoms/f.edn`, `atomic_ions/f-.edn`, hydrides, `inorganic_small/xef2.edn`, `donor_acceptor/xe2f11+.edn`) | done | Noble-gas companion additions: F#n3#m and F#c-#n2#d2; halogen review remains open |
+| F | yes | yes (-1) | partial | yes (selected HW states) | done | Selected halogen scope complete; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `atomic_ions/na+1.toml`) | done |  |
 | Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `atomic_ions/mg+2.toml`) | done |  |
@@ -99,14 +114,14 @@ Status values:
 | Si | yes | no | no | yes (`atoms/si.toml`) | done |  |
 | P | yes | yes (-3) | no | yes (`atoms/p.toml`, `atomic_ions/p-3.toml`) | done |  |
 | S | yes | yes (-2) | no | yes (`atoms/s.toml`, `atomic_ions/s-2.toml`) | done |  |
-| Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `atomic_ions/cl-1.toml`) | done |  |
+| Cl | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 16 states added; terminal donor covered by [RhCl(NH3)5]2+ |
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
 | K | yes | yes (+1) | no | yes (`atoms/k.toml`, `atomic_ions/k+1.toml`) | done |  |
 | Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `atomic_ions/ca+2.toml`) | done |  |
 | Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `atomic_ions/sc+3.toml`) | done |  |
 | Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `atomic_ions/ti+3.toml`, `atomic_ions/ti+4.toml`) | done |  |
 | V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `atomic_ions/v+2.toml`, `atomic_ions/v+3.toml`) | done |  |
-| Cr | yes | yes (+2,+3) | no | yes (`atoms/cr.toml`, `atomic_ions/cr+2.toml`, `atomic_ions/cr+3.toml`) | done |  |
+| Cr | yes | yes (+2,+3) | partial | yes (`atoms/cr.edn`, `atomic_ions/cr+2.edn`, `atomic_ions/cr+3.edn`, `donor_acceptor/hcr2-co10-.edn`) | done | Hydrogen companion addition: Cr#n3#t5#m0 |
 | Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `atomic_ions/mn+2.toml`, `atomic_ions/mn+3.toml`) | done |  |
 | Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `atomic_ions/fe+2.toml`, `atomic_ions/fe+3.toml`) | done |  |
 | Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `atomic_ions/co+2.toml`, `atomic_ions/co+3.toml`) | done |  |
@@ -117,7 +132,7 @@ Status values:
 | Ge | yes | no | no | yes (`atoms/ge.toml`) | done |  |
 | As | yes | yes (-3) | no | yes (`atoms/as.toml`, `atomic_ions/as-3.toml`) | done |  |
 | Se | yes | yes (-2) | no | yes (`atoms/se.toml`, `atomic_ions/se-2.toml`) | done |  |
-| Br | yes | yes (-1) | no | yes (`atoms/br.toml`, `atomic_ions/br-1.toml`, hydrides) | done |  |
+| Br | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 18 states added; terminal donor covered by [RhBr(NH3)5]2+ |
 | Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1) | no | yes (`atoms/rb.toml`, `atomic_ions/rb+1.toml`) | done |  |
 | Sr | yes | yes (+2) | no | yes (`atoms/sr.toml`, `atomic_ions/sr+2.toml`) | done |  |
@@ -127,23 +142,23 @@ Status values:
 | Mo | yes | yes (+2,+3) | no | yes (`atoms/mo.toml`, `atomic_ions/mo+2.toml`, `atomic_ions/mo+3.toml`) | done |  |
 | Tc | yes | no | no | yes (`atoms/tc.toml`) | done | No ion added in current scope |
 | Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `atomic_ions/ru+2.toml`, `atomic_ions/ru+3.toml`) | done |  |
-| Rh | yes | yes (+2,+3) | no | yes (`atoms/rh.toml`, `atomic_ions/rh+2.toml`, `atomic_ions/rh+3.toml`) | done |  |
+| Rh | yes | yes (+2,+3) | partial | yes (`atoms/rh.edn`, `atomic_ions/rh+2.edn`, `atomic_ions/rh+3.edn`, Rh–H donor fixture below) | done | Hydrogen companion addition: Rh#c+3#n3#t6 |
 | Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `atomic_ions/pd+2.toml`) | done |  |
-| Ag | yes | yes (+1,+2) | no | yes (`atoms/ag.toml`, `atomic_ions/ag+1.toml`, `atomic_ions/ag+2.toml`) | done |  |
+| Ag | yes | yes (+1,+2) | partial | yes (`atoms/ag.edn`, `atomic_ions/ag+1.edn`, `atomic_ions/ag+2.edn`, `donor_acceptor/ag2-i2-4-2+.edn`) | done | I2-ligand companion: Ag#c+#n5#t3 |
 | Cd | yes | yes (+2) | no | yes (`atoms/cd.toml`, `atomic_ions/cd+2.toml`) | done |  |
 | In | yes | yes (+3) | no | yes (`atoms/in.toml`, `atomic_ions/in+3.toml`) | done |  |
 | Sn | yes | no | no | yes (`atoms/sn.toml`) | done |  |
 | Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `atomic_ions/sb-3.toml`) | done |  |
-| Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `atomic_ions/te-2.toml`) | done |  |
-| I | yes | yes (-1) | no | yes (`atoms/i.toml`, `atomic_ions/i-1.toml`, hydrides) | done |   |
-| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | HW review complete; all 25 retained states covered; HW/primary/PW references added |
+| Te | yes | yes (-2) | partial | yes (`atoms/te.edn`, `atomic_ions/te-2.edn`, `donor_acceptor/te4cl16.edn`) | done | Halogen companion addition: Te#c+#n#v3#t3 |
+| I | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 22 states added; terminal donor covered by [RhI(NH3)5]2+ |
+| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | 25 of 26 retained states covered; Xe#n#v2#t#m4 loses its fixture with [F(XeOF4)3]− |
 | Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `atomic_ions/cs+1.toml`) | done |  |
 | Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `atomic_ions/ba+2.toml`) | done |  |
 | Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `atomic_ions/tl+1.toml`, `atomic_ions/tl+3.toml`) | done |  |
 | Pb | yes | yes (+2,+4) | no | yes (`atoms/pb.toml`, `atomic_ions/pb+2.toml`, `atomic_ions/pb+4.toml`) | done |  |
 | Bi | yes | yes (+3) | no | yes (`atoms/bi.toml`, `atomic_ions/bi+3.toml`) | done |  |
 | Po | yes | yes (-2) | no | yes (`atoms/po.toml`, `atomic_ions/po-2.toml`) | done |  |
-| At | yes | yes (-1) | no | yes (`atoms/at.toml`, `atomic_ions/at-1.toml`) | done |  |
+| At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
 | La | yes | yes (+3) | no | yes (`atoms/la.toml`, `atomic_ions/la+3.toml`) | done |  |
 | Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `atomic_ions/ce+3.toml`, `atomic_ions/ce+4.toml`) | done |  |
@@ -307,6 +322,93 @@ the top of the registry defines short keys; primary references supplement HW onl
 where they add information used in an assignment. PW means “Present work —
 calculations and adopted assignments,” marked as `assignment: PW` on the relevant
 examples. Methods, results and assumptions are recorded here.
+
+### Hydrogen
+
+Source: [HW 103, Band 1, chapter VIII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=320>),
+printed pp. 282–324, PDF pp. 320–362. The chapter's bonding cross-references were
+also followed: HW I, pp. 174–176, 179, 1236, and
+[HW II, pp. 2068–2073](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 2.pdf#page=572>).
+Page references below are printed pages. Atom descriptions use AtomTypeRegistry::raise_defaults.
+H01–H09 are implemented: the four earlier entries and five selected additions.
+The other extracted examples are accounted for below.
+
+#### Entries and selection status
+
+| ID | Atom description | Example / source evidence | HW | Registry status |
+| --- | --- | --- | --- | --- |
+| H01 | H#v | H2 and ordinary covalent E–H bonds; HW explicitly describes two-center/two-electron bonding | I 289, 311 | Present |
+| H02 | H#u | Atomic hydrogen | I 295–298 | Present |
+| H03 | H#c+ | Proton | I 290 | Present |
+| H04 | H#c-#n | Ionic hydrides: LiH, NaH, CaH2, etc. | I 290, 306–308 | Present; conformance gap filled |
+| H05 | H#h | H2 represented by one explicit H carrying one implicit H; distinct from H01 under the loading defaults | I 287–290 | Selected; implemented |
+| H06 | H#m | Neutral-H construction of the B–H–B bridges in B2H6; HW explicitly assigns three-center/two-electron bonds | I 179, 311, 1236 | Selected; implemented |
+| H07 | H#c-#d | Terminal hydride donor, e.g. [RhH(NH3)5]2+; HW explicitly describes coordination through the H− lone pair | II 2068, 2071 | Selected; implemented |
+| H08 | H#c+#m0 | Shared-proton construction of HF2− with two F#c-#n3#m2 partners, [2,0,2]; also H3+ with two H06 partners, [1,0,1] | I 174–176, 290–291, 311, 320 | Selected; implemented; charge placement is a constructed convention |
+| H09 | H#c-#m2 | [HCr2(CO)10]−: closed three-center/two-electron Cr–H–Cr bridge (D79, p. 19, Fig. 2), using the selected H− convention | II 2069–2071 | Selected; implemented |
+
+The atom strings are constructed from the source descriptions. H06 uses neutral B/H
+bookkeeping: the two B–H–B units can carry contributions [1,1,0] and [0,1,1],
+with the middle atom H. Each B then has two ordinary B–H bonds and total #m1.
+H09 uses contributions [0,2,0] for Cr–H–Cr. D79 includes the partial Cr–Cr
+bonding in this multicenter unit. The companion entries B#v2#m, Rh#c+3#n3#t6,
+F#c-#n3#m2, Cr#n3#t5#m0 and C#c-#v3#d are implemented for the fixtures below;
+the CO donors retain the C−/O+ triple-bond convention used for free CO.
+
+**D79:** Darensbourg and Incorvia, *Inorg. Chem.* **18** (1979), 18–22;
+[DOI](https://doi.org/10.1021/ic50191a004),
+[PDF](../materials/valence/Darensbourg-1979-bridging-carbonyl-hydrides.pdf#page=2).
+
+#### Registry and ValenceTable comparison
+
+Counts admits H01–H05 in direct atom-classification probes; the updated AtomTyping
+registry covers H01–H09. Counts rejects H06, H07 and H09 with their concrete zero-H,
+zero-lone-pair fields: its nonbonding budget does not subtract multicenter contributions
+or donated pairs. These are Counts accounting omissions despite supplied contributions;
+the correction is tracked in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting).
+The existing H target [1] already covers H05; no larger target is needed for H01–H05.
+H08 passes Counts classification as an individual atom. ValenceTable is unchanged.
+
+#### Other extracted examples
+
+| Example | H-state coverage / disposition | HW |
+| --- | --- | --- |
+| H(OH2)2+; H(NH3)2+; associated HF/H2O/NH3 | H08 covers the shared proton under the selected charge convention. Full encodings require companion-atom curation, rather than another H entry | I 174–176, 311 |
+| W(H2)(CO)3(PCy3)2 and other η2-H2 complexes | H06 supplies the neutral-H contribution to HW's three-center/two-electron σ unit. The remaining full-complex work concerns metal/ligand assignments | I 291, 303; II 2071–2073 |
+| H4Co4(C5H5)4; [H2Ru8(CO)21]2−; Mg2NiH4; HNb6I11; HRu6(CO)18 | H coordination numbers 3–6 do not themselves require further atom states. H09 covers a hydride contribution to a multicenter unit; individual metal/cluster assignments remain outside this hydrogen slice | I 303; II 2069–2070 |
+| HeH+, CH5+; H2+, H4+, Hn+ (n = 5–11, 13, 15) | Retained as extraction results. No further default H entry is proposed from these occurrence examples alone | I 290–291 |
+
+Metallic H and interstitial metal hydrides are described as extended phases; no discrete
+atom state was extracted from their stoichiometries (HW I 289, 308–309).
+H/D/T and ortho/para H2 introduce no additional electronic valence entries (I 298–302).
+
+#### Conformance coverage
+
+Existing cases cover atomic H, H+ and explicit H2. Seven fixtures now cover the additions
+and the earlier H− gap; their lone-pair/spin fields are left for resolution.
+
+| Added fixture | Coverage |
+| --- | --- |
+| [Implicit H2](../umol-graph/tests/resolution/data/hydrides/h2-implicit.edn) | H05 |
+| [H−](../umol-graph/tests/resolution/data/atomic_ions/h-.edn) | H04 |
+| [B2H6](../umol-graph/tests/resolution/data/inorganic_small/b2h6.edn) | H06 and B#v2#m; explicit terminal H, two three-center bridges |
+| [[RhH(NH3)5]2+](../umol-graph/tests/resolution/data/donor_acceptor/pentaamminehydridorhodium-2+.edn) | H07 and Rh#c+3#n3#t6; explicit N–H bonds reuse N#v3#d |
+| [HF2−](../umol-graph/tests/resolution/data/inorganic_ions/hf2-.edn) | H08 and F#c-#n3#m2; three-center/four-electron [2,0,2] |
+| [H3+](../umol-graph/tests/resolution/data/inorganic_ions/h3+.edn) | H06 and H08; three-center/two-electron [1,0,1] |
+| [[HCr2(CO)10]−](../umol-graph/tests/resolution/data/donor_acceptor/hcr2-co10-.edn) | H09, Cr#n3#t5#m0 and C#c-#v3#d; three-center/two-electron [0,2,0] |
+
+AtomTyping resolves all seven under Strict and MostSaturated. Counts agrees for H−
+and implicit H2; its snapshots assign extra unpaired electrons in B2H6/H3+ and
+extra lone pairs on F in HF2−, the H−/N donors in the Rh complex, and H−/CO
+donors in the Cr complex.
+
+**The current Counts result for [HCr2(CO)10]− is incorrect:** both policies assign
+#n1 to the bridging H− and each CO carbon, although the supplied contributions
+require #n0. The snapshot records this known bug; passing conformance does not
+establish correctness of that assignment. The fix is tracked in 240 above.
+
+Checks passed: **718 conformance cases and 3516 graph unit tests** (including the
+366 valence tests). The 711 earlier snapshots are unchanged.
 
 ### Noble Gases
 
@@ -560,113 +662,331 @@ ValenceTable is unchanged.
 ### Halogens
 
 Source: [HW 103, Band 1, chapter XII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=513>),
-printed pp. 475–552, PDF pp. 513–590. References below are printed HW I pages.
-Descriptions use AtomTypeRegistry::raise_defaults; the formulas are source examples,
-and the atom strings are constructed encodings. The user's L-table selections are
-recorded below; **implementation is paused for clarification of overlapping descriptions**.
-The M and D tables remain unreviewed except for the F entry in D04, now implemented
-for Xe2F11+ in the noble-gas slice.
+printed pp. 475–552, PDF pp. 513–590. HW references below are printed Band I pages.
+Atom descriptions use AtomTypeRegistry::raise_defaults. Charges and contributions
+are constructed assignments; X expands only over the elements named in its row.
 
-#### Existing coverage
+The registry currently has **110 halogen descriptions**: F 14, Cl 27, Br 27, I 31, At 11.
+Existing monovalent, atomic and halide entries supply the baseline (HW 477–506).
+The existing Cl/Br/I states X#n2#v3, X#n#v5 and X#v7 have independent oxoacid/oxide
+examples (HW 512–546); revising their fluoride examples need not remove these states.
+The existing X#c+#n2#v2 states cover XF2+; S20 directly supports localized ClF2+.
+The bare Cl+/Br+/I+ entries are retained for electrophilic halogenation mechanism
+representations; no bare F+ entry is selected.
 
-The registry has 37 halogen descriptions: F 6, Cl 11, Br 9, I 9, At 2.
+#### Whole-registry audit (2026-10-31)
 
-| Existing descriptions | Examples / source qualification | HW pages |
+All 112 entries were reviewed, including the 37 pre-existing entries. Binary molecules
+and simple ions remain in scope, including short-lived species. The pruning criterion
+is an extra atom state needed only for an obscure complex or complicated ion; a large
+example alone does not justify removing a state with simpler uses. Small oxyfluorides
+and their mononuclear ions remain included.
+
+AtomTyping scans the element/charge bucket; an unspecified charge uses all entries
+for that element. Current bucket sizes are:
+
+| Element | Charge 0 | Charge +1 | Charge −1 | Total |
+| --- | ---: | ---: | ---: | ---: |
+| F | 4 | 3 | 7 | 14 |
+| Cl | 13 | 5 | 9 | 27 |
+| Br | 14 | 5 | 8 | 27 |
+| I | 15 | 7 | 9 | 31 |
+| At | 6 | 1 | 4 | 11 |
+
+**Removed from the default for now:**
+
+| State | Reason for omission | Bucket reduction |
 | --- | --- | --- |
-| X#n3#v; X#n3#u (X = F, Cl, Br, I, At); X#n3#h (X = F, Cl, Br, I) | X2, HX, interhalogens, terminal halogens and free atoms; At chemistry rests on tracer experiments | 477, 483, 486, 489–490, 496–506 |
-| X#c-#n4 (X = F, Cl, Br, I) | Halide salts | 493, 498–505 |
-| X#c+#n3; X#c+#n2#v2 (X = Cl, Br, I) | Atomic cations; X3+ and XF2+ salts. HW distinguishes free gas-phase I+ from condensed-phase complexes | 491–492, 510 |
-| X#n2#v3; X#n#v5; X#v7 (X = Cl, Br, I) | XF3/XF5, IF7; oxoacids/oxoanions, oxides and fluoride oxides; I(OTeF5)3/5 | 508–510, 512–546 |
-| Cl#n#u#v4; Cl#u#v6 | ClO2; transient ClO3 | 531, 536–540 |
-| F#n3#m | Multicenter terminal F, added in the noble-gas slice | 465, 469 |
-| F#c-#n2#d2 | Bridging F− in Xe2F11+, added in the noble-gas slice; covers the F entry in D04 | 468 |
+| F#c-#n#d3 | Three donations from one fluoride; cited examples are [F(XeOF4)3]− and [F(SbF5)3]− (HW 499). This is a general μ3-fluoride role, but the current examples are complexes of three Lewis-acid units. Weaker default case than terminal or doubly bridging fluoride | F−: 8 → 7 |
+| Cl#c+#n3#m0 | Specialized bis(pyridine)chloronium coordination. R20 establishes the 3c4e interpretation; P23, pp. 2326–2327 supplies solid-state structures obtained at low temperature. Supported, but less broadly useful than the Br/I reagent families | Cl+: 6 → 5 |
 
-#### Descriptions and selection status
+All other states are retained under this criterion. In particular, Cl#c-#n#d3 covers
+the binary SeCl4/TeCl4 aggregates (HW 711), I#c+#n2#v2#t2 covers I2Cl6, and the
+terminal/doubly bridging halide states are general ligand roles. Br/I acceptor states
+also cover pentahalides; I2 donation and Br/I bis(pyridine) reagent families remain
+selected (HW 489, 493–495; P23, p. 2325). The two removals leave 110 states;
+neutral buckets are unchanged. These counts are not timing results.
 
-Each X expands only over the elements specified in its row. Examples in these tables
-also supply candidates for conformance inputs. The user accepted L01–L09 and L11,
-with separate At oxoanion entries required in L03. L10 is covered by the user's
-N#c-2#n3#v addition. These selections do not approve adding both representations of
-the same examples. The following overlaps were not resolved in the extraction:
+Citation corrections cover the previously unreferenced baseline entries, the shared
+Li96 key for the old trihalogen-cation DOI, and C73/S20 for the explicit localized
+bonding evidence. At#n3#v now cites AtBr/AtI (HW 506), IOF3/IOF4− cite HW 545,
+and ClF6− includes HW 498. The bare Cl+/Br+/I+ states are labelled PW mechanism
+fragments. I#c-#n#v6 and I#c-#v8 also cover IO3− and IO4− with charge on I under
+the adopted formal-charge convention; their usefulness is not confined to the rarer
+examples previously listed. The two corresponding fixtures and snapshots are
+removed; the ValenceTable is unchanged.
 
-| Rows requiring clarification | Overlap / source uncertainty |
-| --- | --- |
-| L04 fluoride examples | The cited ion list establishes XF4+/XF6+ species; the extraction did not verify their localized bond description. Oxide cations and I(OH)6+ are separate examples in this row |
-| L05 ↔ M02 | Alternative descriptions of X3− and XY2−. HW explicitly discusses 3-center/4-electron bonding for I3− on p. 494; L05 was not independently justified by that example |
-| L06 ↔ M03, M04, M11, M12 | Alternative descriptions of the same polyhalides and oxofluorides. H2IO4− is a separate example for I#c-#n#v6 |
-| L07 ↔ M05, M13 | IF8− overlaps M05; IOF6−/IO2F4− overlap M13. The extraction did not establish which bond description the cited source supports |
-| M06–M10 ↔ existing localized entries | Alternative encodings of XF3/XF5/IF7 and fluoride oxides already represented in the registry. The specific multicenter partitions were constructed, not verified from the cited passages |
+#### Consolidated proposals
 
-The overlapping descriptions are **unresolved alternatives**, not independent additions.
+**Accepted** means selected by the user or explicitly described in reviewed literature,
+awaiting implementation; **Proposed** means one surviving assignment awaiting selection;
+**Open** identifies an unresolved assignment; **Present** means implemented;
+**Not selected** records an explicit omission from the default registry.
+Explicit literature assignments are accepted automatically within the selected scope. Ask the user only where
+there is ambiguity, controversy or no literature support. List inaccessible papers
+before considering an inferred assignment. Earlier row IDs are retained for reference;
+Open rows carry no asserted atom description where the bonding is unsettled.
 
-| ID | Localized descriptions | Examples / source qualification | HW pages |
+| Rows | Atom descriptions | Status | Examples; evidence or open point |
 | --- | --- | --- | --- |
-| L01 | F#c+#n2#v2; F#c+#n2#v#h; F#c+#n2#h2 | H2F+ in liquid HF; explicit, mixed and implicit H | 498–499 |
-| L02 | At#c-#n4; At#c+#n3 | Astatides; At+ precipitation as At2S and cathodic deposition; tracer chemistry | 490, 492, 499, 502 |
-| L03 | At#n2#v3; At#n#v5; At#v7 | HAtO2/HAtO3/HAtO4 in the general oxoacid series; AtO3−/AtO4− in the redox diagram | 512–513 |
-| L04 | X#c+#n#v4; X#c+#v6 (X = Cl, Br, I) | XF4+/XF6+ salts; ClO2+, IO2+, ClO2F2+, I(OH)6+ | 510, 528, 540, 543, 545 |
-| L05 | X#c-#n3#v2 (X = Cl, Br, I, At) | X3− (Cl, Br, I); ClF2−/BrF2−/IF2−, BrCl2−, ICl2−, IBr2−, AtBr2−/AtI2− | 493–494, 510 |
-| L06 | X#c-#n2#v4; X#c-#n#v6 (X = Cl, Br, I) | XF4−, BrCl4−/ICl4−/IBr4−; BrF6−/IF6−, ClO2F2−/BrO2F2−, BrOF4−, H2IO4− | 510, 527, 545 |
-| L07 | I#c-#v8 | IF8−, IOF6−, cis-/trans-IO2F4− | 510–511, 546 |
-| L08 | X#n2#u#v2 (X = Cl, Br, I) | XO radicals with X=O and the unpaired electron on X; transient/matrix species, HW discusses delocalization | 530–531 |
-| L09 | X#n#u#v4; X#u#v6 (X = Br, I) | XO2/XO3 radicals; transient/matrix species | 531 |
-| L10 | N#c-2#n3#v | N in [ClO3N]2−, retaining three Cl=O and one Cl–N; HW reports K2[ClO3N] | 546 |
-| L11 | At#n3#h | HAt mentioned in the HX redox series; no preparation or structural evidence supplied there | 502 |
+| L01 | F#c+#n2#v2; F#c+#n2#v#h; F#c+#n2#h2 | Present | H2F+ with explicit, mixed or implicit H; HW 498–499 |
+| L02 | At#c-#n4; At#c+#n3 | Present | Astatides; At+ precipitation as At2S and cathodic deposition; tracer chemistry, HW 490, 492, 499, 502 |
+| L03 | At#n2#v3; At#n#v5; At#v7; At#c-#n#v6; At#c-#v8 | Present | HAtO2/HAtO3/HAtO4; separate At− entries for AtO3−/AtO4− with charge on At and At=O bonds; HW 512–513 |
+| L11 | At#n3#h | Present | HAt in the HX redox series; HW 502 supplies no preparation or structure |
+| L04, oxo examples | Cl#c+#n#v4; I#c+#n#v4 | Present | ClO2+, IO2+ units; HW 540, 543, 545 |
+| L04, valence six | X#c+#v6 (X = Cl, Br, I) | Present | XF6+: Le04, pp. 6917–6919 describes two-center, highly polar single X–F bonds. ClO2F2+: C73, p. 1362 supports two Cl=O and two localized Cl–F bonds. I(OH)6+ independently supports I#c+#v6 (HW 528) |
+| L06, oxo example | I#c-#n#v6 | Present | H2IO4−, with two I=O and two I–OH bonds; HW 527 |
+| L08 | X#n2#u#v2 (X = Cl, Br, I) | Present | XO radicals; formal X=O assignment with unpaired electron on X; HW 530–531 discusses delocalization |
+| L09 | X#n#u#v4; X#u#v6 (X = Br, I) | Present | XO2/XO3 radicals; HW 531. Corresponding Cl states are already present |
+| L10 | N#c-2#n3#v | Present | User-added N entry covers [ClO3N]2− with three Cl=O and one Cl–N; HW 546 |
+| L05/M01/M02 | X#n3#m; X#c-#n3#m2 (X = Cl, Br, I) | Present | X3−, ClF2−/BrF2−/IF2−, BrCl2−/ICl2−/IBr2−; HW 393, 493–494, 510–511 and L97 support the trihalide construction. Contributions [1,2,1] and central charge are our convention. Both F states already exist |
+| M02, At | At#c-#n3#m2 | Present; by analogy | AtBr2−/AtI2− occur in HW 510; the analogous trihalide assignment is selected. No direct At bonding analysis reviewed |
+| L04, tetrafluorides | X#c+#n#v2#m2 (X = Cl, Br, I) | Present | XF4+: two localized equatorial X–F bonds and an axial 3c4e F–X–F unit. Constructed assignment from C01, p. 6347, Table 22 and discussion of axial 3c4e contributions; replaces the all-localized fluoride proposal |
+| L06/M03, tetrahalides | X#c-#n2#m4 (X = Cl, Br, I) | Present | XF4−: two 3c4e F–X–F units, each with contributions [1,2,1]; C68, pp. 125, 132–133, and CN73, pp. 61–62 support the assignment. Extension to square-planar BrCl4−/ICl4−/IBr4− is by analogy (HW 510–511). Terminal F#n3#m, Cl#n3#m and Br#n3#m are present |
+| L06/M04, hexafluorides | X#c-#n#m6 (X = Cl, Br, I) | Present; by analogy | XF6−: three 3c4e F–X–F units, each [1,2,1], extending the selected XeF6 assignment. CW89, pp. 3276–3277; D08, pp. 5488, 5493; M22, pp. 10–11 support one central lone pair. D08 invokes 3c4e contributions in iodine fluorides but does not specify this all-multicenter partition. HW 498 includes ClF6−; HW 510–511 covers BrF6−/IF6− |
+| L07/M05 | I#c-#v8 | Present | IF8−: eight localized I–F bonds, no lone pair; selected no-lone-pair convention. Square-antiprismatic D4d structure: HW 510–511; D08, p. 5487, Fig. 1 and pp. 5489–5490 |
+| M06, trifluorides | X#n2#v#m2 (X = Cl, Br, I) | Present; Br/I by analogy | XF3: one localized equatorial X–F bond, one axial 3c4e F–X–F unit [1,2,1], two lone pairs. Sh73, pp. 5873–5875 explicitly supports this bond partition for ClF3. HW 508–509 gives the common T-shaped structures; D08, pp. 5487, 5493 supports the axial/equatorial distinction in IF3 and discusses 3c4e contributions |
+| M07, pentafluorides | X#n#v#m4 (X = Cl, Br, I) | Present; Br by analogy | XF5: one lone pair, one localized apical X–F bond, two basal 3c4e F–X–F units, each [1,2,1]. C68, pp. 132–133 supports this partition for ClF5; C93A, pp. 2705–2706 explicitly invokes basal multicenter bonding and a more covalent apical bond in IF5. M22, p. 10 supports the apical/basal distinction in BrF5; HW 508–509 |
+| M07, IF7 | I#v7 | Present; retained | IF7: seven localized I–F bonds; no central lone pair to reserve s character. Selected convention applies the lone-pair criterion in Le04, pp. 6917–6918. HW 508–509; D08, p. 5487, Fig. 1 |
+| M08, Cl/Br | X#n#v3#m2 (X = Cl, Br) | Present | ClOF3/BrOF3: X=O, one localized equatorial X–F bond, one axial 3c4e F–X–F unit [1,2,1], one lone pair. Explicit bonding descriptions in OC82, p. 275 and C78, pp. 1537–1538; E02 confirms the structures; HW 544–545 |
+| M08, I | I#n#v3#m2 | Present; by analogy | IOF3: same partition as ClOF3/BrOF3. ET74, pp. 175, 178–179 and CA71, p. 2299 establish the molecular structure and axial/equatorial distinction, but do not explicitly assign 3c4e bonding; E02, p. 1992 concurs on the structure |
+| M09, Cl | Cl#v7 | Present | ClO2F3: two Cl=O and three localized Cl–F bonds, no lone pair. Selected no-lone-pair convention supersedes C73D's axial 3c4e partition; HW 545–546 |
+| M09, I | I#v7 | Present | IO2F3: localized I–F bonds, no lone pair. S77 establishes the oxygen-bridged crystal dimer: each I has one terminal I=O, three I–F and two ordinary I–O bridge bonds. The monomer above 100 °C has two I=O bonds and the same atom state (HW 546). Selected no-lone-pair convention |
+| M10 | I#v7 | Present | IOF5: I=O and five localized I–F bonds, no lone pair; selected no-lone-pair convention. C93O, pp. 9656–9658 gives comparable axial/equatorial I–F lengths and force constants; HW 546 |
+| L06/M12, IOF4− | I#c-#n#v2#m4 | Present | IOF4−: I=O, one lone pair and two basal 3c4e units [1,2,1]. C93A, pp. 2705–2706 explicitly invokes multicenter bonding for the four basal I–F bonds; E02, pp. 1995–1996 compares the structures |
+| L07/M13, IOF6− | I#c-#v8 | Present | IOF6−: I=O and six localized I–F bonds, no lone pair; selected no-lone-pair convention. C93A establishes the structure; its equatorial 6c10e partition (pp. 2704–2706) is not adopted |
+| L06/M11 | X#c-#n#v4#m2 (X = Cl, Br) | Present; Br by analogy | XO2F2−: two X=O bonds, one lone pair and an axial F–X–F 3c4e unit [1,2,1]. C72D, pp. 38–39 explicitly supports this partition for Cl. GS76, p. 2393 supports the corresponding Br structure; the same partition is adopted. HW 545 |
+| L06/M12, Cl/Br | X#c-#n#v2#m4 (X = Cl, Br) | Present; by convention | XOF4−: X=O, one lone pair and two basal 3c4e units [1,2,1], extending the selected IOF4− partition. C78T, pp. 537–538 compares the three anions; E02, pp. 1995–1997 supports their square-pyramidal structures and central lone pair. HW 545 |
+| L07/M13, IO2F4− | I#c-#v8 | Present; existing state | cis-/trans-IO2F4−: two I=O and four localized I–F bonds under the selected no-lone-pair convention. C81, p. 2109 supports I=O and distinguishes both isomers; HW 546. One fixture covers their shared valence graph |
+| D01/D10, Br/I | X#c+#n3#m0 (X = Br, I); N#v2#a#m2 | Present | [X(py)2]+: R20, pp. 7983–7986 explicitly describes N–X–N 3c4e bonding; selected contributions [2,0,2]. Supersedes the two-dative-bond proposal. HW 491–492 lists Br/I examples |
+| D01/D10, Cl | Cl#c+#n3#m0 | Not selected | [Cl(py)2]+: supported by R20, pp. 7983–7986 and P23, pp. 2326–2327; omitted from the default for now |
+| D01/D10, At | Unassigned | Not selected | [At(py)2]+ occurs in HW 492; no extension by analogy for the default registry |
+| D02 | I#n3#v#t | Present | Me3N→I2 charge-transfer complex; HW 494–495. N#v3#d already exists |
+| D03, F/Cl/Br/I | X#c-#n3#d (X = F, Cl, Br, I) | Present | Monodentate X− donation; HW 499. Fixtures: [RhF6]3− (HW II 2012) and [RhX(NH3)5]2+ for Cl/Br/I (HW II 2015–2016); existing Rh#c+3#n3#t6 |
+| D03, At | At#c-#n3#d | Not selected | HW 499 includes astatido ligands; omitted from the default scope |
+| D04/D06, halide bridges | X#c-#n2#d2 (X = Cl, Br, I) | Present | Two X− donations; HW 499. Extends the selected F#c-#n2#d2 convention in Xe2F11+. Covered by I2Cl6, Br5− and I5− |
+| D05, Cl | Cl#c-#n#d3; Te#c+#n#v3#t3 | Present | Te4Cl16 fixture. HW 499 gives triply bridging donors; HW 711 explicitly describes TeCl3+/Cl− cubane units |
+| D05, F | F#c-#n#d3 | Not selected | [F(XeOF4)3]− and [F(SbF5)3]−; HW 499. Omitted from the default for now; fixture removed |
+| D05, Xe companion | Xe#n#v2#t#m4 | Present | XeOF4 acceptor state retained; no remaining fixture after removing [F(XeOF4)3]−. HW 471, 499; W75, p. 1477 |
+| D06, I2 ligand | I#n2#v#d; Ag#c+#n5#t3 | Present | HW 489 explicitly describes I2 donation. M16, pp. 9263–9264, Fig. 1 gives discrete [Ag2(I2)4]2+: two bridging and two terminal I2 ligands, three I donors per Ag. The fixture records the additional I···I halogen contact as noncovalent |
+| D08, I2Cl6 dimer | I#c+#n2#v2#t2; Cl#c-#n2#d2 | Present | Two [ICl2]+ cores joined by two doubly donating Cl− bridges, applying the settled halide-donor convention. One I acceptor state added; the Cl state exists. HW 508–509 and BW54, pp. 421–423 establish the planar dimer. The discrete encoding is our adopted assignment |
+| D07, fluoride aggregates | Unassigned | Open | Additional intermolecular contacts in BrF3/IF3; the monomer states and fixtures already exist. HW 508–509 |
+| D08/D11, HIO3 adduct | I#n#v5#t; O#n#v2#d | Not selected | HIO3·Me2SO: selected O→I encoding retains both I=O bonds and DMSO S=O. HW 527 reports base addition; N02 depicts O attachment but does not establish this bond partition. No default entries or fixture |
+| D09 | Unassigned | Open | ClO2·py: establish the attachment before assigning Cl#t; HW 538 reports the stable adduct |
+| Existing atomic cations | X#c+#n3 (X = Cl, Br, I) | Present; retained | Needed for electrophilic halogenation mechanism representations. Three atomic-ion fixtures added. No bare F+ entry selected |
+| Further polyhalogen cations | Unassigned | Open | Br2+/I2+, Cl4+, I4²+, Br5+/I5+, I15³+: full encodings and default inclusion; HW 490–493 gives bond order 1.5 for X2+ and multicenter links in larger cations |
+| Pentahalide anions | X#c-#n2#d2; X#n3#v#t (X = Br, I) | Present | Br5− and I5− as X− donating to two X2 molecules, following HW 493–494 and the selected halide-donor convention. One Br2 acceptor state added; the other states exist |
+| Higher polyhalide anions | Unassigned | Open | Polyiodides beyond I5−: individual encodings and default inclusion; HW 493–494 |
+| Higher HF aggregates | F#c-#n2#m4; F#c-#n#m6; F#c-#m8 | Present; by convention | H2F3−, branched H3F4− and H4F5−: extend HF2− with F−–H+–F− units [2,0,2]. HW 174–176 explicitly describes 3c4e hydrogen bridges; HW 498, Fig. 12.8 and Iv17 establish the aggregate structures. H#c+#m0 and peripheral F#c-#n3#m2 already exist. Chain H3F4−, H5F6− and H7F8− need no further atom states |
+| Further oxides | Unassigned | Open | ClO4, Cl2O2+, polymeric IO+/IO2+/I3O6+ and iodine oxides: full encodings and default inclusion; HW 531, 539, 542–544 |
+| Weak associates | Unassigned | Open | Br2·toluene; F2/Cl2/Br2/ClF/BrCl with H2O, H2S or NH3: whether to include a coordination bond; HW 494–495 supplies occurrence/association evidence |
 
-| ID | Multicenter descriptions | Examples / source qualification | HW pages |
-| --- | --- | --- | --- |
-| M01 | X#n3#m (X = Cl, Br, I) | Terminal X in X3− and mixed polyhalides; terminal F already covered | 493–494, 510–511 |
-| M02 | X#c-#n3#m2 (X = F, Cl, Br, I, At) | Central X in X3− (F, Cl, Br, I), XY2−; F3− only in a 15 K matrix, decomposes at 40 K; AtBr2−/AtI2− | 493–494, 510 |
-| M03 | X#c-#n2#m4 (X = Cl, Br, I) | XF4− and BrCl4−/ICl4−/IBr4− | 510–511 |
-| M04 | X#c-#n#m6 (X = Br, I) | BrF6−/IF6− | 510–511 |
-| M05 | I#c-#m8 | IF8− | 510–511 |
-| M06 | X#n2#v#m2; X#n#v#m4 (X = Cl, Br, I) | XF3/XF5; one localized X–F, remaining F in multicenter bonds | 508–509 |
-| M07 | I#v#m6 | IF7 with one localized I–F | 508–509 |
-| M08 | X#n#v3#m2 (X = Cl, Br, I) | XOF3 with X=O and one localized X–F | 544–545 |
-| M09 | X#v5#m2 (X = Cl, I) | ClO2F3 and monomeric IO2F3 above 100 °C, with two X=O and one localized X–F; IO2F3 forms an O-bridged dimer below 100 °C | 544–546 |
-| M10 | I#v3#m4 | IOF5 with I=O and one localized I–F | 544, 546 |
-| M11 | X#c-#n#v4#m2 (X = Cl, Br) | ClO2F2−/BrO2F2− with two X=O | 545 |
-| M12 | Br#c-#n#v2#m4 | BrOF4− with Br=O | 545 |
-| M13 | I#c-#v2#m6; I#c-#v4#m4 | IOF6−; cis-/trans-IO2F4−, with I=O | 546 |
+The localized X#c-#n3#v2 proposal for trihalides is removed in light of the
+3-center/4-electron evidence. Other unverified localized/multicenter partitions
+are replaced by the single Open row for their compound family. Halide bridges use
+one X− donation convention; D06 retains only its independent neutral-I2 example.
 
-| ID | Donor–acceptor descriptions | Examples / source qualification | HW pages |
-| --- | --- | --- | --- |
-| D01 | X#c+#n3#t2 (X = Br, I, At) | [X(py)2]+, two N→X bonds; py = pyridine | 491–492 |
-| D02 | I#n3#v#t | Me3N→I2; HW describes a charge-transfer complex | 494–495 |
-| D03 | X#c-#n3#d (X = F, Cl, Br, I, At) | Monodentate halogenido ligands, using X− donation | 499 |
-| D04 | X#c-#n2#d2 (X = F, Cl, Br, I) | Bridging halogenido ligands, two donations; Nb fluoride, Al halides, Co–I–Co examples | 495–496, 499 |
-| D05 | X#c-#n#d3 (X = F, Cl) | Three donations: [F(XeOF4)3]−, [F(SbF5)3]−, bridging Cl in TeCl4 | 499 |
-| D06 | X#n2#v#d (X = F, Cl, Br, I) | Covalent bond plus donation in halide bridges; I2 donation in polymeric Ag(I2)+ | 489, 495–496, 499 |
-| D07 | X#n2#v3#t (X = Br, I) | BrF3 polymer contacts; I acceptor in I2Cl6 with Cl donor D06 | 508–509 |
-| D08 | I#n2#v3#t2; I#n#v5#t | IF3 polymer contacts; Me2SO adduct of HIO3 | 509, 527 |
-| D09 | Cl#n#u#v4#t | Stable ClO2·py adduct, if encoded with N→Cl; HW does not specify the attachment in this passage | 538 |
-| D10 | N#v2#a#d | Pyridine donor for D01/D09; N#v3#d for Me3N already exists | 491–492, 538 |
-| D11 | O#n#v2#d | Me2SO donor for D08, using S=O and O→I | 527 |
+The inferred all-dative aluminium fixtures and the Hg(OH)At fixture are withdrawn,
+including their Al/O/Hg companion entries. Default inclusion remains a case-by-case
+decision; the extraction may retain compounds omitted from the default.
 
-#### Further examples and source qualifications
+IF7, IF8−, IOF6−, IOF5, IO2F3 and ClO2F3 use localized bonds by the selected
+no-lone-pair convention: without a central lone pair to reserve s character,
+no multicenter unit is assigned. These are pragmatic graph assignments;
+the earlier mixed and 6c10e proposals for these compounds are superseded.
 
-| Examples | Extraction result / unresolved encoding | HW pages |
-| --- | --- | --- |
-| Br2+/I2+, Cl4+, I4²+, Br5+/I5+, I15³+ | Isolated salts; Cl4+ decomposes above −78 °C. HW describes bond order 1.5 for X2+ and multicenter links in larger cations. Atom descriptions remain open | 490–493 |
-| X2− (X = F, Cl, Br, I) | Irradiated glasses/matrices; M01/M02 (existing F#n3#m) provide a 2-center/3-electron encoding, with the unpaired electron on the bond | 493–494 |
-| Br5−; higher polyiodides | Aggregates with linear, branched or extended structures; complete encodings remain open | 493–494 |
-| HF2−, [HnFn+1]− (n = 1, 2, 3, 4, 5, 7) | Salts and hydrogen-bonded aggregates; encoding remains open | 498 |
-| Br2·toluene; F2/Cl2/Br2/ClF/BrCl with H2O, H2S or NH3 | Charge-transfer complex or short-lived prereactive associates; no dative description assigned solely from the contact | 494–495 |
-| ClO4, Cl2O2+; polymeric IO+, IO2+, I3O6+ and iodine oxides | ClO4 transient; Cl2O2+ salt has a π*–π* association. Local oxide units reuse existing states/L04; full association encodings remain open | 531, 539, 542–544 |
-| ClF7, BrF7, F3+, I(OAc)7; I7+, I(OSO2F)5, XO3+ | First four unestablished in HW; last three possible or questioned | 491–492, 508–510, 545 |
+F3− (15 K matrix, decomposition at 40 K) and X2− (X = F, Cl, Br, I;
+irradiated glasses/matrices) require no additional states beyond the trihalide rows;
+no dedicated default additions are proposed from these examples (HW 493–494).
+HW marks ClF7, BrF7, F3+ and I(OAc)7 as unestablished, and I7+, I(OSO2F)5
+and XO3+ as possible or questioned. No default entries are proposed for them
+(HW 491–492, 508–510, 545).
+
+Primary sources reviewed; retained PDFs in materials/valence, extracts in scratch:
+
+- **Iv17:** Ivlev et al., *Z. Anorg. Allg. Chem.* **643** (2017), 1436–1443;
+  [DOI](https://doi.org/10.1002/zaac.201700228), [author manuscript](../materials/valence/Ivlev-2017-sodium-hydrogen-fluorides.pdf).
+  Crystal structures of NaH2F3, NaH3F4 and NaH4F5, including neutron diffraction
+  for NaH2F3; all F–H···F bridges are asymmetric. The charge/contribution assignment is PW.
+- **C72D:** Christe and Curtis, *Inorg. Chem.* **11** (1972), 35–39;
+  [DOI](https://doi.org/10.1021/ic50107a009), [PDF](../materials/valence/Christe-1972-ClO2F2-anion.pdf#page=4).
+  Pages 38–39 explicitly describe Cl=O bonds and an axial 3c4e F–Cl–F unit in ClO2F2−.
+- **GS76:** Gillespie and Spekkens, *J. Chem. Soc., Dalton Trans.* (1976), 2391–2396;
+  [DOI](https://doi.org/10.1039/DT9760002391), [PDF](../materials/valence/Gillespie-1976-bromine-oxyfluoride-anions.pdf#page=3).
+  Page 2393 assigns BrO2F2− two axial F atoms and equatorial O atoms and lone pair from its Raman spectrum.
+- **C78T:** Christe et al., *Inorg. Chem.* **17** (1978), 533–538;
+  [DOI](https://doi.org/10.1021/ic50181a003), [PDF](../materials/valence/Christe-1978-XOF4-anions.pdf#page=5).
+  Pages 537–538 compare the square-planar XF4 groups and X–O/X–F force constants in ClOF4−, BrOF4− and IOF4−.
+- **C81:** Christe, Wilson and Schack, *Inorg. Chem.* **20** (1981), 2104–2114;
+  [DOI](https://doi.org/10.1021/ic50221a034), [PDF](../materials/valence/Christe-1981-tetrafluoroperiodates.pdf#page=6).
+  Page 2109 supports I=O bonds in IO2F4− and identifies both isomers by vibrational and 19F NMR spectra.
+- **M16:** Malinowski, Himmel and Krossing, *Angew. Chem. Int. Ed.* **55** (2016), 9262–9266;
+  [DOI](https://doi.org/10.1002/anie.201603913),
+  [PDF](../materials/valence/Malinowski-2016-diiodine-coordination.pdf#page=2).
+  Figure 1 establishes terminal/bridging I2 ligands in discrete Ag complexes;
+  p. 9264 explicitly describes I2→Ag donation.
+- **BW54:** Boswijk and Wiebenga, *Acta Cryst.* **7** (1954), 417–423;
+  [DOI](https://doi.org/10.1107/S0365110X54001260),
+  [PDF](../materials/valence/Boswijk-1954-I2Cl6-structure.pdf#page=6).
+  Planar I2Cl6 dimer with two chlorine bridges; the proposed ionic resonance
+  description does not settle the discrete bond partition.
+- **R20:** Reiersolmoen et al., *Chem. Sci.* **11** (2020), 7979–7990;
+  [DOI](https://doi.org/10.1039/D0SC02076A),
+  [PDF](../materials/valence/Reiersolmoen-2020-three-center-halogen-bonds.pdf).
+  Pages 7983–7986 explicitly describe 3c4e bonding in the Cl/Br/I bis(pyridine) cations.
+- **P23:** Pröhm et al., *Chem. Sci.* **14** (2023), 2325–2329;
+  [DOI](https://doi.org/10.1039/D2SC06757A),
+  [PDF](../materials/valence/Prohm-2023-pyridine-chloronium.pdf#page=2).
+  Pages 2326–2327 establish [Cl(py)2]+ in the solid state and retain its 3c4e description.
+- **N02:** Nicolaou, Montagnon and Baran, *Angew. Chem. Int. Ed.* **41** (2002), 1386–1389;
+  [DOI](https://doi.org/10.1002/1521-3773%2820020415%2941%3A8%3C1386%3A%3AAID-ANIE1386%3E3.0.CO%3B2-V),
+  [PDF](../materials/valence/Nicolaou-2002-HIO3-DMSO.pdf).
+  Scheme 1B depicts HIO3·DMSO; the crystallographic evidence on p. 1388 concerns I2O5·DMSO.
+- **S77:** Smart, *J. Chem. Soc., Chem. Commun.* (1977), 519–520;
+  [DOI](https://doi.org/10.1039/C39770000519),
+  [PDF](../materials/valence/Smart-1977-IO2F3-dimer.pdf).
+  Establishes the oxygen-bridged IO2F3 crystal dimer, superseding GK76's trimer
+  assignment for the solid; no explicit F-bond partition.
+- **C93A:** Christe et al., *J. Am. Chem. Soc.* **115** (1993), 2696–2706;
+  [DOI](https://doi.org/10.1021/ja00060a019),
+  [PDF](../materials/valence/Christe-1993-IOF6-anion-bonding.pdf#page=9).
+  Pages 2704–2706 propose the equatorial 6c10e model for IOF6−; this partition is
+  not adopted. They also describe the selected basal multicenter bonding in IOF4−
+  and IF5.
+- **T12:** Thanthiriwatte et al., *Inorg. Chem.* **51** (2012), 10966–10982;
+  [DOI](https://doi.org/10.1021/ic301438b),
+  [PDF](../materials/valence/Thanthiriwatte-2012-halogen-oxyfluorides.pdf).
+  Structural and energetic comparisons include IO2F3 and IOF5; no explicit
+  multicenter partition for either. Predicted species are distinguished from
+  experimentally characterized compounds.
+- **C73D:** Christe and Curtis, *Inorg. Chem.* **12** (1973), 2245–2251;
+  [DOI](https://doi.org/10.1021/ic50128a007),
+  [PDF](../materials/valence/Christe-1973-ClO2F3-bonding.pdf#page=7).
+  Pages 2250–2251 explicitly describe localized equatorial bonds and one axial
+  3c4e unit in ClO2F3. The selected no-lone-pair convention supersedes this partition.
+- **GK76:** Gillespie and Krasznai, *Inorg. Chem.* **15** (1976), 1251–1256;
+  [DOI](https://doi.org/10.1021/ic50160a002),
+  [PDF](../materials/valence/Gillespie-1976-IO2F3-structure.pdf#page=4).
+  Pages 1254–1255 propose an oxygen-bridged cyclic trimer in the solid, melt and
+  solution; S77 subsequently establishes a dimer in the crystal. No explicit F-bond
+  partition.
+- **C93O:** Christe, Curtis and Dixon, *J. Am. Chem. Soc.* **115** (1993), 9655–9658;
+  [DOI](https://doi.org/10.1021/ja00074a034),
+  [PDF](../materials/valence/Christe-1993-IOF5-structure.pdf#page=2).
+  Comparable axial/equatorial I–F lengths and force constants in IOF5; no explicit
+  multicenter partition. The IOF6− comparison on p. 9657 distinguishes its mainly
+  covalent axial I=O/I–F bonds from its more ionic equatorial bonds.
+- **OC82:** Oberhammer and Christe, *Inorg. Chem.* **21** (1982), 273–275;
+  [DOI](https://doi.org/10.1021/ic00131a050),
+  [PDF](../materials/valence/Oberhammer-1982-ClOF3-structure.pdf#page=3).
+  Page 275 explicitly describes Cl=O, an equatorial Cl–F single bond, one lone pair
+  and axial 3c4e bonding in ClOF3.
+- **C78:** Christe, Curtis and Bougon, *Inorg. Chem.* **17** (1978), 1533–1539;
+  [DOI](https://doi.org/10.1021/ic50184a029),
+  [PDF](../materials/valence/Christe-1978-BrOF3-bonding.pdf#page=6).
+  Pages 1537–1538 support Br=O and explicitly explain the weaker axial Br–F bonds
+  using 3c4e bonding; the equatorial Br–F bond is stronger.
+- **ET74:** Edwards and Taylor, *J. Fluorine Chem.* **4** (1974), 173–179;
+  [DOI](https://doi.org/10.1016/S0022-1139%2800%2982511-7),
+  [PDF](../materials/valence/Edwards-1974-IOF3-structure.pdf#page=3).
+  Pages 175, 178–179 establish IOF3 molecules with weaker intermolecular contacts;
+  the oxygen position is reassigned. No explicit 3c4e description.
+- **CA71:** Carter and Aubke, *Inorg. Chem.* **10** (1971), 2296–2301;
+  [DOI](https://doi.org/10.1021/ic50104a041),
+  [PDF](../materials/valence/Carter-1971-iodine-oxyfluorides.pdf#page=4).
+  Page 2299 distinguishes equatorial and axial I–F stretches in IOF3 and identifies
+  one iodine lone pair; no explicit 3c4e assignment.
+- **E02:** Ellern et al., *Z. Anorg. Allg. Chem.* **628** (2002), 1991–1999;
+  [DOI](https://doi.org/10.1002/1521-3749%28200209%29628%3A9%2F10%3C1991%3A%3AAID-ZAAC1991%3E3.0.CO%3B2-1),
+  [PDF](../materials/valence/Ellern-2002-halogen-oxyfluoride-structures.pdf#page=2).
+  Pages 1992–1995 confirm ClOF3/BrOF3 structures and their relation to IOF3;
+  pp. 1995–1996 establish square-pyramidal BrOF4− with one bromine lone pair.
+- **C68:** Christe and Sawodny, *Z. Anorg. Allg. Chem.* **357** (1968), 125–133;
+  [DOI](https://doi.org/10.1002/zaac.19683570303),
+  [PDF](../materials/valence/Christe-1968-ClF4-anion.pdf#page=8).
+  Pages 125 and 132–133 support two 3c4e units in ClF4−.
+  Pages 132–133 also apply the 3c4e model to the basal bonds of ClF5 and
+  distinguish its more covalent apical bond.
+- **CN73:** Christe and Naumann, *Inorg. Chem.* **12** (1973), 59–62;
+  [DOI](https://doi.org/10.1021/ic50119a016),
+  [PDF](../materials/valence/Christe-1973-IF4-anion.pdf#page=4).
+  Table III (p. 61) compares ClF4−, BrF4− and IF4−; the discussion on p. 62
+  interprets all three using semiionic 3c4e bonds and identifies two central lone pairs.
+- **CW89:** Christe and Wilson, *Inorg. Chem.* **28** (1989), 3275–3277;
+  [DOI](https://doi.org/10.1021/ic00316a001),
+  [PDF](../materials/valence/Christe-1989-BrF6-IF6-lone-pairs.pdf#page=2).
+  Pages 3276–3277 establish octahedral BrF6− and distorted IF6− in solution,
+  both fluxional on the NMR timescale, with inactive/active lone pairs respectively.
+  The paper does not specify a 3c4e bond partition.
+- **C73:** Christe, Wilson and Curtis, *Inorg. Chem.* **12** (1973), 1358–1362;
+  [DOI](https://doi.org/10.1021/ic50124a029),
+  [PDF](../materials/valence/Christe-1973-difluoroperchloryl-cation.pdf#page=5).
+  Page 1362 depicts the two-Cl=O resonance form and identifies predominantly
+  covalent Cl–F bonds in ClO2F2+.
+- **C01:** Christe, Zhang, Sheehy and Bau, *J. Am. Chem. Soc.* **123** (2001), 6338–6348;
+  [DOI](https://doi.org/10.1021/ja003347a),
+  [PDF](../materials/valence/Christe-2001-tetrafluorohalogen-cations.pdf#page=10).
+  Page 6347 attributes weaker axial bonds to strong 3c4e contributions in
+  ClF4+/BrF4+/IF4+; the discrete registry partition above is the selected assignment.
+- **C93:** Christe, Curtis and Dixon, *J. Am. Chem. Soc.* **115** (1993), 1520–1526;
+  [DOI](https://doi.org/10.1021/ja00057a044),
+  [PDF](../materials/valence/Christe-1993-IF7-bonding.pdf#page=6).
+  Pages 1525–1526 propose a six-center/ten-electron equatorial system and two
+  more covalent axial bonds in IF7. This partition is not adopted for IF7.
+- **D08:** Dixon et al., *Inorg. Chem.* **47** (2008), 5485–5494;
+  [DOI](https://doi.org/10.1021/ic800021h),
+  [PDF](../materials/valence/Dixon-2008-iodine-fluorides.pdf#page=9).
+  Pages 5486–5488 identify experimentally known ClF6−/BrF6− and calculate Oh
+  minima, versus C3v for IF6−. Page 5493 attributes iodine-fluoride bond-length
+  differences to 3c4e contributions and discusses the central lone pairs;
+  three separate 3c4e units in XF6− are our adopted assignment.
+- **L97:** Landrum, Goldberg and Hoffmann, *J. Chem. Soc., Dalton Trans.* (1997),
+  3605–3613; [DOI](https://doi.org/10.1039/A703736H),
+  [PDF](../materials/valence/Landrum-1997-trihalide-bonding.pdf).
+  Table 1 and the mixed-trihalide analysis support electron-rich three-center bonding.
+- **Le04:** Lehmann et al., *Inorg. Chem.* **43** (2004), 6905–6921;
+  [DOI](https://doi.org/10.1021/ic040015o),
+  [PDF](../materials/valence/Lehmann-2004-hexafluorohalogen-cations.pdf#page=13).
+  The bonding discussion on pp. 6917–6918 and conclusion on p. 6919 support six
+  localized X–F bonds in XF6+ (X = Cl, Br, I), hence X#c+#v6.
+- **M22:** Möbs et al., *Chem. Eur. J.* **28** (2022), e202202466;
+  [DOI](https://doi.org/10.1002/chem.202202466),
+  [PDF](../materials/valence/Mobs-2022-BrF6-IF6-bonding.pdf#page=12).
+  Pages 10–11 and Figs. 13/15 identify a central lone pair in both BrF6− and IF6−;
+  the former is 4s-like, the latter predominantly 5s with a small 5p contribution.
+- **S20:** Scheibe et al., *Eur. J. Inorg. Chem.* (2020), 4483–4496;
+  [DOI](https://doi.org/10.1002/ejic.202000845),
+  [PDF](../materials/valence/Scheibe-2020-difluorochloronium.pdf#page=12).
+  Page 4493 distinguishes localized and 3-center/4-electron Cl–F bonding and
+  supports localized ClF2+; the remaining fluoride assignments are listed above.
+- **Sh73:** Shaw, Carroll and Thomas, *J. Am. Chem. Soc.* **95** (1973), 5870–5875;
+  [DOI](https://doi.org/10.1021/ja00799a006),
+  [PDF](../materials/valence/Shaw-1973-ClF3-photoelectron.pdf#page=4).
+  Pages 5873–5875 explicitly describe equatorial 2c2e and axial 3c4e bonding in
+  ClF3, supported by F 1s binding energies, charge analysis and the MO discussion.
 
 #### Registry and ValenceTable comparison
 
-The initial extraction contained **92 distinct candidate descriptions** (89 halogen,
-3 N/O companions), none then present under the registry's loading defaults; L10 has
-since been added by the user. All pass electron conservation. This check does not
-establish source support for a bond description or settle the alternatives above.
-All 34 localized descriptions pass Counts classification with their literal H counts;
-no ValenceTable exclusion was found for this set, including I#c-#v8. Multicenter and
-dative descriptions are outside this Counts comparison.
+All 58 added states are non-redundant under the registry raise defaults and have
+conformance coverage: 60 new fixtures and revised ClF3/IF5 fixtures. Both AtomTyping
+policies produce the selected assignments in all 62 fixtures, including the IO2F3
+monomer and crystal dimer.
 
-Counts uses saturation targets, not an allowed-valence whitelist. Both policies
-resolve H2F+, ClF4+, localized I3−/IF8− and BrO with H=0 in probes. With both H and
-spin unspecified, BrO is underdetermined under Strict and receives H under
-MostSaturated; supplying the radical or H=0 retains BrO. No registry, ValenceTable
-or conformance changes have been made for this chapter.
+No ValenceTable extension is needed for the localized assignments, including
+I#c-#v8 and the separate At− oxoanions. Counts MostSaturated agrees with AtomTyping
+on all 32 localized fixtures. Counts Strict leaves H2F+ underdetermined in the
+two fixtures with unspecified H counts; MostSaturated selects the intended H2F+.
+
+The 30 multicenter fixtures retain the incorrect Counts electron assignments,
+tracked in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting).
+For BrO with both H and spin unspecified, Counts Strict remains underdetermined and
+MostSaturated adds H; the BrO fixture supplies H=0.
+
+The donor–acceptor pass retains 18 non-redundant states. Twelve fixtures cover 17:
+Br/I bis(pyridine), Me3N→I2, Te4Cl16, [Ag2(I2)4]2+, I2Cl6,
+Br5−, I5−, [RhF6]3− and [RhX(NH3)5]2+ for Cl/Br/I. Both AtomTyping policies
+produce the selected assignments. Xe#n#v2#t#m4 has no remaining fixture after
+removing [F(XeOF4)3]−. The terminal At− donor entry is omitted.
+No ValenceTable change is made for this pass.
+The three retained bare Cl+/Br+/I+ states have separate atomic-ion fixtures;
+both AtomTyping and Counts resolve each as X#c+#n3 under both policies.
