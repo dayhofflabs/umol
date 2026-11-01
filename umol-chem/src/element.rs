@@ -57,7 +57,7 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, u8, (i8, i8), u8, u8)
     (31, 69, 69.723, "Ga", 4, 27, 3, 12, 3, (0, 3), 3, 0), // Ga
     (32, 74, 72.630, "Ge", 4, 28, 4, 12, 4, (0, 4), 4, 0), // Ge
     (33, 75, 74.922, "As", 4, 29, 5, 12, 5, (-3, 3), 3, 4), // As
-    (34, 80, 78.971, "Se", 4, 30, 6, 12, 6, (-2, 1), 2, 3), // Se
+    (34, 80, 78.971, "Se", 4, 30, 6, 14, 6, (-2, 1), 2, 3), // Se
     (35, 79, 79.904, "Br", 4, 31, 7, 14, 7, (-1, 1), 1, 1), // Br
     (36, 84, 83.798, "Kr", 4, 32, 8, 18, 8, (-1, 1), 0, 0), // Kr: allow Kr compounds
     (37, 85, 85.468, "Rb", 5, 1, 1, 8, 1, (-1, 1), 1, 0), // Rb
@@ -75,7 +75,7 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, u8, (i8, i8), u8, u8)
     (49, 115, 114.82, "In", 5, 27, 3, 12, 3, (0, 3), 3, 0), // In
     (50, 120, 118.71, "Sn", 5, 28, 4, 12, 4, (0, 4), 4, 4), // Sn
     (51, 121, 121.76, "Sb", 5, 29, 5, 12, 5, (-3, 3), 3, 4), // Sb
-    (52, 130, 127.60, "Te", 5, 30, 6, 14, 6, (-2, 2), 2, 3), // Te
+    (52, 130, 127.60, "Te", 5, 30, 6, 16, 6, (-2, 2), 2, 3), // Te
     (53, 127, 126.90, "I", 5, 31, 7, 16, 7, (-1, 1), 1, 1), // I
     (54, 132, 131.29, "Xe", 5, 32, 8, 18, 8, (-2, 1), 0, 0), // Xe: allow Xe compounds
     (55, 133, 132.91, "Cs", 6, 1, 1, 8, 1, (-1, 1), 1, 0), // Cs
@@ -696,7 +696,7 @@ impl Element {
     /// on total number of electrons (used in electron count invariants).
     /// H/He: 2;
     /// row 2 + non-hypervalent row 3 main-group: 8 (strict octet);
-    /// hypervalent row 3+ main-group: (Si, P, S, Ga, Ge, As, Se, In, Sn, Sb, Tl, Pb, Bi, Nh, Fl, Mc) 12;
+    /// hypervalent row 3+ main-group: (Si, P, S, Ga, Ge, As, In, Sn, Sb, Tl, Pb, Bi, Nh, Fl, Mc) 12;
     /// heavy chalcogens / halogens / d-block / heavy noble gases: 14–18;
     /// f-block (Ce–Lu, Th–Lr): 26
     pub const fn valence_capacity(&self) -> u8 {
@@ -1228,10 +1228,10 @@ mod tests {
     #[case::ar(Element::Ar, 8, 0, 0, 0, 0, 0)]
     #[case::fe(Element::Fe, 18, 6, 0, 6, 6, 0)]
     #[case::zn(Element::Zn, 18, 2, 0, 2, 2, 0)]
-    #[case::se(Element::Se, 12, 6, -2, 1, 2, 3)]
+    #[case::se(Element::Se, 14, 6, -2, 1, 2, 3)]
     #[case::br(Element::Br, 14, 7, -1, 1, 1, 1)]
     #[case::kr(Element::Kr, 18, 8, -1, 1, 0, 0)]
-    #[case::te(Element::Te, 14, 6, -2, 2, 2, 3)]
+    #[case::te(Element::Te, 16, 6, -2, 2, 2, 3)]
     #[case::i(Element::I, 16, 7, -1, 1, 1, 1)]
     #[case::xe(Element::Xe, 18, 8, -2, 1, 0, 0)]
     #[case::la(Element::La, 18, 3, 0, 3, 1, 0)]
