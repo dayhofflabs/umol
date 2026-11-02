@@ -1,0 +1,3 @@
+; OH radical; HW I, p. 584, Fig. 13.12.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#h"] :bonds []}}

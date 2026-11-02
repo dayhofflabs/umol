@@ -1,0 +1,62 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["O#c+#n" "O#n2" "O#n2" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [1 6 :single]
+        [1 7 :single]
+        [2 8 :single]
+        [2 9 :single]]
+      :noncovalent-bonds [{:atoms [3 1] :attrs "Hbd"} {:atoms [4 2] :attrs "Hbd"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["O#c+#n" "O#n2" "O#n2" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [1 6 :single]
+        [1 7 :single]
+        [2 8 :single]
+        [2 9 :single]]
+      :noncovalent-bonds [{:atoms [3 1] :attrs "Hbd"} {:atoms [4 2] :attrs "Hbd"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["O#c+#n" "O#n2" "O#n2" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [1 6 :single]
+        [1 7 :single]
+        [2 8 :single]
+        [2 9 :single]]
+      :noncovalent-bonds [{:atoms [3 1] :attrs "Hbd"} {:atoms [4 2] :attrs "Hbd"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["O#c+#n" "O#n2" "O#n2" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [1 6 :single]
+        [1 7 :single]
+        [2 8 :single]
+        [2 9 :single]]
+      :noncovalent-bonds [{:atoms [3 1] :attrs "Hbd"} {:atoms [4 2] :attrs "Hbd"}]}
+    :success true
+    :tie-breaks []}}

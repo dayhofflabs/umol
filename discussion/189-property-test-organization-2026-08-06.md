@@ -1,8 +1,9 @@
 # 189 — Property-test organization
 
-Status: **Proposed**
+Status: Proposed
 Date: 2026-08-06
-Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
+Relates: [056](056-default-registry-2026-03-07.md),
+[156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [161](161-property-tests-as-specs-2026-07-25.md),
 [168](168-api-hygiene-2026-07-27.md),
 [property-test guide](../docs/development/property-tests.md)
@@ -111,6 +112,8 @@ the selected hierarchy and do not widen production visibility to accommodate tes
 - Keep checked-in corpora and captured outputs under the existing test-data facilities, with their
   provenance and regeneration procedures. External tools remain one-off producers, not test
   dependencies.
+- Each test suite owns its fixtures; do not include or glob another suite's data. Keep independent
+  copies of small EDN inputs when needed. Fixture names must not select expected outcomes.
 - Retain regression files at stable subject roots and verify that every child continues to use the
   intended file after movement.
 - Do not create `common`, `shared`, or `utils` modules. A support module is named for its generated
@@ -145,6 +148,36 @@ the selected hierarchy and do not widen production visibility to accommodate tes
 Inventory property targets in the remaining workspace crates after the two primary suites establish
 the pattern. Apply the pattern where a suite has enough independent domains to benefit; do not build
 hierarchy around a handful of cohesive properties.
+
+## Graph test follow-ups (2026-11-01)
+
+The audit during [056](056-default-registry-2026-03-07.md) identified these pending corrections
+in umol-graph. They change test organization and generated domains; production behavior is outside
+this work.
+
+- [ ] Split test_transformer_transform_configuration in
+  [transform/stereo.rs](../umol-graph/tests/property/transform/stereo.rs) into tests that state the
+  particular unsupported configuration or kind and assert its exact error. Remove ConfigurationCase
+  and the conditional choice of expected error from the test body.
+- [ ] Separate the MOL either-cis/trans case from successful export cases in
+  test_export_smiles_with_mol in [project.rs](../umol-graph/tests/property/project.rs). The current
+  state == 3 writes V2000 double-bond stereo code 3 and checks an Underdetermined result with
+  unchanged input; the other states check SMILES export and roundtrip. Give these distinct tests
+  and explicit inputs instead of the numeric selector.
+- [ ] Replace successful-result filtering with generators for the domain each property needs.
+  The five properties below contain eight guards that omit errors or non-determined results.
+  Generate successful inputs independently of the operation under test and require its result;
+  keep negative and partial domains in separate tests with explicit expectations. Check that the
+  intended assertions are exercised, including after shrinking; more generated cases alone do not
+  repair the omitted coverage.
+
+| Property | Location | Current omission |
+| --- | --- | --- |
+| test_resolver_resolve_discharge | [resolve.rs](../umol-graph/tests/property/resolve.rs) | Three guards retain only determined aromaticity, stereo and composite results. |
+| test_resolver_resolve_renderings | [resolve.rs](../umol-graph/tests/property/resolve.rs) | Skips unsuccessful SMILES/MOL resolutions. |
+| test_resolver_project_roundtrip | [resolve.rs](../umol-graph/tests/property/resolve.rs) | Skips inputs that do not initially resolve. |
+| test_resolver_resolve_aromatic_constraints | [resolve.rs](../umol-graph/tests/property/resolve.rs) | Two guards omit unsuccessful standalone/composite results. |
+| test_aromatizer_transform_constraints | [transform/aromaticity.rs](../umol-graph/tests/property/transform/aromaticity.rs) | Transformation errors bypass the property assertions. |
 
 ## Semantic-change boundary
 

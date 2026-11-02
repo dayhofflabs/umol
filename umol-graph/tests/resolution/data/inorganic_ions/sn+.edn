@@ -1,0 +1,4 @@
+; Thionitrosyl SN+: S-N triple bond; HW I, p. 683.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#c+" "N"]
+         :bonds [[0 1 :triple]]}}

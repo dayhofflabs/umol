@@ -1,0 +1,3 @@
+; TeO; HW I, pp. 714-715; NIST diatomic constants (CAS 13451-17-7), X3Sigma-; bond-spin encoding: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te" "O"] :bonds [[0 1 "2#s3"]]}}

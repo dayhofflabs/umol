@@ -1,0 +1,4 @@
+; Dithionitryl S2N+: linear S=N+=S; HW I, p. 683.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "N#c+" "S"]
+         :bonds [[0 1 :double] [1 2 :double]]}}

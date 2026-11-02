@@ -1,0 +1,6 @@
+; SeBr4(2-); HW I, p. 708; doi:10.1515/znb-1984-1202, p. 1637. Two trans 3c4e units; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se#c-2" "Br" "Br" "Br" "Br"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}]}}

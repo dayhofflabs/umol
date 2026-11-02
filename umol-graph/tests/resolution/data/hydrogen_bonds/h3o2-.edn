@@ -1,0 +1,5 @@
+; OH-.H2O, localized hydroxide/water description; HW I, pp. 593-594, Fig. 13.17l.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#c-" "O" "H" "H" "H"]
+         :bonds [[0 2 :single] [1 3 :single] [1 4 :single]]
+         :noncovalent-bonds [{:atoms [0 3] :attrs "Hbd"}]}}

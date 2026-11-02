@@ -1,0 +1,7 @@
+; Te6(4+): one resonance contributor with two Te3 triangles and two inter-ring singles.
+; Bu82, p. 805 (doi:10.1021/ic00132a065).
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#c+" "Te#c+" "Te" "Te#c+" "Te#c+" "Te"]
+         :bonds [[0 1 :single] [1 2 :single] [2 0 :single]
+                 [3 4 :single] [4 5 :single] [5 3 :single]
+                 [0 3 :single] [1 4 :single]]}}

@@ -1,0 +1,6 @@
+; Se3N2+: cyclic radical cation, seven pi electrons; HW I, pp. 726-727.
+; Multicenter contributions and system-charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se" "N" "Se" "Se" "N"]
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single] [4 0 :single]]
+         :multicenter-bonds [{:atoms [0 1 2 3 4] :attrs "[2,1,2,2,1]#c+#s2"}]}}

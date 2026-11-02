@@ -1,0 +1,6 @@
+; S3N-: S-S-N-S chain with six pi electrons; HW I, p. 685; B82, pp. 4839-4840.
+; Contributions follow B82's reference partition; system-charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "S" "N" "S"]
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single]]
+         :multicenter-bonds [{:atoms [0 1 2 3] :attrs "[1,2,1,1]#c-"}]}}

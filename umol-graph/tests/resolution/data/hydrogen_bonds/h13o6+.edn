@@ -1,0 +1,13 @@
+; H5O2+.(H2O)4: Zundel core and four outer hydrogen bonds; HW I, pp. 593-594, Fig. 13.17o.
+; Core O/H+/O contributions [2,0,2]: existing PW assignment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O" "H#c+" "O" "H" "H" "H" "H" "O" "O" "O" "O"
+                 "H" "H" "H" "H" "H" "H" "H" "H"]
+         :bonds [[0 3 :single] [0 4 :single] [2 5 :single] [2 6 :single]
+                 [7 11 :single] [7 12 :single] [8 13 :single] [8 14 :single]
+                 [9 15 :single] [9 16 :single] [10 17 :single] [10 18 :single]]
+         :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,2]"}]
+         :noncovalent-bonds [{:atoms [3 7] :attrs "Hbd"}
+                            {:atoms [4 8] :attrs "Hbd"}
+                            {:atoms [5 9] :attrs "Hbd"}
+                            {:atoms [6 10] :attrs "Hbd"}]}}

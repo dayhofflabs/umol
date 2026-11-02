@@ -1,0 +1,3 @@
+; H2S; HW I, p. 623; one explicit and one implicit H.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#h" "H"] :bonds [[0 1 :single]]}}

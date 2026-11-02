@@ -1,0 +1,6 @@
+; S2N2: four S-N sigma bonds; six pi electrons, two unpaired, coupled to a singlet.
+; HW I, p. 681; multicenter allocation without assigned radical sites: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "N" "S" "N"]
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 0 :single]]
+         :multicenter-bonds [{:atoms [0 1 2 3] :attrs "[2,1,2,1]#u2#s1"}]}}

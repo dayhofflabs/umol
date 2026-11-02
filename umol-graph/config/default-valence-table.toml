@@ -115,9 +115,11 @@ target_covalences = [2, 4]
 
 [Sb]
 target_covalences = [3, 5]
+aromatic_valences = [1]
 
 [Te]
 target_covalences = [2, 4, 6]
+aromatic_valences = [2]
 
 [I]
 target_covalences = [1, 3, 5, 7]

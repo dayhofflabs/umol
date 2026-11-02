@@ -1,0 +1,6 @@
+; TeCl4(2-); HW I, p. 712; doi:10.1515/znb-1985-0218, pp. 254-255. Two trans 3c4e units; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#c-2" "Cl" "Cl" "Cl" "Cl"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}]}}

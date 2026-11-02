@@ -1,0 +1,7 @@
+; TeBr6(2-); HW I, pp. 711-712; doi:10.1016/j.saa.2013.09.063, sec. 4.2.1. Three trans 3c4e units; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#c-2" "Br" "Br" "Br" "Br" "Br" "Br"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [5 0 6] :attrs "[1,2,1]#c0#u0#s1"}]}}

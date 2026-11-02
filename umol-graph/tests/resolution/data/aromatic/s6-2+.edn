@@ -1,0 +1,5 @@
+; S6(2+): six-membered 10pi aromatic ring; HW I, p. 621; charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#c+#a+" "S#a+" "S#a+" "S#c+#a+" "S#a+" "S#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"]
+                 [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}}

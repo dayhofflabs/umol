@@ -1,0 +1,6 @@
+; Ammonia dimer, N-H...N hydrogen bond.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N" "N" "H" "H" "H" "H" "H" "H"]
+         :bonds [[0 2 :single] [0 3 :single] [0 4 :single]
+                 [1 5 :single] [1 6 :single] [1 7 :single]]
+         :noncovalent-bonds [{:atoms [2 1] :attrs "Hbd"}]}}

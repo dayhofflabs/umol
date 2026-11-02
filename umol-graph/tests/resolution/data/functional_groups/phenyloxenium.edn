@@ -1,0 +1,6 @@
+; Singlet phenyloxenium; H13, Scheme 2 and p. 9080 (doi:10.1021/ja403370k).
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#c+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 :single]
+                 [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 5 "1#a"] [5 6 "1#a"] [6 1 "1#a"]]}}

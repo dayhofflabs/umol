@@ -1,0 +1,5 @@
+; Water dimer, O-H...O hydrogen bond.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O" "O" "H" "H" "H" "H"]
+         :bonds [[0 2 :single] [0 3 :single] [1 4 :single] [1 5 :single]]
+         :noncovalent-bonds [{:atoms [2 1] :attrs "Hbd"}]}}

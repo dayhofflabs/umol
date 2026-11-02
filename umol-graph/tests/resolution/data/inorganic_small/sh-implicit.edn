@@ -1,0 +1,3 @@
+; SH radical; NIST Chemistry WebBook, diatomic constants, CAS 13940-21-1.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#h"] :bonds []}}
