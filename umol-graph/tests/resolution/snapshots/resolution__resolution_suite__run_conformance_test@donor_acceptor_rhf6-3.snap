@@ -31,7 +31,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["Rh#c+3#n3" "F#c-#n4" "F#c-#n4" "F#c-#n4" "F#c-#n4" "F#c-#n4" "F#c-#n4"]
+      :atoms ["Rh#c+3#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3"]
       :bonds []
       :dative-bonds [
         {:acceptor 0 :attrs :single :donors [1]}
@@ -44,7 +44,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["Rh#c+3#n3" "F#c-#n4" "F#c-#n4" "F#c-#n4" "F#c-#n4" "F#c-#n4" "F#c-#n4"]
+      :atoms ["Rh#c+3#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3" "F#c-#n3"]
       :bonds []
       :dative-bonds [
         {:acceptor 0 :attrs :single :donors [1]}

@@ -23,7 +23,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["Br#c-#n4" "Br#n3" "Br#n3" "Br#n3" "Br#n3"]
+      :atoms ["Br#c-#n2" "Br#n3" "Br#n3" "Br#n3" "Br#n3"]
       :bonds [[1 2 :single] [3 4 :single]]
       :dative-bonds [
         {:acceptor 1 :attrs :single :donors [0]}
@@ -32,7 +32,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["Br#c-#n4" "Br#n3" "Br#n3" "Br#n3" "Br#n3"]
+      :atoms ["Br#c-#n2" "Br#n3" "Br#n3" "Br#n3" "Br#n3"]
       :bonds [[1 2 :single] [3 4 :single]]
       :dative-bonds [
         {:acceptor 1 :attrs :single :donors [0]}

@@ -25,7 +25,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["I#c-#n4" "F#n3#u" "F#n3#u" "F#n3#u" "F#n3#u" "F#n3#u" "F#n3#u"]
+      :atoms ["I#c-#n" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
       :bonds []
       :multicenter-bonds [
         {:atoms [1 0 2] :attrs "[1,2,1]"}
@@ -35,7 +35,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["I#c-#n4" "F#n3#u" "F#n3#u" "F#n3#u" "F#n3#u" "F#n3#u" "F#n3#u"]
+      :atoms ["I#c-#n" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
       :bonds []
       :multicenter-bonds [
         {:atoms [1 0 2] :attrs "[1,2,1]"}

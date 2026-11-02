@@ -78,25 +78,25 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
   :counts-most-saturated {
     :output {
       :atoms [
-        "F#c-#n4"
-        "Xe#n3"
+        "F#c-#n"
+        "Xe#n"
         "O#n2"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "Xe#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "Xe#n"
         "O#n2"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "Xe#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "Xe#n"
         "O#n2"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"]
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
       :bonds [[1 2 :double] [7 8 :double] [13 14 :double]]
       :dative-bonds [
         {:acceptor 1 :attrs :single :donors [0]}
@@ -114,25 +114,25 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
   :counts-strict {
     :output {
       :atoms [
-        "F#c-#n4"
-        "Xe#n3"
+        "F#c-#n"
+        "Xe#n"
         "O#n2"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "Xe#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "Xe#n"
         "O#n2"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "Xe#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "Xe#n"
         "O#n2"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"]
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
       :bonds [[1 2 :double] [7 8 :double] [13 14 :double]]
       :dative-bonds [
         {:acceptor 1 :attrs :single :donors [0]}

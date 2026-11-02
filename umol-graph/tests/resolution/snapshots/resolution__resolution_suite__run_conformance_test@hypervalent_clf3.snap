@@ -19,14 +19,14 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["Cl#n3" "F#n3" "F#n3#u" "F#n3#u"]
+      :atoms ["Cl#n2" "F#n3" "F#n3" "F#n3"]
       :bonds [[0 1 :single]]
       :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]"}]}
     :success true
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["Cl#n3" "F#n3" "F#n3#u" "F#n3#u"]
+      :atoms ["Cl#n2" "F#n3" "F#n3" "F#n3"]
       :bonds [[0 1 :single]]
       :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]"}]}
     :success true

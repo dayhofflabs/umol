@@ -21,8 +21,11 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 ## Project Status (2026-11-02)
 
 **Last implementation check (2026-11-02):** graph tests and 906 resolution
-conformance cases passed. Earlier workspace tests, 215 graph property cases,
-3150 Python tests (2 skipped), workspace Clippy and formatting checks also passed.
+conformance cases and 215 graph properties passed. The Counts accounting correction
+in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting) is implemented:
+107 snapshots now give the selected donor/multicenter assignments under both policies.
+Earlier workspace tests, 3150 Python tests (2 skipped), workspace Clippy and
+formatting checks also passed.
 
 Each EDN input runs through AtomTyping and Counts with both Strict and MostSaturated policies. The selected
 noble-gas HW additions and six xenon-anion replacements are implemented. Perxenate
@@ -439,13 +442,10 @@ the CO donors retain the C−/O+ triple-bond convention used for free CO.
 
 #### Registry and ValenceTable comparison
 
-Counts admits H01–H05 in direct atom-classification probes; the updated AtomTyping
-registry covers H01–H09. Counts rejects H06, H07 and H09 with their concrete zero-H,
-zero-lone-pair fields: its nonbonding budget does not subtract multicenter contributions
-or donated pairs. These are Counts accounting omissions despite supplied contributions;
-the correction is tracked in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting).
-The existing H target [1] already covers H05; no larger target is needed for H01–H05.
-H08 passes Counts classification as an individual atom. ValenceTable is unchanged.
+The AtomTyping registry covers H01–H09. After the Counts accounting correction
+(2026-11-02), both models agree in all seven fixtures below, including the donated
+pair in H07 and the multicenter contributions in H06/H09. The existing H target [1]
+already covers H05; ValenceTable is unchanged.
 
 #### Other extracted examples
 
@@ -475,18 +475,10 @@ and the earlier H− gap; their lone-pair/spin fields are left for resolution.
 | [H3+](../umol-graph/tests/resolution/data/inorganic_ions/h3+.edn) | H06 and H08; three-center/two-electron [1,0,1] |
 | [[HCr2(CO)10]−](../umol-graph/tests/resolution/data/donor_acceptor/hcr2-co10-.edn) | H09, Cr#n3#t5#m0 and C#c-#v3#d; three-center/two-electron [0,2,0] |
 
-AtomTyping resolves all seven under Strict and MostSaturated. Counts agrees for H−
-and implicit H2; its snapshots assign extra unpaired electrons in B2H6/H3+ and
-extra lone pairs on F in HF2−, the H−/N donors in the Rh complex, and H−/CO
-donors in the Cr complex.
-
-**The current Counts result for [HCr2(CO)10]− is incorrect:** both policies assign
-#n1 to the bridging H− and each CO carbon, although the supplied contributions
-require #n0. The snapshot records this known bug; passing conformance does not
-establish correctness of that assignment. The fix is tracked in 240 above.
-
-Checks passed: **718 conformance cases and 3516 graph unit tests** (including the
-366 valence tests). The 711 earlier snapshots are unchanged.
+Both models resolve all seven under Strict and MostSaturated. In [HCr2(CO)10]−,
+the bridging H− and every CO carbon now receive #n0, as required by the supplied
+multicenter and dative contributions. The correction is recorded in
+[240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting).
 
 ### Noble Gases
 
@@ -734,8 +726,8 @@ preserving the 685 cases preceding the HW increment.
 The perxenate encoding resolves under both policies with AtomTyping and Counts.
 No noble-gas selections remain open.
 
-Earlier Counts probes with explicit H=0 matched the XeO3, XeO4 and XeO6⁴−
-encodings. Multicenter/dative cases remain outside its supported scope.
+After the Counts accounting correction (2026-11-02), its multicenter and dative
+outputs also match the selected AtomTyping assignments under both policies.
 ValenceTable is unchanged.
 
 ### Halogens
@@ -1065,8 +1057,9 @@ Both models and policies agree on the latter without ties, preserving all Hbd
 contacts. Counts Strict leaves H2F+ underdetermined in the
 two fixtures with unspecified H counts; MostSaturated selects the intended H2F+.
 
-The 27 multicenter fixtures retain the incorrect Counts electron assignments,
-tracked in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting).
+The 27 multicenter fixtures now agree under both models and policies after the
+[Counts correction](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting)
+on 2026-11-02.
 For BrO with both H and spin unspecified, Counts Strict remains underdetermined and
 MostSaturated adds H; the BrO fixture supplies H=0.
 
@@ -1113,22 +1106,22 @@ the integer order is a graph encoding, not the fractional MO bond order.
 | Ch07 | E#c+#n#v3 (E = S, Se, Te); S#c+#v5 | Present; S#c+#v5 added | Pyramidal EX3+ (HW 633, 707, 711); tetrahedral SOF3+ with S=O and three S–F bonds (HW 664) |
 | Ch08 | Se#c+#n#v3#t3; Br#c-#n#d3; I#c-#n#d3 | Present; 3 added | Binary Se4Cl16/Te4Br16/epsilon-Te4I16 fixtures. HW 707, 711 explicitly gives [EX3+X−]4 cubanes; extends the existing Te4Cl16 donor convention |
 | Ch09 | Po#n2#v2; Po#n2#v#h; Po#n2#h2; Po#c+2#n2; Po#c+4#n | Present; 5 added | H2Po (HW 704), Po2+/Po4+ solution and salt chemistry (HW 725); five fixtures |
-| Ch10 | O#c+#n#u#v2; O#n2#v#m; O#n#v2#m2; existing O#n2#v2, O#n2#u#v, O#c-#n3#v | Present; 3 added | HW 565–567, Fig. 13.6. Four O2± fixtures cover atom-localized and bond-charge/spin encodings. O3/O3− use two O–O singles and a multicenter π system with contributions [1,2,1]; O3− has system charge −1 and doublet spin (PW). Two new fixtures; AtomTyping agrees under both policies, Counts is incorrect for the multicenter cases |
+| Ch10 | O#c+#n#u#v2; O#n2#v#m; O#n#v2#m2; existing O#n2#v2, O#n2#u#v, O#c-#n3#v | Present; 3 added | HW 565–567, Fig. 13.6. Four O2± fixtures cover atom-localized and bond-charge/spin encodings. O3/O3− use two O–O singles and a multicenter π system with contributions [1,2,1]; O3− has system charge −1 and doublet spin (PW). Two new fixtures; both models agree under both policies |
 | Ch11, Zundel | O#n#v2#m2; O#n#v#h#m2; O#n#h2#m2; O#n2#v2#m0; O#n2#v#h#m0; O#n2#h2#m0; existing H#c+#m0 | Present; 5 added | Both 3c2e (M17) and 3c4e (HW 174–176, 311, 593–594) descriptions accepted. O–H–O contributions [2,0,0] retain one/two lone pairs on the O atoms; [2,0,2] retains one on each (PW). Six fixtures cover explicit, implicit and mixed terminal H |
 | Ch11, hydration | Existing H2O, H3O+, OH− and H5O2+ states | Present; no new states | H7O3+ and H9O4+: hydronium plus two/three waters; H13O6+: existing Zundel core plus four waters; H3O2−: localized hydroxide/water description. HW 593–594, Fig. 13.17. Four hydrogen_bonds/ fixtures use Hbd for the hydration contacts and preserve those relations under resolution |
-| Ch12 | S#n2#u#v; S#c-#n3#v; S#n2#v#m; S#n#v2#m2; E#n2#v2 and E#c+#n#v3 (E = S, Se, Te); E#n#v2#a2 and E#c+#n#v2#a (E = S, Se, Te) | Present; selected slice complete | S2− has atom-localized and bond-charge/spin fixtures (HW 622; PW). S3− has localized S−–S–S• and multicenter π [1,2,1] with system charge −1/doublet spin (HW 622, ozonide analogy; PW); terminal S#n2#v#m added. Localized S8²⁺/Se8²⁺ use six divalent E and two trivalent E+ atoms (M12). Te6²⁺ has six ring singles and one transannular single in one contributor (Be94, Fig. 4); Te6⁴⁺ has two Te3 triangles and two inter-ring singles (Bu82). HW assigns 6π aromaticity to E4²⁺ (621, 700–701) and 10π to S6²⁺ (621); three missing Se/Te states added. S5+/S6+/S7+ use ring singles and 9/11/13-electron multicenter systems with system charge +1 and doublet spin (KP04; allocation: PW). All have fixtures; Counts is incorrect for the multicenter cases |
+| Ch12 | S#n2#u#v; S#c-#n3#v; S#n2#v#m; S#n#v2#m2; E#n2#v2 and E#c+#n#v3 (E = S, Se, Te); E#n#v2#a2 and E#c+#n#v2#a (E = S, Se, Te) | Present; selected slice complete | S2− has atom-localized and bond-charge/spin fixtures (HW 622; PW). S3− has localized S−–S–S• and multicenter π [1,2,1] with system charge −1/doublet spin (HW 622, ozonide analogy; PW); terminal S#n2#v#m added. Localized S8²⁺/Se8²⁺ use six divalent E and two trivalent E+ atoms (M12). Te6²⁺ has six ring singles and one transannular single in one contributor (Be94, Fig. 4); Te6⁴⁺ has two Te3 triangles and two inter-ring singles (Bu82). HW assigns 6π aromaticity to E4²⁺ (621, 700–701) and 10π to S6²⁺ (621); three missing Se/Te states added. S5+/S6+/S7+ use ring singles and 9/11/13-electron multicenter systems with system charge +1 and doublet spin (KP04; allocation: PW). All have fixtures; both models agree |
 | Ch13 | Te#c-#v7; Te#c-2#v8 | Present; 2 added | TeF7−/TeOF5− and TeF8²−/TeOF6²−. HW 710, 725; C91H/C93H/C93T. Selected no-central-lone-pair / ordinary-oxo convention (PW); four fixtures |
-| Ch14, hexahalides | E#c-2#n#m6 (E = Se, Te) | Present; 2 added | SeBr6²−, TeCl6²− and TeBr6²−: three trans 3c4e units [1,2,1], one central lone pair. HW 707, 711–712; A07, p. 18; N14, §4.2.1; contributions/charge placement: PW. Three fixtures; both AtomTyping policies agree, Counts is incorrect |
-| Ch14, tetrahalides | E#c-2#n2#m4 (E = Se, Te) | Present; 2 added | SeX4²− (X = Cl, Br), TeX4²− (X = Cl, Br, I): two trans 3c4e units [1,2,1], two central lone pairs. HW 708, 712; explicit 3c4e assignments: K84, p. 1637; K91, pp. 23–24; P85, pp. 254–255. Contributions/charge placement: PW. SeBr4²− and TeCl4²− fixtures; both AtomTyping policies agree, Counts is incorrect |
-| Ch15 | S#u#v#m4; existing E#n2#v2 (E = O, S, Se, Te) | Present; 1 added | SF5: axial single bond, two basal 3c4e units [1,2,1], one unpaired S electron and no lone pair (HW 634; C93R, pp. 1133–1134; contributions: PW). SO/SeO/TeO use a double bond with #s3 (HW 646, 714–715; NIST). Four fixtures; both AtomTyping policies agree, Counts is incorrect for SF5. Existing EH radical citations completed in Ch20 |
+| Ch14, hexahalides | E#c-2#n#m6 (E = Se, Te) | Present; 2 added | SeBr6²−, TeCl6²− and TeBr6²−: three trans 3c4e units [1,2,1], one central lone pair. HW 707, 711–712; A07, p. 18; N14, §4.2.1; contributions/charge placement: PW. Three fixtures; both models agree |
+| Ch14, tetrahalides | E#c-2#n2#m4 (E = Se, Te) | Present; 2 added | SeX4²− (X = Cl, Br), TeX4²− (X = Cl, Br, I): two trans 3c4e units [1,2,1], two central lone pairs. HW 708, 712; explicit 3c4e assignments: K84, p. 1637; K91, pp. 23–24; P85, pp. 254–255. Contributions/charge placement: PW. SeBr4²− and TeCl4²− fixtures; both models agree |
+| Ch15 | S#u#v#m4; existing E#n2#v2 (E = O, S, Se, Te) | Present; 1 added | SF5: axial single bond, two basal 3c4e units [1,2,1], one unpaired S electron and no lone pair (HW 634; C93R, pp. 1133–1134; contributions: PW). SO/SeO/TeO use a double bond with #s3 (HW 646, 714–715; NIST). Four fixtures; both models agree. Existing EH radical citations completed in Ch20 |
 | Ch16, E4N4 | E#c+#n#v3; N#c-#n2#v2 (E = S, Se); existing HW-contributor states | Present; existing states | Localized: eight E–N singles and two E–E singles (M12). Earlier S4N4 HW contributor with two N–S–N 3c4e units retained |
 | Ch16, E4N4 whole cage | E#c+#n#v2#m; N#c-#n#v2#m2 (E = S, Se) | Not selected | Optional 12-electron, eight-center description (AP24; Se analogy and contributions: PW). Three entries and two fixtures removed 2026-11-02: simpler descriptions already cover these molecules |
-| Ch16, small nitrides | S#c+#n#v3; N#n#v3; N#c+#v4; S#n2#v2; S#n#v2#m2; N#n#v2#m | Present; existing states | SN+: S+≡N; S2N+: S=N+=S (HW 683). S4N2: six-membered ring, six singles and one N–S–N 3c4e π unit [1,2,1] (HW 675, 682; contributions: PW). Three fixtures; Counts is incorrect for S4N2 |
-| Ch16, S2N2 | S#n#v2#a2; N#n#v2#a; S#n#v2#m2; N#n#v2#m | Present; existing states | Two alternative encodings of four S–N sigma bonds and six π electrons: aromatic (K18), or nonaromatic multicenter [2,1,2,1]#u2#s1 carrying HW's two singlet-coupled radical electrons (HW 681; allocation: PW). One lone pair per atom; radical sites unspecified. Both have fixtures; Counts is incorrect for the multicenter case |
+| Ch16, small nitrides | S#c+#n#v3; N#n#v3; N#c+#v4; S#n2#v2; S#n#v2#m2; N#n#v2#m | Present; existing states | SN+: S+≡N; S2N+: S=N+=S (HW 683). S4N2: six-membered ring, six singles and one N–S–N 3c4e π unit [1,2,1] (HW 675, 682; contributions: PW). Three fixtures; both models agree |
+| Ch16, S2N2 | S#n#v2#a2; N#n#v2#a; S#n#v2#m2; N#n#v2#m | Present; existing states | Two alternative encodings of four S–N sigma bonds and six π electrons: aromatic (K18), or nonaromatic multicenter [2,1,2,1]#u2#s1 carrying HW's two singlet-coupled radical electrons (HW 681; allocation: PW). One lone pair per atom; radical sites unspecified. Both have fixtures; both models agree |
 | Ch16, aromatic nitride ions | E#n#v2#a2; E#c+#n#v2#a (E = S, Se); N#n#v2#a; N#c-#n#v2#a2 | Present; N− state added | HW 683–686, 726–727: S2N3+, S3N2²⁺ and Se3N2²⁺ (6π); S4N3+, S4N4²⁺ and S3N3− (10π); S5N5+ (14π). Seven fixtures, one lone pair per atom; formal-charge placement: PW |
-| Ch16, radical nitride cations | E#n#v2#m2 (E = S, Se); N#n#v2#m | Present; existing states | E3N2+: five-membered E–N–E–E–N ring, five sigma singles, seven-electron π system [2,1,2,2,1]#c+#s2. HW 683–684, 726–727; contributions/system charge: PW. Two fixtures; Counts is incorrect |
+| Ch16, radical nitride cations | E#n#v2#m2 (E = S, Se); N#n#v2#m | Present; existing states | E3N2+: five-membered E–N–E–E–N ring, five sigma singles, seven-electron π system [2,1,2,2,1]#c+#s2. HW 683–684, 726–727; contributions/system charge: PW. Two fixtures; both models agree |
 | Ch16, Se4N2 | Unassigned | Not selected; reassigned | HW 725–726 repeats the original formula. Siivari et al. (1992), pp. 1518–1519, identify the material as Se3N2Cl2 by elemental analysis, reaction stoichiometry and independent synthesis with matching IR; full paper reviewed. No Se4N2 fixture or registry example |
-| Ch16, acyclic SxN− | S#n2#v#m; S#n#v2#m2; N#n#v2#m | Present; existing states | S3N−: S–S–N–S, three singles and six π electrons [1,2,1,1]#c− (B82). S4N−: S–S–N–S–S, four singles and eight π electrons [1,2,1,2,1]#c− (C80, pp. 5780–5781). HW 685; graph allocation: PW. Two fixtures; Counts is incorrect |
+| Ch16, acyclic SxN− | S#n2#v#m; S#n#v2#m2; N#n#v2#m | Present; existing states | S3N−: S–S–N–S, three singles and six π electrons [1,2,1,1]#c− (B82). S4N−: S–S–N–S–S, four singles and eight π electrons [1,2,1,2,1]#c− (C80, pp. 5780–5781). HW 685; graph allocation: PW. Two fixtures; both models agree |
 | Ch16, SN2²− | S#n#v4; N#c-#n2#v2 | Present; existing states | N−=S=N−: HW 686; V18, Fig. 1a and Table 2. One fixture; both models agree |
 | Ch17 | Unassigned | Not selected in this pass | Larger polyatomic clusters and specialized adducts: HW 620–622, 699–703, 707–713, 725–727. Se2N2/SeSN2 occur as adducts, not established free-molecule examples. No states added solely for elaborate ions/complexes |
 | Ch18 | Unassigned | Not selected; unsupported | PoF6: HW 706 lists it, but W60 establishes only a volatile Po fluoride without composition determination |
@@ -1369,37 +1362,12 @@ TeF3+ replaces the unsupported TeH3+ example without adding a state.
 | Existing heteroaromatic states and Kekulé notation | aromatic/{pyrylium,furan,furan-kekule}.edn |
 
 The capacity expansion removes Counts rejections of Se4Cl16, TeF8²− and TeOF6²−.
-Counts now agrees with AtomTyping in 71 of the 111 new/revised chalcogen cases
-and returns incorrect electron assignments in forty donor/multicenter cases,
-including Se4Cl16 and the multicenter nitrides.
-In the HW S4N4 contributor it adds a lone pair to each multicenter S
-and an unpaired electron to each N; the S4N2, diradical S2N2 and E3N2+ π systems
-have the same error (E = S, Se).
-S3N− and S4N− likewise acquire an extra lone pair on each internal S and an unpaired
-electron on N and each terminal S under Counts. Both AtomTyping policies give the
-selected assignments without ties; neither case requires a ValenceTable extension.
-For S5+/S6+/S7+, both AtomTyping policies assign one lone pair per S without ties;
-Counts instead assigns two. All policies preserve the system charge and doublet.
-SN+, S2N+, SN2²−, aromatic S2N2 and the seven new aromatic nitride ions agree under both
-models. N−#a2 uses the existing isoelectronic O aromatic contribution in Counts;
-no ValenceTable extension is needed. For O3/O3− and multicenter S3− it adds a lone
-pair to the central atom and an unpaired electron to each terminal atom.
-Localized S3− agrees under both models. In both Zundel descriptions Counts adds
-a lone pair to every O contributing two multicenter electrons. The H13O6+ fixture
-retains this error only in its existing Zundel core; its outer waters agree.
-H7O3+, H9O4+ and localized H3O2− agree under all four configurations without ties.
-All four hydration fixtures preserve their Hbd relations and require no registry
-or ValenceTable changes. Localized E4N4
-and S8²⁺/Se8²⁺ agree under both models. The S6²⁺ fixture resolves to one lone pair
-per S and aromatic contributions [1,2,2,1,2,2]; all four configurations agree without ties.
-Te6²⁺/Te6⁴⁺ and phenyloxenium likewise agree under all four configurations without ties.
-The Ch14 additions require no ValenceTable extension. Counts assigns four central
-lone pairs instead of one (hexahalides) or two (tetrahalides), and one unpaired
-electron to each halogen.
-SF5 requires no ValenceTable extension. Counts adds two sulfur lone pairs and one
-unpaired electron to each basal fluorine; the axial fluorine resolves correctly.
-The restored F complex also returns incorrect donor-pair counts. Donated-pair and
-multicenter omissions are tracked in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting).
+After the [accounting correction](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting)
+on 2026-11-02, Counts agrees with AtomTyping in all 111 new/revised chalcogen cases.
+The forty previously incorrect donor/multicenter assignments are corrected, including
+the Zundel core in H13O6+. The restored [F(XeOF4)3]− fixture also agrees. All four
+hydration fixtures preserve their Hbd relations and require no registry or table changes.
+N−#a2 uses the existing isoelectronic O aromatic contribution in Counts.
 ValenceTable covalence targets remain unchanged. The Te dianion fixtures have H
 fixed to zero and use the approved element-capacity adjustment.
 

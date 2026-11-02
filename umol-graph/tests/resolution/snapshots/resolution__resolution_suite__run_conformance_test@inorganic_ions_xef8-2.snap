@@ -19,32 +19,14 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms [
-        "Xe#c-2#n5"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"]
+      :atoms ["Xe#c-2#n" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
       :bonds []
       :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[8,1,1,1,1,1,1,1,1]"}]}
     :success true
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms [
-        "Xe#c-2#n5"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"
-        "F#n3#u"]
+      :atoms ["Xe#c-2#n" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
       :bonds []
       :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[8,1,1,1,1,1,1,1,1]"}]}
     :success true

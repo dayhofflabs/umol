@@ -19,14 +19,14 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["F#c-#n4" "H#c+" "F#c-#n4"]
+      :atoms ["F#c-#n3" "H#c+" "F#c-#n3"]
       :bonds []
       :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,2]"}]}
     :success true
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["F#c-#n4" "H#c+" "F#c-#n4"]
+      :atoms ["F#c-#n3" "H#c+" "F#c-#n3"]
       :bonds []
       :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,2]"}]}
     :success true

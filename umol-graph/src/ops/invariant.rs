@@ -50,6 +50,60 @@ pub enum ValenceMismatch {
 }
 
 impl ValenceInvariants {
+    /// Number of electrons assigned to an atom, including shared electrons.
+    ///
+    /// Uses the actual element's valence electrons and the supplied contributions.
+    /// This is a signed calculation, not a validity or capacity check.
+    #[inline]
+    pub fn electron_count(
+        element: Element,
+        charge: i64,
+        implicit_hydrogens: i64,
+        valence: i64,
+        aromatic_valence: i64,
+        accepted_pairs: i64,
+    ) -> i64 {
+        i64::from(element.valence_electrons()) - charge
+            + implicit_hydrogens
+            + valence
+            + aromatic_covalence(aromatic_valence)
+            + 2 * accepted_pairs
+    }
+
+    /// Electrons available for lone pairs and unpaired electrons (`2*n + u`).
+    ///
+    /// Subtracts bonding occupation from the electron count. Accepted pairs
+    /// cancel from that balance. A negative result is retained, indicating
+    /// that the supplied bonding contributions exceed the available electrons.
+    #[inline]
+    pub fn nonbonding_electrons(
+        element: Element,
+        charge: i64,
+        implicit_hydrogens: i64,
+        valence: i64,
+        aromatic_valence: i64,
+        donated_pairs: i64,
+        multicenter_valence: i64,
+    ) -> i64 {
+        Self::electron_count(
+            element,
+            charge,
+            implicit_hydrogens,
+            valence,
+            aromatic_valence,
+            0,
+        ) - orbital_count(
+            0,
+            0,
+            donated_pairs,
+            0,
+            implicit_hydrogens,
+            valence,
+            aromatic_valence,
+            multicenter_valence,
+        )
+    }
+
     /// Molecule-wide solution: `Underdetermined` if any atom has a non-`Lit`
     /// field the check can't fire on, `Contradictory` on the first orbital !=
     /// electron mismatch, else `Determined`.
@@ -128,7 +182,7 @@ impl ValenceInvariants {
             aromatic_valence,
             multicenter_valence,
         );
-        let electron = electron_count(
+        let electron = Self::electron_count(
             element,
             charge,
             implicit_h,
@@ -147,8 +201,7 @@ impl ValenceInvariants {
         }
     }
 
-    /// Per-atom solution reading the atom in its molecule context: each valence
-    /// is taken from a literal constraint, else the topology-derived value.
+    /// Per-atom solution using complete evidence for each contribution.
     /// `Underdetermined` when any required field is non-`Lit`.
     fn check_molecule_atom(molecule: &Molecule, atom_id: AtomId) -> Solution<(), ValenceMismatch> {
         let atom = molecule.atom(atom_id);
@@ -167,71 +220,89 @@ impl ValenceInvariants {
         let Some(unpaired_electrons) = atom.unpaired_electrons().count.as_lit() else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom.constraints().valence() {
-            NumForm::Lit(v) if *v >= 0 => *v,
-            NumForm::Undetermined => match atom.valence() {
-                Some(NumForm::Lit(t)) if t >= 0 => t,
-                None => {
-                    return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
-                        atom_id,
-                        key: AtomConstraintKey::Valence,
-                    })
-                }
-                _ => return Solution::Underdetermined(()),
-            },
-            _ => return Solution::Underdetermined(()),
-        };
-        let donated = match atom.constraints().donated_pairs() {
-            NumForm::Lit(v) if *v >= 0 => *v,
-            NumForm::Undetermined => match atom.donated_pairs() {
-                Some(NumForm::Lit(t)) if t >= 0 => t,
-                None => {
-                    return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
-                        atom_id,
-                        key: AtomConstraintKey::DonatedPairs,
-                    })
-                }
-                _ => return Solution::Underdetermined(()),
-            },
-            _ => return Solution::Underdetermined(()),
-        };
-        let accepted = match atom.constraints().accepted_pairs() {
-            NumForm::Lit(v) if *v >= 0 => *v,
-            NumForm::Undetermined => match atom.accepted_pairs() {
-                Some(NumForm::Lit(t)) if t >= 0 => t,
-                None => {
-                    return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
-                        atom_id,
-                        key: AtomConstraintKey::AcceptedPairs,
-                    })
-                }
-                _ => return Solution::Underdetermined(()),
-            },
-            _ => return Solution::Underdetermined(()),
-        };
-        let aromatic_constraint = atom.constraints().aromatic_valence();
-        let aromatic_valence = match aromatic_constraint
-            .as_lit()
-            .map(|valence| valence.valence_count())
+        let valence = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::Valence)
         {
-            Some(valence) if valence >= 0 => valence,
-            None if aromatic_constraint.is_undetermined() => match atom.aromatic_valence() {
-                NumForm::Lit(t) if t >= 0 => t,
-                _ => return Solution::Underdetermined(()),
-            },
-            _ => return Solution::Underdetermined(()),
+            Some(AtomConstraintForm::Valence(form)) => form.as_lit(),
+            None => {
+                return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                    atom_id,
+                    key: AtomConstraintKey::Valence,
+                })
+            }
+            _ => unreachable!(),
         };
-        let multicenter_constraint = atom.constraints().multicenter_valence();
-        let multicenter_valence = match multicenter_constraint
-            .as_lit()
-            .map(|valence| valence.valence_count())
+        let Some(valence) = valence.filter(|value| *value >= 0) else {
+            return Solution::Underdetermined(());
+        };
+        let donated = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::DonatedPairs)
         {
-            Some(valence) if valence >= 0 => valence,
-            None if multicenter_constraint.is_undetermined() => match atom.multicenter_valence() {
-                NumForm::Lit(t) if t >= 0 => t,
-                _ => return Solution::Underdetermined(()),
-            },
-            _ => return Solution::Underdetermined(()),
+            Some(AtomConstraintForm::DonatedPairs(form)) => form.as_lit(),
+            None => {
+                return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                    atom_id,
+                    key: AtomConstraintKey::DonatedPairs,
+                })
+            }
+            _ => unreachable!(),
+        };
+        let Some(donated) = donated.filter(|value| *value >= 0) else {
+            return Solution::Underdetermined(());
+        };
+        let accepted = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AcceptedPairs)
+        {
+            Some(AtomConstraintForm::AcceptedPairs(form)) => form.as_lit(),
+            None => {
+                return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                    atom_id,
+                    key: AtomConstraintKey::AcceptedPairs,
+                })
+            }
+            _ => unreachable!(),
+        };
+        let Some(accepted) = accepted.filter(|value| *value >= 0) else {
+            return Solution::Underdetermined(());
+        };
+        let aromatic_valence = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AromaticValence)
+        {
+            Some(AtomConstraintForm::AromaticValence(form)) => {
+                form.as_lit().map(|value| value.valence_count())
+            }
+            None => {
+                return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                    atom_id,
+                    key: AtomConstraintKey::AromaticValence,
+                })
+            }
+            _ => unreachable!(),
+        };
+        let Some(aromatic_valence) = aromatic_valence.filter(|value| *value >= 0) else {
+            return Solution::Underdetermined(());
+        };
+        let multicenter_valence = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::MulticenterValence)
+        {
+            Some(AtomConstraintForm::MulticenterValence(form)) => {
+                form.as_lit().map(|value| value.valence_count())
+            }
+            None => {
+                return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                    atom_id,
+                    key: AtomConstraintKey::MulticenterValence,
+                })
+            }
+            _ => unreachable!(),
+        };
+        let Some(multicenter_valence) = multicenter_valence.filter(|value| *value >= 0) else {
+            return Solution::Underdetermined(());
         };
         let orbital = orbital_count(
             unpaired_electrons,
@@ -243,7 +314,7 @@ impl ValenceInvariants {
             aromatic_valence,
             multicenter_valence,
         );
-        let electron = electron_count(
+        let electron = Self::electron_count(
             element,
             charge,
             implicit_h,
@@ -271,7 +342,7 @@ impl ValenceInvariants {
     /// - `0 <= unpaired_electrons <= max_unpaired_electrons`
     /// - `0 <= lone_pairs <= valence_capacity / 2`
     ///
-    /// Structural inputs read from the atom (constraint, else topology):
+    /// Structural inputs use complete evidence, meeting assertions with relations:
     /// `valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`, `multicenter_valence`.
     ///
     pub fn enumerate_atom(molecule: &Molecule, atom_id: AtomId) -> Vec<AtomForm> {
@@ -280,55 +351,65 @@ impl ValenceInvariants {
             return Vec::new();
         };
 
-        let valence = match atom.constraints().valence() {
-            NumForm::Lit(v) if *v >= 0 => *v,
-            NumForm::Undetermined => match atom.valence() {
-                Some(NumForm::Lit(t)) if t >= 0 => t,
-                _ => return Vec::new(),
-            },
-            _ => return Vec::new(),
-        };
-        let donated = match atom.constraints().donated_pairs() {
-            NumForm::Lit(v) if *v >= 0 => *v,
-            NumForm::Undetermined => match atom.donated_pairs() {
-                Some(NumForm::Lit(t)) if t >= 0 => t,
-                _ => return Vec::new(),
-            },
-            _ => return Vec::new(),
-        };
-        let accepted = match atom.constraints().accepted_pairs() {
-            NumForm::Lit(v) if *v >= 0 => *v,
-            NumForm::Undetermined => match atom.accepted_pairs() {
-                Some(NumForm::Lit(t)) if t >= 0 => t,
-                _ => return Vec::new(),
-            },
-            _ => return Vec::new(),
-        };
-        let aromatic_constraint = atom.constraints().aromatic_valence();
-        let aromatic_valence = match aromatic_constraint
-            .as_lit()
-            .map(|valence| valence.valence_count())
+        let valence = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::Valence)
         {
-            Some(valence) if valence >= 0 => valence,
-            None if aromatic_constraint.is_undetermined() => match atom.aromatic_valence() {
-                NumForm::Lit(t) if t >= 0 => t,
-                _ => return Vec::new(),
-            },
-            _ => return Vec::new(),
+            Some(AtomConstraintForm::Valence(form)) => form.as_lit(),
+            None => return Vec::new(),
+            _ => unreachable!(),
         };
-        let multicenter_constraint = atom.constraints().multicenter_valence();
-        let multicenter_valence = match multicenter_constraint
-            .as_lit()
-            .map(|valence| valence.valence_count())
+        let Some(valence) = valence.filter(|value| *value >= 0) else {
+            return Vec::new();
+        };
+        let donated = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::DonatedPairs)
         {
-            Some(valence) if valence >= 0 => valence,
-            None if multicenter_constraint.is_undetermined() => match atom.multicenter_valence() {
-                NumForm::Lit(t) if t >= 0 => t,
-                _ => return Vec::new(),
-            },
-            _ => return Vec::new(),
+            Some(AtomConstraintForm::DonatedPairs(form)) => form.as_lit(),
+            None => return Vec::new(),
+            _ => unreachable!(),
         };
-
+        let Some(donated) = donated.filter(|value| *value >= 0) else {
+            return Vec::new();
+        };
+        let accepted = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AcceptedPairs)
+        {
+            Some(AtomConstraintForm::AcceptedPairs(form)) => form.as_lit(),
+            None => return Vec::new(),
+            _ => unreachable!(),
+        };
+        let Some(accepted) = accepted.filter(|value| *value >= 0) else {
+            return Vec::new();
+        };
+        let aromatic_valence = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AromaticValence)
+        {
+            Some(AtomConstraintForm::AromaticValence(form)) => {
+                form.as_lit().map(|value| value.valence_count())
+            }
+            None => return Vec::new(),
+            _ => unreachable!(),
+        };
+        let Some(aromatic_valence) = aromatic_valence.filter(|value| *value >= 0) else {
+            return Vec::new();
+        };
+        let multicenter_valence = match atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::MulticenterValence)
+        {
+            Some(AtomConstraintForm::MulticenterValence(form)) => {
+                form.as_lit().map(|value| value.valence_count())
+            }
+            None => return Vec::new(),
+            _ => unreachable!(),
+        };
+        let Some(multicenter_valence) = multicenter_valence.filter(|value| *value >= 0) else {
+            return Vec::new();
+        };
         let charge_range = enumeration_values(atom.charge(), element_charge_range(element));
         let implicit_h_range = enumeration_values(
             atom.implicit_hydrogens(),
@@ -358,7 +439,7 @@ impl ValenceInvariants {
                             aromatic_valence,
                             multicenter_valence,
                         );
-                        let electron = electron_count(
+                        let electron = Self::electron_count(
                             element,
                             charge,
                             implicit_h,
@@ -460,23 +541,6 @@ fn orbital_count(
         + multicenter_valence
 }
 
-/// Compute number of electrons assigned to atom
-fn electron_count(
-    element: Element,
-    charge: i64,
-    implicit_h: i64,
-    valence: i64,
-    aromatic_valence: i64,
-    accepted_pairs: i64,
-) -> i64 {
-    let aromatic_covalence = aromatic_covalence(aromatic_valence);
-    (element.valence_electrons() as i64) - charge
-        + implicit_h
-        + valence
-        + aromatic_covalence
-        + 2 * accepted_pairs
-}
-
 fn element_charge_range(element: Element) -> RangeInclusive<i64> {
     let (lo, hi) = element.charge_bounds();
     (lo as i64)..=(hi as i64)
@@ -500,8 +564,70 @@ mod tests {
         AromaticValenceForm, AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId, BondForm,
         ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, UnpairedElectronsForm,
     };
+    use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
+
+    #[rstest]
+    #[case::methane(Element::C, 0, 4, 0, 0, 0, 8)]
+    #[case::aromatic_carbon(Element::C, 0, 1, 2, 1, 0, 8)]
+    #[case::aromatic_oxygen(Element::O, 0, 0, 2, 2, 0, 8)]
+    #[case::borane_acceptor(Element::B, 0, 3, 0, 0, 1, 8)]
+    #[case::hydride(Element::H, -1, 0, 0, 0, 0, 2)]
+    fn test_valence_invariants_electron_count(
+        #[case] element: Element,
+        #[case] charge: i64,
+        #[case] implicit_hydrogens: i64,
+        #[case] valence: i64,
+        #[case] aromatic_valence: i64,
+        #[case] accepted_pairs: i64,
+        #[case] expected: i64,
+    ) {
+        assert_eq!(
+            ValenceInvariants::electron_count(
+                element,
+                charge,
+                implicit_hydrogens,
+                valence,
+                aromatic_valence,
+                accepted_pairs,
+            ),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::methane((Element::C, 0), 4, 0, 0, 0, 0, 0)]
+    #[case::ammonia((Element::N, 0), 3, 0, 0, 0, 0, 2)]
+    #[case::ammonia_donor((Element::N, 0), 3, 0, 0, 1, 0, 0)]
+    #[case::bridging_hydride((Element::H, -1), 0, 0, 0, 0, 2, 0)]
+    #[case::xenon_difluoride((Element::Xe, 0), 0, 0, 0, 0, 2, 6)]
+    #[case::aromatic_oxygen((Element::O, 0), 0, 2, 2, 0, 0, 2)]
+    #[case::combined_contributions((Element::O, 0), 0, 1, 1, 1, 1, 1)]
+    #[case::negative_budget((Element::H, 0), 0, 1, 0, 0, 1, -1)]
+    fn test_valence_invariants_nonbonding_electrons(
+        #[case] atom: (Element, i64),
+        #[case] implicit_hydrogens: i64,
+        #[case] valence: i64,
+        #[case] aromatic_valence: i64,
+        #[case] donated_pairs: i64,
+        #[case] multicenter_valence: i64,
+        #[case] expected: i64,
+    ) {
+        let (element, charge) = atom;
+        assert_eq!(
+            ValenceInvariants::nonbonding_electrons(
+                element,
+                charge,
+                implicit_hydrogens,
+                valence,
+                aromatic_valence,
+                donated_pairs,
+                multicenter_valence,
+            ),
+            expected,
+        );
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -560,6 +686,69 @@ mod tests {
         #[case] expected: Solution<(), ValenceMismatch>,
     ) {
         assert_eq!(ValenceInvariants::check_molecule_atom(&molecule, atom_id), expected);
+    }
+
+    #[rstest]
+    #[case::donor(
+        r#"{:atoms ["N#c0#h3#n0#u0#s" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        Solution::Determined(())
+    )]
+    #[case::unknown_donor(
+        r#"{:atoms ["N#c0#h3#n0#u0#s" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
+        Solution::Underdetermined(())
+    )]
+    #[case::asserted_donor(
+        r#"{:atoms ["N#c0#h3#n0#u0#s#d" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
+        Solution::Determined(())
+    )]
+    #[case::conflicting_donor(
+        r#"{:atoms ["N#c0#h3#n1#u0#s#d0" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::DonatedPairs,
+        })
+    )]
+    #[case::multicenter(
+        r#"{:atoms ["H#c-#h0#n0#u0#s" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        Solution::Determined(())
+    )]
+    #[case::unknown_multicenter(
+        r#"{:atoms ["H#c-#h0#n0#u0#s" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
+        Solution::Underdetermined(())
+    )]
+    #[case::asserted_multicenter(
+        r#"{:atoms ["H#c-#h0#n0#u0#s#m2" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
+        Solution::Determined(())
+    )]
+    #[case::conflicting_multicenter(
+        r#"{:atoms ["H#c-#h0#n1#u0#s#m0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::MulticenterValence,
+        })
+    )]
+    #[case::conflicting_aromatic(
+        r#"{:atoms ["C#c0#h1#n0#u0#s#a1" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]}"#,
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::AromaticValence,
+        })
+    )]
+    fn test_valence_invariants_check_molecule_atom_contributions(
+        #[case] input: &str,
+        #[case] expected: Solution<(), ValenceMismatch>,
+    ) {
+        let molecule = mol_dsl!(input);
+        assert_eq!(
+            ValenceInvariants::check_molecule_atom(&molecule, AtomId(0)),
+            expected
+        );
     }
 
     #[rustfmt::skip]
@@ -835,6 +1024,43 @@ mod tests {
         assert_eq!(
             ValenceInvariants::enumerate_atom(&molecule, atom_id),
             expected
+        );
+    }
+
+    #[rstest]
+    #[case::multicenter(
+        r#"{:atoms ["H#c-#h0#u0#s" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        vec!["H#i=#c-#h0#n0#u0#s#v0"]
+    )]
+    #[case::unknown_multicenter(
+        r#"{:atoms ["H#c-#h0#u0#s" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#, vec![]
+    )]
+    #[case::conflicting_multicenter(
+        r#"{:atoms ["H#c-#h0#u0#s#m0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#, vec![]
+    )]
+    #[case::donor(
+        r#"{:atoms ["N#c0#h3#u0#s" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        vec!["N#i=#c0#h3#n0#u0#s#v0"]
+    )]
+    #[case::conflicting_donor(
+        r#"{:atoms ["N#c0#h3#u0#s#d0" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#, vec![]
+    )]
+    fn test_valence_invariants_enumerate_atom_contributions(
+        #[case] input: &str,
+        #[case] expected: Vec<&str>,
+    ) {
+        let molecule = mol_dsl!(input);
+        assert_eq!(
+            ValenceInvariants::enumerate_atom(&molecule, AtomId(0)),
+            expected
+                .iter()
+                .map(|atom| atom_dsl!(atom))
+                .collect::<Vec<_>>(),
         );
     }
 }

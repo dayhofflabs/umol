@@ -1,6 +1,5 @@
 ---
 source: umol-graph/tests/resolution/resolution_suite.rs
-assertion_line: 225
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
@@ -26,7 +25,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["Te#c-2#n4" "Br#n3#u" "Br#n3#u" "Br#n3#u" "Br#n3#u" "Br#n3#u" "Br#n3#u"]
+      :atoms ["Te#c-2#n" "Br#n3" "Br#n3" "Br#n3" "Br#n3" "Br#n3" "Br#n3"]
       :bonds []
       :multicenter-bonds [
         {:atoms [1 0 2] :attrs "[1,2,1]"}
@@ -36,7 +35,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["Te#c-2#n4" "Br#n3#u" "Br#n3#u" "Br#n3#u" "Br#n3#u" "Br#n3#u" "Br#n3#u"]
+      :atoms ["Te#c-2#n" "Br#n3" "Br#n3" "Br#n3" "Br#n3" "Br#n3" "Br#n3"]
       :bonds []
       :multicenter-bonds [
         {:atoms [1 0 2] :attrs "[1,2,1]"}

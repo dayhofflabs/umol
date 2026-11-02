@@ -35,7 +35,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["S#n2" "N#n#u" "S#n2" "N#n#u" "S#n2" "N#n#u" "S#n2" "N#n#u"]
+      :atoms ["S#n" "N#n" "S#n2" "N#n" "S#n" "N#n" "S#n2" "N#n"]
       :bonds [
         [0 1 :single]
         [1 2 :single]
@@ -50,7 +50,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["S#n2" "N#n#u" "S#n2" "N#n#u" "S#n2" "N#n#u" "S#n2" "N#n#u"]
+      :atoms ["S#n" "N#n" "S#n2" "N#n" "S#n" "N#n" "S#n2" "N#n"]
       :bonds [
         [0 1 :single]
         [1 2 :single]

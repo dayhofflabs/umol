@@ -19,14 +19,14 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["Kr#c+#n3" "F#n3" "N#n" "C" "H"]
+      :atoms ["Kr#c+#n3" "F#n3" "N" "C" "H"]
       :bonds [[0 1 :single] [2 3 :triple] [3 4 :single]]
       :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
     :success true
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["Kr#c+#n3" "F#n3" "N#n" "C" "H"]
+      :atoms ["Kr#c+#n3" "F#n3" "N" "C" "H"]
       :bonds [[0 1 :single] [2 3 :triple] [3 4 :single]]
       :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
     :success true

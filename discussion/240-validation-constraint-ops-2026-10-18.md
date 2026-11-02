@@ -21,7 +21,7 @@ outstanding.
 S15a, the counts-resolver valence-capacity correction, remains in doc 166 and
 in scope for 0.10.
 
-This record also tracks the proposed Counts electron-accounting correction
+This record also tracks the implemented Counts electron-accounting correction
 identified during the hydrogen registry work in doc 056.
 
 The relocation and discharge contracts below carry forward the agreed design.
@@ -55,35 +55,38 @@ to that proposal without review.
 
 ## Counts electron accounting
 
-Proposed work item, added 2026-10-31; implementation has not started.
+Implemented 2026-11-02.
 
-The [hydrogen fixtures in 056](056-default-registry-2026-03-07.md#conformance-coverage)
-supply explicit dative orders and multicenter electron contributions. Counts nevertheless
-assigns #n1 to the bridging H− and each CO carbon in [HCr2(CO)10]−, where the supplied
-contributions require #n0. This is an accounting omission, not missing input data.
+Counts now includes donated pairs and multicenter contributions:
+`2*n + u = valence_electrons - charge - v - h - a - m - 2*d`.
+The bridging H− and CO carbons in [HCr2(CO)10]− consequently resolve to #n0.
 
-[ValenceInvariants](../umol-graph/src/ops/invariant.rs) already includes donated pairs
-and multicenter contributions in its conservation equation. Counts does not call it;
-[CountsValence](../umol-graph/src/ops/valence/counts.rs) independently derives the
-nonbonding budget in candidate_states and infer_implicit_hydrogens. Both omit those
-terms. The separation is recorded in [099](099-counts-as-invariants-2026-05-23.md).
+[ValenceInvariants](../umol-graph/src/ops/invariant.rs) exposes public electron_count
+and nonbonding_electrons calculations. Counts uses them for candidate admission,
+classification and implicit-H inference; invariant validation and enumeration share
+the same orbital/electron balance. The dependency runs from Counts to the invariant
+calculator. Table selection, capacity limits and tie-breaking are unchanged;
+Counts does not adopt the broader invariant enumeration described in
+[099](099-counts-as-invariants-2026-05-23.md).
 
-- Align both Counts paths with the existing conservation equation:
-  `2*n + u = valence_electrons - charge - v - h - a - m - 2*d`, where d counts
-  donated pairs and m counts contributed multicenter electrons. Preserve the
-  table-driven candidate selection and accepted-pair accounting.
-- Read supplied contributions consistently with atom constraints and relation evidence.
-  Preserve underdetermination when required contributions remain unknown; a multi-donor
-  bond's total order alone does not specify each donor's contribution.
-- Cover admission, classification and implicit-H inference, including known-zero,
-  supplied, unknown and contradictory contributions. Use the hydrogen fixtures and
-  affected noble-gas cases; check corrected determined assignments independently with
-  ValenceInvariantsValidator and review the changed conformance expectations under both
-  Strict and MostSaturated.
+Molecule contributions use evidenced_complete readings of #v, #d, #t, #a and #m.
+These meet assertions with relation evidence, preserve conflicts and unknown required
+contributions, and close absent overlays under the existing reading semantics.
+Supplied aromatic contributions constrain Counts enumeration too. Bare-atom validation
+retains its standalone convention. Multi-donor dative projection remains unchanged
+and requires separate work.
 
-The implementation must reconcile the two accounting paths; changing only
-ValenceInvariants would leave the current Counts calculation untouched. Sharing the
-equation does not require adopting ValenceInvariants::enumerate_atom's broader search.
+Regression coverage includes absent, supplied, unknown and conflicting contributions,
+classification, invariant enumeration and both implicit-H policies. All 107 changed
+conformance snapshots preserve AtomTyping results; their 214 Counts outputs match
+AtomTyping and pass ValenceInvariantsValidator. The full 906-case resolution suite
+and 215 graph properties pass.
+
+The existing Counts-admission benchmarks measured about 3–6% overhead for octane,
+benzene and pyridine, and about 10% (25 ns) for the single-atom cases. The 64-carbon
+chain comparison was within Criterion's noise threshold. These measurements used
+the pre-change baseline and a 20-sample, two-second final run; they do not measure
+the change in full-resolution time.
 
 ## Stereo-ligand validator API
 
