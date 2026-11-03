@@ -1,0 +1,13 @@
+; BiF5 chain fragment cut at boundary F atoms; HW I, pp. 953-954; halide-donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi#c+" "Bi#c+" "Bi#c+" "F#c-" "F#c-" "F#c-" "F#c-" "F" "F" "F" "F" "F" "F" "F" "F" "F"
+                 "F" "F" "F"]
+         :bonds [[0 7 :single] [0 8 :single] [0 9 :single] [0 10 :single]
+                 [1 11 :single] [1 12 :single] [1 13 :single] [1 14 :single]
+                 [2 15 :single] [2 16 :single] [2 17 :single] [2 18 :single]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 1 :attrs "1"}
+                        {:donors [5] :acceptor 1 :attrs "1"}
+                        {:donors [5] :acceptor 2 :attrs "1"}
+                        {:donors [6] :acceptor 2 :attrs "1"}]}}

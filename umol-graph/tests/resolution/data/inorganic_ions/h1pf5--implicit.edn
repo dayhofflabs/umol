@@ -1,0 +1,5 @@
+; HPF5-/trans-H2PF4-; HW I, p. 891; localized assignment: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#c-#h1" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]
+                 [0 5 :single]]}}

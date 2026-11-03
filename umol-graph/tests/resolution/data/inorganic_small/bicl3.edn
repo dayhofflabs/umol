@@ -1,0 +1,4 @@
+; Molecular BiCl3; HW I, pp. 952-954.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]}}

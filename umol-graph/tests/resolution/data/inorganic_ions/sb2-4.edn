@@ -1,0 +1,4 @@
+; Sb2(4-) unit in Ca11Sb10; HW I, p. 948.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sb#c-2" "Sb#c-2"]
+         :bonds [[0 1 :single]]}}

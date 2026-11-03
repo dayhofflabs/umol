@@ -26,21 +26,29 @@
 # C93H | Christe et al., J. Am. Chem. Soc. 115 (1993), 9461-9467; doi:10.1021/ja00074a011
 # C93R | Christe et al., J. Am. Chem. Soc. 115 (1993), 1129-1134; doi:10.1021/ja00056a043
 # C93T | Christe et al., Inorg. Chem. 32 (1993), 4089-4093; doi:10.1021/ic00071a020
+# C94P | Christe et al., J. Am. Chem. Soc. 116 (1994), 2850-2858; doi:10.1021/ja00086a018
 # CN73 | Christe and Naumann, Inorg. Chem. 12 (1973), 59-62; doi:10.1021/ic50119a016
 # D08 | Dixon et al., Inorg. Chem. 47 (2008), 5485-5494; doi:10.1021/ic800021h
 # D79 | Darensbourg and Incorvia, Inorg. Chem. 18 (1979), 18-22; doi:10.1021/ic50191a004
+# EC76 | Epiotis and Cherry, J. Am. Chem. Soc. 98 (1976), 4365-4370; doi:10.1021/ja00431a003
+# F18 | Falvey, ACS Omega 3 (2018), 10418-10432; doi:10.1021/acsomega.8b01038
 # G10 | Grant et al., Inorg. Chem. 49 (2010), 261-270; doi:10.1021/ic901956g
 # G16 | Goettel et al., Angew. Chem. Int. Ed. 55 (2016), 13780-13783; doi:10.1002/anie.201607583
+# G18 | Ganesamoorthy et al., Nat. Commun. 9 (2018), 87; doi:10.1038/s41467-017-02581-2
 # GS76 | Gillespie and Spekkens, J. Chem. Soc., Dalton Trans. (1976), 2391-2396; doi:10.1039/DT9760002391
 # H13 | Hanway et al., J. Am. Chem. Soc. 135 (2013), 9078-9082; doi:10.1021/ja403370k
+# H81 | Harrison, J. Am. Chem. Soc. 103 (1981), 7406-7413; doi:10.1021/ja00415a002
 # I98 | Moss, IUPAC fused-ring nomenclature, Pure Appl. Chem. 70 (1998), 143-216; doi:10.1351/pac199870010143
 # K18 | Karadakov et al., Chem. Eur. J. 24 (2018), 16791-16803; doi:10.1002/chem.201804292
 # K84 | Krebs, Schäffer and Pohl, Z. Naturforsch. B 39 (1984), 1633-1641; doi:10.1515/znb-1984-1202
 # K91 | Krebs et al., Z. Anorg. Allg. Chem. 592 (1991), 17-34; doi:10.1002/zaac.19915920103
+# KJ86 | Karpas and Jasien, Int. J. Mass Spectrom. Ion Processes 69 (1986), 115-119; doi:10.1016/0168-1176(86)87046-X
 # KP04 | Krossing and Passmore, Inorg. Chem. 43 (2004), 1000-1011; doi:10.1021/ic0207303
 # L97 | Landrum, Goldberg and Hoffmann, J. Chem. Soc., Dalton Trans. (1997), 3605-3613; doi:10.1039/A703736H
 # Le04 | Lehmann et al., Inorg. Chem. 43 (2004), 6905-6921; doi:10.1021/ic040015o
 # Li96 | Li, Irle and Schwarz, Inorg. Chem. 35 (1996), 100-109; doi:10.1021/ic950305s
+# Lo17 | Loor et al., Z. Anorg. Allg. Chem. 643 (2017), 60-68; doi:10.1002/zaac.201600325
+# M02 | Mattmann et al., J. Org. Chem. 67 (2002), 1208-1213; doi:10.1021/jo0108156
 # M12 | Moilanen et al., J. Chem. Theory Comput. 8 (2012), 4249-4258; doi:10.1021/ct300627p
 # M16 | Malinowski, Himmel and Krossing, Angew. Chem. Int. Ed. 55 (2016), 9262-9266; doi:10.1002/anie.201603913
 # M17 | Molčanov et al., CrystEngComm 19 (2017), 3898-3901; doi:10.1039/C7CE00501F
@@ -54,9 +62,13 @@
 # Q15 | Quiñonero, Molecules 20 (2015), 11632-11659; doi:10.3390/molecules200711632
 # R20 | Reiersolmoen et al., Chem. Sci. 11 (2020), 7979-7990; doi:10.1039/D0SC02076A
 # S20 | Scheibe et al., Eur. J. Inorg. Chem. (2020), 4483-4496; doi:10.1002/ejic.202000845
+# SJ73 | Schroeder and Jacobson, Inorg. Chem. 12 (1973), 210-213; doi:10.1021/ic50119a046
 # Sh73 | Shaw, Carroll and Thomas, J. Am. Chem. Soc. 95 (1973), 5870-5875; doi:10.1021/ja00799a006
 # V18 | Valjus et al., Can. J. Chem. 96 (2018), 591-598; doi:10.1139/cjc-2018-0047
+# W02 | Walker et al., J. Am. Soc. Mass Spectrom. 13 (2002), 469-476; doi:10.1016/S1044-0305(02)00369-0
 # W75 | Willett, LaBonville and Ferraro, J. Chem. Phys. 63 (1975), 1474-1478; doi:10.1063/1.431510
+# WJ74 | Wismer and Jacobson, Inorg. Chem. 13 (1974), 1678-1680; doi:10.1021/ic50137a026
+# Z22 | Zhang, Yuan and Wang, Phys. Chem. Chem. Phys. 24 (2022), 6505-6514; doi:10.1039/D2CP00189F
 
 [H]
 0 = [
@@ -173,49 +185,66 @@
 
 [N]
 0 = [
-    "N #n #v3",      # N2, NH3, NX3, HONO, N2O3, HN=NH, H2N-NH2; SN+: HW I, p. 683
-    "N #n #v2 #h",   # NX2H
-    "N #n #v #h2",   # NXH2
-    "N #n #h3",      # NH3
-    "N #n #v2 #a",   # C5H5N; cyclic chalcogen nitrides: HW I, pp. 683-686, 727; S2N2: K18; assignment: PW
-    "N #v3 #a2",     # C4H4NX, C4H4NH
-    "N #v2 #a2 #h",  # C4H4NH
-    "N #v3 #d",      # N dative bond; HW I, p. 470
-    "N #v2 #a #m2",  # [X(py)2]+ (X = Br, I); R20, pp. 7983-7986; assignment: PW
+    "N #n #v3",      # NH3, N2H4, HN=NH; HW I, p. 749; SN+: p. 683
+    "N #n #v2 #h",   # NH3, amines; HW I, pp. 749, 757
+    "N #n #v #h2",   # NH3, amines; HW I, pp. 749, 757
+    "N #n #h3",      # NH3; HW I, pp. 749-751
+    "N #n #v2 #a",   # pyridine; HW I, p. 938; cyclic chalcogen nitrides: pp. 683-686, 727; S2N2: K18; assignment: PW
+    "N #v3 #a2",     # pyrrole, N-phenylpyrrole; I98, Appendix 2, entry 54; HW I, p. 985
+    "N #v2 #a2 #h",  # pyrrole; I98, Appendix 2, entry 54
+    "N #v3 #d",      # ammine/amine donor, MeCN->XeO3; HW I, pp. 470, 757-758
+    "N #v2 #a #m2",  # [X(py)2]+ (X = Cl, Br, I); R20, pp. 7983-7986; assignment: PW
     "N #n #v2 #m",   # S4N4, S4N2, S2N2, S3N-, S4N-, E3N2+ (E = S, Se); HW I, pp. 675, 677, 681-685, 727; B82; C80; assignment: PW
-    "N #u #v2 #a2",  # pyrrolyl radical
-    "N #n #u #v2",   # NX2, NH2, NO
-    "N #n #u #v #h", # NXH
-    "N #n #u #h2",   # NH2
-    "N #n2 #v",      # NX, NH
-    "N #n2 #h",      # NH
-    "N #n #u3",      # N atom, s2p3
+    "N #u #v2 #a2",  # sigma-pyrrolyl, B(2A1) state; Z22, section 3.1.3; allocation: PW
+    "N #n #u #v2",   # NH2, NF2, NO; HW I, pp. 799, 806, 820
+    "N #n #u #v #h", # NH2 radical; HW I, p. 820
+    "N #n #u #h2",   # NH2 radical; HW I, p. 820
+    "N #n2 #v",      # singlet NH; HW I, p. 779
+    "N #n2 #h",      # singlet NH; HW I, p. 779
+    "N #n #u3",      # N atom, s2p3; HW I, p. 328
+    "N #n #u2 #v",   # triplet NH, XN, NOH; HW I, pp. 779, 800, 821
+    "N #n #u2 #h",   # triplet NH; HW I, p. 779
+    "N #v2 #h #d",   # ammine/amine donor; HW I, pp. 757-758
+    "N #v #h2 #d",   # ammine/amine donor; HW I, pp. 757-758
+    "N #h3 #d",      # ammine/amine donor; HW I, pp. 757-758
 ]
 1 = [
-    "N #c+ #v4",       # [NX4]+, [NH4]+, [NO2]+, HONO2; S2N+: HW I, p. 683
-    "N #c+ #v3 #h",    # [NX3H]+
-    "N #c+ #v2 #h2",   # [NX2H2]+
-    "N #c+ #v #h3",    # [NXH3]+
-    "N #c+ #h4",       # [NH4]+
-    "N #c+ #v3 #a",    # C5H5N(+)X, C5H5N(+)H
-    "N #c+ #v2 #a #h", # C5H5N(+)H
-    "N #c+ #u #v3",    # O=N(+)^-O-
-    "N #c+ #n #v2",    # [NX2]+, [NH2]+, NO+
-    "N #c+ #n #v #h",  # NXH+
-    "N #c+ #n #h2",    # [NH2]+
+    "N #c+ #v4",       # NH4+, alkylammonium, NO2+; HW I, pp. 757, 813; S2N+: p. 683
+    "N #c+ #v3 #h",    # NH4+, alkylammonium; HW I, p. 757
+    "N #c+ #v2 #h2",   # NH4+, alkylammonium; HW I, p. 757
+    "N #c+ #v #h3",    # NH4+, alkylammonium; HW I, p. 757
+    "N #c+ #h4",       # NH4+; HW I, p. 757
+    "N #c+ #v3 #a",    # pyridinium; HW I, p. 957
+    "N #c+ #v2 #a #h", # pyridinium; HW I, p. 957
+    "N #c+ #u #v3",    # O=N(+)(radical)-O-; HW I, pp. 811-812; allocation: PW
+    "N #c+ #n #v2",    # singlet nitrenium ions, NH2+; F18, Tables 1-2
+    "N #c+ #n #v #h",  # singlet nitrenium ions, NH2+; F18, Tables 1-2
+    "N #c+ #n #h2",    # singlet NH2+; F18, Tables 1-2
 ]
 -1 = [
-    "N #c- #n2 #v2",    # [NX2]-, [NH2]-; E4N4 (E = S, Se): M12, NBO analysis; SN2(2-): HW I, p. 686; V18, Fig. 1a
-    "N #c- #n2 #v #h",  # NXH-
-    "N #c- #n2 #h2",    # [NH2]-
-    "N #c- #n #v2 #a2", # S3N3-; HW I, pp. 683, 686; charge placement: PW
+    "N #c- #n2 #v2",     # NH2-, amide ions; HW I, pp. 756-758; E4N4 (E = S, Se): M12, NBO analysis; SN2(2-): V18, Fig. 1a
+    "N #c- #n2 #v #h",   # NH2-, amide ions; HW I, pp. 756-758
+    "N #c- #n2 #h2",     # NH2-; HW I, pp. 756-758
+    "N #c- #n #v2 #a2",  # S3N3-; HW I, pp. 683, 686; charge placement: PW
+    "N #c- #n #v2 #d",   # terminal amido donor; HW I, pp. 757-758, Fig. 14.6b; assignment: PW
+    "N #c- #n #v #h #d", # terminal amido donor; HW I, pp. 757-758, Fig. 14.6b; assignment: PW
+    "N #c- #n #h2 #d",   # terminal amido donor; HW I, pp. 757-758, Fig. 14.6b; assignment: PW
+    "N #c- #v2 #d2",     # bridging amido donor; HW I, pp. 757-758, Fig. 14.6c; assignment: PW
+    "N #c- #v #h #d2",   # bridging amido donor; HW I, pp. 757-758, Fig. 14.6c; assignment: PW
+    "N #c- #h2 #d2",     # bridging amido donor; HW I, pp. 757-758, Fig. 14.6c; assignment: PW
 ]
 -2 = [
-    "N #c-2 #n3 #v",   # [NX]2-
-    "N #c-2 #n3 #h",   # [NH]2-
+    "N #c-2 #n3 #v",    # NH(2-), imide ions; HW I, pp. 756-758
+    "N #c-2 #n3 #h",    # NH(2-); HW I, pp. 756-758
+    "N #c-2 #n #v #d2", # imido donor; HW I, pp. 757-758, Fig. 14.6d-e; assignment: PW
+    "N #c-2 #n #h #d2", # imido donor; HW I, pp. 757-758, Fig. 14.6d-e; assignment: PW
+    "N #c-2 #v #d3",    # imido donor; HW I, pp. 757-758, Fig. 14.6f; assignment: PW
+    "N #c-2 #h #d3",    # imido donor; HW I, pp. 757-758, Fig. 14.6f; assignment: PW
 ]
 -3 = [
-    "N #c-3 #n4", # N3-
+    "N #c-3 #n4",    # N3-, ionic nitrides; HW I, pp. 747, 756-758
+    "N #c-3 #n #d3", # nitrido donor; HW I, pp. 757-758, Fig. 14.6g; assignment: PW
+    "N #c-3 #d4",    # nitrido donor; HW I, pp. 757-758, Fig. 14.6h-k; assignment: PW
 ]
 
 [O]
@@ -330,33 +359,58 @@
 
 [P]
 0 = [
-    "P #n #v3",      # PH3, P2, XP3
-    "P #n #v2 #h",   # PX2H
-    "P #n #v #h2",   # PXH2
-    "P #n #h3",      # PH3
-    "P #n #u #v2",   # PX2, PH2
-    "P #n #u #v #h", # PXH
-    "P #n #u #h2",   # PXH2
-    "P #v5",
-    "P #n #u3",      # P atom, s2p3
+    "P #n #v3",      # PH3, PR3; HW I, pp. 870-871, 935-936
+    "P #n #v2 #h",   # PH3, R2PH; HW I, pp. 870-871, 935-936
+    "P #n #v #h2",   # PH3, RPH2; HW I, pp. 870-871, 935-936
+    "P #n #h3",      # PH3; HW I, pp. 870-871
+    "P #n #u #v2",   # PH2, PR2 radicals; HW I, pp. 870, 936
+    "P #n #u #v #h", # PH2 radical; HW I, p. 870
+    "P #n #u #h2",   # PH2 radical; HW I, p. 870
+    "P #v5",         # molecular PF5, PCl5; HW I, pp. 891-892; assignment: PW
+    "P #n #u3",      # P atom, s2p3; HW I, p. 328
+    "P #n #u2 #v",   # triplet PH, PR; HW I, pp. 866, 937
+    "P #n #u2 #h",   # triplet PH; HW I, p. 866
+    "P #v3 #d",      # PH3, PR3, PF3, PCl3 donors; HW I, pp. 871, 888, 936
+    "P #v2 #h #d",   # PH3, R2PH donors; HW I, pp. 871, 936
+    "P #v #h2 #d",   # PH3, RPH2 donors; HW I, pp. 871, 936
+    "P #h3 #d",      # PH3 donor; HW I, pp. 871, 936
+    "P #v4 #h",      # HPF4, H3PO3; HW I, pp. 886, 891, 905-908
+    "P #v3 #h2",     # H2PF3, H3PO2; HW I, pp. 886, 891, 903
+    "P #v2 #h3",     # H3PF2; HW I, pp. 886, 891
+    "P #n #v3 #t",   # Me3N->PCl3; HW I, p. 888; PBr4-: C94P, p. 2858
+    "P #v5 #t",      # Me3N/Me3P->PF5; HW I, p. 891
+    "P #n #v2 #a",   # phosphinine; HW I, p. 938
+    "P #v3 #a2",     # phospholes; EC76, pp. 4365, 4368-4370; M02, pp. 1208, 1211-1213; contribution: PW
+    "P #v2 #h #a2",  # phospholes; EC76, pp. 4365, 4368-4370; M02, pp. 1208, 1211-1213; contribution: PW
 ]
 1 = [
-    "P #c+ #v4",      # [PX4]+
-    "P #c+ #v3 #h",   # [PXH3]+
-    "P #c+ #v2 #h2",  # [PX2H2]+
-    "P #c+ #v #h3",   # [PXH3]+
-    "P #c+ #h4",      # [PH4]+
-    "P #c+ #n #v2",   # [PX2]+, [PH2]+
-    "P #c+ #n #v #h", # PXH+
-    "P #c+ #n #h2",   # [PH2]+
+    "P #c+ #v4",        # PH4+, PR4+; HW I, pp. 871, 936
+    "P #c+ #v3 #h",     # PH4+, R3PH+; HW I, pp. 871, 936
+    "P #c+ #v2 #h2",    # PH4+, R2PH2+; HW I, pp. 871, 936
+    "P #c+ #v #h3",     # PH4+, RPH3+; HW I, pp. 871, 936
+    "P #c+ #h4",        # PH4+; HW I, p. 871
+    "P #c+ #n #v2",     # singlet R2P+: HW I, p. 937; PH2+, HPF+, PF2+: H81, pp. 7410-7412
+    "P #c+ #n #v #h",   # singlet PH2+, HPF+; H81, pp. 7410-7412
+    "P #c+ #n #h2",     # singlet PH2+; H81, pp. 7410-7412
+    "P #c+ #v4 #t2",    # P2Cl10; HW I, p. 892; assignment: PW
+    "P #c+ #n #v2 #a0", # phosphirenylium; HW I, pp. 937-938, Fig. 14.91a; contribution: PW
 ]
 -1 = [
-    "P #c- #n2 #v2",   # [PX2]-
-    "P #c- #n2 #v #h", # PXH-
-    "P #c- #n2 #h2",   # [PH2]-
+    "P #c- #n2 #v2",    # PH2-, R2P-; HW I, pp. 871, 936
+    "P #c- #n2 #v #h",  # PH2-, RPH-; HW I, pp. 871, 936
+    "P #c- #n2 #h2",    # PH2-; HW I, p. 871
+    "P #c- #v6",        # PF6- / PCl6-; HW I, pp. 891-892; assignment: PW
+    "P #c- #v5 #h",     # HPF5-; HW I, p. 891; assignment: PW
+    "P #c- #v4 #h2",    # H2PF4-; HW I, p. 891; assignment: PW
+    "P #c- #n #v2 #m2", # PF4-, PCl4-; HW I, pp. 887-889; C94P, p. 2857; W02, p. 473; assignment: PW
+    "P #c- #n #v2 #a2", # P5-, PC4R4-; HW I, pp. 883, 938; charge placement: PW
+]
+-2 = [
+    "P #c-2 #n3 #v", # P2(4-), chain phosphide termini; HW I, p. 861
+    "P #c-2 #n3 #h", # PH(2-) in Li2PH; HW I, p. 871
 ]
 -3 = [
-    "P #c-3 #n4", # P3-
+    "P #c-3 #n4", # P3-, ionic phosphides; HW I, pp. 860-861, 871
 ]
 
 [S]
@@ -599,24 +653,42 @@
 
 [As]
 0 = [
-    "As #n #u3",     # As atom, s2p3
-    "As #n #v3",     # AsX3
-    "As #n #v2 #h",  # AsX2H
-    "As #n #v #h2",  # AsXH2
-    "As #n #h3",     # AsH3
-    "As #n #u #v2",  # AsX2
-    "As #v3 #a2",    # C4H4AsX, C4H4AsH
-    "As #v2 #a2 #h", # C4H4AsH
-    "As #n #v2 #a",  # C5H5As
+    "As #n #u3",     # As atom, s2p3; HW I, p. 328
+    "As #n #v3",     # AsH3, molecular AsX3, AsR3; HW I, pp. 951-954, 979
+    "As #n #v2 #h",  # AsH3, R2AsH; HW I, pp. 951, 979
+    "As #n #v #h2",  # AsH3, RAsH2; HW I, pp. 951, 979
+    "As #n #h3",     # AsH3; HW I, p. 951
+    "As #n #u #v2",  # AsR2 radicals; HW I, p. 983
+    "As #v3 #a2",    # arsoles; EC76, pp. 4368-4370; contribution: PW
+    "As #v2 #a2 #h", # arsole; EC76, pp. 4368-4370; contribution: PW
+    "As #n #v2 #a",  # arsinine; HW I, p. 985
+    "As #v3 #d",     # AsH3, RnAsH(3-n) donors; HW I, pp. 951, 979
+    "As #v2 #h #d",  # AsH3, R2AsH donors; HW I, pp. 951, 979
+    "As #v #h2 #d",  # AsH3, RAsH2 donors; HW I, pp. 951, 979
+    "As #h3 #d",     # AsH3 donor; HW I, pp. 951, 979
+    "As #v5",        # molecular AsF5, As(V) organics; HW I, pp. 953, 958-959, 980-981; assignment: PW
 ]
 1 = [
-    "As #c+ #v4", # [AsX4]+
+    "As #c+ #n #v2",  # AsF2+; HW I, p. 955
+    "As #c+ #v4",     # AsH4+, AsR4+; HW I, pp. 951, 980-981
+    "As #c+ #v3 #h",  # AsH4+; HW I, p. 951
+    "As #c+ #v2 #h2", # AsH4+; HW I, p. 951
+    "As #c+ #v #h3",  # AsH4+; HW I, p. 951
+    "As #c+ #h4",     # AsH4+; HW I, p. 951
 ]
 -1 = [
-    "As #c- #n2 #v2", # [AsX2]-
+    "As #c- #n2 #v2",    # AsH2-, R2As-; HW I, pp. 951, 979
+    "As #c- #n2 #v #h",  # AsH2-; HW I, p. 951
+    "As #c- #n2 #h2",    # AsH2-; HW I, p. 951
+    "As #c- #v6",        # AsF6-; HW I, pp. 958-959; assignment: PW
+    "As #c- #n #v2 #m2", # AsCl4-; HW I, pp. 955-957; W02, p. 473; assignment: PW
+    "As #c- #n #v2 #a2", # AsC4R4-; HW I, pp. 985-986; charge placement: PW
+]
+-2 = [
+    "As #c-2 #n3 #v", # As2(4-) in CaAs; HW I, p. 948
 ]
 -3 = [
-    "As #c-3 #n4", # As3-
+    "As #c-3 #n4", # As3-, ionic arsenides; HW I, p. 948
 ]
 
 [Se]
@@ -820,21 +892,47 @@
 
 [Sb]
 0 = [
-    "Sb #n #u3",    # Sb atom, s2p3
-    "Sb #n #v3",    # SbX3
-    "Sb #n #v2 #h", # SbX2H
-    "Sb #n #v #h2", # SbXH2
-    "Sb #n #h3",    # SbH3
-    "Sb #n #u #v2", # SbX2
+    "Sb #n #u3",    # Sb atom, s2p3; HW I, p. 328
+    "Sb #n #v3",    # SbH3, molecular SbX3, SbR3; HW I, pp. 951-954, 979
+    "Sb #n #v2 #h", # SbH3, R2SbH; HW I, pp. 951, 979
+    "Sb #n #v #h2", # SbH3, RSbH2; HW I, pp. 951, 979
+    "Sb #n #h3",    # SbH3; HW I, p. 951
+    "Sb #n #u #v2", # stibinyl radicals; G18, p. 4, NBO analysis
+    "Sb #v3 #d",    # SbH3, RnSbH(3-n) donors; HW I, pp. 951, 979
+    "Sb #v2 #h #d", # SbH3, R2SbH donors; HW I, pp. 951, 979
+    "Sb #v #h2 #d", # SbH3, RSbH2 donors; HW I, pp. 951, 979
+    "Sb #h3 #d",    # SbH3 donor; HW I, pp. 951, 979
+    "Sb #v5",       # molecular SbF5, Sb(V) organics; HW I, pp. 953, 958-959, 980-981; assignment: PW
+    "Sb #v5 #t",    # O-bound SO2->SbF5; HW I, p. 958
+    "Sb #n #v2 #a", # stibinine; HW I, p. 985
 ]
 1 = [
-    "Sb #c+ #v4", # [SbX4]+
+    "Sb #c+ #n #v2",  # SbF2+; HW I, p. 955
+    "Sb #c+ #v4",     # SbH4+, SbR4+; HW I, pp. 951, 980-981
+    "Sb #c+ #v3 #h",  # SbH4+; HW I, p. 951
+    "Sb #c+ #v2 #h2", # SbH4+; HW I, p. 951
+    "Sb #c+ #v #h3",  # SbH4+; HW I, p. 951
+    "Sb #c+ #h4",     # SbH4+; HW I, p. 951
+    "Sb #c+ #v4 #t2", # cyclic (SbF5)4; HW I, pp. 953-954; assignment: PW
+]
+3 = [
+    "Sb #c+3 #n #t4", # SbCl4-; HW I, pp. 955-957; W02, p. 473; assignment: PW
 ]
 -1 = [
-    "Sb #c- #n2 #v2", # [SbX2]-
+    "Sb #c- #n2 #v2",    # SbH2-, R2Sb-; HW I, pp. 951, 979
+    "Sb #c- #n2 #v #h",  # SbH2-; HW I, p. 951
+    "Sb #c- #n2 #h2",    # SbH2-; HW I, p. 951
+    "Sb #c- #v6",        # SbF6-; HW I, pp. 958-959; assignment: PW
+    "Sb #c- #n #v2 #a2", # SbC4R4-; HW I, pp. 985-986; charge placement: PW
+]
+-2 = [
+    "Sb #c-2 #n3 #v",    # Sb2(4-) in Ca11Sb10; HW I, p. 948
+    "Sb #c-2 #v7",       # SbF7(2-); HW I, pp. 958-959; assignment: PW
+    "Sb #c-2 #n #v #m4", # SbCl5(2-); HW I, p. 957; WJ74, p. 1680; assignment: PW
 ]
 -3 = [
-    "Sb #c-3 #n4", # Sb3-
+    "Sb #c-3 #n4",    # Sb3-, ionic antimonides; HW I, p. 948
+    "Sb #c-3 #n #m6", # SbCl6(3-), SbBr6(3-); HW I, p. 957; SJ73, pp. 212-213; assignment: PW
 ]
 
 [Te]
@@ -856,7 +954,7 @@
     "Te #c- #v7",      # TeF7-, TeOF5-; HW I, p. 710; C93H; C93T; assignment: PW
 ]
 1 = [
-    "Te #c+ #n #v3",     # [TeX3]+; HW I, p. 711; Te6(2+): Be94, Fig. 4; Te6(4+): Bu82, p. 805
+    "Te #c+ #n #v3",     # [TeX3]+; HW I, p. 711; H3Te+ (gas): KJ86, p. 117; Te6(2+): Be94, Fig. 4; Te6(4+): Bu82, p. 805
     "Te #c+ #n #v2 #a",  # Te4(2+); HW I, pp. 700-701
     "Te #c+ #n #v3 #t3", # Te4X16 (X = Cl, Br, I); HW I, p. 711
 ]
@@ -1185,10 +1283,35 @@
 
 [Bi]
 0 = [
-    "Bi #n #u3", # Bi atom, s2p3
+    "Bi #n #u3",     # Bi atom, s2p3; HW I, p. 328
+    "Bi #n #v3",     # BiH3, molecular BiX3, BiR3; HW I, pp. 949-954, 979-980
+    "Bi #n #v2 #h",  # BiH3, R2BiH; HW I, pp. 949-951, 979-980
+    "Bi #n #v #h2",  # BiH3, RBiH2; HW I, pp. 949-951, 979-980
+    "Bi #n #h3",     # BiH3; HW I, pp. 949-951
+    "Bi #v5",        # molecular BiF5, Bi(V) organics; HW I, pp. 953, 958-959, 980-981; assignment: PW
+    "Bi #n #v3 #t3", # BiCl6(3-); HW I, p. 957; Lo17, manuscript p. 4; assignment: PW
+    "Bi #n #v2 #a",  # bismine; HW I, p. 985
+]
+1 = [
+    "Bi #c+ #n2",     # Bi+ in [Bi][Bi9][HfCl6]3; HW I, p. 947; assignment: PW
+    "Bi #c+ #v4",     # BiR4+; HW I, pp. 980-981
+    "Bi #c+ #v4 #t2", # polymeric BiF5; HW I, pp. 953-954; assignment: PW
 ]
 3 = [
-    "Bi #c+3 #n", # Bi3+
+    "Bi #c+3 #n",     # Bi3+; HW I, pp. 975-976
+    "Bi #c+3 #n #t4", # BiCl4-; HW I, pp. 955-957; W02, p. 473; assignment: PW
+]
+-1 = [
+    "Bi #c- #n2 #v2",    # Bi2(2-), R2Bi-; HW I, pp. 948, 979
+    "Bi #c- #v6",        # BiF6-; HW I, pp. 958-959; assignment: PW
+    "Bi #c- #n #v2 #a2", # BiC4R4-; HW I, pp. 985-986; charge placement: PW
+]
+-2 = [
+    "Bi #c-2 #n3 #v", # Bi2(4-) in Ca11Bi10; HW I, p. 948
+    "Bi #c-2 #v7",    # BiF7(2-); HW I, pp. 958-959; assignment: PW
+]
+-3 = [
+    "Bi #c-3 #n4", # ionic bismuthides; HW I, p. 948
 ]
 
 [Po]

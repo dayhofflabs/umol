@@ -1,0 +1,4 @@
+; AsF2+; HW I, p. 955.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["As#c+" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

@@ -545,7 +545,7 @@ def test_molecule_from_smiles_io_config(io_config):
     [
         (
             True,
-            '{:atoms ["C#i=#c0#h4#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
+            '{:atoms ["C#i=#c0#h2#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
             ':dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}',
         ),
         (

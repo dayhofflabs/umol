@@ -1,0 +1,5 @@
+; Arsole, implicit-h; EC76, pp. 4365, 4368-4370; aromatic allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["As#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 0 "1#a"]]}}

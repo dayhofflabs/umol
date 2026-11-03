@@ -1,0 +1,5 @@
+; P5-; HW I, p. 883; localized charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#c-" "P" "P" "P" "P"]
+         :bonds [[0 1 :single] [1 2 :double] [2 3 :single] [3 4 :double]
+                 [4 0 :single]]}}

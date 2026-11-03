@@ -1,0 +1,7 @@
+; SbBr6(3-); HW I, p. 957; SJ73, pp. 212-213; three trans 3c4e units: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sb#c-3" "Br" "Br" "Br" "Br" "Br" "Br"]
+         :bonds []
+         :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [5 0 6] :attrs "[1,2,1]#c0#u0#s1"}]}}

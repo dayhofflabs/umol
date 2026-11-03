@@ -1,0 +1,12 @@
+; EH3 donor to Cr(CO)5 (E = Sb); HW I, pp. 951, 979; CO charge convention: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#n3#u0#s1" "Sb#h3" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-"
+                 "O#c+"]
+         :bonds [[2 3 :triple] [4 5 :triple] [6 7 :triple] [8 9 :triple]
+                 [10 11 :triple]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,10 @@
+; Bridging amido motif [R2AlNR2]2, N-R = N-H; HW I, pp. 757-758, Fig. 14.6c; ionic allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al#c+#n0#u0#s1" "Al#c+#n0#u0#s1" "N#c-#h0" "N#c-#h0" "C#h3" "C#h3" "C#h3" "C#h3" "H" "H"
+                 "H" "H"]
+         :bonds [[0 4 :single] [0 5 :single] [1 6 :single] [1 7 :single]
+                 [2 8 :single] [2 9 :single] [3 10 :single] [3 11 :single]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 1 :attrs "1"}]}}

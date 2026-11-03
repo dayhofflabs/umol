@@ -1,0 +1,4 @@
+; Triplet NH; HW I, p. 779.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N#u2#s3#h"]
+         :bonds []}}

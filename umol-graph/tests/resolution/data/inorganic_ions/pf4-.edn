@@ -1,0 +1,5 @@
+; PF4-; HW I, pp. 887-889, 955-957; C94P, p. 2857; axial 3c4e allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#c-" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single]]
+         :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}]}}

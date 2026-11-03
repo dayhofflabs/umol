@@ -1,0 +1,6 @@
+; EC4Me4- (E = Sb); HW I, pp. 938, 985-986; charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sb#c-#a+" "C#a+" "C#a+" "C#a+" "C#a+" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 0 "1#a"] [1 5 :single] [2 6 :single] [3 7 :single]
+                 [4 8 :single]]}}

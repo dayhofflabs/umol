@@ -1,5 +1,5 @@
 ---
-source: umol-graph/tests/resolution/mod.rs
+source: umol-graph/tests/resolution/resolution_suite.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
@@ -20,7 +20,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#n#v#d0#t0#a!#m!"
         "C#n#u#v#d0#t0#a!#m!"
         "C#u3#v#d0#t0#a!#m!"]
-      3 ["N#h2#n#v#d0#t0#a!#m!" "N#h#n#u#v#d0#t0#a!#m!" "N#n2#v#d0#t0#a!#m!"]}}
+      3 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]}}
   :counts-most-saturated {
     :output {
       :atoms ["C#h3" "C" "O#n2" "N#h2#n"]

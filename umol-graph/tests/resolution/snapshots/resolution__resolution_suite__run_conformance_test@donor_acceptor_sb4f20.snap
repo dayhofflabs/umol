@@ -1,0 +1,225 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
+      :bonds [
+        [0 8 :single]
+        [0 9 :single]
+        [0 10 :single]
+        [0 11 :single]
+        [1 12 :single]
+        [1 13 :single]
+        [1 14 :single]
+        [1 15 :single]
+        [2 16 :single]
+        [2 17 :single]
+        [2 18 :single]
+        [2 19 :single]
+        [3 20 :single]
+        [3 21 :single]
+        [3 22 :single]
+        [3 23 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [7]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
+      :bonds [
+        [0 8 :single]
+        [0 9 :single]
+        [0 10 :single]
+        [0 11 :single]
+        [1 12 :single]
+        [1 13 :single]
+        [1 14 :single]
+        [1 15 :single]
+        [2 16 :single]
+        [2 17 :single]
+        [2 18 :single]
+        [2 19 :single]
+        [3 20 :single]
+        [3 21 :single]
+        [3 22 :single]
+        [3 23 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [7]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
+      :bonds [
+        [0 8 :single]
+        [0 9 :single]
+        [0 10 :single]
+        [0 11 :single]
+        [1 12 :single]
+        [1 13 :single]
+        [1 14 :single]
+        [1 15 :single]
+        [2 16 :single]
+        [2 17 :single]
+        [2 18 :single]
+        [2 19 :single]
+        [3 20 :single]
+        [3 21 :single]
+        [3 22 :single]
+        [3 23 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [7]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "Sb#c+"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"
+        "F#n3"]
+      :bonds [
+        [0 8 :single]
+        [0 9 :single]
+        [0 10 :single]
+        [0 11 :single]
+        [1 12 :single]
+        [1 13 :single]
+        [1 14 :single]
+        [1 15 :single]
+        [2 16 :single]
+        [2 17 :single]
+        [2 18 :single]
+        [2 19 :single]
+        [3 20 :single]
+        [3 21 :single]
+        [3 22 :single]
+        [3 23 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [4]}
+        {:acceptor 1 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [5]}
+        {:acceptor 2 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [6]}
+        {:acceptor 3 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [7]}]}
+    :success true
+    :tie-breaks []}}

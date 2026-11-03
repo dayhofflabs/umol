@@ -1,0 +1,4 @@
+; HPF4/H2PF3/H3PF2; HW I, pp. 886, 891.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#h1" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}}

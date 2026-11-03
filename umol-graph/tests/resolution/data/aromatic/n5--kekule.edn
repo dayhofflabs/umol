@@ -1,0 +1,5 @@
+; N5- in CsN5; Steele et al., doi:10.1021/acs.chemmater.6b04538; charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N#c-" "N" "N" "N" "N"]
+         :bonds [[0 1 :single] [1 2 :double] [2 3 :single] [3 4 :double]
+                 [4 0 :single]]}}

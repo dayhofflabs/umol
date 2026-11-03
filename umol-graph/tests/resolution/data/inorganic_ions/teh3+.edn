@@ -1,0 +1,4 @@
+; H3Te+ (gas phase); Karpas and Jasien (1986), pp. 117-118; doi:10.1016/0168-1176(86)87046-X.
+{:input {:atoms ["Te #c+" "H" "H" "H"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]}
+ :config-overrides {:atom {:implicit-hydrogens :zero :charge :zero}}}

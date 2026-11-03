@@ -1,0 +1,4 @@
+; Triplet PH; HW I, p. 866.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#u2#s3#h"]
+         :bonds []}}

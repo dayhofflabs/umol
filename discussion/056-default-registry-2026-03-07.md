@@ -7,11 +7,16 @@ Relates: [217](217-rhea-participant-failures-2026-08-30.md),
 [189](189-property-test-organization-2026-08-06.md)
 
 The [HW extraction](#hw-extraction-spike-2026-10-31) records hydrogen selections,
-noble-gas evidence, halogen selections and chalcogen extraction. The noble-gas audit covers earlier and
+noble-gas evidence, halogen selections, chalcogen extraction and the
+[pnictogen work table](#pnictogen-work-table). The noble-gas audit covers earlier and
 newly added entries; the supplied primary-paper PDFs have been reviewed. The selected
-hydrogen, noble-gas, halogen and chalcogen passes are complete. Unselected candidates
-remain in the extraction tables. The [chalcogen work table](#chalcogen-work-table)
+hydrogen, noble-gas, halogen, chalcogen and pnictogen passes are complete. Unselected
+candidates remain in the extraction tables. The [chalcogen work table](#chalcogen-work-table)
 includes the completed audit of existing entries.
+The selected pnictogen additions are implemented: 95 states, 134 fixtures and the
+approved Counts bounds/table changes. The 79 earlier pnictogen entries have also
+received the citation/comment audit. SbCl4−/BiCl4− use the accepted ionic/donor
+description; the other extracted cases are explicitly unselected.
 The March planning and implementation notes below are historical; later updates to
 the tracking table are dated.
 
@@ -20,12 +25,13 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 
 ## Project Status (2026-11-02)
 
-**Last implementation check (2026-11-02):** graph tests and 906 resolution
-conformance cases and 215 graph properties passed. The Counts accounting correction
-in [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting) is implemented:
+**Last curation check (2026-11-02):** 1041 resolution conformance cases, 403 valence
+unit tests, focused Clippy and formatting passed. The seven follow-up fixtures agree
+across both models/policies and satisfy the valence invariants. The preceding
+90-state batch also passed workspace tests, 215 graph properties, 3150 Python tests
+(2 skipped), workspace Clippy and formatting. The Counts accounting correction in
+[240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting) is implemented:
 107 snapshots now give the selected donor/multicenter assignments under both policies.
-Earlier workspace tests, 3150 Python tests (2 skipped), workspace Clippy and
-formatting checks also passed.
 
 Each EDN input runs through AtomTyping and Counts with both Strict and MostSaturated policies. The selected
 noble-gas HW additions and six xenon-anion replacements are implemented. Perxenate
@@ -81,7 +87,8 @@ Localized S8²⁺/Se8²⁺ and aromatic S4²⁺/S6²⁺ reuse existing states.
 S5+/S6+/S7+ have multicenter fixtures using existing S#n#v2#m2, with the accepted PW allocation.
 Te6²⁺/Te6⁴⁺ have fixtures for localized resonance contributors using existing Te states (Be94/Bu82).
 Singlet phenyloxenium tests existing O#c+#n2#v; H13 replaces the OH+ registry example.
-The unsupported TeH3+ example is replaced by HW's TeF3+ using the same existing state.
+TeF3+ and the restored explicit-H H3Te+ fixture cover the existing Te#c+#n#v3 state.
+Their distinct experimental evidence is recorded in Ch19; no atom type is added.
 Restoring F#c-#n#d3 adds one further state and restores its fixture.
 One duplicate hydronium row is removed. The chalcogens now have 100 unique states;
 the current halogen total is 110 after the HF-aggregate pruning.
@@ -92,27 +99,38 @@ The approved Se=14 and Te=16 electron-capacity limits and their scope are record
 in the [expansion rationale](#electron-capacity-expansion-2026-11-01).
 PoF6 is omitted: the supplied Weinstock report establishes volatility without a formula.
 
+The pnictogen pass adds 17 N, 23 P, 16 As, 22 Sb and 17 Bi states, all covered by
+134 new fixtures. Of these, 132 give identical determined graphs across all four
+resolver/policy combinations; the two NH inputs with unspecified spin remain
+underdetermined under Strict AtomTyping and select the existing singlet under
+MostSaturated. All 534 determined outputs satisfy the valence invariants.
+Eight older snapshots gain the triplet N candidate under Strict AtomTyping;
+their MostSaturated outputs are unchanged. The 79 earlier pnictogen states are
+retained with checked citations and corrected examples. Three stale Python
+expectations are corrected for the earlier Counts donor accounting and conservative
+H-count retention during Strict export. No resolver code changes.
+
 ### Conformance suite breakdown
 
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 135 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 25 | Hydrides with explicit or implicit H |
-| `inorganic_small/` | 96 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 132 | Inorganic ions |
-| `donor_acceptor/` | 27 | Donor–acceptor complexes with dative or multicenter bonds |
+| `atomic_ions/` | 137 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 29 | Hydrides with explicit or implicit H |
+| `inorganic_small/` | 103 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 173 | Inorganic ions |
+| `donor_acceptor/` | 65 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 53 | C/H compounds |
 | `functional_groups/` | 74 | Organic heteroatom groups (halides, amines, etc.) |
 | `carbonyl_derivatives/` | 62 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
-| `aromatic/` | 48 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
-| `hypervalent/` | 40 | Expanded-octet and multicenter species |
+| `aromatic/` | 82 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
+| `hypervalent/` | 49 | Expanded-octet and multicenter species |
 | `transition_metals/` | 7 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **906** | |
+| **Total** | **1041** | |
 
 ## March 2026 record
 
@@ -139,7 +157,7 @@ PoF6 is omitted: the supplied Weinstock report establishes volatility without a 
 
 ## Tracking Table
 
-Chalcogen, N and F companion rows updated 2026-11-02; Br/I/Xe companion rows updated
+Pnictogen review and chalcogen/N/F companion rows updated 2026-11-02; Br/I/Xe companion rows updated
 2026-11-01; hydrogen, other noble-gas and other halogen rows updated 2026-10-31.
 Other rows retain the March record.
 
@@ -158,7 +176,7 @@ Status values:
 | Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `atomic_ions/be+2.toml`) | done |  |
 | B | yes | no | partial | yes (`atoms/b.edn`, `hydrides/bh3.edn`, `inorganic_small/b2h6.edn`) | done | Hydrogen companion addition: B#v2#m |
 | C | yes | no | partial | yes (`atoms/c.edn`, `donor_acceptor/hcr2-co10-.edn`) | done | Hydrogen companion addition: C#c-#v3#d |
-| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | done | Companion additions: N#v3#d, N#v2#a#m2, N#n#v2#m and N#c-#n#v2#a2 |
+| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 52 current states; 17 additions and both NO− fixtures implemented; existing-entry citation audit complete |
 | O | yes | yes (-2) | yes (selected) | yes (all 29 states) | done | Thirteen states added; duplicate hydronium removed; citation and default-scope audit complete; aromatic and Kekulé furan covered |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
@@ -166,7 +184,7 @@ Status values:
 | Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `atomic_ions/mg+2.toml`) | done |  |
 | Al | yes | yes (+3) | no | yes (`atoms/al.toml`, `atomic_ions/al+3.toml`) | done |  |
 | Si | yes | no | no | yes (`atoms/si.toml`) | done |  |
-| P | yes | yes (-3) | no | yes (`atoms/p.toml`, `atomic_ions/p-3.toml`) | done |  |
+| P | yes | yes (-3) | partial | yes (`atoms/p.edn`, `atomic_ions/p-3.edn`, `hydrides/`, `hypervalent/`) | in_progress | 44 current states; 23 additions implemented; existing-entry citation audit complete |
 | S | yes | yes (-2) | yes (selected) | yes (all 22 states) | done | Five states added; citation and default-scope audit complete; S4N4 retains localized and HW three-center descriptions |
 | Cl | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 16 states added; terminal donor covered by [RhCl(NH3)5]2+ |
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
@@ -184,7 +202,7 @@ Status values:
 | Zn | yes | yes (+2) | no | yes (`atoms/zn.toml`, `atomic_ions/zn+2.toml`) | done |  |
 | Ga | yes | yes (+3) | no | yes (`atoms/ga.toml`, `atomic_ions/ga+3.toml`) | done |  |
 | Ge | yes | no | no | yes (`atoms/ge.toml`) | done |  |
-| As | yes | yes (-3) | no | yes (`atoms/as.toml`, `atomic_ions/as-3.toml`) | done |  |
+| As | yes | yes (-3) | partial | yes (`atoms/as.edn`, `atomic_ions/as-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 27 current states; 15 additions implemented; existing arsole types retained with paired aromatic/Kekulé fixtures; citation audit complete |
 | Se | yes | yes (-2) | yes (selected) | yes (all 22 states) | done | Six states added; citation and default-scope audit complete, including localized Se4N4 |
 | Br | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 18 halogen-pass additions plus Br#c-#n#d3 for binary chalcogen bromides |
 | Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
@@ -202,7 +220,7 @@ Status values:
 | Cd | yes | yes (+2) | no | yes (`atoms/cd.toml`, `atomic_ions/cd+2.toml`) | done |  |
 | In | yes | yes (+3) | no | yes (`atoms/in.toml`, `atomic_ions/in+3.toml`) | done |  |
 | Sn | yes | no | no | yes (`atoms/sn.toml`) | done |  |
-| Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `atomic_ions/sb-3.toml`) | done |  |
+| Sb | yes | yes (-3) | partial | yes (`atoms/sb.edn`, `atomic_ions/sb-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 29 current states; 20 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Te | yes | yes (-2, -1, +1) | yes (selected) | yes (all 20 states) | done | Eleven states added, including aromatic Te4²⁺; citation and default-scope audit complete |
 | I | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 22 halogen-pass additions plus I#c-#n#d3 for binary TeI4 aggregates |
 | Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
@@ -210,7 +228,7 @@ Status values:
 | Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `atomic_ions/ba+2.toml`) | done |  |
 | Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `atomic_ions/tl+1.toml`, `atomic_ions/tl+3.toml`) | done |  |
 | Pb | yes | yes (+2,+4) | no | yes (`atoms/pb.toml`, `atomic_ions/pb+2.toml`, `atomic_ions/pb+4.toml`) | done |  |
-| Bi | yes | yes (+3) | no | yes (`atoms/bi.toml`, `atomic_ions/bi+3.toml`) | done |  |
+| Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `hydrides/`, `inorganic_ions/`, `aromatic/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
 | At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
@@ -383,6 +401,13 @@ Default multicenter entries are limited to common patterns or selected molecules
 for which no simpler description, multicenter or otherwise, is available. Delocalized
 molecular orbitals or a possible electron allocation alone do not justify additional
 atom types. Hydrogen-bond, donor–acceptor and aromatic descriptions retain their own categories.
+
+**Multicenter counting limitation (2026-11-02):** the graph retains individual
+relations and electron contributions, but registry matching uses the aggregate
+per-atom contribution. Thus #m6 does not require three 3c4e units with the atom
+in the central role. Describing the number and kind of units and each atom's role
+could constrain counting more usefully. This is a future model-design question;
+the Pn24 multicenter entries are accepted for now under the current model.
 
 **Multicenter scope review (2026-11-02):** reviewed all 60 multicenter states in
 hydrogen, halogens and noble gases, together with their B/Cr/N companions and
@@ -1087,7 +1112,8 @@ Po 7. F#c-#n#d3 is also restored under the bridge-scope revision above.
 
 **Present** means implemented; **Accepted** means selected with implementation work
 remaining; **Open** means the assignment is unresolved; **Not selected** means omitted
-from the default. Citation or fixture work on an accepted entry does not reopen its
+from the default; **Deferred** means held outside the default pending reconsideration.
+Citation or fixture work on an accepted entry does not reopen its
 inclusion. Row IDs are retained; unassigned families have no proposed atom description.
 
 Charged diatomics admit both atom-localized and bond-based charge/spin descriptions.
@@ -1099,6 +1125,7 @@ the integer order is a graph encoding, not the fractional MO bond order.
 | --- | --- | --- | --- |
 | Ch01 | O#n2#v2; O#n2#v#h; O#n2#h2; O#c-#n3#v; O#c-#n3#h; O#c-2#n4; O#c+#n#v3; O#c+#n#v2#h; O#c+#n#v#h2; O#c+#n#h3 | Present | Ordinary O, hydroxide, peroxide and hydronium states; HW 565–567, 572–573, 590–600. Duplicate hydronium removed, OX2H+ comment corrected; O2 fixture supplies triplet bond spin |
 | Ch02 | O#n#v2#d; O#n#v#h#d; O#n#h2#d; O#c-#n2#v#d; O#c-#n2#h#d | Present; 5 added | Terminal aqua and hydroxido donors. HW I 572; II 2015 gives [Rh(H2O)6]3+ and [Rh(OH)(H2O)5]2+; all five states covered |
+| Ch02, bridging neutral O | O#v2#d2; O#v#h#d2; O#h2#d2 | Deferred | Neutral O bridging two acceptors: [water](https://doi.org/10.1107/S2056989017005564), [methanol](https://doi.org/10.1016/S1387-7003(03)00143-6), [ether](https://doi.org/10.1016/j.poly.2010.04.036). Two donated pairs, no remaining lone pair under the adopted donor convention. Available abstracts/structural excerpts reviewed; PDFs not obtained. Default inclusion deferred for scope and per-O matching cost |
 | Ch03 | E#n2#v2; E#n2#v#h; E#n2#h2; E#c-#n3#v; E#c-#n3#h; E#c-2#n4 (E = S, Se, Te) | Present; Te#c-#n3#h added | Chains, hydrides and chalcogenide ions; HW 615–628, 699–704. HTe− has explicit and implicit H fixtures |
 | Ch04 | E#n#v4; E#v6 (E = S, Se, Te) | Present; 2 Te states added | Ordinary oxo convention. TeO3²−, TeF6 and Te(OH)6: HW 703, 710, 723–724. Solid H2TeO3 is not a structural example: HW leaves its structure unknown |
 | Ch05 | E#n#v2#m2 (E = S, Se, Te) | Present; 3 added | EF4: two equatorial single bonds and one axial 3c4e unit [1,2,1]. HW 633, 707, 710–711; C01, p. 6347. Three fixtures |
@@ -1126,8 +1153,36 @@ the integer order is a graph encoding, not the fractional MO bond order.
 | Ch17 | Unassigned | Not selected in this pass | Larger polyatomic clusters and specialized adducts: HW 620–622, 699–703, 707–713, 725–727. Se2N2/SeSN2 occur as adducts, not established free-molecule examples. No states added solely for elaborate ions/complexes |
 | Ch18 | Unassigned | Not selected; unsupported | PoF6: HW 706 lists it, but W60 establishes only a volatile Po fluoride without composition determination |
 | Ch19, oxenium | O#c+#n2#v | Present; cited and covered | Singlet phenyloxenium (H13, Scheme 2 and p. 9080) replaces the OH+ registry example. One fixture uses the existing state; both models agree |
-| Ch19, Te example | Te#c+#n#v3 | Present; example replaced | TeF3+ (HW 711) replaces the unsupported TeH3+ fixture. HW 705 reports H2Te decomposition in HF/SbF5 |
+| Ch19, Te examples | Te#c+#n#v3 | Present; H3Te+ fixture restored | TeF3+ (HW 711) and gas-phase H3Te+ (KJ86, pp. 117–118) have separate fixtures using the same existing state. HW 705 reports H2Te decomposition in HF/SbF5; the full papers distinguish this failed salt preparation from gas-phase protonation |
 | Ch20, remaining existing entries | Existing atomic, aromatic and remaining hydride/radical states | Present; audit complete | Atomic configurations: HW 328; OH, H3S+, H3Se+: HW 584, 625, 705; SH/SeH/TeH: NIST; heterocycles: I98/Q15. Twenty-two fixtures complete coverage of all 100 retained chalcogen states under both AtomTyping policies. Furan has aromatic and Kekulé fixtures. No further registry states or scope removals |
+
+**H3Te+/H3Se+ evidence correction (2026-11-02).** Both full papers reviewed.
+[Minkwitz, Kornath and Sawodny (1992)](../materials/valence/Minkwitz-1992-selenonium-hexafluoroantimonate.pdf),
+doi:[10.1002/anie.199206431](https://doi.org/10.1002/anie.199206431), pp. 643–644:
+isolated H3Se+SbF6− and its deuterated analogue, characterized by IR/Raman spectra;
+stable for about a week at 195 K, decomposing within minutes at 213 K.
+H2Te decomposes in HF/SbF5 at 190 K; no telluronium salt was isolated.
+KJ86: [Karpas and Jasien (1986)](../materials/valence/Karpas-1986-hydrogen-telluride-proton-affinity.pdf),
+doi:[10.1016/0168-1176(86)87046-X](https://doi.org/10.1016/0168-1176(86)87046-X), pp. 117–118:
+gas-phase proton-transfer bracketing and equilibria establish PA(H2Te) = 175.8 ± 0.5 kcal/mol,
+above H2Se (171.3); calculated H3Te+ has H–Te–H = 93.6° and Te–H = 1.654 Å.
+This supports restoring the explicit-H H3Te+ fixture alongside TeF3+, using the existing
+Te#c+#n#v3 state; both resolvers and both policies agree without ties.
+H3Se+ retains its four explicit/mixed/implicit-H fixtures.
+
+**Deferred O donor check (2026-11-02).** A trial registry with these three entries
+changed no candidate sets, resolved molecules or reports across 906 fixtures under
+Strict and MostSaturated. All 556 O atoms have complete donated-pair counts of 0 or 1.
+The neutral-O bucket grows from 17 to 20 entries. A small release-build comparison
+(20 alternating measured pairs after warm-up; parsing, input cloning and startup
+excluded) gave median MostSaturated resolution increases of 4.5% for water, 5.0% for
+[Rh(H2O)6]3+ and 0.8–1.4% for methanol, dimethyl ether and 18-crown-6. These are
+fixture-specific measurements, not a general workload estimate. The default is unchanged.
+
+Potential optimization: reject incompatible candidate families earlier using complete
+structural readings, such as donated-pair counts that exclude all #d2 entries.
+Any approach must preserve partial-input semantics, admitted candidates and tie-break
+outcomes; the mechanism remains an open design question.
 
 #### Primary sources
 
@@ -1323,14 +1378,15 @@ Aromaticity's minimum-electron
 tie-break is reported for S4N4²⁺ and S5N5+ under AtomTyping, and for all six new
 aromatic nitride cations under Counts; S3N3− needs no tie-break. The restored
 [F(XeOF4)3]− fixture additionally covers restored F#c-#n#d3 and the existing Xe acceptor.
-TeF3+ replaces the unsupported TeH3+ example without adding a state.
+The explicit-H H3Te+ fixture is restored alongside TeF3+ after reviewing KJ86;
+both use the existing Te#c+#n#v3 state (Ch19).
 
 | Coverage | Fixture paths under tests/resolution/data |
 | --- | --- |
 | EF4 and TeF6 | hypervalent/{sf4,sef4,tef4,tef6}.edn |
 | SF5 radical | hypervalent/sf5.edn |
 | EF5−, SOF3+, tellurite, implicit HTe− | inorganic_ions/{sf5-,sef5-,tef5-,sof3+,teo3-2,teh-implicit-}.edn |
-| Higher-coordinate Te anions; TeF3+ replacement | inorganic_ions/{tef7-,tef8-2,teof5-,teof6-2,tef3+}.edn |
+| Higher-coordinate Te anions; TeF3+ and H3Te+ | inorganic_ions/{tef7-,tef8-2,teof5-,teof6-2,tef3+,teh3+}.edn |
 | Se/Te hexahalide dianions | inorganic_ions/{sebr6-2,tecl6-2,tebr6-2}.edn |
 | Se/Te tetrahalide dianions | inorganic_ions/{sebr4-2,tecl4-2}.edn |
 | Aqua / hydroxido donors, explicit and implicit H | donor_acceptor/rh-h2o6*.edn; donor_acceptor/rh-oh*.edn |
@@ -1390,3 +1446,119 @@ Kekulé matching. Kekulization owns independent success and no_matching fixture 
 its corpus error test asserts NoMatching explicitly. The resolution corpus is unchanged.
 Other test-organization and generator corrections are tracked in
 [189](189-property-test-organization-2026-08-06.md#graph-test-follow-ups-2026-11-01).
+
+### Pnictogens
+
+Source: [HW 103, Band I, chapter XIV](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=777>),
+printed pp. 739–985; chapter references pp. 986–993. First extraction table:
+2026-11-02. Implemented after discussion: N 52, P 44, As 28, Sb 31, Bi 19 states
+(95 additions). The selected entries, parameter changes and fixtures are implemented;
+the other extracted cases are explicitly unselected. No selection remains open in
+this chapter pass.
+
+#### Pnictogen work table
+
+**Present** identifies types that preceded this pass.
+**Implemented** identifies selected additions and fixture work now in the repository.
+**Proposed** identifies additions for discussion; **Open** identifies an unsettled
+assignment, evidence or default-scope question. **No addition proposed** retains
+the extraction result without expanding the default. State lists use the concrete,
+zero-valence registry defaults; each value of E denotes a separate element entry.
+HW references below are printed pages in Band I. PW identifies an adopted graph
+allocation or extension of an existing convention, not an explicit HW assignment.
+
+| ID | Atom descriptions / gap | Disposition | Examples, evidence and fixture candidates |
+| --- | --- | --- | --- |
+| Pn01 | Existing ordinary N, N+, N−, N²− and N³− states | Present | N2, NH3, N2H4, N2H2, NH4+, NH2−, NH²−, N³−, nitrogen halides and oxo compounds; HW 747–758, 768–781, 788–845. NH2/NO/NF2 and localized NO2 radicals also use existing states (799, 806, 811). Citations checked; existing fixtures retained |
+| Pn02 | N#n#u2#v; N#n#u2#h | Implemented: 2 | Triplet NH, XN and NOH; HW 779 explicitly distinguishes singlet/triplet NH, 800 gives triplet XN, 821 triplet NOH. Existing N#n2#v / N#n2#h retain the singlet. Fixtures: explicit/implicit NH with and without supplied spin |
+| Pn03 | Existing N/O and accepted Pn02 states | Implemented: two fixtures; no further type | NO−: HW 806 gives a double-bond reference; 822 explicitly gives triplet spin. Selected fixtures: N−=O with bond #u2#s3 uses existing types; N(2 unpaired electrons)–O− uses accepted N#n#u2#v and existing O#c-#n3#v. Both resolve under AtomTyping and Counts, Strict and MostSaturated. Charge/spin allocations are PW. N#c-#n#u2#v2 is not selected |
+| Pn04 | N#v2#h#d; N#v#h2#d; N#h3#d | Implemented: 3 | Complete the existing N#v3#d family for ammine/amine donors; HW 757–758. Fixtures: the same ammine complex with explicit, mixed and implicit N–H bonds |
+| Pn05 | N#c-#n#v2#d; N#c-#n#v#h#d; N#c-#n#h2#d | Implemented: 3 | Terminal amido donors, retaining one lone pair. HW 757–758, Fig. 14.6b; formal N− donor convention follows the selected anionic-ligand convention. Fixtures use the Be(NH2)2 motif, with all H representations |
+| Pn06 | N#c-#v2#d2; N#c-#v#h#d2; N#c-#h2#d2 | Implemented: 3 | Bridging amido donors: two donated pairs, one to each acceptor. HW 757–758, Fig. 14.6c, [R2AlNR2]2. Fixtures use the Al amido dimer motif with R = H on N; Al acceptor attributes are supplied explicitly |
+| Pn07 | N#c-2#n#v#d2; N#c-2#n#h#d2; N#c-2#v#d3; N#c-2#h#d3; N#c-3#n#d3; N#c-3#d4 | Implemented: 6 | Imido: two donated pairs and one remaining lone pair, or three donated pairs and no lone pair; explicit/implicit H variants. Nitrido: three donated pairs and one lone pair, or four donated pairs and none. HW 757–758, Fig. 14.6d–k explicitly describes these donor counts, including Cl3VNR, [Cl3VN]− and [{RuCl4(H2O)}2N]3−. Formal N²−/N³− donor convention follows the selected anionic-ligand convention. Fixtures cover the V imido/nitrido, Al imido and Ru nitrido motifs; metal attributes are supplied explicitly. All fit the N electron capacity of 8; no neutral-N bucket additions |
+| Pn08 | Existing N#n#v3, N#c+#v4, N#c-#n2#v2 and aromatic N/N− states | Present; N5− fixtures implemented | Localized azide, HN3, H2N3+, N5+, N2F+, NOF3 and N2O5; HW 746–747, 773–774, 800, 813, 827. S17 establishes pentazolate rings in CsN5 by diffraction/Raman evidence and explicitly assigns aromaticity, extending HW 748. Paired aromatic/Kekulé N5− fixtures use existing types; localized charge placement is PW |
+| Pn09 | Optional additional N multicenter states | No addition proposed | HW explicitly describes two 3c4e π units in azide (747), but existing localized states suffice. N2−/N2²− (747) belong with the charged-diatomic graph checks; their existence does not justify a new family of multicenter N types |
+| Pn10 | Bi#n#v3; Bi#n#v2#h; Bi#n#v#h2; Bi#n#h3 | Implemented: 4; P/As/Sb counterparts present | BiH3, molecular BiX3 and RnBiH3−n; HW 949–954, 979–980. Fixtures: BiH3 with explicit/mixed/implicit H and BiCl3. Existing E#n#v3 also covers localized P4/As4, E4O6 and simple E–E skeletons (849, 944, 964, 971) |
+| Pn11 | E#c+#v3#h; E#c+#v2#h2; E#c+#v#h3; E#c+#h4 (E = As, Sb); Bi#c+#v4 | Implemented: 9 | AsH4+/SbH4+ salts: HW 951; complete the H variants of existing As/Sb#c+#v4. BiR4+ is established in 980–981; use an organobismuth example, not hypothetical BiH4+ |
+| Pn12 | E#c-#n2#v#h; E#c-#n2#h2 (E = As, Sb); Bi#c-#n2#v2 | Implemented: 5 | AsH2−/SbH2−: HW 951. Bi2²− has a Bi=Bi bond (948), and R2Bi− salts are described in 979. P hydride-anion variants already exist; no BiH2− example is assumed |
+| Pn13 | E#c-2#n3#v (E = P, As, Sb, Bi); P#c-2#n3#h | Implemented: 5 | Singly bonded termini in E2⁴−/chain pentelides: HW 861, 948; PH²− in Li2PH: 871. Fixtures: P2⁴−, PH²−, and As2⁴−/Sb2⁴−/Bi2⁴− fragments from CaAs/Ca11Sb10/Ca11Bi10 (948) |
+| Pn14 | Bi#c-3#n4 | Implemented: 1 | Ionic bismuthides M3Bi; HW 948. Completes the existing N/P/As/Sb E³− family |
+| Pn15 | P#n#u2#v; P#n#u2#h | Implemented: 2 | Triplet PH is explicit in HW 866, Table 14.9 footnote a; triplet PR intermediates in 937. The existing P#n#u#v2 family covers PR2 radicals (870, 936) |
+| Pn16 | P#v3#d; P#v2#h#d; P#v#h2#d; P#h3#d | Implemented: 4 | PH3, PR3, PF3 and PCl3 donors; HW 871, 888, 936. Fixtures cover PH3 H variants and PMe3 in Cr(CO)5 adducts, with Cr acceptor attributes supplied explicitly |
+| Pn17 | E#v3#d; E#v2#h#d; E#v#h2#d; E#h3#d (E = As, Sb) | Implemented: 8 | Arsane/stibane donors and their hydride/organic variants; HW 951, 979. BiPh3 donation is also reported, but described as rare (979): no Bi donor addition proposed at this stage |
+| Pn18 | As#v5; Sb#v5; Bi#v5; existing P#v5 | Implemented: 3 | Monomeric EF5, E(V) organics and localized oxo descriptions; HW 953, 958–959, 966, 980–981. Continues the existing P#v5/no-central-lone-pair convention (PW). Use the molecular phase; solid BiF5 is polymeric. No alternative #m encoding proposed |
+| Pn19 | P#v4#h; P#v3#h2; P#v2#h3 | Implemented: 3 | HPF4, H2PF3, H3PF2 (886, 891), plus P–H oxo compounds H3PO2/H3PO3 (903, 905–908). Completes the explicitly supported H variants of P#v5; does not add PH5 |
+| Pn20 | E#c-#v6 (E = P, As, Sb, Bi); P#c-#v5#h; P#c-#v4#h2 | Implemented: 6 | PF6−/PCl6−, AsF6−/AsCl6−, SbF6−/SbCl6− and BiF6−; HW 891–892, 958–959. HPF5− and trans-H2PF4− contain P-bound H and form by fluoride addition to HPF4 and H2PF3 (891); explicit-H graphs use the accepted P#c-#v6. Localized, no-lone-pair continuation (PW), also applicable to Sb(OH)6− (972). Counts capacity is exactly 12; no table-target extension needed with H supplied |
+| Pn21 | Sb#c-2#v7; Bi#c-2#v7 | Implemented: 2 and capacity 12 → 14 | SbF7²−/BiF7²− are established pentagonal bipyramids (958–959). The adopted localized convention requires 14 electrons. Sb/Bi valence_capacity is raised from 12 to 14; rationale below |
+| Pn22 | P#n#v3#t; P#v5#t; Sb#v5#t | Implemented: 3 | Me3N→PCl3 (888), Me3N→PF5 / Me3P→PF5 (891), O-bound SO2→SbF5 (958): explicit Lewis-acid/base adduct descriptions in HW. One accepted pair; Counts capacities suffice. Fixtures: Me3N→PCl3, Me3N→PF5 and SO2→SbF5, using existing N/O donor types |
+| Pn23 | E#c+#v4#t2 (E = P, Sb, Bi); existing bridging halide donor types | Implemented: 3; assignment PW | P2Cl10 (892), cyclic (SbF5)4 and polymeric BiF5 (953–954): four terminal halides and two bridge contacts per E. Extends the selected halide-anion donor convention; no extra multicenter types. Counts electron count is 12. Fixtures cover P2Cl10, (SbF5)4 and a BiF5 chain fragment cut at boundary F atoms. Ordinary phosphonium inputs retain the same candidates and resolution results: their complete #t0 reading excludes #t2 before tie-breaking |
+| Pn24, P/As tetrahalides | P#c-#n#v2#m2; As#c-#n#v2#m2 | Implemented (accepted for now): 2 | PF4−: C94P, p. 2857 explicitly assigns axial 3c4e bonding; PCl4−/AsCl4−: W02, p. 473 supports the same partition by NBO analysis. Two equatorial single bonds, one lone pair, one axial 3c4e unit; contributions [1,2,1] and central charge follow the selected convention (PW). Existing terminal F/Cl types suffice. Counts electron count: 8. Fixtures: PF4−, PCl4− and AsCl4−; HW 887–889, 955–957 |
+| Pn24, asymmetric PBr4− | Accepted P#n#v3#t (Pn22); existing Br#c-#n3#d | Implemented: fixture; no further type | [Et4N][PBr4]: C94P, p. 2858 explicitly describes PBr3 with a loosely attached Br−, unlike the more symmetric [nPr4N] salt. Use Br−→PBr3 under the selected halide-donor convention; no extra PBr4-specific type |
+| Pn24, SbCl5²− | Sb#c-2#n#v#m4 | Implemented (accepted for now): 1 | WJ74, p. 1680 explicitly supports basal 3c4e bonding in square-pyramidal SbCl5²−. One ordinary apical bond, two basal 3c4e units and one lone pair; contributions [1,2,1] and central charge follow the selected convention (PW). Counts electron count: 8. Fixture: SbCl5²−; HW 957. RC72 establishes SbF5²− geometry and a lone pair, but not this partition. No SbF5²− multicenter fixture is selected from that evidence alone |
+| Pn24, SbCl6³−/SbBr6³− | Sb#c-3#n#m6 | Implemented (accepted for now): 1 | SJ73, pp. 212–213 explicitly applies Rundle's polyhalide bonding model to both hexahalides: Sb 5p bonding and a retained 5s lone pair. Encode three trans 3c4e units; contributions [1,2,1] and central charge follow the selected convention (PW). Existing terminal Cl/Br types suffice. Counts electron count: 8. Fixtures: SbCl6³− and SbBr6³−; the chloride structure is measured in SJ73; HW 957 |
+| Pn24, BiCl6³− | Bi#n#v3#t3 | Implemented: 1 | Lo17, manuscript p. 4 explicitly permits BiCl3 with three coordinated Cl−. Use three ordinary Bi–Cl bonds and three Cl− donations, retaining one Bi lone pair; the existing Cl− donor type suffices. This donor description meets the multicenter inclusion rule without another Bi multicenter state. Counts electron count: 14, covered by the accepted Bi expansion in Pn21. Fixture: BiCl6³−; HW 957 |
+| Pn24, SbCl4−/BiCl4− | Sb#c+3#n#t4; Bi#c+3#n#t4 | Implemented: 2 donor states | W02, p. 473 favors E³⁺ surrounded by four Cl− ions over the P/As 3c4e description. Accepted four terminal Cl−→E³⁺ bonds apply the existing halide-donor convention (PW); existing Cl#c-#n3#d suffices. Central electron count 2 + 4×2 = 10, net molecular charge −1. Both fixtures resolve identically under both models/policies and satisfy the invariants; no bound/table changes or new multicenter states |
+| Pn24, other halogenoanions | No further states selected | No addition proposed | HW 955–957 and WK92 describe further EX4−/EX5²−/EX6³− structures and aggregates without establishing additional selected bond partitions. Retain the literature-supported multicenter assignments above; do not extrapolate new Sb/Bi multicenter types across the family. Larger aggregate ions do not justify additional states |
+| Pn25 | E#n#v2#a (E = P, Sb, Bi); N/As counterparts present | Implemented: 3 | Phosphinine, stibinine, bismine; HW 938, 985. Paired aromatic/Kekulé fixtures. Counts companion: Bi aromatic contribution 1 added for inputs supplying only aromatic membership |
+| Pn26 | E#c-#n#v2#a2 (E = P, As, Sb, Bi); N counterpart present | Implemented: 4 | P5− (883) and aromatic EC4R4− rings (938, 985–986). Localized charge on E is the graph allocation (PW). Paired aromatic/Kekulé fixtures. Counts companion: Po aromatic contribution 2 added for Bi−, which reads the isoelectronic chalcogen row |
+| Pn27 | P#c+#n#v2#a0 | Implemented: 1 | Phosphirenylium, explicitly called aromatic in HW 937–938, Fig. 14.91a. Two C π electrons, P+ retains its lone pair. Paired aromatic/Kekulé fixtures. Counts companion: aromatic contribution 0 added to the Si row used for P+ |
+| Pn28 | P#v3#a2; P#v2#h#a2; existing As#v3#a2 / As#v2#h#a2 | Implemented: 2; retain existing As | EC76, pp. 4365, 4368–4370 supports aromatic descriptions of phospholes and arsoles, including pyramidal geometries. M02, pp. 1208, 1211–1213 finds weak, substituent-dependent phosphole aromaticity; pyramidality alone does not classify the series. Qualifies HW 937–938, 985. Both aromatic and localized notations selected, with P–H explicit/implicit and P–Me fixtures and corresponding As coverage. The 6π graph allocation uses E contribution 2 (PW). Counts already admits P/As contribution 2. No extension to Sb/Bi proposed |
+| Pn29 | Existing P#n#v3, P#v5, P#c+#v4 and N neutral/anionic states | Present | PN, phosphazanes, iminophosphoranes and cyclophosphazenes; HW 927–934. Localized and charge-separated contributors use existing states. No cage/ring-wide multicenter type proposed merely to reproduce delocalization |
+| Pn30 | As#c+#n#v2; Sb#c+#n#v2; Bi#c+#n2 | Implemented: 3 | Accepted AsF2+/SbF2+ cation states: two ordinary bonds and one lone pair (955); EF3-stabilized aggregates require their own topology. Bi+ occurs in [Bi][Bi9][HfCl6]3 (947); the accepted two-pair allocation is PW. Three fixtures resolve identically under both models/policies; no bounds/table changes |
+| Pn31 | All 79 earlier N/P/As/Sb/Bi states | Audited: retained | HW references filled throughout; AsR2 radicals: HW 983. G18 supplies explicit NBO support for Sb#n#u#v2. H81 supports singlet PH2+/HPF+/PF2+. F18 supports the singlet nitrenium entries; the unrelated NO+ example is removed. Z22 distinguishes pyrrolyl π and σ states: the existing N#u#v2#a2 example is qualified as the σ-radical B(2A1) reading, not the ground state. Corrected PH2 and R3PH+ formula comments; no type changes from this audit |
+| Pn32 | Additional cluster-, aggregate- or coordination-specific states | No addition proposed | Larger P/As/Sb/Bi cages, HP4+, polynuclear halide ions, higher-coordinate nitrido complexes and Bi hydrolysis clusters: HW 855–863, 947–948, 957, 976. Many ordinary E–E skeletons already reuse the types above; do not add a multicenter state for every cluster size |
+| Pn33 | Gas-phase atomic/polyatomic ions; unestablished hydrides | No addition proposed | Mass-spectrometer Nn+/Pn+ series (746, 860) do not by themselves qualify for the default. PH5, AsH5, SbH5, BiH5 are not established examples (865, 951); no extra H variants inferred from their formulas |
+
+Ninety-five additions are implemented under the concrete, zero-valence defaults.
+All have AtomTyping fixture coverage and satisfy the scalar electron balance.
+The 134 fixtures include paired aromatic/Kekulé inputs and explicit, mixed and
+implicit H variants. In fixtures of pnictogen donors, transition-metal acceptor
+attributes are supplied; this pass adds no transition-metal states.
+
+Counts comparison: the two Pn21 states and Pn24's Bi#n#v3#t3 required the
+implemented Sb/Bi capacity of 14. The living ValenceTable now admits Bi aromatic
+contribution 1, Po contribution 2 (for Bi−), and Si contribution 0 (for P+),
+covering Pn25–Pn27 when only aromatic membership is supplied. Saturation targets
+and frozen tables are unchanged; targets are not hard maxima.
+
+**Implemented capacity expansion (Pn21, 2026-11-02).** Sb/Bi valence_capacity
+is raised from 12 to 14 to admit localized SbF7²−/BiF7²−: 5 − (−2) + 7 = 14 electrons.
+As in the Se/Te expansion, established binary compounds justify the general bound;
+it is not restricted to these two registry entries. Counts already uses the I/At
+saturation targets for Sb²−/Bi²−, so no ValenceTable target change is needed.
+
+For Pn02, the earlier triplet omission avoided ambiguity before the tie-break was
+developed. MostSaturated now prefers the existing singlet when spin is unspecified;
+explicit triplet fixtures supply #u2#s3 and resolve under both models/policies.
+Counts likewise needs the supplied unpaired count for this reading. No resolver
+changes are part of this pass.
+
+The focused existing benchmark comparison (30 samples, 1 s warm-up, 2 s measurement)
+measured pyridine admission at 5.65 µs (+3.5%). Full pyridine resolution was
+24.43 µs, within the benchmark's noise threshold. Octane and the charged case
+showed no detected full-resolution regression. These three inputs do not establish
+performance across the registry.
+
+#### Pnictogen primary sources
+
+- **C94P:** Christe et al., “Tetrafluorophosphite, PF4−, Anion,” *J. Am. Chem. Soc.* **116** (1994), 2850–2858. [DOI](https://doi.org/10.1021/ja00086a018); [PDF](../materials/valence/Christe-1994-PF4-anion.pdf).
+- **W02:** Walker et al., “The Thermochemistry of Group 15 Tetrachloride Anions,” *J. Am. Soc. Mass Spectrom.* **13** (2002), 469–476. [DOI](https://doi.org/10.1016/S1044-0305%2802%2900369-0); [PDF](../materials/valence/Walker-2002-tetrachloride-anions.pdf).
+- **Lo17:** Loor et al., “Synthesis of Sb2Se3 and Bi2Se3 Nanoparticles in Ionic Liquids at Low Temperatures and Solid State Structure of [C4C1Im]3[BiCl6],” *Z. Anorg. Allg. Chem.* **643** (2017), 60–68. [DOI](https://doi.org/10.1002/zaac.201600325); [accepted manuscript](../materials/valence/Loor-2017-BiCl6.pdf).
+- **WJ74:** Wismer and Jacobson, “Crystal Structure of Potassium Pentachloroantimonate(III),” *Inorg. Chem.* **13** (1974), 1678–1680. [DOI](https://doi.org/10.1021/ic50137a026); [PDF](../materials/valence/Wismer-1974-K2SbCl5.pdf).
+- **RC72:** Ryan and Cromer, “Structures of the MF5E Type. The Crystal Structure of Ammonium Pentafluoroantimonate(III),” *Inorg. Chem.* **11** (1972), 2322–2324. [DOI](https://doi.org/10.1021/ic50116a006); [PDF](../materials/valence/Ryan-1972-ammonium-SbF5.pdf).
+- **WK92:** Wheeler and Kumar, “Stereochemically Active or Inactive Lone Pair Electrons in Some Six-Coordinate, Group 15 Halides,” *J. Am. Chem. Soc.* **114** (1992), 4776–4784. [DOI](https://doi.org/10.1021/ja00038a049); [PDF](../materials/valence/Wheeler-1992-group15-lone-pairs.pdf).
+- **SJ73:** Schroeder and Jacobson, “Crystal Structure of Hexaamminecobalt Hexachloroantimonate(III),” *Inorg. Chem.* **12** (1973), 210–213. [DOI](https://doi.org/10.1021/ic50119a046); [PDF](../materials/valence/Schroeder-1973-SbCl6.pdf).
+- **S17:** Steele et al., “High-Pressure Synthesis of a Pentazolate Salt,” *Chem. Mater.* **29** (2017), 735–741. [DOI](https://doi.org/10.1021/acs.chemmater.6b04538); [preprint](../materials/valence/Steele-2017-pentazolate-preprint.pdf). Preprint pp. 7–10: aromatic N5− rings, diffraction and Raman evidence for CsN5; no new N type required.
+- **EC76:** Epiotis and Cherry, “On the Aromaticity of Phospholes and Arsoles,” *J. Am. Chem. Soc.* **98** (1976), 4365–4370. [DOI](https://doi.org/10.1021/ja00431a003); [PDF](../materials/valence/Epiotis-1976-phospholes-arsoles.pdf).
+- **M02:** Mattmann et al., “De-aromatizing Phosphole,” *J. Org. Chem.* **67** (2002), 1208–1213. [DOI](https://doi.org/10.1021/jo0108156); [PDF](../materials/valence/Mattmann-2002-phosphole.pdf).
+
+- **F18:** Falvey, “Discrete Existence of Singlet Nitrenium Ions Revisited: Computational Studies of Non-Aryl Nitrenium Ions and Their Rearrangements,” *ACS Omega* **3** (2018), 10418–10432. [DOI](https://doi.org/10.1021/acsomega.8b01038); [full-text XML](../materials/valence/Falvey-2018-nitrenium.xml). Tables 1–2 distinguish the singlet entries from triplet ground states.
+- **G18:** Ganesamoorthy et al., “From Stable Sb- and Bi-Centered Radicals to a Compound with a Ga=Sb Double Bond,” *Nat. Commun.* **9** (2018), 87. [DOI](https://doi.org/10.1038/s41467-017-02581-2); [PDF](../materials/valence/Ganesamoorthy-2018-Sb-radicals.pdf). NBO analysis on p. 4 supports two bonds, one lone pair and one unpaired electron at Sb.
+- **H81:** Harrison, “Electronic Structure of the Phosphenium Ions PH2+, HPF+, and PF2+,” *J. Am. Chem. Soc.* **103** (1981), 7406–7413. [DOI](https://doi.org/10.1021/ja00415a002); [PDF](../materials/valence/Harrison-1981-phosphenium.pdf). Singlet states with two bonds and a lone pair, pp. 7410–7412.
+- **Z22:** Zhang, Yuan and Wang, “Probing the Electronic Structure and Spectroscopy of Pyrrolyl and Imidazolyl Radicals Using High-Resolution Photoelectron Imaging of Cryogenically Cooled Anions,” *Phys. Chem. Chem. Phys.* **24** (2022), 6505–6514. [DOI](https://doi.org/10.1039/D2CP00189F); [accepted manuscript](../materials/valence/Zhang-2022-pyrrolyl.pdf). Section 3.1.3 assigns the observed B(2A1) pyrrolyl state to σ-electron detachment; the registry's atom-local allocation is PW.
+
+Unavailable review: Fisher and Norman, “The Structures of the Group 15 Element(III)
+Halides and Halogenoanions,” *Adv. Inorg. Chem.* **41** (1994), 233–271;
+[DOI](https://doi.org/10.1016/S0898-8838%2808%2960173-7), cited by HW I, p. 990.
+The user supplied the abstract but also cannot access the full chapter. The abstract
+establishes structural families, not a bond partition; it adds no accepted assignment.

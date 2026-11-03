@@ -1,0 +1,5 @@
+; Stibinine; HW I, p. 985.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sb#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 5 "1#a"] [5 0 "1#a"]]}}

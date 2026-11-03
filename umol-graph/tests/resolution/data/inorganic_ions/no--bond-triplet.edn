@@ -1,0 +1,4 @@
+; NO-; HW I, pp. 806, 822; bond charge/spin allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N#c-" "O"]
+         :bonds [[0 1 "2#u2#s3"]]}}

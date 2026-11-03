@@ -1,0 +1,21 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {:atoms ["N#n2" "H"] :bonds [[0 1 :single]]}
+    :success true
+    :tie-breaks [0]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {0 ["N#n2#v#d0#t0#a!#m!" "N#n#u2#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {:atoms ["N#n2" "H"] :bonds [[0 1 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {:atoms ["N#n2" "H"] :bonds [[0 1 :single]]}
+    :success true
+    :tie-breaks []}}

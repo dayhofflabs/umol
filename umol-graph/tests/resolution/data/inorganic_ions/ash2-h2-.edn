@@ -1,0 +1,4 @@
+; AsH2-/SbH2-; HW I, p. 951.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["As#c-#h2"]
+         :bonds []}}

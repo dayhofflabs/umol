@@ -1,0 +1,16 @@
+; Cyclic (SbF5)4; HW I, pp. 953-954; bridging halide-donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sb#c+" "Sb#c+" "Sb#c+" "Sb#c+" "F#c-" "F#c-" "F#c-" "F#c-" "F" "F" "F" "F" "F" "F" "F"
+                 "F" "F" "F" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 8 :single] [0 9 :single] [0 10 :single] [0 11 :single]
+                 [1 12 :single] [1 13 :single] [1 14 :single] [1 15 :single]
+                 [2 16 :single] [2 17 :single] [2 18 :single] [2 19 :single]
+                 [3 20 :single] [3 21 :single] [3 22 :single] [3 23 :single]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 1 :attrs "1"}
+                        {:donors [5] :acceptor 1 :attrs "1"}
+                        {:donors [5] :acceptor 2 :attrs "1"}
+                        {:donors [6] :acceptor 2 :attrs "1"}
+                        {:donors [6] :acceptor 3 :attrs "1"}
+                        {:donors [7] :acceptor 3 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}]}}

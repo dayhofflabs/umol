@@ -1,0 +1,4 @@
+; P2(4-) unit in diphosphides; HW I, p. 861.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#c-2" "P#c-2"]
+         :bonds [[0 1 :single]]}}

@@ -1,0 +1,4 @@
+; Bi=Bi(2-) in K[crypt]2Bi2; HW I, p. 948.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi#c-" "Bi#c-"]
+         :bonds [[0 1 :double]]}}

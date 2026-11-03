@@ -1,0 +1,4 @@
+; Bi(3-) in ionic bismuthides; HW I, p. 948.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi#c-3"]
+         :bonds []}}
