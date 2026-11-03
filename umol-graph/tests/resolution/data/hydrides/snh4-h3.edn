@@ -1,0 +1,4 @@
+; SnH4; HW I, p. 1169.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sn#s1#h3" "H"]
+         :bonds [[0 1 "1"]]}}

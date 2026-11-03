@@ -1,0 +1,18 @@
+; [Ni(CO)3(SnPh3)]-; HW I, p. 1194.
+; Anionic tetrelyl-donor allocation: PW; metal occupation supplied.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#n5#u0#s1" "Sn#c-" "C#h0" "C#h" "C#h" "C#h"
+                 "C#h" "C#h" "C#h0" "C#h" "C#h" "C#h"
+                 "C#h" "C#h" "C#h0" "C#h" "C#h" "C#h"
+                 "C#h" "C#h" "C#c-" "O#c+" "C#c-" "O#c+"
+                 "C#c-" "O#c+"]
+         :bonds [[1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"]
+                 [5 6 "1"] [6 7 "2"] [7 2 "1"] [1 8 "1"]
+                 [8 9 "2"] [9 10 "1"] [10 11 "2"] [11 12 "1"]
+                 [12 13 "2"] [13 8 "1"] [1 14 "1"] [14 15 "2"]
+                 [15 16 "1"] [16 17 "2"] [17 18 "1"] [18 19 "2"]
+                 [19 14 "1"] [20 21 "3"] [22 23 "3"] [24 25 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [20] :acceptor 0 :attrs "1"}
+                        {:donors [22] :acceptor 0 :attrs "1"}
+                        {:donors [24] :acceptor 0 :attrs "1"}]}}

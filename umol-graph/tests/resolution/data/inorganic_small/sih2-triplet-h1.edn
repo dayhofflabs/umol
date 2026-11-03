@@ -1,0 +1,4 @@
+; SiH2, excited triplet; HW I, pp. 1077, 1090.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#u2#h1" "H"]
+         :bonds [[0 1 "1"]]}}

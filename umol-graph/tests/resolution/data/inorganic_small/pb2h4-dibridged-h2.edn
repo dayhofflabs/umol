@@ -1,0 +1,8 @@
+; Dibridged Pb2H4; WA03, pp. 6585-6586; T90, p. 2136.
+; Two terminal Pb-H bonds and two 3c2e H bridges; no direct Pb-Pb bond.
+; Neutral contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#h" "Pb#h" "H" "H"]
+         :bonds []
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

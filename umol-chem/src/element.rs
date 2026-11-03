@@ -73,7 +73,7 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, u8, (i8, i8), u8, u8)
     (47, 107, 107.87, "Ag", 5, 25, 11, 18, 4, (0, 4), 3, 0), // Ag
     (48, 114, 112.41, "Cd", 5, 26, 2, 18, 2, (0, 2), 2, 0), // Cd
     (49, 115, 114.82, "In", 5, 27, 3, 12, 3, (0, 3), 3, 0), // In
-    (50, 120, 118.71, "Sn", 5, 28, 4, 12, 4, (0, 4), 4, 4), // Sn
+    (50, 120, 118.71, "Sn", 5, 28, 4, 14, 4, (0, 4), 4, 4), // Sn
     (51, 121, 121.76, "Sb", 5, 29, 5, 14, 5, (-3, 3), 3, 4), // Sb
     (52, 130, 127.60, "Te", 5, 30, 6, 16, 6, (-2, 2), 2, 3), // Te
     (53, 127, 126.90, "I", 5, 31, 7, 16, 7, (-1, 1), 1, 1), // I
@@ -105,7 +105,7 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, u8, (i8, i8), u8, u8)
     (79, 197, 196.97, "Au", 6, 25, 11, 18, 3, (0, 5), 2, 0), // Au
     (80, 202, 200.59, "Hg", 6, 26, 12, 18, 4, (0, 4), 2, 0), // Hg
     (81, 205, 204.38, "Tl", 6, 27, 3, 12, 3, (0, 3), 3, 0), // Tl
-    (82, 208, 207.2, "Pb", 6, 28, 4, 12, 4, (0, 4), 4, 0), // Pb
+    (82, 208, 207.2, "Pb", 6, 28, 4, 14, 4, (0, 4), 4, 0), // Pb
     (83, 209, 208.98, "Bi", 6, 29, 5, 14, 5, (-3, 3), 3, 3), // Bi
     (84, 209, 209.0, "Po", 6, 30, 6, 14, 6, (-2, 2), 2, 2), // Po
     (85, 210, 210.0, "At", 6, 31, 7, 16, 7, (0, 7), 1, 1), // At
@@ -696,7 +696,8 @@ impl Element {
     /// on total number of electrons (used in electron count invariants).
     /// H/He: 2;
     /// row 2 + non-hypervalent row 3 main-group: 8 (strict octet);
-    /// hypervalent row 3+ main-group: (Si, P, S, Ga, Ge, As, In, Sn, Sb, Tl, Pb, Bi, Nh, Fl, Mc) 12;
+    /// hypervalent row 3+ main-group: (Si, P, S, Ga, Ge, As, In, Tl, Nh, Fl, Mc) 12;
+    /// Sn/Sb/Pb/Bi: 14;
     /// heavy chalcogens / halogens / d-block / heavy noble gases: 14–18;
     /// f-block (Ce–Lu, Th–Lr): 26
     pub const fn valence_capacity(&self) -> u8 {

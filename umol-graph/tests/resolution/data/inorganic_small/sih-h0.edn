@@ -1,0 +1,4 @@
+; SiH, doublet; HW I, p. 1077.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#s2" "H"]
+         :bonds [[0 1 "1"]]}}

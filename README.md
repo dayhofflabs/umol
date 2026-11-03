@@ -108,9 +108,9 @@ from umol import (
 
 registry = AtomTypeRegistry.from_toml("""
 [P]
-0 = ["P #n #v3"]
+3 = ["P #n #v3"]
 [F]
-0 = ["F #n3 #v"]
+1 = ["F #n3 #v"]
 """)
 
 default = ChemistryModel.default()

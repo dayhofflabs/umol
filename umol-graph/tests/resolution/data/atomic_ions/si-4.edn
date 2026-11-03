@@ -1,0 +1,3 @@
+; Isolated silicide ion in Ca2Si; HW I, p. 1070.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#c-4"]}}

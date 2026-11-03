@@ -1,0 +1,3 @@
+; SiH2, singlet ground state; HW I, pp. 1077, 1090.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#s1#h2"]}}

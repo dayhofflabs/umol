@@ -1,0 +1,4 @@
+; PbH3, doublet; Wang and Andrews (2003), doi:10.1021/ja029862l.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#s2#h2" "H"]
+         :bonds [[0 1 "1"]]}}

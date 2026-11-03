@@ -1,0 +1,4 @@
+; SnCl3- in CsSnCl3; HW I, p. 1174, Fig. 15.110f.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sn#c-" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

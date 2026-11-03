@@ -1,0 +1,4 @@
+; PbH2, singlet; HW I, p. 1077.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#s1#h1" "H"]
+         :bonds [[0 1 "1"]]}}

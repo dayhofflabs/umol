@@ -56,6 +56,7 @@ target_covalences = [2]
 
 [Al]
 target_covalences = [3]
+aromatic_valences = [0]
 
 [Si]
 target_covalences = [4]
@@ -83,9 +84,11 @@ target_covalences = [2]
 
 [Ga]
 target_covalences = [3]
+aromatic_valences = [0]
 
 [Ge]
 target_covalences = [4]
+aromatic_valences = [1]
 
 [As]
 target_covalences = [3, 5]

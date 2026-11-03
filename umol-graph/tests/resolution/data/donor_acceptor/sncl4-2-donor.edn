@@ -1,0 +1,9 @@
+; SnCl4(2-); HW I, p. 1174, Fig. 15.110h.
+; Sn(II) ns2 core and four chloride donors; allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sn#c+2" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds []
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}]}}
