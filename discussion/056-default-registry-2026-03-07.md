@@ -11,7 +11,10 @@ noble-gas evidence, halogen selections, chalcogen extraction, the
 [pnictogen work table](#pnictogen-work-table) and the
 [tetrel work table](#tetrel-work-table), followed by the
 [triel work table](#triel-work-table) and the
-[alkaline-earth work table](#alkaline-earth-work-table). The selected group-2 pass
+[alkaline-earth work table](#alkaline-earth-work-table) and the
+[alkali-metal work table](#alkali-metal-work-table). The selected group-1 pass is
+complete: 34 additions, 35 fixtures, the existing-entry citation audit and the
+approved capacity increases are implemented. The selected group-2 pass
 is complete: 76 additions and the approved capacity increases are implemented.
 The Be follow-up needs no further additions; KMgH3 uses existing ionic states
 after the full Fornari review. Bridging-water descriptions remain deferred with Ch02.
@@ -46,7 +49,17 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 
 ## Project Status (2026-11-03)
 
-**Current review:** HW I, chapter XVII (group 2), selected scope complete.
+**Current review:** HW I, chapter XVIII (group 1), selected scope complete.
+All 34 approved additions are implemented: Li 9, Na 7, K 7, Rb 5 and Cs 6,
+covered by 35 fixtures. The 13 existing entries have checked HW citations.
+Capacities are Li/Na/Rb 16, K 20 and Cs 24; Fr stays at 8 and ValenceTable
+targets stay unchanged. The examples cover molecular hydrides, alkalides,
+aqua ions, ordinary solvates, crowns/cryptands and standard organolithium cases.
+Specialized carbon-contact and Cp assemblies add no types. The primary papers,
+including MP12's supporting information, are reviewed and archived.
+Bridging neutral water donors remain deferred with Ch02.
+
+**Previous chapter:** HW I, chapter XVII (group 2), selected scope complete.
 Be 20, Mg 22, Ca 12, Sr 11 and Ba 11 additions are implemented, with 77 new
 fixtures and three Be-amido inputs revised to infer Be's occupation. All 76
 additions have coverage. Capacities are Be/Mg 12, Ca/Sr 16 and Ba 18; Ra remains
@@ -58,7 +71,7 @@ The five approved aqua-ion states are implemented (Ae24); bridging-water
 descriptions remain deferred with Ch02. No source or assignment question remains
 for the selected group-2 scope.
 
-**Previous chapter:** HW I, chapter XVI (group 13), selected scope complete. The boron
+**Earlier chapter:** HW I, chapter XVI (group 13), selected scope complete. The boron
 batch adds 27 B states and four C companions, covered by 32 fixtures; the earlier
 borolide correction/removal has its own fixture. The heavy-triel batch adds
 Al 37, Ga 39, In 32 and Tl 22 states plus the general pyridine-donor N state,
@@ -66,11 +79,13 @@ covered by 137 fixtures. Existing triel entries have checked HW citations.
 Al capacity is raised from 8 to 12 for the accepted five-/six-coordinate donor
 descriptions; ValenceTable entries are unchanged.
 
-**Last curation check (2026-11-03):** 1429 resolution conformance cases, 417 valence,
-46 invariant and 306 umol-chem unit tests, focused Clippy and formatting pass.
-All 76 group-2 additions have inferred fixture coverage; the 80 affected fixtures'
-320 outputs agree across both models/policies and satisfy the valence invariants.
-The 1352 pre-batch snapshots are unchanged.
+**Last curation check (2026-11-03):** 3594 graph library tests, 1464 resolution
+conformance cases, 223 graph properties and 306 umol-chem unit tests pass, as do
+the remaining graph integration tests, Clippy and formatting.
+All 34 group-1 additions have inferred fixture coverage; the 35 fixtures' 140
+outputs agree across both models/policies and satisfy the valence invariants.
+All 1429 earlier snapshots are unchanged. The convey-model test uses the approved
+MostSaturated policy; both models omit the H counts for BH3 and H2O.
 
 **Earlier curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
 46 invariant and 306 umol-chem unit tests, focused Clippy and formatting passed.
@@ -286,7 +301,7 @@ single-atom cases were effectively unchanged.
 
 Carbon/silicon review, Al companion, pnictogen review and chalcogen/N/F companion rows updated 2026-11-02; Br/I/Xe companion rows updated
 2026-11-01; hydrogen, other noble-gas and other halogen rows updated 2026-10-31.
-Group-2 rows updated 2026-11-03 for the approved batch; other rows retain the March record.
+Group-1/2 rows updated 2026-11-03 for the approved batches; other rows retain the March record.
 
 Status values:
 
@@ -299,7 +314,7 @@ Status values:
 |---|---|---|---|---|---|---|
 | H | yes | yes (+1, −1) | yes (selected) | yes (all nine states; see [hydrogen fixtures](#conformance-coverage)) | done | H05–H09 implemented; selected hydrogen scope complete |
 | He | yes | no | n/a | yes (`atoms/he.edn`) | done | HW review complete; zero-lone-pair description retained |
-| Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `atomic_ions/li+1.toml`) | done |  |
+| Li | yes | yes (+1) | yes (selected) | yes (9 additions covered) | done | 12 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Be | yes | yes (+2) | yes (selected) | yes (20 additions covered) | done | 22 current states; approved additions, citation audit and capacity 12 implemented; remaining hydride/borohydride descriptions checked for reuse, with no further default additions proposed |
 | B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
 | C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
@@ -307,7 +322,7 @@ Status values:
 | O | yes | yes (-2) | yes (selected) | yes (all 29 states) | done | Thirteen states added; duplicate hydronium removed; citation and default-scope audit complete; aromatic and Kekulé furan covered |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
-| Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `atomic_ions/na+1.toml`) | done |  |
+| Na | yes | yes (+1, −1) | yes (selected) | yes (7 additions covered) | done | 9 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Mg | yes | yes (+2) | yes (selected) | yes (22 additions covered) | done | 26 current states; additions, citation audit and capacity 12 implemented; KMgH3's ionic description reuses existing states |
 | Al | yes | yes (+3) | yes (selected) | yes (37 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete; capacity 12 for five-/six-coordinate donor descriptions |
 | Si | yes | yes (−4) | yes (selected) | yes (28 additions covered by 30 fixtures) | done | 39 current states; selected HW scope complete; all 11 earlier entries retained with checked citations; Al zero-π Counts companion added |
@@ -315,7 +330,7 @@ Status values:
 | S | yes | yes (-2) | yes (selected) | yes (all 23 states) | done | Six states added, including the Tt27 thioether donor companion; citation and default-scope audit complete; S4N4 retains localized and HW three-center descriptions |
 | Cl | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 16 states added; terminal donor covered by [RhCl(NH3)5]2+ |
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
-| K | yes | yes (+1) | no | yes (`atoms/k.toml`, `atomic_ions/k+1.toml`) | done |  |
+| K | yes | yes (+1, −1) | yes (selected) | yes (7 additions covered) | done | 9 current states; selected HW scope, citation audit and capacity 20 implemented |
 | Ca | yes | yes (+2) | yes (selected) | yes (12 additions covered) | done | 14 current states; additions, citation audit, seven-donor aqua fixture and capacity 16 implemented; water bridges deferred with Ch02 |
 | Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `atomic_ions/sc+3.toml`) | done |  |
 | Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `atomic_ions/ti+3.toml`, `atomic_ions/ti+4.toml`) | done |  |
@@ -333,7 +348,7 @@ Status values:
 | Se | yes | yes (-2) | yes (selected) | yes (all 22 states) | done | Six states added; citation and default-scope audit complete, including localized Se4N4 |
 | Br | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 18 halogen-pass additions plus Br#c-#n#d3 for binary chalcogen bromides |
 | Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
-| Rb | yes | yes (+1) | no | yes (`atoms/rb.toml`, `atomic_ions/rb+1.toml`) | done |  |
+| Rb | yes | yes (+1, −1) | yes (selected) | yes (5 additions covered) | done | 7 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
 | Y | yes | yes (+3) | no | yes (`atoms/y.toml`, `atomic_ions/y+3.toml`) | done |  |
 | Zr | yes | yes (+4) | no | yes (`atoms/zr.toml`, `atomic_ions/zr+4.toml`) | done |  |
@@ -351,7 +366,7 @@ Status values:
 | Te | yes | yes (-2, -1, +1) | yes (selected) | yes (all 20 states) | done | Eleven states added, including aromatic Te4²⁺; citation and default-scope audit complete |
 | I | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 22 halogen-pass additions plus I#c-#n#d3 for binary TeI4 aggregates |
 | Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
-| Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `atomic_ions/cs+1.toml`) | done |  |
+| Cs | yes | yes (+1, −1) | yes (selected) | yes (6 additions covered) | done | 8 current states; selected HW scope, citation audit and capacity 24 implemented |
 | Ba | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, eight-/nine-donor aqua fixtures and capacity 18 implemented; water bridges deferred with Ch02 |
 | Tl | yes | yes (+1,+3) | yes (selected) | yes (22 additions covered) | done | 25 current states; selected HW scope and existing-entry citation audit complete |
 | Pb | yes | yes (+2, +4, −4) | partial | yes (32 additions covered) | done | 35 current states; selected HW scope and existing-entry audit complete, including both ionic states; capacity 14 for six-donor Pb(II) |
@@ -383,7 +398,7 @@ Status values:
 | Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `atomic_ions/pt+2.toml`) | done |  |
 | Au | yes | yes (+1,+3) | no | yes (`atoms/au.toml`, `atomic_ions/au+1.toml`, `atomic_ions/au+3.toml`) | done | `Au3+` conformance pinned to low-spin |
 | Hg | yes | yes (+2, [Hg2]2+) | no | yes (`atoms/hg.toml`, `atomic_ions/hg+2.toml`, `atomic_ions/hg+2_dimer.toml`) | done | Dimer encoded as two `Hg+1` atoms with single bond |
-| Fr | yes | yes (+1) | no | yes (`atoms/fr.toml`, `atomic_ions/fr+1.toml`) | done |  |
+| Fr | yes | yes (+1) | no additions selected | yes (`atoms/fr.edn`, `atomic_ions/fr+1.edn`) | done | Two existing states retained with checked HW citations; capacity unchanged |
 | Ra | yes | yes (+2) | ionic descriptions retained | existing atom/ion fixtures | done | 2 current states retained with checked HW citations; no additional state selected |
 | Ac | yes | yes (+3) | no | yes (`atoms/ac.toml`, `atomic_ions/ac+3.toml`) | done |  |
 | Th | yes | yes (+3,+4) | no | yes (`atoms/th.toml`, `atomic_ions/th+3.toml`, `atomic_ions/th+4.toml`) | done |  |
@@ -2095,3 +2110,87 @@ The sources below are reviewed and archived in materials/valence.
 | PS95 | Persson, Sandström, Yokoyama and Chaudhry, “Structure of the Solvated Strontium and Barium Ions in Aqueous, Dimethyl Sulfoxide and Pyridine Solution, and Crystal Structure of Strontium and Barium Hydroxide Octahydrate,” *Z. Naturforsch. A* **50** (1995), 21–37. [DOI](https://doi.org/10.1515/zna-1995-0105), [PDF](../materials/valence/Persson-1995-Sr-Ba-solvation.pdf) | Eight-coordinate Sr/Ba hydroxide octahydrate crystal structures; solution measurements in Table 9. Supports Ae24's #t8 states independently of water bridges |
 | BPS26 | Bajnóczi, Sigfridsson Clauss and Persson, “Structure of Concentrated Aqueous Solutions of Alkaline Earth Metal Chlorides and Bromides,” *J. Solution Chem.* **55** (2026), 851–865. [DOI](https://doi.org/10.1007/s10953-025-01559-9), [PDF](../materials/valence/Bajnoczi-2026-alkaline-earth-solutions.pdf) | Sections 3.2–3.4: seven-coordinate Ca/Sr and nine-coordinate Ba aqua-ion descriptions from solution scattering/EXAFS; also distinguishes concentrated Ca water bridges. Supports Ae24's #t7/#t9 states |
 | Fo07 | Fornari, Subedi and Singh, “Structure and dynamics of perovskite hydrides AMgH3 (A = Na, K, Rb) in relation to the corresponding fluorides: A first-principles study,” *Phys. Rev. B* **76** (2007), 214118. [DOI](https://doi.org/10.1103/PhysRevB.76.214118), [PDF](../materials/valence/Fornari-2007-perovskite-hydrides.pdf) | Reviewed: ionic hydride description, section IV, p. 214118-2; effective charges near nominal ionic values, section V and Table IV, p. 214118-5. Existing K+, Mg²⁺ and H− states suffice for Ae21 |
+
+### Alkali metals
+
+Source: [HW 103, Band I, chapter XVIII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=1521>),
+printed pp. 1483–1531; chapter references pp. 1531–1533. Extraction: 2026-11-03.
+Baseline: Li 3, Na/K/Rb/Cs/Fr 2 each, 13 states in total.
+
+#### Alkali-metal work table
+
+All 34 approved additions are implemented: Li 9, Na 7, K 7, Rb 5 and Cs 6;
+none for Fr. This includes the three higher-crown states in Ak15.
+States use the concrete, zero-valence registry defaults. HW references are
+printed Band I pages; **PW** marks our graph allocation. No new MC entry is added.
+Default examples are aqua ions, ordinary donor solvates, crowns/cryptands and
+standard organolithium compounds. Specialized carbon-contact arrangements and
+Cp stacks are retained as extracted cases but do not justify further types.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Ak01 | Existing M#u and M#c+ (Li–Fr); Li#v | Retained; citations updated | Atomic s¹ occupations: HW 1483, 1496; M⁺: 1485, 1504–1505. Li2, LiX and monomeric LiR: 1484, 1487, 1494. All 13 existing entries audited |
+| Ak02 | M#v (M = Na, K, Rb, Cs) | Implemented: 4 | M2 vapor molecules with a filled σ orbital, HW 1500; gaseous MX monomers, 1508. Ordinary one-bond descriptions |
+| Ak03 | M#h (M = Li, Na, K, Rb, Cs) | Implemented: 5 | Molecular MH, distinct from bulk ionic hydrides. ADD09, section 2 and Table 2, treats the X¹Σ⁺ ground states of all five molecules and compares with spectroscopy. Implicit-H counterparts of M#v; ordinary M–H allocation: PW |
+| Ak04 | M#c-#n (M = Na, K, Rb, Cs) | Implemented: 4 | Isolated alkalide anions in characterized salts, HW 1505–1506. Closed s² description. HW 1485 does not establish condensed-phase Li−; no Li− or Fr− extension proposed |
+| Ak05 | Li#c+#t; Li#c+#t2; Li#c+#t3; Li#c+#t4 | Implemented: 4 | One solvent donor per Li in (LiMe)4·4THF; two in (LiPh·TMEDA)2; three in LiR·3THF; four in separated [LiD4]⁺ and [Li(H2O)4]⁺. HW 1485, 1492–1494. Li⁺/R− ionic contacts plus neutral donors (PW); carbon retains its anionic lone pair |
+| Ak06 | Li#v#t3 | Implemented: 1 | Ordinary Li–C bond plus three N/O donors in monomeric LiR·3THF or LiPh·PMDTA, HW 1493–1494, Fig. 18.5k. Supports the bonded monomer notation alongside Ak05's ion-pair notation |
+| Ak07 | Li#c+#t5 | Implemented: 1; minimum capacity 10 | LiNCS(12-crown-4), HW 1485: four O donors and N-bound NCS−; existing nitrile N and terminal S− types suffice |
+| Ak08 | M#c+#t6 (M = Li, Na, K) | Implemented: 3; minimum capacity 12 | Li(DME)3⁺: MP12, p. 429 and SI Table S4, with 75 six-coordinate DME-solvate structures. Na(H2O)6⁺: MP12, pp. 431, 436; Na(H2O)(benzo-15-crown-5)⁺ and K(18-crown-6)⁺: HW 1525. K–valinomycin, 1526, and K(THF)6⁺, MP12 p. 430, reuse the K state. No Cp example is needed |
+| Ak09 | Na#c+#t2; Na#c+#t3; Rb#c+#t3 | Not selected | The collected examples are [Na(TMEDA)]⁺ in the LiPh4³− salt (HW 1494), (NaPh·PMDTA)2 and [RbCH(SiMe3)2·PMDTA]2 (1529). Their split between N donation and ionic carbon contacts alone does not justify these extra default counts. |
+| Ak10 | Na#c+#t5; Na#c+#t7 | Implemented: 2; minimum capacity 10/14 | Na(15-crown-5)⁺ and Na(H2O)(18-crown-6)⁺, HW 1525. Five ether donors, or six ether donors plus one terminal water |
+| Ak11 | Rb#c+#t7; Cs#c+#t7 | Implemented: 2; minimum capacity 14 | Rb/Cs complexes of 21-crown-7, explicitly described at HW 1525. Seven ordinary ether-donor pairs |
+| Ak12 | M#c+#t8 (M = Na, K, Rb, Cs) | Implemented: 4; minimum capacity 16 | Na/K crypt-222 salts, HW 1506; Rb crypt-222, 1525. MMW73, pp. 392–394, explicitly gives six O and two N donors for Rb/Cs crypt-222, with outer-sphere SCN− and water. MP12, p. 436, also selects eight-water descriptions for hydrated Rb⁺/Cs⁺. Existing N/O donor types suffice |
+| Ak13 | (LiR)n, heavier MR aggregates, amides, alkoxides and molecular/lattice MX or MH aggregates | Existing ionic states; no aggregate-specific MC additions | HW 1490–1495, 1507–1508, 1529–1531. HW 1490 explicitly describes ionic Li⁺/R− subunits and noncovalent aggregation; 1529 gives the heavier organyls' ionic description. Ion contacts preserve the aggregate topology (PW). (LiMe)4 was checked with the current registry; donor solvates additionally use the new acceptor states |
+| Ak14 | Li#c-#v2; Li#c-3#v4; Na#c-#v2 | Not selected | Localized alternatives for LiTsi2−, LiPh4³− and NaTsi2−, HW 1493–1494, 1529. Ionic contact graphs use existing M⁺/C− types; the Li anion-donor descriptions can reuse Ak05. These specialized examples justify no extra metal-charge states or fixtures |
+| Ak15 | Li#c+#t8; K#c+#t10; Cs#c+#t12 | Implemented: 3; minimum capacities 16/20/24 | Ordinary crown donors: Li(12-crown-4)2⁺, HW 1485; K(benzo-15-crown-5)2⁺ and K(dibenzo-30-crown-10)⁺, 1525; Cs(18-crown-6)2⁺, 1506. Eight, ten and twelve O donors, respectively. These remain in the ordinary crown family; their capacities are implemented |
+| Ak16 | Bridging neutral water donors, including O#v2#d2 and H variants | Deferred with Ch02 | Hydrated alkali-halide/sulfate/carbonate chains and dimers, HW 1523–1524. Do not infer terminal aqua coordination from a hydrate's stoichiometric water count. No additional O types proposed here |
+| Ak17 | Metal-local states for electrides, ligand-reduced cryptates, metal clusters/suboxides, higher bare cations and further Fr states | No additions selected | HW 1500, 1504–1506, 1516–1517, 1527, 1530–1531. Keep interstitial/ligand electrons distinct from metal-local occupations. The current Fr atom/cation descriptions are retained |
+| Ak18 | Cs#c+#t6; Li#c+#t7; Cp/arene assemblies as additional default examples | Not selected | LiCp2−, LiCp(TMEDA), LiCp–crown, NaCp2−, KCp chains, Cs2Cp3− and CsTsi–benzene; HW 1485, 1493–1494, 1529–1530. No further row or fixture is justified solely by these carbon-ligand arrangements. Li/Na/K #t6 have independent solvent/crown support in Ak08 |
+| Ak19 | K#c+#t7 | Implemented: 1; minimum capacity 14 | K(H2O)7⁺: MP12, pp. 431, 436, adopts sevenfold hydration from measured distances and their comparison with structural/thermodynamic data. Seven ordinary water donations (PW); existing O#h2#n#d suffices. This is the paper's selected integer description, with the fitted hydration number fixed during final refinement |
+
+#### Alkali-metal Counts comparison
+
+All six ValenceTable entries retain target_covalences = [1]. No aromatic-table
+entry is needed. The approved capacities admit the selected donor descriptions.
+
+| Limit | Finding / implemented change |
+| --- | --- |
+| Actual-element capacity | M⁺#tN occupies 2N electrons in this counting model. Sixteen added states exceeded the former bound of 8. Capacities are now Li/Na/Rb 16, K 20 and Cs 24; Fr remains 8. The bounds support the approved aqua, solvate, crown and cryptand donor graphs, including Ak15's eight-/ten-/twelve-donor crowns; they apply generally without molecule-specific exceptions |
+| Saturation targets | Retain [1]. With supplied H counts, the ordinary/donor states need no target change. Li#v#t3 occupies exactly 8 electrons |
+| Enumeration bounds | Unchanged. Supplied #h is accepted for K/Rb/Cs despite their zero free-H enumeration bound; the molecular-hydride fixtures confirm this |
+| Conformance | All 34 additions have inferred coverage in 35 new fixtures. Their 140 outputs agree across both models/policies, satisfy the valence invariants and require no tie breaks. All 1429 earlier snapshots are unchanged |
+
+The fixtures cover explicit/implicit LiH–CsH, the four alkalides, the selected
+solvates and aqua ions, crowns and crypt-222 complexes. (LiMe)4(THF)4 and
+(LiPh·TMEDA)2 use ionic carbon contacts; LiPh(PMDTA) has separate ion-pair and
+ordinary Li–C fixtures. Each metal's lone-pair and unpaired-electron counts are inferred.
+
+#### Alkali-metal primary sources
+
+- **ADD09:** Aymar, Deiglmayr and Dulieu, “Systematic trends in electronic properties
+  of alkali hydrides,” *Can. J. Phys.* **87** (2009), 543–556.
+  [DOI](https://doi.org/10.1139/P09-005),
+  [reviewed and archived preprint](../materials/valence/Aymar-2009-alkali-hydrides-preprint.pdf).
+  Preprint pp. 3–4 and Table 2 (p. 21): molecular LiH–CsH ground states and
+  experimental comparison. Supports Ak03; no excited-state or molecular-cation
+  series proposed from the additional calculations.
+- **MMW73:** Moras, Metz and Weiss, “Etude structurale des cryptates. II. Structure
+  cristalline et moléculaire des ‘cryptates de rubidium et de césium’,”
+  *Acta Cryst. B* **29** (1973), 388–395.
+  [DOI](https://doi.org/10.1107/S0567740873002645),
+  [reviewed and archived PDF](../materials/valence/Moras-1973-Rb-Cs-cryptates.pdf).
+  Page 392 explicitly identifies all eight ligand heteroatoms as bound to the
+  cation, with inward-directed lone pairs; p. 394 describes eightfold coordination
+  and absence of additional metal–anion/water contacts. Supports Rb/Cs#c+#t8
+  with six ether-O and two tertiary-amine-N donations (Ak12).
+- **MP12:** Mähler and Persson, “A Study of the Hydration of the Alkali Metal Ions
+  in Aqueous Solution,” *Inorg. Chem.* **51** (2012), 425–438.
+  [DOI](https://doi.org/10.1021/ic2018693),
+  [reviewed and archived PDF](../materials/valence/Mahler-2012-alkali-hydration.pdf),
+  [supporting information](../materials/valence/Mahler-2012-alkali-hydration-si.pdf).
+  Page 429 surveys six-coordinate Li ether solvates; SI Table S4 identifies the
+  75 structures as DME solvates, supplying the Li(DME)3⁺ fixture. Pages 431 and 436 support
+  Na/K/Rb/Cs aqua descriptions with 6/7/8/8 donors. These are inferred integer
+  hydration numbers supported by the authors' analysis, not direct counts of
+  individual solution molecules. Ak08, Ak12 and Ak19.

@@ -10,6 +10,7 @@
 # A07 | Aragoni et al., Bioinorg. Chem. Appl. (2007), 17416; doi:10.1155/2007/17416
 # A12 | Arp et al., J. Am. Chem. Soc. 134 (2012), 6409-6415; doi:10.1021/ja300654t
 # A93 | Arduengo et al., Inorg. Chem. 32 (1993), 1541-1542; doi:10.1021/ic00061a004
+# ADD09 | Aymar, Deiglmayr and Dulieu, Can. J. Phys. 87 (2009), 543-556; doi:10.1139/P09-005
 # B00 | Baran, J. Fluorine Chem. 101 (2000), 61-63; doi:10.1016/S0022-1139(99)00194-3
 # B04 | Balaban, Oniciu and Katritzky, Chem. Rev. 104 (2004), 2777-2812; doi:10.1021/cr0306790
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
@@ -75,6 +76,8 @@
 # M73 | McKee, Zalkin and Bartlett, Inorg. Chem. 12 (1973), 1713-1717; doi:10.1021/ic50126a001
 # M93 | Mercier et al., Inorg. Chem. 32 (1993), 386-393; doi:10.1021/ic00056a009
 # MH23 | Pang et al., ACS Omega 8 (2023), 19391-19401; doi:10.1021/acsomega.3c00352
+# MMW73 | Moras, Metz and Weiss, Acta Cryst. B29 (1973), 388-395; doi:10.1107/S0567740873002645
+# MP12 | Mähler and Persson, Inorg. Chem. 51 (2012), 425-438; doi:10.1021/ic2018693
 # N14 | Närhi et al., Spectrochim. Acta A 117 (2014), 728-738; doi:10.1016/j.saa.2013.09.063
 # NBS74 | McNesby, Measures for Air Quality (1972-1973), NBS Technical Note 828 (1974), p. 123
 # OC82 | Oberhammer and Christe, Inorg. Chem. 21 (1982), 273-275; doi:10.1021/ic00131a050
@@ -123,11 +126,20 @@
 
 [Li]
 0 = [
-    "Li #u", # Li atom, s1
-    "Li #c+", # Li+
+    "Li #h",      # LiH; ADD09
+    "Li #u",      # Li atom, s1; HW I, p. 1483
+    "Li #c+",     # Li+; HW I, p. 1485
+    "Li #c+ #t",  # (LiMe)4(THF)4; HW I, p. 1492; assignment: PW
+    "Li #c+ #t2", # (LiPh·TMEDA)2; HW I, p. 1493; assignment: PW
+    "Li #c+ #t3", # LiR(THF)3, LiPh(PMDTA); HW I, pp. 1493-1494; assignment: PW
+    "Li #c+ #t4", # [Li(H2O)4]+; HW I, p. 1485
+    "Li #c+ #t5", # LiNCS(12-crown-4); HW I, p. 1485
+    "Li #c+ #t6", # [Li(DME)3]+; MP12, p. 429, SI Table S4
+    "Li #c+ #t8", # [Li(12-crown-4)2]+; HW I, p. 1485
 ]
 1 = [
-    "Li #v", # LiX, Li2
+    "Li #v",     # LiX, Li2, LiR; HW I, pp. 1484, 1487, 1494
+    "Li #v #t3", # LiR(THF)3, LiPh(PMDTA); HW I, pp. 1493-1494
 ]
 
 [Be]
@@ -421,8 +433,17 @@
 
 [Na]
 0 = [
-    "Na #u", # Na atom, s1
-    "Na #c+", # Na+
+    "Na #h",      # NaH; ADD09
+    "Na #u",      # Na atom, s1; HW I, p. 1496
+    "Na #c+",     # Na+; HW I, pp. 1504-1505
+    "Na #c+ #t5", # [Na(15-crown-5)]+; HW I, p. 1525
+    "Na #c+ #t6", # [Na(H2O)6]+, [Na(H2O)(benzo-15-crown-5)]+; MP12, pp. 431, 436; HW I, p. 1525
+    "Na #c+ #t7", # [Na(H2O)(18-crown-6)]+; HW I, p. 1525
+    "Na #c+ #t8", # [Na(crypt-222)]+; HW I, p. 1506
+    "Na #c- #n",  # Na- alkalides; HW I, pp. 1505-1506
+]
+1 = [
+    "Na #v", # Na2, molecular NaX; HW I, pp. 1500, 1508
 ]
 
 [Mg]
@@ -718,8 +739,17 @@
 
 [K]
 0 = [
-    "K #u", # K atom, s1
-    "K #c+", # K+
+    "K #h",       # KH; ADD09
+    "K #u",       # K atom, s1; HW I, p. 1496
+    "K #c+",      # K+; HW I, pp. 1504-1505
+    "K #c+ #t6",  # [K(18-crown-6)]+; HW I, p. 1525
+    "K #c+ #t7",  # [K(H2O)7]+; MP12, pp. 431, 436
+    "K #c+ #t8",  # [K(crypt-222)]+; HW I, p. 1506
+    "K #c+ #t10", # [K(benzo-15-crown-5)2]+, [K(dibenzo-30-crown-10)]+; HW I, p. 1525
+    "K #c- #n",   # K- alkalides; HW I, pp. 1505-1506
+]
+1 = [
+    "K #v", # K2, molecular KX; HW I, pp. 1500, 1508
 ]
 
 [Ca]
@@ -1086,8 +1116,15 @@
 
 [Rb]
 0 = [
-    "Rb #u",  # Rb atom, s1
-    "Rb #c+", # Rb+
+    "Rb #h",      # RbH; ADD09
+    "Rb #u",      # Rb atom, s1; HW I, p. 1496
+    "Rb #c+",     # Rb+; HW I, pp. 1504-1505
+    "Rb #c+ #t7", # [Rb(21-crown-7)]+; HW I, p. 1525
+    "Rb #c+ #t8", # [Rb(crypt-222)]+, [Rb(H2O)8]+; HW I, p. 1525; MMW73; MP12, p. 436
+    "Rb #c- #n",  # Rb- alkalides; HW I, p. 1506
+]
+1 = [
+    "Rb #v", # Rb2, molecular RbX; HW I, pp. 1500, 1508
 ]
 
 [Sr]
@@ -1452,8 +1489,16 @@
 
 [Cs]
 0 = [
-    "Cs #u",  # Cs atom, s1
-    "Cs #c+", # Cs+
+    "Cs #h",       # CsH; ADD09
+    "Cs #u",       # Cs atom, s1; HW I, p. 1496
+    "Cs #c+",      # Cs+; HW I, pp. 1504-1505
+    "Cs #c+ #t7",  # [Cs(21-crown-7)]+; HW I, p. 1525
+    "Cs #c+ #t8",  # [Cs(crypt-222)]+, [Cs(H2O)8]+; MMW73; MP12, p. 436
+    "Cs #c+ #t12", # [Cs(18-crown-6)2]+; HW I, p. 1506
+    "Cs #c- #n",   # Cs- alkalides; HW I, p. 1506
+]
+1 = [
+    "Cs #v", # Cs2, molecular CsX; HW I, pp. 1500, 1508
 ]
 
 [Ba]
@@ -1797,8 +1842,8 @@
 
 [Fr]
 0 = [
-    "Fr #u",  # Fr atom, s1
-    "Fr #c+", # Fr+
+    "Fr #u",  # Fr atom, s1; HW I, p. 1496
+    "Fr #c+", # Fr+; HW I, pp. 1504-1505
 ]
 
 [Ra]

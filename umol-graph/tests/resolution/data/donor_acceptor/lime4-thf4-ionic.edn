@@ -1,0 +1,14 @@
+; (LiMe)4(THF)4; HW I, p. 1492. Li+/Me- ion contacts and THF donation: adopted assignment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Li#c+" "Li#c+" "Li#c+" "Li#c+" "C#c-#h3" "C#c-#h3" "C#c-#h3" "C#c-#h3" "O" "C#h2" "C#h2" "C#h2"
+                 "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2" "C#h2" "C#h2"
+                 "C#h2"]
+         :bonds [[8 9 "1"] [9 10 "1"] [10 11 "1"] [11 12 "1"] [12 8 "1"] [13 14 "1"] [14 15 "1"] [15 16 "1"]
+                 [16 17 "1"] [17 13 "1"] [18 19 "1"] [19 20 "1"] [20 21 "1"] [21 22 "1"] [22 18 "1"] [23 24 "1"]
+                 [24 25 "1"] [25 26 "1"] [26 27 "1"] [27 23 "1"]]
+         :dative-bonds [{:donors [8] :acceptor 0 :attrs "1"} {:donors [13] :acceptor 1 :attrs "1"}
+                        {:donors [18] :acceptor 2 :attrs "1"} {:donors [23] :acceptor 3 :attrs "1"}]
+         :noncovalent-bonds [{:atoms [0 5] :attrs "Ion"} {:atoms [0 6] :attrs "Ion"} {:atoms [0 7] :attrs "Ion"}
+                             {:atoms [1 4] :attrs "Ion"} {:atoms [1 6] :attrs "Ion"} {:atoms [1 7] :attrs "Ion"}
+                             {:atoms [2 4] :attrs "Ion"} {:atoms [2 5] :attrs "Ion"} {:atoms [2 7] :attrs "Ion"}
+                             {:atoms [3 4] :attrs "Ion"} {:atoms [3 5] :attrs "Ion"} {:atoms [3 6] :attrs "Ion"}]}}
