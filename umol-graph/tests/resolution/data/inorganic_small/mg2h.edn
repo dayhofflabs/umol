@@ -1,0 +1,4 @@
+; Mg-Mg-H; Wang and Andrews (2004), pp. 11518-11520; doi:10.1021/jp046410h. Ordinary Mg-Mg and Mg-H bonds.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg" "Mg" "H"]
+         :bonds [[0 1 "1"] [1 2 "1"]]}}

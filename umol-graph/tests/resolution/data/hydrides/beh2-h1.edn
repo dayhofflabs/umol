@@ -1,0 +1,4 @@
+; Molecular BeH2; Shayesteh et al. (2003), doi:10.1063/1.1539850.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Be#h1" "H"]
+         :bonds [[0 1 "1"]]}}

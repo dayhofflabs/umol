@@ -1,0 +1,4 @@
+; MeMg+ with solvent donors omitted in the reaction representation; HW I, pp. 1452-1453, Eq. 17.1.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#c+" "C#h3"]
+         :bonds [[0 1 "1"]]}}

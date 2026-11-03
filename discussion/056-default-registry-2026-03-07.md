@@ -10,7 +10,12 @@ The [HW extraction](#hw-extraction-spike-2026-10-31) records hydrogen selections
 noble-gas evidence, halogen selections, chalcogen extraction, the
 [pnictogen work table](#pnictogen-work-table) and the
 [tetrel work table](#tetrel-work-table), followed by the
-[triel work table](#triel-work-table). The selected triel pass is implemented,
+[triel work table](#triel-work-table) and the
+[alkaline-earth work table](#alkaline-earth-work-table). The selected group-2 pass
+is complete: 76 additions and the approved capacity increases are implemented.
+The Be follow-up needs no further additions; KMgH3 uses existing ionic states
+after the full Fornari review. Bridging-water descriptions remain deferred with Ch02.
+The selected triel pass is implemented,
 including four carbon companions, the pyridine-donor N state, the existing-entry
 citation audit and Al's capacity increase to 12.
 The noble-gas audit covers earlier and
@@ -41,7 +46,19 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 
 ## Project Status (2026-11-03)
 
-**Current review:** HW I, chapter XVI (group 13), selected scope complete. The boron
+**Current review:** HW I, chapter XVII (group 2), selected scope complete.
+Be 20, Mg 22, Ca 12, Sr 11 and Ba 11 additions are implemented, with 77 new
+fixtures and three Be-amido inputs revised to infer Be's occupation. All 76
+additions have coverage. Capacities are Be/Mg 12, Ca/Sr 16 and Ba 18; Ra remains
+8 and ValenceTable entries are unchanged. The supplied papers, including Fo07,
+are reviewed; PS95 and BPS26 were reviewed in full online.
+The Be follow-up records existing-state reuse and unselected narrow non-binary
+descriptions (Ae21, Ae23). KMgH3 uses existing K+, Mg²⁺ and H− states (Ae21).
+The five approved aqua-ion states are implemented (Ae24); bridging-water
+descriptions remain deferred with Ch02. No source or assignment question remains
+for the selected group-2 scope.
+
+**Previous chapter:** HW I, chapter XVI (group 13), selected scope complete. The boron
 batch adds 27 B states and four C companions, covered by 32 fixtures; the earlier
 borolide correction/removal has its own fixture. The heavy-triel batch adds
 Al 37, Ga 39, In 32 and Tl 22 states plus the general pyridine-donor N state,
@@ -49,11 +66,11 @@ covered by 137 fixtures. Existing triel entries have checked HW citations.
 Al capacity is raised from 8 to 12 for the accepted five-/six-coordinate donor
 descriptions; ValenceTable entries are unchanged.
 
-**Last curation check (2026-11-03):** 1352 resolution conformance cases, 417 valence,
+**Last curation check (2026-11-03):** 1429 resolution conformance cases, 417 valence,
 46 invariant and 306 umol-chem unit tests, focused Clippy and formatting pass.
-All 131 additions in the heavy-triel batch have fixture coverage; its 548 outputs
-agree across both models/policies and satisfy the valence invariants. The 1215
-pre-batch snapshots are unchanged.
+All 76 group-2 additions have inferred fixture coverage; the 80 affected fixtures'
+320 outputs agree across both models/policies and satisfy the valence invariants.
+The 1352 pre-batch snapshots are unchanged.
 
 **Earlier curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
 46 invariant and 306 umol-chem unit tests, focused Clippy and formatting passed.
@@ -269,7 +286,7 @@ single-atom cases were effectively unchanged.
 
 Carbon/silicon review, Al companion, pnictogen review and chalcogen/N/F companion rows updated 2026-11-02; Br/I/Xe companion rows updated
 2026-11-01; hydrogen, other noble-gas and other halogen rows updated 2026-10-31.
-Other rows retain the March record.
+Group-2 rows updated 2026-11-03 for the approved batch; other rows retain the March record.
 
 Status values:
 
@@ -283,7 +300,7 @@ Status values:
 | H | yes | yes (+1, −1) | yes (selected) | yes (all nine states; see [hydrogen fixtures](#conformance-coverage)) | done | H05–H09 implemented; selected hydrogen scope complete |
 | He | yes | no | n/a | yes (`atoms/he.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `atomic_ions/li+1.toml`) | done |  |
-| Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `atomic_ions/be+2.toml`) | done |  |
+| Be | yes | yes (+2) | yes (selected) | yes (20 additions covered) | done | 22 current states; approved additions, citation audit and capacity 12 implemented; remaining hydride/borohydride descriptions checked for reuse, with no further default additions proposed |
 | B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
 | C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
 | N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
@@ -291,7 +308,7 @@ Status values:
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `atomic_ions/na+1.toml`) | done |  |
-| Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `atomic_ions/mg+2.toml`) | done |  |
+| Mg | yes | yes (+2) | yes (selected) | yes (22 additions covered) | done | 26 current states; additions, citation audit and capacity 12 implemented; KMgH3's ionic description reuses existing states |
 | Al | yes | yes (+3) | yes (selected) | yes (37 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete; capacity 12 for five-/six-coordinate donor descriptions |
 | Si | yes | yes (−4) | yes (selected) | yes (28 additions covered by 30 fixtures) | done | 39 current states; selected HW scope complete; all 11 earlier entries retained with checked citations; Al zero-π Counts companion added |
 | P | yes | yes (-3) | partial | yes (`atoms/p.edn`, `atomic_ions/p-3.edn`, `hydrides/`, `hypervalent/`) | in_progress | 44 current states; 23 additions implemented; existing-entry citation audit complete |
@@ -299,7 +316,7 @@ Status values:
 | Cl | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 16 states added; terminal donor covered by [RhCl(NH3)5]2+ |
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
 | K | yes | yes (+1) | no | yes (`atoms/k.toml`, `atomic_ions/k+1.toml`) | done |  |
-| Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `atomic_ions/ca+2.toml`) | done |  |
+| Ca | yes | yes (+2) | yes (selected) | yes (12 additions covered) | done | 14 current states; additions, citation audit, seven-donor aqua fixture and capacity 16 implemented; water bridges deferred with Ch02 |
 | Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `atomic_ions/sc+3.toml`) | done |  |
 | Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `atomic_ions/ti+3.toml`, `atomic_ions/ti+4.toml`) | done |  |
 | V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `atomic_ions/v+2.toml`, `atomic_ions/v+3.toml`) | done |  |
@@ -317,7 +334,7 @@ Status values:
 | Br | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 18 halogen-pass additions plus Br#c-#n#d3 for binary chalcogen bromides |
 | Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1) | no | yes (`atoms/rb.toml`, `atomic_ions/rb+1.toml`) | done |  |
-| Sr | yes | yes (+2) | no | yes (`atoms/sr.toml`, `atomic_ions/sr+2.toml`) | done |  |
+| Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
 | Y | yes | yes (+3) | no | yes (`atoms/y.toml`, `atomic_ions/y+3.toml`) | done |  |
 | Zr | yes | yes (+4) | no | yes (`atoms/zr.toml`, `atomic_ions/zr+4.toml`) | done |  |
 | Nb | yes | yes (+3) | no | yes (`atoms/nb.toml`, `atomic_ions/nb+3.toml`) | done |  |
@@ -335,7 +352,7 @@ Status values:
 | I | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 22 halogen-pass additions plus I#c-#n#d3 for binary TeI4 aggregates |
 | Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
 | Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `atomic_ions/cs+1.toml`) | done |  |
-| Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `atomic_ions/ba+2.toml`) | done |  |
+| Ba | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, eight-/nine-donor aqua fixtures and capacity 18 implemented; water bridges deferred with Ch02 |
 | Tl | yes | yes (+1,+3) | yes (selected) | yes (22 additions covered) | done | 25 current states; selected HW scope and existing-entry citation audit complete |
 | Pb | yes | yes (+2, +4, −4) | partial | yes (32 additions covered) | done | 35 current states; selected HW scope and existing-entry audit complete, including both ionic states; capacity 14 for six-donor Pb(II) |
 | Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `hydrides/`, `inorganic_ions/`, `aromatic/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
@@ -367,7 +384,7 @@ Status values:
 | Au | yes | yes (+1,+3) | no | yes (`atoms/au.toml`, `atomic_ions/au+1.toml`, `atomic_ions/au+3.toml`) | done | `Au3+` conformance pinned to low-spin |
 | Hg | yes | yes (+2, [Hg2]2+) | no | yes (`atoms/hg.toml`, `atomic_ions/hg+2.toml`, `atomic_ions/hg+2_dimer.toml`) | done | Dimer encoded as two `Hg+1` atoms with single bond |
 | Fr | yes | yes (+1) | no | yes (`atoms/fr.toml`, `atomic_ions/fr+1.toml`) | done |  |
-| Ra | yes | yes (+2) | no | yes (`atoms/ra.toml`, `atomic_ions/ra+2.toml`) | done |  |
+| Ra | yes | yes (+2) | ionic descriptions retained | existing atom/ion fixtures | done | 2 current states retained with checked HW citations; no additional state selected |
 | Ac | yes | yes (+3) | no | yes (`atoms/ac.toml`, `atomic_ions/ac+3.toml`) | done |  |
 | Th | yes | yes (+3,+4) | no | yes (`atoms/th.toml`, `atomic_ions/th+3.toml`, `atomic_ions/th+4.toml`) | done |  |
 | Pa | yes | yes (+4,+5) | no | yes (`atoms/pa.toml`, `atomic_ions/pa+4.toml`, `atomic_ions/pa+5.toml`) | done | Valence table outer electrons adjusted to 5 |
@@ -506,6 +523,13 @@ the top of the registry defines short keys; primary references supplement HW onl
 where they add information used in an assignment. PW means “Present work —
 calculations and adopted assignments,” marked as `assignment: PW` on the relevant
 examples. Methods, results and assumptions are recorded here.
+
+For non-binary molecules, a new default atom type serving only a small set or an
+individual molecule has a high inclusion threshold. Literature support establishes
+the description but does not by itself justify default inclusion. Check reuse of
+existing types and require a strong use case before proposing another entry.
+Binary compounds remain broadly in scope. This applies to all bonding categories,
+in addition to the multicenter restriction below.
 
 Default multicenter entries are limited to common patterns or selected molecules
 for which no simpler description, multicenter or otherwise, is available. Delocalized
@@ -1972,3 +1996,103 @@ Tr09's unsupported B–H borolide entry is removed. HW's characterized borolides
 a non-H B substituent, and B11 does not establish the B–H dianion.
 Further low-valent donor and specialized cluster types are not selected merely
 because papers about them exist.
+
+### Alkaline earths
+
+Source: [HW 103, Band I, chapter XVII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=1467>),
+printed pp. 1429–1480; chapter references pp. 1481–1482. Extraction: 2026-11-03.
+Baseline: Be 2, Mg 4, Ca 2, Sr 2, Ba 2 and Ra 2 states. The approved 76 additions
+bring the totals to Be 22, Mg 26, Ca 14, Sr 13, Ba 13 and Ra 2. Selected scope complete.
+
+#### Alkaline-earth work table
+
+**Implemented** identifies approved additions. Unselected and deferred descriptions
+are marked explicitly. States use the concrete, zero-valence registry defaults.
+HW references are printed Band I pages; **PW** marks our charge/contribution
+allocation. Examples identify coverage for the states, not a requirement to
+turn every extracted compound into a fixture.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Ae01 | Existing 14 Be/Mg/Ca/Sr/Ba/Ra states | Retained; citations updated | Neutral s² atoms: HW 1429. E²⁺ ions: 1432–1434, 1443–1444, 1458. Existing Mg#v2: gaseous MgO/MgX2 and monomeric MgR2, 1443, 1452, 1460. Existing Mg#u#v: MgH doublet, MH23, Table 1. No new isolated E⁺ ion series |
+| Ae02 | Be#v2; Ca#v2; Sr#v2; Ba#v2 | Implemented: 4 | Molecular EX2 and EO: HW 1432–1433, 1458–1460. BeR2 and CaR2 monomers: 1439–1440, 1476. Ordinary two-bond descriptions; Mg#v2 already exists |
+| Ae03 | Be#u#v | Implemented: 1 | BeCl, HW 1431–1432. One ordinary bond and one unpaired electron; molecular subhalide, not a bare ionization state |
+| Ae04 | Be#c-#v3; Be#c-2#v4; Mg#c-#v3; Mg#c-2#v4 | Implemented: 4 | Trigonal [BetBu3]− and tetrahedral [BeMe4]²−, HW 1440; monomeric bulky MgR3− and MgMe4²−, 1453. Ordinary bonds with formal charge on the metal (PW). Hydride formulas alone are not used to infer all H variants; see Ae21 |
+| Ae05 | Be#v2#t; Be#v2#t2 | Implemented: 2 | BetBu2(OMe2), BePh2(OMe2)2, BeMe2(PMe3)2 and BeMe2(bipy), HW 1440; BeX2·2D, 1432, 1436. Two ordinary Be bonds plus one/two donor pairs |
+| Ae06 | Mg#v2#t; Mg#v2#t2; Mg#v2#t3; Mg#v2#t4 | Implemented: 4 | (Me3Si)2CHMgCl(OEt2), EtMgBr(OEt2)2/MgMe2(tmeda), MeMgBr(THF)3 and Mg(GeMe3)2(DME)2; HW 1451–1452, Fig. 17.13. MgBr2(THF)4 independently supports #t4, 1446. #t3/#t4 require capacity 10/12 |
+| Ae07 | Ca#v2#t2; Ca#v2#t4 | Implemented: 2 | Ca[CH(SiMe3)2]2(dioxane)2, Ca(SnMe3)2(THF)4 and MesCaI(THF)4; HW 1476. Ordinary Ca–R/Ca–I bonds plus solvent donors (PW). #t4 requires capacity 12 |
+| Ae08 | E#c+#v#t2; E#c+#v#t3 (E = Be, Mg) | Implemented: 4 | Halide-bridged Be2Cl4 and [Me3SiMgBr]2: HW 1433, 1452; donor-solvated [tBuBeHal(OEt2)]2 and [EtMgBr(NEt3)]2: 1440, 1452. One ordinary terminal bond, two bridging X− donations, and zero/one neutral donor (PW). Be#c+#v#t3 also covers [Be(OH)(H2O)3]⁺, 1435. Be amido oligomers, 1435, reuse these states and Ae10 |
+| Ae09 | Mg#c+#v | Implemented: 1 | RMg⁺ in the Grignard dissociation scheme, HW 1452–1453, Eq. 17.1. Supports the explicitly donor-omitted reaction representation; not a claim that the solution cation is uncoordinated |
+| Ae10 | Be#c+2#t2; Be#c+2#t4 | Implemented: 2 | Two amido donors in monomeric Be(NR2)2, HW 1435, Fig. 17.5c (ionic allocation: PW); four donors in [Be(H2O)4]²⁺/[Be(NH3)4]²⁺, 1432, 1436. #t4 also covers the four halide-donor description of polymeric BeX2 and η5/η1 BeCp2, 1432–1433, 1439. The three Be-amido fixtures now infer Be's occupation and cover #t2 |
+| Ae11 | Mg#c+2#t4; Mg#c+2#t5; Mg#c+2#t6 | Implemented: 3 | Four Cl− donors in MgCl4²− (PW), HW 1446; [Mg(OAsMe3)5]²⁺, 1443; [Mg(H2O)6]²⁺/[Mg(NH3)6]²⁺, 1443–1446. MgCp2, 1452, uses two six-electron Cp− donations and the same #t6. #t5/#t6 require capacity 10/12 |
+| Ae12 | Ca#c+2#t6; Sr#c+2#t6; Ba#c+2#t6 | Implemented: 3 | Two η5-Cp*− ligands in E(C5Me5)2, HW 1476, Fig. 17.19a: six donated pairs in the existing haptic convention (PW). Ca–EDTA, 1475, provides six ordinary donor sites. Capacity 12 required; no new metal MC type |
+| Ae13 | Ca#c+2#t8 | Implemented: 1 | [Ca(H2O)8]²⁺ in CaO2·8H2O, explicitly eight-coordinate at HW 1458. Eight water donors require capacity 16 |
+| Ae14 | Be#m2; Mg#m2 | Implemented: 2 | Polymeric BeH2 and (BeMe2)n: HW 1433–1434, 1439; (MgR2)n: 1452, 1475. Recurring local E–H–E/E–C–E 3c2e units, with two total metal contributions per site (PW). S03, p. 3622, identifies solid BeH2 as a three-dimensional network of connected BeH4 tetrahedra, not linear chains. Use existing H#m and C#h3#m or their explicit-H counterparts; no aggregate-size-specific type |
+| Ae15 | Be#v#m | Implemented: 1 | (BeEt2)2 and (tBuBeMe)3, HW 1439–1440, Fig. 17.9i,k. One ordinary Be–R bond and one total contribution to the two local alkyl bridges (PW) |
+| Ae16 | Be#v#m#t; Be#h#m#t; Mg#v#m#t | Implemented: 3 | [BeH2(NMe3)]2 and [BeMe2(NMe3)]2, HW 1435, 1440; [MgEt2(OEt2)]2 and [HMgCl(THF)]2, 1444, 1452. One ordinary terminal bond, two local 3c2e bridges and one donor per metal (PW). Be's terminal hydride has explicit/implicit H variants; HMgCl has bridging H, not an implicit terminal H |
+| Ae17 | Be#v2#m0; Mg#v2#m0 | Implemented: 2 | [R2E(μ-H)]2²−, HW 1440, Fig. 17.10r, and 1453, Fig. 17.14m. Two neutral ER2 units joined by two H− bridges; each bridge uses [0,2,0] and existing H#c-#m2 (PW). Zero-contribution MC membership is distinct from ordinary E#v2 |
+| Ae18 | Mg#c-#v2#m | Implemented: 1 | [Mg2R6]²−, HW 1453, Fig. 17.14m, explicitly compared with Al2R6. Two ordinary Mg–R bonds and one total Mg contribution to two alkyl 3c2e bridges; −1 on each Mg (PW). Existing neutral bridging-carbon types suffice |
+| Ae19 | E#v#h; E#h2 (E = Be, Mg, Ca, Sr, Ba) | Implemented: 10 | Molecular EH2: S03, pp. 3622, 3626–3627; WA04M, pp. 11514–11516; WA04H, pp. 11506–11509. Linear BeH2/MgH2 and bent or nearly linear Ca/Sr/Ba monomers all use two ordinary M–H bonds. These are the mixed/implicit-H counterparts of E#v2; distinct from bulk ionic hydrides |
+| Ae20 | E#u#h (E = Be, Mg, Ca, Sr, Ba); E#u#v (E = Ca, Sr, Ba) | Implemented: 8 | MH23, Introduction and Table 1, identifies X²Σ⁺ ground states for all five monohydrides. Full text reviewed; the ordinary M–H graph places the remaining unpaired electron on M (PW). Be's explicit-bond radical is in Ae03; Mg's already exists. No Ra extension inferred |
+| Ae21, Be | LiBeH3, Li2BeH4 | Existing states; no further default additions proposed | Wu81's explicit-H BeH3−/BeH4²− graphs reuse Be#c-#v3 and Be#c-2#v4. Hu08, pp. 234105-3–4, 234105-7, describes BeH4 chains with ionic Li+. Two ordinary terminal Be–H bonds and H− bridges [0,2,0] reuse Be#v2#m0 and H#c-#m2 (allocation: PW); the interior-site check resolves under both models/policies. Ba90 re-indexes old powder data and explicitly leaves its perovskite proposals hypothetical; no extra type follows from that paper. Li-bound monomer encodings and additional implicit-H variants remain unselected |
+| Ae21, Mg | KMgH3 | Existing states; checked | HW 1445; Fo07, section IV, p. 214118-2, assigns ionic bonding with hydride anions; section V, p. 214118-5, finds effective charges close to nominal ionic values. The K+ + Mg²⁺ + 3H− description reuses existing states and resolves under both models/policies. No isolated MgH3− or lattice MC state is needed |
+| Ae22 | Be#c+2#t6 | Implemented: 1; capacity 12 | BeCp*2: Co03, pp. 4455–4456, Fig. 3 and Table 2 establish the η5/η5 crystal structure; pp. 4457–4458 analyze ionic and donor–acceptor interactions between Be²⁺ and Cp− fragments. Two three-pair Cp− donations use the existing haptic convention (PW), not a measured Be shell population. The η5/η1 compounds reuse Ae10's #t4; HW 1439–1440 |
+| Ae23, gas | Be(BH4)2 | Existing states; checked | HW 1435: HB(μ-H)3Be(μ-H)3BH. Six local 3c2e bridges reuse Be#m2, B#v#m2/B#h#m2 and H#m (allocation: PW). Explicit/implicit terminal-H graphs resolve under both models/policies |
+| Ae23, adduct | Be(BH4)2·D | Existing states; tentative HW structure checked | HW 1435, Fig. 17.6e proposes a Be–B–B ring with three H bridges, one terminal Be–H, two terminal B–H per B and one donor at Be. It reuses Be#v#m#t/Be#h#m#t and B#v2#m/H variants (allocation: PW). NMe3 example checked with explicit/implicit terminal H; this establishes representability of HW's tentative graph |
+| Ae23, solid/Cp | Solid Be(BH4)2; CpBeBH4 | No additional default types proposed | HW 1435, 1439–1440; vS08, Fig. 1. The tested neutral local-3c2e polymer description needs B#m3 at its chain B sites; Be#m2 already exists. The Cp−/neutral-B, double-bridge description needs Be#c+#m#t3. Both pass Counts and the invariants; these limited non-binary uses alone do not justify the extra default entries |
+| Ae24, seven donors | Ca#c+2#t7; Sr#c+2#t7 | Implemented: 2 | BPS26, sections 3.2–3.3, assigns seven-coordinate aqua ions in concentrated CaCl2/SrCl2 solutions. Seven water donations (PW) use existing O types for the monomeric description and occupy 14 electrons, within the approved Ca/Sr capacity 16 |
+| Ae24, eight donors | Sr#c+2#t8; Ba#c+2#t8 | Implemented: 2 | PS95 redetermines [Sr(H2O)8](OH)2 and [Ba(H2O)8](OH)2: eight terminal waters, with hydrogen bonding to the outer shell. Ordinary aqua ions supply a general use independent of the bridging-water lattices. Existing O donor types suffice; capacity 16 required |
+| Ae24, nine donors | Ba#c+2#t9 | Implemented: 1 | BPS26, section 3.4, fits nine-coordinate hydrated Ba²⁺ in saturated BaBr2 solution. Nine water donations (PW), using existing O types, require the approved Ba capacity 18 |
+| Ae24, bridges | Ca/Sr#c+2#t9; O#v2#d2 and its H variants | Deferred with Ch02 | HW 1474–1475: nine-coordinate hydrated Ca/Sr/Ba chains and eight-coordinate SrCl2·2H2O/BaCl2·2H2O layers with bridging water. The latter have four chloride and four water neighbours per metal. No new O entry or extra metal state is proposed for these lattices in this pass |
+| Ae25 | MgEt2(18-crown-6), [RMg(15-crown-5)]⁺, inverse crowns, larger metallocene assemblies | Not selected | HW 1452–1453, 1476–1477. Retain the examples without proposing Mg#v2#t6, Mg#c+#v#t5 or additional acceptor/MC ladders for the specialized assemblies |
+| Ae26 | Ionic salts, extended hydrides, suboxides/subnitrides and Ra compounds | No additional state proposed | HW 1458–1474. Existing E²⁺ states cover the ionic descriptions. Do not turn lattice coordination or metallic electrons into extra MC states. Ra remains at its existing atom/Ra²⁺ descriptions in this pass |
+| Ae27 | Be#h#m; E#v#m and E#h#m (E = Mg, Ca, Sr, Ba); Sr#m2; Ba#m2 | Implemented: 11 | WA04M, pp. 11516–11518, establishes HMg(μ-H)2MgH; WA04H, pp. 11507–11509, establishes HCa(μ-H)2CaH and HSr(μ-H)3Sr/HBa(μ-H)3Ba, and summarizes the analogous Be dimer. Use local 3c2e bridges with H#m (PW): each metal contributes 1 across the two bridges of E2H4 (E = Be, Mg, Ca); the terminal-H and bare sites of the Sr/Ba dimers contribute 1 and 2 across three bridges. Be#v#m already appears in Ae15. The cyclic Mg3H6/Mg4H8 structures, WA04M pp. 11514, 11517–11518, reuse Mg#v#m/H variants |
+| Ae28 | Mg#u#m | Implemented: 1 | HMg(μ-H)2Mg radical: WA04M, p. 11519 and Tables 3–4. Two local 3c2e bridges; terminal-H Mg uses Mg#v#m/H, and the other Mg contributes 1 with one unpaired electron (PW). The paper's linear Mg–Mg–H and H–Mg–Mg–H structures use ordinary Mg–Mg bonds and reuse Mg#u#v, Mg#v2 and Ae19's Mg#v#h; no further type |
+
+#### Alkaline-earth Counts comparison
+
+All 76 additions are distinct from the previous registry and covered by inputs
+that leave the target atom's occupation to be inferred. The 80 affected fixtures
+(77 new, three revised) produce identical, determined outputs under AtomTyping
+and Counts with both policies; all 320 outputs satisfy the valence invariants.
+
+| Limit | Implemented change / verification |
+| --- | --- |
+| Actual-element capacity | Approved bounds are Be/Mg 12, Ca/Sr 16 and Ba 18; Ra stays at 8. Selected donor/haptic graphs exceed the previous bound 8. The final Sr/Ba increases cover ordinary seven-/eight-/nine-donor aqua ions without adding oxygen types. These counts follow the selected graph convention; they do not assert a physical shell population |
+| ValenceTable entries | Unchanged: all six have target_covalences = [2]. No aromatic additions. The selected states resolve with supplied H counts without target or aromatic-table changes |
+| Enumeration bounds | Unchanged: maximum localized valence 2 and charge interval [0,2] restrict enumeration, not supplied #v3/#v4 or negative charge |
+| Coverage | All Ae02–Ae20, Ae22, Ae24 and Ae27–Ae28 additions are covered. Existing H/C/N/O/halide ligand types supply the companions. Polymer/network fixtures infer an interior site's occupation with supplied boundary occupations. Cp* fixtures use the existing haptic convention; general multidonor accounting remains separately deferred |
+
+The Be follow-up checked seven further inputs using the default registry: BeH3−,
+Li2BeH4 with separate Li+ counterions, a LiBeH3 chain fragment, and explicit/implicit
+terminal-H forms of gaseous Be(BH4)2 and HW's tentative NMe3 adduct. All 28 outputs
+agree across both models/policies and satisfy the invariants. The two additional
+solid/Cp graph probes confirm the specific registry gaps recorded in Ae23; Counts
+resolves both under both policies. These checks add no registry rows or permanent
+fixtures; the approved states already have conformance coverage.
+
+Ae24 adds five donor_acceptor fixtures. All 20 outputs agree across both models
+and policies, satisfy the invariants and need no tie break. The 1424 earlier
+snapshots are unchanged. The KMgH3 ionic probe also agrees across all four
+configurations and satisfies the invariants; it needs no additional registry row.
+
+#### Alkaline-earth primary-source checks
+
+The supplied S03, WA04M, WA04H, MH23, Co03, Wu81, Ba90 and Fo07 PDFs are reviewed
+and archived in materials/valence. Hu08, vS08, PS95 and BPS26 were reviewed in full
+online at the links below; local PDFs are not archived for those four sources.
+
+| Key | Source | Needed for |
+| --- | --- | --- |
+| S03 | Shayesteh et al., “Infrared emission spectra of BeH2 and BeD2,” *J. Chem. Phys.* **118** (2003), 3622–3627. [DOI](https://doi.org/10.1063/1.1539850), [PDF](../materials/valence/Shayesteh-2003-BeH2-BeD2.pdf) | Reviewed: gaseous linear BeH2, pp. 3622, 3626–3627; solid BeH2 network, p. 3622. Ae14, Ae19 |
+| WA04M | Wang and Andrews, “Infrared Spectra of Magnesium Hydride Molecules, Complexes, and Solid Magnesium Dihydride,” *J. Phys. Chem. A* **108** (2004), 11511–11520. [DOI](https://doi.org/10.1021/jp046410h), [PDF](../materials/valence/Wang-Andrews-2004-Mg-hydrides.pdf) | Reviewed: MgH2 and Mg2H4, pp. 11514–11517; cyclic oligomers, pp. 11517–11518; Mg–Mg bonds and the Mg2H3 radical, pp. 11518–11520. Ae19–Ae20, Ae27–Ae28 |
+| WA04H | Wang and Andrews, “Metal Dihydride (MH2) and Dimer (M2H4) Structures in Solid Argon, Neon, and Hydrogen (M = Ca, Sr, and Ba): Infrared Spectra and Theoretical Calculations,” *J. Phys. Chem. A* **108** (2004), 11500–11510. [DOI](https://doi.org/10.1021/jp046046m), [PDF](../materials/valence/Wang-Andrews-2004-Ca-Sr-Ba-hydrides.pdf) | Reviewed: monomers, pp. 11506–11509; isotope evidence for dibridged Ca2H4 and tribridged Sr2H4/Ba2H4, pp. 11507–11509. Ae19, Ae27 |
+| MH23 | Pang et al., “Theoretical Investigation of Spectroscopic Properties of the Alkaline-Earth-Metal Monohydrides toward Laser Cooling and Magneto-Optical Trapping,” *ACS Omega* **8** (2023), 19391–19401. [DOI](https://doi.org/10.1021/acsomega.3c00352), [PDF](../materials/valence/Pang-2023-alkaline-earth-monohydrides.pdf) | Reviewed: X²Σ⁺ monohydride ground states and experimental references, pp. 19392–19393, Table 1. Ae20 |
+| Co03 | Conejo et al., “Synthesis, Solid-State Structure, and Bonding Analysis of the Beryllocenes [Be(C5Me4H)2], [Be(C5Me5)2], and [Be(C5Me5)(C5Me4H)],” *Chem. Eur. J.* **9** (2003), 4452–4461. [DOI](https://doi.org/10.1002/chem.200304876), [PDF](../materials/valence/Conejo-2003-beryllocenes.pdf) | Reviewed: η5/η5 BeCp*2 crystal structure, pp. 4455–4456; ionic/donor–acceptor fragment analysis, pp. 4457–4458. Ae22; the η5/η1 compounds reuse Ae10 |
+| Wu81 | Würthwein, Krogh-Jespersen and Schleyer, “Structures of Complex Beryllium Hydrides and Fluorides, LiBeX3 and Li2BeX4,” *Inorg. Chem.* **20** (1981), 3663–3667. [DOI](https://doi.org/10.1021/ic50225a016), [PDF](../materials/valence/Wuerthwein-1981-complex-beryllium-hydrides-fluorides.pdf) | Reviewed: calculated BeX3−/BeX4²− anions, pp. 3664–3665; LiBeX3 and Li2BeX4 monomers, pp. 3664–3667. Ae21 |
+| Ba90 | Bastide, “Crystal structure of lithium beryllium hydrides LiBeH3, Li2BeH4,” *Solid State Commun.* **74** (1990), 355–358. [DOI](https://doi.org/10.1016/0038-1098(90)90502-3), [PDF](../materials/valence/Bastide-1990-lithium-beryllium-hydrides.pdf) | Reviewed: revised indexing and lattice parameters, pp. 356–357; hypothetical status stated in the conclusion, p. 357. No bond-electron assignment or new registry support |
+| Hu08 | Hu et al., “Crystal structure prediction of LiBeH3 using ab initio total-energy calculations and evolutionary simulations,” *J. Chem. Phys.* **129** (2008), 234105. [DOI](https://doi.org/10.1063/1.3021079), [author PDF](https://uspex-team.org/static/file/Hu-JChemPhys-2008.pdf) | Reviewed: corner-sharing BeH4 chains, pp. 234105-3–4; ionic Li+/chain interaction, pp. 234105-6–7, 234105-11. The local H− bridge allocation is PW |
+| vS08 | van Setten, de Wijs and Brocks, “First-principles calculations of the crystal structure, electronic structure, and thermodynamic stability of Be(BH4)2,” *Phys. Rev. B* **77** (2008), 165115. [DOI](https://doi.org/10.1103/PhysRevB.77.165115), [reviewed preprint](https://arxiv.org/pdf/0712.0907) | Preprint p. 2, Fig. 1 distinguishes chain and pendant BH4 groups in the solid, consistent with HW 1435. Local 3c2e allocation is PW |
+| PS95 | Persson, Sandström, Yokoyama and Chaudhry, “Structure of the Solvated Strontium and Barium Ions in Aqueous, Dimethyl Sulfoxide and Pyridine Solution, and Crystal Structure of Strontium and Barium Hydroxide Octahydrate,” *Z. Naturforsch. A* **50** (1995), 21–37. [DOI](https://doi.org/10.1515/zna-1995-0105), [reviewed publisher full text](https://www.researchgate.net/publication/273506475_Structure_of_the_Solvated_Strontium_and_Barium_Ions_in_Aqueous_Dimethyl_Sulfoxide_and_Pyridine_Solution_and_Crystal_Structure_of_Strontium_and_Barium_Hydroxide_Octahydrate) | Eight-coordinate Sr/Ba hydroxide octahydrate crystal structures; solution measurements in Table 9. Supports Ae24's #t8 states independently of water bridges |
+| BPS26 | Bajnóczi, Persson and Sigfridsson Clauss, “Structure of Concentrated Aqueous Solutions of Alkaline Earth Metal Chlorides and Bromides,” *J. Solution Chem.* **55** (2026), 851–865. [DOI and reviewed full text](https://doi.org/10.1007/s10953-025-01559-9) | Sections 3.2–3.4: seven-coordinate Ca/Sr and nine-coordinate Ba aqua-ion descriptions from solution scattering/EXAFS; also distinguishes concentrated Ca water bridges. Supports Ae24's #t7/#t9 states |
+| Fo07 | Fornari, Subedi and Singh, “Structure and dynamics of perovskite hydrides AMgH3 (A = Na, K, Rb) in relation to the corresponding fluorides: A first-principles study,” *Phys. Rev. B* **76** (2007), 214118. [DOI](https://doi.org/10.1103/PhysRevB.76.214118), [PDF](../materials/valence/Fornari-2007-perovskite-hydrides.pdf) | Reviewed: ionic hydride description, section IV, p. 214118-2; effective charges near nominal ionic values, section V and Table IV, p. 214118-5. Existing K+, Mg²⁺ and H− states suffice for Ae21 |

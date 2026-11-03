@@ -1,0 +1,7 @@
+; HMg(mu-H)2Mg radical; Wang and Andrews (2004), p. 11519; doi:10.1021/jp046410h. Local 3c2e contributions
+; and unpaired electron on the terminal-H-free Mg: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg" "Mg" "H" "H" "H"]
+         :bonds [[0 4 "1"]]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

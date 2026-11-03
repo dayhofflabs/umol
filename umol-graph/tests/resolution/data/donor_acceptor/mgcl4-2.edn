@@ -1,0 +1,5 @@
+; MgCl4(2-); HW I, p. 1446; four Cl- donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#c+2" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

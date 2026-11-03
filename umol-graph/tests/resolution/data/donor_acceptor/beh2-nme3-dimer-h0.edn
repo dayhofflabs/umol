@@ -1,0 +1,7 @@
+; [BeH2(NMe3)]2; HW I, p. 1435; two local 3c2e hydride bridges, contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Be#h0" "Be#h0" "H" "H" "H" "N" "C#h3" "C#h3" "C#h3" "H" "N" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 4 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [1 9 "1"] [10 11 "1"] [10 12 "1"] [10 13 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

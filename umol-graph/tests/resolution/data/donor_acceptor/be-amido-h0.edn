@@ -1,6 +1,6 @@
 ; Be(NH2)2 donor motif; HW I, pp. 757-758, Fig. 14.6b; ionic allocation: PW.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
- :input {:atoms ["Be#c+2#n0#u0#s1" "N#c-#h0" "N#c-#h0" "H" "H" "H" "H"]
+ :input {:atoms ["Be#c+2" "N#c-#h0" "N#c-#h0" "H" "H" "H" "H"]
          :bonds [[1 3 :single] [1 4 :single] [2 5 :single] [2 6 :single]]
          :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
                         {:donors [2] :acceptor 0 :attrs "1"}]}}

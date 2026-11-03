@@ -1,0 +1,5 @@
+; Monomeric [MgR3]- with bulky R; HW I, p. 1453. Cut at the three Mg-bound carbons; boundary carbon
+; occupations supplied.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#c-" "C#n#u#s2" "C#n#u#s2" "C#n#u#s2"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}
