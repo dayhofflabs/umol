@@ -1,0 +1,9 @@
+; nido-B5H9; HW I, pp. 1236-1238, Fig. 16.18; local bond contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#h" "B#h" "B#h" "B#h" "B#h" "H" "H" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]
+         :multicenter-bonds [{:atoms [0 3 4] :attrs "[0,1,1]#c0#u0#s1"}
+                            {:atoms [1 5 2] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [2 6 3] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [3 7 4] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [4 8 1] :attrs "[1,1,0]#c0#u0#s1"}]}}

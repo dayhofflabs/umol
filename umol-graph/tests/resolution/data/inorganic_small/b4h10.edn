@@ -1,0 +1,8 @@
+; arachno-B4H10; HW I, pp. 1236-1238, Fig. 16.18; local bond contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#h2" "B#h" "B#h" "B#h2" "H" "H" "H" "H"]
+         :bonds [[1 2 "1"]]
+         :multicenter-bonds [{:atoms [0 4 1] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [1 5 3] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [3 6 2] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [2 7 0] :attrs "[1,1,0]#c0#u0#s1"}]}}

@@ -1,0 +1,7 @@
+; PMe3-stabilized borabenzene; HW I, p. 1320; D-A/aromatic allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "P" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 5 "1#a"] [5 0 "1#a"] [6 7 "1"] [6 8 "1"]
+                 [6 9 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

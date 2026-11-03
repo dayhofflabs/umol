@@ -1,0 +1,5 @@
+; Diborane; HW I, pp. 1236-1238; bridge contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#h2" "B#h2" "H" "H"]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

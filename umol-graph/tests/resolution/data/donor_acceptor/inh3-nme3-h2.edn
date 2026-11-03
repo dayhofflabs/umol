@@ -1,0 +1,5 @@
+; InH3(NMe3); HW I, p. 1390.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["In#h2" "H" "N" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [2 3 "1"] [2 4 "1"] [2 5 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}]}}

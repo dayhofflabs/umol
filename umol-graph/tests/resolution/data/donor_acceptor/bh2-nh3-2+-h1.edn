@@ -1,0 +1,5 @@
+; [BH2(NH3)2]+, diammoniate of diborane cation; HW I, p. 1243.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#c+#h" "N#h3" "N#h3" "H"]
+         :bonds [[0 3 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}}

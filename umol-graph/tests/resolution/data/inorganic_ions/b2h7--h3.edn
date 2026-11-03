@@ -1,0 +1,4 @@
+; H3B-H-BH3-; HW I, p. 1243; hydride bridge allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#h3" "B#h3" "H#c-"]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]#c0#u0#s1"}]}}

@@ -1,0 +1,5 @@
+; Dibridged Al2H6/Ga2H6; HW I, pp. 1339, 1389; bridge allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ga#h2" "Ga#h2" "H" "H"]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

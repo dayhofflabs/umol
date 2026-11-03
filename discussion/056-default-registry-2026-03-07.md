@@ -9,7 +9,11 @@ Relates: [217](217-rhea-participant-failures-2026-08-30.md),
 The [HW extraction](#hw-extraction-spike-2026-10-31) records hydrogen selections,
 noble-gas evidence, halogen selections, chalcogen extraction, the
 [pnictogen work table](#pnictogen-work-table) and the
-[tetrel work table](#tetrel-work-table). The noble-gas audit covers earlier and
+[tetrel work table](#tetrel-work-table), followed by the
+[triel work table](#triel-work-table). The selected triel pass is implemented,
+including four carbon companions, the pyridine-donor N state, the existing-entry
+citation audit and Al's capacity increase to 12.
+The noble-gas audit covers earlier and
 newly added entries; the supplied primary-paper PDFs have been reviewed. The selected
 hydrogen, noble-gas, halogen, chalcogen, pnictogen and tetrel passes are complete. Unselected
 candidates remain in the extraction tables. The [chalcogen work table](#chalcogen-work-table)
@@ -35,9 +39,23 @@ the tracking table are dated.
 This document tracks incremental, reviewable expansion of the default atom type registry.
 Registry entries are treated as code: explicit scope, per-entry review, and matching conformance coverage.
 
-## Project Status (2026-11-02)
+## Project Status (2026-11-03)
 
-**Last curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
+**Current review:** HW I, chapter XVI (group 13), selected scope complete. The boron
+batch adds 27 B states and four C companions, covered by 32 fixtures; the earlier
+borolide correction/removal has its own fixture. The heavy-triel batch adds
+Al 37, Ga 39, In 32 and Tl 22 states plus the general pyridine-donor N state,
+covered by 137 fixtures. Existing triel entries have checked HW citations.
+Al capacity is raised from 8 to 12 for the accepted five-/six-coordinate donor
+descriptions; ValenceTable entries are unchanged.
+
+**Last curation check (2026-11-03):** 1352 resolution conformance cases, 417 valence,
+46 invariant and 306 umol-chem unit tests, focused Clippy and formatting pass.
+All 131 additions in the heavy-triel batch have fixture coverage; its 548 outputs
+agree across both models/policies and satisfy the valence invariants. The 1215
+pre-batch snapshots are unchanged.
+
+**Earlier curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
 46 invariant and 306 umol-chem unit tests, focused Clippy and formatting passed.
 The seven pnictogen follow-up fixtures agree
 across both models/policies and satisfy the valence invariants. The preceding
@@ -266,15 +284,15 @@ Status values:
 | He | yes | no | n/a | yes (`atoms/he.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `atomic_ions/li+1.toml`) | done |  |
 | Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `atomic_ions/be+2.toml`) | done |  |
-| B | yes | no | partial | yes (`atoms/b.edn`, `hydrides/bh3.edn`, `inorganic_small/b2h6.edn`) | done | Hydrogen companion addition: B#v2#m |
-| C | yes | yes (−4) | yes (selected) | yes (12 additions covered; Tt02–Tt05) | done | 48 current states; carbon batch implemented; all 36 earlier entries retained with checked citations |
-| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 52 current states; 17 additions and both NO− fixtures implemented; existing-entry citation audit complete |
+| B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
+| C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
+| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
 | O | yes | yes (-2) | yes (selected) | yes (all 29 states) | done | Thirteen states added; duplicate hydronium removed; citation and default-scope audit complete; aromatic and Kekulé furan covered |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `atomic_ions/na+1.toml`) | done |  |
 | Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `atomic_ions/mg+2.toml`) | done |  |
-| Al | yes | yes (+3) | partial | yes (`atoms/al.edn`, `atomic_ions/al+3.edn`, `inorganic_small/al2me6-h0.edn`) | done | Carbon companion addition: Al#v2#m; full group-13 review remains separate |
+| Al | yes | yes (+3) | yes (selected) | yes (37 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete; capacity 12 for five-/six-coordinate donor descriptions |
 | Si | yes | yes (−4) | yes (selected) | yes (28 additions covered by 30 fixtures) | done | 39 current states; selected HW scope complete; all 11 earlier entries retained with checked citations; Al zero-π Counts companion added |
 | P | yes | yes (-3) | partial | yes (`atoms/p.edn`, `atomic_ions/p-3.edn`, `hydrides/`, `hypervalent/`) | in_progress | 44 current states; 23 additions implemented; existing-entry citation audit complete |
 | S | yes | yes (-2) | yes (selected) | yes (all 23 states) | done | Six states added, including the Tt27 thioether donor companion; citation and default-scope audit complete; S4N4 retains localized and HW three-center descriptions |
@@ -292,7 +310,7 @@ Status values:
 | Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `atomic_ions/ni+2.toml`) | done |  |
 | Cu | yes | yes (+1,+2) | no | yes (`atoms/cu.toml`, `atomic_ions/cu+1.toml`, `atomic_ions/cu+2.toml`) | done |  |
 | Zn | yes | yes (+2) | no | yes (`atoms/zn.toml`, `atomic_ions/zn+2.toml`) | done |  |
-| Ga | yes | yes (+3) | no | yes (`atoms/ga.toml`, `atomic_ions/ga+3.toml`) | done |  |
+| Ga | yes | yes (+1,+3) | yes (selected) | yes (39 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete |
 | Ge | yes | yes (−4) | partial | yes (30 additions covered) | done | 31 current states; selected HW scope and existing-entry audit complete |
 | As | yes | yes (-3) | partial | yes (`atoms/as.edn`, `atomic_ions/as-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 27 current states; 15 additions implemented; existing arsole types retained with paired aromatic/Kekulé fixtures; citation audit complete |
 | Se | yes | yes (-2) | yes (selected) | yes (all 22 states) | done | Six states added; citation and default-scope audit complete, including localized Se4N4 |
@@ -310,7 +328,7 @@ Status values:
 | Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `atomic_ions/pd+2.toml`) | done |  |
 | Ag | yes | yes (+1,+2) | partial | yes (`atoms/ag.edn`, `atomic_ions/ag+1.edn`, `atomic_ions/ag+2.edn`, `donor_acceptor/ag2-i2-4-2+.edn`) | done | I2-ligand companion: Ag#c+#n5#t3 |
 | Cd | yes | yes (+2) | no | yes (`atoms/cd.toml`, `atomic_ions/cd+2.toml`) | done |  |
-| In | yes | yes (+3) | no | yes (`atoms/in.toml`, `atomic_ions/in+3.toml`) | done |  |
+| In | yes | yes (+1,+3) | yes (selected) | yes (32 additions covered) | done | 34 current states; selected HW scope and existing-entry citation audit complete |
 | Sn | yes | yes (+2, −4) | partial | yes (31 additions covered) | done | 32 current states; selected HW scope and existing-entry audit complete; capacity 14 for six-donor Sn(II) |
 | Sb | yes | yes (-3) | partial | yes (`atoms/sb.edn`, `atomic_ions/sb-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 29 current states; 20 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Te | yes | yes (-2, -1, +1) | yes (selected) | yes (all 20 states) | done | Eleven states added, including aromatic Te4²⁺; citation and default-scope audit complete |
@@ -318,7 +336,7 @@ Status values:
 | Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
 | Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `atomic_ions/cs+1.toml`) | done |  |
 | Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `atomic_ions/ba+2.toml`) | done |  |
-| Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `atomic_ions/tl+1.toml`, `atomic_ions/tl+3.toml`) | done |  |
+| Tl | yes | yes (+1,+3) | yes (selected) | yes (22 additions covered) | done | 25 current states; selected HW scope and existing-entry citation audit complete |
 | Pb | yes | yes (+2, +4, −4) | partial | yes (32 additions covered) | done | 35 current states; selected HW scope and existing-entry audit complete, including both ionic states; capacity 14 for six-donor Pb(II) |
 | Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `hydrides/`, `inorganic_ions/`, `aromatic/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
@@ -493,6 +511,9 @@ Default multicenter entries are limited to common patterns or selected molecules
 for which no simpler description, multicenter or otherwise, is available. Delocalized
 molecular orbitals or a possible electron allocation alone do not justify additional
 atom types. Hydrogen-bond, donor–acceptor and aromatic descriptions retain their own categories.
+Whole-cage descriptions are allowed, particularly where no adequate smaller model
+is available. Reuse common per-atom contributions across cages; the restriction is
+on scaffold-specific atom types, not on the size of a multicenter relation.
 
 **Multicenter counting limitation (2026-11-02):** the graph retains individual
 relations and electron contributions, but registry matching uses the aggregate
@@ -1829,3 +1850,125 @@ Counts rejection of supplied values.
 - **vS96:** von Schnering et al., “Hückel Arenes with Ten π Electrons: Cyclic Zintl Anions Si6¹⁰− and Ge6¹⁰−, Isosteric to P6⁴− and As6⁴−,” *Angew. Chem. Int. Ed. Engl.* **35** (1996), 984–986. [DOI](https://doi.org/10.1002/anie.199609841); [PDF](../materials/valence/von-Schnering-1996-Si-Ge-aromatic-rings.pdf). Reviewed; these aromatic Zintl-ring assignments do not justify additional default-registry states and are excluded in Tt14.
 - **B04:** Balaban, Oniciu and Katritzky, “Aromaticity as a Cornerstone of Heterocyclic Chemistry,” *Chem. Rev.* **104** (2004), 2777–2812. [DOI](https://doi.org/10.1021/cr0306790); [PDF](../materials/valence/Balaban-2004-heterocyclic-aromaticity.pdf). Page 2783 discusses pyridone tautomerism; pp. 2788–2791 define zero-electron Z-type ring positions and include carbons bearing exocyclic C=O, with tropone in Scheme 27. The C#v4#a0 allocation retaining the localized C=O bond is PW. This replaces the inappropriate RDKit citation without changing the existing entry or fixtures.
 - **G12:** Goebbert, “Photoelectron imaging of CH−,” *Chem. Phys. Lett.* **551** (2012), 19–25. [DOI](https://doi.org/10.1016/j.cplett.2012.08.065); [PDF](../materials/valence/Goebbert-2012-CH-photoelectron.pdf). Page 19 gives the X²Π configuration with a paired nonbonding 3σ orbital and one unpaired π electron, and the a⁴Σ− configuration with three unpaired electrons. Page 21 and Fig. 3 identify both states experimentally. These support the existing single-bond CH descriptions C#n#u#v and C#u3#v, including their implicit-H variants.
+
+### Triels
+
+Source: [HW 103, Band I, chapter XVI](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 1.pdf#page=1254>),
+printed pp. 1216–1421; chapter references pp. 1422–1428. Initial extraction:
+2026-11-03. Baseline: B 24, Al 4, Ga 2, In 2, Tl 3 registry states.
+The selected additions and Tr09 correction/removal are implemented. Current totals:
+B 50, Al 41, Ga 41, In 34 and Tl 25. The four carborane companions bring C to 52;
+the aromatic pyridine donor brings N to 53.
+
+For boron, default multicenter types describe reusable per-atom contributions across
+local bonds and whole-cage systems. Whole-cage descriptions are accepted, especially
+where no adequate smaller model suffices. Cage size, closo/nido/arachno classification
+and choice of localization do not each require a separate atom type. HW's local
+B–H–B/B–B–B descriptions and its Wade counting both supply representative examples.
+
+#### Triel work table
+
+**Implemented** marks accepted additions; **Not selected** records exclusions from
+this pass. States use the concrete, zero-valence registry defaults; each listed E
+expands to a separate element. H variants are
+listed explicitly. HW references below are printed Band I pages. **PW** identifies
+our electron/charge allocation, rather than an assignment stated by HW.
+Examples guide coverage of selected states; not every extracted molecule needs a fixture.
+Citation keys refer to the [primary sources](#triel-primary-sources) below.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Tr01 | Original 35 B/Al/Ga/In/Tl states; 34 after Tr09 | Citation audit complete | The two original borolide entries failed electron conservation; Tr09 corrects one and removes the other. All 34 retained states pass. B ordinary BH3/BX3/BR3 and BH4−/BX4− families: HW 1226, 1248, 1280–1285, 1315–1316. BH/BF and BH2/BO descriptions: 1286, 1287, 1318, 1321. Existing aromatic B: boroxine 1291; borazine 1297, 1303; boratabenzene/borepin 1320–1321. Al/Ga/In/Tl atoms: 1216; Al³⁺: 1335, 1345; Al#v3: 1339, 1345, 1366; Al#v2#m: 1366; heavy E³⁺ and Tl⁺: 1387, 1399. Ce03 supports singlet BH2− and thus B#c-#n#v2 plus its two H variants. S06 independently supports the localized boryl-anion description with a B lone pair; neither source requires replacing these states |
+| Tr02 | B#n#h | Implemented: 1 | Implicit-H counterpart of existing B#n#v for BH; HW 1321. BF's retained s² pair is explicit at 1286 |
+| Tr03 | B#v#h#m; B#h2#m; B#v#m2; B#h#m2 | Implemented: 4 | Complete the H representations of B#v2#m and add the one-localized-bond/two-MC-electron pattern. B2H6, B4H10 and B5H9; HW 1236–1238, Figs. 16.17–16.18 explicitly separate BH/BB 2c2e from BHB/BBB 3c2e bonds. Use [1,1,0] permutations for the 3c2e units (PW); B5H9 also uses Tr04. B#v#m2/B#h#m2 also supplies the neutral BH vertices in Tr06's cage descriptions |
+| Tr04 | B#v3#m0; B#v2#h#m0; B#v#h2#m0; B#h3#m0 | Implemented: 4 | Zero-contribution participants in local 3c2e units: B5H9 (HW 1237), B3H8− (1254), and B2H7− = H3B–H–BH3 (1243). For B2H7−, use existing H#c-#m2 between neutral BH3 units, contributions [0,2,0] (PW). These states are distinct from non-MC B#v3 and its H variants |
+| Tr05 | B#c-#v2#m2; B#c-#v#h#m2; B#c-#h2#m2 | Implemented: 3 | B3H8−, HW 1254, Eq. 16.12: one ordinary B–B bond, six terminal B–H bonds and two B–H–B bridges. Put −1 on the B without an ordinary B–B bond; it contributes one electron to each bridge, each bridge H contributes one, and the other B contributes zero (PW). The latter two B sites use Tr04 |
+| Tr06 | B#c-#v#m3; B#c-#h#m3; C#v#m3; C#h#m3; C#v2#m2; C#v#h#m2 | Implemented: 6 | HW 1234–1235, 1265–1277: reusable BH/CH skeletal contributions. For B6H6²−/B12H12²−, place −1 on two B vertices, contributing three electrons each; remaining neutral BH vertices contribute two (Tr03). C2B10H12 uses two neutral CH contributions of three and ten BH contributions of two. Retaining the ordinary C–C bond in ortho-C2B10H12 leaves two MC electrons per C (M18, Table 1, p. 4669). Integer charge/contribution allocations and whole-cage grouping: PW. Explicit/implicit H variants tested; no dependence on cage size |
+| Tr07 | B#v3#t; B#v2#h#t; B#v#h2#t; B#h3#t | Implemented: 4 | BH3·NH3/BH3·NMe3 and BF3·OEt2, with mixed H representations; HW 1242–1243, 1281, 1284 explicitly describes donor adducts. Also covers B2Cl4·2D (1285), BR3·D (1315) and the corresponding Lewis-acid functionality |
+| Tr08 | B#c+#v2#t2; B#c+#v#h#t2; B#c+#h2#t2 | Implemented: 3 | [BH2(NH3)2]⁺ in diammoniate of diborane, HW 1243; [Ph2B(bipy)]⁺, 1318. Two ordinary bonds and two donated pairs; not a bare two-coordinate borenium proposal |
+| Tr09 | Correct B#c-#v3#a2 to B#c-2#v3#a2; remove B#c-#v2#h#a2; add localized companion B#c-2#n#v3 | Implemented: 1 correction + 1 removal + 1 addition | Borolide dianion, HW 1320–1321, Fig. 16.88. Three σ contributions plus two aromatic electrons require five B-assigned electrons, hence B²−. The corrected entry is covered by 1-(dimethylamino)borolide in aromatic/nme2-borolide-2.edn. The localized counterpart retains a B lone pair and two C=C bonds. The B–H entry is removed because reviewed sources do not establish the dianion; B11's neutral NHC adduct instead uses Tr07 |
+| Tr10 | B#v2#a#t | Implemented: 1 | Donor-stabilized borabenzene, PMe3→BC5H5; HW 1320. Aromatic graph with B contributing one π electron and accepting one pair (PW); the localized graph uses Tr07's B#v3#t |
+| Tr11 | B#c-#u#v3 | Implemented: 1 | Triarylborane radical anions BPh3•−/BMes3•−, HW 1315. Atom-localized charge/spin description; no additional delocalized relation or B–H variants proposed |
+| Tr12 | Additional boryl/borylene donor and cluster-adduct states | Not selected | HW 1317–1319, 1322 describes metal complexes and low-valent derivatives. Existing ordinary B states and Tr07–Tr08 cover simpler selected descriptions. S06, Scheme 1 and pp. 113–114, supports retaining the existing B− lone-pair state through the ionic boryl−/Li+ description; the contact dimer does not require extra donor/acceptor states for this example |
+| Tr13 | Al: #v2#h, #v#h2, #h3; Ga/In/Tl: #v3, #v2#h, #v#h2, #h3 | Implemented: 15 | Ordinary trivalent centers and monomeric EH3, with explicit/mixed/implicit H. AlH3: HW 1338–1339; GaH3/InH3/TlH3: 1388–1389 (matrix species distinguished from polymers). EX3/ER3: 1393–1394, 1405–1407. Existing Al#v3 retained |
+| Tr14 | E#n#v; E#n#h (E = Al, Ga, In, Tl) | Implemented: 8 | Singlet monohydrides EH and monohalides EX; HW 1336, 1339, 1370, 1388–1389, 1395–1396. Also covers ordinary monoorganyl centers; 1407–1408 explicitly retains the lone pair |
+| Tr15 | E#u#v2; E#u#v#h; E#u#h2 (E = Al, Ga, In, Tl) | Implemented: 12 | EH2 radicals, explicit/mixed/implicit H. HW 1372 gives AlHMe and alanyl radicals; 1388–1389 gives heavy EH2. Ce03, Tables II–IV and pp. 84–85, explicitly treats neutral AlH2 and GaH2 as ²A1 radicals, resolving the Al#u#h2 source gap |
+| Tr16 | E#c-#v4; E#c-#v3#h; E#c-#v2#h2; E#c-#v#h3; E#c-#h4 (E = Al, Ga, In, Tl) | Implemented: 20 | Tetrahydridoaluminate/gallate/indate/thallate: HW 1342–1343, 1392. EX4−/ER4− and substituted alanates: 1343, 1346, 1368, 1394. E#c-#v4 also covers ordinary tetrahedral E− sites |
+| Tr17 | Ga#c+#n; In#c+#n | Implemented: 2 | Chemical E(I) counterions in mixed-valent halides such as E⁺EX4−; HW 1387, 1393–1395. Tl#c+#n already exists |
+| Tr18 | E#v3#t; E#v2#h#t; E#v#h2#t; E#h3#t (E = Al, Ga, In); Tl#v3#t | Implemented: 13 | EH3·D for Al/Ga/In: HW 1340, 1390; EX3·D and ER3·D: 1346, 1368, 1394, 1407. No TlH3·D extension: HW 1390 discusses that as a prospect, not an obtained adduct |
+| Tr19 | E#v3#t2; E#v2#h#t2; E#v#h2#t2; E#h3#t2 (E = Al, Ga, In) | Implemented: 12; Al capacity 12 | AlH3(NMe3)2, GaH3(NMe3)2 and InH3(PCy3)2; HW 1340, 1390. The Al/Ga halide analogues and InX3·2D are also explicit at 1346, 1394. No automatic Tl analogue |
+| Tr20 | In#v3#t3 | Implemented: 1 | InX3·3D, D = ether/amine, octahedral; HW 1394. Three ordinary In–X bonds and three neutral donor bonds |
+| Tr21 | E#c+3#t6 (E = Al, Ga, In, Tl) | Implemented: 4; Al capacity 12 | [E(H2O)6]³⁺, HW 1345, 1399. The same acceptor states support six halide donors in EF6³− and InCl6³−/TlCl6³−/TlBr6³− (1337, 1344, 1394), and six hydride donors in AlH6³− (1343). Ionic donor allocation: PW. No extra MC or localized #v6 family |
+| Tr22 | In#c+3#t5; Tl#c+3#t5 | Implemented: 2 | InCl5²− and TlCl5²−/TlBr5²−, HW 1394. Five halide donors around E³⁺ (PW); reuse existing terminal halide-donor types |
+| Tr23 | E#c+#v2#t2 (E = Al, Ga, In); E#c+#v#h#t2 and E#c+#h2#t2 (E = Al, Ga) | Implemented: 7 | E2X6 dimers: HW 1337, 1345–1346, 1394. Two EX2⁺ units joined by two X− donors, each donating to both E centers (PW; existing halide-bridge convention). H variants: Al/Ga amido/halide bridges, 1340, 1390–1391. Al-amido fixtures already supply the Al occupation explicitly; the added states also permit inference |
+| Tr24 | Al#c+2#v#t3; Al#c+2#h#t3 | Implemented: 2 | Threefold imido bridges in [RAlNR′]4 and [HAlNR′]4; HW 1368–1369, Fig. 16.112l. AlR²⁺/NR′²− donor allocation (PW), already used by the Al-imido fixtures with supplied Al occupation. No new N states needed |
+| Tr25 | Al#v#h#m; Al#h2#m; Ga#v2#m; Ga#v#h#m; Ga#h2#m | Implemented: 5 | Dibridged Al2H6/Ga2H6: HW 1339, 1389, Fig. 16.126a; neutral [1,1,0] bridge allocations as for diborane (PW). Al#v2#m already exists for Al2Me6. HW qualifies the In2H6 structure as tentative; no In analogue selected on that basis |
+| Tr26 | Al#m3 | Implemented: 1 | Polymeric α-AlH3, HW 1339: six Al–H–Al bridges at each Al; the recurring local 3c2e pattern, with three total Al contributions per center (PW). The fixture resolves the central Al in a local coordination fragment with supplied cut-boundary Al occupations. No whole-polymer relation or dependence on aggregate size |
+| Tr27 | E#c-2#n#v3 (E = Al, Ga, In, Tl) | Implemented: 4 | Tetrahedral E4⁸− Zintl units, HW 1384: Al/Ga in Sr8Al7/Sr8Ga7/Ba8Ga7, In/Tl in Na2In/Na2Tl. Ordinary E–E edges and one lone pair per E²− (PW). E− diamond-like networks reuse Tr16's #v4; no additional cage-aromatic states |
+| Tr28 | E#c+#n#t3 (E = Al, Ga, In, Tl) | Implemented: 4 | Cp*Al and gaseous CpGa/CpIn/CpTl monomers; HW 1371, 1408–1409. Six-electron Cp− donation to E⁺ retaining s². The metal's accepted-pair count resolves; donor-side multidonor accounting remains separate work. No MC reinterpretation or polymer-contact additions |
+| Tr29 | E#v#d (E = Ga, In, Tl); Al#c+#t3#d | Implemented: 4 | Trielylene Lewis bases: RE→B(C6F5)3, HW 1408; Cp*Al→B(C6F5)3, 1371. Donation consumes the retained lone pair; the Al entry also retains Cp donation. No EH donor series inferred |
+| Tr30 | Tl#c+#v2; In#c+#v2#t4 | Implemented: 2 | Dialkylthallium cations and [Me2In(H2O)4]⁺, HW 1407. [Me2Ga(H2O)2]⁺ uses Tr23. The weakly hydrated, linear Me2Tl⁺ description does not require a ladder of Tl acceptor counts |
+| Tr31 | Ga#c-#v3#a; Ga#v3#a0 | Implemented: 2 | Gallatabenzene (HW 1411–1412) and Ga3R3²− rings (1416–1417). For the latter, two Ga− sites contribute one π electron each and the neutral Ga contributes zero (PW). Localized contributors use Tr13/Tr16; no additional MC state |
+| Tr32 | Larger borane/heteroborane adducts, metallaboranes and triel clusters | Not selected | HW 1269–1278, 1322–1326, 1373–1376, 1413–1421. Retain the extraction without generating types from every cluster electron count. B4Cl4's explicitly stated BBB 3c2e bonding (1280) can reuse the neutral local patterns above; Al/Ga/In tetrahedranes and larger metalloids do not by themselves justify another default series |
+| Tr33 | Higher coordination and specialized donor combinations | Not selected | Crown-bound Al/Ga/In/Tl ions, larger borohydride adducts and nine-coordinate solid TlF3; HW 1342, 1372, 1394–1395, 1407. Solid TlF3 can retain the ionic Tl³⁺/F− description using existing states; no nine-donor row or per-complex acceptor ladder is proposed |
+| Tr34 | E#c-#n#v2; E#c-#n#v#h; E#c-#n#h2 (E = Al, Ga) | Implemented: 6 | Calculated singlet AlH2− and GaH2−, Ce03, Tables II–VII and pp. 84–86. Two ordinary E–H bonds and one E lone pair; explicit/mixed/implicit H. These are computationally supported binary anions, not claimed isolated salts. HW 1416–1417 also describes [RGa–GaR]²− with a single Ga–Ga bond and retained lone pairs, using Ga#c-#n#v2. No extrapolation to In/Tl |
+| Tr35 | B#c-#u2#v2; B#c-#u2#v#h; B#c-#u2#h2 | Implemented: 3 | Calculated triplet BH2− (³B1), Ce03, Tables I, IV–V and pp. 81–84. Retain the existing singlet descriptions as well: the final ZPE-corrected estimate favors singlet by only about 0.01 eV, with ordering sensitive to the calculation. Two ordinary B–H bonds and two unpaired electrons; no MC relation needed |
+| Tr36 | E#n#m (E = Al, Ga, In, Tl) | Implemented: 4 | H-bridged E2H2, HW 1339, 1389, Fig. 16.126c. Two local 3c2e bridges with [1,1,0]/[0,1,1] contributions and one retained lone pair per E (PW); existing H#m suffices. The photogenerated HE=EH isomers use ordinary Tr13 states |
+| Tr37 | N#v2#a#d | Implemented: 1 companion | General pyridine-type aromatic N donor; Tu25, Fig. 2, supplies InCl3(py)3. Donation consumes the lone pair while retaining one aromatic electron. Paired aromatic/Kekulé fixtures; the latter uses existing N#v3#d |
+
+#### Counts comparison and coverage
+
+The reviewed set contains 163 descriptions: 162 additions and one replacement.
+All are implemented and pass the valence invariants. The original 35 triel states
+included two borolide entries with orbital/electron counts 8/7; Tr09 corrects one
+and removes the other.
+
+The boron batch has 32 fixtures covering all 31 B/C additions, plus the earlier
+aromatic borolide fixture. Its 128 outputs agree across both models/policies and
+satisfy the valence invariants. Strict atom typing of the earlier BN fixture now
+exposes B− lone-pair/two-unpaired-electron alternatives; MostSaturated retains its
+previous molecule and records the tie-break. Counts is unchanged.
+
+The heavy-triel batch has 137 fixtures covering all 130 triel additions and the
+pyridine-donor N companion. All 548 outputs agree across both models/policies
+and satisfy the valence invariants; all 1215
+preceding snapshots are unchanged. The donor fixtures use characterized ligands:
+InCl3(py)3, TlPh3·NMe3 and ArE→B(C6F5)3 (E = Ga, In, Tl), with
+Ar = 2,6-Dipp2-C6H3 and Dipp = 2,6-iPr2-C6H3. InCl3(py)3 has paired aromatic/Kekulé
+fixtures. The α-AlH3 fixture resolves the central Al in a local coordination
+fragment with supplied cut-boundary occupations. Cp fixtures test metal acceptance;
+donor-side multidonor accounting remains separate work.
+
+| Check | Finding / disposition |
+| --- | --- |
+| Actual-element capacity | Al capacity increased from 8 to 12. The four Tr19 states for AlH3·2D occupy 10 electrons, and Al#c+3#t6 for [Al(H2O)6]³⁺ occupies 12. These selected five-/six-coordinate adducts and ions have consistent electron accounting; the former bound excluded them. The approved bound applies generally, with no molecule-specific exception. Maximum localized valence, charge/H enumeration bounds and saturation targets are unchanged |
+| Aromatic ValenceTable entries | No new entry needed. Corrected B²− reads N's aromatic contribution 2; B− reads C's 1; neutral borabenzene with one acceptor reads N's 1. Ga− reads Ge's 1 and neutral Ga reads the existing Ga 0 |
+| Free-H completion, ordinary Tl | The first-target rule for Tl [1,3] cannot infer Tl#v#h2, Tl#h3, Tl#u#v#h or Tl#u#h2 with free H at those localized valences. Supplied H counts permit these descriptions; the lower target is retained |
+| Free-H completion, InH4−/TlH4− | Shifted Sn/Pb [2,4] lookup cannot infer #v2#h2, #v#h3 or #h4 for either anion with free H at those valences. Supplied H counts permit them |
+| Free-H completion, EH3·2D | Shifted Cl/Br/I [1,3,…] lookup cannot infer #v#h2#t2 or #h3#t2 for Al/Ga/In with free H. Supplied H counts permit them |
+| Enumeration bounds | Maximum-valence, charge and implicit-H enumeration bounds do not reject supplied literal fields; no blanket increases made |
+| Conformance | Every added state is covered, including H variants and aromatic/localized ring descriptions. Coverage checks bookkeeping; it does not distinguish cage geometries or establish bonding assignments |
+
+#### Triel primary sources
+
+All nine papers below are available in full and retained in materials/valence.
+The supplied ME63, Ha03, Wr02 and Wr05 PDFs were checked on 2026-11-03; their
+experimental and bonding sections confirm the selected donor fixtures and
+assignments. No registry or fixture changes were needed.
+
+| Key | Source | Contribution beyond HW |
+| --- | --- | --- |
+| Ce03 | Černušák et al., “Group IIIa Hydrides XH2 and XH2− (X = B, Al, Ga): Electron Affinities and Singlet-Triplet Splittings Revisited,” *Collect. Czech. Chem. Commun.* **68** (2003), 75–88. [DOI](https://doi.org/10.1135/cccc20030075), [PDF](../materials/valence/Cernusak-2003-group13-dihydrides.pdf) | Doublet neutral dihydrides, singlet anions and the nearly degenerate BH2− triplet. Supports Tr01, Tr15, Tr34–Tr35; distinguishes calculated states from experimental characterization |
+| S06 | Segawa, Yamashita and Nozaki, “Boryllithium: Isolation, Characterization, and Reactivity as a Boryl Anion,” *Science* **314** (2006), 113–115. [DOI](https://doi.org/10.1126/science.1131914), [PDF](../materials/valence/Segawa-2006-boryllithium.pdf) | Crystallography, NMR and reactivity support the B− lone-pair description in Tr01/Tr12. The supplied PDF includes the correction to the gallium reference and SI parameter count |
+| M18 | Melichar, Hnyk and Fanfrlík, “A systematic examination of classical and multi-center bonding in heteroborane clusters,” *Phys. Chem. Chem. Phys.* **20** (2018), 4666–4675. [DOI](https://doi.org/10.1039/C7CP07422K), [PDF](../materials/valence/Melichar-2018-heteroborane-bonding.pdf) | Local 3c2e and 4c2e IBOs, ordinary bonds where found (including ortho-carborane C–C), and differences from NBO localization. Integer atom contributions and grouping several bonds into a whole-cage relation are PW choices |
+| B11 | Braunschweig, Chiu, Kupfer and Radacki, “NHC-Stabilized 1-Hydro-1H-borole and Its Nondegenerate Sigmatropic Isomers,” *Inorg. Chem.* **50** (2011), 4247–4249. [DOI](https://doi.org/10.1021/ic200533e), [PDF](../materials/valence/Braunschweig-2011-hydroborole.pdf) | The neutral 2-BH adduct has tetracoordinate B and alternating C–C bonds (p. 4248). An NHC→B graph uses Tr07's B#v2#h#t or B#v3#t with explicit H. The paper does not establish a free B–H borolide dianion; its Scheme 1 B–H borole examples are metal-bound |
+| Tu25 | Tuna et al., *J. Turkish Chem. Soc. A* **12** (2025), 15–22. [DOI](https://doi.org/10.18596/jotcsa.1590991), [PDF](../materials/valence/Tuna-2025-indium-pyridine.pdf) | Fig. 2 and Table 2 reproduce the InCl3(py)3 structure of Jeffs et al. (1984), [DOI](https://doi.org/10.1107/S010827018400785X), supplying a specific Tr20 example |
+| ME63 | Maher and Evans, *J. Chem. Soc.* (1963), 5534–5539. [DOI](https://doi.org/10.1039/JR9630005534), [PDF](../materials/valence/Maher-1963-thallium-amines.pdf) | Pages 5535 and 5537 establish isolated TlPh3·NMe3; elemental analysis and NMR confirm the 1:1 adduct used in Tr18 |
+| Ha03 | Hardman et al., *J. Am. Chem. Soc.* **125** (2003), 2667–2679. [DOI](https://doi.org/10.1021/ja028579j), [PDF](../materials/valence/Hardman-2003-gallium-borane-adducts.pdf) | Compound 10, ArGa→B(C6F5)3 with Ar = 2,6-Dipp2-C6H3; pp. 2676–2677 explicitly describe Ga lone-pair donation |
+| Wr02 | Wright et al., *J. Am. Chem. Soc.* **124** (2002), 8538–8539. [DOI](https://doi.org/10.1021/ja026285s), [PDF](../materials/valence/Wright-2002-indium-borane-adducts.pdf) | Page 8538 and Fig. 2 identify ArInB(C6F5)3, compound 2, with the same Ar group; p. 8539 explicitly discusses In donor action |
+| Wr05 | Wright et al., *J. Am. Chem. Soc.* **127** (2005), 4794–4799. [DOI](https://doi.org/10.1021/ja0432259), [PDF](../materials/valence/Wright-2005-thallium-borane-adducts.pdf) | Compound 3, ArTl→B(C6F5)3 with the same Ar group; Fig. 3 gives its structure, and p. 4799 explicitly assigns Tl lone-pair donation to B |
+
+Tr09's unsupported B–H borolide entry is removed. HW's characterized borolides have
+a non-H B substituent, and B11 does not establish the B–H dianion.
+Further low-valent donor and specialized cluster types are not selected merely
+because papers about them exist.

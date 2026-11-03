@@ -1,0 +1,54 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["B#h" "B#h" "B#h" "B#h" "B#h" "H" "H" "H" "H"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [
+        {:atoms [0 3 4] :attrs "[0,1,1]"}
+        {:atoms [1 5 2] :attrs "[1,1,0]"}
+        {:atoms [2 6 3] :attrs "[1,1,0]"}
+        {:atoms [3 7 4] :attrs "[1,1,0]"}
+        {:atoms [4 8 1] :attrs "[1,1,0]"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["B#h" "B#h" "B#h" "B#h" "B#h" "H" "H" "H" "H"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [
+        {:atoms [0 3 4] :attrs "[0,1,1]"}
+        {:atoms [1 5 2] :attrs "[1,1,0]"}
+        {:atoms [2 6 3] :attrs "[1,1,0]"}
+        {:atoms [3 7 4] :attrs "[1,1,0]"}
+        {:atoms [4 8 1] :attrs "[1,1,0]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["B#h" "B#h" "B#h" "B#h" "B#h" "H" "H" "H" "H"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [
+        {:atoms [0 3 4] :attrs "[0,1,1]"}
+        {:atoms [1 5 2] :attrs "[1,1,0]"}
+        {:atoms [2 6 3] :attrs "[1,1,0]"}
+        {:atoms [3 7 4] :attrs "[1,1,0]"}
+        {:atoms [4 8 1] :attrs "[1,1,0]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["B#h" "B#h" "B#h" "B#h" "B#h" "H" "H" "H" "H"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [
+        {:atoms [0 3 4] :attrs "[0,1,1]"}
+        {:atoms [1 5 2] :attrs "[1,1,0]"}
+        {:atoms [2 6 3] :attrs "[1,1,0]"}
+        {:atoms [3 7 4] :attrs "[1,1,0]"}
+        {:atoms [4 8 1] :attrs "[1,1,0]"}]}
+    :success true
+    :tie-breaks []}}

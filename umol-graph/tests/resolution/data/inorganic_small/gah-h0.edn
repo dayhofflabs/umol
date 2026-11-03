@@ -1,0 +1,4 @@
+; GaH; HW I, pp. 1388-1389.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ga#h0" "H"]
+         :bonds [[0 1 "1"]]}}

@@ -1,0 +1,6 @@
+; Dimer E2Cl6; HW I, pp. 1345-1346, 1394; bridging chlorides: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al#c+" "Al#c+" "Cl#c-" "Cl#c-" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"}]}}

@@ -1,0 +1,5 @@
+; Ammonia borane; HW I, pp. 1242-1243.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B" "N#h3" "H" "H" "H"]
+         :bonds [[0 2 "1"] [0 3 "1"] [0 4 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}
