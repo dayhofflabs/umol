@@ -11,8 +11,8 @@
 //! counts tables, including isotope retention, field preservation, and repeated conversion.
 //! Stage selection is compared with standalone composition for every flag combination on
 //! ingested stereo/aromatic molecules; every flag combination preserves H counts.
-//! Reaction convey checks selective H omission, compacted atom-map indices, and reaction equivalence
-//! for alcohol oxidation with partial correspondence and optional creation/deletion.
+//! Reaction roundtrips cover alcohol oxidation with partial correspondence. Mapping is checked
+//! on methane components; exact H omission uses a finite table of explicit registries.
 //! Export fixtures compare source orderings by canonical GraphIR equality across valence and
 //! isotope policies; generated cases cover fused/linked aromatic systems and mapped reaction stereo.
 //! MOL export compares coordinate-derived stereo with independently specified SMILES, including
@@ -35,6 +35,7 @@ use umol_graph::ops::resolve::{
     IsotopePolicy, ProjectError, ProjectFlags, ResolveConfig, Resolver,
 };
 use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
+use umol_graph::registry;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
@@ -85,30 +86,23 @@ proptest! {
 
     #[test]
     fn test_reaction_smiles_convey_roundtrip(
-        mut mapped in prop::collection::vec(any::<bool>(), 2..10),
+        mapped in prop::collection::vec(any::<bool>(), 2..10),
         label_start in 1u32..1000, label_step in 1u32..10,
         components in any::<bool>(), typing in any::<bool>(), saturated in any::<bool>(),
     ) {
         let count = mapped.len();
         let mut left = String::new();
         let mut right = String::new();
-        let mut left_h = Vec::new();
-        let mut right_h = Vec::new();
         for (index, &paired) in mapped.iter().enumerate() {
             let label = if paired { format!(":{}", label_start + index as u32 * label_step) } else { String::new() };
             let before = if index == 0 { 3 } else { 2 };
             let after = if index == count - 1 { 1 } else { before };
             left.push_str(&format!("[CH{before}{label}]"));
             right.push_str(&format!("[CH{after}{label}]"));
-            left_h.push(if paired || !saturated { Some(before) } else { None });
-            right_h.push(if paired || (!saturated && after != 1) { Some(after) } else { None });
         }
         let oxygen_label = label_start + count as u32 * label_step;
         left.push_str(&format!("[OH:{oxygen_label}]"));
         right.push_str(&format!("=[O:{oxygen_label}]"));
-        mapped.push(true);
-        left_h.push(Some(1));
-        right_h.push(Some(0));
         let input = if components { format!("[OH2].{left}>>{right}.[NH3]") } else { format!("{left}>>{right}") };
         let mut model = ChemistryModel {
             valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
@@ -121,19 +115,6 @@ proptest! {
         let original = source.clone();
         let boundary = ReactionSmiles::convey(&source, &model, &config, &io).unwrap();
         prop_assert_eq!(&source, &original);
-        let mut expected_mapping = BTreeMap::new();
-        for (rank, (index, _)) in mapped.iter().enumerate().filter(|(_, paired)| **paired).enumerate() {
-            expected_mapping.insert(rank as u32 + 1, (vec![index as u32 + u32::from(components)], vec![rank as u32]));
-        }
-        prop_assert_eq!(&boundary.as_table_ir().atom_mapping, &expected_mapping);
-        let mut expected_right_h = mapped.iter().zip(&right_h).filter(|(paired, _)| **paired).map(|(_, h)| *h)
-            .chain(mapped.iter().zip(&right_h).filter(|(paired, _)| !**paired).map(|(_, h)| *h)).collect::<Vec<_>>();
-        if components {
-            left_h.insert(0, if saturated || typing { None } else { Some(2) });
-            expected_right_h.push(if saturated { None } else { Some(3) });
-        }
-        prop_assert_eq!(boundary.as_table_ir().reactants.atoms.iter().map(|atom| atom.implicit_hydrogens).collect::<Vec<_>>(), left_h);
-        prop_assert_eq!(boundary.as_table_ir().products.atoms.iter().map(|atom| atom.implicit_hydrogens).collect::<Vec<_>>(), expected_right_h);
         let text = boundary.render().unwrap();
         prop_assert_eq!(export_reaction_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
         prop_assert_eq!(&source, &original);
@@ -142,6 +123,38 @@ proptest! {
         prop_assert!(source.canonical_eq(&restored, &context));
         let repeated = ReactionSmiles::convey(&restored, &model, &config, &io).unwrap().render().unwrap();
         prop_assert_eq!(text, repeated);
+    }
+
+    #[test]
+    fn test_reaction_smiles_convey_mapping(
+        mapped in prop::collection::vec(any::<bool>(), 1..12),
+        label_start in 1u32..1000, label_step in 1u32..10, prefix in 0usize..3,
+    ) {
+        let mut left = vec!["[CH4]".to_owned(); prefix];
+        let mut right = Vec::new();
+        let mut expected = BTreeMap::new();
+        for (index, &paired) in mapped.iter().enumerate() {
+            let atom = if paired {
+                let rank = expected.len() as u32;
+                expected.insert(rank + 1, (vec![(prefix + index) as u32], vec![rank]));
+                format!("[CH4:{}]", label_start + index as u32 * label_step)
+            } else {
+                "[CH4]".to_owned()
+            };
+            left.push(atom.clone());
+            right.push(atom);
+        }
+        right.reverse();
+        let input = format!("{}>>{}", left.join("."), right.join("."));
+        let model = ChemistryModel {
+            valence: ValenceModel::atom_typing(Cow::Owned(registry!["C#h4"])),
+            ..Default::default()
+        };
+        let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+        let io = SmilesIoConfig::opensmiles();
+        let source = ingest_reaction_smiles_with(&input, &io, &model, &config).unwrap();
+        let boundary = ReactionSmiles::convey(&source, &model, &config, &io).unwrap();
+        prop_assert_eq!(&boundary.as_table_ir().atom_mapping, &expected);
     }
 
     #[test]
@@ -317,6 +330,57 @@ proptest! {
             prop_assert_eq!(&molecule, &original);
         }
     }
+}
+
+#[rstest]
+#[case::unique_methane(registry!["C#h4"], 4, ValenceTieBreak::Strict, None)]
+#[case::unique_methylene(registry!["C#n#h2"], 2, ValenceTieBreak::Strict, None)]
+#[case::plural_methane(registry!["C#n#h2", "C#h4"], 4, ValenceTieBreak::Strict, Some(4))]
+#[case::plural_methylene(registry!["C#n#h2", "C#h4"], 2, ValenceTieBreak::Strict, Some(2))]
+#[case::saturated_methane(registry!["C#n#h2", "C#h4"], 4, ValenceTieBreak::MostSaturated, None)]
+#[case::saturated_methylene(registry!["C#n#h2", "C#h4"], 2, ValenceTieBreak::MostSaturated, Some(2))]
+fn test_reaction_smiles_convey_hydrogens(
+    #[case] registry: AtomTypeRegistry,
+    #[case] hydrogens: u8,
+    #[case] policy: ValenceTieBreak,
+    #[case] unmapped_hydrogens: Option<u8>,
+) {
+    let input = format!("[CH{hydrogens}:1].[CH{hydrogens}]>>[CH{hydrogens}:1].[CH{hydrogens}]");
+    let model = ChemistryModel {
+        valence: ValenceModel {
+            tie_break: policy,
+            ..ValenceModel::atom_typing(Cow::Owned(registry))
+        },
+        ..Default::default()
+    };
+    let config = ResolveConfig {
+        isotope: IsotopePolicy::Natural,
+        ..Default::default()
+    };
+    let io = SmilesIoConfig::opensmiles();
+    let source = ingest_reaction_smiles_with(&input, &io, &model, &config).unwrap();
+    let boundary = ReactionSmiles::convey(&source, &model, &config, &io).unwrap();
+    let expected = vec![Some(hydrogens), unmapped_hydrogens];
+    assert_eq!(
+        boundary
+            .as_table_ir()
+            .reactants
+            .atoms
+            .iter()
+            .map(|atom| atom.implicit_hydrogens)
+            .collect::<Vec<_>>(),
+        expected
+    );
+    assert_eq!(
+        boundary
+            .as_table_ir()
+            .products
+            .atoms
+            .iter()
+            .map(|atom| atom.implicit_hydrogens)
+            .collect::<Vec<_>>(),
+        expected
+    );
 }
 
 #[rstest]

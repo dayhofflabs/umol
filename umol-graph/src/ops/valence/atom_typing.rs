@@ -43,7 +43,8 @@ impl<'a> AtomTypingValence<'a> {
     }
 
     /// Admission: determine candidate sets for each atom under resolution,
-    /// Underdetermined if any atom is non-literal, empty if no atoms are admitted.
+    /// Underdetermined if an element or required complete valence is non-literal,
+    /// empty if no atoms are admitted.
     /// Exactly equal post-meet forms occur once, in first-occurrence order.
     /// Registry patterns leave isotope information unchanged, including unresolved forms.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, AtomTypingError> {
@@ -56,34 +57,42 @@ impl<'a> AtomTypingValence<'a> {
         let mut completions = AtomCompletions::new();
         for id in molecule.atoms().ids() {
             match self.admitted_completions(molecule, id) {
-                Ok(Some(admitted)) => completions.insert(id, admitted),
-                Ok(None) => {}
-                Err(contradiction) => return Solution::Contradictory(contradiction),
+                Solution::Determined(Some(admitted)) => completions.insert(id, admitted),
+                Solution::Determined(None) => {}
+                Solution::Underdetermined(_) => {
+                    return Solution::Underdetermined(AtomCompletions::new())
+                }
+                Solution::Contradictory(contradiction) => {
+                    return Solution::Contradictory(contradiction)
+                }
             }
         }
         Solution::Determined(completions)
     }
 
     /// Determine admitted completions, compatible with the atom's form and constraints.
-    /// `None` when the atom is ground or its element is not literal.
+    /// `None` when the atom is ground. Lookup uses its complete valence reading.
     fn admitted_completions(
         &self,
         molecule: &Molecule,
         id: AtomId,
-    ) -> Result<Option<SmallVec<[AtomForm; 1]>>, AtomTypingError> {
+    ) -> Solution<Option<SmallVec<[AtomForm; 1]>>, AtomTypingError> {
         let atom = molecule.atom(id);
         let Some(element) = atom.element().as_lit() else {
-            return Ok(None);
+            return Solution::Underdetermined(None);
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
-        let aromatic = atom
+        let mismatch = AtomTypingError::NoMatch {
+            atom_id: id,
+            element,
+            charge,
+        };
+        let Some(aromatic) = atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::AromaticValence)
-            .ok_or(AtomTypingError::NoMatch {
-                atom_id: id,
-                element,
-                charge,
-            })?;
+        else {
+            return Solution::Contradictory(mismatch);
+        };
         let is_ground = atom.is_ground();
         let ground_contribution_open = is_ground
             && matches!(
@@ -93,9 +102,18 @@ impl<'a> AtomTypingValence<'a> {
                 ))
             );
         if is_ground && !ground_contribution_open {
-            return Ok(None);
+            return Solution::Determined(None);
         }
-        let rows = self.registry.lookup(element, charge);
+        let Some(AtomConstraintForm::Valence(valence)) = atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::Valence)
+        else {
+            return Solution::Contradictory(mismatch);
+        };
+        let Some(valence) = valence.as_lit() else {
+            return Solution::Underdetermined(None);
+        };
+        let rows = self.registry.lookup(element, valence as u8);
         let rings = rows
             .iter()
             .any(|row| {
@@ -119,6 +137,10 @@ impl<'a> AtomTypingValence<'a> {
         };
         let mut readings = SmallVec::<[(AtomConstraintKey, Option<AtomConstraintForm>); 5]>::new();
         readings.push((AtomConstraintKey::AromaticValence, Some(aromatic)));
+        readings.push((
+            AtomConstraintKey::Valence,
+            Some(AtomConstraintForm::valence(valence)),
+        ));
         let attributes_first = !atom.implicit_hydrogens().is_undetermined();
         let mut admitted = SmallVec::<[AtomForm; 1]>::new();
         for candidate in rows
@@ -127,6 +149,9 @@ impl<'a> AtomTypingValence<'a> {
                 // A field-ground atom is under resolution only for its open
                 // aromatic contribution: only aromatic rows complete it.
                 if ground_contribution_open && !row.constraints.aromatic_valence().is_aromatic() {
+                    return false;
+                }
+                if !atom.charge().is_compatible(&row.charge) {
                     return false;
                 }
                 if attributes_first && !atom.attributes().is_compatible(row) {
@@ -159,18 +184,14 @@ impl<'a> AtomTypingValence<'a> {
             }
         }
         if admitted.is_empty() {
-            return Err(AtomTypingError::NoMatch {
-                atom_id: id,
-                element,
-                charge,
-            });
+            return Solution::Contradictory(mismatch);
         }
-        Ok(Some(admitted))
+        Solution::Determined(Some(admitted))
     }
 
     /// Classify a molecule atom against the registry: `Determined` if some
     /// pattern admits it, `Contradictory` if none does, and `Underdetermined`
-    /// if the atom is not ground.
+    /// if the atom is not ground or its complete valence is non-literal.
     ///
     /// Admission compares each row key with `evidenced_complete`; contradictory
     /// evidence admits no row. Ring context is built when a row requests it.
@@ -187,7 +208,16 @@ impl<'a> AtomTypingValence<'a> {
             return Solution::Underdetermined(());
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
-        let rows = self.registry.lookup(element, charge);
+        let Some(AtomConstraintForm::Valence(valence)) = atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::Valence)
+        else {
+            return Solution::Contradictory(AtomTypingMismatch { element, charge });
+        };
+        let Some(valence) = valence.as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let rows = self.registry.lookup(element, valence as u8);
         let rings = rows
             .iter()
             .any(|row| {
@@ -226,7 +256,7 @@ impl<'a> AtomTypingValence<'a> {
 
     /// Infer an implicit-H count under the valence policy, without using stored H or lone pairs.
     ///
-    /// Filters element/charge lookup results by localized valence, aromatic contribution,
+    /// Filters element/valence lookup results by charge, aromatic contribution,
     /// and retained unpaired-electron count/multiplicity. Other atom constraints do not enter
     /// this calculation. Valence and aromatic evidence use the complete constraint reading,
     /// meeting assertions with relation evidence. Returns None for an absent atom, missing
@@ -254,7 +284,7 @@ impl<'a> AtomTypingValence<'a> {
         else {
             unreachable!()
         };
-        let valence = NumForm::Lit(valence.as_lit()?);
+        let valence = valence.as_lit()? as u8;
         let AtomConstraintForm::AromaticValence(aromatic) =
             constraints.evidenced_complete(AtomConstraintKey::AromaticValence)?
         else {
@@ -262,11 +292,11 @@ impl<'a> AtomTypingValence<'a> {
         };
         let aromatic = AromaticValenceForm::from(aromatic.as_lit()?);
         let mut hydrogens = None;
-        for row in self.registry.lookup(element, Some(charge)) {
-            if !atom
-                .unpaired_electrons()
-                .is_compatible(&row.unpaired_electrons)
-                || !row.constraints.valence().is_compatible(&valence)
+        for row in self.registry.lookup(element, valence) {
+            if row.charge != NumForm::Lit(i64::from(charge))
+                || !atom
+                    .unpaired_electrons()
+                    .is_compatible(&row.unpaired_electrons)
                 || !row.constraints.aromatic_valence().is_compatible(&aromatic)
             {
                 continue;
@@ -298,15 +328,17 @@ mod tests {
 
     #[fixture]
     fn atom_type_registry() -> AtomTypeRegistry {
-        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])
+        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4#v0")])
     }
 
     #[fixture]
     fn plural_registry() -> AtomTypeRegistry {
         AtomTypeRegistry::from_atoms([
-            atom_dsl!("C#c0#h4"),
-            atom_dsl!("N#c0#h0#a1"),
-            atom_dsl!("N#c0#h1#a2"),
+            atom_dsl!("C#c0#h4#v0"),
+            atom_dsl!("N#c0#h0#a1#v0"),
+            atom_dsl!("N#c0#h1#a2#v0"),
+            atom_dsl!("N#c0#h0#a1#v1"),
+            atom_dsl!("N#c0#h1#a2#v1"),
         ])
     }
 
@@ -315,14 +347,14 @@ mod tests {
         let resolver = AtomTypingValence::new(&atom_type_registry);
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
         let mut expected = AtomCompletions::new();
-        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4#D1")]);
+        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4#D1#v0")]);
         assert_eq!(resolver.admit(&molecule), Solution::Determined(expected));
     }
 
     #[rstest]
-    #[case::overlapping(vec![atom_dsl!("C#c0#h*#n0#u0#s"), atom_dsl!("C#c0#h4#n0#u0#s")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s")])]
-    #[case::reversed(vec![atom_dsl!("C#c0#h4#n0#u0#s"), atom_dsl!("C#c0#h*#n0#u0#s")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s")])]
-    #[case::distinct_constraints(vec![atom_dsl!("C#i*#c0#h4#n0#u0#s"), atom_dsl!("C#i*#c0#h4#n0#u0#s#v0")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s"), atom_dsl!("C#i=#c0#h4#n0#u0#s#v0")])]
+    #[case::overlapping(vec![atom_dsl!("C#c0#h*#n0#u0#s#v0"), atom_dsl!("C#c0#h4#n0#u0#s#v0")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0")])]
+    #[case::reversed(vec![atom_dsl!("C#c0#h4#n0#u0#s#v0"), atom_dsl!("C#c0#h*#n0#u0#s#v0")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0")])]
+    #[case::distinct_constraints(vec![atom_dsl!("C#i*#c0#h4#n0#u0#s#v0"), atom_dsl!("C#i*#c0#h4#n0#u0#s#v0#D0")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0"), atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#D0")])]
     fn test_atom_typing_valence_admit_overlap(
         #[case] rows: Vec<AtomForm>,
         #[case] expected: SmallVec<[AtomForm; 1]>,
@@ -392,7 +424,7 @@ mod tests {
             .collect();
         assert_eq!(
             admitted,
-            vec!["N#i=#c0#h#n0#u0#s#a2", "N#i=#c0#h#n0#u0#s#a2"]
+            vec!["N#i=#c0#h#n0#u0#s#v#a2", "N#i=#c0#h#n0#u0#s#v#a2"]
         );
     }
 
@@ -401,25 +433,25 @@ mod tests {
         let resolver = AtomTypingValence::new(&plural_registry);
         let molecule = mol_dsl!(r#"{:atoms ["C#c0" "N#c0#a+"]}"#);
         let mut expected = AtomCompletions::new();
-        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4")]);
+        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4#v0")]);
         expected.insert(
             AtomId(1),
-            smallvec![atom_dsl!("N#c0#h0#a1"), atom_dsl!("N#c0#h1#a2")],
+            smallvec![atom_dsl!("N#c0#h0#a1#v0"), atom_dsl!("N#c0#h1#a2#v0")],
         );
         assert_eq!(resolver.admit(&molecule), Solution::Determined(expected));
     }
 
     #[rstest]
     #[case::topology_key_admits(
-        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h3#D1")]),
+        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h3#D1#v1")]),
         Solution::Determined({
             let mut expected = AtomCompletions::new();
-            expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h3#D1")]);
+            expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h3#D1#v1")]);
             expected
         })
     )]
     #[case::topology_key_rejects(
-        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h2#D2")]),
+        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h2#D2#v1")]),
         Solution::Contradictory(AtomTypingError::NoMatch {
             atom_id: AtomId(0),
             element: Element::C,
@@ -436,10 +468,8 @@ mod tests {
 
     #[rstest]
     #[case::repeated_key(NumForm::Lit(1), vec!["C#c0#h3#v2", "C#c0#h3#v1", "C#c0#h3#v1"], vec!["C#c0#h3#v1"])]
-    #[case::top(NumForm::Undetermined, vec!["C#c0#h3#v2", "C#c0#h3#v1"], vec!["C#c0#h3#v2", "C#c0#h3#v1"])]
     #[case::singleton(NumForm::lit_set([1]), vec!["C#c0#h3#v2", "C#c0#h3#v1"], vec!["C#c0#h3#v1"])]
     #[case::bottom(NumForm::lit_set([]), vec!["C#c0#h3#v2", "C#c0#h3#v1"], vec![])]
-    #[case::unqueried_bottom(NumForm::lit_set([]), vec!["C#c0#h3#v1", "C#c0#h3"], vec!["C#c0#h3"])]
     #[case::multiple_keys(NumForm::Lit(1), vec!["C#c0#h3#v1#t1", "C#c0#h3#v1#t0"], vec!["C#c0#h3#v1#t0"])]
     fn test_atom_typing_valence_admit_readings(
         #[case] order: NumForm,
@@ -509,6 +539,7 @@ mod tests {
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    #[case::bond_order(mol_dsl!(r#"{:atoms ["C#c0" "C#c0"] :bonds [[0 1 "*"]]}"#))]
     fn test_atom_typing_valence_admit_partial(
         atom_type_registry: AtomTypeRegistry,
         #[case] molecule: Molecule,
@@ -554,26 +585,26 @@ mod tests {
     #[rstest]
     #[case::singleton(vec!["C#c0#h4#n0#u0#s#v0#a!"], r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#, Some(4), Some(4))]
     #[case::duplicate(vec!["C#c0#h4#v0#a!", "C#c0#h4#v0#a!"], r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#, Some(4), Some(4))]
-    #[case::same_h(vec!["C#c0#h2#n0", "C#c0#h2#n1"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, Some(2), Some(2))]
-    #[case::plural(vec!["C#c0#h2#n1", "C#c0#h4#n0"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, None, Some(4))]
-    #[case::reversed(vec!["C#c0#h4#n0", "C#c0#h2#n1"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, None, Some(4))]
-    #[case::different_stored_h(vec!["C#c0#h4"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, Some(4), Some(4))]
-    #[case::zero(vec!["C#c0#h0"], r#"{:atoms ["C#c0#h0#n2#u0#s"]}"#, Some(0), Some(0))]
-    #[case::element(vec!["N#c0#h3", "C#c0#h4"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
-    #[case::charge(vec!["C#c+#h3", "C#c0#h4"], r#"{:atoms ["C#c+#h3#u0#s"]}"#, Some(3), Some(3))]
-    #[case::unpaired(vec!["C#c0#h3#u1#s2", "C#c0#h4#u0#s"], r#"{:atoms ["C#c0#h3#u1#s2"]}"#, Some(3), Some(3))]
-    #[case::multiplicity(vec!["C#c0#h2#u2#s3", "C#c0#h0#u2#s"], r#"{:atoms ["C#c0#h2#u2#s3"]}"#, Some(2), Some(2))]
+    #[case::same_h(vec!["C#c0#h2#n0#v0", "C#c0#h2#n1#v0"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, Some(2), Some(2))]
+    #[case::plural(vec!["C#c0#h2#n1#v0", "C#c0#h4#n0#v0"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, None, Some(4))]
+    #[case::reversed(vec!["C#c0#h4#n0#v0", "C#c0#h2#n1#v0"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, None, Some(4))]
+    #[case::different_stored_h(vec!["C#c0#h4#v0"], r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, Some(4), Some(4))]
+    #[case::zero(vec!["C#c0#h0#v0"], r#"{:atoms ["C#c0#h0#n2#u0#s"]}"#, Some(0), Some(0))]
+    #[case::element(vec!["N#c0#h3#v0", "C#c0#h4#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
+    #[case::charge(vec!["C#c+#h3#v0", "C#c0#h4#v0"], r#"{:atoms ["C#c+#h3#u0#s"]}"#, Some(3), Some(3))]
+    #[case::unpaired(vec!["C#c0#h3#u1#s2#v0", "C#c0#h4#u0#s#v0"], r#"{:atoms ["C#c0#h3#u1#s2"]}"#, Some(3), Some(3))]
+    #[case::multiplicity(vec!["C#c0#h2#u2#s3#v0", "C#c0#h0#u2#s#v0"], r#"{:atoms ["C#c0#h2#u2#s3"]}"#, Some(2), Some(2))]
     #[case::valence(vec!["C#c0#h4#v0", "C#c0#h3#v1"], r#"{:atoms ["C#c0#h3#u0#s" "C"] :bonds [[0 1 "1"]]}"#, Some(3), Some(3))]
     #[case::aromatic(vec!["C#c0#h0#v0#a0", "C#c0#h1#v0#a1", "C#c0#h2#v0#a2"], r#"{:atoms ["C#c0#h1#u0#s#a1"]}"#, Some(1), Some(1))]
     #[case::both_valences(vec!["C#c0#h4#v0#a1", "C#c0#h2#v1#a2", "C#c0#h1#v1#a1"], r#"{:atoms ["C#c0#h1#u0#s#a1" "C"] :bonds [[0 1 "1"]]}"#, Some(1), Some(1))]
-    #[case::not_aromatic(vec!["C#c0#h1#a1", "C#c0#h4#a!"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
-    #[case::other_constraints(vec!["C#c0#h4#x2#y3#V8#H6#D7", "C#c0#h4#x0#y0#V4#H4#D4"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
+    #[case::not_aromatic(vec!["C#c0#h1#a1#v0", "C#c0#h4#a!#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
+    #[case::other_constraints(vec!["C#c0#h4#x2#y3#V8#H6#D7#v0", "C#c0#h4#x0#y0#V4#H4#D4#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
     #[case::empty(vec![], r#"{:atoms ["C#c0#h4#u0#s"]}"#, None, None)]
-    #[case::no_match(vec!["C#c+#h3"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, None, None)]
-    #[case::nonliteral_h(vec!["C#c0#h*", "C#c0#h4"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, None, None)]
+    #[case::no_match(vec!["C#c+#h3#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, None, None)]
+    #[case::nonliteral_h(vec!["C#c0#h*#v0", "C#c0#h4#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, None, None)]
     #[case::filtered_nonliteral_h(vec!["C#c0#h*#v1", "C#c0#h4#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
-    #[case::open_charge(vec!["C#c0#h4"], r#"{:atoms ["C#h4#u0#s"]}"#, None, None)]
-    #[case::open_aromatic(vec!["C#c0#h1#a1"], r#"{:atoms ["C#c0#h1#u0#s#a*"]}"#, None, None)]
+    #[case::open_charge(vec!["C#c0#h4#v0"], r#"{:atoms ["C#h4#u0#s"]}"#, None, None)]
+    #[case::open_aromatic(vec!["C#c0#h1#a1#v0"], r#"{:atoms ["C#c0#h1#u0#s#a*"]}"#, None, None)]
     #[case::stored_valence(vec!["C#c0#h4#v0", "C#c0#h3#v1"], r#"{:atoms ["C#c0#h4#u0#s#v1"]}"#, None, None)]
     #[case::aromatic_system(
         vec!["C#c0#h1#v2#a1", "C#c0#h0#v2#a2"],
@@ -589,7 +620,7 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#,
         None, None
     )]
-    #[case::aromatic_zero(vec!["C#c0#h2#a0", "C#c0#h4#a!"], r#"{:atoms ["C#c0#h2#u0#s#a0"]}"#, Some(2), Some(2))]
+    #[case::aromatic_zero(vec!["C#c0#h2#a0#v0", "C#c0#h4#a!#v0"], r#"{:atoms ["C#c0#h2#u0#s#a0"]}"#, Some(2), Some(2))]
     fn test_atom_typing_valence_infer_implicit_hydrogens(
         #[case] rows: Vec<&str>,
         #[case] input: &str,

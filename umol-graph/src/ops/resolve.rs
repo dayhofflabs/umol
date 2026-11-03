@@ -1316,8 +1316,8 @@ mod tests {
         ValenceTieBreak::Strict,
         Solution::Underdetermined(ResolveReport {
             unresolved: AtomCompletions::from_iter([(AtomId(0), vec![
-                atom_dsl!("C#i=#c0#h4#n0#u0#s"),
-                atom_dsl!("C#i=#c0#h3#n0#u1#s2"),
+                atom_dsl!("C#i=#c0#h4#n0#u0#s#v0"),
+                atom_dsl!("C#i=#c0#h3#n0#u1#s2#v0"),
             ].into())]),
             tie_breaks: Vec::new(),
         })
@@ -1344,8 +1344,8 @@ mod tests {
             valence: ValenceModel {
                 tie_break,
                 ..ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
-                    atom_dsl!("C#c0#h4#n0#u0#s"),
-                    atom_dsl!("C#c0#h3#n0#u1#s2"),
+                    atom_dsl!("C#c0#h4#n0#u0#s#v0"),
+                    atom_dsl!("C#c0#h3#n0#u1#s2#v0"),
                 ])))
             },
             ..ChemistryModel::default()
@@ -1621,8 +1621,8 @@ mod tests {
         let model = ChemistryModel {
             valence: ValenceModel {
                 candidates: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
-                    atom_dsl!("C#c0#h*#n0#u0#s"),
-                    atom_dsl!("C#c0#h4#n0#u0#s"),
+                    atom_dsl!("C#c0#h*#n0#u0#s#v0"),
+                    atom_dsl!("C#c0#h4#n0#u0#s#v0"),
                 ])))
                 .candidates,
                 tie_break,

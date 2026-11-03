@@ -2471,8 +2471,6 @@ mod tests {
             let Solution::Underdetermined {} = solution else {
                 panic!("expected Underdetermined under the default model");
             };
-            // The charge-open atom takes the registry's charge-less lookup: every
-            // carbon row is a candidate.
             assert_eq!(
                 report
                     .unwrap()
@@ -2483,7 +2481,6 @@ mod tests {
                     .map(|form| form.to_rust().to_string())
                     .collect::<Vec<_>>(),
                 vec![
-                    "C#c-#h3#n#u0#s#v0#d0#t0#a!#m!",
                     "C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!",
                     "C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!",
                     "C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!",
@@ -2492,6 +2489,8 @@ mod tests {
                     "C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!",
                     "C#c0#h0#n#u2#s3#v0#d0#t0#a!#m!",
                     "C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!",
+                    "C#c-#h3#n#u0#s#v0#d0#t0#a!#m!",
+                    "C#c-4#h0#n4#u0#s#v0#d0#t0#a!#m!",
                 ]
             );
         });

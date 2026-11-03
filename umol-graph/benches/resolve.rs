@@ -384,12 +384,14 @@ fn bench_aromatic_selection(c: &mut Criterion) {
 }
 
 fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
-    let carbon = atom_dsl!("C#c0#a");
-    let nitrogen_zero = atom_dsl!("N#c0#a0");
-    let nitrogen_two = atom_dsl!("N#c0#a2");
+    let carbon = atom_dsl!("C#c0#v2#a");
+    let substituted_carbon = atom_dsl!("C#c0#v3#a");
+    let nitrogen_zero = atom_dsl!("N#c0#v2#a0");
+    let nitrogen_two = atom_dsl!("N#c0#v2#a2");
     let model = ChemistryModel {
         valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
             carbon.clone(),
+            substituted_carbon.clone(),
             nitrogen_zero.clone(),
             nitrogen_two.clone(),
         ]))),
@@ -440,7 +442,9 @@ fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
         assert_eq!(
             state.completions,
             AtomCompletions::from_iter((0..19).map(|atom| {
-                let forms = if atom < 6 || atom == 18 {
+                let forms = if atom == 4 || atom == 5 {
+                    smallvec![substituted_carbon.clone()]
+                } else if atom < 6 || atom == 18 {
                     smallvec![carbon.clone()]
                 } else if atom < 6 + flexible_atoms {
                     smallvec![nitrogen_zero.clone(), nitrogen_two.clone()]

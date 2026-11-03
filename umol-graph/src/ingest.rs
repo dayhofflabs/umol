@@ -1902,7 +1902,7 @@ mod tests {
         "C",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0")]))),
+            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#v0")]))),
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
