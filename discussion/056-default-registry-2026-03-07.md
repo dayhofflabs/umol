@@ -51,7 +51,7 @@ Be 20, Mg 22, Ca 12, Sr 11 and Ba 11 additions are implemented, with 77 new
 fixtures and three Be-amido inputs revised to infer Be's occupation. All 76
 additions have coverage. Capacities are Be/Mg 12, Ca/Sr 16 and Ba 18; Ra remains
 8 and ValenceTable entries are unchanged. The supplied papers, including Fo07,
-are reviewed; PS95 and BPS26 were reviewed in full online.
+are reviewed and archived, as are PS95 and BPS26.
 The Be follow-up records existing-state reuse and unselected narrow non-binary
 descriptions (Ae21, Ae23). KMgH3 uses existing K+, Mg²⁺ and H− states (Ae21).
 The five approved aqua-ion states are implemented (Ae24); bridging-water
@@ -1431,7 +1431,7 @@ The same compilation supplies the doublet ground states of
 single-bond radical descriptions. Atomic ns²np⁴ configurations use HW I, p. 328,
 Table 9.1; OH and pyramidal H3S+/H3Se+ use HW I, pp. 584, 625 and 705, respectively.
 
-I98: [Moss (1998), IUPAC fused-ring nomenclature](https://iupac.qmul.ac.uk/fusedring/app2.html),
+I98: [Moss (1998), IUPAC fused-ring nomenclature](../materials/valence/Moss-1998-fused-ring-appendix-2.html),
 doi:[10.1351/pac199870010143](https://doi.org/10.1351/pac199870010143), Appendix 2,
 entries 71, 78 and 83: furan, thiophene and selenophene structures.
 Furan retains both ordinary O#n2#v2 and aromatic O#n#v2#a2 descriptions.
@@ -1459,8 +1459,9 @@ Angew. Chem. Int. Ed. 31, 1518–1519. Full paper reviewed. Elemental analysis a
 reaction stoichiometry support Se3N2Cl2; an independent synthesis gives the same
 IR spectrum. The paper leaves ionic versus covalent forms of Se3N2Cl2 open.
 
-B82: [Bojes et al. (1982)](https://doi.org/10.1021/ja00382a017), pp. 4839–4840;
-author-posted full text reviewed. Explicit six-electron π system in S3N−;
+B82: [Bojes et al. (1982)](../materials/valence/Bojes-1982-S3N-anion.pdf),
+doi:[10.1021/ja00382a017](https://doi.org/10.1021/ja00382a017), pp. 4839–4840;
+full paper reviewed. Explicit six-electron π system in S3N−;
 reference contributions are one electron per terminal S and per N, and two per internal S.
 C80: [Chivers et al. (1980)](../materials/valence/Chivers-1980-S4N-anion.pdf),
 doi:[10.1021/ja00538a013](https://doi.org/10.1021/ja00538a013), pp. 5773, 5780–5781, Table V.
@@ -1692,7 +1693,7 @@ performance across the registry.
 - **EC76:** Epiotis and Cherry, “On the Aromaticity of Phospholes and Arsoles,” *J. Am. Chem. Soc.* **98** (1976), 4365–4370. [DOI](https://doi.org/10.1021/ja00431a003); [PDF](../materials/valence/Epiotis-1976-phospholes-arsoles.pdf).
 - **M02:** Mattmann et al., “De-aromatizing Phosphole,” *J. Org. Chem.* **67** (2002), 1208–1213. [DOI](https://doi.org/10.1021/jo0108156); [PDF](../materials/valence/Mattmann-2002-phosphole.pdf).
 
-- **F18:** Falvey, “Discrete Existence of Singlet Nitrenium Ions Revisited: Computational Studies of Non-Aryl Nitrenium Ions and Their Rearrangements,” *ACS Omega* **3** (2018), 10418–10432. [DOI](https://doi.org/10.1021/acsomega.8b01038); [full-text XML](../materials/valence/Falvey-2018-nitrenium.xml). Tables 1–2 distinguish the singlet entries from triplet ground states.
+- **F18:** Falvey, “Discrete Existence of Singlet Nitrenium Ions Revisited: Computational Studies of Non-Aryl Nitrenium Ions and Their Rearrangements,” *ACS Omega* **3** (2018), 10418–10432. [DOI](https://doi.org/10.1021/acsomega.8b01038); [full-text XML](../materials/valence/Falvey-2018-nitrenium/Falvey-2018-nitrenium.xml), with figures and SI alongside it. Tables 1–2 distinguish the singlet entries from triplet ground states.
 - **G18:** Ganesamoorthy et al., “From Stable Sb- and Bi-Centered Radicals to a Compound with a Ga=Sb Double Bond,” *Nat. Commun.* **9** (2018), 87. [DOI](https://doi.org/10.1038/s41467-017-02581-2); [PDF](../materials/valence/Ganesamoorthy-2018-Sb-radicals.pdf). NBO analysis on p. 4 supports two bonds, one lone pair and one unpaired electron at Sb.
 - **H81:** Harrison, “Electronic Structure of the Phosphenium Ions PH2+, HPF+, and PF2+,” *J. Am. Chem. Soc.* **103** (1981), 7406–7413. [DOI](https://doi.org/10.1021/ja00415a002); [PDF](../materials/valence/Harrison-1981-phosphenium.pdf). Singlet states with two bonds and a lone pair, pp. 7410–7412.
 - **Z22:** Zhang, Yuan and Wang, “Probing the Electronic Structure and Spectroscopy of Pyrrolyl and Imidazolyl Radicals Using High-Resolution Photoelectron Imaging of Cryogenically Cooled Anions,” *Phys. Chem. Chem. Phys.* **24** (2022), 6505–6514. [DOI](https://doi.org/10.1039/D2CP00189F); [accepted manuscript](../materials/valence/Zhang-2022-pyrrolyl.pdf). Section 3.1.3 assigns the observed B(2A1) pyrrolyl state to σ-electron detachment; the registry's atom-local allocation is PW.
@@ -1856,7 +1857,7 @@ Counts rejection of supplied values.
 
 - **G09:** Ghadwal et al., “Lewis Base Stabilized Dichlorosilylene,” *Angew. Chem. Int. Ed.* **48** (2009), 5683–5686. [DOI](https://doi.org/10.1002/anie.200901766); [SI](../materials/valence/Ghadwal-2009-dichlorosilylene-SI.pdf). Supplied SI pp. 2–3 and 7 give the synthesis and crystallographic data for IPr–SiCl2 (compound 1); HW 1151–1152 supplies the donor/acceptor description.
 - **A93:** Arduengo, Dias, Calabrese and Davidson, “A Carbene-GeI2 Adduct: Model of the Non-Least-Motion Pathway for Dimerization of Singlet Carbenes,” *Inorg. Chem.* **32** (1993), 1541–1542. [DOI](https://doi.org/10.1021/ic00061a004); [PDF](../materials/valence/Arduengo-1993-GeI2-carbene.pdf). Compound 2 is the characterized IMes–GeI2 adduct; Scheme I and the pyramidal Ge geometry support carbene donation. The fixture uses the neutral donor–acceptor encoding (PW).
-- **A12:** Arp et al., “Dispersion Energy Enforced Dimerization of a Cyclic Disilylated Plumbylene,” *J. Am. Chem. Soc.* **134** (2012), 6409–6415. [DOI](https://doi.org/10.1021/ja300654t); [full text](https://pmc.ncbi.nlm.nih.gov/articles/PMC3336735/). Compound 2 and Fig. 1 supply the plumbylene–PEt3 fixture; the crystallographic discussion and NBO analysis explicitly identify P→Pb donation. Full text and structure figure reviewed.
+- **A12:** Arp et al., “Dispersion Energy Enforced Dimerization of a Cyclic Disilylated Plumbylene,” *J. Am. Chem. Soc.* **134** (2012), 6409–6415. [DOI](https://doi.org/10.1021/ja300654t); [archived full-text XML](../materials/valence/Arp-2012-plumbylene/Arp-2012-plumbylene.xml), with figures and SI alongside it. Compound 2 and Fig. 1 supply the plumbylene–PEt3 fixture; the crystallographic discussion and NBO analysis explicitly identify P→Pb donation. Full text and structure figure reviewed.
 - **WA03:** Wang and Andrews, “Infrared Spectra of Group 14 Hydrides in Solid Hydrogen: Experimental Observation of PbH4, Pb2H2, and Pb2H4,” *J. Am. Chem. Soc.* **125** (2003), 6581–6587. [DOI](https://doi.org/10.1021/ja029862l); [PDF](../materials/valence/Wang-Andrews-2003-group14-hydrides.pdf). Matrix-IR evidence for hydrides, including PbH4, PbH3− and bridged Pb2H2/Pb2H4; Table 2 gives the calculated electronic states used in the spectral assignments.
 - **NBS74:** McNesby, *Measures for Air Quality (1972–1973): Annual Report—FY 1973*, NBS Technical Note 828 (1974). [PDF](../materials/valence/McNesby-1974-air-quality-TN828.pdf#page=131). Brinckman and Iverson's project report, p. 123, identifies aqueous Me3Sn+/Me3Pb+ chemistry by proton NMR and laser-Raman spectroscopy; supports the two cation-core fixtures.
 - **B67:** Brooks, *Germyl and Hydrido Palladium Complexes*, doctoral thesis, Durham University (1967). [Repository](https://etheses.durham.ac.uk/id/eprint/8826/); [PDF](../materials/valence/Brooks-1967-germyl-palladium-thesis.pdf). Pages 106–108 establish isolated Pd(PEt3)2(GePh3)2; the fixture uses the selected anionic-donor allocation (PW).
@@ -2078,9 +2079,7 @@ configurations and satisfies the invariants; it needs no additional registry row
 
 #### Alkaline-earth primary-source checks
 
-The supplied S03, WA04M, WA04H, MH23, Co03, Wu81, Ba90 and Fo07 PDFs are reviewed
-and archived in materials/valence. Hu08, vS08, PS95 and BPS26 were reviewed in full
-online at the links below; local PDFs are not archived for those four sources.
+The sources below are reviewed and archived in materials/valence.
 
 | Key | Source | Needed for |
 | --- | --- | --- |
@@ -2091,8 +2090,8 @@ online at the links below; local PDFs are not archived for those four sources.
 | Co03 | Conejo et al., “Synthesis, Solid-State Structure, and Bonding Analysis of the Beryllocenes [Be(C5Me4H)2], [Be(C5Me5)2], and [Be(C5Me5)(C5Me4H)],” *Chem. Eur. J.* **9** (2003), 4452–4461. [DOI](https://doi.org/10.1002/chem.200304876), [PDF](../materials/valence/Conejo-2003-beryllocenes.pdf) | Reviewed: η5/η5 BeCp*2 crystal structure, pp. 4455–4456; ionic/donor–acceptor fragment analysis, pp. 4457–4458. Ae22; the η5/η1 compounds reuse Ae10 |
 | Wu81 | Würthwein, Krogh-Jespersen and Schleyer, “Structures of Complex Beryllium Hydrides and Fluorides, LiBeX3 and Li2BeX4,” *Inorg. Chem.* **20** (1981), 3663–3667. [DOI](https://doi.org/10.1021/ic50225a016), [PDF](../materials/valence/Wuerthwein-1981-complex-beryllium-hydrides-fluorides.pdf) | Reviewed: calculated BeX3−/BeX4²− anions, pp. 3664–3665; LiBeX3 and Li2BeX4 monomers, pp. 3664–3667. Ae21 |
 | Ba90 | Bastide, “Crystal structure of lithium beryllium hydrides LiBeH3, Li2BeH4,” *Solid State Commun.* **74** (1990), 355–358. [DOI](https://doi.org/10.1016/0038-1098(90)90502-3), [PDF](../materials/valence/Bastide-1990-lithium-beryllium-hydrides.pdf) | Reviewed: revised indexing and lattice parameters, pp. 356–357; hypothetical status stated in the conclusion, p. 357. No bond-electron assignment or new registry support |
-| Hu08 | Hu et al., “Crystal structure prediction of LiBeH3 using ab initio total-energy calculations and evolutionary simulations,” *J. Chem. Phys.* **129** (2008), 234105. [DOI](https://doi.org/10.1063/1.3021079), [author PDF](https://uspex-team.org/static/file/Hu-JChemPhys-2008.pdf) | Reviewed: corner-sharing BeH4 chains, pp. 234105-3–4; ionic Li+/chain interaction, pp. 234105-6–7, 234105-11. The local H− bridge allocation is PW |
-| vS08 | van Setten, de Wijs and Brocks, “First-principles calculations of the crystal structure, electronic structure, and thermodynamic stability of Be(BH4)2,” *Phys. Rev. B* **77** (2008), 165115. [DOI](https://doi.org/10.1103/PhysRevB.77.165115), [reviewed preprint](https://arxiv.org/pdf/0712.0907) | Preprint p. 2, Fig. 1 distinguishes chain and pendant BH4 groups in the solid, consistent with HW 1435. Local 3c2e allocation is PW |
-| PS95 | Persson, Sandström, Yokoyama and Chaudhry, “Structure of the Solvated Strontium and Barium Ions in Aqueous, Dimethyl Sulfoxide and Pyridine Solution, and Crystal Structure of Strontium and Barium Hydroxide Octahydrate,” *Z. Naturforsch. A* **50** (1995), 21–37. [DOI](https://doi.org/10.1515/zna-1995-0105), [reviewed publisher full text](https://www.researchgate.net/publication/273506475_Structure_of_the_Solvated_Strontium_and_Barium_Ions_in_Aqueous_Dimethyl_Sulfoxide_and_Pyridine_Solution_and_Crystal_Structure_of_Strontium_and_Barium_Hydroxide_Octahydrate) | Eight-coordinate Sr/Ba hydroxide octahydrate crystal structures; solution measurements in Table 9. Supports Ae24's #t8 states independently of water bridges |
-| BPS26 | Bajnóczi, Persson and Sigfridsson Clauss, “Structure of Concentrated Aqueous Solutions of Alkaline Earth Metal Chlorides and Bromides,” *J. Solution Chem.* **55** (2026), 851–865. [DOI and reviewed full text](https://doi.org/10.1007/s10953-025-01559-9) | Sections 3.2–3.4: seven-coordinate Ca/Sr and nine-coordinate Ba aqua-ion descriptions from solution scattering/EXAFS; also distinguishes concentrated Ca water bridges. Supports Ae24's #t7/#t9 states |
+| Hu08 | Hu et al., “Crystal structure prediction of LiBeH3 using ab initio total-energy calculations and evolutionary simulations,” *J. Chem. Phys.* **129** (2008), 234105. [DOI](https://doi.org/10.1063/1.3021079), [PDF](../materials/valence/Hu-2008-LiBeH3.pdf) | Reviewed: corner-sharing BeH4 chains, pp. 234105-3–4; ionic Li+/chain interaction, pp. 234105-6–7, 234105-11. The local H− bridge allocation is PW |
+| vS08 | van Setten, de Wijs and Brocks, “First-principles calculations of the crystal structure, electronic structure, and thermodynamic stability of Be(BH4)2,” *Phys. Rev. B* **77** (2008), 165115. [DOI](https://doi.org/10.1103/PhysRevB.77.165115), [reviewed preprint](../materials/valence/van-Setten-2008-BeBH4-preprint.pdf) | Preprint p. 2, Fig. 1 distinguishes chain and pendant BH4 groups in the solid, consistent with HW 1435. Local 3c2e allocation is PW |
+| PS95 | Persson, Sandström, Yokoyama and Chaudhry, “Structure of the Solvated Strontium and Barium Ions in Aqueous, Dimethyl Sulfoxide and Pyridine Solution, and Crystal Structure of Strontium and Barium Hydroxide Octahydrate,” *Z. Naturforsch. A* **50** (1995), 21–37. [DOI](https://doi.org/10.1515/zna-1995-0105), [PDF](../materials/valence/Persson-1995-Sr-Ba-solvation.pdf) | Eight-coordinate Sr/Ba hydroxide octahydrate crystal structures; solution measurements in Table 9. Supports Ae24's #t8 states independently of water bridges |
+| BPS26 | Bajnóczi, Sigfridsson Clauss and Persson, “Structure of Concentrated Aqueous Solutions of Alkaline Earth Metal Chlorides and Bromides,” *J. Solution Chem.* **55** (2026), 851–865. [DOI](https://doi.org/10.1007/s10953-025-01559-9), [PDF](../materials/valence/Bajnoczi-2026-alkaline-earth-solutions.pdf) | Sections 3.2–3.4: seven-coordinate Ca/Sr and nine-coordinate Ba aqua-ion descriptions from solution scattering/EXAFS; also distinguishes concentrated Ca water bridges. Supports Ae24's #t7/#t9 states |
 | Fo07 | Fornari, Subedi and Singh, “Structure and dynamics of perovskite hydrides AMgH3 (A = Na, K, Rb) in relation to the corresponding fluorides: A first-principles study,” *Phys. Rev. B* **76** (2007), 214118. [DOI](https://doi.org/10.1103/PhysRevB.76.214118), [PDF](../materials/valence/Fornari-2007-perovskite-hydrides.pdf) | Reviewed: ionic hydride description, section IV, p. 214118-2; effective charges near nominal ionic values, section V and Table IV, p. 214118-5. Existing K+, Mg²⁺ and H− states suffice for Ae21 |
