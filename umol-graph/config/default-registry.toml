@@ -1,7 +1,7 @@
 # Atom typing for valence resolver.
 #
 # This registry is primarily based on Holleman/Wiberg, 103. Auflage. Primary literature sources included where needed.
-# The registry data is sorted by element and localized valence.
+# The registry data is sorted by element, localized valence and charge (0, +1, +2, ..., -1, -2, ...).
 #
 # Key | Reference
 # --- | ---
@@ -11,6 +11,8 @@
 # A12 | Arp et al., J. Am. Chem. Soc. 134 (2012), 6409-6415; doi:10.1021/ja300654t
 # A93 | Arduengo et al., Inorg. Chem. 32 (1993), 1541-1542; doi:10.1021/ic00061a004
 # ADD09 | Aymar, Deiglmayr and Dulieu, Can. J. Phys. 87 (2009), 543-556; doi:10.1139/P09-005
+# AW03H | Andrews and Wang, J. Am. Chem. Soc. 125 (2003), 11751-11760; doi:10.1021/ja036307q
+# AW69 | Allen and Warren, Inorg. Chem. 8 (1969), 1895-1901; doi:10.1021/ic50079a018
 # B00 | Baran, J. Fluorine Chem. 101 (2000), 61-63; doi:10.1016/S0022-1139(99)00194-3
 # B04 | Balaban, Oniciu and Katritzky, Chem. Rev. 104 (2004), 2777-2812; doi:10.1021/cr0306790
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
@@ -47,6 +49,7 @@
 # E92 | Eppley et al., J. Organomet. Chem. 431 (1992), 133-142; doi:10.1016/0022-328X(92)80112-B
 # EC76 | Epiotis and Cherry, J. Am. Chem. Soc. 98 (1976), 4365-4370; doi:10.1021/ja00431a003
 # F18 | Falvey, ACS Omega 3 (2018), 10418-10432; doi:10.1021/acsomega.8b01038
+# Fr24 | Fritsch et al., Chem. Eur. J. (2024), e202400357; doi:10.1002/chem.202400357
 # G09 | Ghadwal et al., Angew. Chem. Int. Ed. 48 (2009), 5683-5686; doi:10.1002/anie.200901766
 # G10 | Grant et al., Inorg. Chem. 49 (2010), 261-270; doi:10.1021/ic901956g
 # G12 | Goebbert, Chem. Phys. Lett. 551 (2012), 19-25; doi:10.1016/j.cplett.2012.08.065
@@ -61,6 +64,7 @@
 # K21 | King, Levason and Reid, Dalton Trans. 50 (2021), 17751-17765; doi:10.1039/D1DT03339E
 # K84 | Krebs, Schäffer and Pohl, Z. Naturforsch. B 39 (1984), 1633-1641; doi:10.1515/znb-1984-1202
 # K91 | Krebs et al., Z. Anorg. Allg. Chem. 592 (1991), 17-34; doi:10.1002/zaac.19915920103
+# KBK80 | de Koning et al., J. Organomet. Chem. 195 (1980), 1-12; doi:10.1016/S0022-328X(00)93381-3
 # KJ86 | Karpas and Jasien, Int. J. Mass Spectrom. Ion Processes 69 (1986), 115-119; doi:10.1016/0168-1176(86)87046-X
 # KP04 | Krossing and Passmore, Inorg. Chem. 43 (2004), 1000-1011; doi:10.1021/ic0207303
 # L97 | Landrum, Goldberg and Hoffmann, J. Chem. Soc., Dalton Trans. (1997), 3605-3613; doi:10.1039/A703736H
@@ -78,6 +82,7 @@
 # MH23 | Pang et al., ACS Omega 8 (2023), 19391-19401; doi:10.1021/acsomega.3c00352
 # MMW73 | Moras, Metz and Weiss, Acta Cryst. B29 (1973), 388-395; doi:10.1107/S0567740873002645
 # MP12 | Mähler and Persson, Inorg. Chem. 51 (2012), 425-438; doi:10.1021/ic2018693
+# Mo01 | Mosyagin et al., GRECP/RCC calculation of HgH (2001); arXiv:physics/0101047v4
 # N14 | Närhi et al., Spectrochim. Acta A 117 (2014), 728-738; doi:10.1016/j.saa.2013.09.063
 # NBS74 | McNesby, Measures for Air Quality (1972-1973), NBS Technical Note 828 (1974), p. 123
 # OC82 | Oberhammer and Christe, Inorg. Chem. 21 (1982), 273-275; doi:10.1021/ic00131a050
@@ -93,6 +98,7 @@
 # S20 | Scheibe et al., Eur. J. Inorg. Chem. (2020), 4483-4496; doi:10.1002/ejic.202000845
 # SJ73 | Schroeder and Jacobson, Inorg. Chem. 12 (1973), 210-213; doi:10.1021/ic50119a046
 # Sh73 | Shaw, Carroll and Thomas, J. Am. Chem. Soc. 95 (1973), 5870-5875; doi:10.1021/ja00799a006
+# SYB05 | Shayesteh et al., Chem. Eur. J. 11 (2005), 4709-4712; doi:10.1002/chem.200500332
 # T90 | Trinquier, J. Am. Chem. Soc. 112 (1990), 2130-2137; doi:10.1021/ja00162a014
 # Tu25 | Tuna et al., J. Turkish Chem. Soc. A 12 (2025), 15-22; doi:10.18596/jotcsa.1590991
 # V18 | Valjus et al., Can. J. Chem. 96 (2018), 591-598; doi:10.1139/cjc-2018-0047
@@ -101,8 +107,11 @@
 # WA03 | Wang and Andrews, J. Am. Chem. Soc. 125 (2003), 6581-6587; doi:10.1021/ja029862l
 # WA04M | Wang and Andrews, J. Phys. Chem. A 108 (2004), 11511-11520; doi:10.1021/jp046410h
 # WA04H | Wang and Andrews, J. Phys. Chem. A 108 (2004), 11500-11510; doi:10.1021/jp046046m
+# WA04Z | Wang and Andrews, J. Phys. Chem. A 108 (2004), 11006-11013; doi:10.1021/jp046414m
 # WJ74 | Wismer and Jacobson, Inorg. Chem. 13 (1974), 1678-1680; doi:10.1021/ic50137a026
+# WWS01 | Wang et al., J. Chem. Phys. 114 (2001), 7388-7395; doi:10.1063/1.1362289
 # Z22 | Zhang, Yuan and Wang, Phys. Chem. Chem. Phys. 24 (2022), 6505-6514; doi:10.1039/D2CP00189F
+# Z23 | Zainab et al., Critically Evaluated Atomic Data for Au IV Spectrum (2023); doi:10.3847/1538-4365/acd117
 
 [H]
 0 = [
@@ -391,6 +400,7 @@
     "O #c+ #n2 #v",    # singlet oxenium R-O+; phenyloxenium: H13, pp. 9079-9080
     "O #c- #n3 #v",    # OX-, OH-, atom-localized O2-; HW I, pp. 566, 592, 600
     "O #c- #n2 #v #d", # terminal hydroxido donor; HW II, p. 2015
+    "O #c- #v #d3",    # mu3-alkoxido donor in [RZnOR]4; HW II, p. 1764; allocation: PW
 ]
 2 = [
     "O #n2 #v2",       # O2, bond-charged O2+/O2-, OH2, OX2; HW I, pp. 565-566, 572, 590
@@ -511,10 +521,10 @@
     "Al #v #h #m",      # Al2H6 bridges; HW I, p. 1339; assignment: PW
     "Al #v #h2 #t",     # AlH3.D; HW I, p. 1340
     "Al #v #h2 #t2",    # AlH3(NMe3)2; HW I, p. 1340
-    "Al #c- #v #h3",    # AlH4-; HW I, pp. 1342-1343
-    "Al #c- #n #v #h",  # singlet AlH2-, calculated; Ce03
     "Al #c+ #v #h #t2", # Al amido-bridged hydrides; HW I, p. 1340; assignment: PW
     "Al #c+2 #v #t3",   # [RAlNR′]4, [HAlNR′]4; HW I, pp. 1368-1369; assignment: PW
+    "Al #c- #v #h3",    # AlH4-; HW I, pp. 1342-1343
+    "Al #c- #n #v #h",  # singlet AlH2-, calculated; Ce03
 ]
 2 = [
     "Al #v2 #m",      # Al2Me6; HW I, p. 1366; assignment: PW
@@ -871,21 +881,88 @@
 
 [Cu]
 0 = [
-    "Cu #n5 #u",      # Cu atom, s1d10
-    "Cu #c+ #n5",     # Cu+, d10
-    "Cu #c+2 #n4 #u", # Cu2+, d9
+    "Cu #n5 #u",           # Cu atom, s1d10; HW II, p. 1538, Table 19.1
+    "Cu #n5 #h",           # CuH; HW II, p. 1695
+    "Cu #n5 #m",           # CuR aggregates, local Cu-C-Cu 3c2e; HW II, p. 1708; contributions: PW
+    "Cu #c+ #n5",          # Cu+, d10; HW II, pp. 1693-1694
+    "Cu #c+ #n5 #t",       # Cu(CO)+; HW II, p. 1696
+    "Cu #c+ #n5 #t2",      # Cu(NH3)2+, Cu(CN)2-; HW II, pp. 1696-1697; allocation: PW
+    "Cu #c+ #n5 #t3",      # Cu(CO)3+, Cu(CN)3(2-); HW II, pp. 1696-1697; allocation: PW
+    "Cu #c+ #n5 #t4",      # Cu(CO)4+, Cu(NH3)4+, Cu(CN)4(3-); HW II, pp. 1696-1697; allocation: PW
+    "Cu #c+ #n5 #t #m0",   # [(PPh3)CuH]6; HW II, pp. 1694-1696; Fr24, pp. 2, 4-5; H- bridges: PW
+    "Cu #c+2 #n4 #u",      # Cu2+, d9; HW II, pp. 1693-1694
+    "Cu #c+2 #n4 #u #t4",  # Cu(NH3)4(2+), CuCl4(2-); HW II, pp. 1700, 1705; allocation: PW
+    "Cu #c+2 #n4 #u #t5",  # CuCl5(3-), Cu acetate dimer; HW II, pp. 1700, 1705; allocation: PW
+    "Cu #c+2 #n4 #u #t6",  # Cu(H2O)6(2+), Cu(NH3)6(2+), CuF6(4-); HW II, pp. 1694, 1700, 1705; PW
+    "Cu #c+3 #n4 #t4",     # Cu(OH)4-, paired d8; HW II, p. 1707; allocation: PW
+    "Cu #c+3 #n3 #u2 #t6", # CuF6(3-), d8 triplet; HW II, p. 1707; AW69, Table II; allocation: PW
+    "Cu #c+4 #n3 #u #t6",  # CuF6(2-), d7 doublet; HW II, p. 1707; allocation: PW
+    "Cu #c- #n5 #h2",      # CuH2- singlet; AW03H, pp. 11753-11756
+]
+1 = [
+    "Cu #n5 #v",        # CuH; HW II, p. 1695
+    "Cu #n5 #v #t3",    # CuCl(PR3)3, CuCl(CO)(H2O)2; HW II, p. 1696
+    "Cu #c- #n5 #v #h", # CuH2- singlet; AW03H, pp. 11753-11756
+]
+2 = [
+    "Cu #n4 #u #v2",     # Molecular CuCl2/CuBr2 doublets; WWS01, pp. 7391-7392
+    "Cu #n4 #u #v2 #t2", # CuCl2D2, CuBr2(NH3)2; HW II, pp. 1700-1701
+    "Cu #n4 #u #v2 #t4", # CuCl2(H2O)4; HW II, pp. 1700-1701
+    "Cu #c- #n5 #v2",    # Cu(CN)2-, CuR2-, CuH2-; HW II, pp. 1697, 1707-1708; AW03H
+]
+3 = [
+    "Cu #c-2 #n5 #v3", # Cu(CN)3(2-); HW II, p. 1697; ordinary bonds: PW
+]
+4 = [
+    "Cu #c- #n4 #v4",     # Cu(OH)4-, paired d8; HW II, p. 1707; allocation: PW
+    "Cu #c-2 #n4 #u #v4", # CuCl4(2-); HW II, p. 1700; ordinary bonds: PW
+    "Cu #c-3 #n5 #v4",    # Cu(CN)4(3-), CuCl4(3-); HW II, pp. 1696-1697; ordinary bonds: PW
+]
+5 = [
+    "Cu #c-3 #n4 #u #v5", # CuCl5(3-); HW II, p. 1700; ordinary bonds: PW
+]
+6 = [
+    "Cu #c-2 #n3 #u #v6",  # CuF6(2-), d7 doublet; HW II, p. 1707; allocation: PW
+    "Cu #c-3 #n3 #u2 #v6", # CuF6(3-), d8 triplet; HW II, p. 1707; AW69, Table II; allocation: PW
+    "Cu #c-4 #n4 #u #v6",  # CuF6(4-); HW II, p. 1700; ordinary bonds: PW
 ]
 
 [Zn]
 0 = [
-    "Zn #n",   # Zn atom, s2
-    "Zn #c+2", # Zn2+, s0
+    "Zn #n",       # Zn atom, s2; HW II, pp. 1747, 1751
+    "Zn #h2",      # ZnH2; HW II, p. 1755; SYB05
+    "Zn #u #h",    # ZnH doublet; WA04Z, Tables 5-6
+    "Zn #c+2",     # Zn2+; HW II, pp. 1753-1754
+    "Zn #c+2 #t2", # ZnMe2, methyl donors; HW II, p. 1763; allocation: PW
+    "Zn #c+2 #t3", # ZnCl3-, chloride donors; HW II, p. 1756; allocation: PW
+    "Zn #c+2 #t4", # ZnCl4(2-), chloride donors; HW II, p. 1756; allocation: PW
+    "Zn #c+2 #t5", # Zn(acac)2(H2O); HW II, p. 1754; allocation: PW
+    "Zn #c+2 #t6", # [Zn(H2O)6]2+; HW II, pp. 1753-1754
+]
+1 = [
+    "Zn #v #h",         # ZnH2; HW II, p. 1755; SYB05
+    "Zn #u #v",         # ZnH doublet; WA04Z, Tables 5-6
+    "Zn #c+ #v",        # Zn2(2+); HW II, p. 1762; ordinary bond: PW
+    "Zn #c+ #v #t2",    # [MeZnNPh2]2; HW II, p. 1764, Fig. 23.6d; bridge donors: PW
+    "Zn #c+ #v #t3",    # [RZnX]4, [RZnOR]4, ZnCp2; HW II, pp. 1763-1764; donors: PW
+    "Zn #c+ #v #t #m0", # [RZnH.py]3 bridges; HW II, p. 1764; KBK80; assignment: PW
+]
+2 = [
+    "Zn #v2",     # ZnH2, ZnR2; HW II, pp. 1755, 1763-1764; SYB05
+    "Zn #v2 #t",  # R2ZnD; HW II, p. 1763
+    "Zn #v2 #t2", # R2ZnD2; HW II, p. 1763
+]
+3 = [
+    "Zn #c- #v3",    # ZnCl3-, ordinary bonds; HW II, p. 1756; allocation: PW
+    "Zn #c- #v3 #t", # Zn(OH)3(H2O)-; HW II, p. 1758; allocation: PW
+]
+4 = [
+    "Zn #c-2 #v4", # ZnCl4(2-), ordinary bonds; HW II, p. 1756; allocation: PW
 ]
 
 [Ga]
 0 = [
     "Ga #n #u",       # Ga atom, s2p1; HW I, p. 1216
-    "Ga #c+3",        # Ga3+; HW I, pp. 1387, 1399
     "Ga #h3",         # GaH3; HW I, pp. 1388-1389
     "Ga #n #h",       # GaH; HW I, p. 1388
     "Ga #u #h2",      # GaH2 radical; HW I, pp. 1388-1389; Ce03
@@ -896,9 +973,10 @@
     "Ga #c+ #h2 #t2", # Ga amido-bridged hydrides; HW I, pp. 1390-1391; assignment: PW
     "Ga #c+ #n #t3",  # GaCp; HW I, pp. 1408-1409; assignment: PW
     "Ga #c+ #n",      # Ga(I) salts; HW I, pp. 1387, 1393-1395
+    "Ga #c+3",        # Ga3+; HW I, pp. 1387, 1399
+    "Ga #c+3 #t6",    # [Ga(H2O)6]3+; HW I, p. 1399
     "Ga #c- #n #h2",  # singlet GaH2-, calculated; Ce03
     "Ga #c- #h4",     # GaH4-; HW I, p. 1392
-    "Ga #c+3 #t6",    # [Ga(H2O)6]3+; HW I, p. 1399
 ]
 1 = [
     "Ga #v #h2",        # GaH3; HW I, pp. 1388-1389
@@ -1202,16 +1280,69 @@
 
 [Ag]
 0 = [
-    "Ag #n5 #u",      # Ag atom, s1d10
-    "Ag #c+ #n5",     # Ag+, d10
-    "Ag #c+ #n5 #t3", # [Ag2(I2)4]2+; M16, pp. 9263-9264, Fig. 1
-    "Ag #c+2 #n4 #u", # Ag2+, d9
+    "Ag #n5 #u",           # Ag atom, s1d10; HW II, p. 1538, Table 19.1
+    "Ag #n5 #h",           # AgH; HW II, p. 1714
+    "Ag #c+ #n5",          # Ag+, d10; HW II, p. 1714
+    "Ag #c+ #n5 #t3",      # Ag(I) three-donor complexes; HW II, p. 1714; [Ag2(I2)4]2+: M16, Fig. 1
+    "Ag #c+ #n5 #t",       # Ag(CO)+; HW II, p. 1718
+    "Ag #c+ #n5 #t2",      # Ag(NH3)2+, Ag(CN)2-; HW II, pp. 1714-1717; allocation: PW
+    "Ag #c+ #n5 #t4",      # Ag(H2O)4+, Ag(PPh3)4+; HW II, pp. 1713-1714, 1718
+    "Ag #c+2 #n4 #u",      # Ag2+, d9; HW II, pp. 1719-1720
+    "Ag #c+2 #n4 #u #t4",  # Ag(py)4(2+), Ag(bipy)2(2+), AgF4(2-); HW II, pp. 1719-1721; allocation: PW
+    "Ag #c+2 #n4 #u #t6",  # Ag(H2O)6(2+), AgF6(4-); HW II, pp. 1719-1720; allocation: PW
+    "Ag #c+3 #n4 #t4",     # AgF4-, paired d8; HW II, p. 1721; allocation: PW
+    "Ag #c+3 #n3 #u2 #t6", # AgF6(3-), d8 triplet; HW II, pp. 1714, 1721; AW69, Table II; allocation: PW
+    "Ag #c- #n5 #h2",      # AgH2- singlet; AW03H, pp. 11753-11756
+]
+1 = [
+    "Ag #n5 #v",        # AgH; HW II, p. 1714
+    "Ag #n5 #v #t2",    # AgI(PR3)2; HW II, p. 1714
+    "Ag #n5 #v #t3",    # AgX(PR3)3; HW II, p. 1717
+    "Ag #c- #n5 #v #h", # AgH2- singlet; AW03H, pp. 11753-11756
+]
+2 = [
+    "Ag #c- #n5 #v2", # Ag(CN)2-, AgR2-, AgH2-; HW II, pp. 1715-1717, 1722; AW03H
+]
+4 = [
+    "Ag #c- #n4 #v4",     # AgF4-, paired d8; HW II, p. 1721; allocation: PW
+    "Ag #c-2 #n4 #u #v4", # AgF4(2-); HW II, p. 1719; ordinary bonds: PW
+]
+6 = [
+    "Ag #c-3 #n3 #u2 #v6", # AgF6(3-), d8 triplet; HW II, pp. 1714, 1721; AW69, Table II; allocation: PW
+    "Ag #c-4 #n4 #u #v6",  # AgF6(4-); HW II, p. 1719; ordinary bonds: PW
 ]
 
 [Cd]
 0 = [
-    "Cd #n",   # Cd atom, s2
-    "Cd #c+2", # Cd2+, s0
+    "Cd #n",       # Cd atom, s2; HW II, pp. 1747, 1751
+    "Cd #h2",      # CdH2; HW II, p. 1755; SYB05
+    "Cd #u #h",    # CdH doublet; WA04Z, Tables 5-6
+    "Cd #c+2",     # Cd2+; HW II, pp. 1753-1754
+    "Cd #c+2 #t2", # CdMe2, methyl donors; HW II, p. 1763; allocation: PW
+    "Cd #c+2 #t3", # CdCl3-, chloride donors; HW II, p. 1756; allocation: PW
+    "Cd #c+2 #t4", # CdCl4(2-), chloride donors; HW II, p. 1756; allocation: PW
+    "Cd #c+2 #t5", # CdCl5(3-), chloride donors; HW II, p. 1756; allocation: PW
+    "Cd #c+2 #t6", # [Cd(H2O)6]2+; HW II, pp. 1753-1754
+]
+1 = [
+    "Cd #v #h",      # CdH2; HW II, p. 1755; SYB05
+    "Cd #u #v",      # CdH doublet; WA04Z, Tables 5-6
+    "Cd #c+ #v",     # Cd2(2+); HW II, p. 1762; ordinary bond: PW
+    "Cd #c+ #v #t3", # CdCp2, eta1/eta5; HW II, p. 1781; haptic order 3: PW
+]
+2 = [
+    "Cd #v2",     # CdH2, CdR2; HW II, pp. 1755, 1763-1764; SYB05
+    "Cd #v2 #t",  # R2CdD; HW II, p. 1763
+    "Cd #v2 #t2", # R2CdD2; HW II, p. 1763
+]
+3 = [
+    "Cd #c- #v3", # CdCl3-, ordinary bonds; HW II, p. 1756; allocation: PW
+]
+4 = [
+    "Cd #c-2 #v4", # CdCl4(2-), ordinary bonds; HW II, p. 1756; allocation: PW
+]
+5 = [
+    "Cd #c-3 #v5", # CdCl5(3-), ordinary bonds; HW II, p. 1756; allocation: PW
 ]
 
 [In]
@@ -1657,19 +1788,86 @@
 
 [Au]
 0 = [
-    "Au #n5 #u",       # Au atom, s1d10
-    "Au #c+ #n5",      # Au+, d10
-    "Au #c+3 #n4",     # Au3+, d8 low-spin
-    "Au #c+3 #n3 #u2", # Au3+, d8 high-spin
+    "Au #n5 #u",       # Au atom, s1d10; HW II, p. 1538, Table 19.1
+    "Au #n5 #h",       # AuH; HW II, p. 1733
+    "Au #n4 #u #h2",   # AuH2 doublet; AW03H, pp. 11757-11758
+    "Au #c+ #n5",      # Au+, d10; HW II, p. 1728
+    "Au #c+ #n5 #t",   # Au(CO)+, LAu+; HW II, pp. 1734, 1742
+    "Au #c+ #n5 #t2",  # Au(CO)2+, Au(PR3)2+; HW II, pp. 1734, 1742
+    "Au #c+ #n5 #t3",  # Au(CO)3+, Au(PR3)3+; HW II, pp. 1734, 1742
+    "Au #c+ #n5 #t4",  # Au(PR3)4+; HW II, p. 1734
+    "Au #c+3 #n4",     # Au3+, d8 singlet; Z23, Table 2
+    "Au #c+3 #n3 #u2", # Au3+ free-ion ground state, d8 3F4; Z23, Table 2
+    "Au #c+3 #n4 #t4", # Au(NH3)4(3+), AuX4-; HW II, pp. 1737-1738; allocation: PW
+    "Au #c+3 #n4 #t5", # Au(III) halide-substitution intermediate; HW II, pp. 1737-1738; halide donors: PW
+    "Au #c+5 #n3 #t6", # AuF6-, paired d6; HW II, pp. 1738-1739; F- donors: PW
+    "Au #c- #n6",      # Au- aurides, d10s2; HW II, pp. 1739-1740
+    "Au #c- #n5 #h2",  # AuH2-; HW II, p. 1733; AW03H, pp. 11754-11756
+    "Au #c- #n4 #h4",  # AuH4-; HW II, p. 1733; AW03H, pp. 11754-11757
+]
+1 = [
+    "Au #n5 #v",         # AuH; HW II, p. 1733
+    "Au #n5 #v #t",      # AuCl(PR3), RAuPR3; HW II, pp. 1734, 1742-1743
+    "Au #n5 #v #t2",     # AuCl(PR3)2; HW II, p. 1734
+    "Au #n5 #v #t3",     # AuCl(PR3)3; HW II, p. 1734
+    "Au #n4 #u #v #h",   # AuH2 doublet; AW03H, pp. 11757-11758
+    "Au #c- #n5 #v #h",  # AuH2-; HW II, p. 1733; AW03H, pp. 11754-11756
+    "Au #c- #n4 #v #h3", # AuH4-; HW II, p. 1733; AW03H, pp. 11754-11757
+]
+2 = [
+    "Au #n4 #u #v2",      # AuCl2/AuBr2, AuH2 doublets; HW II, p. 1735; AW03H, pp. 11757-11758
+    "Au #c+ #n4 #v2 #t2", # Au2X6, Me2Au(H2O)2+; HW II, pp. 1736-1737, 1743-1744; bridging X- donors: PW
+    "Au #c- #n5 #v2",     # Au(CN)2-, AuR2-, AuH2-; HW II, pp. 1733-1734, 1742-1743; AW03H
+    "Au #c- #n4 #v2 #h2", # AuH4-; HW II, p. 1733; AW03H, pp. 11754-11757
+]
+3 = [
+    "Au #n4 #v3",        # Molecular AuCl3/AuBr3, AuMe3; HW II, pp. 1736, 1743
+    "Au #n4 #v3 #t",     # AuCl3(H2O), AuMe3(PPh3); HW II, pp. 1736-1737, 1743
+    "Au #c- #n4 #v3 #h", # AuH4-; HW II, p. 1733; AW03H, pp. 11754-11757
+]
+4 = [
+    "Au #c+ #n3 #v4 #t2", # Au2F10; HW II, pp. 1738-1739; bridging F- donors: PW
+    "Au #c- #n4 #v4",     # AuX4-, Au(CN)4-, AuMe4-, AuH4-; HW II, pp. 1733, 1737-1738, 1743; AW03H; PW
+]
+5 = [
+    "Au #n3 #v5", # AuF5 monomer, paired d6; HW II, pp. 1738-1739
+]
+6 = [
+    "Au #c- #n3 #v6", # AuF6-, paired d6; HW II, pp. 1738-1739; ordinary bonds: PW
 ]
 
 [Hg]
 0 = [
-    "Hg #n6",      # Hg atom, s2d10
-    "Hg #c+2 #n5", # Hg2+, d10
+    "Hg #n6",          # Hg atom, s2d10; HW II, pp. 1747, 1769
+    "Hg #n5 #h2",      # HgH2; HW II, p. 1755; SYB05
+    "Hg #n5 #u #h",    # HgH doublet; SYB05; Mo01, Table III
+    "Hg #c+2 #n5",     # Hg2+, d10; HW II, pp. 1767-1768
+    "Hg #c+2 #n5 #t2", # Hg(NH3)2(2+); HW II, p. 1773
+    "Hg #c+2 #n5 #t3", # HgCl3-, chloride donors; HW II, pp. 1768, 1772; allocation: PW
+    "Hg #c+2 #n5 #t4", # HgCl4(2-), chloride donors; HW II, pp. 1768, 1772; allocation: PW
+    "Hg #c+2 #n5 #t5", # HgCl5(3-), chloride donors; HW II, p. 1773; allocation: PW
+    "Hg #c+2 #n5 #t6", # [Hg(H2O)6]2+; HW II, p. 1768
 ]
 1 = [
-    "Hg #c+ #n5 #v", # [Hg2]2+
+    "Hg #n5 #v #h",      # HgH2; HW II, p. 1755; SYB05
+    "Hg #n5 #u #v",      # HgH doublet; SYB05; Mo01, Table III
+    "Hg #c+ #n5 #v",     # Hg2(2+), RHg+; HW II, pp. 1771-1772, 1781
+    "Hg #c+ #n5 #v #t",  # RHg(H2O)+, RHgD+; HW II, p. 1781
+    "Hg #c+ #n5 #v #t2", # RHg(bipy)+; HW II, p. 1781
+    "Hg #c+ #n5 #v #t3", # Hg2X4D2; HW II, p. 1775, Fig. 23.10g; bridge donors: PW
+]
+2 = [
+    "Hg #n5 #v2",     # HgH2, HgR2; HW II, pp. 1755, 1780-1781; SYB05
+    "Hg #n5 #v2 #t2", # HgX2D2; HW II, p. 1775, Fig. 23.10f
+]
+3 = [
+    "Hg #c- #n5 #v3", # HgCl3-, ordinary bonds; HW II, pp. 1772-1773; allocation: PW
+]
+4 = [
+    "Hg #c-2 #n5 #v4", # HgCl4(2-), ordinary bonds; HW II, pp. 1772-1773; allocation: PW
+]
+5 = [
+    "Hg #c-3 #n5 #v5", # HgCl5(3-), ordinary bonds; HW II, p. 1773; allocation: PW
 ]
 
 [Tl]

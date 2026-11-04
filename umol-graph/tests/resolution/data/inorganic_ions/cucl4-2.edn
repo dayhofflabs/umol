@@ -1,0 +1,4 @@
+; [CuCl4](-2); HW II, pp. 1700-1701; ordinary bonds: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu#c-2" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

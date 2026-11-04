@@ -1,0 +1,3 @@
+; Square-planar singlet AuH4-; HW II, p. 1733; Andrews and Wang (2003), pp. 11754-11757; doi:10.1021/ja036307q.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au#c-#h4"]}}

@@ -1,0 +1,4 @@
+; [Ag(NH3)2]+; HW II, p. 1714.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ag#c+" "N#h3" "N#h3"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; Molecular AuH; HW II, p. 1733.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au" "H"]
+         :bonds [[0 1 "1"]]}}

@@ -1,0 +1,6 @@
+; Five-coordinate intermediate in [AuCl4]-/Br- substitution; HW II, pp. 1737-1738; halide donation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au#c+3" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Br#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,5 @@
+; CuBr2(NH3)2; HW II, pp. 1700-1701.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu" "Br" "Br" "N#h3" "N#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

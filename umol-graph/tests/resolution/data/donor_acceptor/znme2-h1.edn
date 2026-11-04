@@ -1,7 +1,6 @@
-; Dimethylzinc; HW I, pp. 1060-1062; anionic methyl-donor allocation: PW.
-; Zn(II) occupation supplied.
+; Dimethylzinc; HW II, p. 1763; anionic methyl-donor allocation: PW.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
- :input {:atoms ["Zn#c+2#n0#u0#s1" "C#c-#h1" "C#c-#h1" "H" "H" "H"
+ :input {:atoms ["Zn#c+2" "C#c-#h1" "C#c-#h1" "H" "H" "H"
                  "H"]
          :bonds [[1 3 :single] [1 4 :single] [2 5 :single] [2 6 :single]]
          :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}

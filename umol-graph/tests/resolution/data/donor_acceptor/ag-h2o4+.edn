@@ -1,0 +1,5 @@
+; [Ag(H2O)4]+; HW II, pp. 1713, 1718.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ag#c+" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

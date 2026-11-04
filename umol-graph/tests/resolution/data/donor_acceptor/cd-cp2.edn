@@ -1,0 +1,6 @@
+; CdCp2, eta1/eta5; HW II, p. 1781; haptic order 3: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cd#c+" "C#h" "C#h" "C#h" "C#h" "C#h" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 1 "1"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"]
+                 [9 10 "1#a"] [10 6 "1#a"]]
+         :dative-bonds [{:donors [6 7 8 9 10] :acceptor 0 :attrs "3"}]}}

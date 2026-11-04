@@ -1,0 +1,4 @@
+; Molecular CuCl2 doublet; Wang et al. (2001), pp. 7391-7392; doi:10.1063/1.1362289.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

@@ -1,0 +1,4 @@
+; [ZnCl4](2-); HW II, pp. 1756; ordinary bonds: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zn#c-2" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

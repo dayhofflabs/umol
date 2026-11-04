@@ -1,0 +1,4 @@
+; Bent doublet AuH2; Andrews and Wang (2003), pp. 11757-11758; doi:10.1021/ja036307q.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au#h" "H"]
+         :bonds [[0 1 "1"]]}}

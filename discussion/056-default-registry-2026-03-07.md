@@ -12,7 +12,17 @@ noble-gas evidence, halogen selections, chalcogen extraction, the
 [tetrel work table](#tetrel-work-table), followed by the
 [triel work table](#triel-work-table) and the
 [alkaline-earth work table](#alkaline-earth-work-table) and the
-[alkali-metal work table](#alkali-metal-work-table). The selected group-1 pass is
+[alkali-metal work table](#alkali-metal-work-table), followed by the
+[copper-group work table](#copper-group-work-table) and the
+[zinc-group work table](#zinc-group-work-table). The selected Zn/Cd/Hg pass is
+complete: 53 metal additions and one alkoxide O companion are implemented, covered
+by 52 new fixtures and four revised ZnMe2 inputs. All seven earlier metal states
+are retained with checked citations. The approved Hg capacity increase from 18 to
+22 is implemented; the hydride and HgF4 papers are reviewed and archived.
+The selected Cu/Ag/Au pass is
+complete: 77 additions, 78 fixtures, the existing-entry citation audit and the
+approved Cu/Ag capacity increases are implemented. All 11 earlier states are retained.
+The selected group-1 pass is
 complete: 34 additions, 35 fixtures, the existing-entry citation audit and the
 approved capacity increases are implemented. The selected group-2 pass
 is complete: 76 additions and the approved capacity increases are implemented.
@@ -49,7 +59,32 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 
 ## Project Status (2026-11-03)
 
-**Current review:** HW I, chapter XVIII (group 1), selected scope complete.
+**Current chapter:** HW II, chapter XXIII (Zn, Cd, Hg), pp. 1747–1783, selected scope complete.
+The [work table](#zinc-group-work-table) records 53 implemented metal additions:
+Zn 19, Cd 17 and Hg 17, plus O#c-#v#d3 for μ₃-alkoxide donors. All 54 states have
+inferred coverage in 52 new fixtures and four revised ZnMe2 inputs. The seven
+earlier metal states are retained with updated citations. The approved Hg capacity
+increase from 18 to 22 admits the six-water description and the two selected
+states requiring 20. Zn/Cd limits and ValenceTable targets are unchanged.
+Primary-source review supports molecular mono-/dihydrides and one
+local organozinc hydride-bridge state. HgF4 is unselected in both ordinary and
+donor descriptions; Hg oxidation states above II are excluded from this pass.
+The solid/complex hydride papers do not establish specific polymer or molecular
+graphs; no further additions are proposed from those formulae alone.
+All 1,594 resolution cases pass; the 1,542 earlier snapshots are unchanged.
+
+**Previous chapter:** HW II, chapter XXII (Cu, Ag, Au), selected scope complete.
+All 77 additions (Cu 29, Ag 18, Au 30) are implemented and covered by 78 fixtures,
+including separate coverage for the retained free-ion Au³⁺ triplet (Cg32).
+All 11 earlier states are retained with updated citations. Cu/Ag capacities are
+21; Au remains at 18. The increase admits 13 selected states excluded by the
+previous capacity 18. ValenceTable targets and the other bounds are unchanged.
+The source PDFs are reviewed and archived: AgF6³− has two unpaired electrons;
+CuH2−/AgH2− and neutral AuH2 support six further H variants.
+Cs2AgF6 remains an ambiguous Ag(IV)/Ag(III,V) case, with no extra states selected.
+η²-H2 donor descriptions remain deferred.
+
+**Earlier chapter:** HW I, chapter XVIII (group 1), selected scope complete.
 All 34 approved additions are implemented: Li 9, Na 7, K 7, Rb 5 and Cs 6,
 covered by 35 fixtures. The 13 existing entries have checked HW citations.
 Capacities are Li/Na/Rb 16, K 20 and Cs 24; Fr stays at 8 and ValenceTable
@@ -59,7 +94,7 @@ Specialized carbon-contact and Cp assemblies add no types. The primary papers,
 including MP12's supporting information, are reviewed and archived.
 Bridging neutral water donors remain deferred with Ch02.
 
-**Previous chapter:** HW I, chapter XVII (group 2), selected scope complete.
+**Earlier chapter:** HW I, chapter XVII (group 2), selected scope complete.
 Be 20, Mg 22, Ca 12, Sr 11 and Ba 11 additions are implemented, with 77 new
 fixtures and three Be-amido inputs revised to infer Be's occupation. All 76
 additions have coverage. Capacities are Be/Mg 12, Ca/Sr 16 and Ba 18; Ra remains
@@ -79,12 +114,12 @@ covered by 137 fixtures. Existing triel entries have checked HW citations.
 Al capacity is raised from 8 to 12 for the accepted five-/six-coordinate donor
 descriptions; ValenceTable entries are unchanged.
 
-**Last curation check (2026-11-03):** 3594 graph library tests, 1464 resolution
+**Last curation check (2026-11-03):** 3594 graph library tests, 1542 resolution
 conformance cases, 223 graph properties and 306 umol-chem unit tests pass, as do
 the remaining graph integration tests, Clippy and formatting.
-All 34 group-1 additions have inferred fixture coverage; the 35 fixtures' 140
-outputs agree across both models/policies and satisfy the valence invariants.
-All 1429 earlier snapshots are unchanged. The convey-model test uses the approved
+All 77 copper-group additions have inferred fixture coverage; the 78 fixtures agree
+across both models/policies and satisfy the valence invariants. All 1464 earlier
+snapshots are unchanged. The convey-model test uses the approved
 MostSaturated policy; both models omit the H counts for BH3 and H2O.
 
 **Earlier curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
@@ -222,22 +257,22 @@ retained with HW citations. No table or limit changes.
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 143 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 44 | Hydrides with explicit or implicit H |
-| `inorganic_small/` | 150 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 198 | Inorganic ions |
-| `donor_acceptor/` | 97 | Donor–acceptor complexes with dative or multicenter bonds |
+| `atomic_ions/` | 151 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 97 | Hydrides with explicit or implicit H |
+| `inorganic_small/` | 245 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 273 | Inorganic ions |
+| `donor_acceptor/` | 272 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 53 | C/H compounds |
 | `functional_groups/` | 74 | Organic heteroatom groups (halides, amines, etc.) |
 | `carbonyl_derivatives/` | 62 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
-| `aromatic/` | 96 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
+| `aromatic/` | 102 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
 | `hypervalent/` | 51 | Expanded-octet and multicenter species |
 | `transition_metals/` | 7 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **1182** | |
+| **Total** | **1594** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -301,7 +336,9 @@ single-atom cases were effectively unchanged.
 
 Carbon/silicon review, Al companion, pnictogen review and chalcogen/N/F companion rows updated 2026-11-02; Br/I/Xe companion rows updated
 2026-11-01; hydrogen, other noble-gas and other halogen rows updated 2026-10-31.
-Group-1/2 rows updated 2026-11-03 for the approved batches; other rows retain the March record.
+Group-1/2 rows updated 2026-11-03 for the approved batches; Cu/Ag/Au rows record
+the completed selected scope on the same date, as do Zn/Cd/Hg and the O companion.
+Other rows retain the March record.
 
 Status values:
 
@@ -319,7 +356,7 @@ Status values:
 | B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
 | C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
 | N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
-| O | yes | yes (-2) | yes (selected) | yes (all 29 states) | done | Thirteen states added; duplicate hydronium removed; citation and default-scope audit complete; aromatic and Kekulé furan covered |
+| O | yes | yes (-2) | yes (selected) | yes (all 30 states) | done | Chalcogen selection, citation audit and aromatic/Kekulé furan coverage complete; Zg24's μ₃-alkoxide donor is implemented and covered by [MeZnOMe]4 |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Na | yes | yes (+1, −1) | yes (selected) | yes (7 additions covered) | done | 9 current states; selected HW scope, citation audit and capacity 16 implemented |
@@ -340,8 +377,8 @@ Status values:
 | Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `atomic_ions/fe+2.toml`, `atomic_ions/fe+3.toml`) | done |  |
 | Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `atomic_ions/co+2.toml`, `atomic_ions/co+3.toml`) | done |  |
 | Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `atomic_ions/ni+2.toml`) | done |  |
-| Cu | yes | yes (+1,+2) | no | yes (`atoms/cu.toml`, `atomic_ions/cu+1.toml`, `atomic_ions/cu+2.toml`) | done |  |
-| Zn | yes | yes (+2) | no | yes (`atoms/zn.toml`, `atomic_ions/zn+2.toml`) | done |  |
+| Cu | yes | yes (+1,+2) | yes (selected) | yes (29 additions covered) | done | 32 current states; selected HW scope, citation audit and capacity 21 implemented |
+| Zn | yes | yes (+2) | yes (selected) | yes (19 additions covered) | done | 21 current states; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Ga | yes | yes (+1,+3) | yes (selected) | yes (39 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete |
 | Ge | yes | yes (−4) | partial | yes (30 additions covered) | done | 31 current states; selected HW scope and existing-entry audit complete |
 | As | yes | yes (-3) | partial | yes (`atoms/as.edn`, `atomic_ions/as-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 27 current states; 15 additions implemented; existing arsole types retained with paired aromatic/Kekulé fixtures; citation audit complete |
@@ -358,8 +395,8 @@ Status values:
 | Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `atomic_ions/ru+2.toml`, `atomic_ions/ru+3.toml`) | done |  |
 | Rh | yes | yes (+2,+3) | partial | yes (`atoms/rh.edn`, `atomic_ions/rh+2.edn`, `atomic_ions/rh+3.edn`, Rh–H donor fixture below) | done | Hydrogen companion addition: Rh#c+3#n3#t6 |
 | Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `atomic_ions/pd+2.toml`) | done |  |
-| Ag | yes | yes (+1,+2) | partial | yes (`atoms/ag.edn`, `atomic_ions/ag+1.edn`, `atomic_ions/ag+2.edn`, `donor_acceptor/ag2-i2-4-2+.edn`) | done | I2-ligand companion: Ag#c+#n5#t3 |
-| Cd | yes | yes (+2) | no | yes (`atoms/cd.toml`, `atomic_ions/cd+2.toml`) | done |  |
+| Ag | yes | yes (+1,+2) | yes (selected) | yes (18 additions covered) | done | 22 current states; selected HW scope, citation audit and capacity 21 implemented; ambiguous Cs2AgF6 unselected |
+| Cd | yes | yes (+2) | yes (selected) | yes (17 additions covered) | done | 19 current states; selected HW scope and citation audit complete; capacity 18 unchanged |
 | In | yes | yes (+1,+3) | yes (selected) | yes (32 additions covered) | done | 34 current states; selected HW scope and existing-entry citation audit complete |
 | Sn | yes | yes (+2, −4) | partial | yes (31 additions covered) | done | 32 current states; selected HW scope and existing-entry audit complete; capacity 14 for six-donor Sn(II) |
 | Sb | yes | yes (-3) | partial | yes (`atoms/sb.edn`, `atomic_ions/sb-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 29 current states; 20 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
@@ -396,8 +433,8 @@ Status values:
 | Os | yes | no | no | yes (`atoms/os.toml`) | done |  |
 | Ir | yes | no | no | yes (`atoms/ir.toml`) | done |  |
 | Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `atomic_ions/pt+2.toml`) | done |  |
-| Au | yes | yes (+1,+3) | no | yes (`atoms/au.toml`, `atomic_ions/au+1.toml`, `atomic_ions/au+3.toml`) | done | `Au3+` conformance pinned to low-spin |
-| Hg | yes | yes (+2, [Hg2]2+) | no | yes (`atoms/hg.toml`, `atomic_ions/hg+2.toml`, `atomic_ions/hg+2_dimer.toml`) | done | Dimer encoded as two `Hg+1` atoms with single bond |
+| Au | yes | yes (−1,+1,+3) | yes (selected) | yes (30 additions and existing Au³⁺ triplet covered by 31 new fixtures) | done | 34 current states; all four earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
+| Hg | yes | yes (+2, [Hg2]2+) | yes (selected) | yes (17 additions covered) | done | 20 current states; all three earlier states retained; selected HW scope, citation audit and capacity 22 implemented; Hg(IV) unselected |
 | Fr | yes | yes (+1) | no additions selected | yes (`atoms/fr.edn`, `atomic_ions/fr+1.edn`) | done | Two existing states retained with checked HW citations; capacity unchanged |
 | Ra | yes | yes (+2) | ionic descriptions retained | existing atom/ion fixtures | done | 2 current states retained with checked HW citations; no additional state selected |
 | Ac | yes | yes (+3) | no | yes (`atoms/ac.toml`, `atomic_ions/ac+3.toml`) | done |  |
@@ -1750,7 +1787,7 @@ coverage of selected states; they are not a requirement to fixture every compoun
 | Tt01 | Existing 36 C states | Audited: retained | HW citations filled throughout. CO removed from the C+ example; C− donor comment broadened. G12 experimentally identifies CH's X²Π ground state and excited a⁴Σ− state. B04 supplies the chemical counting scheme for exocyclic-carbonyl C#v4#a0 (umol allocation: PW); existing 2-pyridone/tropone fixtures retained |
 | Tt02 | C#c-4#n4; C#c-2#n2#v2 | Implemented: 2 | Methanides Al4C3/Be2C and allenides Li4C3/Mg2C3; HW 1021–1022. Terminal C²−=C=C²− allocation. Fixtures: atomic C⁴− and C3⁴−. Acetylide C#c-#n#v3 already exists |
 | Tt03 | C#v2#d; C#v#h#d; C#h2#d | Implemented: 3 | Neutral carbene donors, including NHCs; HW 1044–1045, II 2165–2167. Three OsCl(NO)(PPh3)2(CH2) fixtures cover explicit/mixed/implicit carbene H, using Fig. 32.64g's donor description. Os occupation supplied; NO+ allocation is PW. No additional aromatic donor type selected |
-| Tt04 | C#c-#v2#h#d; C#c-#v#h2#d; C#c-#h3#d | Implemented: 3 | Organyl donors, HW 1060–1062; selected anionic-donor convention (PW). Four ZnMe2 fixtures cover all H representations, including existing C#c-#v3#d; Zn(II) occupation supplied |
+| Tt04 | C#c-#v2#h#d; C#c-#v#h2#d; C#c-#h3#d | Implemented: 3 | Organyl donors, HW 1060–1062; selected anionic-donor convention (PW). Four ZnMe2 fixtures cover all H representations, including existing C#c-#v3#d; Zn(II) occupation is inferred with Zg03 |
 | Tt05 | C#v3#m; C#v2#h#m; C#v#h2#m; C#h3#m; companion Al#v2#m | Implemented: 5 | Al2Me6: HW 1024 explicitly assigns 3c2e Al–C–Al bridges. Neutral contributions [1,1,0] and [0,1,1] follow the existing diborane allocation (PW). Four fixtures cover every bridge-C H representation and the Al companion |
 | Tt06 | Existing Si states and Ge/Sn/Pb atomic states | Audited: retained | SiH4/SiX4: HW 1082–1097; partial-H derivatives: 1086; SiH3 radical and singlet/triplet SiH2: 1090; SiX2: 1093; SiX3−: 1087, 1143; SiX3+: 1144. Atomic Si's triplet ground state: 1066. Ge/Sn/Pb s²p² ground configurations: 328, Table 9.1. Corrected Si#v3#h's example to SiX3H |
 | Tt07 | Si#n#v#h; Si#n#h2; Si#u2#v#h; Si#u2#h2; Si#u#v2#h; Si#u#v#h2; Si#u#h3 | Implemented: 7 | Complete singlet/triplet SiH2 and SiH3-radical H representations; HW 1076–1078, 1090; WA03 observes SiH3. Explicit-H Si#n#v2, Si#u2#v2 and Si#u#v3 already exist |
@@ -2194,3 +2231,186 @@ ordinary Li–C fixtures. Each metal's lone-pair and unpaired-electron counts ar
   Na/K/Rb/Cs aqua descriptions with 6/7/8/8 donors. These are inferred integer
   hydration numbers supported by the authors' analysis, not direct counts of
   individual solution molecules. Ak08, Ak12 and Ak19.
+
+### Copper group
+
+Source: [HW 103, Band II, chapter XXII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 2.pdf#page=190>),
+printed pp. 1686–1743; chapter references pp. 1744–1746. Extraction: 2026-11-03.
+Chapters XIX–XXI supply transition-metal, coordination and solid-state background;
+the next element chapter after the alkalis is Cu/Ag/Au. Rg is treated separately by HW.
+Baseline: Cu 3, Ag 4 and Au 4 states. All 77 selected additions below are implemented;
+current totals are Cu 32, Ag 22 and Au 34. All 11 previous states are retained.
+The existing-entry citation audit, capacity changes and conformance coverage are complete.
+
+#### Copper-group work table
+
+M = Cu, Ag, Au; X = halide; D = neutral donor. States use concrete, zero-valence
+defaults. HW page references are to Band II. **PW** marks our graph allocation:
+ordinary M–X bonds leave X neutral, whereas X−→M donation retains the ligand charge.
+Where both appear, the states support those two supplied graph notations.
+The accepted policy supports neutral and ionic electron-allocation conventions
+for the selected TM families, including hydride and organyl ligands. Neutral
+donor ligands remain pair donors; additional mixed partitions need their own justification.
+Examples identify the supported families; they are not a requirement to make a fixture
+for every compound. **Capacity** is the minimum required by the current Counts formula.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Cg01 | Existing M#n5#u; M#c+#n5; Cu/Ag#c+2#n4#u; Ag#c+#n5#t3; Au#c+3#n4 | Retained: 10; citations updated | Atomic d¹⁰s¹: HW 1538, Table 19.1. Cu(I/II): 1693–1694; Ag(I/II): 1714, 1719–1720; Au(I): 1728. Free-ion Au³⁺ d⁸ singlet levels: Z23, Table 2. Ag's #t3 also covers three-donor coordination beyond the existing [Ag2(I2)4]²⁺ example (M16): AgI(PR3)2 in the iodide-donor notation, HW 1714. The remaining existing Au entry is Cg32 |
+| Cg02 | M#n5#v; M#n5#h | Implemented: 6 | Molecular MH: HW 1695, 1714, 1733. M2 molecules: 1731. AuF monomer: 1733. Ordinary single bonds; explicit and implicit H |
+| Cg03 | M#c+#n5#t; M#c+#n5#t2; M#c+#n5#t3; M#c+#n5#t4 | Implemented: 11; Ag #t3 exists | One to four donor pairs. Cu(CO)n⁺ (n = 1, 3, 4), [Cu(NH3)2]⁺, [Cu(CN)3]²− and [Cu(py)4]⁺: HW 1694–1697. Ag(CO)n⁺ (n = 1–4), [Ag(NH3)2]⁺, AgI(PR3)2, [Ag(PPh3)4]⁺ and Ag(H2O)4⁺: 1713–1718. LAu⁺, Au(CO)n⁺ (n = 1–3) and Au(PR3)n⁺ (n = 2–4): 1734, 1742. Maximum capacity 18 |
+| Cg04 | Cu#n5#v#t3; Ag#n5#v#t2; Ag#n5#v#t3; Au#n5#v#t; Au#n5#v#t2; Au#n5#v#t3 | Implemented: 6 | One ordinary terminal M–X/M–R bond plus donors: CuCl(PR3)3 and CuCl(CO)(H2O)2, HW 1696; AgI(PR3)2 and AgX(PR3)3, 1714, 1717; AuCl(PR3)n (n = 1–3) and RAuPR3, 1734, 1742–1743. Maximum capacity 18 |
+| Cg05 | M#c-#n5#v2 | Implemented: 3 | Ordinary-bond notation for M(CN)2− and MR2−: HW 1693–1697, 1707–1708, 1715–1717, 1722, 1734, 1742–1743. CuCl2−/CuBr2− also supported by WWS01; all three linear MH2− anions reuse these explicit-H states (AW03H, pp. 11753–11756; Au also HW 1733). Donor notation reuses Cg03 |
+| Cg06 | Cu#c-2#n5#v3; Cu#c-3#n5#v4 | Implemented: 2 | Ordinary-bond [Cu(CN)3]²− and [Cu(CN)4]³−, HW 1697, Fig. 22.5e,g; four-coordinate CuCl4³−, 1696. Donor notation reuses Cg03. Capacity 16/18 |
+| Cg07 | Cu#n4#u#v2; Cu#n4#u#v2#t2; Cu#n4#u#v2#t4 | Implemented: 3; #t4 needs capacity 21 | Molecular CuCl2/CuBr2 doublets: WWS01, pp. 7388, 7391–7392. CuCl2D2/CuBr2(NH3)2 and CuCl2(H2O)4: HW 1700–1701. Two ordinary bonds with zero, two or four additional donor pairs |
+| Cg08 | Cu#c+2#n4#u#t4; Cu#c+2#n4#u#t5; Cu#c+2#n4#u#t6 | Implemented: 3; capacities 17/19/21 | Cu(NH3)4²⁺, CuCl5³−, Cu(H2O)6²⁺ and Cu(NH3)6²⁺: HW 1694, 1700, 1705. Halide-donor allocation: PW. The Cu acetate dimer, 1705, provides another five-donor example without assigning an ordinary Cu–Cu bond |
+| Cg09 | Cu#c-2#n4#u#v4; Cu#c-3#n4#u#v5; Cu#c-4#n4#u#v6 | Implemented: 3; capacities 17/19/21 | Ordinary-bond CuCl4²−, CuCl5³− and CuF6⁴−: HW 1700–1701. These are the corresponding halide graph alternatives to Cg08 |
+| Cg10 | Cu#c+3#n4#t4; Cu#c-#n4#v4 | Implemented: 2 | Diamagnetic Cu(OH)4−, HW 1707: four OH− donors or four ordinary Cu–O bonds (PW). Other square-planar Cu(III) complexes reuse these counts |
+| Cg11 | Cu#c+3#n3#u2#t6; Cu#c-3#n3#u2#v6 | Implemented: 2; capacity 20 | CuF6³−, explicitly high-spin d⁸ at HW 1707; AW69, pp. 1895–1897, assigns the ³A2g ground state. Six F− donors or six ordinary Cu–F bonds (PW). Supply #u2 when checking Counts; its unconstrained occupation completion pairs the eight remaining electrons |
+| Cg12 | Cu#c+4#n3#u#t6; Cu#c-2#n3#u#v6 | Implemented: 2; capacity 19 | CuF6²− in Cs2CuF6, explicitly low-spin paramagnetic d⁷ at HW 1707. Donor and ordinary-bond notations (PW) |
+| Cg13 | Ag#c+2#n4#u#t4; Ag#c+2#n4#u#t6 | Implemented: 2; capacities 17/21 | Ag(py)4²⁺ and Ag(bipy)2²⁺: HW 1720–1721; Ag(H2O)6²⁺ in acidic solution: 1713, 1720. Six-coordinate AgF6⁴− provides binary-ion coverage, 1719 |
+| Cg14 | Ag#c-2#n4#u#v4; Ag#c-4#n4#u#v6 | Implemented: 2; capacities 17/21 | Ordinary-bond AgF4²− and AgF6⁴−, isolated units in BaAgF4/Ba2AgF6: HW 1719. Donor notation reuses Cg13 |
+| Cg15 | Ag#c+3#n4#t4; Ag#c-#n4#v4 | Implemented: 2 | Diamagnetic square-planar AgF4−: HW 1721. Donor and ordinary-bond notations (PW); Ag(CF3)4−, 1722, independently supports the ordinary-bond state |
+| Cg16 | Ag#c+3#n3#u2#t6; Ag#c-3#n3#u2#v6 | Implemented: 2; capacity 20 | Octahedral AgF6³− in Cs2KAgF6: HW 1714, 1721. AW69, pp. 1895–1897, Table II, assigns a d⁸ ³A2g ground state, supporting #n3#u2; it also cites a 2.6 BM moment. Donor and ordinary-bond notations (PW). Supply #u2 for Counts as in Cg11 |
+| Cg17 | Cs2AgF6: Ag(IV) versus mixed Ag(III/V) | Not selected; assignment unresolved | HW 1721 calls this Ag(IV). S78, pp. 247–250, reports weak magnetism and proposes paired Ag(III)/Ag(V), supported by diamagnetic Cs2Ga0.5Ag0.5F6. The authors explicitly leave that interpretation unconfirmed; attempted CsAgF6 synthesis failed. This source does not settle a new Ag(IV), paired six-coordinate Ag(III), or Ag(V) state |
+| Cg18 | Au#c-#n6 | Implemented: 1 | Auride Au− in CsAu, NMe4Au and BaAu2: HW 1739–1740. Closed d¹⁰s² count; capacity 12 |
+| Cg19 | Au#n4#v3; Au#n4#v3#t | Implemented: 2 | Molecular AuCl3/AuBr3 and AuMe3: HW 1736, 1743; AuCl3(H2O) and AuMe3(PPh3): 1736–1737, 1743. Ordinary terminal bonds, with one additional donor in the adducts |
+| Cg20 | Au#c+#n4#v2#t2 | Implemented: 1 | Au2Cl6/Au2Br6 and the primary AuF3 chain: HW 1736–1737. Two ordinary terminal Au–X bonds and two bridging X− donations per Au (PW). Also Me2Au(H2O)2⁺ and [Me2AuBr]2, 1743–1744 |
+| Cg21 | Au#c+3#n4#t4; Au#c-#n4#v4 | Implemented: 2 | Au(NH3)4³⁺ and donor notation for AuX4−, HW 1737–1738; ordinary AuX4−/Au(CN)4− and AuMe4−, 1737–1738, 1743. Explicit AuH4− also reuses the latter, 1733 |
+| Cg22 | Au#n3#v5; Au#c-#n3#v6; Au#c+5#n3#t6; Au#c+#n3#v4#t2 | Implemented: 4; maximum capacity 18 | AuF5 monomer; ordinary-bond and F−-donor AuF6−; Au2F10 with four ordinary terminal bonds and two bridging F− donations per Au (PW). HW 1738–1739, including the diamagnetic Au(V) description and dimer structure |
+| Cg23 | Au#c-#n5#v#h; Au#c-#n5#h2; Au#c-#n4#v3#h; Au#c-#n4#v2#h2; Au#c-#n4#v#h3; Au#c-#n4#h4 | Implemented: 6 | All mixed/implicit-H counterparts of linear AuH2− and square-planar AuH4−, HW 1733, Fig. 22.23d,e. Explicit-H entries are Cg05/Cg21. AW03H, pp. 11754–11757, supports the singlet structures with isotope-resolved IR and calculations |
+| Cg24 | Cu#n5#m | Implemented: 1 | (CuCH2SiMe3)4 and related CuR aggregates: HW 1708 explicitly describes local Cu–C–Cu 3c2e bridges. One total Cu contribution across its two bridges (PW); existing C#v3#m and its H variants suffice. No aggregate-size-dependent state |
+| Cg25 | Au#n4#u#v2 | Implemented: 1 | Molecular AuCl2/AuBr2, observed as short-lived gas-phase binaries: HW 1735, in the d⁹ Au(II) section. Separate from solid AuCl2, which HW identifies as mixed Au(I/III). Also explicit-H AuH2: AW03H, pp. 11754, 11757–11758, gives the bent ²B2 state and matrix IR evidence |
+| Cg26 | Cu/Ag#c-#n5#v#h; Cu/Ag#c-#n5#h2; Au#n4#u#v#h; Au#n4#u#h2 | Implemented: 6 | Mixed/implicit-H variants of linear singlet CuH2−/AgH2− and bent doublet AuH2. AW03H, pp. 11753–11755, 11757–11758: isotope-resolved matrix IR plus calculated structures/states. Explicit-H states are accepted in Cg05/Cg25. No additions for the calculated CuH4−/AgH4− or HW's calculated Au2H6 |
+| Cg27 | Cu#c+#n5#t#m0 | Implemented: 1; allocation PW | Stryker's reagent [(PPh3)CuH]6: HW 1694–1696. Fr24, pp. 2, 4–5, supports Cu(I) and edge-bridging hydrides, revising the older face-capping picture. Use six local Cu–H−–Cu bridges with contributions [0,2,0] and one P donation per Cu; existing H#c-#m2 and P#v3#d suffice |
+| Cg28 | Au#c+3#n4#t5 | Implemented: 1; capacity 18 | Five-coordinate intermediate in halide substitution at AuX4−, HW 1737–1738. Five anionic donor pairs (PW). Its inclusion rests on the substitution motif; rare isolated chelate complexes are not needed as the justification |
+| Cg29 | Au#c+2#n4#u#t4; Au#n4#v3#t2; Au#c+#n4#v2#t4 | Not selected | Au(II) dithiolate/phthalocyanine complexes and five-/six-coordinate Au(III) chelates: HW 1729, 1735, 1737. These limited non-binary examples do not presently justify extra default states; the six-coordinate diarsine description would additionally require capacity 20 |
+| Cg30 | Au#n5#m; an analogous Ag organyl MC state | Not selected | HW explicitly assigns 3c2e bridges in (AuMes)5, 1743; (AgMes)6 is listed at 1722 without a corresponding bond assignment. No extra row solely for these individual aggregates. Ordinary AuR/AgR donor adducts and MR2− are already accepted |
+| Cg31 | Extended solids, neutral matrix carbonyls, larger metal/chalcogenide clusters and additional bare ions | No further default additions selected | HW 1695–1699, 1702–1706, 1713–1722, 1731–1732, 1739–1742. Ionic salts reuse existing ions; accepted donor counts cover many halide/ligand bridges. No all-metal MC ladder, secondary metallophilic contacts, or scaffold-specific state series. Stryker's reagent is the separately justified Cg27 case |
+| Cg32 | Existing Au#c+3#n3#u2 | Retained; covered | Free Au³⁺ (spectroscopic Au IV) has a 5d⁸ ³F₄ ground state: Z23, Table 2. The proposed removal incorrectly applied the paired configuration of Au(III) complexes to the free ion. The existing singlet fixture remains; atomic_ions/au+3-triplet.edn supplies #u2 and infers #n3 |
+| Cg33 | η²-H2 adducts (H2)MH and (H2)AuH3 | Deferred; no new states selected | HW 1733 and AW03H, pp. 11753, 11756, distinguish the H2 adducts from ordinary hydrides. Their H2-donor accounting remains separate work; no MC replacement introduced in this pass |
+
+#### Copper-group Counts comparison and coverage
+
+Cu and Ag now have capacity 21; Au retains 18. None has a direct ValenceTable entry.
+For these nonaromatic states the checked arithmetic is
+`E = 11 − charge + h + v + 2t` and `2n + u = 11 − charge − h − v − 2d − m`.
+All 77 additions satisfy the latter and are distinct from the 11 retained entries.
+
+| Constraint | Implemented selection |
+| --- | --- |
+| Cu capacity | Increased 18 → 21. This admits nine states previously excluded: Cg07 #t4; Cg08 #t5/#t6; Cg09 #v5/#v6; both Cg11 states; both Cg12 states. The maxima come from ordinary six-coordinate Cu(II) examples, including its aqua ion |
+| Ag capacity | Increased 18 → 21. This admits four states previously excluded: Cg13 #t6 and Cg14 #v6 need 21; both Cg16 Ag(III) states need 20 |
+| Au capacity | All 30 accepted states fit the current 18. The unselected six-coordinate Au(III) chelate is not used to enlarge the limit |
+| ValenceTable | No target or aromatic entry change selected. Metal implicit H is zero except for the deliberate MH/MH2−/AuH2/AuH4− variants; supplied #h is supported despite the zero free-H enumeration bound |
+| Other bounds | The registry grows its valence index for supplied #v values, so max_valence is not an admission limit. Literal charges, including the negative formal charges above, are accepted independently of the free-charge enumeration bounds. No bound change selected for these inputs |
+| Spin evidence | Cg11/Cg16 require supplied #u2 for Counts to infer #n3. No geometry-dependent spin inference or resolver change is proposed |
+| Coverage | 78 fixtures: Cu 29, Ag 18, Au 31. All 77 added states infer the metal lone-pair count; the four Cu/Ag d⁸ triplet states supply #u2. The extra fixture covers the existing Au³⁺ triplet. Explicit/mixed/implicit H variants and the selected ordinary/donor notations are covered; the two Cu MC states use (CuCH2SiMe3)4 and Stryker's reagent |
+
+All four resolver/policy combinations agree on the new outputs. Independent checks
+matched 88 metal sites to their expected registry states (352 checks) and checked
+electron conservation for every resolved molecule. The 1,464 earlier snapshots are
+unchanged; the full resolution suite now has 1,542 passing cases.
+The graph library (3,594), graph properties (223), chemistry library (306), other
+graph integration tests and doc tests pass. Clippy with warnings denied, formatting
+and diff whitespace checks pass.
+
+#### Copper-group primary sources
+
+| Key | Source and access | Role |
+| --- | --- | --- |
+| WWS01 | Wang, Wang, Brown, Schwerdtfeger, Schröder and Schwarz, *J. Chem. Phys.* **114** (2001), 7388–7395. [DOI](https://doi.org/10.1063/1.1362289), [reviewed PDF](../materials/valence/Wang-2001-CuCl2-CuBr2.pdf) | Molecular CuCl2/CuBr2 and their anions; pp. 7388, 7391–7392 distinguish the d⁹ neutral and closed-shell anion descriptions. Cg05/Cg07 |
+| Fr24 | Fritsch et al., *Chem. Eur. J.* (2024), e202400357. [DOI](https://doi.org/10.1002/chem.202400357), [reviewed PDF](../materials/valence/Fritsch-2024-Cu-hydride-Xray.pdf) | Stryker reagent's edge-bridging H and Cu(I), pp. 2, 4–5. Its reference 13 is Bennett et al., *Inorg. Chem.* **53** (2014), 2963–2967, [DOI](https://doi.org/10.1021/ic402736t), the earlier structural revision. Fr24 itself was downloaded and archived; Cg27's graph allocation is PW |
+| AW69 | Allen and Warren, *Inorg. Chem.* **8** (1969), 1895–1901. [DOI](https://doi.org/10.1021/ic50079a018), [reviewed PDF](../materials/valence/Allen-Warren-1969-hexafluoro-anions.pdf) | CuF6³−/AgF6³− d⁸ ³A2g ground states: pp. 1895–1897, Table II. Cg11/Cg16 |
+| S78 | Sorbe, Grannec, Portier and Hagenmuller, “Sur deux nouveaux composés fluorés de l'argent: Cs2AgF6 et Cs2Ga0.5Ag0.5F6,” *J. Fluorine Chem.* **11** (1978), 243–250. [DOI](https://doi.org/10.1016/S0022-1139(00)82444-6), [reviewed PDF](../materials/valence/Sorbe-1978-silver-fluorides.pdf) | Weak magnetism, proposed paired Ag(III)/Ag(V), and the Ga/Ag comparison: pp. 247–250. The mixed-valence interpretation remains a hypothesis, not a settled replacement for HW's Ag(IV). Cg17 |
+| AW03H | Andrews and Wang, *J. Am. Chem. Soc.* **125** (2003), 11751–11760. [DOI](https://doi.org/10.1021/ja036307q), [reviewed PDF](../materials/valence/Andrews-Wang-2003-coinage-metal-hydrides.pdf) | Linear singlet MH2− and square-planar singlet AuH4−: pp. 11753–11757, Tables 2–3. Bent doublet AuH2: pp. 11757–11758. Isotopic IR supports the assignments; CuH4−/AgH4− are calculated but not observed. Cg05/Cg21/Cg23/Cg25/Cg26/Cg33 |
+| Z23 | Zainab et al., “Critically Evaluated Atomic Data for Au IV Spectrum” (2023). [DOI](https://doi.org/10.3847/1538-4365/acd117), [reviewed PDF](../materials/valence/Zainab-2023-Au-IV.pdf) | Free Au³⁺ d⁸ triplet ground state and excited singlet levels, Table 2. Existing states Cg01/Cg32 |
+
+### Zinc group
+
+Source: [HW 103, Band II, chapter XXIII](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 2.pdf#page=251>),
+printed pp. 1747–1781; chapter references pp. 1782–1783. Extraction: 2026-11-03.
+Baseline: Zn 2, Cd 2 and Hg 3 states. The accepted additions are implemented:
+53 metal states (Zn 19, Cd 17, Hg 17) and one O companion. Cn belongs to HW's
+later transactinoid chapter.
+
+#### Zinc-group work table
+
+M = Zn or Cd; X = halide; R = organyl; D = neutral donor. States use concrete,
+zero-valence defaults. Page references are to HW II. The current model counts two
+valence electrons for Zn/Cd and twelve for Hg; these entries retain that convention.
+**PW** marks our graph allocation: ordinary M–X/M–R bonds or anionic pair donors,
+following the selected copper-group policy. Neutral donors remain dative.
+The source establishes the compound/connectivity; the paired counts follow this allocation.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Zg01 | Existing Zn#n, Zn#c+2; Cd#n, Cd#c+2; Hg#n6, Hg#c+2#n5, Hg#c+#n5#v | All 7 retained; citations updated | Atomic configurations: HW 1747, 1751, 1769. Zn²⁺/Cd²⁺: 1753–1754; Hg²⁺/Hg2²⁺: 1767–1768, 1770–1772. The existing Hg(I) state also covers RHg⁺, 1781 |
+| Zg02 | Zn#v2; Cd#v2; Hg#n5#v2 | Implemented: 3 | Ordinary bonds in MR2 and RMX, HW 1763–1764; HgX2, Hg(CN)2, HgR2 and RHgX, 1772, 1775, 1780–1781. Also X–Hg–Hg–X, 1771. Explicit-H MH2 reuses these states (SYB05, pp. 4710–4711), as do linear HZnZnH/HCdCdH (WA04Z, p. 11011) |
+| Zg03 | M#c+2#t2; M#c+2#t3; M#c+2#t4; M#c+2#t5; M#c+2#t6 | Implemented: 10 | Two to six donor pairs. MR2/MR2D/MR2D2: HW 1763 (R− allocation: PW); MX3−/MX4²−: 1756; Zn(NH3)4²⁺, M(H2O)6²⁺ and M(NH3)6²⁺: 1753–1754, 1758. Five donors: Zn(acac)2(H2O), 1754, and CdCl5³−, 1756. These counts also cover the cited bridging-ligand and bioinorganic coordination without protein-specific types |
+| Zg04 | Hg#c+2#n5#t2; Hg#c+2#n5#t3; Hg#c+2#n5#t4; Hg#c+2#n5#t5; Hg#c+2#n5#t6 | Implemented: 5; capacity increase approved and implemented | Hg(NH3)2²⁺/Hg(NH3)4²⁺, HW 1773; HgX3−/HgX4²−, 1768, 1772–1775; discrete HgCl5³−, 1773; Hg(H2O)6²⁺, 1768. Halide-donor allocation: PW. Six water ligands are explicitly stated, rather than inferred from hydrate stoichiometry |
+| Zg05 | M#v2#t; M#v2#t2; Hg#n5#v2#t2 | Implemented: 5 | Two ordinary bonds plus neutral donors. R2MD/R2MD2, HW 1763; ZnCl2(NH3)2 and ZnCl2(H2O)2, 1753, 1755–1756; HgX2D2 (D = R2S/R3P), 1775, Fig. 23.10f. Hg2Cl6²− also uses Hg#n5#v2#t2 with two ordinary terminal bonds and two bridging Cl− donations per Hg (PW), 1772, Fig. 23.8a |
+| Zg06 | M#c-#v3; M#c-2#v4; Hg#c-#n5#v3; Hg#c-2#n5#v4 | Implemented: 6 | Ordinary-bond descriptions of MX3−/MX4²−, HW 1756; MR3−/MR4²−, 1763; HgX3−/HgX4²− and Hg(CN)4²−, 1768, 1772–1775. Charges are formal graph allocations (PW); donor alternatives reuse Zg03/Zg04 |
+| Zg07 | Cd#c-3#v5; Hg#c-3#n5#v5 | Implemented: 2 | Ordinary-bond descriptions of discrete CdCl5³− and HgCl5³−, HW 1756, 1773. Donor alternatives reuse Zg03/Zg04 |
+| Zg08 | Zn#c-#v3#t | Implemented: 1 | Zn(OH)3(H2O)−, HW 1758: three ordinary Zn–OH bonds and one water donor. The all-donor graph reuses Zn#c+2#t4 (PW) |
+| Zg09 | Zn#c+#v; Cd#c+#v | Implemented: 2 | Zn2²⁺/Cd2²⁺ with an ordinary M–M bond, HW 1762; Cd2[AlCl4]2 is isolated. Hg2²⁺ already has the corresponding #n5 state. Ordinary X–M–M–X uses Zg02 |
+| Zg10 | Hg#c+#n5#v#t; Hg#c+#n5#v#t2 | Implemented: 2 | RHg(H2O)⁺/RHgD⁺ and RHg(bipy)⁺, HW 1781: one ordinary Hg–C bond and one/two neutral donor pairs. The first state also covers H2O→Hg–Hg←OH2²⁺, 1771, and the halide-donor description of Hg2X2 (PW) |
+| Zg11 | Zn#c+#v#t2; Zn#c+#v#t3; Cd#c+#v#t3 | Implemented: 3 | [MeZnNPh2]2 and [RZnX]4/[RZnOR]4, HW 1764, Fig. 23.6d,f: ordinary Zn–R plus two/three anionic bridge donors (PW). ZnCp2/CdCp2 have one σ-Cp and one η⁵-Cp, 1763, 1781; η⁵-Cp− donates three pairs (PW), reusing #v#t3. Zn2Cp*2 with its ordinary Zn–Zn bond also reuses the Zn state, 1763, Fig. 23.5c. Existing N/halide companions suffice; the alkoxide companion is Zg24. Cp donor-side multidonor accounting remains separate, as in Tr28/Ae12 |
+| Zg12 | Hg#c+#n5#v#t3 | Implemented: 1 | Hg2X4D2 and terminal sites of Hg3X6D2, HW 1775, Fig. 23.10g,h: one ordinary terminal Hg–X bond, two bridging X− donations and one neutral donor (PW). The central Hg in Hg3X6D2 reuses Hg#c+2#n5#t4 |
+| Zg13 | Hg3²⁺/Hg4²⁺ | Reuse; no further type proposed | HW 1778 gives (nearly) linear Hg chains. Ordinary single bonds, terminal Hg#c+#n5#v and internal Hg#n5#v2 conserve the charge/electrons (PW). No cluster-size-dependent MC states |
+| Zg14 | ZnN2⁴−; HgO2²−, HgS2²−, HgS4⁶− | Reuse; no further type proposed | HW 1761 draws N=Zn=N; an ordinary-double-bond graph uses Zn#c-2#v4 and two existing N#c-#n2#v2 states (PW). HW 1776–1777 gives isolated linear O–Hg–O/S–Hg–S and tetrahedral HgS4 units. Ordinary single bonds use existing terminal O−/S− states and Zg02/Zg06 |
+| Zg15 | HgO/HgS chains; [HgNH2]⁺/[HgOH]⁺ chains; [Hg2N]⁺ network | Reuse; no further type proposed | HW 1773, 1776–1777 explicitly gives ordinary skeletal Hg–O/Hg–N single bonds. Hg#n5#v2 and existing O/N/S states suffice. Secondary interchain contacts need not be counted as skeletal bonds |
+| Zg16 | Zn(BH4)2 | No additional type proposed | HW 1755. The separated-ion description uses Zn²⁺ and BH4−. A specific coordinated borohydride graph would need its own structural evidence; the formula alone does not select a Zn MC state |
+| Zg17 | M#v#h; M#h2; Hg#n5#v#h; Hg#n5#h2 | Implemented: 6 | ZnH2/CdH2/HgH2, HW 1755. SYB05, pp. 4710–4711, resolves their rotational spectra, establishes linear closed-shell ¹Σg⁺ molecules and explicitly assigns strong covalent bonds. Mixed/implicit-H variants of Zg02; M#v#h also covers linear HZnZnH/HCdCdH, WA04Z p. 11011 |
+| Zg18 | Zn#c+#v#t#m0 | Implemented: 1; bridge allocation PW | [RZnH·py]3, R = Et or Ph: HW 1764, Fig. 23.6e; KBK80, pp. 3–4, Fig. 1. Cryoscopy establishes trimers and IR supports bridging H; the six-membered Zn3H3 ring is the authors' structural proposal, not a diffraction result. One ordinary Zn–R bond, one pyridine donation and two local Zn–H−–Zn bridges per Zn, each [0,2,0], reuse H#c-#m2. The H− pair cannot supply two independent ordinary/dative bonds; no whole-ring MC state |
+| Zg19 | LiZnH3, Li2ZnH4, Li3ZnH5 | Evidence reviewed; no added states proposed | HW 1755 lists solid products; II 2069, Table 32.1 footnote d lists ZnH3−/ZnH4²−/ZnH5³−. W77, pp. 36, 41–42, explicitly leaves their structures unresolved and reports unsuccessful attempts to repeat the Li3ZnH5 preparation. No isolated mononuclear unit or bridge pattern is established; no extra hydride/MC states proposed from stoichiometry alone |
+| Zg20 | Hg#n4#v4; Hg#c+4#n4#t4 | Not selected: Hg oxidation states above II | HW 1770, Table 23.4 footnote b lists a prediction. WRK07, pp. 8371–8374, assigns HgF4 from matrix IR and calculations as square-planar, low-spin d⁸. Ordinary Hg–F bonds or four F− donors (PW) give these two descriptions. Ro08, pp. 4594, 4599, 4603–4604, found no convincing HgF4 in Ar at 10–14 K; it explicitly regards this as broadly consistent with WRK07's principally Ne evidence at 4 K. Both descriptions are excluded from the default selection |
+| Zg21 | Zn#c+2#t8; Cd#c+2#t7; Hg#c+2#n5#t8 | Not proposed for the default registry | Zn(NO3)4²−, Cd(quinoline)2(NO3)2(H2O), HW 1754; eight-coordinate Hg(NO2)4²−/Hg(NO3)4²−, 1768, 1777. Extracted, but these particular higher-coordinate complexes do not presently justify additional default rows. Hg #t8 would require capacity 26 |
+| Zg22 | Additional mixed ordinary/donor partitions | No additional types proposed | Zn(acac)2(H2O), HgCl2(terpy) and the higher-coordinate chelates in HW 1754, 1768 are representable with the donor counts above. Their existence does not require adding every mixed partition of the same coordination environment |
+| Zg23 | Extended halide/chalcogenide/nitride solids, amalgams and mixed-metal Hg clusters | No additional types proposed | HW 1755–1761, 1770, 1778–1779. Ionic descriptions and selected ordinary/donor states cover the simple salts and motifs. No formal-ion ladder from metallic partial charges, lattice coordination-number ladder, or separate types for the Rh/Os–Hg clusters |
+| Zg24 | O#c-#v#d3 | Implemented: 1 companion | μ₃-Alkoxide in [RZnOR]4, HW 1764, Fig. 23.6f: one ordinary O–R bond and three O−→Zn donations (PW). Supports the alkoxide-bridge family, independent of the organyl substituents. This is distinct from the deferred neutral-water/ether #v2#d2 states; no implicit-OH counterpart proposed here |
+| Zg25 | M#u#v; M#u#h; Hg#n5#u#v; Hg#n5#u#h | Implemented: 6 | ZnH/CdH: WA04Z, pp. 11010–11011, Tables 5–6, identifies the ²Σ radicals spectroscopically. HgH: SYB05, pp. 4710–4711; Mo01, Table III, explicitly gives the ²Σ⁺ ground state and compares calculated and experimental constants. Ordinary single bond, explicit/implicit H; no additional metal-cluster states |
+| Zg26 | Solid ZnH2/CdH2; small (MH2)n aggregates | Evidence reviewed; no further type proposed | WA04Z, p. 11012, supports hydrogen-bridged solid polymers but does not establish a specific network topology. The observed molecular dimers/trimers are assigned as van der Waals aggregates; no evidence was found for the calculated D2h dibridged dimers. Retain existing ionic salt descriptions and Zg02/Zg17 monomer states; no inferred polymer motif or extra MC ladder |
+
+#### Zinc-group Counts comparison and coverage
+
+For these nonaromatic states, the implemented arithmetic is
+`E = ve − charge + h + v + 2t` and
+`2n + u = ve − charge − h − v − 2d − m`, with `ve = 2` for Zn/Cd and `12` for Hg.
+All 53 metal additions are distinct from the existing states and satisfy the
+electron balance. The O companion uses `ve = 6` and requires capacity 8, within its
+current limit. Every addition has inferred conformance coverage.
+
+| Constraint | Implemented scope |
+| --- | --- |
+| Zn/Cd capacity | Retained at 18; the added states require at most 12 |
+| Hg capacity | Approved and implemented: 18 → 22 for the explicitly six-coordinate aqua ion, counting ten d electrons and six donated pairs. Hg#c+2#n5#t5 and Hg#c-3#n5#v5 require 20; Hg#c+2#n5#t6 requires 22. All other selected states fit 18 |
+| ValenceTable | No direct Zn/Cd/Hg entries or target/aromatic additions. Explicit-H and nonhydride fixtures default implicit H to zero; selected implicit-H variants supply #h/#h2. Zg18 needs capacity 4. All additions fit the current capacities |
+| Other bounds | Unchanged. Supplied valences/charges are not restricted by the free-enumeration bounds; the registry valence index grows for the actual entries |
+| Coverage | All 54 additions are inferred by independent resolution fixtures: 52 new inputs and four ZnMe2 inputs revised to infer Zn's occupation. Ordinary/donor and explicit/implicit-H variants are covered where selected. The seven baseline atom/ion cases are retained |
+
+All four resolver/policy combinations agree for each new or revised input. The
+expected atom states and valence invariants were checked independently for all
+four outputs. The 1,542 earlier snapshots are unchanged; the full resolution suite
+now has 1,594 passing cases. General Cp donor-side multidonor accounting remains
+separate work, as recorded in Zg11.
+The graph library (3,594), graph properties (223), chemistry library (306), other
+graph integration tests and doc tests pass, as do Clippy with warnings denied,
+formatting and diff whitespace checks.
+
+#### Zinc-group primary-source checks
+
+The five supplied PDFs and W77 are reviewed and archived. Mo01 was obtained as an
+author manuscript to verify HgH's ground-state assignment. No download remains
+necessary for the selected scope. Preserved sources are in `materials/valence/`;
+`scratch/hw-zinc-review/` holds intermediates only.
+
+| Key | Source | Evidence used |
+| --- | --- | --- |
+| SYB05 | Shayesteh, Yu and Bernath, “Gaseous HgH2, CdH2, and ZnH2,” *Chem. Eur. J.* **11** (2005), 4709–4712. [DOI](https://doi.org/10.1002/chem.200500332), [PDF](../materials/valence/Shayesteh-2005-group12-dihydrides.pdf) | Rotational spectra establish linear, closed-shell dihydrides; explicit covalent-bond discussion, pp. 4710–4711. Zg02/Zg17 |
+| WA04Z | Wang and Andrews, “Infrared Spectra of Zn and Cd Hydride Molecules and Solids,” *J. Phys. Chem. A* **108** (2004), 11006–11013. [DOI](https://doi.org/10.1021/jp046414m), [PDF](../materials/valence/Wang-Andrews-2004-Zn-Cd-hydrides.pdf) | ZnH/CdH doublets and linear HMMH: pp. 11010–11011, Tables 5–6; molecular aggregates versus bridged solids: p. 11012. Zg02/Zg17/Zg25/Zg26 |
+| KBK80 | de Koning, Boersma and van der Kerk, “Synthesis, characterization and properties of some organozinc hydride complexes,” *J. Organomet. Chem.* **195** (1980), 1–12. [DOI](https://doi.org/10.1016/S0022-328X(00)93381-3), [PDF](../materials/valence/de-Koning-1980-organozinc-hydrides.pdf) | Cryoscopy, NMR and IR support the trimer/bridge proposal; pp. 3–4, Fig. 1. The [0,2,0] allocation is PW. Zg18 |
+| WRK07 | Wang, Andrews, Riedel and Kaupp, “Mercury Is a Transition Metal: The First Experimental Evidence for HgF4,” *Angew. Chem. Int. Ed.* **46** (2007), 8371–8375. [DOI](https://doi.org/10.1002/anie.200703710), [PDF](../materials/valence/Wang-2007-HgF4.pdf) | IR bands at 703 cm⁻¹ in Ne and 682 cm⁻¹ in Ar; square-planar low-spin d⁸ assignment, pp. 8371–8374. Zg20 |
+| Ro08 | Rooms, Wilson, Harvey, Bridgeman and Young, “Mercury–fluorine interactions: a matrix isolation investigation of Hg⋯F2, HgF2 and HgF4 in argon matrices,” *Phys. Chem. Chem. Phys.* **10** (2008), 4594–4605. [DOI](https://doi.org/10.1039/B805608K), [PDF](../materials/valence/Rooms-2008-mercury-fluorides.pdf) | Negative Ar result and explicit comparison with WRK07's lower-temperature/Ne experiment; pp. 4594, 4599, 4603–4604. Zg20 |
+| W77 | Watkins, *Preparations, Solution Composition, and Reactions of Complex Metal Hydrides and Ate Complexes of Zinc, Aluminum, and Copper*, PhD thesis, Georgia Institute of Technology (1977). [Repository PDF](https://repository.gatech.edu/bitstreams/e81805c5-5e1f-4d9b-88ef-891aad8840c5/download), [archived PDF](../materials/valence/Watkins-1977-complex-metal-hydrides-thesis.pdf) | Reviewed Part I, pp. 35–42: distinct complex-hydride products but unresolved structures; Li3ZnH5 preparation not reproduced. Zg19 |
+| Mo01 | Mosyagin, Titov, Eliav and Kaldor, “GRECP/RCC calculation of the spectroscopic constants for the HgH molecule and its cation” (2001), [author manuscript](https://arxiv.org/abs/physics/0101047v4), [PDF](../materials/valence/Mosyagin-2001-HgH.pdf) | Table III explicitly identifies ground-state HgH as (σ²σ¹) ²Σ⁺ and compares calculations with experimental spectroscopy. Zg25 |

@@ -1,0 +1,5 @@
+; [Au(CO)2]+; HW II, p. 1742; CO charge allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au#c+" "C#c-" "O#c+" "C#c-" "O#c+"]
+         :bonds [[1 2 "3"] [3 4 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,5 @@
+; HgCl2(SMe2)2; HW II, p. 1775, Fig. 23.10f.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Hg" "Cl" "Cl" "S" "C#h3" "C#h3" "S" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"] [6 7 "1"] [6 8 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

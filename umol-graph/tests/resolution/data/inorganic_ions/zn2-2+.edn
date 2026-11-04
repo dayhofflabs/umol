@@ -1,0 +1,4 @@
+; Zn2(2+); HW II, p. 1762; ordinary bond: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zn#c+" "Zn#c+"]
+         :bonds [[0 1 "1"]]}}

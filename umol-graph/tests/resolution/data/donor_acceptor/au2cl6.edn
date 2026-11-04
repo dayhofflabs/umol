@@ -1,0 +1,6 @@
+; Au2Cl6; HW II, pp. 1736-1737; bridging Cl- donation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au#c+" "Au#c+" "Cl" "Cl" "Cl" "Cl" "Cl#c-" "Cl#c-"]
+         :bonds [[0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 1 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 1 :attrs "1"}]}}

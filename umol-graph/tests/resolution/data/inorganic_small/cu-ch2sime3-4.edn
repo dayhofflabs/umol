@@ -1,0 +1,9 @@
+; (CuCH2SiMe3)4; HW II, p. 1708, Fig. 22.15; local Cu-C-Cu 3c2e contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu" "Cu" "Cu" "Cu" "C#h2" "Si" "C#h3" "C#h3" "C#h3" "C#h2" "Si" "C#h3" "C#h3" "C#h3" "C#h2" "Si"
+                 "C#h3" "C#h3" "C#h3" "C#h2" "Si" "C#h3" "C#h3" "C#h3"]
+         :bonds [[4 5 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [9 10 "1"] [10 11 "1"] [10 12 "1"] [10 13 "1"] [14 15 "1"]
+                 [15 16 "1"] [15 17 "1"] [15 18 "1"] [19 20 "1"] [20 21 "1"] [20 22 "1"] [20 23 "1"]]
+         :multicenter-bonds [{:atoms [0 4 1] :attrs "[1,1,0]#c0#u0#s1"} {:atoms [1 9 2] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [2 14 3] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [3 19 0] :attrs "[1,1,0]#c0#u0#s1"}]}}
