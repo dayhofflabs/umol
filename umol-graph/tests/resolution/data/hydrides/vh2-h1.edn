@@ -1,0 +1,4 @@
+; Molecular VH2, 4-fold spin multiplicity; Ma et al. (1996), pp. 872-874, doi:10.1021/ja951376t; Van Zee et al. (1995), pp. 4370-4372, doi:10.1063/1.469485.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#u3#h1" "H"]
+         :bonds [[0 1 "1"]]}}

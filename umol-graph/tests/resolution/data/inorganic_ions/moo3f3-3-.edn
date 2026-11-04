@@ -1,0 +1,4 @@
+; MoO3F3(3-); HW II, p. 1881
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo#c-3" "O" "O" "O" "F" "F" "F"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

@@ -1,0 +1,7 @@
+; CrO(O2)2·py; HW II, pp. 1853-1854; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c+4" "O" "O#c-" "O#c-" "O#c-" "O#c-" "N" "C#h" "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 "2"] [2 3 "1"] [4 5 "1"] [6 7 "2"] [7 8 "1"] [8 9 "2"] [9 10 "1"] [10 11 "2"] [11 6 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

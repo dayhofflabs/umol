@@ -1,0 +1,4 @@
+; MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo#u2#h2" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

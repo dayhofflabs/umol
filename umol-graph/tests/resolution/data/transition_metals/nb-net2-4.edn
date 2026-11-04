@@ -1,0 +1,7 @@
+; Nb(NEt2)4, d1; HW II, pp. 1825, 1833; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nb" "N" "C#h2" "C#h3" "C#h2" "C#h3" "N" "C#h2" "C#h3" "C#h2" "C#h3" "N" "C#h2" "C#h3" "C#h2"
+                 "C#h3" "N" "C#h2" "C#h3" "C#h2" "C#h3"]
+         :bonds [[1 2 "1"] [2 3 "1"] [1 4 "1"] [4 5 "1"] [0 1 "1"] [6 7 "1"] [7 8 "1"] [6 9 "1"] [9 10 "1"]
+                 [0 6 "1"] [11 12 "1"] [12 13 "1"] [11 14 "1"] [14 15 "1"] [0 11 "1"] [16 17 "1"] [17 18 "1"]
+                 [16 19 "1"] [19 20 "1"] [0 16 "1"]]}}

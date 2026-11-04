@@ -1,0 +1,4 @@
+; V(Cl)4, d1; HW II, pp. 1825, 1833; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

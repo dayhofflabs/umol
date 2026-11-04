@@ -1,0 +1,7 @@
+; CrO(O2)2·bipy; HW II, pp. 1853-1854
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr" "O" "O" "O" "O" "O" "N" "C" "C#h" "C#h" "C#h" "C#h" "N" "C" "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 "2"] [2 3 "1"] [0 2 "1"] [0 3 "1"] [4 5 "1"] [0 4 "1"] [0 5 "1"] [6 7 "2"] [7 8 "1"]
+                 [8 9 "2"] [9 10 "1"] [10 11 "2"] [11 6 "1"] [12 13 "2"] [13 14 "1"] [14 15 "2"] [15 16 "1"]
+                 [16 17 "2"] [17 12 "1"] [7 13 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"} {:donors [12] :acceptor 0 :attrs "1"}]}}

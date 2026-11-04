@@ -1,0 +1,6 @@
+; VO(OH)3(1-), d1; HW II, pp. 1826-1827; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c+2" "O" "O#h#c-" "O#h#c-" "O#h#c-"]
+         :bonds [[0 1 "2"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}]}}

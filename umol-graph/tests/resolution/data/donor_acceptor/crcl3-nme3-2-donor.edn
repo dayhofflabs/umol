@@ -1,0 +1,7 @@
+; CrCl3(NMe3)2, d3 quartet; HW II, pp. 1860-1861; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c+3#u3" "Cl#c-" "Cl#c-" "Cl#c-" "N" "C#h3" "C#h3" "C#h3" "N" "C#h3" "C#h3" "C#h3"]
+         :bonds [[4 5 "1"] [4 6 "1"] [4 7 "1"] [8 9 "1"] [8 10 "1"] [8 11 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"}]}}

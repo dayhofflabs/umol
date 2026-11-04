@@ -1,0 +1,5 @@
+; TaCl5·SEt2; HW II, p. 1835.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ta" "Cl" "Cl" "Cl" "Cl" "Cl" "S" "C#h2" "C#h3" "C#h2" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [6 7 "1"] [7 8 "1"] [6 9 "1"] [9 10 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

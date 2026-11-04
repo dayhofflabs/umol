@@ -1,0 +1,4 @@
+; MoH, 5 unpaired electrons; WA05Mo, Tables 2-6; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo#c+1#u5" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

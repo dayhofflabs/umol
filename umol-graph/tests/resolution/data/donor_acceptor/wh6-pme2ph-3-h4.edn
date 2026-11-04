@@ -1,0 +1,10 @@
+; WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#h4" "H" "H" "P" "C#h3" "C#h3" "C" "C#h" "C#h" "C#h" "C#h" "C#h" "P" "C#h3" "C#h3" "C" "C#h"
+                 "C#h" "C#h" "C#h" "C#h" "P" "C#h3" "C#h3" "C" "C#h" "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"] [3 6 "1"] [6 7 "2"] [7 8 "1"] [8 9 "2"] [9 10 "1"]
+                 [10 11 "2"] [11 6 "1"] [12 13 "1"] [12 14 "1"] [12 15 "1"] [15 16 "2"] [16 17 "1"] [17 18 "2"]
+                 [18 19 "1"] [19 20 "2"] [20 15 "1"] [21 22 "1"] [21 23 "1"] [21 24 "1"] [24 25 "2"] [25 26 "1"]
+                 [26 27 "2"] [27 28 "1"] [28 29 "2"] [29 24 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [12] :acceptor 0 :attrs "1"}
+                        {:donors [21] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,7 @@
+; Mo2Cl9(3-), M-M single bond, two local unpaired electrons; HW II, p. 1893; MSL97, p. 6270; chloride donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo#u2" "Mo#u2" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+         :dative-bonds [{:donors [8] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}]}}

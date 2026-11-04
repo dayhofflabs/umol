@@ -1,0 +1,5 @@
+; WO2F2; HW II, p. 1873; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c+2" "O" "O" "F#c-" "F#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

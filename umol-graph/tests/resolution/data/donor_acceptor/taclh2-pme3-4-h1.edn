@@ -1,0 +1,8 @@
+; TaClH2(PMe3)4, diamagnetic; Luetkens et al. (1983), p. 4475; doi:10.1021/ja00351a058.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ta#h1" "Cl" "H" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3" "P"
+                 "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"] [3 6 "1"] [7 8 "1"] [7 9 "1"] [7 10 "1"] [11 12 "1"]
+                 [11 13 "1"] [11 14 "1"] [15 16 "1"] [15 17 "1"] [15 18 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"} {:donors [15] :acceptor 0 :attrs "1"}]}}

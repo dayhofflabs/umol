@@ -1,0 +1,4 @@
+; WCl6-, d1; HW II, p. 1872
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c-1" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

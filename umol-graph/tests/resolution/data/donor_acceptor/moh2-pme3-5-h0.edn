@@ -1,0 +1,14 @@
+; MoH2(PMe3)5; HW II, pp. 1871-1872; Lyons et al. (1984), pp. 695-696.
+; doi:10.1039/DT9840000695. Paired d4 assignment: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo" "H" "H" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3"
+                 "C#h3" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 :single] [0 2 :single] [3 4 :single] [3 5 :single] [3 6 :single]
+                 [7 8 :single] [7 9 :single] [7 10 :single] [11 12 :single] [11 13 :single]
+                 [11 14 :single] [15 16 :single] [15 17 :single] [15 18 :single] [19 20 :single]
+                 [19 21 :single] [19 22 :single]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"}
+                        {:donors [15] :acceptor 0 :attrs "1"}
+                        {:donors [19] :acceptor 0 :attrs "1"}]}}

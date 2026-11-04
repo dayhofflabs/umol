@@ -1,0 +1,9 @@
+; WCl3(py)3, d3 quartet; HW II, p. 1891
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#u3" "Cl" "Cl" "Cl" "N" "C#h" "C#h" "C#h" "C#h" "C#h" "N" "C#h" "C#h" "C#h" "C#h" "C#h" "N"
+                 "C#h" "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2"] [5 6 "1"] [6 7 "2"] [7 8 "1"] [8 9 "2"] [9 4 "1"]
+                 [10 11 "2"] [11 12 "1"] [12 13 "2"] [13 14 "1"] [14 15 "2"] [15 10 "1"] [16 17 "2"] [17 18 "1"]
+                 [18 19 "2"] [19 20 "1"] [20 21 "2"] [21 16 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 0 :attrs "1"}
+                        {:donors [16] :acceptor 0 :attrs "1"}]}}

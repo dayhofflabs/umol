@@ -1,0 +1,6 @@
+; MoO3(dien); HW II, p. 1881
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo" "O" "O" "O" "N#h2" "C#h2" "C#h2" "N#h" "C#h2" "C#h2" "N#h2"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"}]}}

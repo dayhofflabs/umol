@@ -1,0 +1,6 @@
+; Dioxovanadium(V), VO2+ / [VO2(H2O)4]+; HW II, pp. 1821, 1824.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c+" "O" "O" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :bonds [[0 1 "2"] [0 2 "2"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

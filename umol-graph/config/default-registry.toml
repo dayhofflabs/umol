@@ -1,14 +1,16 @@
 # Atom typing for valence resolver.
 #
-# This registry is primarily based on Holleman/Wiberg, 103. Auflage. Primary literature sources included where needed.
-# The registry data is sorted by element, localized valence and charge (0, +1, +2, ..., -1, -2, ...).
+# This registry is primarily based on Holleman/Wiberg, 103. Auflage. Additional references are listed below.
+# The registry data is organized by element and localized valence. The rows within each entry are sorted
+# by charge (0, +1, +2, ..., -1, -2, ...).
 #
 # Key | Reference
 # --- | ---
-# HW  | Holleman/Wiberg, Anorganische Chemie, 103. Auflage.; I/II denote the volume.
+# HW  | Holleman/Wiberg, Anorganische Chemie, 103. Auflage.; I/II denote the volume (Band 1/2).
 # PW  | Present work — calculations and adopted assignments.
 # A07 | Aragoni et al., Bioinorg. Chem. Appl. (2007), 17416; doi:10.1155/2007/17416
 # A12 | Arp et al., J. Am. Chem. Soc. 134 (2012), 6409-6415; doi:10.1021/ja300654t
+# A68 | Alyea et al., Chem. Commun. (1968), 495; doi:10.1039/C19680000495
 # A93 | Arduengo et al., Inorg. Chem. 32 (1993), 1541-1542; doi:10.1021/ic00061a004
 # ADD09 | Aymar, Deiglmayr and Dulieu, Can. J. Phys. 87 (2009), 543-556; doi:10.1139/P09-005
 # AW03H | Andrews and Wang, J. Am. Chem. Soc. 125 (2003), 11751-11760; doi:10.1021/ja036307q
@@ -18,6 +20,8 @@
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
 # B72 | Bartlett et al., Inorg. Chem. 11 (1972), 1124-1127; doi:10.1021/ic50111a042
 # B82 | Bojes et al., J. Am. Chem. Soc. 104 (1982), 4837-4841; doi:10.1021/ja00382a017
+# BHN71 | Bradley, Hursthouse and Newing, J. Chem. Soc. D (1971), 411-412; doi:10.1039/C2971000411B
+# BLH81 | Burt, Leigh and Hughes, J. Chem. Soc., Dalton Trans. (1981), 793-799; doi:10.1039/DT9810000793
 # Be94 | Beck, Angew. Chem. Int. Ed. Engl. 33 (1994), 163-172; doi:10.1002/anie.199401631
 # BPS26 | Bajnóczi, Sigfridsson Clauss and Persson, J. Solution Chem. 55 (2026), 851-865; doi:10.1007/s10953-025-01559-9
 # Bu82 | Burns et al., Inorg. Chem. 21 (1982), 799-807; doi:10.1021/ic00132a065
@@ -33,6 +37,7 @@
 # C78T | Christe et al., Inorg. Chem. 17 (1978), 533-538; doi:10.1021/ic50181a003
 # C80 | Chivers et al., J. Am. Chem. Soc. 102 (1980), 5773-5781; doi:10.1021/ja00538a013
 # C81 | Christe, Wilson and Schack, Inorg. Chem. 20 (1981), 2104-2114; doi:10.1021/ic50221a034
+# C83 | Cox et al., Inorg. Chem. 22 (1983), 3614-3620; doi:10.1021/ic00166a025
 # C87 | Cloke et al., J. Chem. Soc., Chem. Commun. (1987), 1667-1668; doi:10.1039/C39870001667
 # C91 | Christe et al., J. Am. Chem. Soc. 113 (1991), 3351-3361; doi:10.1021/ja00009a021
 # C91H | Christe et al., J. Chem. Soc., Chem. Commun. (1991), 837-840; doi:10.1039/C39910000837
@@ -44,6 +49,7 @@
 # CA94 | Chertihin and Andrews, J. Am. Chem. Soc. 116 (1994), 8322-8327; doi:10.1021/ja00097a045
 # CA95 | Chertihin and Andrews, J. Phys. Chem. 99 (1995), 15004-15010; doi:10.1021/j100041a014
 # CG79 | Cloke and Green, J. Chem. Soc., Chem. Commun. (1979), 127-128; doi:10.1039/C39790000127
+# CND01 | Cage, Nguyen and Dalal, Solid State Commun. 119 (2001), 597-601; doi:10.1016/S0038-1098(01)00296-4
 # CS79 | Corliss and Sugar, J. Phys. Chem. Ref. Data 8 (1979), 1-62; doi:10.1063/1.555591
 # Ce03 | Černušák et al., Collect. Czech. Chem. Commun. 68 (2003), 75-88; doi:10.1135/cccc20030075
 # CN73 | Christe and Naumann, Inorg. Chem. 12 (1973), 59-62; doi:10.1021/ic50119a016
@@ -52,37 +58,48 @@
 # D08 | Dixon et al., Inorg. Chem. 47 (2008), 5485-5494; doi:10.1021/ic800021h
 # D20 | Deng et al., Chem. Eur. J. 26 (2020), 10487-10500; doi:10.1002/chem.201905552
 # D68 | Deganello, Carturan and Belluco, J. Chem. Soc. A (1968), 2873-2878; doi:10.1039/J19680002873
+# D77 | Drew, Mitchell and Pygall, J. Chem. Soc., Dalton Trans. (1977), 1071-1077; doi:10.1039/DT9770001071
 # D79 | Darensbourg and Incorvia, Inorg. Chem. 18 (1979), 18-22; doi:10.1021/ic50191a004
 # DB91 | Das and Balasubramanian, J. Phys. Chem. 95 (1991), 3979-3984; doi:10.1021/j100163a018
+# DW77 | Datta and Wreford, Inorg. Chem. 16 (1977), 1134-1137; doi:10.1021/ic50171a031
 # E92 | Eppley et al., J. Organomet. Chem. 431 (1992), 133-142; doi:10.1016/0022-328X(92)80112-B
 # EC76 | Epiotis and Cherry, J. Am. Chem. Soc. 98 (1976), 4365-4370; doi:10.1021/ja00431a003
 # EC90 | Ellis and Chi, J. Am. Chem. Soc. 112 (1990), 6022-6025; doi:10.1021/ja00172a017
 # F18 | Falvey, ACS Omega 3 (2018), 10418-10432; doi:10.1021/acsomega.8b01038
+# FS77 | Fieselmann and Stucky, J. Organomet. Chem. 137 (1977), 43-54; doi:10.1016/S0022-328X(00)80841-4
 # Fr24 | Fritsch et al., Chem. Eur. J. (2024), e202400357; doi:10.1002/chem.202400357
 # G09 | Ghadwal et al., Angew. Chem. Int. Ed. 48 (2009), 5683-5686; doi:10.1002/anie.200901766
 # G10 | Grant et al., Inorg. Chem. 49 (2010), 261-270; doi:10.1021/ic901956g
 # G12 | Goebbert, Chem. Phys. Lett. 551 (2012), 19-25; doi:10.1016/j.cplett.2012.08.065
 # G16 | Goettel et al., Angew. Chem. Int. Ed. 55 (2016), 13780-13783; doi:10.1002/anie.201607583
 # G18 | Ganesamoorthy et al., Nat. Commun. 9 (2018), 87; doi:10.1038/s41467-017-02581-2
+# G85 | Girolami et al., J. Chem. Soc., Dalton Trans. (1985), 1339-1348; doi:10.1039/DT9850001339
 # GS76 | Gillespie and Spekkens, J. Chem. Soc., Dalton Trans. (1976), 2391-2396; doi:10.1039/DT9760002391
 # H13 | Hanway et al., J. Am. Chem. Soc. 135 (2013), 9078-9082; doi:10.1021/ja403370k
 # H81 | Harrison, J. Am. Chem. Soc. 103 (1981), 7406-7413; doi:10.1021/ja00415a002
+# HC90 | Hlatky and Crabtree, Inorg. Synth. 27 (1990), 8-14; doi:10.1002/9780470132586.ch2
 # HH79 | Huber and Herzberg, Molecular Spectra and Molecular Structure IV: Constants of Diatomic Molecules (1979); doi:10.1007/978-1-4757-0961-2
 # I98 | Moss, IUPAC fused-ring nomenclature, Pure Appl. Chem. 70 (1998), 143-216; doi:10.1351/pac199870010143
+# J12 | Jackson et al., Organometallics 31 (2012), 8265-8274; doi:10.1021/om300892y
 # J19 | Jones et al., ACS Cent. Sci. 5 (2019), 1507-1513; doi:10.1021/acscentsci.9b00403
 # K18 | Karadakov et al., Chem. Eur. J. 24 (2018), 16791-16803; doi:10.1002/chem.201804292
 # K21 | King, Levason and Reid, Dalton Trans. 50 (2021), 17751-17765; doi:10.1039/D1DT03339E
 # K84 | Krebs, Schäffer and Pohl, Z. Naturforsch. B 39 (1984), 1633-1641; doi:10.1515/znb-1984-1202
 # K91 | Krebs et al., Z. Anorg. Allg. Chem. 592 (1991), 17-34; doi:10.1002/zaac.19915920103
 # KBK80 | de Koning et al., J. Organomet. Chem. 195 (1980), 1-12; doi:10.1016/S0022-328X(00)93381-3
+# KG75 | Kiernan and Griffith, J. Chem. Soc., Dalton Trans. (1975), 2489-2494; doi:10.1039/DT9750002489
+# KH74 | Kruck and Hempel, Angew. Chem. Int. Ed. Engl. 13 (1974), 201-202; doi:10.1002/anie.197402011
 # KJ86 | Karpas and Jasien, Int. J. Mass Spectrom. Ion Processes 69 (1986), 115-119; doi:10.1016/0168-1176(86)87046-X
 # KP04 | Krossing and Passmore, Inorg. Chem. 43 (2004), 1000-1011; doi:10.1021/ic0207303
+# L83 | Luetkens, Huffman and Sattelberger, J. Am. Chem. Soc. 105 (1983), 4474-4475; doi:10.1021/ja00351a058
+# L84 | Luetkens et al., Inorg. Chem. 23 (1984), 1718-1726; doi:10.1021/ic00180a017
 # L95 | Lukens, Berkeley thesis (1995), LBL-37646; https://digital.library.unt.edu/ark:/67531/metadc621122/
 # L97 | Landrum, Goldberg and Hoffmann, J. Chem. Soc., Dalton Trans. (1997), 3605-3613; doi:10.1039/A703736H
 # LKF05 | Lein, Krapp and Frenking, J. Am. Chem. Soc. 127 (2005), 6290-6299; doi:10.1021/ja042295c
 # Le04 | Lehmann et al., Inorg. Chem. 43 (2004), 6905-6921; doi:10.1021/ic040015o
 # Li96 | Li, Irle and Schwarz, Inorg. Chem. 35 (1996), 100-109; doi:10.1021/ic950305s
 # Lo17 | Loor et al., Z. Anorg. Allg. Chem. 643 (2017), 60-68; doi:10.1002/zaac.201600325
+# Ly84 | Lyons et al., J. Chem. Soc., Dalton Trans. (1984), 695-700; doi:10.1039/DT9840000695
 # M02 | Mattmann et al., J. Org. Chem. 67 (2002), 1208-1213; doi:10.1021/jo0108156
 # M02G | Matsumoto et al., Acta Cryst. C58 (2002), m186-m187; doi:10.1107/S0108270101020601
 # M12 | Moilanen et al., J. Chem. Theory Comput. 8 (2012), 4249-4258; doi:10.1021/ct300627p
@@ -94,25 +111,31 @@
 # M79 | McPherson et al., J. Am. Chem. Soc. 101 (1979), 3425-3430; doi:10.1021/ja00507a001
 # M93 | Mercier et al., Inorg. Chem. 32 (1993), 386-393; doi:10.1021/ic00056a009
 # MCS96 | Ma, Collins and Schaefer, J. Am. Chem. Soc. 118 (1996), 870-879; doi:10.1021/ja951376t
+# MDP19 | Magott, Dunbar and Pinkowicz, Dalton Trans. 48 (2019), 15493-15500; doi:10.1039/C9DT02164G
 # MH23 | Pang et al., ACS Omega 8 (2023), 19391-19401; doi:10.1021/acsomega.3c00352
 # MMW73 | Moras, Metz and Weiss, Acta Cryst. B29 (1973), 388-395; doi:10.1107/S0567740873002645
 # MP12 | Mähler and Persson, Inorg. Chem. 51 (2012), 425-438; doi:10.1021/ic2018693
+# MSL97 | McGrady, Stranger and Lovell, J. Phys. Chem. A 101 (1997), 6265-6272; doi:10.1021/jp9625568
 # Mo01 | Mosyagin et al., GRECP/RCC calculation of HgH (2001); arXiv:physics/0101047v4
 # N14 | Närhi et al., Spectrochim. Acta A 117 (2014), 728-738; doi:10.1016/j.saa.2013.09.063
 # NBS74 | McNesby, Measures for Air Quality (1972-1973), NBS Technical Note 828 (1974), p. 123
 # OC82 | Oberhammer and Christe, Inorg. Chem. 21 (1982), 273-275; doi:10.1021/ic00131a050
 # P06 | Pointner, Suontamo and Schrobilgen, Inorg. Chem. 45 (2006), 1517-1534; doi:10.1021/ic0510260
+# P71 | Pennella, Chem. Commun. (1971), 158; doi:10.1039/C2971000158A
 # P85 | Pohl, Saak and Krebs, Z. Naturforsch. B 40 (1985), 251-257; doi:10.1515/znb-1985-0218
 # PS95 | Persson et al., Z. Naturforsch. A 50 (1995), 21-37; doi:10.1515/zna-1995-0105
 # Q15 | Quiñonero, Molecules 20 (2015), 11632-11659; doi:10.3390/molecules200711632
 # Q24 | Queen et al., J. Am. Chem. Soc. 146 (2024), 3279-3292; doi:10.1021/jacs.3c11922
 # R05 | Ruth, Lerner and Bolte, Acta Cryst. E61 (2005), m1852-m1853; doi:10.1107/S1600536805026346
 # R20 | Reiersolmoen et al., Chem. Sci. 11 (2020), 7979-7990; doi:10.1039/D0SC02076A
+# R71 | Rossman, Caltech PhD thesis (1971), part I; https://thesis.caltech.edu/9999/
 # RB94 | Ram and Bernath, J. Chem. Phys. 101 (1994), 74-79; doi:10.1063/1.468130
 # S03 | Shayesteh et al., J. Chem. Phys. 118 (2003), 3622-3627; doi:10.1063/1.1539850
 # S06 | Segawa, Yamashita and Nozaki, Science 314 (2006), 113-115; doi:10.1126/science.1131914
 # S19 | Shi et al., Phys. Rev. Materials 3 (2019), 034604; doi:10.1103/PhysRevMaterials.3.034604
 # S20 | Scheibe et al., Eur. J. Inorg. Chem. (2020), 4483-4496; doi:10.1002/ejic.202000845
+# S98 | Stranger, McGrady and Lovell, Inorg. Chem. 37 (1998), 6795-6806; doi:10.1021/ic971511y
+# SG81 | Soares and Griffith, J. Chem. Soc., Dalton Trans. (1981), 1886-1891; doi:10.1039/DT9810001886
 # SJ73 | Schroeder and Jacobson, Inorg. Chem. 12 (1973), 210-213; doi:10.1021/ic50119a046
 # Sh73 | Shaw, Carroll and Thomas, J. Am. Chem. Soc. 95 (1973), 5870-5875; doi:10.1021/ja00799a006
 # SYB05 | Shayesteh et al., Chem. Eur. J. 11 (2005), 4709-4712; doi:10.1002/chem.200500332
@@ -120,12 +143,17 @@
 # TB84 | Thompson and Bercaw, Pure Appl. Chem. 56 (1984), 1-11; doi:10.1351/pac198456010001
 # Tu25 | Tuna et al., J. Turkish Chem. Soc. A 12 (2025), 15-22; doi:10.18596/jotcsa.1590991
 # V18 | Valjus et al., Can. J. Chem. 96 (2018), 591-598; doi:10.1139/cjc-2018-0047
+# VLW95 | Van Zee, Li and Weltner, J. Chem. Phys. 102 (1995), 4367-4374; doi:10.1063/1.469485
 # W02 | Walker et al., J. Am. Soc. Mass Spectrom. 13 (2002), 469-476; doi:10.1016/S1044-0305(02)00369-0
 # W75 | Willett, LaBonville and Ferraro, J. Chem. Phys. 63 (1975), 1474-1478; doi:10.1063/1.431510
+# WA02W | Wang and Andrews, J. Phys. Chem. A 106 (2002), 6720-6729; doi:10.1021/jp025920d
 # WA03 | Wang and Andrews, J. Am. Chem. Soc. 125 (2003), 6581-6587; doi:10.1021/ja029862l
+# WA03Cr | Wang and Andrews, J. Phys. Chem. A 107 (2003), 570-578; doi:10.1021/jp026930h
 # WA04M | Wang and Andrews, J. Phys. Chem. A 108 (2004), 11511-11520; doi:10.1021/jp046410h
 # WA04H | Wang and Andrews, J. Phys. Chem. A 108 (2004), 11500-11510; doi:10.1021/jp046046m
 # WA04Z | Wang and Andrews, J. Phys. Chem. A 108 (2004), 11006-11013; doi:10.1021/jp046414m
+# WA05Mo | Wang and Andrews, J. Phys. Chem. A 109 (2005), 9021-9027; doi:10.1021/jp053591u
+# WA11 | Wang and Andrews, J. Phys. Chem. A 115 (2011), 14175-14183; doi:10.1021/jp2076148
 # WCA02 | Wang et al., J. Phys. Chem. A 106 (2002), 9213-9225; doi:10.1021/jp026166z
 # WDB90 | Wang, Das and Balasubramanian, Mol. Phys. 69 (1990), 147-159; doi:10.1080/00268979000100101
 # WJ74 | Wismer and Jacobson, Inorg. Chem. 13 (1974), 1678-1680; doi:10.1021/ic50137a026
@@ -917,21 +945,180 @@
 
 [V]
 0 = [
-    "V #n #u3",   # V atom, s2d3
-    "V #c+2 #u3", # V2+, d3
-    "V #c+3 #u2", # V3+, d2
+    "V #n #u3",       # V atom, s2d3; HW II, p. 1538
+    "V #n2 #u #t6",   # V(CO)6, d5 doublet; HW II, pp. 1830, 2109-2111
+    "V #u3 #h2",      # VH2 quartet; MCS96, pp. 872-874; VLW95, pp. 4370-4372
+    "V #n2 #h #t6",   # VH(PF3)6, paired d4; KH74, pp. 201-202
+    "V #c+ #n2 #t7",  # CpV(CO)4; HW II, pp. 1830, 1833, 1841, 2111; haptic order 3: PW
+    "V #c+2 #u3",     # V2+, d3; HW II, pp. 1829-1830
+    "V #c+2 #u3 #t6", # [V(H2O)6](2+), Cp2V, d3 quartet; HW II, pp. 1829-1830; J12, pp. 8265-8267; haptic order 3: PW
+    "V #c+2 #u3 #t2", # VH2 quartet; MCS96, pp. 872-874; VLW95, pp. 4370-4372; anionic donors: PW
+    "V #c+3 #u2",     # V3+, d2; HW II, pp. 1828-1829
+    "V #c+3 #u2 #t3", # V[N(SiMe3)2]3, d2 triplet; HW II, pp. 1822, 1829; anionic donors: PW
+    "V #c+3 #u2 #t4", # VCl4-, d2 triplet; HW II, pp. 1822, 1829; anionic donors: PW
+    "V #c+3 #u2 #t5", # VCl3·2D, d2 triplet; HW II, pp. 1828-1830; anionic donors: PW
+    "V #c+3 #u2 #t6", # [V(H2O)6](3+), d2 triplet; HW II, pp. 1828-1830
+    "V #c+3 #u2 #t7", # V(CN)7(4-), d2 triplet; HW II, p. 1829; anionic donors: PW
+    "V #c+3 #n #t8",  # [Cp2V(CO)2]+, paired d2; FS77, pp. 51-52; haptic order 3: PW
+    "V #c+4 #u",      # V4+, d1; HW II, pp. 1821-1826
+    "V #c+4 #u #t4",  # VCl4, d1; HW II, p. 1825; anionic donors: PW
+    "V #c+4 #u #t6",  # VCl6(2-), d1; HW II, pp. 1825-1826; anionic donors: PW
+    "V #c+4 #u #t8",  # VCl4(diars)2, d1; HW II, pp. 1825-1826, 1836; anionic donors: PW
+    "V #c+5",         # V5+, d0; HW II, pp. 1821-1826
+    "V #c+5 #t5",     # VF5; HW II, p. 1822; anionic donors: PW
+    "V #c+5 #t6",     # VF6-; HW II, p. 1822; anionic donors: PW
+    "V #c+5 #t8",     # V(O2)4(3-); HW II, p. 1825; anionic donors: PW
+    "V #c- #n3 #t6",  # V(CO)6-; HW II, pp. 1830, 1833, 1841, 2111
+    "V #c-3 #n4 #t5", # V(CO)5(3-); HW II, pp. 1830, 1833, 1841, 2111
+]
+1 = [
+    "V #u3 #v #h",       # VH2 quartet; MCS96, pp. 872-874; VLW95, pp. 4370-4372
+    "V #n2 #v #t6",      # VH(PF3)6, paired d4; KH74, pp. 201-202
+    "V #c+2 #u2 #v #t5", # [V(OH)(H2O)5](2+), d2 triplet; HW II, pp. 1828-1830
+    "V #c+2 #u2 #v #t6", # Cp2VCl, d2 triplet; FS77, pp. 46-47; haptic order 3: PW
 ]
 2 = [
-    "V #c+2 #v2 #u", # VO2+, d1
+    "V #u3 #v2 #t4",     # VCl2(dmpe)2, d3 quartet; HW II, pp. 1829-1830; G85, p. 1340
+    "V #u3 #v2",         # VH2 quartet; MCS96, pp. 872-874; VLW95, pp. 4370-4372
+    "V #c+ #u2 #v2 #t4", # VCl2D4+, d2 triplet; HW II, pp. 1828-1830
+    "V #c+2 #v2 #u",     # VO(2+), vanadyl, d1; HW II, p. 1826
+    "V #c+2 #u #v2 #t4", # VO(acac)2; HW II, pp. 1826-1827; anionic donors: PW
+    "V #c+2 #u #v2 #t5", # [VO(H2O)5](2+); HW II, pp. 1826-1827
+    "V #c+2 #u #v2 #t3", # VO(OH)3-; HW II, pp. 1826-1827; anionic donors: PW
+    "V #c+2 #u #v2 #t6", # Cp2VCl2; HW II, pp. 1831, 1841; haptic order 3: PW
+    "V #c+3 #v2 #t3",    # VOCl3; HW II, p. 1822; anionic donors: PW
+    "V #c+3 #v2 #t5",    # VOCl3·2D; HW II, p. 1822; anionic donors: PW
+    "V #c+3 #v2 #t6",    # [Cp2VCl2]+; HW II, pp. 1831, 1841; haptic order 3: PW
+]
+3 = [
+    "V #u2 #v3",      # V[N(SiMe3)2]3, d2 triplet; HW II, pp. 1822, 1829
+    "V #u2 #v3 #t2",  # VCl3·2D, d2 triplet; HW II, pp. 1828-1830
+    "V #u2 #v3 #t3",  # VCl3·3D, d2 triplet; HW II, pp. 1828-1830
+    "V #c+2 #v3 #t3", # [Cl3VN]-; HW I, pp. 757-758; nitride donor: PW
+]
+4 = [
+    "V #u #v4",      # VCl4, d1; HW II, p. 1825
+    "V #u #v4 #t2",  # VCl4·2D, d1; HW II, pp. 1825-1826
+    "V #u #v4 #t4",  # VCl4(diars)2, d1; HW II, pp. 1825-1826, 1836
+    "V #c+ #v4",     # VO2+, dioxovanadium; HW II, pp. 1821, 1824
+    "V #c+ #v4 #t4", # [VO2(H2O)4]+; HW II, pp. 1821, 1824
+    "V #c- #u2 #v4", # VCl4-, d2 triplet; HW II, pp. 1822, 1829
+]
+5 = [
+    "V #v5",        # VF5; HW II, p. 1822
+    "V #v5 #t2",    # VOCl3·2D; HW II, p. 1822
+    "V #c- #u #v5", # VO(OH)3-; HW II, pp. 1826-1827
+]
+6 = [
+    "V #c- #v6",      # VF6-; HW II, p. 1822
+    "V #c- #v6 #t",   # [VO(O2)2(NH3)]-; HW II, p. 1825
+    "V #c-2 #u #v6",  # VCl6(2-), d1; HW II, pp. 1825-1826
+    "V #c-3 #u2 #v6", # VCl6(3-), d2 triplet; HW II, pp. 1828-1830
+    "V #c-4 #u3 #v6", # V(CN)6(4-), d3 quartet; HW II, pp. 1829-1830
+]
+7 = [
+    "V #c-3 #u #v7",  # VO(CN)5(3-); HW II, pp. 1826-1827
+    "V #c-4 #u2 #v7", # V(CN)7(4-), d2 triplet; HW II, p. 1829
+]
+8 = [
+    "V #c-3 #v8", # V(O2)4(3-); HW II, p. 1825
 ]
 
 [Cr]
 0 = [
-    "Cr #u6",         # Cr atom, s1d5
-    "Cr #n3 #t5 #m0", # [HCr2(CO)10]-; HW II, p. 2069; D79; assignment: PW
-    "Cr #c+2 #u4",    # Cr2+, d4 high-spin
-    "Cr #c+2 #n #u2", # Cr2+, d4 low-spin
-    "Cr #c+3 #u3",    # Cr3+, d3
+    "Cr #u6",             # Cr atom, s1d5; HW II, p. 1538
+    "Cr #n3 #t5 #m0",     # [HCr2(CO)10]-; HW II, pp. 2069, 2137; D79; assignment: PW
+    "Cr #n3 #t6",         # Cr(CO)6; HW II, pp. 1861, 2111
+    "Cr #u4 #h2",         # CrH2, 4 unpaired electrons; WA03Cr, Tables 1-2
+    "Cr #n #h4 #t4",      # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #u5 #h",          # CrH, 5 unpaired electrons; WA03Cr, Tables 1-2
+    "Cr #c+ #n2 #u #t6",  # [Cr(C6H6)2]+, d5 doublet; HW II, p. 2207; haptic order 3: PW
+    "Cr #c+ #u5 #t",      # CrH, 5 unpaired electrons; WA03Cr, Tables 1-2; anionic donors: PW
+    "Cr #c+2 #u4",        # Cr(II), d4 high-spin; HW II, pp. 1862-1864
+    "Cr #c+2 #n #u2",     # Cr(II), d4 low-spin; HW II, p. 1864
+    "Cr #c+2 #u4 #t4",    # CrCl2(MeCN)2, d4 high-spin; HW II, p. 1864; anionic donors: PW
+    "Cr #c+2 #u4 #t5",    # [CrBr{N(CH2CH2NMe2)3}]+, d4 high-spin; HW II, p. 1864; anionic donors: PW
+    "Cr #c+2 #u4 #t6",    # [Cr(H2O)6](2+), d4 high-spin; HW II, pp. 1862, 1864
+    "Cr #c+2 #n #u2 #t6", # CrCl2(dmpe)2, two unpaired electrons; HW II, p. 1862; G85, p. 1340; anionic donors: PW
+    "Cr #c+2 #u4 #t2",    # CrH2, 4 unpaired electrons; WA03Cr, Tables 1-2; anionic donors: PW
+    "Cr #c+3 #u3",        # Cr(III), d3; HW II, pp. 1860-1861
+    "Cr #c+3 #u3 #t4",    # CrCl4-, d3 quartet; HW II, pp. 1860-1861; anionic donors: PW
+    "Cr #c+3 #u3 #t5",    # CrCl3(NMe3)2, d3 quartet; HW II, pp. 1860-1861; anionic donors: PW
+    "Cr #c+3 #u3 #t6",    # Cr(NH3)6(3+), d3 quartet; HW II, pp. 1860-1861
+    "Cr #c+3 #u3 #t3",    # Cr(NiPr2)3, d3 quartet; HW II, p. 1860; A68; BHN71; anionic donors: PW
+    "Cr #c+4 #u2",        # Cr4+, d2; HW II, pp. 1849, 1854-1856
+    "Cr #c+4 #u2 #t4",    # CrCl4, d2 triplet; HW II, pp. 1854-1856; anionic donors: PW
+    "Cr #c+4 #u2 #t6",    # CrCl6(2-), d2 triplet; HW II, pp. 1854-1856; anionic donors: PW
+    "Cr #c+4 #u2 #t7",    # Cr(O2)2(NH3)3, S=1; HW II, p. 1856; CND01, pp. 599-600; anionic donors: PW
+    "Cr #c+4 #n #t8",     # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862; anionic donors: PW
+    "Cr #c+5 #u",         # Cr5+, d1; HW II, pp. 1849, 1854-1856
+    "Cr #c+5 #u #t5",     # CrF5, d1; HW II, pp. 1854-1855; anionic donors: PW
+    "Cr #c+5 #u #t6",     # CrF6-, d1; HW II, pp. 1854-1855; anionic donors: PW
+    "Cr #c+5 #u #t8",     # Cr(O2)4(3-), d1; HW II, pp. 1855-1856; anionic donors: PW
+    "Cr #c+6",            # Cr6+, d0; HW II, pp. 1849, 1854-1856
+    "Cr #c- #n3 #h #t5",  # [HCr(CO)5]-; HW II, pp. 2136-2137
+    "Cr #c-2 #n4 #t5",    # Cr(CO)5(2-); HW II, pp. 1861, 2111
+]
+1 = [
+    "Cr #u4 #v #h",       # CrH2, 4 unpaired electrons; WA03Cr, Tables 1-2
+    "Cr #n #v #h3 #t4",   # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #u5 #v",          # CrH, 5 unpaired electrons; WA03Cr, Tables 1-2
+    "Cr #c+ #u4 #v #t4",  # [CrBr{N(CH2CH2NMe2)3}]+, d4 high-spin; HW II, p. 1864
+    "Cr #c+2 #u3 #v #t5", # CrCl(NH3)5(2+), d3 quartet; HW II, pp. 1860-1861
+    "Cr #c- #n3 #v #t5",  # Cr2(CO)10(2-), M-M single bond; HW II, pp. 1861, 2111
+]
+2 = [
+    "Cr #u4 #v2 #t2",     # CrCl2(MeCN)2, d4 high-spin; HW II, p. 1864
+    "Cr #n #u2 #v2 #t4",  # CrCl2(dmpe)2, two unpaired electrons; HW II, p. 1862; G85, p. 1340
+    "Cr #u4 #v2",         # CrH2, 4 unpaired electrons; WA03Cr, Tables 1-2
+    "Cr #n #v2 #h2 #t4",  # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #c+ #u3 #v2 #t4", # CrCl2(NH3)4+, d3 quartet; HW II, pp. 1860-1861
+    "Cr #c+3 #u #v2 #t3", # CrOCl3, d1; HW II, p. 1854; anionic donors: PW
+    "Cr #c+3 #u #v2 #t5", # CrOCl5(2-), d1; HW II, p. 1854; anionic donors: PW
+    "Cr #c+3 #u #v2 #t4", # CrOCl4-, d1; HW II, p. 1854; anionic donors: PW
+    "Cr #c+4 #v2 #t4",    # CrOF4; HW II, pp. 1853, 1855; anionic donors: PW
+    "Cr #c+4 #v2 #t5",    # CrO(O2)2·py; HW II, pp. 1853-1854; anionic donors: PW
+    "Cr #c+4 #v2 #t6",    # CrO(O2)2·bipy; HW II, pp. 1853-1854; anionic donors: PW
+]
+3 = [
+    "Cr #u3 #v3 #t2",   # CrCl3(NMe3)2, d3 quartet; HW II, pp. 1860-1861
+    "Cr #u3 #v3 #t3",   # CrCl3(NH3)3, d3 quartet; HW II, pp. 1860-1861
+    "Cr #n #v3 #h #t4", # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #u3 #v3",       # Cr(NiPr2)3, d3 quartet; HW II, p. 1860; A68; BHN71
+]
+4 = [
+    "Cr #u2 #v4",         # CrCl4, d2 triplet; HW II, pp. 1854-1856
+    "Cr #u2 #v4 #t3",     # Cr(O2)2(NH3)3, S=1; HW II, p. 1856; CND01, pp. 599-600
+    "Cr #n #v4 #t4",      # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #c+2 #v4 #t2",    # CrO2F2; HW II, pp. 1853, 1855; anionic donors: PW
+    "Cr #c+2 #v4 #t4",    # CrO2F4(2-); HW II, p. 1849; anionic donors: PW
+    "Cr #c+2 #v4 #t5",    # Cr2(OAc)4(H2O)2, M-M quadruple bond; HW II, pp. 1864-1866; acetate allocation: PW
+    "Cr #c- #u3 #v4",     # CrCl4-, d3 quartet; HW II, pp. 1860-1861
+    "Cr #c- #u3 #v4 #t2", # CrCl4(NH3)2-, d3 quartet; HW II, pp. 1860-1861
+]
+5 = [
+    "Cr #u #v5",          # CrF5, d1; HW II, pp. 1854-1855
+    "Cr #c-2 #u3 #v5 #t", # CrCl5NH3(2-), d3 quartet; HW II, pp. 1860-1861
+    "Cr #c-3 #u4 #v5",    # Cr(CN)5(3-), d4 high-spin; HW II, p. 1862
+]
+6 = [
+    "Cr #v6",             # CrO2F2; HW II, pp. 1849-1853
+    "Cr #v6 #t",          # CrO(O2)2·py; HW II, pp. 1853-1854
+    "Cr #v6 #t2",         # CrO(O2)2·bipy; HW II, pp. 1853-1854
+    "Cr #v6 #t3",         # Cr2(OAc)4(H2O)2, M-M quadruple bond; HW II, pp. 1864-1866; acetate allocation: PW
+    "Cr #c- #u #v6",      # CrF6-, d1; HW II, pp. 1854-1855
+    "Cr #c-2 #u2 #v6",    # CrCl6(2-), d2 triplet; HW II, pp. 1854-1856
+    "Cr #c-3 #u3 #v6",    # CrCl6(3-), d3 quartet; HW II, pp. 1860-1861
+    "Cr #c-4 #u4 #v6",    # CrI6(4-), discrete ion in Tl4CrI6; HW II, p. 1862
+    "Cr #c-4 #n #u2 #v6", # Cr(CN)6(4-), d4 low-spin; HW II, pp. 1862, 1864
+]
+7 = [
+    "Cr #c- #v7",     # [CrO(O2)2(OH)]-; HW II, pp. 1853-1854
+    "Cr #c-2 #u #v7", # CrOCl5(2-), d1; HW II, p. 1854
+]
+8 = [
+    "Cr #c-2 #v8",    # CrO2F4(2-); HW II, p. 1849
+    "Cr #c-3 #u #v8", # Cr(O2)4(3-), d1; HW II, pp. 1855-1856
 ]
 
 [Mn]
@@ -1451,16 +1638,192 @@
 
 [Nb]
 0 = [
-    "Nb #u5",      # Nb atom, s1d4
-    "Nb #c+3 #u2", # Nb3+, d2
+    "Nb #u5",          # Nb atom, s1d4; HW II, p. 1538
+    "Nb #u #h4",       # NbH4 doublet; WA11, pp. 14179-14182
+    "Nb #u3 #h2",      # NbH2 quartet; WA11; VLW95, p. 4367
+    "Nb #c+ #n2 #t7",  # CpNb(CO)4; HW II, pp. 1830, 1833, 1841, 2111; haptic order 3: PW
+    "Nb #c+2 #u3 #t2", # NbH2 quartet; WA11; VLW95, p. 4367; anionic donors: PW
+    "Nb #c+3 #u2",     # Nb3+, d2; HW II, pp. 1833, 1837
+    "Nb #c+3 #u2 #t6", # NbCl3(py)3, d2 triplet; HW II, p. 1837; anionic donors: PW
+    "Nb #c+3 #n #t8",  # Nb(CN)8(5-), paired d2; HW II, p. 1838; KG75, p. 2490; anionic donors: PW
+    "Nb #c+4 #u",      # Nb4+, d1; HW II, pp. 1833-1837
+    "Nb #c+4 #u #t4",  # Nb(NEt2)4, d1; HW II, p. 1833; anionic donors: PW
+    "Nb #c+4 #u #t6",  # NbCl6(2-), d1; HW II, p. 1836; anionic donors: PW
+    "Nb #c+4 #u #t8",  # NbCl4(diars)2, d1; HW II, pp. 1825-1826, 1836; anionic donors: PW
+    "Nb #c+4 #u #t7",  # NbF7(3-), d1; HW II, pp. 1833, 1836; anionic donors: PW
+    "Nb #c+5",         # Nb5+, d0; HW II, pp. 1833-1837
+    "Nb #c+5 #t5",     # NbF5; HW II, pp. 1834-1835; anionic donors: PW
+    "Nb #c+5 #t6",     # NbF6-; HW II, pp. 1834-1835; anionic donors: PW
+    "Nb #c+5 #t7",     # NbF7(2-); HW II, pp. 1834-1835; anionic donors: PW
+    "Nb #c+5 #t8",     # NbF8(3-); HW II, pp. 1834-1835; anionic donors: PW
+    "Nb #c+5 #t9",     # Cp2NbCl3; HW II, pp. 1831, 1841; haptic order 3: PW
+    "Nb #c- #n3 #t6",  # Nb(CO)6-; HW II, pp. 1830, 1833, 1841, 2111
+    "Nb #c-3 #n4 #t5", # Nb(CO)5(3-); HW II, pp. 1830, 1833, 1841, 2111
+]
+1 = [
+    "Nb #u #v #h3",  # NbH4 doublet; WA11, pp. 14179-14182
+    "Nb #u3 #v #h",  # NbH2 quartet; WA11; VLW95, p. 4367
+    "Nb #n2 #v #t6", # NbCl(CO)2(dmpe)2, paired d4; BLH81, pp. 794-795, 798; occupation: PW
+]
+2 = [
+    "Nb #u #v2 #h2",      # NbH4 doublet; WA11, pp. 14179-14182
+    "Nb #u3 #v2",         # NbH2 quartet; WA11; VLW95, p. 4367
+    "Nb #u #v2 #h2 #t4",  # NbCl2H2(dmpe)2, d1; L84, pp. 1719-1721
+    "Nb #c+2 #u #v2 #t6", # Cp2NbCl2; HW II, pp. 1831, 1841; haptic order 3: PW
+    "Nb #c+3 #v2 #t3",    # NbOCl3; HW II, pp. 1835-1836; anionic donors: PW
+    "Nb #c+3 #v2 #t4",    # NbOF4-; HW II, p. 1836; anionic donors: PW
+    "Nb #c+3 #v2 #t5",    # NbOF5(2-); HW II, p. 1836; anionic donors: PW
+    "Nb #c+3 #v2 #t6",    # NbOF6(3-); HW II, p. 1836; anionic donors: PW
+]
+3 = [
+    "Nb #u2 #v3 #t3",   # NbCl3(py)3, d2 triplet; HW II, p. 1837
+    "Nb #u #v3 #h",     # NbH4 doublet; WA11, pp. 14179-14182
+    "Nb #u #v3 #h #t4", # NbCl2H2(dmpe)2, d1; L84, pp. 1719-1721
+    "Nb #c+2 #v3 #t6",  # Cp2NbCl3; HW II, pp. 1831, 1841; haptic order 3: PW
+]
+4 = [
+    "Nb #u #v4",      # Nb(NEt2)4, d1; HW II, p. 1833
+    "Nb #u #v4 #t4",  # NbCl4(diars)2, d1; HW II, pp. 1825-1826, 1836
+    "Nb #c+ #v4 #t2", # Nb2Cl10; HW II, pp. 1834-1836; bridge donors: PW
+]
+5 = [
+    "Nb #v5",     # NbF5; HW II, pp. 1834-1835
+    "Nb #v5 #t",  # NbCl5·D; HW II, p. 1835
+    "Nb #v5 #t2", # NbMe5(dmpe); HW II, p. 1841
+    "Nb #v5 #t3", # Nb2Cl9(3-), triplet M=M; HW II, p. 1837; S98, pp. 6802-6806; assignment: PW
+]
+6 = [
+    "Nb #c- #v6",     # NbF6-; HW II, pp. 1834-1835
+    "Nb #c-2 #u #v6", # NbCl6(2-), d1; HW II, p. 1836
+]
+7 = [
+    "Nb #c-2 #v7",    # NbF7(2-); HW II, pp. 1834-1835
+    "Nb #c-3 #u #v7", # NbF7(3-), d1; HW II, pp. 1833, 1836
+]
+8 = [
+    "Nb #c-3 #v8",    # NbF8(3-); HW II, pp. 1834-1835
+    "Nb #c-4 #u #v8", # Nb(CN)8(4-), d1; HW II, pp. 1836, 1838; KG75, p. 2490
+    "Nb #c-5 #n #v8", # Nb(CN)8(5-), paired d2; HW II, p. 1838; KG75, p. 2490
 ]
 
 [Mo]
 0 = [
-    "Mo #u6",         # Mo atom, s1d5
-    "Mo #c+2 #u4",    # Mo2+, d4 high-spin
-    "Mo #c+2 #n #u2", # Mo2+, d4 low-spin
-    "Mo #c+3 #u3",    # Mo3+, d3
+    "Mo #u6",             # Mo atom, s1d5; HW II, p. 1538
+    "Mo #n2 #h2 #t5",     # MoH2(PMe3)5, paired d4; HW II, pp. 1871-1872; Ly84; occupation: PW
+    "Mo #n3 #t5 #m0",     # [HMo2(CO)10]-; HW II, pp. 2069, 2137; assignment: PW
+    "Mo #n3 #t6",         # Mo(CO)6; HW II, pp. 1871, 2111
+    "Mo #h6 #t3",         # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #u5 #h",          # MoH, 5 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #u4 #h2",         # MoH2, 4 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #u2 #h4",         # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #h6",             # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #n #h4 #t4",      # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #c+ #n2 #u #t6",  # [Mo(C6H6)2]+, d5 doublet; HW II, p. 2207; haptic order 3: PW
+    "Mo #c+ #u5 #t",      # MoH, 5 unpaired electrons; WA05Mo, Tables 2-6; anionic donors: PW
+    "Mo #c+2 #u4",        # Mo2+, d4 high-spin; HW II, pp. 1879, 1891
+    "Mo #c+2 #n #u2",     # Mo(II), d4 low-spin; HW II, p. 1891
+    "Mo #c+2 #n #u2 #t6", # MoCl2(PMe3)4, two unpaired electrons; HW II, p. 1891; anionic donors: PW
+    "Mo #c+2 #n #h2 #t6", # Cp2MoH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #c+2 #u4 #t2",    # MoH2, 4 unpaired electrons; WA05Mo, Tables 2-6; anionic donors: PW
+    "Mo #c+2 #n2 #t7",    # Mo(CN)7(5-), paired d4; HW II, pp. 1876, 1891; D77, p. 1076; anionic donors: PW
+    "Mo #c+3 #u3",        # Mo(III), d3; HW II, pp. 1879, 1891
+    "Mo #c+3 #u3 #t6",    # MoCl3(py)3, d3 quartet; HW II, p. 1891; anionic donors: PW
+    "Mo #c+3 #n #u #t7",  # Mo(CN)7(4-), d3 doublet; HW II, p. 1891; R71, p. 51; MDP19; anionic donors: PW
+    "Mo #c+3 #h3 #t6",    # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #c+4 #u2",        # Mo4+, d2; HW II, pp. 1871, 1891
+    "Mo #c+4 #u2 #t4",    # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6; anionic donors: PW
+    "Mo #c+4 #u2 #t6",    # MoCl6(2-), d2 triplet; HW II, p. 1872; anionic donors: PW
+    "Mo #c+4 #n #t8",     # Mo(CN)8(4-), paired d2; HW II, p. 1876; KG75; anionic donors: PW
+    "Mo #c+5 #u",         # Mo5+, d1; HW II, pp. 1871, 1891
+    "Mo #c+5 #u #t5",     # MoCl5, d1; HW II, p. 1872; anionic donors: PW
+    "Mo #c+5 #u #t6",     # MoCl6-, d1; HW II, p. 1872; anionic donors: PW
+    "Mo #c+5 #u #t8",     # MoF8(3-), d1; HW II, p. 1872; anionic donors: PW
+    "Mo #c+6",            # Mo6+, d0; HW II, pp. 1871, 1891
+    "Mo #c+6 #t6",        # MoF6; HW II, p. 1872; anionic donors: PW
+    "Mo #c+6 #t7",        # MoF7-; HW II, p. 1872; anionic donors: PW
+    "Mo #c+6 #t8",        # MoF8(2-); HW II, p. 1872; anionic donors: PW
+    "Mo #c+6 #t9",        # MoH6(PCy3)3, d0; HW II, p. 1871; HC90; anionic donors: PW
+    "Mo #c- #n3 #h #t5",  # [HMo(CO)5]-; HW II, pp. 2136-2137
+    "Mo #c-2 #n4 #t5",    # Mo(CO)5(2-); HW II, pp. 1871, 2111
+]
+1 = [
+    "Mo #n2 #v #h #t5",     # MoH2(PMe3)5, paired d4; HW II, pp. 1871-1872; Ly84; occupation: PW
+    "Mo #v #h5 #t3",        # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #u5 #v",            # MoH, 5 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #u4 #v #h",         # MoH2, 4 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #u2 #v #h3",        # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #v #h5",            # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #n #v #h3 #t4",     # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #c+2 #n #v #h #t6", # Cp2MoH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #c+3 #v #h2 #t6",   # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #c+3 #u2 #v #t6",   # Mo2Cl9(3-), M-M single bond, two local unpaired electrons; HW II, p. 1893; MSL97, p. 6270; chloride donors: PW
+    "Mo #c- #n3 #v #t5",    # Mo2(CO)10(2-), M-M single bond; HW II, pp. 1871, 2111
+]
+2 = [
+    "Mo #n2 #v2 #t5",     # MoH2(PMe3)5, paired d4; HW II, pp. 1871-1872; Ly84; occupation: PW
+    "Mo #n #u2 #v2 #t4",  # MoCl2(PMe3)4, two unpaired electrons; HW II, p. 1891
+    "Mo #v2 #h4 #t3",     # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #u4 #v2",         # MoH2, 4 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #u2 #v2 #h2",     # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #v2 #h4",         # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #n #v2 #h2 #t4",  # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #c+2 #n #v2 #t6", # Cp2MoH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #c+3 #u #v2 #t3", # MoOCl3, d1; HW II, p. 1873; anionic donors: PW
+    "Mo #c+3 #u #v2 #t5", # MoOCl5(2-), d1; HW II, p. 1873; anionic donors: PW
+    "Mo #c+3 #v2 #h #t6", # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #c+4 #v2 #t4",    # MoOF4; HW II, p. 1873; anionic donors: PW
+    "Mo #c+4 #v2 #t6",    # MoO(O2)2(H2O)2; HW II, p. 1882; anionic donors: PW
+]
+3 = [
+    "Mo #u3 #v3 #t3",   # MoCl3(py)3, d3 quartet; HW II, p. 1891
+    "Mo #v3 #h3 #t3",   # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #u2 #v3 #h",    # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #v3 #h3",       # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #n #v3 #h #t4", # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #c+3 #v3 #t3",  # Mo2(OtBu)6, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "Mo #c+3 #v3 #t4",  # Mo2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "Mo #c+3 #v3 #t6",  # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+]
+4 = [
+    "Mo #u2 #v4",        # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #v4 #h2 #t3",    # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #v4 #h2",        # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #n #v4 #t4",     # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #u2 #v4 #t3",    # Mo2Cl9(3-), M-M single bond, two local unpaired electrons; HW II, p. 1893; MSL97, p. 6270; chloride donors: PW
+    "Mo #c+ #u #v4 #t2", # Mo2Cl10, d1; HW II, p. 1872; bridge donors: PW
+    "Mo #c+2 #v4 #t2",   # MoO2F2; HW II, p. 1873; anionic donors: PW
+    "Mo #c+2 #v4 #t4",   # MoO2F4(2-); HW II, pp. 1873, 1881; anionic donors: PW
+    "Mo #c+2 #v4 #t3",   # MoO2F3-; HW II, p. 1881; anionic donors: PW
+    "Mo #c+2 #v4 #t5",   # Mo2(OAc)4(H2O)2, M-M quadruple bond; HW II, pp. 1891-1892; acetate allocation: PW
+]
+5 = [
+    "Mo #u #v5",     # MoCl5, d1; HW II, p. 1872
+    "Mo #v5 #h #t3", # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #v5 #h",     # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+]
+6 = [
+    "Mo #v6",           # MoF6; HW II, p. 1872
+    "Mo #v6 #t2",       # MoO(O2)2(H2O)2; HW II, p. 1882
+    "Mo #v6 #t3",       # MoO3(dien); HW II, p. 1881
+    "Mo #v6 #t",        # Mo2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "Mo #c- #u #v6",    # MoCl6-, d1; HW II, p. 1872
+    "Mo #c- #u #v6 #t", # [MoOCl4(H2O)]-, d1; HW II, p. 1879
+    "Mo #c-2 #u2 #v6",  # MoCl6(2-), d2 triplet; HW II, p. 1872
+    "Mo #c-3 #u3 #v6",  # MoCl6(3-), d3 quartet; HW II, p. 1891
+]
+7 = [
+    "Mo #c- #v7",        # MoF7-; HW II, p. 1872
+    "Mo #c-2 #u #v7",    # MoOCl5(2-), d1; HW II, p. 1873
+    "Mo #c-4 #n #u #v7", # Mo(CN)7(4-), d3 doublet; HW II, p. 1891; R71, p. 51; MDP19
+    "Mo #c-5 #n2 #v7",   # Mo(CN)7(5-), paired d4; HW II, pp. 1876, 1891; D77, p. 1076
+]
+8 = [
+    "Mo #c-2 #v8",    # MoF8(2-); HW II, p. 1872
+    "Mo #c-3 #u #v8", # MoF8(3-), d1; HW II, p. 1872
+    "Mo #c-4 #n #v8", # Mo(CN)8(4-), paired d2; HW II, p. 1876; KG75
+]
+9 = [
+    "Mo #c-3 #v9", # MoO3F3(3-); HW II, p. 1881
 ]
 
 [Tc]
@@ -2041,12 +2404,193 @@
 
 [Ta]
 0 = [
-    "Ta #n #u3", # Ta atom, s2d3
+    "Ta #n #u3",       # Ta atom, s2d3; HW II, p. 1538
+    "Ta #h5 #t4",      # TaH5(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #h4 #t4",   # TaH4(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #h4",       # TaH4 doublet; WA11, pp. 14179-14182
+    "Ta #u3 #h2",      # TaH2 quartet; WA11; VLW95, p. 4367
+    "Ta #n2 #h #t6",   # TaH(CO)2(dmpe)2, paired d4; DW77, pp. 1134-1136; occupation: PW
+    "Ta #c+ #n2 #t7",  # CpTa(CO)4; HW II, pp. 1830, 1833, 1841, 2111; haptic order 3: PW
+    "Ta #c+2 #u3 #t2", # TaH2 quartet; WA11; VLW95, p. 4367; anionic donors: PW
+    "Ta #c+3 #u2",     # Ta3+, d2; HW II, pp. 1833-1837
+    "Ta #c+3 #u2 #t6", # TaCl3(PMe3)3, d2 triplet; HW II, p. 1837; anionic donors: PW
+    "Ta #c+3 #n #t7",  # TaClH2(PMe3)4, paired d2; L83, p. 4475; anionic donors: PW
+    "Ta #c+4 #u",      # Ta4+, d1; HW II, pp. 1833-1837
+    "Ta #c+4 #u #t6",  # TaCl6(2-), d1; HW II, p. 1836; anionic donors: PW
+    "Ta #c+4 #u #t8",  # TaCl4(diars)2, d1; HW II, pp. 1825-1826, 1836; anionic donors: PW
+    "Ta #c+4 #u #t4",  # TaH4 doublet; WA11, pp. 14179-14182; anionic donors: PW
+    "Ta #c+5",         # Ta5+, d0; HW II, pp. 1833-1837
+    "Ta #c+5 #t5",     # TaF5; HW II, pp. 1834-1835; anionic donors: PW
+    "Ta #c+5 #t6",     # TaF6-; HW II, pp. 1834-1835; anionic donors: PW
+    "Ta #c+5 #t7",     # TaF7(2-); HW II, pp. 1834-1835; anionic donors: PW
+    "Ta #c+5 #t8",     # TaF8(3-); HW II, pp. 1834-1835; anionic donors: PW
+    "Ta #c+5 #t9",     # Cp2TaCl3; HW II, pp. 1831, 1841; haptic order 3: PW
+    "Ta #c- #n3 #t6",  # Ta(CO)6-; HW II, pp. 1830, 1833, 1841, 2111
+    "Ta #c-3 #n4 #t5", # Ta(CO)5(3-); HW II, pp. 1830, 1833, 1841, 2111
+]
+1 = [
+    "Ta #v #h4 #t4",    # TaH5(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v #h3 #t4", # TaH4(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v #h3",     # TaH4 doublet; WA11, pp. 14179-14182
+    "Ta #u3 #v #h",     # TaH2 quartet; WA11; VLW95, p. 4367
+    "Ta #n2 #v #t6",    # TaCl(CO)2(dmpe)2, paired d4; DW77, pp. 1134-1136; occupation: PW
+    "Ta #n #v #h2 #t4", # TaClH2(PMe3)4, paired d2; L83, p. 4475
+]
+2 = [
+    "Ta #v2 #h3 #t4",     # TaH5(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v2 #h2 #t4",  # TaH4(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v2 #h2",      # TaH4 doublet; WA11, pp. 14179-14182
+    "Ta #u3 #v2",         # TaH2 quartet; WA11; VLW95, p. 4367
+    "Ta #n #v2 #h #t4",   # TaClH2(PMe3)4, paired d2; L83, p. 4475
+    "Ta #c+2 #u #v2 #t6", # Cp2TaCl2; HW II, pp. 1831, 1841; haptic order 3: PW
+    "Ta #c+3 #v2 #t3",    # TaOCl3; HW II, pp. 1835-1836; anionic donors: PW
+    "Ta #c+3 #v2 #t6",    # Ta2Cl9(3-), triplet M=M; HW II, p. 1837; S98, pp. 6802-6806; assignment: PW
+]
+3 = [
+    "Ta #u2 #v3 #t3",   # TaCl3(PMe3)3, d2 triplet; HW II, p. 1837
+    "Ta #v3 #h2 #t4",   # TaH5(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v3 #h #t4", # TaH4(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v3 #h",     # TaH4 doublet; WA11, pp. 14179-14182
+    "Ta #n #v3 #t4",    # TaClH2(PMe3)4, paired d2; L83, p. 4475
+    "Ta #c+2 #v3 #t6",  # Cp2TaCl3; HW II, pp. 1831, 1841; haptic order 3: PW
+]
+4 = [
+    "Ta #u #v4 #t4",  # TaCl4(diars)2, d1; HW II, pp. 1825-1826, 1836
+    "Ta #v4 #h #t4",  # TaH5(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #u #v4",      # TaH4 doublet; WA11, pp. 14179-14182
+    "Ta #c+ #v4 #t2", # Ta2Cl10; HW II, pp. 1834-1836; bridge donors: PW
+]
+5 = [
+    "Ta #v5",     # TaF5; HW II, pp. 1834-1835
+    "Ta #v5 #t",  # TaCl5·D; HW II, p. 1835
+    "Ta #v5 #t2", # TaMe5(dmpe); HW II, p. 1841
+    "Ta #v5 #t4", # TaH5(dmpe)2; HW II, pp. 1834, 2068-2069
+    "Ta #v5 #t3", # Ta2Cl9(3-), triplet M=M; HW II, p. 1837; S98, pp. 6802-6806; assignment: PW
+]
+6 = [
+    "Ta #c- #v6",     # TaF6-; HW II, pp. 1834-1835
+    "Ta #c-2 #u #v6", # TaCl6(2-), d1; HW II, p. 1836
+]
+7 = [
+    "Ta #c-2 #v7", # TaF7(2-); HW II, pp. 1834-1835
+]
+8 = [
+    "Ta #c-3 #v8", # TaF8(3-); HW II, pp. 1834-1835
 ]
 
 [W]
 0 = [
-    "W #n #u4", # W atom, s2d4
+    "W #n #u4",          # W atom, s2d4; HW II, p. 1538
+    "W #n3 #t5 #m0",     # [HW2(CO)10]-; HW II, pp. 2069, 2137; assignment: PW
+    "W #n3 #t6",         # W(CO)6; HW II, pp. 1871, 2111
+    "W #h6 #t3",         # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+    "W #u5 #h",          # WH, 5 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u4 #h2",         # WH2, 4 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u3 #h3",         # WH3, 3 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u2 #h4",         # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #h6",             # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #c+ #n2 #u #t6",  # [W(C6H6)2]+, d5 doublet; HW II, p. 2207; haptic order 3: PW
+    "W #c+ #u5 #t",      # WH, 5 unpaired electrons; WA02W, Tables 2-5, 7; anionic donors: PW
+    "W #c+ #h5 #t4",     # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+2 #u4",        # W2+, d4; HW II, pp. 1871, 1891
+    "W #c+2 #n #u2 #t6", # Cp2W, d4 triplet-derived occupation; HW II, p. 2190; C83, pp. 3617-3619; haptic order 3: PW
+    "W #c+2 #n #h2 #t6", # Cp2WH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "W #c+2 #u4 #t2",    # WH2, 4 unpaired electrons; WA02W, Tables 2-5, 7; anionic donors: PW
+    "W #c+2 #n2 #t7",    # W(CN)7(5-), paired d4; HW II, pp. 1876, 1891; SG81, p. 1886; anionic donors: PW
+    "W #c+3 #u3",        # W3+, d3; HW II, pp. 1871, 1891
+    "W #c+3 #u3 #t6",    # WCl3(py)3, d3 quartet; HW II, p. 1891; anionic donors: PW
+    "W #c+3 #h3 #t6",    # Cp2WH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "W #c+3 #u3 #t3",    # WH3, 3 unpaired electrons; WA02W, Tables 2-5, 7; anionic donors: PW
+    "W #c+3 #n #h #t7",  # [HW(CN)7](4-), paired d2; HW II, p. 1876; SG81, pp. 1886-1887; anionic donors: PW
+    "W #c+4 #u2",        # W4+, d2; HW II, pp. 1871, 1891
+    "W #c+4 #u2 #t4",    # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7; anionic donors: PW
+    "W #c+4 #u2 #t6",    # WCl6(2-), d2 triplet; HW II, p. 1872; anionic donors: PW
+    "W #c+4 #n #t8",     # W(CN)8(4-), paired d2; HW II, p. 1876; KG75; anionic donors: PW
+    "W #c+5 #u",         # W5+, d1; HW II, pp. 1871, 1891
+    "W #c+5 #u #t5",     # WCl5, d1; HW II, p. 1872; anionic donors: PW
+    "W #c+5 #u #t6",     # WCl6-, d1; HW II, p. 1872; anionic donors: PW
+    "W #c+5 #u #t8",     # WF8(3-), d1; HW II, p. 1872; anionic donors: PW
+    "W #c+6",            # W6+, d0; HW II, pp. 1871, 1891
+    "W #c+6 #t6",        # WF6; HW II, p. 1872; anionic donors: PW
+    "W #c+6 #t7",        # WF7-; HW II, p. 1872; anionic donors: PW
+    "W #c+6 #t8",        # WF8(2-); HW II, p. 1872; anionic donors: PW
+    "W #c+6 #t9",        # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90; anionic donors: PW
+    "W #c- #n3 #h #t5",  # [HW(CO)5]-; HW II, pp. 2136-2137
+    "W #c-2 #n4 #t5",    # W(CO)5(2-); HW II, pp. 1871, 2111
+]
+1 = [
+    "W #v #h5 #t3",        # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+    "W #u5 #v",            # WH, 5 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u4 #v #h",         # WH2, 4 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u3 #v #h2",        # WH3, 3 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u2 #v #h3",        # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #v #h5",            # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #c+ #v #h4 #t4",    # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+2 #n #v #h #t6", # Cp2WH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "W #c+3 #v #h2 #t6",   # Cp2WH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "W #c+3 #n #v #t7",    # [HW(CN)7](4-), paired d2; HW II, p. 1876; SG81, pp. 1886-1887; anionic donors: PW
+    "W #c- #n3 #v #t5",    # W2(CO)10(2-), M-M single bond; HW II, pp. 1871, 2111
+]
+2 = [
+    "W #v2 #h4 #t3",     # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+    "W #u4 #v2",         # WH2, 4 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u3 #v2 #h",      # WH3, 3 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u2 #v2 #h2",     # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #v2 #h4",         # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #c+ #v2 #h3 #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+2 #n #v2 #t6", # Cp2WH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "W #c+3 #u #v2 #t3", # WOCl3, d1; HW II, p. 1873; anionic donors: PW
+    "W #c+3 #u #v2 #t5", # WOCl5(2-), d1; HW II, p. 1873; anionic donors: PW
+    "W #c+3 #v2 #h #t6", # Cp2WH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "W #c+4 #v2 #t4",    # WOF4; HW II, p. 1873; anionic donors: PW
+    "W #c+4 #v2 #t6",    # WO(O2)2(H2O)2; HW II, p. 1882; anionic donors: PW
+]
+3 = [
+    "W #u3 #v3 #t3",     # WCl3(py)3, d3 quartet; HW II, p. 1891
+    "W #v3 #h3 #t3",     # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+    "W #u3 #v3",         # WH3, 3 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #u2 #v3 #h",      # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #v3 #h3",         # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #c+ #v3 #h2 #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+3 #v3 #t3",    # W2(OtBu)6, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "W #c+3 #v3 #t4",    # W2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "W #c+3 #v3 #t6",    # W2Cl9(3-), M-M triple bond; HW II, pp. 1891-1893; chloride donors: PW
+]
+4 = [
+    "W #u2 #v4",        # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #v4 #h2 #t3",    # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+    "W #v4 #h2",        # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #c+ #u #v4 #t2", # W2Cl10, d1; HW II, p. 1872; bridge donors: PW
+    "W #c+ #v4 #h #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+2 #v4 #t2",   # WO2F2; HW II, p. 1873; anionic donors: PW
+    "W #c+2 #v4 #t4",   # WO2F4(2-); HW II, pp. 1873, 1881; anionic donors: PW
+    "W #c+2 #v4 #t5",   # W2(OAc)4(H2O)2, M-M quadruple bond; HW II, pp. 1891-1892; acetate allocation: PW
+]
+5 = [
+    "W #u #v5",      # WCl5, d1; HW II, p. 1872
+    "W #v5 #h #t3",  # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
+    "W #v5 #h",      # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #c+ #v5 #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+]
+6 = [
+    "W #v6",          # WF6; HW II, p. 1872
+    "W #v6 #t2",      # WO(O2)2(H2O)2; HW II, p. 1882
+    "W #v6 #t3",      # WO3(dien); HW II, p. 1881
+    "W #v6 #t",       # W2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "W #c- #u #v6",   # WCl6-, d1; HW II, p. 1872
+    "W #c-2 #u2 #v6", # WCl6(2-), d2 triplet; HW II, p. 1872
+    "W #c-3 #u3 #v6", # WCl6(3-), d3 quartet; HW II, p. 1891
+]
+7 = [
+    "W #c- #v7",        # WF7-; HW II, p. 1872
+    "W #c-2 #u #v7",    # WOCl5(2-), d1; HW II, p. 1873
+    "W #c-4 #n #v7 #h", # [HW(CN)7](4-), paired d2; HW II, p. 1876; SG81, pp. 1886-1887
+    "W #c-5 #n2 #v7",   # W(CN)7(5-), paired d4; HW II, pp. 1876, 1891; SG81, p. 1886
+]
+8 = [
+    "W #c-2 #v8",    # WF8(2-); HW II, p. 1872
+    "W #c-3 #u #v8", # WF8(3-), d1; HW II, p. 1872
+    "W #c-4 #n #v8", # W(CN)8(4-), paired d2; HW II, p. 1876; KG75
 ]
 
 [Re]
@@ -2452,12 +2996,12 @@
 
 [Db]
 0 = [
-    "Db #n #u3", # Db atom, s2d3
+    "Db #n #u3", # Db atom, s2d3 (calculated); HW II, p. 1538
 ]
 
 [Sg]
 0 = [
-    "Sg #n #u4", # Sg atom, s2d4
+    "Sg #n #u4", # Sg atom, s2d4 (calculated); HW II, p. 1538
 ]
 
 [Bh]

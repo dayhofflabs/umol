@@ -1,0 +1,4 @@
+; Molecular NbH4, 2-fold spin multiplicity; Wang and Andrews (2011), pp. 14179-14182, doi:10.1021/jp2076148.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nb" "H" "H" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

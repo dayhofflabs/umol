@@ -1,0 +1,4 @@
+; CrH, 5 unpaired electrons; WA03Cr, Tables 1-2
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#u5" "H"]
+         :bonds [[0 1 "1"]]}}

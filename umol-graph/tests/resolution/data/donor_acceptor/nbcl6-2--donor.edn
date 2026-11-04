@@ -1,0 +1,6 @@
+; NbCl6(2-), d1; HW II, pp. 1825-1826, 1836; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nb#c+4" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

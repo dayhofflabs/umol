@@ -1,0 +1,4 @@
+; CrI6(4-), discrete ion in Tl4CrI6; HW II, p. 1862
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c-4#u4" "I" "I" "I" "I" "I" "I"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

@@ -1,0 +1,24 @@
+; [HMo2(CO)10]-; HW II, pp. 2069, 2137.
+; 3c2e Mo-H-Mo bridge, contributions [0,2,0]; assignment: PW.
+; CO donors use the C-/O+ triple-bond convention.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo" "Mo" "H#c-"
+                 "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"
+                 "C#c-" "O#c+" "C#c-" "O#c+"
+                 "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"
+                 "C#c-" "O#c+" "C#c-" "O#c+"]
+         :bonds [[3 4 :triple] [5 6 :triple] [7 8 :triple]
+                 [9 10 :triple] [11 12 :triple] [13 14 :triple]
+                 [15 16 :triple] [17 18 :triple] [19 20 :triple]
+                 [21 22 :triple]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"}
+                        {:donors [13] :acceptor 1 :attrs "1"}
+                        {:donors [15] :acceptor 1 :attrs "1"}
+                        {:donors [17] :acceptor 1 :attrs "1"}
+                        {:donors [19] :acceptor 1 :attrs "1"}
+                        {:donors [21] :acceptor 1 :attrs "1"}]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]#c0#u0#s1"}]}}

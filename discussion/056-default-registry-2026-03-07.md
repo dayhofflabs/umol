@@ -16,7 +16,21 @@ noble-gas evidence, halogen selections, chalcogen extraction, the
 [copper-group work table](#copper-group-work-table) and the
 [zinc-group work table](#zinc-group-work-table) and the
 [scandium-group work table](#scandium-group-work-table) and the
-[titanium-group work table](#titanium-group-work-table). The selected Ti/Zr/Hf pass
+[titanium-group work table](#titanium-group-work-table) and the
+[vanadium-group work table](#vanadium-group-work-table) and the
+[chromium-group work table](#chromium-group-work-table). The selected Cr/Mo/W pass
+is complete: 260 additions (Cr 72, Mo 94, W 94), 260 fixtures and the existing-entry
+citation audit are implemented. All 11 earlier Cr/Mo/W/Sg states are retained;
+capacity 18 and the ValenceTable are unchanged. Thirteen W phosphine-hydride
+occupations remain open by decision. Other source checks and the optional bridging
+OH− companion proposal are separate from the implemented selection.
+The selected V/Nb/Ta pass
+is complete: 160 additions (V 57, Nb 48, Ta 55), 165 new fixtures, one revised nitride
+fixture and the existing-entry citation audit are implemented. All eight earlier
+V/Nb/Ta/Db states are retained. Fourteen primary-source PDFs are reviewed and archived;
+capacity 18 and the ValenceTable are unchanged. The four uncertain Nb/Ta(II)
+phosphine #n#u candidates are omitted.
+The selected Ti/Zr/Hf pass
 is complete: 118 additions (Ti 47, Zr 44, Hf 27), 135 fixtures, the existing-entry
 citation audit and the approved Zr/Hf capacities of 20 are implemented.
 All eight earlier Ti/Zr/Hf/Rf states are retained. Sixteen primary-source PDFs
@@ -69,9 +83,33 @@ the tracking table are dated.
 This document tracks incremental, reviewable expansion of the default atom type registry.
 Registry entries are treated as code: explicit scope, source review, and matching conformance coverage.
 
-## Project Status (2026-11-03)
+## Project Status (2026-11-04)
 
-**Current chapter:** HW II, chapter XXV (Ti, Zr, Hf), pp. 1793–1818, selected scope complete.
+**Current chapter:** HW II, chapter XXVII (Cr, Mo, W), pp. 1844–1898, selected scope complete.
+The [work table](#chromium-group-work-table) records 260 implemented additions
+(Cr 72, Mo 94, W 94), all covered by inferred resolution in 260 fixtures. All 11
+earlier Cr/Mo/W/Sg states are retained with checked citations. Capacity 18 and the
+ValenceTable are unchanged; no ligand companion was added. The only new MC states
+are the two accepted Mo/W hydride bridges. All supplied papers and the additional
+Baran and Hlatky–Crabtree sources are reviewed and archived under `materials/valence/`.
+The 13 W phosphine-hydride occupations, EF7³− and the chromium cyano-peroxide remain
+outside the selection. Crg37 records the optional bridging OH− companion proposal;
+the selected Mo state is already covered by Cp2MoH3+.
+All 3,594 graph unit tests, 223 graph property tests and 2,236 resolution cases pass.
+The 1,976 pre-chapter snapshots are unchanged.
+
+**Previous chapter:** HW II, chapter XXVI (V, Nb, Ta), pp. 1819–1843, selected scope complete.
+The [work table](#vanadium-group-work-table) records 160 implemented additions:
+V 57, Nb 48 and Ta 55. Every added state has inferred coverage in 165 new fixtures
+and the revised [Cl3VN]− input. All eight earlier V/Nb/Ta/Db states are retained
+with checked citations. The 14 primary-source PDFs are reviewed and archived.
+No MC state, capacity increase, ValenceTable entry or ligand companion was added.
+The uncertain Nb/Ta(II) phosphine #n#u candidates are omitted; H2 adducts remain
+deferred with the earlier group-3/copper cases.
+All 3,594 graph unit tests, 223 graph property tests and 1,976 resolution cases pass.
+The 1,811 earlier snapshots are unchanged.
+
+**Earlier chapter:** HW II, chapter XXV (Ti, Zr, Hf), pp. 1793–1818, selected scope complete.
 The [work table](#titanium-group-work-table) records 118 implemented additions:
 Ti 47, Zr 44 and Hf 27, with inferred coverage in 135 fixtures. These include both
 ZrH2 occupations, the two Schwartz's-reagent states and two ZrCp4 descriptions.
@@ -83,7 +121,7 @@ MC states, specialized assemblies and formula-only lower cyanides remain unselec
 All 3,594 graph unit tests, 223 graph property tests and 1,811 resolution cases pass.
 The 1,684 snapshots preceding the final 110-state batch are unchanged.
 
-**Previous chapter:** HW II, chapter XXIV (Sc, Y, La, Ac), pp. 1784–1792, selected scope complete.
+**Earlier chapter:** HW II, chapter XXIV (Sc, Y, La, Ac), pp. 1784–1792, selected scope complete.
 The [work table](#scandium-group-work-table) records 79 implemented additions:
 Sc 28, Y 25 and La 26, with inferred coverage in 82 new fixtures. The eight earlier
 states are retained with checked citations, including Y's corrected s²d¹ comment.
@@ -375,6 +413,8 @@ Group-1/2 rows updated 2026-11-03 for the approved batches; Cu/Ag/Au rows record
 the completed selected scope on the same date, as do Zn/Cd/Hg and the O companion.
 Sc/Y/La/Ac rows record the completed selected scope on 2026-11-03.
 Ti/Zr/Hf rows record the completed selected scope on 2026-11-03.
+V/Nb/Ta/Db rows record the completed selected scope on 2026-11-03.
+Cr/Mo/W/Sg rows record the completed selected scope on 2026-11-04.
 Other rows retain the March record.
 
 Status values:
@@ -408,8 +448,8 @@ Status values:
 | Ca | yes | yes (+2) | yes (selected) | yes (12 additions covered) | done | 14 current states; additions, citation audit, seven-donor aqua fixture and capacity 16 implemented; water bridges deferred with Ch02 |
 | Sc | yes | yes (+3) | yes (selected) | yes (28 additions covered) | done | 30 current states; both earlier states retained; selected HW scope and citation audit complete |
 | Ti | yes | yes (+2,+3,+4) | yes (selected) | yes (47 additions covered) | done | 50 current states; all 3 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
-| V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `atomic_ions/v+2.toml`, `atomic_ions/v+3.toml`) | done |  |
-| Cr | yes | yes (+2,+3) | partial | yes (`atoms/cr.edn`, `atomic_ions/cr+2.edn`, `atomic_ions/cr+3.edn`, `donor_acceptor/hcr2-co10-.edn`) | done | Hydrogen companion addition: Cr#n3#t5#m0 |
+| V | yes | yes (+2,+3,+4,+5) | yes (selected) | yes (57 additions covered) | done | 61 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
+| Cr | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (72 additions covered) | done | 77 current states; all 5 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `atomic_ions/mn+2.toml`, `atomic_ions/mn+3.toml`) | done |  |
 | Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `atomic_ions/fe+2.toml`, `atomic_ions/fe+3.toml`) | done |  |
 | Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `atomic_ions/co+2.toml`, `atomic_ions/co+3.toml`) | done |  |
@@ -426,8 +466,8 @@ Status values:
 | Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
 | Y | yes | yes (+3) | yes (selected) | yes (25 additions covered) | done | 27 current states; both earlier states retained; selected HW scope and citation audit complete |
 | Zr | yes | yes (+3,+4) | yes (selected) | yes (44 additions covered) | done | 46 current states; both earlier states retained; both ZrH2 occupations, Schwartz's reagent and selected donor states implemented; capacity 20 implemented |
-| Nb | yes | yes (+3) | no | yes (`atoms/nb.toml`, `atomic_ions/nb+3.toml`) | done |  |
-| Mo | yes | yes (+2,+3) | no | yes (`atoms/mo.toml`, `atomic_ions/mo+2.toml`, `atomic_ions/mo+3.toml`) | done |  |
+| Nb | yes | yes (+3,+4,+5) | yes (selected) | yes (48 additions covered) | done | 50 current states; both earlier states retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
+| Mo | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (94 additions covered) | done | 98 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Tc | yes | no | no | yes (`atoms/tc.toml`) | done | No ion added in current scope |
 | Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `atomic_ions/ru+2.toml`, `atomic_ions/ru+3.toml`) | done |  |
 | Rh | yes | yes (+2,+3) | partial | yes (`atoms/rh.edn`, `atomic_ions/rh+2.edn`, `atomic_ions/rh+3.edn`, Rh–H donor fixture below) | done | Hydrogen companion addition: Rh#c+3#n3#t6 |
@@ -464,8 +504,8 @@ Status values:
 | Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `atomic_ions/yb+2.toml`, `atomic_ions/yb+3.toml`) | done |  |
 | Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `atomic_ions/lu+3.toml`) | done |  |
 | Hf | yes | yes (+3,+4) | yes (selected) | yes (27 additions covered) | done | 29 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
-| Ta | yes | no | no | yes (`atoms/ta.toml`) | done |  |
-| W | yes | no | no | yes (`atoms/w.toml`) | done |  |
+| Ta | yes | yes (+3,+4,+5) | yes (selected) | yes (55 additions covered) | done | 56 current states; earlier state retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
+| W | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (94 additions covered) | done | 95 current states; earlier atom retained; selected HW scope and citation audit complete; capacity 18 unchanged; 13 unselected phosphine-hydride occupations remain open |
 | Re | yes | no | no | yes (`atoms/re.toml`) | done |  |
 | Os | yes | no | no | yes (`atoms/os.toml`) | done |  |
 | Ir | yes | no | no | yes (`atoms/ir.toml`) | done |  |
@@ -490,8 +530,8 @@ Status values:
 | No | yes | yes (+2) | no | yes (`atoms/no.toml`, `atomic_ions/no+2.toml`) | done |  |
 | Lr | yes | yes (+3) | no | yes (`atoms/lr.toml`, `atomic_ions/lr+3.toml`) | done |  |
 | Rf | yes | no | no | yes (`atoms/rf.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, pp. 1538, 2358; compound chemistry deferred to XXXVII |
-| Db | yes | no | no | yes (`atoms/db.toml`) | done |  |
-| Sg | yes | no | no | yes (`atoms/sg.toml`) | done |  |
+| Db | yes | no | no | yes (`atoms/db.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, p. 1538; compound chemistry deferred to XXXVII |
+| Sg | yes | no | no | yes (`atoms/sg.edn`) | done | Existing calculated atomic occupation retained with HW citation; no additions |
 | Bh | yes | no | no | yes (`atoms/bh.toml`) | done |  |
 | Hs | yes | no | no | yes (`atoms/hs.toml`) | done |  |
 
@@ -2677,3 +2717,238 @@ Intermediates are in `scratch/hw-titanium-review/`; retained source PDFs are in
 abstract/page excerpts have been reviewed; 16 PDFs are archived. Source research,
 selection, registry implementation and conformance coverage are complete for the
 selected scope above.
+
+### Vanadium group
+
+Source: [HW 103, Band II, chapter XXVI](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 2.pdf#page=323>),
+printed pp. 1819–1841; references pp. 1842–1843. Extraction: 2026-11-03.
+Baseline: V 4, Nb 2, Ta 1 and Db 1 states. All eight are retained with checked
+registry citations. Db chemistry is referred to chapter XXXVII on p. 1819.
+
+#### Vanadium-group work table
+
+M = V, Nb or Ta unless restricted; X = halide; D = neutral pair donor.
+States use concrete, zero-valence defaults. Page references are to HW II.
+Ordinary M–X/M–R/M–H bonds, anionic donor alternatives and Cp− donation follow
+the selected PW convention; terminal M=O remains localized. All 160 selected
+additions below (V 57, Nb 48, Ta 55) are **implemented and covered**. Counts exclude
+states already listed in earlier rows. Deferred and omitted rows add no states.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Vg01 | V/Ta/Db#n#u3; Nb#u5; V#c+2#u3; V/Nb#c+3#u2; V#c+2#u#v2 | Retained all 8; citations checked | Free atoms: 1538, Table 19.1, including calculated Db. V²⁺/V³⁺: 1828–1830; Nb³⁺: 1833, 1837. Vanadyl VO²⁺: 1826; its comment distinguishes it from dioxovanadium VO2⁺ |
+| Vg02 | M#c+4#u; M#c+5; Ta#c+3#u2 | Implemented: 7 | Ionic descriptions of IV/V oxides and halides, 1821–1822, 1825–1826, 1833–1837; Ta(III), 1837. Free-ion occupations remain separate from complex occupations |
+| Vg03 | M#v5; M#c+5#t5 | Implemented: 6 | Molecular VF5 and Nb/TaX5, 1822, 1834–1836; Nb/TaMe5, 1841. Ordinary terminal bonds or five anionic donors. V#v5 also covers localized VOX3, orthovanadate/protonated vanadates, V2O7⁴− and cyclic V4O12⁴−, 1822–1824; no VCl5/VBr5 or VMe5 example inferred |
+| Vg04 | M#c-#v6; M#c+5#t6 | Implemented: 6 | VF6− and Nb/TaX6−, 1822, 1835; MMe6−, 1831, 1841. Six ordinary bonds or six anionic donors |
+| Vg05 | Nb/Ta#c-2#v7; #c-3#v8; #c+5#t7; #c+5#t8 | Implemented: 8 | MF7²− and MF8³−, 1835. Seven/eight ordinary bonds or halide donors. M(O2)4³−, 1833, reuses the eight-coordinate states with the peroxide O–O bonds retained |
+| Vg06 | Nb/Ta#v5#t; #v5#t2; V#v5#t2 | Implemented: 5; donor alternatives reuse earlier rows | Nb/TaX5·D, 1835, and MMe5(dmpe), 1841. VOCl3·2D, 1822, retains V=O; its halide-donor description is in Vg09 |
+| Vg07 | Nb/Ta#c+#v4#t2 | Implemented: 2; all-halide-donor forms reuse Vg04 | M2X10 dimers and (MF5)4 rings, 1834–1836, Fig. 26.7. Four ordinary terminal halides and two bridging X− donors at each metal; existing X−#d2 states suffice. No MC addition |
+| Vg08 | V#c+#v4; V#c+#v4#t4 | Implemented: 2 | Dioxovanadium VO2⁺ and [VO2(H2O)4]⁺, 1821, 1824: two localized V=O bonds, with four water donors in the hydrate |
+| Vg09 | M#c+3#v2#t3; V#c+3#v2#t5; Nb#c+3#v2#t4; Nb#c+3#v2#t5; Nb#c+3#v2#t6 | Implemented: 7 | MOX3 and VOCl3·2D, 1822, 1835–1836; NbOF4−/NbOF5²−/NbOF6³−, 1836. Localized M=O plus halide/neutral donors. Ordinary Nb–F alternatives reuse Vg04–Vg05 |
+| Vg10 | V#c-#v6#t; V#c-3#v8; V#c+5#t8 | Implemented: 3 | [VO(O2)2(NH3)]− and V(O2)4³−, 1825. Peroxide O–O bonds retained; ordinary V–O or peroxide O− donors. VO2(O2)2³− reuses V#c-3#v8; the oxoperoxo donor form retains V=O and reuses Vg09 |
+| Vg11 | V/Nb#u#v4; #c+4#u#t4 | Implemented: 4 | Molecular VCl4/VBr4 and VR4, 1825, 1831; tetrahedral Nb(NEt2)4, 1833. Ordinary bonds or anionic donors, leaving one metal electron. No free TaX4 molecule inferred from its solid formula |
+| Vg12 | M#c-2#u#v6; M#c+4#u#t6 | Implemented: 6 | V(IV)X6²−, 1825–1826, and Nb/Ta(IV)X6²−, 1836. Six ordinary bonds or six halide donors, d¹ |
+| Vg13 | V#u#v4#t2; M#u#v4#t4; M#c+4#u#t8 | Implemented: 7 | VCl4·2D and MCl4(diars)2, 1822, 1825–1826, 1836. Mixed ordinary/donor and all-donor forms; shared four/eight-donor counts. V#u#v4#t2 also covers localized VO(acac)2 |
+| Vg14 | Nb#c-3#u#v7; Nb#c+4#u#t7; Nb#c-4#u#v8 | Implemented: 3; eight-donor form reused | NbF7³− and Nb(CN)8⁴−, 1833, 1836, 1838. One remaining electron; ordinary or anionic-donor descriptions. KG75, p. 2490, confirms the IV cyanide's paramagnetism; the paired III cyanide is in Vg30 |
+| Vg15 | V#c+2#u#v2#t4; V#c+2#u#v2#t5; V#c-#u#v5; V#c+2#u#v2#t3; V#c-3#u#v7 | Implemented: 5; bare vanadyl retained | [VO(H2O)5]²⁺, VO(acac)2, VO(OH)3− and VO(CN)5³−, 1822, 1826–1827. Localized V=O; the remaining ligands are ordinary or donors. VO(CN)5³− is distinguished from the explicitly unknown V(CN)6²− |
+| Vg16 | V#u2#v3; V#c+3#u2#t3; V#c-#u2#v4; V#c+3#u2#t4 | Implemented: 4 | V[N(SiMe3)2]3 and VCl4−/VBr4−, 1822, 1829. Trigonal-planar/tetrahedral V(III) examples; ordinary or donor descriptions |
+| Vg17 | V#u2#v3#t2; #u2#v3#t3; #c+#u2#v2#t4; #c+3#u2#t5; #c+3#u2#t6; #c-3#u2#v6; #c+2#u2#v#t5 | Implemented: 7 | VX3·2D, VX3·3D, VX2D4⁺, [V(H2O)6]³⁺, VX6³− and [V(OH)(H2O)5]²⁺, 1828–1830. HW gives the V(III) magnetic moments supporting two unpaired electrons |
+| Vg18 | V#c-4#u2#v7; V#c+3#u2#t7 | Implemented: 2 | V(CN)7⁴−, 1829: explicitly two unpaired electrons and seven-coordinate V; ordinary C-bound cyanides or CN− donors |
+| Vg19 | V#u3#v2#t4; V#c+2#u3#t6; V#c-4#u3#v6 | Implemented: 3 | V(II)X2D4, [V(H2O)6]²⁺ and V(CN)6⁴−, 1829–1830. Three unpaired electrons are explicit in HW. VPh6⁴− reuses the six-ordinary-bond state |
+| Vg19b | V#u3#v2#t4; V#c+2#u3#t6 | Reuse Vg19; no additional state | VCl2(dmpe)2 and VMe2(dmpe)2: G85, p. 1340, Table 2, gives 3.7 ± 0.1 BM for both and explicitly lists three unpaired V electrons. The paper's collective “low-spin” description does not mean #n#u for d³; its ESR analysis is S = 3/2, pp. 1341, 1343 |
+| Vg20 | Nb/Ta#u2#v3#t3; #c+3#u2#t6 | Implemented: 4 | NbCl3(py)3, NbBr3(PMe2Ph)3 and TaX3(PMe3)3, 1837: HW explicitly assigns two unpaired electrons. Ordinary halides plus neutral donors, or all donors |
+| Vg21 | M#c-#n3#t6; M#c-3#n4#t5; M#c+#n2#t7 | Implemented: 9 | M(CO)6−, M(CO)5³− and CpM(CO)4, 1822, 1830, 1833, 1841, 2111. HW's closed-shell/low-spin carbonyl descriptions; CO donates one pair and Cp− three pairs (PW) |
+| Vg22 | V#n2#u#t6 | Implemented: 1 | V(CO)6, 1822, 1830, 2109–2111: low-spin d⁵, one unpaired electron. V(arene)2 reuses the state; HW 2207, Table 32.25, gives 1.68 BM |
+| Vg23 | M#c+2#u#v2#t6; V#c+3#v2#t6; Nb/Ta#c+2#v3#t6; #c+5#t9 | Implemented: 8; other all-donor states reused | Cp2MX2, [Cp2VCl2]⁺ and Cp2Nb/TaX3, 1831, 1841. Two η⁵-Cp− donors plus ordinary X or X− donation. Nb/TaCp4 has two η⁵ and two η¹ rings and reuses the IV counts; Cp2MeTa=CH2 reuses the V counts |
+| Vg24 | V#c+2#u3#t6 | Reuse Vg19 | Vanadocene, HW 1830. J12 establishes S = 3/2 by EPR/HFEPR; use this evidence rather than the inconsistent 2.84 BM printed in HW 2190, Table 32.22 |
+| Vg25 | V#u3#v2; V#u3#v#h; V#u3#h2; V#c+2#u3#t2 | Implemented: 4 | Molecular VH2: MCS96, pp. 872–874, Table 2, calculates a quartet ground state; VLW95, pp. 4367, 4370–4372, establishes S = 3/2 by ESR. Ordinary, mixed/implicit H or H− donors. The geometry discussion does not change the local occupation |
+| Vg26 | V#c+2#v3#t3 | Implemented: 1 | [Cl3VN]−, HW I, pp. 757–758, Fig. 14.6g: three ordinary V–Cl bonds plus the existing N³− three-pair donor. The revised `donor_acceptor/vcl3-nitride-.edn` infers the metal occupation. The fully ordinary V≡N graph reuses Vg04 |
+| Vg27 | Ta#v5#t4; #v4#h#t4; #v3#h2#t4; #v2#h3#t4; #v#h4#t4; #h5#t4; Ta#u#v3#h#t4; #u#v2#h2#t4; #u#v#h3#t4; #u#h4#t4 | Implemented: 10; explicit tetrahydride and H−-donor states reused | TaH5(dmpe)2 and TaH4(dmpe)2, 1834, 2068–2069. Five/four terminal hydrides and four phosphine donors; d⁰/d¹. Explicit, mixed and implicit H; all-H− alternatives reuse Ta#c+5#t9 and Ta#c+4#u#t8 |
+| Vg28a | Nb/Ta#u#v3#h; #u#v2#h2; #u#v#h3; #u#h4; Ta#u#v4; Ta#c+4#u#t4 | Implemented: 10; Nb explicit/donor forms reuse Vg11 | Molecular NbH4 and TaH4: WA11, pp. 14179–14182, Tables 5–6, assigns doublet D2d structures. Ordinary, mixed/implicit H or four H− donors; no change to the already accepted coordinated tetrahydrides |
+| Vg28b | Nb/Ta#u3#v2; #u3#v#h; #u3#h2; #c+2#u3#t2 | Implemented: 8 | Molecular NbH2/TaH2: WA11 establishes the molecules. VLW95, p. 4367, reports calculated NbH2 ⁴B1 and three competing TaH2 quartet states (⁴B1/⁴A2/⁴B2); their ordering does not affect #u3. This is theoretical occupation evidence, not an ESR determination for these dihydrides. Ordinary, mixed/implicit H or H− donors |
+| Vg28c | VH2(H2), NbH4(H2)4 and TaH4(H2)4 | Deferred; no new states | WA11, pp. 14178–14182, explicitly distinguishes the intact H2 ligands from terminal hydrides. Keep with Cg33/Sg09h: H2-donor accounting is separate work; no MC replacement or VH4 assignment inferred from these formulae |
+| Vg29a | Nb#u#v3#h#t4; Nb#u#v2#h2#t4 | Implemented: 2; explicit, Ta and all-anionic-donor forms reused | NbCl2H2(dmpe)2, TaCl2H2(dmpe)2 and TaCl2H2(PMe3)4: L84, pp. 1719–1721, establishes terminal hydrides and one unpaired electron by ESR and moments of 1.72–1.74 BM. Nb mixed/implicit H adds two states; Vg13/Vg27 cover the rest |
+| Vg29b | Nb/Ta#n#u#v2#t4; #c+2#n#u#t6 | Omitted: occupation insufficiently established | Nb/TaCl2L4 (L = PMe3 or one dmpe P donor), HW 1837. L83, p. 4474, footnote 12, gives 1.45/1.49 BM for TaCl2(PMe3)4; DW77, p. 1134, gives ESR g = 1.943 for TaCl2(dmpe)2. Neither paper explicitly assigns the occupation. L84/P25/BLH81 do not supply the Nb(II) occupation. User decision 2026-11-03: omit all four uncertain states |
+| Vg29c | Ta#n2#v#t6; Ta#n2#h#t6 | Implemented: 2; Ta#c+#n2#t7 reused | TaX(CO)2(dmpe)2, X = Cl, Br, H, Me or CN: DW77, pp. 1134–1136. One ordinary X/H bond and six neutral donor pairs; the paired d⁴ assignment follows the resolved ¹H/³¹P NMR and the selected closed-shell carbonyl convention. The hydride has an implicit-H form; all-anionic-donor forms reuse Vg21 |
+| Vg29d | Ta#n#v3#t4; #n#v2#h#t4; #n#v#h2#t4; #c+3#n#t7 | Implemented: 4 | TaClH2(PMe3)4: L83, p. 4475, explicitly identifies the diamagnetic Ta(III) monomer and terminal hydrides. Paired d²; ordinary, mixed/implicit H or all-anionic-donor forms. Distinct from the six-coordinate unpaired III complexes in Vg20 |
+| Vg29e | Nb#n2#v#t6 | Implemented: 1; Nb#c+#n2#t7 reused | NbCl(CO)2(dmpe)2: BLH81, pp. 794–795, 798, gives the synthesis, IR, mass spectrum and expected phosphine ¹H NMR signals. The paired d⁴ assignment follows the selected closed-shell carbonyl convention, as for Ta in Vg29c; it is not a separately measured spin assignment. One ordinary Nb–Cl bond and six neutral donor pairs, or Cl− donation. HW 1837's other MX·6D carbonyls reuse these counts |
+| Vg30 | Nb#c-5#n#v8; Nb#c+3#n#t8 | Implemented: 2 | Nb(CN)8⁵−, HW 1838; KG75, p. 2490, explicitly states that the III salts are diamagnetic. Eight ordinary C-bound cyanides or eight CN− donors, with the two remaining metal electrons paired |
+| Vg31 | Nb/Ta#v5#t3; Ta#c+3#v2#t6 | Implemented: 3; Nb#c+3#v2#t6 reused | Nb2X9³− (X = Cl, Br, I) and Ta2Cl9³−: HW 1837; S98, pp. 6802–6804, 6806, explicitly assigns a metal–metal double bond with two unpaired bonding electrons. Encode M=M as `2#u2#s3` (PW), with three terminal ordinary halides and three bridging X− donors per metal, or all six halides as donors. No atom-local unpaired electron or MC type is added |
+| Vg32 | V#c+2#u2#v#t6; V#c+3#n#t8 | Implemented: 2; V#c+3#u2#t7 reused | Cp2VCl: FS77, pp. 46–47, explicitly assigns two unpaired electrons from 2.80(5) BM. Ordinary terminal Cl or Cl− donation; the paper extends the occupation to Cp2VR. Its pp. 51–52 separately identify diamagnetic [Cp2VL2]⁺ complexes (L = CO/phosphine), giving the paired eight-accepted-pair state |
+| Vg33 | V#n2#v#t6; V#n2#h#t6 | Implemented: 2; V#c+#n2#t7 reused | KH74, pp. 201–202, establishes diamagnetic VH(PF3)6, including the hydride resonance and molecular ion. HW 1828's VH(PF3)5 formula is incorrect. Ordinary/implicit H plus six phosphane donors, or H− donation |
+| Vg34 | Vanadates/thiovanadates, extended binary solids, polyoxo-/metal clusters | Reuse where local states suffice; no additional default types selected | VO4³−/VS4³−/VSe4³− and small linked tetrahedral vanadates reuse localized #v5, 1823–1825. No aggregate MC state from bulk oxides, nitrides, carbides, borides, M3/M6 halide clusters or the large polyoxometalates, 1827–1830, 1837–1841. M2X9³− is covered separately above |
+| Vg35 | VH2·2BH3; V2(form)4; Np3V–N2–VNp3; rearranged NbCp2 dimer; further bis-arene/bipyridyl redox states | Unselected in this pass | Extraction retained from 1828–1831, 1833, 1841 and cross-references. No broad borohydride MC state, scaffold-specific metal state or formal metal-redox ladder inferred from these formulae. The common Cp and carbonyl classes are selected above |
+
+#### Vanadium-group limits and coverage
+
+All 160 implemented additions satisfy the nonbonding budget and the existing
+capacity 18; none is excluded by that bound. No new target-covalence or aromatic
+ValenceTable entry is identified for these graphs with zero or supplied implicit H.
+Counts uses the entry shifted by `2t − charge`, while capacity belongs to the
+actual element. With occupation absent it pairs the remaining electrons; the
+unpaired V(II/III), Nb/Ta(III) and quartet molecular MH2 inputs therefore need supplied
+#u3/#u2 for agreement with AtomTyping. The 166 fixture inputs cover every addition,
+including mixed/implicit hydrides and both selected ligand descriptions. All four
+resolver/policy outputs agree and pass the valence-invariants validator; 688 checks
+verify the expected metal states. The Nb2Cl9³−/Ta2Cl9³− fixtures retain triplet M=M
+bond occupation with either ordinary terminal halides or all-halide donation.
+
+The suite adds 165 independent inputs and revises [Cl3VN]− to infer its metal
+occupation. All 3,594 graph unit tests, 223 property tests and 1,976 resolution
+cases pass; all 1,811 earlier snapshots are unchanged. Existing H−, halide,
+peroxide, water, amine, phosphine, carbonyl and Cp donor types suffice. The existing
+multidonor accounting issue remains outside this work. No resolver, capacity or
+ValenceTable changes were needed.
+
+#### Vanadium-group primary-source checks
+
+| Key | Source | Status and use |
+| --- | --- | --- |
+| J12 | Jackson et al., “Vanadocene de Novo: Spectroscopic and Computational Analysis of Bis(η⁵-cyclopentadienyl)vanadium(II),” *Organometallics* **31** (2012), 8265–8274. [DOI](https://doi.org/10.1021/om300892y), [PDF](../materials/valence/Jackson-2012-vanadocene.pdf) | Author copy obtained from the National High Magnetic Field Laboratory, reviewed and archived; pp. 8265–8267 establish the quartet. Vg24 |
+| MCS96 | Ma, Collins and Schaefer, *J. Am. Chem. Soc.* **118** (1996), 870–879. [DOI](https://doi.org/10.1021/ja951376t), [PDF](../materials/valence/Ma-Collins-Schaefer-1996-TiH2.pdf) | Existing archived paper; VH2 section reviewed, pp. 872–874, Table 2. Vg25 |
+| WA11 | Wang and Andrews, “Tetrahydrometalate Species VH2(H2), NbH4, and TaH4: Matrix Infrared Spectra and Quantum Chemical Calculations,” *J. Phys. Chem. A* **115** (2011), 14175–14183. [DOI](https://doi.org/10.1021/jp2076148), [PDF](../materials/valence/Wang-Andrews-2011-group5-hydrides.pdf) | Supplied PDF reviewed and archived. NbH4/TaH4 doublets, Tables 5–6; VH2(H2) quartet and intact H2 adducts, pp. 14179–14182. Bare NbH2/TaH2 occupations are not labelled. Vg28 |
+| L84 | Luetkens, Elcesser, Huffman and Sattelberger, “Paramagnetic hydride complexes of niobium(IV) and tantalum(IV),” *Inorg. Chem.* **23** (1984), 1718–1726. [DOI](https://doi.org/10.1021/ic00180a017), [PDF](../materials/valence/Luetkens-1984-Nb-Ta-hydrides.pdf) | Supplied PDF reviewed and archived. Terminal M(IV) hydrides and d¹ occupation, pp. 1719–1721; no explicit spin assignment for the M(II) precursors. Vg29 |
+| KG75 | Kiernan and Griffith, “Studies on transition-metal cyano-complexes. Part I. Octacyanoniobates(III), -niobates(IV), -molybdates(V), and -tungstates(V),” *J. Chem. Soc., Dalton Trans.* (1975), 2489–2494. [DOI](https://doi.org/10.1039/DT9750002489), [PDF](../materials/valence/Kiernan-Griffith-1975-octacyanoniobates.pdf) | Supplied PDF reviewed and archived. Page 2490 explicitly distinguishes diamagnetic III from paramagnetic IV salts. Vg14/Vg30 |
+| S98 | Stranger, McGrady and Lovell, “Metal–Metal Bonding in d¹d¹ and d²d² Bioctahedral Dimer Systems,” *Inorg. Chem.* **37** (1998), 6795–6806. [DOI](https://doi.org/10.1021/ic971511y), [PDF](../materials/valence/Stranger-McGrady-Lovell-1998-metal-metal-bonding.pdf) | Supplied PDF reviewed and archived. Nb2X9³−/Ta2Cl9³− double bond: paired σ electrons and two parallel-spin electrons in the δπ bonding orbitals, pp. 6802–6804, 6806. The weakly coupled V2Cl9³− quintet is distinct. Vg31 |
+| FS77 | Fieselmann and Stucky, “The crystal structure of dicyclopentadienylvanadium monochloride and its implications for the structures of other d² dicyclopentadienyl compounds,” *J. Organomet. Chem.* **137** (1977), 43–54. [DOI](https://doi.org/10.1016/S0022-328X(00)80841-4), [PDF](../materials/valence/Fieselmann-Stucky-1977-Cp2VCl.pdf) | Supplied PDF reviewed and archived. Two unpaired electrons in Cp2VCl, pp. 46–47; paired [Cp2VL2]⁺ complexes, pp. 51–52. Vg32 |
+| KH74 | Kruck and Hempel, “Hexakis(trifluorophosphane)vanadium Hydride,” *Angew. Chem. Int. Ed. Engl.* **13** (1974), 201–202. [DOI](https://doi.org/10.1002/anie.197402011), [PDF](../materials/valence/Kruck-Hempel-1974-VH-PF3-6.pdf) | Supplied PDF reviewed and archived. VH(PF3)6, diamagnetism and seven-coordinate V; corrects HW's five-PF3 formula. Vg33 |
+| P25 | Pampaloni et al., “Oxidative Chlorination Reactions of [Nb(CO)6]− in the Presence of N- and P-Donors,” *Eur. J. Inorg. Chem.* (2025), e202500026. [DOI](https://doi.org/10.1002/ejic.202500026), [PDF](../materials/valence/Pampaloni-2025-Nb-carbonyl-chlorination.pdf) | Author manuscript obtained from Bologna's repository and archived. Confirms NbCl2(dmpe)2 preparation; no explicit spin assignment. Vg29b omitted |
+| L83 | Luetkens, Huffman and Sattelberger, “Development of low-valent tantalum chemistry,” *J. Am. Chem. Soc.* **105** (1983), 4474–4475. [DOI](https://doi.org/10.1021/ja00351a058), [PDF](../materials/valence/Luetkens-1983-low-valent-Ta.pdf) | Supplied PDF reviewed and archived. TaCl2(PMe3)4 moments, p. 4474, footnote 12, without an explicit spin assignment; diamagnetic terminal TaClH2(PMe3)4, p. 4475. Vg29b/Vg29d |
+| DW77 | Datta and Wreford, “Seven-coordinate complexes of tantalum(I),” *Inorg. Chem.* **16** (1977), 1134–1137. [DOI](https://doi.org/10.1021/ic50171a031), [PDF](../materials/valence/Datta-Wreford-1977-TaI-complexes.pdf) | Supplied PDF reviewed and archived. Ta(II) ESR, p. 1134; Ta(I) carbonyl structures, hydride identification and resolved NMR, pp. 1134–1136. The paired I occupation is inferred from the spectroscopy; no explicit II spin assignment. Vg29b/Vg29c |
+| VLW95 | Van Zee, Li and Weltner, “V, Nb, and Ta hydride molecules in deuterium and rare-gas matrices: Infrared and electron spin resonance spectra,” *J. Chem. Phys.* **102** (1995), 4367–4374. [DOI](https://doi.org/10.1063/1.469485), [PDF](../materials/valence/Van-Zee-Li-Weltner-1995-group5-hydrides.pdf) | Supplied PDF reviewed and archived. Calculated NbH2/TaH2 quartet states summarized on p. 4367; direct VH2 quartet and NbH4/TaH4 doublet ESR evidence. Vg25/Vg28 |
+| G85 | Girolami, Wilkinson, Galas, Thornton-Pett and Hursthouse, “Synthesis and properties of the divalent 1,2-bis(dimethylphosphino)ethane (dmpe) complexes MCl2(dmpe)2 and MMe2(dmpe)2 (M = Ti, V, Cr, Mn, or Fe),” *J. Chem. Soc., Dalton Trans.* (1985), 1339–1348. [DOI](https://doi.org/10.1039/DT9850001339), [PDF](../materials/valence/Girolami-1985-divalent-dmpe-complexes.pdf) | Supplied PDF reviewed and archived. Three unpaired V electrons and 3.7 ± 0.1 BM for VCl2(dmpe)2/VMe2(dmpe)2, p. 1340, Table 2; quartet ESR treatment, pp. 1341, 1343. Vg19b reuses Vg19 |
+| BLH81 | Burt, Leigh and Hughes, “Carbonyl complexes of niobium and tantalum and evidence of a niobium dinitrogen complex,” *J. Chem. Soc., Dalton Trans.* (1981), 793–799. [DOI](https://doi.org/10.1039/DT9810000793), [PDF](../materials/valence/Burt-Leigh-Hughes-1981-Nb-Ta-carbonyls.pdf) | Supplied PDF reviewed and archived. NbCl(CO)2(dmpe)2 and its Br/N3 substitutions, pp. 794–795, 798; NMR supports the selected closed-shell carbonyl convention. The reported ESR concerns Nb(IV), not the Nb(II) phosphine occupation. Vg29e |
+
+Intermediates and the deduplication/count audit are in `scratch/hw-vanadium-review/`.
+Retained papers are in `materials/valence/`; neither the work table nor its evidence
+depends on keeping the scratch directory.
+
+### Chromium group
+
+HW II, chapter XXVII, pp. 1844–1898 (chemistry through p. 1895), with the cited
+chapter-XXXII cross-references. Updated 2026-11-04. The accepted set of **260 new
+states: Cr 72, Mo 94, W 94** is implemented with inferred conformance coverage.
+All 11 earlier Cr/Mo/W/Sg states are retained with checked citations. Thirteen W
+phosphine-hydride occupations remain open by decision and are outside the selected
+counts, as are the other open rows and the optional O companion proposal.
+
+#### Chromium-group work table
+
+E = Cr, Mo, W; M = Mo, W. A prefix applies to every following suffix in its cell.
+Counts are new states after reuse across rows. The 260-state selection was
+accepted and implemented on 2026-11-04; fixture verification is recorded below.
+Ionic ligand allocation follows the convention used in the preceding
+transition-metal chapters. Oxo bonds remain ordinary E=O unless stated otherwise.
+
+| ID | States / extracted family | Status; new states | Examples and evidence |
+| --- | --- | --- | --- |
+| Crg01 | Cr#u6; Cr#c+2#u4; Cr#c+2#n#u2; Cr#c+3#u3; Cr#n3#t5#m0; Mo#u6; Mo#c+2#u4; Mo#c+2#n#u2; Mo#c+3#u3; W#n#u4; Sg#n#u4 | Retained; 11 existing | Atomic occupations: HW II, p. 1538; Cr(II) high-/low-spin and Cr(III), pp. 1861–1864; Mo(II/III), pp. 1879, 1891. Existing Cr bridge: pp. 2069, 2137 and D79. Citations/comments updated; no existing occupation is removed |
+| Crg02 | E#c+4#u2; #c+5#u; #c+6; W#c+2#u4; #c+3#u3 | Implemented; 11 | Ionic states for the chapter's II–VI chemistry; d⁴/d³/d²/d¹/d⁰ free-ion occupations. These do not prescribe the occupations of coordinated complexes. HW 1849, 1871, 1891 |
+| Crg03 | E#v6; M#c+6#t6 | Implemented; 5 | Chromate/dichromate, molybdate/tungstate and localized E(VI) oxo graphs; MF6, WCl6/WBr6, MMe6, alkylidene/alkylidyne and terminal nitrido derivatives. HW 1849–1853, 1872–1873, 1880, 1893–1894. MF6 has ordinary or six F−-donor descriptions; CrF6 is not an example |
+| Crg04 | M#c-#v7; #c-2#v8; #c+6#t7; #c+6#t8 | Implemented; 8 | MF7− and MF8²−, 1872; MMe7−, 1894. Ordinary or anionic-donor ligands. M(O2)4²−, 1882, reuses the eight-coordinate states while retaining each O–O bond |
+| Crg05 | E#c+4#v2#t4; #c+2#v4#t2 | Implemented; 6 | EO X4 and EO2 X2: ordinary oxo bonds plus X− donors. Cr, 1853, 1855; Mo/W, 1873. Fully ordinary graphs reuse E#v6 |
+| Crg06 | Cr#c-#v7; #c-2#v8; #c+2#v4#t4 | Implemented; 3 | CrO(O2)2(OH)− and halogenochromates, 1853–1854; CrO2F4²−, 1849. Ordinary ligand bonds, or F− donation with the two Cr=O bonds retained |
+| Crg07 | Cr#v6#t; #v6#t2; #c+4#v2#t5; #c+4#v2#t6 | Implemented; 4 | CrO(O2)2·D and CrO(O2)2(bipy), 1853–1854: one/two neutral donor pairs, with ordinary Cr–peroxo bonds or O− donation. The latter allocates one negative charge to each peroxide O, retaining O–O |
+| Crg08 | M#c+2#v4#t4; #v6#t2; #v6#t3; #c+4#v2#t6; Mo#c+2#v4#t3; #c-3#v9; W#v6#t | Implemented; 11 | MoO2(H2O)4²+, MoO2Cl2(H2O)2, MO2F4²−, MoO2F3−, MoO3F3³−, WO3X−/WO3F2²−, MO3(dien), and MO(O2)2(H2O)2. HW 1870, 1873, 1881–1882. Other ordinary/all-halide-donor forms reuse preceding rows. No state is inferred from the inconsistent WO3F3²− formula printed on p. 1881 |
+| Crg09 | E#u#v5; #c+5#u#t5; #c-#u#v6; #c+5#u#t6 | Implemented; 12 | CrF5/CrF6−; molecular MCl5 and MX6−; MMe5. HW 1854–1855, 1872, 1894: d¹. Ordinary or anionic-donor ligand descriptions |
+| Crg10 | M#c-3#u#v8; #c+5#u#t8; #c+#u#v4#t2 | Implemented; 6 | MF8³− and M2Cl10, 1872. Each chloride dimer has four terminal ordinary bonds and two bridging Cl− donors; the all-chloride-donor graph reuses M#c+5#u#t6. HW explicitly excludes an M–M bond in these dimers. The eight-ligand states also cover M(CN)8³−, 1876 |
+| Crg11 | E#c+3#u#v2#t3; #c+3#u#v2#t5; #c-2#u#v7; Cr#c+3#u#v2#t4; Mo#c-#u#v6#t | Implemented; 11 | EO X3, EO X5²−; CrOX4−; MoO(H2O)5³+ and MoOCl4(H2O)−. Cr, 1854; Mo/W, 1873, 1879. One unpaired electron, ordinary E=O, with ordinary halides or X− donors |
+| Crg12 | Cr#c-3#u#v8; #c+5#u#t8 | Implemented; 2 | Cr(O2)4³−, 1855–1856: isolated paramagnetic Cr(V) tetraperoxochromate. Ordinary Cr–O or peroxide-O− donation; O–O bonds retained |
+| Crg13 | E#u2#v4; #c+4#u2#t4; #c-2#u2#v6; #c+4#u2#t6 | Implemented; 12 | Tetrahedral CrX4 and EAr4; octahedral EX6²−. HW 1854–1856, 1866, 1872, 1894 and its d² ligand-field treatment. SDV25 explicitly calculates triplet tetraaryl ground states. Seven-coordinate IV fluorides remain separate below |
+| Crg14 | M#c-4#n#v8; #c+4#n#t8 | Implemented; 4 | M(CN)8⁴−: explicitly diamagnetic d², 1876; KG75. Ordinary C-bound cyanides or CN− donors. The d¹ M(CN)8³− states reuse Crg10 |
+| Crg15 | Cr#u2#v4#t3; #c+4#u2#t7 | Implemented; 2 | Cr(O2)2(NH3)3, 1856. CND01, pp. 599–600, determines S = 1 independently from susceptibility and heat capacity. Ordinary Cr–peroxo bonds or peroxide-O− donation; three NH3 donors. No occupation is transferred to Cr(O2)2(CN)3³− without evidence |
+| Crg16 | Cr#c-#u3#v4; #c+3#u3#t4; #u3#v3#t2; #c+3#u3#t5 | Implemented; 4 | Four- and five-coordinate Cr(III): CrCl4− and CrCl3(NMe3)2; HW 1860–1861. Ordinary anionic ligands or their donor forms. The trigonal trisamide is separated below |
+| Crg17 | Cr#c+3#u3#t6; #c+2#u3#v#t5; #c+#u3#v2#t4; #u3#v3#t3; #c-#u3#v4#t2; #c-2#u3#v5#t; #c-3#u3#v6; M#u3#v3#t3; #c-3#u3#v6; #c+3#u3#t6 | Implemented; 13 | Cr(NH3)6−k Xk (k = 0–6), aquochloro ions, CrCl3(THF)3, Cr(acac)3 and Reinecke's salt; 1860–1861. MCl3(py)3/MCl6³−, 1891; Mo(H2O)6³+, 1879. Three unpaired electrons. Cr hydroxo dimers reuse the metal state but their OH− donor graph needs Crg37 |
+| Crg18 | Cr#u4#v2#t2; #c+2#u4#t4; #c+#u4#v#t4; #c+2#u4#t5; #c-3#u4#v5; #c+2#u4#t6; #c-4#u4#v6 | Implemented; 7 | High-spin Cr(II): Cr(acac)2/CrCl2(MeCN)2, CrBrL+ (L = four N donors), Cr(CN)5³−, aqua/ammine ions and discrete CrI6⁴− in Tl4CrI6. HW 1862–1864 explicitly distinguishes the four-unpaired class |
+| Crg19 | Cr/Mo#n#u2#v2#t4; #c+2#n#u2#t6; Cr#c-4#n#u2#v6 | Implemented; 5 | CrCl2(diars)2/CrCl2(dmpe)2 and Cr(CN)6⁴−, 1862, 1864; G85 confirms two unpaired electrons for the dmpe complexes. MoCl2(PR3)4 belongs to HW's two-unpaired class, 1891. CrCp2 reuses the Cr six-pair donor state, 2190 |
+| Crg20 | Mo#c-4#n#u#v7; #c+3#n#u#t7 | Implemented; 2 | Mo(CN)7⁴− is a doublet, not an example of the generic three-unpaired Mo(III) statement on HW 1891. R71, p. 51, gives S = ½, susceptibility and EPR; MDP19 explicitly uses S = ½. Ordinary cyanides or CN− donors |
+| Crg21 | E#n3#t6; #c-2#n4#t5; #c-#n3#v#t5; #c+#n2#u#t6 | Implemented; 12 | E(CO)6, E(CO)5²−, E2(CO)10²− (ordinary E–E single bond), E(C6H6)2 and its monocation. HW 1861, 1871, 1895, 2111, 2207. Neutral carbonyl/bis-arene class paired; bis-arene monocations have one unpaired electron. No additional metal MC state for the haptic arene ligands |
+| Crg22 | Cr#v6#t3; E#c+2#v4#t5; reuse E#v6#t2, E#c+2#v4#t4 and E#c-2#v8 | Implemented; 4 | Quadruple-bonded E2(OAc)4, its axial donor adducts, Cr2Me8⁴−, M2Cl8⁴− and Mo2(H2O)8⁴+. HW 1864–1866, 1880, 1891–1892. Ordinary E–E order 4; mixed ordinary/donor acetate or all-O donation. No MC description |
+| Crg23 | Mo#v6#t; M#c+3#v3#t3; #c+3#v3#t4; #c+3#v3#t6; other ordinary forms reused | Implemented; 7 | Triple-bonded M2(OR)6/M2(NR2)6 and their two-donor adducts; W2Cl9³−; Mo2(OH)2(H2O)8⁴+ (OH− companions in Crg37). HW 1880, 1891–1893. Ordinary M–M order 3, with ordinary terminal ligands or anionic donors. W#v6#t and E#v6#t3 already occur above |
+| Crg24 | Cr#u4#v2; #u4#v#h; #u4#h2; #c+2#u4#t2 | Implemented; 4 | Molecular CrH2: MCS96, pp. 873–874, Table 3, identifies the quintet ground state. Its calculated low-spin states are about 59 kcal/mol higher, not competing ground-state candidates. Ordinary, mixed/implicit H or two H− donors |
+| Crg25 | Cr#n#v4#t4; #n#v3#h#t4; #n#v2#h2#t4; #n#v#h3#t4; #n#h4#t4; #c+4#n#t8 | Implemented; 6 | CrH4(dmpe)2 is explicitly diamagnetic, HW 1861–1862. Four terminal hydrides and four phosphine donors; ordinary, mixed/implicit H or all-H− donation. Distinct from the triplet tetrahalides |
+| Crg26 | M#v5#h#t3; #v4#h2#t3; #v3#h3#t3; #v2#h4#t3; #v#h5#t3; #h6#t3; #c+6#t9; explicit M#v6#t3 reused | Implemented; 14 | MH6(PR3)3, HW 1871: d⁰ terminal hexahydrides. HC90, pp. 12–14, supplies WH6(PMe2Ph)3 and MoH6(PCy3)3 as fixture examples. Explicit, mixed/implicit H or H− donors. Nine accepted pairs fit capacity 18 |
+| Crg27 | Mo#n3#t5#m0; W#n3#t5#m0 | Implemented; 2 | HMo2(CO)10−/HW2(CO)10−, HW 2069, 2137. Adopted the existing Cr convention: H− contribution [0,2,0] to the 3c2e bridge, with no separate M–M bond (PW). Cr is covered by D79/PW |
+| Crg28a | W#c+2#n#u2#t6; Mo counterpart reused | Implemented; 1 | MoCp2/WCp2: C83, pp. 3614, 3617–3619, establishes paramagnetism and uses a triplet-derived ground manifold. Its spin–orbit doublet is not an S = ½ assignment. Cp− ligands donate six pairs in total; no metal MC state |
+| Crg28b | M#c+2#n#v2#t6; #c+2#n#v#h#t6; #c+2#n#h2#t6; all-H− form M#c+4#n#t8 reused | Implemented; 6 | Cp2MH2: HW 2199–2200 gives the isolated 18-electron dihydrides; C83 uses them as photochemical precursors and reports resolved precursor NMR. Paired d² occupation in the standard closed-shell description; explicit, mixed/implicit H or H− donors |
+| Crg28c | M#c+3#v2#h#t6; #c+3#v#h2#t6; #c+3#h3#t6; explicit M#c+3#v3#t6 and all-H− M#c+6#t9 reused | Implemented; 6 | Cp2MH3+: HW 2201 identifies protonation products of Cp2MH2. Ordinary terminal hydrides leave d⁰; explicit, mixed/implicit H or H− donors |
+| Crg28d | Mo#n2#v2#t5; #n2#v#h#t5; #n2#h2#t5; donor Mo#c+2#n2#t7 supported in Crg30a | Implemented; 3 | MoH2(PMe3)5: Ly84, pp. 695–696, establishes two terminal hydrides and resolved ¹H/³¹P NMR down to 190 K. Paired d⁴ assignment accepted from that evidence (PW); no magnetic measurement or explicit electronic multiplicity is reported. The Crg30a donor state is also implemented |
+| Crg28e | E#c-#n3#h#t5; explicit E#c-#n3#v#t5 and H−-donor E#n3#t6 reused | Implemented; 3 | HM(CO)5−, HW 2136–2137: implicit-H counterparts of the supported terminal carbonyl-hydride description. No extra donor state |
+| Crg28f | Mo#n#v4#t4; #n#v3#h#t4; #n#v2#h2#t4; #n#v#h3#t4; #n#h4#t4; donor Mo#c+4#n#t8 reused | Implemented; 5 | MoH4(PR3)4, HW 1871. P71 explicitly reports diamagnetism from magnetic measurements for PMePh2, PEtPh2 and dppe complexes. HC90, p. 10, supports terminal hydrides by structure and relaxation measurements. Ordinary/mixed/implicit H or H− donors |
+| Crg28g | W#n2#v2#t5; #n2#v#h#t5; #n2#h2#t5; W#n#v4#t4; #n#v3#h#t4; #n#v2#h2#t4; #n#v#h3#t4; #n#h4#t4; W#c+#n#v3#t4; #c+#n#v2#h#t4; #c+#n#v#h2#t4; #c+#n#h3#t4; #c+4#n#t7 | Open by decision; 13, excluded from supported count | WH2(PMe3)5, WH4(PMe3)4 and WH3(PMe3)4+: Ch81, pp. 1205, 1207–1209, gives resolved NMR coupling but no magnetic measurement or explicit electronic multiplicity. Paired assignments were left open. W#c+2#n2#t7 and W#c+4#n#t8 have independent cyanide support; their use for these hydrides remains open |
+| Crg28h | W#c+#v5#t4; #c+#v4#h#t4; #c+#v3#h2#t4; #c+#v2#h3#t4; #c+#v#h4#t4; #c+#h5#t4; donor W#c+6#t9 reused | Implemented; 6 | WH5(PMePh2)4+, HW 1872. HC90, p. 11, explicitly identifies the pentahydride and supports its classical description with T1 = 179 ms at 240 K; ordinary hydrides leave d⁰. This is distinct from Ch81's PMe3 trihydride product formed with H2 loss |
+| Crg28i | H2E(CO)5 | Unselected | HW 2137 marks these carbonyl dihydrides as not isolated. No additional default states selected |
+| Crg29a | E#u5#v; #u5#h; #c+#u5#t | Implemented; 9 | CrH, MoH, WH: WA03Cr, p. 574; WA05Mo, Table 2; WA02W, Table 2. Observed monohydrides, ⁶Σ⁺ ground-state assignments; one ordinary H or H− donation |
+| Crg29b | M#u4#v2; #u4#v#h; #u4#h2; #c+2#u4#t2 | Implemented; 8 | MoH2/WH2: WA05Mo and WA02W, Table 3, identify bent ⁵B2 ground states against the isotope spectra. CrH2 is already in Crg24 |
+| Crg29c | W#u3#v3; #u3#v2#h; #u3#v#h2; #u3#h3; #c+3#u3#t3 | Implemented; 5 | WH3: WA02W, Table 4 and pp. 6725–6726, assigns the observed trihydride to pyramidal ⁴A1. Not the higher-energy H2 adduct |
+| Crg29d | M#u2#v3#h; #u2#v2#h2; #u2#v#h3; #u2#h4; explicit M#u2#v4 and H−-donor M#c+4#u2#t4 reused | Implemented; 8 | MoH4/WH4: WA05Mo and WA02W, Table 5, give the tetrahedral triplet assignments used to interpret their observed spectra. The Cr paper instead observes H2 adducts of CrH2 |
+| Crg29e | M#v5#h; #v4#h2; #v3#h3; #v2#h4; #v#h5; #h6; explicit M#v6 and H−-donor M#c+6#t6 reused | Implemented; 12 | MoH6/WH6: WA05Mo, Table 6; WA02W, Table 7. Observed hexahydrides with singlet calculations. MoH6 geometry is less decisively assigned than WH6, but both considered Mo geometries have the same occupation and ordinary-bond graph |
+| Crg29f | CrH3/CrH4/CrH6; MoH3; WH5; hydride–H2 adducts | Unselected, or deferred for intact H2 | WA03Cr explicitly observes CrH/CrH2 and their H2 adducts, not the calculated higher ordinary hydrides. WA05Mo does not identify MoH3 experimentally; WA02W calculates WH5 but does not identify it in the spectra. No additions from calculation tables alone; intact-H2 cases remain with Crg33 |
+| Crg30a | Mo#c-5#n2#v7; #c+2#n2#t7 | Implemented; 2 | Mo(CN)7⁵−: D77, p. 1076, explicitly concludes diamagnetism and a ¹A1′ ground state from susceptibility. Ordinary C-bound cyanides or CN− donors; distinct from doublet Mo(CN)7⁴− |
+| Crg30b | W#c-5#n2#v7; #c+2#n2#t7; W#c-4#n#v7#h; #c+3#n#v#t7; #c+3#n#h#t7; explicit W#c-4#n#v8 and all-donor W#c+4#n#t8 reused | Implemented; 5 | W(CN)7⁵− and HW(CN)7⁴−, HW 1876. SG81, pp. 1886–1887, explicitly reports diamagnetism for both; NMR coupling and H/D vibrational shifts establish the W–H unit. Ordinary CN/H bonds or CN−/H− donors; the hydride's ionic allocation leaves paired d² |
+| Crg31a | EF7³− | Open occupation/coordination; not counted | HW 1855, 1872. The formulas alone do not establish a discrete seven-coordinate ion or its d² occupation. No specific primary structure/spin source located; no transfer from octahedral EX6²− |
+| Crg31b | Cr(O2)2(CN)3³− | Open occupation; not counted | HW 1856; S65, p. 71, establishes seven-coordinate, pentagonal-bipyramidal Cr(IV), two peroxide groups and three C-bound cyanides. Neither S65 nor B77, pp. 1295–1297, reports magnetic data or an electronic occupation. The longer *Ark. Kemi* reports cited by B77 remain unlocated. No transfer of the ammonia-peroxide triplet |
+| Crg32 | Mo#u2#v4#t3; #c+3#u2#v#t6 | Implemented single-bond graph; 2 | Mo2Cl9³−: HW 1893 gives a Mo–Mo single bond. MSL97, p. 6270, describes the experimentally relevant 2.6–2.8 Å region by one σ bond and four weakly coupled δπ electrons, consistent with paramagnetism. This gives two unpaired electrons per Mo, with ordinary terminal Cl/bridging Cl− donors or all-Cl− donation. The paper does not assert this partition for every salt; molecular antiferromagnetic coupling does not replace the local #u2 by #n |
+| Crg33 | η²-H2 complexes, including W(H2)(CO)3(PR3)2 | Deferred with the earlier H2-donor accounting work | HW 1872, 2071–2073. The classical two-hydride form and the intact-H2 form are distinct; no aggregate MC replacement |
+| Crg34 | Extended binary oxides/halides/sulfides, carbides, nitrides, borides; highly charged nitridometallates; larger polyoxo-, sulfido- and halide clusters | Extracted; no additional default states selected | HW 1860, 1863, 1874–1890. Retain the distinction between bulk formulas and finite molecular graphs. The low-spin d³ CrN3⁶− statement on p. 1863 is recorded here, not used to replace the ordinary Cr(III) quartet. No broad cluster MC states |
+| Crg35 | CrF6; MoCl6; WMe4/WMe8²−; Cr(O2)4²−; specialized ligand rearrangements and higher assemblies | Unselected | HW itself questions the first four assignments (1855, 1872, 1894); Cr(O2)4²− is only a postulated transient, 1854–1855. No extra states from exotic scaffolds or hypothetical species |
+| Crg36 | Cr#u3#v3; #c+3#u3#t3 | Implemented; 2 | Cr(NiPr2)3: A68, p. 495, gives μeff = 3.80 BM, temperature-independent over 298–123 K. BHN71, p. 412, identifies the zero-field-split d³ ESR, g∥ = 2 and g⊥ = 4 at 130 K. These support the quartet; the room-temperature g = 1.975 signal is an oxygen-complex impurity |
+| Crg37 | O#c-#n#v#d2; O#c-#n#h#d2 | Proposed; 2 O companions, outside the selected metal count | Doubly bridging OH− with explicit/implicit H, HW 1860, 1880, 1893; adopted donor allocation (PW). Needed for the all-donor hydroxo-dimer graphs, not for coverage of any new metal state. Both forms pass all four resolver/policy combinations and the electron-count validator with the candidate entries and O capacity 8 |
+
+#### Chromium-group limits and coverage
+
+Expansion under the registry's concrete zero defaults and deduplication against
+the 11 earlier states gives 260 implemented new metal states. All satisfy the
+nonbonding budget and capacity 18. The ValenceTable is unchanged: Counts uses the
+table shifted by `2t − charge` and the actual element's capacity. Supplied #u
+preserves unpaired occupations when Counts' default pairing would differ.
+Crg27 adds the only two metal MC states; no aromatic metal state was added.
+
+All 260 new metal states have inferred coverage in 260 independent fixtures:
+168 `donor_acceptor`, 41 `hydrides`, 32 `inorganic_ions`, 11 `atomic_ions` and
+8 `inorganic_small`. Their inputs omit target-metal lone pairs, localized valence
+and accepted-pair counts. AtomTyping and Counts, each with Strict and
+MostSaturated, infer the expected states and agree on the complete output graphs.
+The independent audit checks 280 target atoms across those four configurations
+(1,120 checks), including electron conservation. The Mo#c+3#v3#t6 fixture uses
+Cp2MoH3+; a hydroxo-dimer donor fixture would also need Crg37's unselected O states.
+
+Verification: 3,594 graph unit tests, 223 graph property tests and 2,236 resolution
+conformance cases pass. All 1,976 pre-chapter snapshots are unchanged. The
+existing-entry citation/comment audit is complete; the 13 open W occupations,
+Crg31 source checks and intact-H2 accounting remain outside this selection.
+
+#### Chromium-group primary sources
+
+| Key | Source | Access and use |
+| --- | --- | --- |
+| MCS96 | Ma, Collins and Schaefer, *J. Am. Chem. Soc.* **118** (1996), 870–879. [DOI](https://doi.org/10.1021/ja951376t), [PDF](../materials/valence/Ma-Collins-Schaefer-1996-TiH2.pdf) | Archived paper; CrH2 ground-state discussion and Table 3 reviewed. Crg24 |
+| G85 | Girolami et al., *J. Chem. Soc., Dalton Trans.* (1985), 1339–1348. [DOI](https://doi.org/10.1039/DT9850001339), [PDF](../materials/valence/Girolami-1985-divalent-dmpe-complexes.pdf) | Archived paper; CrCl2(dmpe)2/CrMe2(dmpe)2 have two unpaired electrons, p. 1340. Crg19 |
+| KG75 | Kiernan and Griffith, *J. Chem. Soc., Dalton Trans.* (1975), 2489–2494. [DOI](https://doi.org/10.1039/DT9750002489), [PDF](../materials/valence/Kiernan-Griffith-1975-octacyanoniobates.pdf) | Archived paper; octacyanide oxidation states/occupations. Crg14 |
+| R71 | Rossman, Caltech PhD thesis (1971), part I, especially p. 51. [Repository](https://thesis.caltech.edu/9999/), [PDF](../materials/valence/Rossman-1971-heptacyanomolybdate-thesis.pdf) | Downloaded from Caltech and archived; explicit Mo(CN)7⁴− S = ½, with susceptibility/EPR. Crg20 |
+| MDP19 | Magott, Dunbar and Pinkowicz, “Correlating magnetic anisotropy with [Mo(CN)7]4− geometry of MnII–MoIII magnetic frameworks,” *Dalton Trans.* (2019). [DOI](https://doi.org/10.1039/C9DT02164G), [PDF](../materials/valence/Magott-Dunbar-Pinkowicz-2019-heptacyanomolybdate.pdf) | Downloaded from NSF PAR and archived; explicitly assigns S = ½ to Mo(CN)7⁴−. The framework itself is not a proposed fixture |
+| SDV25 | Sauza-de la Vega et al., “Designing molecular qubits: computational insights into first-row and group 6 transition metal complexes,” *Chem. Sci.* **16** (2025), 12896–12905. [DOI](https://doi.org/10.1039/D5SC02544C), [archived full text](../materials/valence/Sauza-de-la-Vega-2025-group6-qubits.html) | Full text reviewed via PMC and archived as HTML; Table 2 explicitly assigns calculated triplet Cr/Mo/W tetraaryl ground states. PDF retrieval failed; the HTML contains the evidence |
+| D79 | Darensbourg and Incorvia, *Inorg. Chem.* **18** (1979), 18–22. [DOI](https://doi.org/10.1021/ic50191a004), [PDF](../materials/valence/Darensbourg-1979-bridging-carbonyl-hydrides.pdf) | Existing archived source for the accepted chromium hydride-bridge convention; HW explicitly extends the structural class to Mo/W. Crg27 |
+| S98 | Stranger, McGrady and Lovell, *Inorg. Chem.* **37** (1998), 6795–6806. [DOI](https://doi.org/10.1021/ic971511y), [PDF](../materials/valence/Stranger-McGrady-Lovell-1998-metal-metal-bonding.pdf) | Existing archived paper; d³d³ comparison and reference to MSL97. Crg32 |
+| CND01 | Cage, Nguyen and Dalal, “Three-dimensional antiferromagnetism in triamminodiperoxychromate, Cr(NH3)3(O2)2,” *Solid State Commun.* **119** (2001), 597–601. [DOI](https://doi.org/10.1016/S0038-1098(01)00296-4), [PDF](../materials/valence/Cage-Nguyen-Dalal-2001-CrIV-peroxo-magnetism.pdf) | Supplied PDF reviewed and archived. Susceptibility and magnetic entropy independently establish S = 1, pp. 599–600. Crg15 |
+| C83 | Cox et al., “Electronic structure of molybdenocene and tungstenocene: detection of paramagnetism by magnetic circular dichroism in argon matrixes,” *Inorg. Chem.* **22** (1983), 3614–3620. [DOI](https://doi.org/10.1021/ic00166a025), [PDF](../materials/valence/Cox-1983-molybdenocene-tungstenocene.pdf) | Reviewed and archived. MCD establishes paramagnetism; the analysis uses a triplet manifold with spin–orbit splitting, pp. 3617–3619. The spin–orbit doublet does not imply one unpaired electron. Crg28a–b |
+| Ly84 | Lyons et al., “Synthesis, X-ray crystal structure, and reactions of dihydridopentakis(trimethylphosphine)molybdenum(II),” *J. Chem. Soc., Dalton Trans.* (1984), 695–700. [DOI](https://doi.org/10.1039/DT9840000695), [PDF](../materials/valence/Lyons-1984-molybdenum-phosphine-dihydride.pdf) | Reviewed and archived. Two terminal hydrides and pentagonal-bipyramidal geometry by diffraction; resolved ¹H/³¹P NMR, pp. 695–696. Paired occupation accepted as PW; the paper gives no magnetic measurement or explicit electronic multiplicity. Crg28d |
+| D77 | Drew, Mitchell and Pygall, “Preparation and properties of the heptacyanomolybdate(II) anion and the crystal and molecular structures of its sodium and potassium salts,” *J. Chem. Soc., Dalton Trans.* (1977), 1071–1077. [DOI](https://doi.org/10.1039/DT9770001071), [PDF](../materials/valence/Drew-Mitchell-Pygall-1977-heptacyanomolybdate-II.pdf) | Supplied PDF reviewed and archived. Explicit diamagnetism and ¹A1′ assignment for Mo(CN)7⁵−, p. 1076. Crg30a |
+| WA03Cr | Wang and Andrews, “Chromium Hydrides and Dihydrogen Complexes in Solid Neon, Argon, and Hydrogen,” *J. Phys. Chem. A* **107** (2003), 570–578. [DOI](https://doi.org/10.1021/jp026930h), [PDF](../materials/valence/Wang-Andrews-2003-chromium-hydrides.pdf) | Supplied PDF reviewed and archived. CrH ⁶Σ⁺ and CrH2 ⁵B2, Table 2 and pp. 574–575. Observed higher-H species are H2 adducts; no observed CrH3 or ordinary CrH4 assignment. Crg24, Crg29a/f |
+| WA05Mo | Wang and Andrews, “Matrix Infrared Spectra and Density Functional Theory Calculations of Molybdenum Hydrides,” *J. Phys. Chem. A* **109** (2005), 9021–9027. [DOI](https://doi.org/10.1021/jp053591u), [PDF](../materials/valence/Wang-Andrews-2005-molybdenum-hydrides.pdf) | Supplied PDF reviewed and archived. Observed MoH/MoH2/MoH4/MoH6 interpreted with sextet/quintet/triplet/singlet calculations, Tables 2, 3, 5, 6. MoH3 calculations alone do not establish an observed species. Crg29 |
+| WA02W | Wang and Andrews, “Neon Matrix Infrared Spectra and DFT Calculations of Tungsten Hydrides WHx (x = 1–4, 6),” *J. Phys. Chem. A* **106** (2002), 6720–6729. [DOI](https://doi.org/10.1021/jp025920d), [PDF](../materials/valence/Wang-Andrews-2002-tungsten-hydrides.pdf) | Supplied PDF reviewed and archived. Observed WH/WH2/WH3/WH4/WH6 interpreted with sextet/quintet/quartet/triplet/singlet calculations, Tables 2–5, 7. WH5 is calculated but not identified experimentally. Crg29 |
+| BHN71 | Bradley, Hursthouse and Newing, “Crystal structure and electron spin resonance spectrum of tris-di-isopropylaminatochromium(III),” *J. Chem. Soc. D* (1971), 411–412. [DOI](https://doi.org/10.1039/C2971000411B), [PDF](../materials/valence/Bradley-Hursthouse-Newing-1971-chromium-trisamide.pdf) | Supplied PDF reviewed and archived. Trigonal structure and zero-field-split d³ ESR, g∥ = 2, g⊥ = 4 at 130 K, p. 412; the room-temperature signal is an oxygen impurity. Crg36's quartet is the interpretation of these ESR data |
+| B77 | Baran, “Die IR-Spektren von [Cr(O2)2(NH3)3] und K3[Cr(O2)2(CN)3],” *Monatsh. Chem.* **108** (1977), 1295–1299. [DOI](https://doi.org/10.1007/BF01046442), [PDF](../materials/valence/Baran-1977-chromium-peroxides.pdf) | Retrieved from the author's university repository, reviewed and archived. Structure, C-bound cyanide and Cr(IV) supported; no spin assignment. Crg31b |
+| SG81 | Soares and Griffith, “Studies on transition-metal cyano-complexes. Part 3. Heptacyano-complexes of tungsten, molybdenum, and vanadium, and a hydrido-heptacyano-complex of tungsten,” *J. Chem. Soc., Dalton Trans.* (1981), 1886–1891. [DOI](https://doi.org/10.1039/DT9810001886), [PDF](../materials/valence/Soares-Griffith-1981-heptacyanides.pdf) | Reviewed and archived. Explicit diamagnetism for both W salts, p. 1886; W–H NMR coupling and isotope-sensitive vibrations, p. 1887. Crg30b |
+| MSL97 | McGrady, Stranger and Lovell, “Broken-symmetry and approximate spin-projected potential energy curves for bimetallic systems,” *J. Phys. Chem. A* **101** (1997), 6265–6272. [DOI](https://doi.org/10.1021/jp9625568), [PDF](../materials/valence/McGrady-Stranger-Lovell-1997-d3-dimers.pdf) | Reviewed and archived. Single σ bond with four weakly coupled δπ electrons in the longer-bonded Mo2Cl9³− salts, p. 6270; distinct from the computed short-distance triple-bond regime. Crg32 |
+| A68 | Alyea, Basi, Bradley and Chisholm, “Low co-ordination numbers for chromium in chromium(III) compounds,” *Chem. Commun.* (1968), 495. [DOI](https://doi.org/10.1039/C19680000495), [PDF](../materials/valence/Alyea-1968-chromium-amides.pdf) | Reviewed and archived. Cr(NiPr2)3 μeff = 3.80 BM, constant over 298–123 K. Crg36 |
+| P71 | Pennella, “Tetrahydrido-complexes of molybdenum,” *Chem. Commun.* (1971), 158. [DOI](https://doi.org/10.1039/C2971000158A), [PDF](../materials/valence/Pennella-1971-molybdenum-tetrahydrides.pdf) | Reviewed and archived. Explicit diamagnetism from magnetic measurements; four hydrides from NMR integration and H/D vibrational shifts. Crg28f |
+| Ch81 | Chiu et al., “Reactions of hexamethyltungsten(VI) in the presence of trimethylphosphine,” *J. Chem. Soc., Dalton Trans.* (1981), 1204–1211. [DOI](https://doi.org/10.1039/DT9810001204), [PDF](../materials/valence/Chiu-1981-tungsten-phosphine-hydrides.pdf) | Reviewed and archived. WH2(PMe3)5, WH4(PMe3)4 and WH3(PMe3)4+; resolved NMR but no explicit electronic multiplicity. Protonation gives the trihydride plus H2, pp. 1208–1209. Occupations left open in Crg28g |
+| HC90 | Hlatky and Crabtree, “Molybdenum and tungsten phosphine polyhydrides,” *Inorg. Synth.* **27** (1990), 8–14. [DOI](https://doi.org/10.1002/9780470132586.ch2), [PDF](../materials/valence/Hlatky-Crabtree-1990-Mo-W-phosphine-polyhydrides.pdf) | Retrieved from a university-hosted copy; complete chapter reviewed and archived. Mo tetrahydride structure/relaxation, p. 10; classical WH5(PMePh2)4+ and its relaxation evidence, p. 11; WH6(PMe2Ph)3 and MoH6(PCy3)3, pp. 12–14. Crg26, Crg28f/h |
+| S65 | Stomberg, “Crystal structure of potassium diperoxotricyanochromate(IV),” *Nature* **205** (1965), 71. [DOI](https://doi.org/10.1038/205071a0), [PDF](../materials/valence/Stomberg-1965-potassium-diperoxotricyanochromate.pdf) | Supplied PDF reviewed and archived. Seven-coordinate, pentagonal-bipyramidal structure; O–O 1.440/1.455 Å and Cr–C 2.081–2.102 Å. No magnetic data or electronic occupation reported. Crg31b |
+
+All supplied PDFs are reviewed and archived. B77 and HC90 were additionally
+obtained from university repositories. Crg31 records the outstanding
+structure/occupation evidence. Crg28g remains open by decision.
+Intermediates and the count audit are in `scratch/hw-chromium-review/`; retained
+source material is in `materials/valence/`.

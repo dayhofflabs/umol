@@ -1,0 +1,8 @@
+; CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#h1" "H" "H" "H" "P" "C#h2" "C#h2" "P" "C#h3" "C#h3" "C#h3" "C#h3" "P" "C#h2" "C#h2" "P" "C#h3"
+                 "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"] [4 8 "1"] [4 9 "1"] [7 10 "1"]
+                 [7 11 "1"] [12 13 "1"] [13 14 "1"] [14 15 "1"] [12 16 "1"] [12 17 "1"] [15 18 "1"] [15 19 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [12] :acceptor 0 :attrs "1"} {:donors [15] :acceptor 0 :attrs "1"}]}}

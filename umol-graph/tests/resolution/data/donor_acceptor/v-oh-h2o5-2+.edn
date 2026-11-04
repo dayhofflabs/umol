@@ -1,0 +1,7 @@
+; V(III) aqua/chloro/acetonitrile/hydroxo complexes, d2 triplet; HW II, pp. 1828-1830.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c+2#u2" "O#h" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :bonds [[0 1 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

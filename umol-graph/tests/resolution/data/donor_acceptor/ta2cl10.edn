@@ -1,0 +1,6 @@
+; Ta2Cl10; HW II, pp. 1834-1836, Fig. 26.7; bridging chloride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ta#c+1" "Ta#c+1" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl#c-" "Cl#c-"]
+         :bonds [[0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"] [1 8 "1"] [1 9 "1"]]
+         :dative-bonds [{:donors [10] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 1 :attrs "1"}]}}

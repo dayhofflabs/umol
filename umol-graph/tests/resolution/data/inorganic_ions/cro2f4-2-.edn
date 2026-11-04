@@ -1,0 +1,4 @@
+; CrO2F4(2-); HW II, p. 1849
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c-2" "O" "O" "F" "F" "F" "F"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

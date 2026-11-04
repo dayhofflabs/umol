@@ -1,0 +1,6 @@
+; CrCl2(NH3)4+, d3 quartet; HW II, pp. 1860-1861
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c+1#u3" "Cl" "Cl" "N#h3" "N#h3" "N#h3" "N#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

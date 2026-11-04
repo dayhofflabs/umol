@@ -1,0 +1,9 @@
+; NbCl(CO)2(dmpe)2; Burt et al. (1981), pp. 794-795, 798, doi:10.1039/DT9810000793; closed-shell carbonyl occupation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nb" "Cl" "P" "C#h2" "C#h2" "P" "C#h3" "C#h3" "C#h3" "C#h3" "C#c-" "O#c+" "P" "C#h2" "C#h2" "P"
+                 "C#h3" "C#h3" "C#h3" "C#h3" "C#c-" "O#c+"]
+         :bonds [[0 1 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [2 6 "1"] [2 7 "1"] [5 8 "1"] [5 9 "1"] [10 11 "3"]
+                 [12 13 "1"] [13 14 "1"] [14 15 "1"] [12 16 "1"] [12 17 "1"] [15 18 "1"] [15 19 "1"] [20 21 "3"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [12] :acceptor 0 :attrs "1"}
+                        {:donors [15] :acceptor 0 :attrs "1"} {:donors [20] :acceptor 0 :attrs "1"}]}}

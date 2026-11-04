@@ -1,0 +1,5 @@
+; Molecular NbH4; Wang and Andrews (2011), pp. 14179-14182, doi:10.1021/jp2076148; hydride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nb#c+4" "H#c-" "H#c-" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

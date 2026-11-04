@@ -1,0 +1,7 @@
+; Cp2NbCl3; HW II, pp. 1831, 1841; Cp/halide donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nb#c+2" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "Cl" "Cl" "Cl"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 1 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"]
+                 [9 10 "1#a"] [10 6 "1#a"] [0 11 "1"] [0 12 "1"] [0 13 "1"]]
+         :dative-bonds [{:donors [1 2 3 4 5] :acceptor 0 :attrs "3"} {:donors [6 7 8 9 10] :acceptor 0 :attrs "3"}]}}
