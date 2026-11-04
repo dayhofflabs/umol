@@ -1,0 +1,9 @@
+; TiCl3(THF)3, d1; HW II, pp. 1797, 1804.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti" "Cl" "Cl" "Cl" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2"
+                 "C#h2" "C#h2" "C#h2"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 4 "1"] [9 10 "1"]
+                 [10 11 "1"] [11 12 "1"] [12 13 "1"] [13 9 "1"] [14 15 "1"] [15 16 "1"] [16 17 "1"] [17 18 "1"]
+                 [18 14 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 0 :attrs "1"}
+                        {:donors [14] :acceptor 0 :attrs "1"}]}}

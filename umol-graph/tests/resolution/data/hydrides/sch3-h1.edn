@@ -1,0 +1,4 @@
+; Molecular ScH3; Wang et al. (2002), Table 7; doi:10.1021/jp026166z.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sc#h" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

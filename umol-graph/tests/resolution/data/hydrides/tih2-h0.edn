@@ -1,0 +1,4 @@
+; Molecular TiH2; Ma, Collins and Schaefer (1996), pp. 872-873; doi:10.1021/ja951376t.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#u2" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

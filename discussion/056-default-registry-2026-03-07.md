@@ -14,7 +14,19 @@ noble-gas evidence, halogen selections, chalcogen extraction, the
 [alkaline-earth work table](#alkaline-earth-work-table) and the
 [alkali-metal work table](#alkali-metal-work-table), followed by the
 [copper-group work table](#copper-group-work-table) and the
-[zinc-group work table](#zinc-group-work-table). The selected Zn/Cd/Hg pass is
+[zinc-group work table](#zinc-group-work-table) and the
+[scandium-group work table](#scandium-group-work-table) and the
+[titanium-group work table](#titanium-group-work-table). The selected Ti/Zr/Hf pass
+is complete: 118 additions (Ti 47, Zr 44, Hf 27), 135 fixtures, the existing-entry
+citation audit and the approved Zr/Hf capacities of 20 are implemented.
+All eight earlier Ti/Zr/Hf/Rf states are retained. Sixteen primary-source PDFs
+are archived; no ligand-companion or ValenceTable additions were needed.
+The selected Sc/Y/La/Ac
+pass is complete: 79 additions (Sc 28, Y 25, La 26), 82 new fixtures and the
+existing-entry citation audit are implemented. All eight earlier states are
+retained. The four supplied papers are reviewed and archived; capacities and
+ValenceTable entries are unchanged.
+The selected Zn/Cd/Hg pass is
 complete: 53 metal additions and one alkoxide O companion are implemented, covered
 by 52 new fixtures and four revised ZnMe2 inputs. All seven earlier metal states
 are retained with checked citations. The approved Hg capacity increase from 18 to
@@ -55,11 +67,33 @@ The March planning and implementation notes below are historical; later updates 
 the tracking table are dated.
 
 This document tracks incremental, reviewable expansion of the default atom type registry.
-Registry entries are treated as code: explicit scope, per-entry review, and matching conformance coverage.
+Registry entries are treated as code: explicit scope, source review, and matching conformance coverage.
 
 ## Project Status (2026-11-03)
 
-**Current chapter:** HW II, chapter XXIII (Zn, Cd, Hg), pp. 1747–1783, selected scope complete.
+**Current chapter:** HW II, chapter XXV (Ti, Zr, Hf), pp. 1793–1818, selected scope complete.
+The [work table](#titanium-group-work-table) records 118 implemented additions:
+Ti 47, Zr 44 and Hf 27, with inferred coverage in 135 fixtures. These include both
+ZrH2 occupations, the two Schwartz's-reagent states and two ZrCp4 descriptions.
+All eight earlier Ti/Zr/Hf/Rf states are retained with checked HW citations.
+The approved Zr/Hf capacity increases from 18 to 20 are implemented; Ti retains
+capacity 18. No ligand-companion or ValenceTable additions were needed.
+Sixteen primary-source PDFs are archived. Tentative ZrH/HfH3, broad borohydride
+MC states, specialized assemblies and formula-only lower cyanides remain unselected.
+All 3,594 graph unit tests, 223 graph property tests and 1,811 resolution cases pass.
+The 1,684 snapshots preceding the final 110-state batch are unchanged.
+
+**Previous chapter:** HW II, chapter XXIV (Sc, Y, La, Ac), pp. 1784–1792, selected scope complete.
+The [work table](#scandium-group-work-table) records 79 implemented additions:
+Sc 28, Y 25 and La 26, with inferred coverage in 82 new fixtures. The eight earlier
+states are retained with checked citations, including Y's corrected s²d¹ comment.
+All additions fit capacity 18; no ValenceTable or ligand-companion changes were
+needed. The four supplied papers are reviewed and archived. Bare ScH2, uncertain
+Cp hydrides, H2 adducts, the remaining formula-only cases and the extra Sc(II)
+iodido-scandocene states remain unselected or deferred as recorded below.
+All 1,676 resolution cases pass; the 1,594 earlier snapshots are unchanged.
+
+**Earlier chapter:** HW II, chapter XXIII (Zn, Cd, Hg), pp. 1747–1783, selected scope complete.
 The [work table](#zinc-group-work-table) records 53 implemented metal additions:
 Zn 19, Cd 17 and Hg 17, plus O#c-#v#d3 for μ₃-alkoxide donors. All 54 states have
 inferred coverage in 52 new fixtures and four revised ZnMe2 inputs. The seven
@@ -73,7 +107,7 @@ The solid/complex hydride papers do not establish specific polymer or molecular
 graphs; no further additions are proposed from those formulae alone.
 All 1,594 resolution cases pass; the 1,542 earlier snapshots are unchanged.
 
-**Previous chapter:** HW II, chapter XXII (Cu, Ag, Au), selected scope complete.
+**Earlier chapter:** HW II, chapter XXII (Cu, Ag, Au), selected scope complete.
 All 77 additions (Cu 29, Ag 18, Au 30) are implemented and covered by 78 fixtures,
 including separate coverage for the retained free-ion Au³⁺ triplet (Cg32).
 All 11 earlier states are retained with updated citations. Cu/Ag capacities are
@@ -114,13 +148,14 @@ covered by 137 fixtures. Existing triel entries have checked HW citations.
 Al capacity is raised from 8 to 12 for the accepted five-/six-coordinate donor
 descriptions; ValenceTable entries are unchanged.
 
-**Last curation check (2026-11-03):** 3594 graph library tests, 1542 resolution
-conformance cases, 223 graph properties and 306 umol-chem unit tests pass, as do
-the remaining graph integration tests, Clippy and formatting.
-All 77 copper-group additions have inferred fixture coverage; the 78 fixtures agree
-across both models/policies and satisfy the valence invariants. All 1464 earlier
-snapshots are unchanged. The convey-model test uses the approved
-MostSaturated policy; both models omit the H counts for BH3 and H2O.
+**Last curation check (2026-11-03):** all 1684 resolution conformance cases pass.
+The eight ZrH2 additions have inferred coverage in eight fixtures; expected metal
+states and valence invariants pass independently for all four model/policy outputs.
+All 1676 earlier snapshots are unchanged; 80 registry tests, formatting and
+whitespace checks also pass. The preceding scandium-group pass completed 3594
+graph library tests, 223 graph properties, the remaining graph integration tests,
+doc tests and Clippy. The convey-model test uses the approved MostSaturated policy;
+both models omit the H counts for BH3 and H2O.
 
 **Earlier curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
 46 invariant and 306 umol-chem unit tests, focused Clippy and formatting passed.
@@ -257,11 +292,11 @@ retained with HW citations. No table or limit changes.
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 151 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 97 | Hydrides with explicit or implicit H |
-| `inorganic_small/` | 245 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 273 | Inorganic ions |
-| `donor_acceptor/` | 272 | Donor–acceptor complexes with dative or multicenter bonds |
+| `atomic_ions/` | 154 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 186 | Hydrides with explicit or implicit H |
+| `inorganic_small/` | 248 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 283 | Inorganic ions |
+| `donor_acceptor/` | 380 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 53 | C/H compounds |
 | `functional_groups/` | 74 | Organic heteroatom groups (halides, amines, etc.) |
@@ -269,10 +304,10 @@ retained with HW citations. No table or limit changes.
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
 | `aromatic/` | 102 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
 | `hypervalent/` | 51 | Expanded-octet and multicenter species |
-| `transition_metals/` | 7 | Transition-metal complexes |
+| `transition_metals/` | 11 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **1594** | |
+| **Total** | **1811** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -338,6 +373,8 @@ Carbon/silicon review, Al companion, pnictogen review and chalcogen/N/F companio
 2026-11-01; hydrogen, other noble-gas and other halogen rows updated 2026-10-31.
 Group-1/2 rows updated 2026-11-03 for the approved batches; Cu/Ag/Au rows record
 the completed selected scope on the same date, as do Zn/Cd/Hg and the O companion.
+Sc/Y/La/Ac rows record the completed selected scope on 2026-11-03.
+Ti/Zr/Hf rows record the completed selected scope on 2026-11-03.
 Other rows retain the March record.
 
 Status values:
@@ -369,8 +406,8 @@ Status values:
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
 | K | yes | yes (+1, −1) | yes (selected) | yes (7 additions covered) | done | 9 current states; selected HW scope, citation audit and capacity 20 implemented |
 | Ca | yes | yes (+2) | yes (selected) | yes (12 additions covered) | done | 14 current states; additions, citation audit, seven-donor aqua fixture and capacity 16 implemented; water bridges deferred with Ch02 |
-| Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `atomic_ions/sc+3.toml`) | done |  |
-| Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `atomic_ions/ti+3.toml`, `atomic_ions/ti+4.toml`) | done |  |
+| Sc | yes | yes (+3) | yes (selected) | yes (28 additions covered) | done | 30 current states; both earlier states retained; selected HW scope and citation audit complete |
+| Ti | yes | yes (+2,+3,+4) | yes (selected) | yes (47 additions covered) | done | 50 current states; all 3 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `atomic_ions/v+2.toml`, `atomic_ions/v+3.toml`) | done |  |
 | Cr | yes | yes (+2,+3) | partial | yes (`atoms/cr.edn`, `atomic_ions/cr+2.edn`, `atomic_ions/cr+3.edn`, `donor_acceptor/hcr2-co10-.edn`) | done | Hydrogen companion addition: Cr#n3#t5#m0 |
 | Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `atomic_ions/mn+2.toml`, `atomic_ions/mn+3.toml`) | done |  |
@@ -387,8 +424,8 @@ Status values:
 | Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1, −1) | yes (selected) | yes (5 additions covered) | done | 7 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
-| Y | yes | yes (+3) | no | yes (`atoms/y.toml`, `atomic_ions/y+3.toml`) | done |  |
-| Zr | yes | yes (+4) | no | yes (`atoms/zr.toml`, `atomic_ions/zr+4.toml`) | done |  |
+| Y | yes | yes (+3) | yes (selected) | yes (25 additions covered) | done | 27 current states; both earlier states retained; selected HW scope and citation audit complete |
+| Zr | yes | yes (+3,+4) | yes (selected) | yes (44 additions covered) | done | 46 current states; both earlier states retained; both ZrH2 occupations, Schwartz's reagent and selected donor states implemented; capacity 20 implemented |
 | Nb | yes | yes (+3) | no | yes (`atoms/nb.toml`, `atomic_ions/nb+3.toml`) | done |  |
 | Mo | yes | yes (+2,+3) | no | yes (`atoms/mo.toml`, `atomic_ions/mo+2.toml`, `atomic_ions/mo+3.toml`) | done |  |
 | Tc | yes | no | no | yes (`atoms/tc.toml`) | done | No ion added in current scope |
@@ -411,7 +448,7 @@ Status values:
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
 | At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
-| La | yes | yes (+3) | no | yes (`atoms/la.toml`, `atomic_ions/la+3.toml`) | done |  |
+| La | yes | yes (+3) | yes (selected) | yes (26 additions covered) | done | 28 current states; both earlier states retained; selected HW scope and citation audit complete |
 | Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `atomic_ions/ce+3.toml`, `atomic_ions/ce+4.toml`) | done |  |
 | Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `atomic_ions/pr+3.toml`, `atomic_ions/pr+4.toml`) | done | Counts requires `Pr` valence-table support for +4 |
 | Nd | yes | yes (+3) | no | yes (`atoms/nd.toml`, `atomic_ions/nd+3.toml`) | done |  |
@@ -426,7 +463,7 @@ Status values:
 | Tm | yes | yes (+3) | no | yes (`atoms/tm.toml`, `atomic_ions/tm+3.toml`) | done |  |
 | Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `atomic_ions/yb+2.toml`, `atomic_ions/yb+3.toml`) | done |  |
 | Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `atomic_ions/lu+3.toml`) | done |  |
-| Hf | yes | yes (+4) | no | yes (`atoms/hf.toml`, `atomic_ions/hf+4.toml`) | done |  |
+| Hf | yes | yes (+3,+4) | yes (selected) | yes (27 additions covered) | done | 29 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
 | Ta | yes | no | no | yes (`atoms/ta.toml`) | done |  |
 | W | yes | no | no | yes (`atoms/w.toml`) | done |  |
 | Re | yes | no | no | yes (`atoms/re.toml`) | done |  |
@@ -437,7 +474,7 @@ Status values:
 | Hg | yes | yes (+2, [Hg2]2+) | yes (selected) | yes (17 additions covered) | done | 20 current states; all three earlier states retained; selected HW scope, citation audit and capacity 22 implemented; Hg(IV) unselected |
 | Fr | yes | yes (+1) | no additions selected | yes (`atoms/fr.edn`, `atomic_ions/fr+1.edn`) | done | Two existing states retained with checked HW citations; capacity unchanged |
 | Ra | yes | yes (+2) | ionic descriptions retained | existing atom/ion fixtures | done | 2 current states retained with checked HW citations; no additional state selected |
-| Ac | yes | yes (+3) | no | yes (`atoms/ac.toml`, `atomic_ions/ac+3.toml`) | done |  |
+| Ac | yes | yes (+3) | no additions selected | existing atom/ion fixtures | done | Both existing states retained with checked HW citations; no additional default state selected |
 | Th | yes | yes (+3,+4) | no | yes (`atoms/th.toml`, `atomic_ions/th+3.toml`, `atomic_ions/th+4.toml`) | done |  |
 | Pa | yes | yes (+4,+5) | no | yes (`atoms/pa.toml`, `atomic_ions/pa+4.toml`, `atomic_ions/pa+5.toml`) | done | Valence table outer electrons adjusted to 5 |
 | U | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/u.toml`, `atomic_ions/u+3.toml`, `atomic_ions/u+4.toml`, `atomic_ions/u+5.toml`, `atomic_ions/u+6.toml`) | done | Valence table outer electrons adjusted to 6 |
@@ -452,7 +489,7 @@ Status values:
 | Md | yes | yes (+2,+3) | no | yes (`atoms/md.toml`, `atomic_ions/md+2.toml`, `atomic_ions/md+3.toml`) | done |  |
 | No | yes | yes (+2) | no | yes (`atoms/no.toml`, `atomic_ions/no+2.toml`) | done |  |
 | Lr | yes | yes (+3) | no | yes (`atoms/lr.toml`, `atomic_ions/lr+3.toml`) | done |  |
-| Rf | yes | no | no | yes (`atoms/rf.toml`) | done |  |
+| Rf | yes | no | no | yes (`atoms/rf.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, pp. 1538, 2358; compound chemistry deferred to XXXVII |
 | Db | yes | no | no | yes (`atoms/db.toml`) | done |  |
 | Sg | yes | no | no | yes (`atoms/sg.toml`) | done |  |
 | Bh | yes | no | no | yes (`atoms/bh.toml`) | done |  |
@@ -583,6 +620,11 @@ existing types and require a strong use case before proposing another entry.
 Binary compounds remain broadly in scope. This applies to all bonding categories,
 in addition to the multicenter restriction below.
 
+Within this scope, source-supported ordinary localized-valence states and ions
+with ligand donations are accepted under the standing instruction. Multicenter
+descriptions, complicated ternary compounds and capacity changes require explicit
+user review.
+
 Default multicenter entries are limited to common patterns or selected molecules
 for which no simpler description, multicenter or otherwise, is available. Delocalized
 molecular orbitals or a possible electron allocation alone do not justify additional
@@ -590,6 +632,10 @@ atom types. Hydrogen-bond, donor–acceptor and aromatic descriptions retain the
 Whole-cage descriptions are allowed, particularly where no adequate smaller model
 is available. Reuse common per-atom contributions across cages; the restriction is
 on scaffold-specific atom types, not on the size of a multicenter relation.
+
+For descriptions requiring many multicenter bonds, require a common compound
+class before adding default states: the aggregate #m value does not constrain
+the number, kind or arrangement of those bonds.
 
 **Multicenter counting limitation (2026-11-02):** the graph retains individual
 relations and electron contributions, but registry matching uses the aggregate
@@ -2414,3 +2460,220 @@ necessary for the selected scope. Preserved sources are in `materials/valence/`;
 | Ro08 | Rooms, Wilson, Harvey, Bridgeman and Young, “Mercury–fluorine interactions: a matrix isolation investigation of Hg⋯F2, HgF2 and HgF4 in argon matrices,” *Phys. Chem. Chem. Phys.* **10** (2008), 4594–4605. [DOI](https://doi.org/10.1039/B805608K), [PDF](../materials/valence/Rooms-2008-mercury-fluorides.pdf) | Negative Ar result and explicit comparison with WRK07's lower-temperature/Ne experiment; pp. 4594, 4599, 4603–4604. Zg20 |
 | W77 | Watkins, *Preparations, Solution Composition, and Reactions of Complex Metal Hydrides and Ate Complexes of Zinc, Aluminum, and Copper*, PhD thesis, Georgia Institute of Technology (1977). [Repository PDF](https://repository.gatech.edu/bitstreams/e81805c5-5e1f-4d9b-88ef-891aad8840c5/download), [archived PDF](../materials/valence/Watkins-1977-complex-metal-hydrides-thesis.pdf) | Reviewed Part I, pp. 35–42: distinct complex-hydride products but unresolved structures; Li3ZnH5 preparation not reproduced. Zg19 |
 | Mo01 | Mosyagin, Titov, Eliav and Kaldor, “GRECP/RCC calculation of the spectroscopic constants for the HgH molecule and its cation” (2001), [author manuscript](https://arxiv.org/abs/physics/0101047v4), [PDF](../materials/valence/Mosyagin-2001-HgH.pdf) | Table III explicitly identifies ground-state HgH as (σ²σ¹) ²Σ⁺ and compares calculations with experimental spectroscopy. Zg25 |
+
+### Scandium group
+
+Source: [HW 103, Band II, chapter XXIV](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 2.pdf#page=288>),
+printed pp. 1784–1791; references p. 1792. Extraction: 2026-11-03.
+Baseline: two states each for Sc, Y, La and Ac, all retained. The 79 accepted
+additions (Sc 28, Y 25, La 26) are implemented and covered by 82 new fixtures.
+The four supplied primary papers are reviewed and archived. The selected scope is
+complete; lanthanoids and actinoids have later HW chapters.
+
+#### Scandium-group work table
+
+M = Sc, Y or La unless specified; R = organyl. States use concrete, zero-valence
+defaults. Page references are to HW II. Ordinary M–R/M–N bonds and anionic pair
+donors follow the selected transition-metal graph convention (PW); neutral donors
+remain dative. Their counts describe the supplied graph, not measured populations.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Sg01 | M#n#u and M#c+3, including Ac | All 8 retained; citations checked | HW 1788–1790: free atoms s²d¹, trivalent ions d⁰. Y's atomic comment is corrected to s²d¹ |
+| Sg02 | Sc#c+3#t6; Y#c+3#t8; La#c+3#t9 | Implemented: 3 | Sc(H2O)6³⁺, Y(H2O)8³⁺ and La(H2O)9³⁺, 1788, 1790. These are explicit aqua coordination spheres, not hydrate stoichiometries. The Y charge printed in the equation on p. 1790 conflicts with the explicit Y(III)/Y(H2O)8³⁺ description on p. 1788; use +3 |
+| Sg03 | Y#c+3#t6; La#c+3#t6; Y#c+3#t7; La#c+3#t8 | Implemented: 4 | Six-coordinate M(NCS)6³−, seven-coordinate Y(acac)3(H2O), eight-coordinate La(bipyO2)4³⁺, 1788. These donor counts also serve other ligands with the same local description. Sc's six-pair state is Sg02 |
+| Sg04 | M#v3 | Implemented: 3 | MR3 and M{N(SiMe3)2}3, 1791: three ordinary M–C or M–N bonds. Alkyl examples include CH2tBu, CH2SiMe3 and CH(SiMe3)2; HW explicitly describes the pyramidal tris-amides. Does not assert that all phenyl or solid halide examples are monomers |
+| Sg05 | M#c+3#t3 | Implemented: 3 | Donor alternatives for Sg04, using three R− or amido donors (PW). Existing C/N companion states suffice; no new ligand state |
+| Sg06 | M#v3#t2; M#c+3#t5 | Implemented: 6 | MR3(THF)2, 1788, 1791: three ordinary M–R bonds plus two neutral donors, or three R− donors plus two neutral donors (PW). HW gives trigonal-bipyramidal coordination |
+| Sg07 | Sc#c-3#v6 | Implemented: 1 | Ordinary-bond alternative for ScF6³−/ScCl6³−, 1787, 1790. HW explicitly gives octahedral ScF6³−. The halide-donor alternative reuses Sc#c+3#t6; existing F/Cl states suffice |
+| Sg08a | La#c-3#v6 | Implemented: 1 | LaCl6³−: M02G, pp. m186–m187, establishes discrete, slightly distorted octahedral anions by diffraction. Six ordinary La–Cl bonds (PW); the chloride-donor graph reuses La#c+3#t6 from Sg03 |
+| Sg08b | YF4−, LaF4−, LaF6³−; LiLaPh4 | Connectivity unresolved; no further types selected from formulae | HW 1790–1791. The hydride additions independently supply Y/La#c-#v4 and Y/La#c+3#t4; Sg08a/Sg03 supply La's six-bond/six-donor counts. These do not establish the fluoride or phenyl structures. No formula-only fixture or additional acceptor count |
+| Sg09a | M#n#v; M#n#h | Implemented: 6 | ScH/YH/LaH: WCA02, pp. 9216–9217, Table 4, assigns ¹Σ⁺ ground states using gas-phase spectroscopy and calculations. Ordinary single bond and explicit/implicit H; one remaining electron pair |
+| Sg09b | M#u#v2; M#u#v#h; M#u#h2, M = Y or La | Implemented: 6 | Observed YH2/LaH2: WCA02, pp. 9218–9220, Table 5, assigns bent ²A1 molecules. Bare ScH2 was calculated but not observed; no Sc counterparts selected from that calculation alone |
+| Sg09c | M#c+#v2; M#c+#v#h; M#c+#h2 | Implemented: 9 | ScH2⁺/YH2⁺/LaH2⁺: WCA02, pp. 9218–9221, Table 6. Matrix IR, isotopic substitution and charge-selective experiments support the molecular cations; calculated bent ¹A1 ground states |
+| Sg09d | M#v2#h; M#v#h2; M#h3 | Implemented: 9; explicit-H M#v3 reused from Sg04 | ScH3/YH3/LaH3: WCA02, p. 9221, Table 7. Observed molecular trihydrides with singlet assignments; Sc's calculated planar/pyramidal distinction does not change these counts |
+| Sg09e | M#c-#v4; M#c-#v3#h; M#c-#v2#h2; M#c-#v#h3; M#c-#h4 | Implemented: 15 | ScH4−/YH4−/LaH4−: WCA02, pp. 9222–9223, Table 8. Isotope-resolved spectra and electron-capture experiments support the anions; tetrahedral ¹A1 structures. All explicit/mixed/implicit-H variants |
+| Sg09f | Sc#c+#u#v; Sc#c+#u#h | Implemented: 2 | ScH⁺: WCA02, pp. 9216–9217, Table 4. Matrix assignment compared with gas-phase work and the calculated ²Δ ground state. No extrapolated YH⁺/LaH⁺ states |
+| Sg09g | M#c+3#t2; M#c+3#t4 | Implemented: 6 | Hydride-donor alternatives for the closed-shell MH2⁺ and MH4− ions, using H−→M³⁺ (PW). The molecular/electronic-state evidence is WCA02; the allocation is our existing donor convention. MH3's donor graph reuses Sg05 |
+| Sg09h | (H2)MH2, (H2)2MH2 and related H2 adducts | Deferred; no new MC states | WCA02, pp. 9221–9224, distinguishes side-bound H2 from ordinary hydrides. H2-donor accounting remains separate, as in Cg33 |
+| Sg10a | Sc#c+2#v#t6; Sc#c+3#t7 | Implemented: 2 | Cp*2ScX, X = Cl, Me, CH2Ph or Ph: TB84, pp. 2–4, establishes monomers and d⁰/14-electron Sc(III). Two η⁵-Cp− ligands donate three pairs each; X is ordinary or anionic donor (PW). Q24's crystallographic Cp-substituted Sc(III) iodide and phenyl structures also support these counts |
+| Sg10b | Sc#c+2#v#t7; Sc#c+3#t8 | Implemented: 2 | Cp*2ScMe(THF), TB84 pp. 3–4: one additional neutral donor. Sc#c+3#t8 also covers the parent [Cp2Sc(μ-Cl)]2 cited on pp. 2–3, with two bridging Cl− donors per Sc (PW); Y/La eight-pair states already occur in Sg02/Sg03. No additional bridge-specific type |
+| Sg10c | Sc#c+2#u#t6 | Implemented: 1 | Isolated (C5H2tBu3)2Sc: Q24, pp. 3281, 3285–3287, establishes Sc(II), one unpaired electron and two Cp rings by diffraction, magnetism, EPR and calculations. Existing η⁵-Cp− donation convention (PW); 13 electrons at Sc |
+| Sg10d | Sc#c+#u#v#t6; Sc#c+2#u#t7 | Supported; not selected for the default registry | Q24, pp. 3283–3285, establishes [Cp″2ScI]− with d¹ Sc(II). Ordinary-I or I−-donor graphs require these two extra states (PW). Recorded separately from the implemented six-pair scandocene state; no default expansion solely for this more specialized anion |
+| Sg10e | [Cp*2ScH]x; Cp*2ScH(THF); other substituted Y/La Cp derivatives | No further types selected in this pass | TB84, pp. 3–4, 10–11, explicitly leaves the base-free hydride's molecularity uncertain and calls its THF adduct only very likely monomeric. No hydride-specific #h or MC addition inferred from these formulations. Other monomeric Y/La derivatives need their own structural evidence before further ordinary/donor combinations |
+| Sg11 | ScCp3/LaCp3 chains; zero-valent M(η6-arene)2 (M = Sc, Y) | No additional default types selected in this pass | HW 1791 gives mixed-hapticity Cp bridges and bulky bis-arene examples. No per-chain acceptor ladder or neutral-metal spin assignment from oxidation state alone. Ordinary molecular metallocene cases remain in Sg10 |
+| Sg12 | Hydrated ScOH²⁺, Sc(OH)2⁺ and hydroxo-bridged Sc oligomers | No additional types selected from formulae | HW 1790 lists compositions without complete hydration/bridge graphs. No additional mixed ordinary/donor patterns are inferred from these formulae |
+| Sg13 | Sc/Y/La borohydrides | Existing ionic description; no new MC states selected | HW 1789 cross-refers to I 1248 and II 2067–2069. Those passages list M(BH4)3, whereas p. 1789 prints M(BH3)3. M³⁺ plus three BH4− uses existing states; the cross-references do not establish a particular Sc/Y/La bridge graph |
+| Sg14 | Metallic MH2, YH3/LaH3, MI2/MO/MS and low-valent cluster halides | No extra states selected from bulk stoichiometry | HW 1787, 1789–1790 distinguishes conduction electrons from formal M²⁺ and describes extended cluster structures. No isolated M²⁺ ladder, arbitrary whole-lattice MC states or fictitious molecular MH2 graphs |
+| Sg15 | Oxides, hydroxides, nitrides, carbides, borides, oxosalts and nitridoscandates | Existing ionic states; no new lattice-specific rows selected | HW 1790–1791. Li3ScN2 contains a network of corner-linked ScN4 tetrahedra, not an isolated ScN2³− molecule; other lattice coordination numbers likewise do not establish discrete molecular units |
+| Sg16 | Nine-coordinate Sc nitrate; ten-coordinate Y/La and twelve-coordinate La complexes | No additional default rows selected | HW 1788: Sc(NO3)5²−, Y(NO3)5²−, La(EDTA)(H2O)4 and hydrated lanthanum sulfate. These particular complexes do not yet justify extending the default counts; the common aqua ions are Sg02 |
+| Sg17 | Ac compounds | Existing atom/Ac³⁺ states retained; citations checked | HW 1789–1791 lists halides and other binary salts but supplies no discrete molecular or aqua coordination sphere for further Ac types. No extrapolation of the Sc/Y/La donor series |
+
+#### Scandium-group Counts comparison and coverage
+
+The current model gives all four elements three valence electrons and capacity 18.
+For the 79 additions, `E = 3 − charge + h + v + 2t` and
+`2n + u = 3 − charge − h − v − 2d`; none has an MC contribution.
+All are distinct from the existing entries. Required capacities range from 3 to
+18; capacities are unchanged. The hydride singlet/doublet occupations and
+Sc(II) doublet are taken from the reviewed sources, rather than from free-ion spin.
+There are no direct Sc/Y/La/Ac ValenceTable entries. Explicit-H and nonhydride
+graphs default implicit H to zero; deliberate implicit-H variants supply #h.
+No target or aromatic table addition was needed.
+
+All 79 added states have inferred occupation coverage in 82 independent fixtures:
+27 donor–acceptor complexes, 50 hydride inputs, two molecular ions and three
+ordinary trialkyls. The three extra fixtures cover explicit-H MH3 alongside the
+trialkyls that share M#v3. All eight earlier atom/ion fixtures are retained.
+Cp fixtures use the existing haptic convention; general donor-side multidonor
+accounting remains separate, as in Tr28/Ae12/Zg11.
+
+All four resolver/policy outputs agree for each new input. Expected metal states
+and the valence invariants were checked independently for all four outputs,
+including the retained atom/ion cases. All 1,676 resolution cases pass; the 1,594
+earlier snapshots are unchanged. Graph library tests (3,594), properties (223),
+the remaining graph integration tests and doc tests pass, as do Clippy with
+warnings denied, formatting and diff whitespace checks.
+
+#### Scandium-group primary-source checks
+
+All four supplied PDFs are reviewed and preserved in `materials/valence/`.
+`scratch/hw-scandium-review/` contains intermediates only. No additional paper is
+needed for the implemented selections above; unresolved structures and unselected extensions
+remain explicit in the work table.
+
+| Key | Source | Evidence used |
+| --- | --- | --- |
+| WCA02 | Wang, Chertihin and Andrews, “Matrix Infrared Spectra and DFT Calculations of the Reactive MHx (x = 1, 2, and 3), (H2)MH2, MH2⁺, and MH4− (M = Sc, Y, and La) Species,” *J. Phys. Chem. A* **106** (2002), 9213–9225. [DOI](https://doi.org/10.1021/jp026166z), [PDF](../materials/valence/Wang-Chertihin-Andrews-2002-group3-hydrides.pdf) | Tables 4–8 and pp. 9216–9224 distinguish molecular hydrides, ground-state occupations and H2 adducts. Bare ScH2 is explicitly not observed. Sg09 |
+| TB84 | Thompson and Bercaw, “Some aspects of the chemistry of alkyl and hydride derivatives of permethylscandocene,” *Pure Appl. Chem.* **56** (1984), 1–11. [DOI](https://doi.org/10.1351/pac198456010001), [PDF](../materials/valence/Thompson-Bercaw-1984-permethylscandocene.pdf) | Monomeric alkyl/chloro/aryl derivatives and THF adducts, pp. 2–4; no ground-state agostic methyl interaction, pp. 4–5, 11. The conclusion explicitly qualifies the hydride molecularity. Sg10a/b/e |
+| M02G | Matsumoto et al., “Tris(1-ethyl-3-methylimidazolium) hexachlorolanthanate,” *Acta Cryst. C* **58** (2002), m186–m187. [DOI](https://doi.org/10.1107/S0108270101020601), [PDF](../materials/valence/Matsumoto-2002-LaCl6.pdf) | Single-crystal structure establishes discrete octahedral LaCl6³−. Sg08a |
+| Q24 | Queen et al., “Synthesis of Crystallographically Characterizable Bis(cyclopentadienyl) Sc(II) Complexes: (C5H2tBu3)2Sc and {[C5H3(SiMe3)2]2ScI}1−,” *J. Am. Chem. Soc.* **146** (2024), 3279–3292. [DOI](https://doi.org/10.1021/jacs.3c11922), [PDF](../materials/valence/Queen-2024-Sc-II-scandocene.pdf) | Diffraction, magnetism, EPR and calculations support d¹ Sc(II) in the isolated scandocene and iodido anion, pp. 3281–3287. The putative Cp*2Sc solution product is not structurally established and its calculated hyperfine coupling disagrees with experiment. Sg10a/c/d |
+
+The earlier MH4− report, Wang and Andrews, *J. Am. Chem. Soc.* **124** (2002),
+7610–7613, [DOI](https://doi.org/10.1021/ja020112l), was not obtained. WCA02 supplies
+the needed structures, electronic states and experimental assignments; it is not
+an outstanding download requirement for this batch.
+
+### Titanium group
+
+Source: [HW 103, Band II, chapter XXV](<../materials/valence/Holleman-Wiberg - Anorganische Chemie - 103. Auflage - Band 2.pdf#page=297>),
+printed pp. 1793–1817; references p. 1818. Extraction: 2026-11-03.
+Baseline: Ti 3, Zr 2, Hf 2 and Rf 1 states. All eight earlier states are retained
+with checked HW citations. Rf chemistry is
+referred to chapter XXXVII on p. 1793.
+
+#### Titanium-group work table
+
+M = Ti, Zr or Hf unless restricted; R = organyl; D = neutral pair donor.
+States use concrete, zero-valence defaults. Page references are to HW II.
+Ordinary M–X/M–R bonds, anionic donor alternatives and Cp− donation follow PW's
+selected transition-metal convention. All **118 selected additions are implemented**
+(Ti 47, Zr 44, Hf 27), including both ZrH2 occupations (Tg18g), the two
+Schwartz's-reagent states (Tg17) and two ZrCp4 states admitted by the approved
+capacity 20. Counts exclude states already listed above in the table.
+Unselected rows are not included.
+
+| ID | Atom descriptions / gap | Disposition | Examples and evidence |
+| --- | --- | --- | --- |
+| Tg01 | Ti/Zr/Hf/Rf#n#u2; Ti#c+3#u; Ti/Zr/Hf#c+4 | Retained: all 8; citation audit implemented | HW 1538, Table 19.1, gives the free-atom s²d² triplets, with Rf explicitly calculated (also 2358). HW 1797, 1811 gives the ionic states. Free-atom/ion occupations are separate from complex occupations |
+| Tg02 | M#v4; M#c+4#t4 | Implemented: 6 | Tetrahedral molecular MX4, 1799, 1813, and MR4, 1807, 1817. Four ordinary bonds or four anionic donors (PW). Gas-phase molecular halides are distinguished from polymeric solids |
+| Tg03 | Ti#v4#t; Ti#v4#t2; Ti#c+4#t5; Ti#c+4#t6 | Implemented: 4 | TiMe4·OEt2, TiMe4·2OEt2, 1806; TiCl4·2D, 1799. Ordinary alkyl/halide bonds plus neutral donation, or all-donor alternatives. TiOCl2(NMe3)2, 1797, also uses Ti#v4#t2 with localized Ti=O |
+| Tg04 | M#c-2#v6; M#c+4#t6 | Implemented: 5 new; Ti donor state reused | Octahedral MX6²−, 1799, 1811, 1814. Ordinary halide bonds or six X− donors; the Zr/Hf hexamethyl anions on 1817 reuse these counts |
+| Tg05 | Ti#c-#v5; Zr#c-#v5; Zr#c+4#t5 | Implemented: 3; Ti donor state reused | TiMe5−, 1806–1807, Fig. 25.4a; discrete ZrCl5−, 1811. Ordinary or anionic-donor graphs; no extrapolated Hf five-coordinate entry |
+| Tg06 | Zr#c-3#v7; Zr#c-4#v8; Zr/Hf#c+4#t7; Zr/Hf#c+4#t8 | Implemented: 6 | ZrF7³− and ZrF8⁴−, 1811, 1814. Seven/eight-donor Zr/Hf chelates MCl(acac)3, M(acac)4 and M(ox)4⁴−, 1814–1815; Zr4(OH)8(H2O)16⁸⁺, 1815–1816, reuses Zr's eight-donor state. No hydration count inferred from salt stoichiometry |
+| Tg07 | Ti#c+4#t7; Ti#c+4#t8 | Implemented: 2 | Ti(O2)F5³− and TiCl(S2CNMe2)3, 1797; Ti(NO3)4, 1799, Fig. 25.2c. Seven/eight pair donors, with peroxide O–O retained; no MC description needed |
+| Tg08 | M#v4#t3; M#v4#t4; Zr/Hf#v4#t2 | Implemented: 8 | Mixed ordinary/donor chelates: TiCl(S2CNMe2)3 and Ti(NO3)4, 1797–1799; Zr/Hf MCl2(acac)2, MCl(acac)3 and M(acac)4, 1814–1815. One ordinary anionic-donor bond and one neutral donation per chelate (PW). These are local counts shared across the ligand families |
+| Tg09 | Ti#u#v3; Ti#c+3#u#t3 | Implemented: 2 | Tris-organyls Ti{CH(SiMe3)2}3, 1807, and tris-amides, 1797. Ordinary bonds or anionic donors leave one Ti electron |
+| Tg10 | Ti#c+3#u#t5; Ti#c+3#u#t6; Ti#u#v3#t2; Ti#u#v3#t3; Ti#c+#u#v2#t4; Ti#c+2#u#v#t5; Ti#c-3#u#v6 | Implemented: 7 | TiBr3(NMe3)2, 1797; TiCl3(THF)3/amine adducts, Ti(H2O)6³⁺, TiCl2(H2O)4⁺, TiCl(H2O)5²⁺ and TiX6³−, 1803–1804. HW explicitly assigns one unpaired electron to the Ti(III) complexes. All-donor six-coordinate alternatives share Ti#c+3#u#t6 |
+| Tg11 | Ti#c+2#u2; Zr#c+3#u; Hf#c+3#u | Implemented: 3 | Ionic descriptions of the lower halides, 1804–1805, 1812–1814. CS79, p. 20, establishes free Ti²⁺ as 3d², ³F2; this does not assign the spin of every Ti(II) complex. The trivalent Zr/Hf ions have one valence electron |
+| Tg12 | M#c+2#v2#t6 | Implemented: 3; M#c+4#t8 reused | Cp2MX2 and Cp2MR2, 1807, 1817: two η⁵-Cp− donors contribute six pairs; X/R is ordinary or anionic donor (PW). TiCp4 and HfCp4 have two η⁵ and two η¹ rings and reuse these counts |
+| Tg13 | Ti#c+2#u#v#t6; Ti#c+3#u#t7; Ti#c+3#u#t8 | Implemented: 3 | Monomeric Cp*2TiX and dimeric [Cp2TiX]2, X = Cl, Br, I, 1807. Ordinary terminal X or X− donation; the dimer uses two bridging X− donors at each Ti. No extra MC type for halide bridges |
+| Tg14 | Zr#c+3#v#t6; Zr#c+3#h#t6 | Implemented: 2; Zr#c+4#t7 reused | Cp2ZrR⁺ and Cp2ZrH⁺ in the polymerization scheme, 1817–1818: ordinary R/H, implicit-H variant, or anionic donor. Solvent/olefin adducts with one further donated pair reuse Zr#c+4#t8 in the all-donor description |
+| Tg15 | Ti#c-2#n3#t6 | Implemented: 1 | Ti(CO)6²−, 1797, 1805 n. 5. HW explicitly identifies six-coordinate Ti(−II) as closed shell; six CO pair donors and three remaining pairs give 18 electrons |
+| Tg16 | Ti#u#m3; Zr#m4; Hf#m4 | Unselected: no default additions | Ti(BH4)3, 1803, and Zr/Hf(BH4)4, 1812: HW specifies the B–H–M bridges; the neutral local-3c2e contribution allocation is PW. Aggregate #m3/#m4 does not distinguish the individual bridge patterns. These examples do not meet the common-class inclusion threshold for adding such broad MC states; extraction retained |
+| Tg17 | Zr#c+3#v#t6#m0; Zr#c+4#t7#m0 | Implemented: 2 | Schwartz's reagent [Cp2ZrCl(μ-H)]2, HW 1817; J19, p. 1508, Fig. 1, establishes the dimer and two hydride bridges. Widespread synthetic use justifies inclusion. Existing H#c-#m2 supplies each local 3c2e bridge (allocation: PW); Cl is ordinary or a Cl− donor |
+| Tg18a | Ti#u3#v; Ti#u3#h; Ti#c+#u3#t | Implemented: 3 | TiH: CA94, pp. 8325–8326, identifies the molecule and assigns a quartet ground state. Ordinary/implicit H or H− donation (PW); three unpaired Ti electrons |
+| Tg18b | Hf#n#u#v; Hf#n#u#h; Hf#c+#n#u#t | Implemented: 3 | HfH: CA95's matrix band is tentative, but RB94, pp. 74–75, 78–79, independently observes HfH/HfD and assigns the lower state as X²Δ3/2. One remaining pair and one unpaired electron in the ordinary-H or H−-donor allocation (PW) |
+| Tg18c | Ti/Zr#u#v3; #u#v2#h; #u#v#h2; #u#h3; #c+3#u#t3 | Implemented: 8 new; Ti#u#v3 and Ti#c+3#u#t3 reused | TiH3 and ZrH3: CA94, pp. 8325–8326, and CA95, pp. 15007–15008, identify the trihydrides by mixed-isotope spectra. Three ordinary bonds leave one metal electron; the all-hydride-donor alternative is PW |
+| Tg18d | M#v4; M#v3#h; M#v2#h2; M#v#h3; M#h4; M#c+4#t4 | Implemented: 12 new H variants; Tg02 states reused | TiH4, ZrH4 and HfH4: CA94, pp. 8326–8327, and CA95, pp. 15008–15010, establish tetrahedral molecular tetrahydrides. Explicit/mixed/implicit H and the all-H−-donor alternative (PW). CA95 supplies the ZrH4/HfH4 evidence missing from HW 1812 |
+| Tg18e | Ti#u2#v2; Ti#u2#v#h; Ti#u2#h2; Ti#c+2#u2#t2; Hf#n#v2; Hf#n#v#h; Hf#n#h2; Hf#c+2#n#t2 | Implemented: 8 | MCS96, pp. 872–873, Table 1: TiH2's lowest states are both triplets; the singlet is 32.6 kcal/mol higher at TZP CCSD. DB91, pp. 3981–3982, Tables II/V/VI: HfH2 is predominantly closed-shell ¹A1; the lowest triplet-derived level remains 0.40 eV higher after spin–orbit coupling. Ordinary/implicit H or H− donation (PW). MCS96, pp. 877–879, also suggests TiH2·H2 for the matrix bands; the bare-TiH2 occupation rests on its calculation |
+| Tg18f | ZrH and HfH3 | Unselected: tentative identification | CA95, pp. 15008–15009, explicitly qualifies these assignments. The follow-up found no independent firm identification to replace those tentative bands; no entries proposed |
+| Tg18g | Zr#n#v2; Zr#n#v#h; Zr#n#h2; Zr#c+2#n#t2; Zr#u2#v2; Zr#u2#v#h; Zr#u2#h2; Zr#c+2#u2#t2 | Implemented: 8; both occupations accepted | WDB90, p. 152, Table 2: MRSDCI places ¹A1 lowest, with ³B1/³A1 at +0.086/+0.145 eV; CASSCF reverses the ordering. The authors explicitly leave the ground-state identification uncertain. Both paired and unpaired descriptions are included, with ordinary/implicit H or H− donation (PW), without selecting a definitive ground state |
+| Tg19a | Ti#c+2#u#h#t6 | Implemented: 1; explicit-H and all-donor states reuse Tg13 | Cp*2TiH, HW 1807. L95, pp. 125–127, 139–140: EPR and XRD with terminal H located/refined. Ordinary H uses Ti#c+2#u#v#t6; H− donation uses Ti#c+3#u#t7 (PW) |
+| Tg19b | Zr/Hf#c+2#v#h#t6; Zr/Hf#c+2#h2#t6 | Implemented: 4; explicit-H and all-donor states reuse Tg12/Tg06 | Monomeric Cp*2MH2, C00, chapter 1, pp. 3–6. Mixed/implicit H variants of M#c+2#v2#t6; two H− donors use M#c+4#t8 (PW). Hf monomer structure established, but H positions were not located. These dihydrides suffice without assuming monomeric solid Schwartz reagent |
+| Tg20a | Ti#u2#v2#t4; Ti#c+2#u2#t6 | Implemented: 2 | TiCl2(tmeda)2, HW 1805; Z20 establishes two Cl/four N coordination and S = 1 by magnetometry, HFEPR and MCD. Ordinary chlorides or six pair donors (PW) |
+| Tg20b | Ti#c+2#u2#t6 | Reuse Tg20a; no extra state | Cp*2Ti, HW 1808. Bercaw's reported magnetic moment supports two unpaired electrons; the values are reproduced explicitly in [the 2025 titanocene study](https://doi.org/10.1039/D5DT00480B). The [1974 PDF](https://doi.org/10.1021/ja00823a012) is unavailable; the state has independent primary support from Z20 |
+| Tg20c | Ti#c+2#n#t8 | Implemented: 1 | Cp2Ti(CO)2: HW 1808, Fig. 25.6h supplies the graph. M61, p. 1288, supports a monomer with terminal CO by IR and gives a closed-shell electron-count argument; M79, p. 3425, explicitly describes a diamagnetic monomer. Two Cp− and two CO donors leave one metal pair (PW). M61 reports no magnetic measurement |
+| Tg21 | Zr#c+3#v#t9; Zr#c+4#t10 | Implemented: 2; capacity 20 approved and implemented | ZrCp4, 1817: three η⁵-Cp− rings plus one η¹ ring. Ordinary η¹ Zr–C or Cp− pair donation gives 20 electrons under PW. This bounds expansion admits the selected donor convention without changing ligand roles |
+| Tg22a | Ti(CN)6³−; older Ti(CN)7⁴− and lower cyanide formulae | Hexacyanide reuses Tg10; other formulae unselected | E97 establishes octahedral C-bound Ti(CN)6³− and d¹ by XRD/EPR/magnetometry: Ti#c-3#u#v6 or Ti#c+3#u#t6 (PW). Its review distinguishes inconsistent older six-/seven-/eight-cyanide assignments. No new type inferred from Ti(CN)7⁴−, K4Ti(CN)4 or K5[M(CN)5] stoichiometry alone |
+| Tg22b | Ti/Zr/Hf bipyridyl complexes | Reuse Ti#c+3#u#t6 and Zr/Hf#c+4#t6 | B13's primary abstract explicitly assigns TiIII d¹ and ZrIV/HfIV with ligand-centered reduction. No formal Ti(0)/Ti(−I) occupation ladder. Ligand-radical graph examples are unselected in this pass; no companion MC types proposed |
+| Tg22c | Zr/Hf#c-2#n3#t6 | Implemented: 2; Ti state reused from Tg15 | Zr/Hf(CO)6²−: EC90, pp. 6022, 6024, Tables II/III, gives octahedral structures, a low-spin d⁶ rationale and closely similar ¹³C NMR spectra across Ti/Zr/Hf. These support the paired assignment: six CO donors and three metal pairs (PW), 18 electrons. No separate magnetic measurement is reported |
+| Tg22d | Ti#n#u2#t6 | Implemented: 1 | Neutral Ti(CO)6, HW 1805 n. 5. D20, p. 10493, calculates a D3d triplet; one pair and two unpaired metal electrons with six CO donors (PW). This is a calculated occupation, not an experimental spin determination. The paper's Ti(CO)7 and Zr/Hf(CO)8 are outside this extracted batch |
+| Tg22e | Ti/Zr/Hf#n2#t6 | Implemented: 3 | Bis(η⁶-arene) complexes, HW 1808, 1811, 1817. C87 explicitly reports diamagnetic Ti/Zr/Hf bis(1,3,5-tri-tert-butylbenzene) complexes in its primary abstract. Two neutral six-electron donors leave two metal pairs (PW); no new MC description. PDF unavailable for archiving |
+| Tg22f | Zr/Hf#n2#t7 | Implemented: 2 | Zr/Hf(arene)2(PMe3), HW 1811. CG79, p. 127, reports isolated compounds and resolved ¹H NMR spectra with ordinary chemical shifts and P–H couplings. Paired occupation is inferred from these data; no magnetic measurement is reported. Two η⁶-arene donors plus PMe3 leave two metal pairs (PW), 18 electrons; the bent geometry is the authors' proposal |
+| Tg22g | Remaining lower-valent Zr/Hf organyls | Unselected: no further default types | HW 1817 lists bulky substituted-Cp/alkyl derivatives. The located [Lappert et al. (1981)](https://doi.org/10.1039/DT9810000805) abstract concerns anionic Ti/Zr reduction products, not a general neutral Zr/Hf triorganyl family. It does not justify extrapolated neutral occupations |
+| Tg22h | Zr#c+3#u#t9 | Implemented: 1 | Cp3Zr: L95, pp. 99–101, establishes a monomer with three η⁵ rings, Zr-coupled EPR and μeff = 1.64 BM. This contradicts HW 1817's statement that ZrCp3 was not obtainable. Three Cp− donors and one unpaired electron give 19 electrons (PW), within the approved capacity 20 |
+| Tg23 | Alkoxide, halide and hydroxo aggregates with ordinary anionic donor bridges | Reuse implemented local donor counts; no extra scaffold types | Ti(OR)4 and [TiCl4(OPCl3)]2, 1799; hydrated Zr/Hf fluorides, 1814; Zr hydroxo tetramer and basic salts, 1815–1816. Existing O−/halide donor types provide the bridges. Ti(IV) aqueous formulae on 1801 do not establish an unhydrolyzed Ti(H2O)6⁴⁺ ion |
+| Tg24 | Centered Zr6 clusters, extended low-valent solids, N2-bridged assemblies and unusual Cp rearrangement products | Extracted; no additional default types proposed | HW 1805–1808, 1813–1817. Bulk stoichiometry does not select a molecular graph; specialized assemblies do not justify an extra occupation/MC ladder in this pass. Ti(AlH4)4 on 1798 also lacks a complete bridge graph |
+
+#### Titanium-group limits and coverage
+
+All 118 implemented additions satisfy the nonbonding
+budget and capacities: Ti 18, Zr/Hf 20. Tg21 requires 20; Tg22h requires 19;
+the other accepted states require at most 18. ZrCp4 prompted the increase to 20.
+D20 also observes both Zr(CO)8 and Hf(CO)8, each counting 20 with eight CO
+pair donors under our convention; the approved bound is therefore 20 for both
+Zr and Hf. Capacity and default-registry inclusion are separate decisions; the
+octacarbonyl states remain outside this batch. No target-covalence or aromatic
+ValenceTable addition is identified for graphs with zero or explicit implicit H.
+All added states have inferred fixture coverage and pass full-graph valence invariants.
+
+For the paired/unpaired ZrH2 alternatives with fixed H and donor counts,
+AtomTyping's MostSaturated favors #n; Strict retains both if occupation is unspecified.
+Supplied #u2 selects the unpaired alternative. Counts pairs the two remaining
+electrons when both #n and #u are absent; a triplet input must supply occupation
+evidence such as #u2. This follows the current resolver behavior, not an energy
+ordering of the molecular states.
+
+The 135 fixtures cover all 118 additions: eight ZrH2 inputs and 127 inputs for
+the remaining 110 states. They cover ordinary/donor alternatives, explicit/mixed/
+implicit hydrides, chelates, Cp/arene donors, carbonyls and both Schwartz's-reagent
+descriptions. Occupation is inferred from supplied charge, H count and spin evidence;
+ZrH2 uses #u0 or #u2 to distinguish the requested occupation. Both resolvers and
+both policies agree for every input, with independently checked expected metal
+states and valence invariants. Existing ligand types suffice.
+
+Verification: all 3,594 graph unit tests, 223 property tests and 1,811 resolution
+cases pass, as do the other graph integration tests and doctests. The 1,684 earlier
+snapshots are unchanged. Existing multidonor accounting limitations remain outside
+this chapter's scope.
+
+#### Titanium-group primary-source checks
+
+| Key | Source | Access and evidence |
+| --- | --- | --- |
+| CS79 | Corliss and Sugar, “Energy Levels of Titanium, Ti I through Ti XXII,” *J. Phys. Chem. Ref. Data* **8** (1979), 1–62. [DOI](https://doi.org/10.1063/1.555591), [PDF](../materials/valence/Corliss-Sugar-1979-Ti-energy-levels.pdf) | Reviewed and archived. Ti²⁺ ground configuration and term, p. 20; Tg11 |
+| J19 | Jones et al., “Characterization of Reactive Organometallic Species via MicroED,” *ACS Cent. Sci.* **5** (2019), 1507–1513. [DOI](https://doi.org/10.1021/acscentsci.9b00403), [PDF](../materials/valence/Jones-2019-Schwartz-reagent-MicroED.pdf) | Reviewed and archived from the authors' Caltech copy. Dimeric Schwartz reagent and bridging-hydride locations, p. 1508, Fig. 1; Tg17 |
+| CA94 | Chertihin and Andrews, “Reactions of Laser Ablated Ti Atoms with Hydrogen during Condensation in Excess Argon. Infrared Spectra of the TiH, TiH2, TiH3, and TiH4 Molecules,” *J. Am. Chem. Soc.* **116** (1994), 8322–8327. [DOI](https://doi.org/10.1021/ja00097a045), [PDF](../materials/valence/Chertihin-Andrews-1994-Ti-hydrides.pdf) | Supplied PDF reviewed and archived. TiH quartet, TiH3 doublet and tetrahedral TiH4; the TiH2 triplet assignment is qualified in the discussion. Tg18a/c/d/e |
+| CA95 | Chertihin and Andrews, “Reactions of laser-ablated Zr and Hf atoms with hydrogen. Matrix infrared spectra of the MH, MH2, MH3, and MH4 molecules,” *J. Phys. Chem.* **99** (1995), 15004–15010. [DOI](https://doi.org/10.1021/j100041a014), [PDF](../materials/valence/Chertihin-Andrews-1995-Zr-Hf-hydrides.pdf) | Supplied PDF reviewed and archived. ZrH3 and both tetrahydrides supported; dihydride spin orderings differ between calculations. ZrH, HfH and HfH3 matrix assignments are tentative. Tg18b–f |
+| RB94 | Ram and Bernath, “Fourier transform emission spectroscopy of HfH and HfD,” *J. Chem. Phys.* **101** (1994), 74–79. [DOI](https://doi.org/10.1063/1.468130), [PDF](../materials/valence/Ram-Bernath-1994-HfH-HfD.pdf) | Supplied PDF reviewed and archived. Independent HfH/HfD observation and X²Δ3/2 assignment, pp. 74–75, 78–79; Tg18b |
+| MCS96 | Ma, Collins and Schaefer, “Periodic Trends for Transition Metal Dihydrides MH2, Dihydride Dihydrogen Complexes MH2·H2, and Tetrahydrides MH4 (M = Ti, V, and Cr),” *J. Am. Chem. Soc.* **118** (1996), 870–879. [DOI](https://doi.org/10.1021/ja951376t), [PDF](../materials/valence/Ma-Collins-Schaefer-1996-TiH2.pdf) | Supplied PDF reviewed and archived. TiH2 triplet occupation, pp. 872–873, Table 1; the ³A1/³B1 distinction needs no separate atom type. The proposed matrix-band reassignment to TiH2·H2, pp. 877–879, is not used to add an adduct state. Tg18e |
+| WDB90 | Wang, Das and Balasubramanian, “Potential energy surfaces for insertion of Zr into H2,” *Mol. Phys.* **69** (1990), 147–159. [DOI](https://doi.org/10.1080/00268979000100101), [PDF](../materials/valence/Wang-Das-Balasubramanian-1990-ZrH2.pdf) | Supplied PDF reviewed and archived. Singlet/triplet minima and explicitly unresolved ordering, p. 152, Table 2; Tg18g |
+| DB91 | Das and Balasubramanian, “Potential energy surfaces for insertion of hafnium atoms into hydrogen,” *J. Phys. Chem.* **95** (1991), 3979–3984. [DOI](https://doi.org/10.1021/j100163a018), [PDF](../materials/valence/Das-Balasubramanian-1991-HfH2.pdf) | Supplied PDF reviewed and archived. HfH2 singlet ground state at CASSCF/SOCI and with spin–orbit coupling, pp. 3981–3982, Tables II/V/VI; Tg18e |
+| Z20 | Zolnhofer et al., “Electronic Structure and Magnetic Properties of a Titanium(II) Coordination Complex,” *Inorg. Chem.* **59** (2020), 6187–6201. [DOI](https://doi.org/10.1021/acs.inorgchem.0c00311), [PDF](../materials/valence/Zolnhofer-2020-TiII-tmeda.pdf) | Reviewed and archived from the authors' FSU copy. TiCl2(tmeda)2 structure and experimental S = 1; Tg20a |
+| L95 | Lukens, *Trivalent Metallocene Chemistry of Some Uranium, Titanium, and Zirconium Complexes*, Berkeley thesis (1995), LBL-37646. [Repository](https://digital.library.unt.edu/ark:/67531/metadc621122/), [PDF](../materials/valence/Lukens-1995-metallocene-thesis.pdf) | Reviewed and archived. Original Cp*2TiH EPR/XRD and Cp3Zr measurements; Tg19a/Tg22h. Supplies the needed hydride data without the unavailable [1998 article](https://doi.org/10.1021/om980601n) |
+| C00 | Chirik, *Ancillary Ligand Effects on Fundamental Transformations in Metallocene Catalyzed Olefin Polymerization*, Caltech thesis (2000), chapter 1. [DOI](https://doi.org/10.7907/2qx2-9753), [PDF](../materials/valence/Chirik-2000-metallocene-thesis.pdf) | Reviewed and archived. Terminal Zr/Hf metallocene dihydrides; Tg19b. Contains the study published as [Chirik, Day and Bercaw (1999)](https://doi.org/10.1021/om9810293); that journal PDF is no longer required |
+| E97 | Entley et al., “The Hexacyanotitanate Ion,” *J. Am. Chem. Soc.* **119** (1997), 6251–6258. [DOI](https://doi.org/10.1021/ja962773m), [PDF](../materials/valence/Entley-1997-Ti-hexacyanide.pdf) | Reviewed and archived from Girolami's group site. Ti(CN)6³− XRD/EPR/magnetometry and older cyanide-assignment review; Tg22a |
+| D20 | Deng et al., “Filling a Gap: The Coordinatively Saturated Group 4 Carbonyl Complexes TM(CO)8 (TM = Zr, Hf) and Ti(CO)7,” *Chem. Eur. J.* **26** (2020), 10487–10500. [DOI](https://doi.org/10.1002/chem.201905552), [PDF](../materials/valence/Deng-2020-group4-carbonyls.pdf) | Reviewed and archived. Calculated neutral Ti(CO)6 triplet, p. 10493; Tg22d. Observed Zr/Hf octacarbonyls support capacity 20 under our donor counting. No MO-based reassignment of donated-pair counts is adopted |
+| B13 | Bowman et al., *Inorg. Chem.* **52** (2013), 2242–2256. [DOI](https://doi.org/10.1021/ic302799s) | Primary abstract reviewed; full PDF unavailable. Explicit metal/ligand redox allocation suffices for metal-state reuse in Tg22b; no ligand graph inferred |
+| C87 | Cloke et al., “Synthesis of bis(η-1,3,5-tri-t-butylbenzene) sandwich complexes of titanium, zirconium, and hafnium,” *J. Chem. Soc., Chem. Commun.* (1987), 1667–1668. [DOI](https://doi.org/10.1039/C39870001667) | Primary abstract explicitly reports diamagnetism for all three complexes; Tg22e. PDF download failed; archive copy remains desirable |
+| M61 | Murray, “A Metal Carbonyl Compound of Titanium,” *J. Am. Chem. Soc.* **83** (1961), 1287–1289. [DOI](https://doi.org/10.1021/ja01467a007), [PDF](../materials/valence/Murray-1961-titanocene-dicarbonyl.pdf) | Supplied PDF reviewed and archived. Cp2Ti(CO)2 synthesis, terminal-CO IR bands and closed-shell electron-count argument, p. 1288; Tg20c. No magnetic measurement |
+| M79 | McPherson et al., “Electronic properties of bis(η5-cyclopentadienyl)titanium 2,2′-bipyridyl,” *J. Am. Chem. Soc.* **101** (1979), 3425–3430. [DOI](https://doi.org/10.1021/ja00507a001) | Indexed p. 3425 explicitly describes Cp2Ti(CO)2 as a diamagnetic monomer; Tg20c. This is a literature statement in the introduction, not this paper's new measurement. Full PDF unavailable; not an assignment blocker |
+| EC90 | Ellis and Chi, *J. Am. Chem. Soc.* **112** (1990), 6022–6025. [DOI](https://doi.org/10.1021/ja00172a017), [PDF](../materials/valence/Ellis-Chi-1990-group4-hexacarbonylates.pdf) | Supplied PDF reviewed and archived. Octahedral Ti/Zr/Hf(CO)6²− structures, low-spin d⁶ rationale and comparative ¹³C NMR, pp. 6022, 6024; Tg22c. No separate magnetic measurement |
+| CG79 | Cloke and Green, “Synthesis of zerovalent bis-(η-arene)(trimethylphosphine)-hafnium and -zirconium compounds using metal vapours,” *J. Chem. Soc., Chem. Commun.* (1979), 127–128. [DOI](https://doi.org/10.1039/C39790000127), [PDF](../materials/valence/Cloke-Green-1979-Zr-Hf-bisarenes-PMe3.pdf) | Supplied PDF reviewed and archived. Zr/Hf(arene)2(PMe3) preparation, resolved ¹H NMR and proposed bent geometry, p. 127; Tg22f. The paired occupation is our inference from the reported spectroscopy |
+
+Intermediates are in `scratch/hw-titanium-review/`; retained source PDFs are in
+`materials/valence/`. The available full papers and the explicitly identified
+abstract/page excerpts have been reviewed; 16 PDFs are archived. Source research,
+selection, registry implementation and conformance coverage are complete for the
+selected scope above.

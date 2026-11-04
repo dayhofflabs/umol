@@ -1,0 +1,4 @@
+; Molecular TiH3; Chertihin and Andrews (1994), pp. 8325-8326; doi:10.1021/ja00097a045.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#u1#h1" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

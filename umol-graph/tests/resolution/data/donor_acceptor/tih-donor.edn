@@ -1,0 +1,4 @@
+; Molecular TiH; Chertihin and Andrews (1994), pp. 8325-8326; doi:10.1021/ja00097a045; hydride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#c+1#u3" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

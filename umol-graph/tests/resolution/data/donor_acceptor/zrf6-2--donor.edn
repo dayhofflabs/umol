@@ -1,0 +1,6 @@
+; ZrF6(2-); HW II, pp. 1799, 1811, 1814; fluoride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+4" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

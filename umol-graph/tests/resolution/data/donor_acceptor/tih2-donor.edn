@@ -1,0 +1,4 @@
+; Molecular TiH2; Ma, Collins and Schaefer (1996), pp. 872-873; doi:10.1021/ja951376t; hydride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#c+2#u2" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}}

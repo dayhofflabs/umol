@@ -1,0 +1,3 @@
+; Molecular ScH2+; Wang et al. (2002), Table 6; doi:10.1021/jp026166z.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sc#c+#h2"]}}

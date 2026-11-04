@@ -1,0 +1,9 @@
+; ZrCl2(acac)2; HW II, pp. 1814-1815; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+4" "Cl#c-" "Cl#c-" "C#h3" "C" "O#c-" "C#h" "C" "O" "C#h3" "C#h3" "C" "O#c-" "C#h" "C" "O"
+                 "C#h3"]
+         :bonds [[3 4 "1"] [4 5 "1"] [4 6 "2"] [6 7 "1"] [7 8 "2"] [7 9 "1"] [10 11 "1"] [11 12 "1"] [11 13 "2"]
+                 [13 14 "1"] [14 15 "2"] [14 16 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 0 :attrs "1"}
+                        {:donors [12] :acceptor 0 :attrs "1"} {:donors [15] :acceptor 0 :attrs "1"}]}}

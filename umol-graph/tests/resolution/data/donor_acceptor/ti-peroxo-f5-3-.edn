@@ -1,0 +1,8 @@
+; Ti(O2)F5(3-); HW II, p. 1797; peroxide and fluoride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#c+4" "O#c-" "O#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-"]
+         :bonds [[1 2 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}]}}

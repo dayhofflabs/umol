@@ -1,0 +1,3 @@
+; Molecular ZrH4; Chertihin and Andrews (1995), pp. 15008-15010; doi:10.1021/j100041a014.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#u0#h4"]}}

@@ -1,0 +1,4 @@
+; Molecular LaH2; Wang et al. (2002), Table 5; doi:10.1021/jp026166z.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["La#h" "H"]
+         :bonds [[0 1 "1"]]}}

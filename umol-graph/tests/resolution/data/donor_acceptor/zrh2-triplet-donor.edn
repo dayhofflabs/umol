@@ -1,0 +1,4 @@
+; ZrH2 triplet; Wang et al. (1990), p. 152; doi:10.1080/00268979000100101; hydride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+2#u2" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}}

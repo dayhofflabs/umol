@@ -1,0 +1,5 @@
+; Molecular ZrH3; Chertihin and Andrews (1995), pp. 15007-15008; doi:10.1021/j100041a014; hydride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+3#u1" "H#c-" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}]}}

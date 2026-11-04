@@ -1,0 +1,5 @@
+; ScH4-; Wang et al. (2002), Table 8; doi:10.1021/jp026166z; hydride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sc#c+3" "H#c-" "H#c-" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}
