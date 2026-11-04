@@ -1,0 +1,4 @@
+; Mn(OH)6(3-); HW II, p. 1910
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c-3#u4" "O#h" "O#h" "O#h" "O#h" "O#h" "O#h"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

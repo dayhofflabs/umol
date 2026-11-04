@@ -1,0 +1,242 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Os#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [1 6 :single]
+        [0 1 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [7 12 :single]
+        [0 7 :single]
+        [13 14 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [13 18 :single]
+        [0 13 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [22 23 :single]
+        [23 24 :single]
+        [19 24 :single]
+        [0 19 :single]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Os#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [1 6 :single]
+        [0 1 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [7 12 :single]
+        [0 7 :single]
+        [13 14 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [13 18 :single]
+        [0 13 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [22 23 :single]
+        [23 24 :single]
+        [19 24 :single]
+        [0 19 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Os#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [1 6 :single]
+        [0 1 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [7 12 :single]
+        [0 7 :single]
+        [13 14 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [13 18 :single]
+        [0 13 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [22 23 :single]
+        [23 24 :single]
+        [19 24 :single]
+        [0 19 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Os#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [1 6 :single]
+        [0 1 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [7 12 :single]
+        [0 7 :single]
+        [13 14 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [13 18 :single]
+        [0 13 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [22 23 :single]
+        [23 24 :single]
+        [19 24 :single]
+        [0 19 :single]]}
+    :success true
+    :tie-breaks []}}

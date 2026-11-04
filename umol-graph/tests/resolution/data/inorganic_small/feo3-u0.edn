@@ -1,0 +1,4 @@
+; FeO3, supplied singlet/triplet; W96, p. 5300; X08, pp. 15884-15886
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u0" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"]]}}

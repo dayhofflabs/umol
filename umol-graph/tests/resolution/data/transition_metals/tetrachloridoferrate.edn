@@ -1,3 +1,4 @@
+; FeCl4-, high-spin; HW II, pp. 1949-1950, 1963.
 {:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
- :input {:atoms ["Fe#c-" "Cl" "Cl" "Cl" "Cl"]
+ :input {:atoms ["Fe#c-#u5" "Cl" "Cl" "Cl" "Cl"]
          :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}}

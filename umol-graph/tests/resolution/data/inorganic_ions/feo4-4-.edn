@@ -1,0 +1,4 @@
+; FeO4(4-); S16; N18, SI Table SI11
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u4" "O#c-" "O#c-" "O#c-" "O#c-"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

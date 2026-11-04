@@ -1,0 +1,6 @@
+; ReOBr4-, paired d2; HW II, p. 1924; CL66, p. 14; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c+3" "O" "Br#c-" "Br#c-" "Br#c-" "Br#c-"]
+         :bonds [[0 1 "2"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}]}}

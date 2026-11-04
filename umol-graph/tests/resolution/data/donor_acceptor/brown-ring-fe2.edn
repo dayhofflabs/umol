@@ -1,0 +1,7 @@
+; Brown-ring [Fe(H2O)5(NO)]2+; C23, Fig. 1; bond charge/spin allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+2#u4" "N" "O#c+" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :bonds [[1 2 "3#c-#u#s2"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}]}}

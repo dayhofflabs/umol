@@ -1,0 +1,9 @@
+; Mn(salen)N, paired; HW II, p. 1911; C98, p. 3108; phenolate allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c+2" "N" "N" "C#h2" "C#h2" "N" "C#h" "C" "C" "C#h" "C#h" "C#h" "C#h" "O#c-" "C#h" "C" "C"
+                 "C#h" "C#h" "C#h" "C#h" "O#c-"]
+         :bonds [[0 1 "3"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [2 6 "2"] [6 7 "1"] [7 8 "2"] [8 9 "1"] [9 10 "2"]
+                 [10 11 "1"] [11 12 "2"] [12 7 "1"] [8 13 "1"] [5 14 "2"] [14 15 "1"] [15 16 "2"] [16 17 "1"]
+                 [17 18 "2"] [18 19 "1"] [19 20 "2"] [20 15 "1"] [16 21 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [13] :acceptor 0 :attrs "1"} {:donors [21] :acceptor 0 :attrs "1"}]}}

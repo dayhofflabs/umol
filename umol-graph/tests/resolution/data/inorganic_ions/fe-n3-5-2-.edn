@@ -1,0 +1,6 @@
+; Fe(N3)5(2-), high-spin; HW II, pp. 1953, 1963
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-2#u5" "N" "N#c+" "N#c-" "N" "N#c+" "N#c-" "N" "N#c+" "N#c-" "N" "N#c+" "N#c-" "N" "N#c+"
+                 "N#c-"]
+         :bonds [[0 1 "1"] [1 2 "2"] [2 3 "2"] [0 4 "1"] [4 5 "2"] [5 6 "2"] [0 7 "1"] [7 8 "2"] [8 9 "2"]
+                 [0 10 "1"] [10 11 "2"] [11 12 "2"] [0 13 "1"] [13 14 "2"] [14 15 "2"]]}}

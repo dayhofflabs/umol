@@ -1,0 +1,4 @@
+; MnO4(-2); HW II, pp. 1911-1912
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c-2#u1" "O" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "2"]]}}

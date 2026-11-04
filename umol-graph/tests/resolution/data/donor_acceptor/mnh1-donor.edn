@@ -1,0 +1,4 @@
+; MnH1, 6 unpaired electrons; WA03MnRe, pp. 4086-4087; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c+1#u6" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

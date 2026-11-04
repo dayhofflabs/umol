@@ -1,0 +1,5 @@
+; M2NCl10(5-), paired M=N=M; HW II, pp. 1983-1984; charge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c-3#u0" "Os#c-3#u0" "N#c+" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 2 "2"] [1 2 "2"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"] [0 7 "1"] [1 8 "1"] [1 9 "1"]
+                 [1 10 "1"] [1 11 "1"] [1 12 "1"]]}}

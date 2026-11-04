@@ -1,0 +1,4 @@
+; MnOCl3, triplet; HW II, p. 1907; JH75, p. 1269
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#u2" "O" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

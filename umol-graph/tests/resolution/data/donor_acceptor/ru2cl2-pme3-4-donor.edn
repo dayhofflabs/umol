@@ -1,0 +1,9 @@
+; Ru2Cl2(PMe3)4, Ru-Ru single; HW II, pp. 1984-1985
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c+1#u0" "Ru#c+1#u0" "Cl#c-" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3" "Cl#c-" "P"
+                 "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [3 4 "1"] [3 5 "1"] [3 6 "1"] [7 8 "1"] [7 9 "1"] [7 10 "1"] [12 13 "1"] [12 14 "1"]
+                 [12 15 "1"] [16 17 "1"] [16 18 "1"] [16 19 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 1 :attrs "1"}
+                        {:donors [12] :acceptor 1 :attrs "1"} {:donors [16] :acceptor 1 :attrs "1"}]}}

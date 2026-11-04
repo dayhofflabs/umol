@@ -1,0 +1,4 @@
+; FeO4(2-); HW II, p. 1969
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u2" "O" "O" "O#c-" "O#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "1"] [0 4 "1"]]}}

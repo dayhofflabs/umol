@@ -1,0 +1,9 @@
+; ReOCl4(PPh3)-, paired d2; FL71, p. 2691
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c-1" "O" "Cl" "Cl" "Cl" "Cl" "P" "C" "C#h" "C#h" "C#h" "C#h" "C#h" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "C" "C#h" "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [6 7 "1"] [7 8 "2"] [8 9 "1"] [9 10 "2"]
+                 [10 11 "1"] [11 12 "2"] [12 7 "1"] [6 13 "1"] [13 14 "2"] [14 15 "1"] [15 16 "2"] [16 17 "1"]
+                 [17 18 "2"] [18 13 "1"] [6 19 "1"] [19 20 "2"] [20 21 "1"] [21 22 "2"] [22 23 "1"] [23 24 "2"]
+                 [24 19 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,5 @@
+; RuO3(OH)2(2-), triplet; A06, pp. 1921-1922; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#u2" "O" "O" "O" "O#h#c-" "O#h#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}]}}

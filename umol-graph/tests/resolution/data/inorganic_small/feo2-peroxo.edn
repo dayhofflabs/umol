@@ -1,0 +1,4 @@
+; (O2)FeO2, singlet peroxide; C96, pp. 5269-5270; peroxide donor allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u0" "O" "O" "O" "O"]
+         :bonds [[1 2 "1"] [0 1 "1"] [0 2 "1"] [0 3 "2"] [0 4 "2"]]}}

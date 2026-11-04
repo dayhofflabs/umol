@@ -1,0 +1,6 @@
+; OsO2F4; HW II, pp. 1974-1975, 1978, 1982; C93Os; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c+4#u0" "O" "O" "F#c-" "F#c-" "F#c-" "F#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; Molecular OsO2; Z00, pp. 3461-3462
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#u2" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

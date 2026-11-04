@@ -1,0 +1,5 @@
+; ReH8(PMe3)1; HW II, pp. 1919-1920
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c-1#h7" "H" "P" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [2 3 "1"] [2 4 "1"] [2 5 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}]}}

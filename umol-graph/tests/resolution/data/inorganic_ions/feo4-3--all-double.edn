@@ -1,0 +1,4 @@
+; FeO4(3-); S16; N18, SI Table SI11; charge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-3#u3" "O" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "2"]]}}

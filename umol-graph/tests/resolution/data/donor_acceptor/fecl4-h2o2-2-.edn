@@ -1,0 +1,5 @@
+; FeCl4(H2O)2(2-), high-spin; HW II, pp. 1949-1950, 1964
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-2#u4" "Cl" "Cl" "Cl" "Cl" "O#h2" "O#h2"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

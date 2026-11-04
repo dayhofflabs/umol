@@ -6,335 +6,63 @@ Relates: [217](217-rhea-participant-failures-2026-08-30.md),
 [240](240-validation-constraint-ops-2026-10-18.md),
 [189](189-property-test-organization-2026-08-06.md)
 
-The [HW extraction](#hw-extraction-spike-2026-10-31) records hydrogen selections,
-noble-gas evidence, halogen selections, chalcogen extraction, the
-[pnictogen work table](#pnictogen-work-table) and the
-[tetrel work table](#tetrel-work-table), followed by the
-[triel work table](#triel-work-table) and the
-[alkaline-earth work table](#alkaline-earth-work-table) and the
-[alkali-metal work table](#alkali-metal-work-table), followed by the
-[copper-group work table](#copper-group-work-table) and the
-[zinc-group work table](#zinc-group-work-table) and the
-[scandium-group work table](#scandium-group-work-table) and the
-[titanium-group work table](#titanium-group-work-table) and the
-[vanadium-group work table](#vanadium-group-work-table) and the
-[chromium-group work table](#chromium-group-work-table). The selected Cr/Mo/W pass
-is complete: 260 additions (Cr 72, Mo 94, W 94), 260 fixtures and the existing-entry
-citation audit are implemented. All 11 earlier Cr/Mo/W/Sg states are retained;
-capacity 18 and the ValenceTable are unchanged. Thirteen W phosphine-hydride
-occupations remain open by decision. Other source checks and the optional bridging
-OH− companion proposal are separate from the implemented selection.
-The selected V/Nb/Ta pass
-is complete: 160 additions (V 57, Nb 48, Ta 55), 165 new fixtures, one revised nitride
-fixture and the existing-entry citation audit are implemented. All eight earlier
-V/Nb/Ta/Db states are retained. Fourteen primary-source PDFs are reviewed and archived;
-capacity 18 and the ValenceTable are unchanged. The four uncertain Nb/Ta(II)
-phosphine #n#u candidates are omitted.
-The selected Ti/Zr/Hf pass
-is complete: 118 additions (Ti 47, Zr 44, Hf 27), 135 fixtures, the existing-entry
-citation audit and the approved Zr/Hf capacities of 20 are implemented.
-All eight earlier Ti/Zr/Hf/Rf states are retained. Sixteen primary-source PDFs
-are archived; no ligand-companion or ValenceTable additions were needed.
-The selected Sc/Y/La/Ac
-pass is complete: 79 additions (Sc 28, Y 25, La 26), 82 new fixtures and the
-existing-entry citation audit are implemented. All eight earlier states are
-retained. The four supplied papers are reviewed and archived; capacities and
-ValenceTable entries are unchanged.
-The selected Zn/Cd/Hg pass is
-complete: 53 metal additions and one alkoxide O companion are implemented, covered
-by 52 new fixtures and four revised ZnMe2 inputs. All seven earlier metal states
-are retained with checked citations. The approved Hg capacity increase from 18 to
-22 is implemented; the hydride and HgF4 papers are reviewed and archived.
-The selected Cu/Ag/Au pass is
-complete: 77 additions, 78 fixtures, the existing-entry citation audit and the
-approved Cu/Ag capacity increases are implemented. All 11 earlier states are retained.
-The selected group-1 pass is
-complete: 34 additions, 35 fixtures, the existing-entry citation audit and the
-approved capacity increases are implemented. The selected group-2 pass
-is complete: 76 additions and the approved capacity increases are implemented.
-The Be follow-up needs no further additions; KMgH3 uses existing ionic states
-after the full Fornari review. Bridging-water descriptions remain deferred with Ch02.
-The selected triel pass is implemented,
-including four carbon companions, the pyridine-donor N state, the existing-entry
-citation audit and Al's capacity increase to 12.
-The noble-gas audit covers earlier and
-newly added entries; the supplied primary-paper PDFs have been reviewed. The selected
-hydrogen, noble-gas, halogen, chalcogen, pnictogen and tetrel passes are complete. Unselected
-candidates remain in the extraction tables. The [chalcogen work table](#chalcogen-work-table)
-includes the completed audit of existing entries.
-The selected pnictogen additions are implemented: 95 states, 134 fixtures and the
-approved Counts bounds/table changes. The 79 earlier pnictogen entries have also
-received the citation/comment audit. SbCl4−/BiCl4− use the accepted ionic/donor
-description; the other extracted cases are explicitly unselected.
-The first tetrel batch is implemented: 12 C states and Al#v2#m, covered by 13
-fixtures. The 36 earlier C entries have received the citation/comment audit.
-The silicon batches add 28 states and 30 fixtures, plus Al's zero-π Counts entry
-for Si+. The 11 earlier Si entries are retained with checked citations.
-The heavy-tetrel batches add 93 Ge/Sn/Pb states with 98 fixtures: Zintl states,
-tetrelylene acceptors, tetrelyl donors, neutral donor adducts, aromatic/localized rings,
-ordinary neutral/charged states, halide bridges and dibridged hydrides.
-The adduct fixtures also cover the added thioether donor S#n#v2#d (Ch21).
-The existing Ge/Sn/Pb entries are retained with checked HW citations. Tt28–Tt31
-complete the selected additions; the six-donor Sn(II)/Pb(II) states use the approved
-Counts capacity increase from 12 to 14.
-The March planning and implementation notes below are historical; later updates to
-the tracking table are dated.
-
-This document tracks incremental, reviewable expansion of the default atom type registry.
-Registry entries are treated as code: explicit scope, source review, and matching conformance coverage.
+This document tracks expansion of the default atom-type registry through source review,
+explicit selection and conformance coverage. The [HW extraction](#hw-extraction-spike-2026-10-31)
+contains the inclusion rules, evidence and detailed chapter tables.
 
 ## Project Status (2026-11-04)
 
-**Current chapter:** HW II, chapter XXVII (Cr, Mo, W), pp. 1844–1898, selected scope complete.
-The [work table](#chromium-group-work-table) records 260 implemented additions
-(Cr 72, Mo 94, W 94), all covered by inferred resolution in 260 fixtures. All 11
-earlier Cr/Mo/W/Sg states are retained with checked citations. Capacity 18 and the
-ValenceTable are unchanged; no ligand companion was added. The only new MC states
-are the two accepted Mo/W hydride bridges. All supplied papers and the additional
-Baran and Hlatky–Crabtree sources are reviewed and archived under `materials/valence/`.
-The 13 W phosphine-hydride occupations, EF7³− and the chromium cyano-peroxide remain
-outside the selection. Crg37 records the optional bridging OH− companion proposal;
-the selected Mo state is already covered by Cp2MoH3+.
-All 3,594 graph unit tests, 223 graph property tests and 2,236 resolution cases pass.
-The 1,976 pre-chapter snapshots are unchanged.
+**Selected scope complete through HW II, chapter XXIX (Fe, Ru, Os), pp. 1934–1988.**
+Chapter selections through Fe/Ru/Os are implemented, with existing-entry citation audits and
+coverage of the added states. Unselected and deferred candidates remain in the linked
+tables. Companion states belong to elements outside the chapter being reviewed.
 
-**Previous chapter:** HW II, chapter XXVI (V, Nb, Ta), pp. 1819–1843, selected scope complete.
-The [work table](#vanadium-group-work-table) records 160 implemented additions:
-V 57, Nb 48 and Ta 55. Every added state has inferred coverage in 165 new fixtures
-and the revised [Cl3VN]− input. All eight earlier V/Nb/Ta/Db states are retained
-with checked citations. The 14 primary-source PDFs are reviewed and archived.
-No MC state, capacity increase, ValenceTable entry or ligand companion was added.
-The uncertain Nb/Ta(II) phosphine #n#u candidates are omitted; H2 adducts remain
-deferred with the earlier group-3/copper cases.
-All 3,594 graph unit tests, 223 graph property tests and 1,976 resolution cases pass.
-The 1,811 earlier snapshots are unchanged.
+| Chapter / group | Registry | Conformance fixtures | Model changes and scope notes |
+| --- | --- | --- | --- |
+| [Hydrogen](#hydrogen) | 5 H additions and 5 B/C/F/Cr/Rh companions; all 9 retained H states covered | 7 new | Terminal hydride donors and selected 3c2e/3c4e descriptions; ValenceTable unchanged |
+| [Noble gases](#noble-gases) | All 34 retained states and 3 F/N companions covered | Selected assignments covered, including xenon-anion replacements | Perxenate uses the accepted Xe#v8 assumption. Rn compounds, neutral Xe#m8 and XeO4 adducts excluded |
+| [Halogens](#halogens) | 110 retained states after citation and scope audit | 60 valence, 13 donor–acceptor and 3 atomic-ion fixtures; 2 revised | HF aggregates use hydrogen bonds. General halide donors retained; At donor extensions and specialized adducts excluded |
+| [Chalcogens](#chalcogen-work-table) | 40 additions and 4 N/Br/I companions; 100 unique chalcogen states after later companion work and deduplication | 109 new; SF4 revised | Capacities Se 14, Te 16. Zundel alternatives retained; larger water clusters use hydrogen bonds. Optional whole-cage nitride types excluded |
+| [Pnictogens](#pnictogen-work-table) | 95 additions: N 17, P 23, As 16, Sb 22, Bi 17; 79 earlier states retained | 134 new | Sb/Bi capacity 14; aromatic Counts entries for Bi, Po and Si. SbCl4−/BiCl4− use the selected ionic/donor description |
+| [Tetrels](#tetrel-work-table) | C 12, Si 28 and Ge/Sn/Pb 93 additions; Al and S companions | C 13, Si 30, Ge/Sn/Pb 98 new | Sn/Pb capacity 14; aromatic Counts entries for Al, Ge and Ga |
+| [Triels](#triel-work-table) | B 27, Al 37, Ga 39, In 32, Tl 22 additions; 4 C companions and the pyridine-donor N state | B 32, heavy triels 137 new; earlier borolide correction covered separately | Al capacity 12; ValenceTable unchanged |
+| [Alkaline earths](#alkaline-earth-work-table) | 76 additions: Be 20, Mg 22, Ca 12, Sr 11, Ba 11 | 77 new; 3 Be-amido inputs revised | Capacities Be/Mg 12, Ca/Sr 16, Ba 18; Ra retains 8. KMgH3 reuses existing ions; bridging water deferred |
+| [Alkali metals](#alkali-metal-work-table) | 34 additions: Li 9, Na 7, K 7, Rb 5, Cs 6; 13 earlier states retained | 35 new | Capacities Li/Na/Rb 16, K 20, Cs 24; Fr retains 8. Specialized carbon-contact/Cp assemblies excluded; bridging water deferred |
+| [Cu, Ag, Au](#copper-group-work-table) | 77 additions: Cu 29, Ag 18, Au 30; 11 earlier states retained, including free-ion Au³⁺ triplet | 78 new | Capacities Cu/Ag 21; Au retains 18. Ambiguous Cs2AgF6 adds no states; η²-H2 donors deferred |
+| [Zn, Cd, Hg](#zinc-group-work-table) | 53 additions: Zn 19, Cd 17, Hg 17; 1 μ₃-alkoxide O companion; 7 earlier states retained | 52 new; 4 ZnMe2 inputs revised | Hg capacity 22; Zn/Cd limits unchanged. Selected hydride bridges included; Hg oxidation states above II excluded |
+| [Sc, Y, La, Ac](#scandium-group-work-table) | 79 additions: Sc 28, Y 25, La 26; 8 earlier states retained | 82 new | Capacity 18 and ValenceTable unchanged. Uncertain hydrides, H2 adducts and formula-only cases remain unselected |
+| [Ti, Zr, Hf](#titanium-group-work-table) | 118 additions: Ti 47, Zr 44, Hf 27; 8 earlier states retained | 135 new | Capacities Zr/Hf 20; Ti retains 18. Both ZrH2 occupations included; broad borohydride MC states and specialized assemblies excluded |
+| [V, Nb, Ta](#vanadium-group-work-table) | 160 additions: V 57, Nb 48, Ta 55; 8 earlier states retained | 165 new; 1 nitride input revised | Capacity 18 and ValenceTable unchanged; no new MC types. Four uncertain Nb/Ta(II) phosphine occupations omitted |
+| [Cr, Mo, W](#chromium-group-work-table) | 260 additions: Cr 72, Mo 94, W 94; 2 hydroxido O companions; 11 earlier states retained | 262 new | Capacity 18 and ValenceTable unchanged. Two Mo/W hydride-bridge MC states included; 13 W phosphine-hydride occupations remain open |
+| [Mn, Tc, Re](#manganese-group-work-table) | 243 additions: Mn 62, Tc 60, Re 121; 9 earlier states retained | 242 new | Mn capacity 21; Tc/Re/Bh retain 18; ValenceTable unchanged. Four Re states support separate 3c2e hydride bridges; uncertain occupations excluded |
+| [Fe, Ru, Os](#iron-group-work-table) | 210 additions: Fe 81, Ru 57, Os 68; 3 S and 1 O companions; 17 earlier states retained | 223 new; 2 Fe halide spin inputs revised; 1 source comment corrected | Capacities Fe 21, Os 20; Ru/Hs retain 18; ValenceTable unchanged. One compact hydride-bridge MC state; uncertain occupations and specialized Fe(1-norbornyl)₄ states excluded |
 
-**Earlier chapter:** HW II, chapter XXV (Ti, Zr, Hf), pp. 1793–1818, selected scope complete.
-The [work table](#titanium-group-work-table) records 118 implemented additions:
-Ti 47, Zr 44 and Hf 27, with inferred coverage in 135 fixtures. These include both
-ZrH2 occupations, the two Schwartz's-reagent states and two ZrCp4 descriptions.
-All eight earlier Ti/Zr/Hf/Rf states are retained with checked HW citations.
-The approved Zr/Hf capacity increases from 18 to 20 are implemented; Ti retains
-capacity 18. No ligand-companion or ValenceTable additions were needed.
-Sixteen primary-source PDFs are archived. Tentative ZrH/HfH3, broad borohydride
-MC states, specialized assemblies and formula-only lower cyanides remain unselected.
-All 3,594 graph unit tests, 223 graph property tests and 1,811 resolution cases pass.
-The 1,684 snapshots preceding the final 110-state batch are unchanged.
+### Shared changes and verification
 
-**Earlier chapter:** HW II, chapter XXIV (Sc, Y, La, Ac), pp. 1784–1792, selected scope complete.
-The [work table](#scandium-group-work-table) records 79 implemented additions:
-Sc 28, Y 25 and La 26, with inferred coverage in 82 new fixtures. The eight earlier
-states are retained with checked citations, including Y's corrected s²d¹ comment.
-All additions fit capacity 18; no ValenceTable or ligand-companion changes were
-needed. The four supplied papers are reviewed and archived. Bare ScH2, uncertain
-Cp hydrides, H2 adducts, the remaining formula-only cases and the extra Sc(II)
-iodido-scandocene states remain unselected or deferred as recorded below.
-All 1,676 resolution cases pass; the 1,594 earlier snapshots are unchanged.
+| Item | Current status |
+| --- | --- |
+| Resolution coverage | Each EDN input runs through AtomTyping and Counts with Strict and MostSaturated policies. Coverage does not require every extracted example to become a fixture |
+| Counts accounting | [240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting) implemented; 107 snapshots now give the selected donor/multicenter assignments under both policies |
+| Aromaticity | Default is permissive Hückel; named Daylight/MDL presets retain their restrictions. Sb/Te aromatic Counts entries support Te⁺/Te; later chapter additions are listed above |
+| Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
+| Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
+| Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
+| Verification after Fe/Ru/Os | 2,703 resolution cases, 3,594 graph unit tests, 223 graph property tests and 307 chemistry tests pass; formatting and Clippy pass |
+| Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
-**Earlier chapter:** HW II, chapter XXIII (Zn, Cd, Hg), pp. 1747–1783, selected scope complete.
-The [work table](#zinc-group-work-table) records 53 implemented metal additions:
-Zn 19, Cd 17 and Hg 17, plus O#c-#v#d3 for μ₃-alkoxide donors. All 54 states have
-inferred coverage in 52 new fixtures and four revised ZnMe2 inputs. The seven
-earlier metal states are retained with updated citations. The approved Hg capacity
-increase from 18 to 22 admits the six-water description and the two selected
-states requiring 20. Zn/Cd limits and ValenceTable targets are unchanged.
-Primary-source review supports molecular mono-/dihydrides and one
-local organozinc hydride-bridge state. HgF4 is unselected in both ordinary and
-donor descriptions; Hg oxidation states above II are excluded from this pass.
-The solid/complex hydride papers do not establish specific polymer or molecular
-graphs; no further additions are proposed from those formulae alone.
-All 1,594 resolution cases pass; the 1,542 earlier snapshots are unchanged.
-
-**Earlier chapter:** HW II, chapter XXII (Cu, Ag, Au), selected scope complete.
-All 77 additions (Cu 29, Ag 18, Au 30) are implemented and covered by 78 fixtures,
-including separate coverage for the retained free-ion Au³⁺ triplet (Cg32).
-All 11 earlier states are retained with updated citations. Cu/Ag capacities are
-21; Au remains at 18. The increase admits 13 selected states excluded by the
-previous capacity 18. ValenceTable targets and the other bounds are unchanged.
-The source PDFs are reviewed and archived: AgF6³− has two unpaired electrons;
-CuH2−/AgH2− and neutral AuH2 support six further H variants.
-Cs2AgF6 remains an ambiguous Ag(IV)/Ag(III,V) case, with no extra states selected.
-η²-H2 donor descriptions remain deferred.
-
-**Earlier chapter:** HW I, chapter XVIII (group 1), selected scope complete.
-All 34 approved additions are implemented: Li 9, Na 7, K 7, Rb 5 and Cs 6,
-covered by 35 fixtures. The 13 existing entries have checked HW citations.
-Capacities are Li/Na/Rb 16, K 20 and Cs 24; Fr stays at 8 and ValenceTable
-targets stay unchanged. The examples cover molecular hydrides, alkalides,
-aqua ions, ordinary solvates, crowns/cryptands and standard organolithium cases.
-Specialized carbon-contact and Cp assemblies add no types. The primary papers,
-including MP12's supporting information, are reviewed and archived.
-Bridging neutral water donors remain deferred with Ch02.
-
-**Earlier chapter:** HW I, chapter XVII (group 2), selected scope complete.
-Be 20, Mg 22, Ca 12, Sr 11 and Ba 11 additions are implemented, with 77 new
-fixtures and three Be-amido inputs revised to infer Be's occupation. All 76
-additions have coverage. Capacities are Be/Mg 12, Ca/Sr 16 and Ba 18; Ra remains
-8 and ValenceTable entries are unchanged. The supplied papers, including Fo07,
-are reviewed and archived, as are PS95 and BPS26.
-The Be follow-up records existing-state reuse and unselected narrow non-binary
-descriptions (Ae21, Ae23). KMgH3 uses existing K+, Mg²⁺ and H− states (Ae21).
-The five approved aqua-ion states are implemented (Ae24); bridging-water
-descriptions remain deferred with Ch02. No source or assignment question remains
-for the selected group-2 scope.
-
-**Earlier chapter:** HW I, chapter XVI (group 13), selected scope complete. The boron
-batch adds 27 B states and four C companions, covered by 32 fixtures; the earlier
-borolide correction/removal has its own fixture. The heavy-triel batch adds
-Al 37, Ga 39, In 32 and Tl 22 states plus the general pyridine-donor N state,
-covered by 137 fixtures. Existing triel entries have checked HW citations.
-Al capacity is raised from 8 to 12 for the accepted five-/six-coordinate donor
-descriptions; ValenceTable entries are unchanged.
-
-**Last curation check (2026-11-03):** all 1684 resolution conformance cases pass.
-The eight ZrH2 additions have inferred coverage in eight fixtures; expected metal
-states and valence invariants pass independently for all four model/policy outputs.
-All 1676 earlier snapshots are unchanged; 80 registry tests, formatting and
-whitespace checks also pass. The preceding scandium-group pass completed 3594
-graph library tests, 223 graph properties, the remaining graph integration tests,
-doc tests and Clippy. The convey-model test uses the approved MostSaturated policy;
-both models omit the H counts for BH3 and H2O.
-
-**Earlier curation check (2026-11-02):** 1182 resolution conformance cases, 417 valence,
-46 invariant and 306 umol-chem unit tests, focused Clippy and formatting passed.
-The seven pnictogen follow-up fixtures agree
-across both models/policies and satisfy the valence invariants. The preceding
-90-state batch also passed workspace tests, 215 graph properties, 3150 Python tests
-(2 skipped), workspace Clippy and formatting. The Counts accounting correction in
-[240](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting) is implemented:
-107 snapshots now give the selected donor/multicenter assignments under both policies.
-
-Each EDN input runs through AtomTyping and Counts with both Strict and MostSaturated policies. The selected
-noble-gas HW additions and six xenon-anion replacements are implemented. Perxenate
-uses Xe#v8 as an accepted assumption. All Rn compound entries, neutral Xe#m8
-and the XeO4 adduct entries/fixtures are removed; MeCN→XeO3 uses only the Xe=O description.
-Registry references are complete for this slice: HW, selected primary sources and PW assignment markers.
-All 34 retained noble-gas states and the original three F/N companion states have conformance coverage.
-Hydrogen H05–H09 and the B/C/F/Cr/Rh companions are implemented, with seven new fixtures;
-all nine current H states have coverage, including H#c+#m0 in HF2−/H3+ and
-H#c-#m2 in [HCr2(CO)10]−. The retained halogen additions contribute 55 states,
-60 new fixtures and two revised fixtures (ClF3 and IF5). All 55 added states have
-conformance coverage, including the six oxyfluoride cases in five valence graphs
-and H2F3−, branched H3F4− and H4F5− as F−·nHF with hydrogen bonds. The latter
-replace the three aggregate-specific multicenter F states and their fixtures.
-The hydrogen-bond group also includes neutral H2O, HF and NH3 dimers using existing types.
-The donor–acceptor pass retains 19 states with thirteen fixtures after restoring
-F#c-#n#d3 and [F(XeOF4)3]− on 2026-11-01. All 19 states are covered. Terminal F−/Cl−/Br−/I−
-donors are general ligand states, tested with Rh(III) complexes using the existing Rh state.
-Terminal At− donors, [At(py)2]+ and HIO3·DMSO are not selected for the default.
-The retained Cl+/Br+/I+ mechanism states have three new atomic-ion fixtures.
-Further extracted candidates are recorded below.
-The [citation and default-scope audit](#whole-registry-audit-2026-10-31) reviewed
-all 112 halogen states, including 37 pre-existing entries. Cl#c+#n3#m0 remains omitted.
-The initial omission of F#c-#n#d3 was reversed when extending the general
-triply bridging halide convention to the chalcogen bromide/iodide aggregates.
-The chalcogen pass adds 40 chalcogen states and four N/Br−/I− companions.
-The additions cover the selected halide and nitride patterns, aromatic Se4²⁺/Te4²⁺ and
-multicenter O3/O3−. Zundel H5O2+ has both 3c2e and 3c4e descriptions, each with
-explicit, implicit and mixed terminal hydrogens; five O states are added.
-H7O3+, H9O4+, H13O6+ and H3O2− have four hydrogen-bond compatibility fixtures
-using existing atom types; the H13O6+ fixture retains the existing Zundel core.
-All 44 additions have AtomTyping coverage in 109 new fixtures and revised SF4.
-The final citation/coverage audit adds 22 of those fixtures using existing types,
-including separate aromatic and Kekulé furan inputs. With the Tt27 thioether donor
-companion, all 101 retained chalcogen states now have citations and conformance
-coverage under both AtomTyping policies.
-O2+, O2− and S2− have paired atom-localized and bond-charge/spin fixtures.
-S3− has localized and multicenter fixtures, adding one terminal S state.
-SeBr6²− and TeCl6²−/TeBr6²− add two states with three trans 3c4e units.
-SeX4²− (X = Cl, Br) and TeX4²− (X = Cl, Br, I) add two states with two trans
-3c4e units, explicitly supported by K84/K91/P85; SeBr4²− and TeCl4²− have fixtures.
-SO, SeO and TeO have triplet bond-spin fixtures using existing divalent states.
-SF5 adds S#u#v#m4: one axial single bond, two basal 3c4e units and one unpaired electron.
-S4N4 and Se4N4 have localized transannular-bond descriptions. S4N4 also retains
-one HW resonance contributor with two 3c4e π units. The optional 12-electron
-whole-cage descriptions and their three additional atom types are excluded from the default.
-SN+, S2N+ and S4N2 have fixtures using existing states; S4N2 has one N–S–N 3c4e π unit.
-S2N2 has aromatic and singlet-diradical multicenter fixtures, also using existing states.
-Seven aromatic nitride ions and radical E3N2+ (E = S, Se) have nine fixtures;
-S3N3− adds N#c-#n#v2#a2. Se4N2 is excluded following its reassignment to Se3N2Cl2.
-S3N−, S4N− and SN2²− have three fixtures using existing states; the two chains
-use six- and eight-electron π systems, respectively, and SN2²− uses N−=S=N−.
-Localized S8²⁺/Se8²⁺ and aromatic S4²⁺/S6²⁺ reuse existing states.
-S5+/S6+/S7+ have multicenter fixtures using existing S#n#v2#m2, with the accepted PW allocation.
-Te6²⁺/Te6⁴⁺ have fixtures for localized resonance contributors using existing Te states (Be94/Bu82).
-Singlet phenyloxenium tests existing O#c+#n2#v; H13 replaces the OH+ registry example.
-TeF3+ and the restored explicit-H H3Te+ fixture cover the existing Te#c+#n#v3 state.
-Their distinct experimental evidence is recorded in Ch19; no atom type is added.
-Restoring F#c-#n#d3 adds one further state and restores its fixture.
-One duplicate hydronium row is removed. The chalcogens now have 100 unique states;
-the current halogen total is 110 after the HF-aggregate pruning.
-The general aromaticity default is now permissive Hückel; named Daylight/MDL presets
-retain their restrictions. The living ValenceTable adds aromatic contributions for
-Sb and Te to support Te⁺ and Te in Te4²⁺.
-The approved Se=14 and Te=16 electron-capacity limits and their scope are recorded
-in the [expansion rationale](#electron-capacity-expansion-2026-11-01).
-PoF6 is omitted: the supplied Weinstock report establishes volatility without a formula.
-
-The pnictogen pass adds 17 N, 23 P, 16 As, 22 Sb and 17 Bi states, all covered by
-134 new fixtures. Of these, 132 give identical determined graphs across all four
-resolver/policy combinations; the two NH inputs with unspecified spin remain
-underdetermined under Strict AtomTyping and select the existing singlet under
-MostSaturated. All 534 determined outputs satisfy the valence invariants.
-Eight older snapshots gain the triplet N candidate under Strict AtomTyping;
-their MostSaturated outputs are unchanged. The 79 earlier pnictogen states are
-retained with checked citations and corrected examples. Three stale Python
-expectations are corrected for the earlier Counts donor accounting and conservative
-H-count retention during Strict export. No resolver code changes.
-
-The tetrel carbon batch adds 12 C states and Al#v2#m, with 13 fixtures covering
-methanide, allenide, carbene donation, methyl donation and Al2Me6 bridges.
-All four resolver/policy combinations agree, and all 52 determined outputs satisfy
-the valence invariants. All 1041 earlier snapshots are unchanged. The 36 earlier C
-entries have checked references; CO is removed from the C+ example, the C− donor
-comment is broadened, and quartet CH is identified as an excited state. No table or
-element-limit changes.
-
-The silicon batch covers hydrides, Zintl ions, fluoroanions, donor/acceptor states
-and aromatic rings. All 27 additions have fixture coverage; all 29 fixtures agree
-across both models/policies, and all 116 outputs satisfy the valence invariants.
-The 1054 earlier snapshots are unchanged. Counts gains Al `aromatic_valences = [0]`
-for the shifted Si+ lookup; no element-limit changes.
-
-Tt09 adds three states per Ge/Sn/Pb for isolated E⁴−, E2⁶− dumbbells and two-bond
-E²− chain sites. Nine fixtures cover all nine additions; all 36 outputs agree
-across models/policies and satisfy the valence invariants. Chain fixtures are finite
-counting fragments with E³− termini. All 1083 earlier snapshots are unchanged;
-no valence-table or element-limit changes.
-
-Tt13 adds Ge/Sn/Pb tetrelylene acceptors, covered by IMes→GeI2, SnCl2(NMe3) and
-the cyclic disilylated plumbylene–PEt3 adduct. All twelve outputs agree across
-models/policies and satisfy the valence invariants. All 1092 earlier snapshots
-are unchanged; no valence-table or element-limit changes.
-
-Tt14–Tt16 and the two localized Ge companions add six states, covered by eight
-aromatic/localized fixtures. All 32 outputs agree across models/policies and
-satisfy the valence invariants. All 1095 earlier snapshots are unchanged.
-Counts gains Ge `aromatic_valences = [1]` and Ga `[0]` for the shifted Ge+ lookup;
-no element-limit changes.
-
-Tt18/Tt19/Tt21/Tt22 add 41 ordinary neutral Ge/Sn/Pb states. Forty-two EH,
-singlet EH2, radical EH3 and EH4 fixtures cover every explicit/implicit-H variant.
-All 168 outputs agree across models/policies and satisfy the valence invariants.
-The trial left admission, outputs and reports unchanged for all 1103 earlier
-fixtures; their implemented snapshots are also unchanged. No table or limit changes.
-
-Tt20/Tt23/Tt24/Tt25 add fourteen charged states with fourteen fixtures: GeH3−/PbH3−
-in all H representations, SnCl3−, Me3Sn+/Me3Pb+, SnOH+/PbOH+ and Sn²⁺.
-All 56 outputs agree across models/policies and satisfy the valence invariants;
-all 1145 earlier snapshots are unchanged. The existing Pb²⁺ state and fixture are
-retained with HW citations. No table or limit changes.
+The Decision Log below is the historical March record; later tracking-table updates are
+dated.
 
 ### Conformance suite breakdown
 
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 154 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 186 | Hydrides with explicit or implicit H |
-| `inorganic_small/` | 248 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 283 | Inorganic ions |
-| `donor_acceptor/` | 380 | Donor–acceptor complexes with dative or multicenter bonds |
+| `atomic_ions/` | 196 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 309 | Hydrides with explicit or implicit H |
+| `inorganic_small/` | 281 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 411 | Inorganic ions |
+| `donor_acceptor/` | 944 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 53 | C/H compounds |
 | `functional_groups/` | 74 | Organic heteroatom groups (halides, amines, etc.) |
@@ -342,10 +70,10 @@ retained with HW citations. No table or limit changes.
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
 | `aromatic/` | 102 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
 | `hypervalent/` | 51 | Expanded-octet and multicenter species |
-| `transition_metals/` | 11 | Transition-metal complexes |
+| `transition_metals/` | 13 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **1811** | |
+| **Total** | **2703** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -382,28 +110,27 @@ inputs. Median full-resolution times:
 Admission alone improved by 17.5–24.5% on the four neutral inputs; the two charged
 single-atom cases were effectively unchanged.
 
-## March 2026 record
+## Code and test layout
 
 ### Key code files
 
-- **Registry**: `umol-models-graph/config/default-registry.toml` — per-element atom type spec lists
-- **Valence table**: `umol-models-graph/config/default-valence-table.toml` — element `outer_electrons` + `allowed_valences`
-- **Test harness**: `umol-models-graph/tests/resolution/mod.rs` — rstest-based conformance runner with insta snapshots
-- **Test data**: `umol-models-graph/tests/resolution/data/<category>/<compound>.toml`
-- **Snapshots**: `umol-models-graph/tests/resolution/snapshots/`
-- **Resolver**: `umol-models-graph/src/graph_ir/resolver.rs`
-- **Valence logic**: `umol-models-graph/src/graph_ir/valence.rs`, `config_data.rs`
-- **Atom type spec/query**: `umol-models-graph/src/graph_ir/atom_type.rs`
-- **Tracking doc**: `discussion/56-default-registry-2026-03-07.md` (this file)
+- **Registry**: `umol-graph/config/default-registry.toml` — per-element atom types grouped by valence
+- **Valence table**: `umol-graph/config/default-valence-table.toml` — Counts element data
+- **Test harness**: `umol-graph/tests/resolution/resolution_suite.rs` — rstest-based conformance runner with insta snapshots
+- **Test data**: `umol-graph/tests/resolution/data/<category>/<compound>.edn`
+- **Snapshots**: `umol-graph/tests/resolution/snapshots/`
+- **Resolver**: `umol-graph/src/ops/resolve.rs`, `umol-graph/src/ops/resolve/valence.rs`
+- **Valence logic**: `umol-graph/src/ops/valence.rs`; `atom_typing.rs`, `counts.rs`, `registry.rs` and `table.rs` under `umol-graph/src/ops/valence/`
 
 ### Conformance execution notes
 
-- Run the conformance suite with feature flag enabled:
-  - `cargo test --features conformance --test resolution`
-- Keep the compile-time refresh marker comment in `umol-models-graph/tests/resolution/mod.rs` up to date when adding/removing conformance files (current marker: `v6`).
-- Validation criterion for accepted conformance snapshots:
-  - `atom_typing.success: true`
-  - `counts.success: true`
+- Run the conformance suite with its feature flag enabled:
+  - `cargo test -p umol-graph --features conformance --test resolution`
+- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. All 2,703
+  inputs succeed under MostSaturated. 296 fail under at least one Strict configuration,
+  mostly organic inputs whose hydrogen counts are left to resolution: 271 of the 278 inputs in
+  `hydrocarbons/`, `functional_groups/`, `carbonyl_derivatives/`, `heterocycles/` and the two
+  stereo categories.
 
 ## Tracking Table
 
@@ -415,6 +142,7 @@ Sc/Y/La/Ac rows record the completed selected scope on 2026-11-03.
 Ti/Zr/Hf rows record the completed selected scope on 2026-11-03.
 V/Nb/Ta/Db rows record the completed selected scope on 2026-11-03.
 Cr/Mo/W/Sg rows record the completed selected scope on 2026-11-04.
+Mn/Tc/Re/Bh rows record the completed selected scope on 2026-11-04.
 Other rows retain the March record.
 
 Status values:
@@ -433,7 +161,7 @@ Status values:
 | B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
 | C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
 | N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
-| O | yes | yes (-2) | yes (selected) | yes (all 30 states) | done | Chalcogen selection, citation audit and aromatic/Kekulé furan coverage complete; Zg24's μ₃-alkoxide donor is implemented and covered by [MeZnOMe]4 |
+| O | yes | yes (-2) | yes (selected) | yes (all 32 states) | done | Chalcogen selection and citation audit complete; Zg24's μ₃-alkoxide and Crg37's two μ₂-hydroxido donor entries are implemented and covered |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
 | Na | yes | yes (+1, −1) | yes (selected) | yes (7 additions covered) | done | 9 current states; selected HW scope, citation audit and capacity 16 implemented |
@@ -450,7 +178,7 @@ Status values:
 | Ti | yes | yes (+2,+3,+4) | yes (selected) | yes (47 additions covered) | done | 50 current states; all 3 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | V | yes | yes (+2,+3,+4,+5) | yes (selected) | yes (57 additions covered) | done | 61 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Cr | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (72 additions covered) | done | 77 current states; all 5 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
-| Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `atomic_ions/mn+2.toml`, `atomic_ions/mn+3.toml`) | done |  |
+| Mn | yes | yes (+2 through +7) | yes (selected) | yes (62 additions covered) | done | 68 current states; all 6 earlier states retained; citation audit complete; capacity 21 implemented for high-coordinate Mn(II) |
 | Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `atomic_ions/fe+2.toml`, `atomic_ions/fe+3.toml`) | done |  |
 | Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `atomic_ions/co+2.toml`, `atomic_ions/co+3.toml`) | done |  |
 | Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `atomic_ions/ni+2.toml`) | done |  |
@@ -468,7 +196,7 @@ Status values:
 | Zr | yes | yes (+3,+4) | yes (selected) | yes (44 additions covered) | done | 46 current states; both earlier states retained; both ZrH2 occupations, Schwartz's reagent and selected donor states implemented; capacity 20 implemented |
 | Nb | yes | yes (+3,+4,+5) | yes (selected) | yes (48 additions covered) | done | 50 current states; both earlier states retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
 | Mo | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (94 additions covered) | done | 98 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
-| Tc | yes | no | no | yes (`atoms/tc.toml`) | done | No ion added in current scope |
+| Tc | yes | yes (+2 through +7) | yes (selected) | yes (60 additions covered) | done | 61 current states; earlier atom retained; selected scope and citation audit complete; capacity 18 unchanged |
 | Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `atomic_ions/ru+2.toml`, `atomic_ions/ru+3.toml`) | done |  |
 | Rh | yes | yes (+2,+3) | partial | yes (`atoms/rh.edn`, `atomic_ions/rh+2.edn`, `atomic_ions/rh+3.edn`, Rh–H donor fixture below) | done | Hydrogen companion addition: Rh#c+3#n3#t6 |
 | Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `atomic_ions/pd+2.toml`) | done |  |
@@ -506,7 +234,7 @@ Status values:
 | Hf | yes | yes (+3,+4) | yes (selected) | yes (27 additions covered) | done | 29 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
 | Ta | yes | yes (+3,+4,+5) | yes (selected) | yes (55 additions covered) | done | 56 current states; earlier state retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
 | W | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (94 additions covered) | done | 95 current states; earlier atom retained; selected HW scope and citation audit complete; capacity 18 unchanged; 13 unselected phosphine-hydride occupations remain open |
-| Re | yes | no | no | yes (`atoms/re.toml`) | done |  |
+| Re | yes | yes (+2 through +7) | yes (selected) | yes (121 additions covered) | done | 122 current states; earlier atom retained; selected scope and citation audit complete, including four hydride-bridge states; capacity 18 unchanged |
 | Os | yes | no | no | yes (`atoms/os.toml`) | done |  |
 | Ir | yes | no | no | yes (`atoms/ir.toml`) | done |  |
 | Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `atomic_ions/pt+2.toml`) | done |  |
@@ -532,22 +260,29 @@ Status values:
 | Rf | yes | no | no | yes (`atoms/rf.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, pp. 1538, 2358; compound chemistry deferred to XXXVII |
 | Db | yes | no | no | yes (`atoms/db.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, p. 1538; compound chemistry deferred to XXXVII |
 | Sg | yes | no | no | yes (`atoms/sg.edn`) | done | Existing calculated atomic occupation retained with HW citation; no additions |
-| Bh | yes | no | no | yes (`atoms/bh.toml`) | done |  |
+| Bh | yes | no | no | yes (`atoms/bh.edn`) | done | Existing calculated atomic occupation retained with checked HW citation; no additions |
 | Hs | yes | no | no | yes (`atoms/hs.toml`) | done |  |
 
 Extend this table as new elements are considered.
 
 ### Organic compounds
 
-| Class | Scope | Conformance dir | Status | Notes |
-|-------|-------|-----------------|--------|-------|
-| Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles | `hydrocarbons/` | done | 51 files, `implicit_h=true`, `?{CHn}` |
-| Alcohols / ethers | R–OH, R–O–R′ | — | todo | |
-| Carbonyl derivatives | Aldehydes, ketones, carboxylic acids, esters, amides | `carbonyl_derivatives/` | review | 62 files, `implicit_h=true`, non-aromatic |
-| Organic halides | R–F, R–Cl, R–Br, R–I | — | todo | |
-| Other | Amines, thiols, etc. | — | todo | |
-| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, ethers, amines, nitroso, nitro, sulfoxides, hydrazines, diazo/azo | `functional_groups/` | review | 73 files, `implicit_h=true` |
-| Heterocycles | Non-aromatic O/N/S heterocycles, crown ethers, bridged/fused | `heterocycles/` | review | 52 files, `implicit_h=true` |
+Chapters refer to Beyer/Walter, 25th edition. Polycyclic, charged and stereo-defined
+compounds from any chapter may also fall under the classes below.
+
+| Class | Scope | Conformance dir | Chapters | Status | Notes |
+|-------|-------|-----------------|----------|--------|-------|
+| Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles, non-aromatic annulenes | `hydrocarbons/` | 4, 5, 25 | done | 53 files, including the `k33` and `k5` graph-topology inputs |
+| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, thiols, ethers, thioethers, amines, nitroso, nitro, sulfoxides, hydrazines, diazo/azo; N, P, S and Si groups to be extended | `functional_groups/` | 6–10, 16 | review | 74 files |
+| Carbonyl derivatives | Aldehydes, ketones, carboxylic acids, esters, amides, other acid derivatives, carbonic acid derivatives | `carbonyl_derivatives/` | 12–16 | review | 62 files, non-aromatic |
+| Heterocycles | Non-aromatic heterocycles, crown ethers, bridged/fused | `heterocycles/` | 8, 9, 28–36 | review | 53 files |
+| Aromatic | Aromatic carbocycles, heterocycles and ions | `aromatic/` | 18–25, 28–35 | review | 102 files, including non-carbon rings |
+| Stereochemistry | Tetrahedral and cis/trans inputs | `stereo_tetrahedral/`, `stereo_cis_trans/` | any | review | 36 files |
+| Organometallics | Main-group and transition-metal organyls | `organometallics/` (noted) | 11 | todo | Created after the HW pass finishes |
+| Organoelement compounds | Organic P, As, Si and B compounds | `organoelement/` (noted) | 10 | todo | Created after the HW pass finishes |
+| Reactive intermediates | Carbocations, carbanions, radicals, carbenes, nitrenes, ylides | `reactive_intermediates/` (planned) | any | todo | Expanded in a separate reaction-mechanism step |
+| Metabolites | Carbohydrates, amino acids, peptides, nucleic acid components, lipids, cofactors, pigments, vitamins, hydroxy acids | `metabolites/` (planned) | 13, 15, 17, 28, 35, 37, 38 | todo | Vitamins occur across chapters |
+| Natural products | Terpenes, steroids, alkaloids | `natural_products/` (planned) | 26, 27, 36 | todo | |
 
 Extend this table as new organic classes are added.
 
@@ -555,17 +290,17 @@ Extend this table as new organic classes are added.
 
 Per element, add explicit resolution inputs that cover:
 
-- Free atom query (with explicit `implicit_h` policy)
+- Free atom query (with explicit hydrogen handling in `:config-overrides`)
 - At least one bonded case when chemically meaningful
 - Relevant charge states (for ion stage)
 - At least one "should fail" case where useful to constrain over-broad matching
 
 Suggested naming pattern:
 
-- Atomic ground state: `tests/resolution/data/atoms/<element>.toml`
-- Atomic valence/excited variants: `tests/resolution/data/atoms/<element>_<motif>.toml`
-- Ionic ground state: `tests/resolution/data/atomic_ions/<element><charge>.toml`
-- Ionic valence/excited variants: `tests/resolution/data/atomic_ions/<element><charge>_<motif>.toml`
+- Atomic ground state: `tests/resolution/data/atoms/<element>.edn`
+- Atomic valence/excited variants: `tests/resolution/data/atoms/<element>_<motif>.edn`
+- Ionic ground state: `tests/resolution/data/atomic_ions/<element><charge>.edn`
+- Ionic valence/excited variants: `tests/resolution/data/atomic_ions/<element><charge>_<motif>.edn`
 
 Conventions:
 
@@ -573,12 +308,30 @@ Conventions:
 - `<charge>`: signed integer with explicit sign, e.g. `+1`, `-2` (no underscore between element and charge).
 - `<motif>`: lowercase, underscore-separated descriptor; may encode occupation and optional multiplet.
 
+Organic additions follow Beyer/Walter, 25th edition, chapter by chapter from chapter 4.
+Coverage aims at all compound classes and functional groups, those of N, P, S and Si in
+particular, organometallic compounds and a good selection of compounds found in nature.
+Not every compound encountered is added, and a fixture need not add an atom state. These
+are judgment calls that favor inclusion: the suite is feature-gated, so its size is not a
+constraint. Primary literature is consulted where the book is insufficient. Proposed
+fixtures, atom types and ValenceTable entries are reviewed by chapter, then added in batch.
+
+Each compound has one input carrying all its relevant features, including aromaticity and
+stereo, with hydrogens implicit. Separate Kekulé inputs are not paired with natural
+compounds; Kekulé encodings of aromatic compounds and heterocycles may be added later.
+
 ## Categories
 
 The [conformance suite breakdown](#conformance-suite-breakdown) lists the current
 categories. Donor–acceptor adducts use `donor_acceptor/`, including charged adducts.
 The `hydrogen_bonds/` fixtures check resolution of graphs carrying explicit Hbd
 relations, including their preservation alongside localized and multicenter bonds.
+
+Categories are a rough classification, and a compound fitting several may use any of
+them. Existing fixtures may move when a better category appears. `metabolites/`,
+`natural_products/` and `reactive_intermediates/` are planned; `organometallics/` and
+`organoelement/` are noted until the HW pass finishes. The
+[organic compounds](#organic-compounds) table lists their scope.
 
 The former `implicit_h=true/false` setting was the precursor to atom defaults.
 EDN inputs use MoleculeDefaults with per-input `:config-overrides`; hydrogen
@@ -591,11 +344,11 @@ handling follows those defaults and explicit atom predicates.
 - `hydrides/`: `h2`, `bh3`, `ch4`, `nh3`, `h2o`, `hf`, `sih4`, `ph3`, `h2s`, `hcl`, `ash3`, `h2se`, `hbr`, `sbh3`, `h2te`, `hi`
 - `inorganic_small/`: neutral small inorganics (explicit H only): e.g. `bf2`, `bf3`, `bn`, `c2`, `ch3`, `ch2_singlet`, `ch2_triplet`, `sih3`, `sih2_*`, `nh2`, `ph2`, `ash2`, `sbh2`, `oh`, `sh`, `seh`, `teh`, `br2`, `cl2`, `cn-`, `f2`, `i2`, `n2`, `o2`, etc. Added nitrogen oxides (NO, NO2, N2O, N2O3, N2O4), carbon compounds (CO2, CS2, COS, HCN), oxyacids/hydroxides (HNO2, HNO3, HClO, H2CO3, H3BO3, HOBr, HOI), N-H compounds (N2H4, NH2OH, N2H2), peroxides (H2O2, H2S2), halides (NF3, NCl3, PF3, PCl3, SF2, SiF4, SiCl4, BCl3, ClF, BrF), and other (O3, HNCO, HOCN, HSCN, HNCS).
 - `inorganic_ions/`: molecular ions (explicit H only): e.g. `bcl4-`, `cf3-`, `ccl3+`, `nh2-`, `nh4+`, `ph2-`, `ph4+`, `ash2-`, `ash4+`, `sbh2-`, `sbh4+`, `oh-`, `oh3+`, `sh-`, `sh3+`, `seh-`, `seh3+`, `teh-`, `teh3+`, `f-`, `cl-`, `br-`, `i-`, `sif3-`, `sicl3+`, etc.
-- `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`
-- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6). Total: 73 files, `implicit_h=true`.
-- `carbonyl_derivatives/`: non-aromatic carbonyl compounds (all `implicit_h=true`): aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid. Total: 62 files.
+- `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`, `k33`, `k5`
+- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6); ethyleneglycol, glycerol, methanediol (3); phenyloxenium (1). Total: 74 files.
+- `carbonyl_derivatives/`: non-aromatic carbonyl compounds: aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid. Total: 62 files.
 - `hypervalent/`: expanded-octet species (all `implicit_h=false`): SO2, SO3, H2SO3, H2SO4, SF4, SF6, H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3, HClO2, HClO3, HClO4, ClF3, IF5, SO4(2-), PO4(3-), ClO4(-). Total: 20 files.
-- `heterocycles/`: non-aromatic heterocycles (all `implicit_h=true`). O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6). Total: 52 files.
+- `heterocycles/`: non-aromatic heterocycles. O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6); cages and polyaza rings (urotropin, tetrahydrooctaazanaphthalene). Total: 53 files.
 
 ## Decision Log
 
@@ -639,6 +392,12 @@ handling follows those defaults and explicit atom predicates.
 - Added 6 `functional_groups/` compounds requested for S/N chemistry expansion: dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene.
 - Moved `beta-lactam` and `succinimide` from `heterocycles/` into `carbonyl_derivatives/` to keep carbonyl-centered compounds in one category.
 
+## Beyer/Walter extraction
+
+Source: [Schirmeister, Schmuck and Wich, Beyer/Walter Organische Chemie, 25. Auflage](<../materials/valence/Schirmeister T. et al . - Beyer Walter Organische_Chemie - 25. Auflage.pdf>).
+Page references are printed pages; PDF page = printed page + 22. Working data for each
+chapter is under `scratch/bw-chNN/`.
+
 ## HW extraction spike (2026-10-31)
 
 For each description, distinguish evidence for the species from evidence for the
@@ -665,13 +424,20 @@ with ligand donations are accepted under the standing instruction. Multicenter
 descriptions, complicated ternary compounds and capacity changes require explicit
 user review.
 
+Do not add speculative occupation states prospectively. A justified extension of
+an established assignment by analogy is acceptable, with restraint in adding new
+rows on analogy alone. Suggested electronic structures that use existing or
+approved types may be covered by conformance fixtures; identify adopted analogies
+as such rather than presenting them as established source assignments.
+
 Default multicenter entries are limited to common patterns or selected molecules
 for which no simpler description, multicenter or otherwise, is available. Delocalized
 molecular orbitals or a possible electron allocation alone do not justify additional
 atom types. Hydrogen-bond, donor–acceptor and aromatic descriptions retain their own categories.
-Whole-cage descriptions are allowed, particularly where no adequate smaller model
-is available. Reuse common per-atom contributions across cages; the restriction is
-on scaffold-specific atom types, not on the size of a multicenter relation.
+Use the smallest adequate multicenter units, preserving localized and dative bonds
+where they provide an adequate description. Whole-cage descriptions remain allowed
+where no adequate smaller model is available. Reuse common per-atom contributions
+across cages rather than adding scaffold-specific types.
 
 For descriptions requiring many multicenter bonds, require a common compound
 class before adding default states: the aggregate #m value does not constrain
@@ -2827,10 +2593,11 @@ depends on keeping the scratch directory.
 
 HW II, chapter XXVII, pp. 1844–1898 (chemistry through p. 1895), with the cited
 chapter-XXXII cross-references. Updated 2026-11-04. The accepted set of **260 new
-states: Cr 72, Mo 94, W 94** is implemented with inferred conformance coverage.
+metal states: Cr 72, Mo 94, W 94**, plus **two O bridge companions**, is implemented
+with inferred conformance coverage.
 All 11 earlier Cr/Mo/W/Sg states are retained with checked citations. Thirteen W
 phosphine-hydride occupations remain open by decision and are outside the selected
-counts, as are the other open rows and the optional O companion proposal.
+counts, as are the other open rows.
 
 #### Chromium-group work table
 
@@ -2893,27 +2660,28 @@ transition-metal chapters. Oxo bonds remain ordinary E=O unless stated otherwise
 | Crg34 | Extended binary oxides/halides/sulfides, carbides, nitrides, borides; highly charged nitridometallates; larger polyoxo-, sulfido- and halide clusters | Extracted; no additional default states selected | HW 1860, 1863, 1874–1890. Retain the distinction between bulk formulas and finite molecular graphs. The low-spin d³ CrN3⁶− statement on p. 1863 is recorded here, not used to replace the ordinary Cr(III) quartet. No broad cluster MC states |
 | Crg35 | CrF6; MoCl6; WMe4/WMe8²−; Cr(O2)4²−; specialized ligand rearrangements and higher assemblies | Unselected | HW itself questions the first four assignments (1855, 1872, 1894); Cr(O2)4²− is only a postulated transient, 1854–1855. No extra states from exotic scaffolds or hypothetical species |
 | Crg36 | Cr#u3#v3; #c+3#u3#t3 | Implemented; 2 | Cr(NiPr2)3: A68, p. 495, gives μeff = 3.80 BM, temperature-independent over 298–123 K. BHN71, p. 412, identifies the zero-field-split d³ ESR, g∥ = 2 and g⊥ = 4 at 130 K. These support the quartet; the room-temperature g = 1.975 signal is an oxygen-complex impurity |
-| Crg37 | O#c-#n#v#d2; O#c-#n#h#d2 | Proposed; 2 O companions, outside the selected metal count | Doubly bridging OH− with explicit/implicit H, HW 1860, 1880, 1893; adopted donor allocation (PW). Needed for the all-donor hydroxo-dimer graphs, not for coverage of any new metal state. Both forms pass all four resolver/policy combinations and the electron-count validator with the candidate entries and O capacity 8 |
+| Crg37 | O#c-#n#v#d2; O#c-#n#h#d2 | Implemented; 2 O companions | μ₂-hydroxido donors with explicit/implicit H, HW 1860, 1880, 1893; adopted donor allocation (PW). One pair donated to each metal, one pair retained. Both Mo2(OH)2(H2O)8⁴+ fixtures infer the O states and pass the electron-count validator in all four resolver/policy combinations; O capacity 8 unchanged |
 
 #### Chromium-group limits and coverage
 
 Expansion under the registry's concrete zero defaults and deduplication against
 the 11 earlier states gives 260 implemented new metal states. All satisfy the
-nonbonding budget and capacity 18. The ValenceTable is unchanged: Counts uses the
-table shifted by `2t − charge` and the actual element's capacity. Supplied #u
+nonbonding budget and capacity 18. The two O companions fit capacity 8.
+The ValenceTable is unchanged: Counts uses the table shifted by `2t − charge` and
+the actual element's capacity. Supplied #u
 preserves unpaired occupations when Counts' default pairing would differ.
 Crg27 adds the only two metal MC states; no aromatic metal state was added.
 
-All 260 new metal states have inferred coverage in 260 independent fixtures:
-168 `donor_acceptor`, 41 `hydrides`, 32 `inorganic_ions`, 11 `atomic_ions` and
-8 `inorganic_small`. Their inputs omit target-metal lone pairs, localized valence
-and accepted-pair counts. AtomTyping and Counts, each with Strict and
+All 260 new metal states and both O companions have inferred coverage in 262
+independent fixtures: 170 `donor_acceptor`, 41 `hydrides`, 32 `inorganic_ions`,
+11 `atomic_ions` and 8 `inorganic_small`. Their inputs omit target-atom lone pairs,
+localized valence and accepted-pair counts. AtomTyping and Counts, each with Strict and
 MostSaturated, infer the expected states and agree on the complete output graphs.
-The independent audit checks 280 target atoms across those four configurations
-(1,120 checks), including electron conservation. The Mo#c+3#v3#t6 fixture uses
-Cp2MoH3+; a hydroxo-dimer donor fixture would also need Crg37's unselected O states.
+The independent audit checks 288 target atoms across those four configurations
+(1,152 checks), including electron conservation. Crg37's explicit-/implicit-H
+fixtures also cover both Mo atoms; neither supplies O lone pairs or donation counts.
 
-Verification: 3,594 graph unit tests, 223 graph property tests and 2,236 resolution
+Verification: 3,594 graph unit tests, 223 graph property tests and 2,238 resolution
 conformance cases pass. All 1,976 pre-chapter snapshots are unchanged. The
 existing-entry citation/comment audit is complete; the 13 open W occupations,
 Crg31 source checks and intact-H2 accounting remain outside this selection.
@@ -2952,3 +2720,328 @@ obtained from university repositories. Crg31 records the outstanding
 structure/occupation evidence. Crg28g remains open by decision.
 Intermediates and the count audit are in `scratch/hw-chromium-review/`; retained
 source material is in `materials/valence/`.
+
+### Manganese group
+
+HW II, chapter XXVIII, pp. 1899–1933 (chemistry through p. 1931), with the cited
+chapter-XXXII cross-references. Selected scope implemented 2026-11-04:
+**243 additions: Mn 62, Tc 60, Re 121**, covered by 242 fixtures. Mn capacity
+18 → 21 is implemented; ValenceTable is unchanged. All nine earlier Mn/Tc/Re/Bh
+states are retained with checked citations.
+
+#### Manganese-group work table
+
+E = Mn, Tc, Re; M = Tc, Re. A prefix applies to every following suffix in its cell.
+Only new states are listed after reuse across rows; counts include all displayed
+explicit/mixed/implicit-H forms. Entries use the concrete, zero-valence registry
+defaults. “Implemented” records the selection approved and added on 2026-11-04. Ordinary oxo bonds and anionic-ligand donation follow the preceding
+chapters' graph conventions.
+
+| ID | States / extracted family | Status; new states | Examples and evidence |
+| --- | --- | --- | --- |
+| Mng01 | E#n#u5; Bh#n#u5; Mn#c+2#u5; Mn#c+2#n2#u; Mn#c+3#u4; Mn#c+3#n#u2; Mn#u3#v4 | Retained; 9 existing | Atomic occupations: HW II, p. 1538; Mn(II/III) occupations, pp. 1906–1907, 1910; Mn(IV), 1907, 1914–1915. The neutral #v4 comment now identifies MnF4/MnR4 |
+| Mng02 | E#c+4#u3; #c+5#u2; #c+6#u; #c+7 | Implemented; 12 | IV–VII ionic occupations, d³/d²/d¹/d⁰. HW 1901, 1907, 1911–1913, 1917, 1921–1922. Free-ion occupations do not determine those of coordinated complexes. |
+| Mng03 | M#c+2#u5; #c+3#u4 | Implemented; 4 | II/III free-ion occupations, d⁵/d⁴, for the chapter's lower-valent chemistry. HW 1917, 1923. The corresponding Mn states already exist. |
+| Mng04 | Mn#u5#v2; #c+2#u5#t2; #c-#u5#v3; #c+2#u5#t3; #c-2#u5#v4; #c+2#u5#t4 | Implemented; 6 | Monomeric MnR₂, [MnMes₃]−, [MnMe₄]²−; MnX₄²− and tetrahedral high-spin Mn(CN)₄²−. HW 1903–1904, 1906–1907, 1913–1914. Ordinary bonds or anionic-ligand donors. |
+| Mng05 | Mn#u5#v2#t2; #u5#v2#t4; #c-#u5#v3#t3; #c+2#u5#t6; #c-4#u5#v6 | Implemented; 5 | MnX₂L₂, MnCl₂·4H₂O, MnBr₂(dmpe)₂, [Mn(OH)₃(H₂O)₃]−, Mn(H₂O)₆²+/Mn(NH₃)₆²+, MnCl₆⁴−. HW 1903, 1905–1907; G85, pp. 1340–1341, explicitly establishes high-spin MnBr₂(dmpe)₂/MnI₂(dmpe)₂. |
+| Mng06 | Mn#c+2#u5#t7; #c-2#u5#v4#t3; #c+2#u5#t8; #c-6#u5#v8 | Implemented; 4 | [Mn(edta)(H₂O)]²− and [Mn(NO₃)₄]²−: seven/eight donors, or ordinary anionic O bonds with the other donors retained. HW 1902, 1906–1907. Counts electron counts 19/21 use the implemented Mn capacity 21. |
+| Mng07 | Mn#c+2#n2#u#t6; #c-4#n2#u#v6; #n2#u#v2#t4 | Implemented; 3 | Low-spin Mn(CN)₆⁴−, Mn(CNR)₆²+, MnMe₂(dmpe)₂ and MnCp*₂; HW 1907, 1914; G85, p. 1343, explicitly distinguishes the low-spin methyl from the high-spin halides. The haptic Cp graph reuses the six-accepted-pair state. |
+| Mng08 | Mn#c+3#u4#t5; #c-2#u4#v5; #c+3#u4#t6; #u4#v3#t3; #c-3#u4#v6; #c-#u4#v4; #c+3#u4#t4 | Implemented; 7 | MnCl₅²−, Mn(H₂O)₆³+, Mn(acac)₃, Mn(OH)₆³− and explicitly high-spin MnMe₄−/MnMe₅²−. HW 1907–1910, 1914. Anionic donors or ordinary ligand bonds; acac retains its neutral O donor. |
+| Mng09 | Seven-coordinate Mn(NO₃)₃(bipy) | No addition; uncertain occupation | HW 1902 gives the geometry; 1910 discusses predominantly high-spin Mn(III) but does not assign this particular complex. No prospective coordination/occupation state is selected for this specific mixed-ligand example |
+| Mng10 | Mn#c-3#n#u2#v6; #c+3#n#u2#t6 | Implemented; 2 | Low-spin Mn(CN)₆³−, HW 1907–1908, 1910. Paired plus two unpaired d electrons, distinct from the high-spin III family. |
+| Mng11 | Mn#c+4#u3#t4; #c-2#u3#v6; #c+4#u3#t6; #u3#v4#t2; #c+#u3#v3#t3 | Implemented; 5 | MnF₄/MnR₄; MnF₆²−, MnCl₆²−, Mn(CN)₆²−, MnMe₆²−; MnMe₄(PMe₃)₂ and CpMnR₃. HW 1907–1908, 1914–1915. Existing Mn#v4#u3 supplies the neutral four-bond state. |
+| Mng12 | Mn#u2#v5; #c-3#u2#v8; #u#v6; #c-2#u#v8; #c+2#u#v4#t2 | Implemented; 5 | MnO₄³−/MnO₄²−, explicitly paramagnetic d²/d¹, and MnO₂Cl₂. HW 1904, 1907, 1911–1912. Ordinary oxo graphs, including all-double-bond charge placement; the last state retains Mn=O and makes the chlorides donors. MnOCl₃ reuses #u2#v5; see Mng30a. |
+| Mng13 | E#v7; #c-#v8; #c+#v6#t | Implemented; 9 | EO₄−, E₂O₇ and EO₃X (X = F/Cl), HW 1912–1913, 1921, 1924–1925. Ordinary E=O; the last state makes X− a donor. C₆F₅Mn(NtBu)₃ and MeMO₃ reuse #v7 (1915, 1930). |
+| Mng13a | Tc#c+#v6 | Implemented; 1 | TcO₃+: F82, pp. 5304, 5306, characterizes the d⁰ trioxocation by ⁹⁹Tc/¹⁷O NMR in HF and reports TcO₃AsF₆ stable to pumping at room temperature. Three ordinary Tc=O bonds. |
+| Mng14 | E#c+#n3#t6; #n3#v#t5; #n3#h#t5; #c-#n4#t5; #c-3#n5#t4; #c-5#n3#v6 | Implemented; 18 | E₂(CO)₁₀, EH(CO)₅, E(CO)₅−, E(CO)₄³− and E(CN)₆⁵−; HW 1902–1903, 1914, 1923–1924, 2111–2113, 2135–2137. GKB78, pp. 1414–1415, confirms the Re(CN)₆⁵− formulation. The six-pair cation is also the CN−/H−-donor allocation. ReCl(PMe₃)₅ reuses #n3#v#t5 (1923). |
+| Mng14b | Re#c-#n3#v2#t4; #c-#n3#v#h#t4; #c-#n3#h2#t4 | Implemented; 3 | ReH₂(CO)₄−, HW 2136–2137: ordinary terminal H, all explicit/mixed/implicit forms. HRe₂(CO)₉− reuses the explicit and mixed-H states with an ordinary Re–Re bond; H−-donor descriptions reuse Mng14. |
+| Mng15 | M#u#v6; #c-#u#v7; #c-2#u#v8; #c+6#u#t6; #c+6#u#t7; #c+6#u#t8 | Implemented; 12 | MF₆, MF₇− and MF₈²−, d¹; HW 1921. ReCl₆, ReMe₆ and ReMe₈²− reuse these states (1921, 1930). TcCl₆ is not used as evidence. |
+| Mng16 | M#c-2#u3#v6; #c+4#u3#t6; #u3#v4#t2 | Implemented; 6 | Octahedral MX₆²− and MX₄(PR₃)₂, d³; HW 1922. The eight-coordinate diars case remains outside this selection. |
+| Mng17 | M#c-#u2#v6; #c+5#u2#t6 | Implemented; 4 | Octahedral MF₆−, d²; HW 1922 and its octahedral ligand-field treatment. No spin-paired alternative is inferred; the polymeric/dimeric pentahalides are treated in Mng34/Mng34a. |
+| Mng18 | Re#c+#v6; #c+7#t6; #c+7#t7; #c+7#t8 | Implemented; 4 | ReF₆+, ReF₇ and ReF₈−, HW 1921. Ordinary F bonds or F− donors; neutral #v7 and negative #v8 are reused. No MC alternative. |
+| Mng19 | Re#c+5#v2#t5; #c+5#v2#t6; #c+3#v4#t3; #c+#v6#t2; #c+3#v4#t4; #c+#v6#t3 | Implemented; 6 | ReOF₅/ReOF₆−, molecular ReO₂Cl₃ and its chloride-bridged dimer, ReO₃Cl₃²−; HW 1921. ReO₃(pmdta)+ and CpReO₃ reuse the last state (1925, 1930). Oxo bonds stay ordinary; bridging Cl− uses the existing donor convention. |
+| Mng20 | Re#c+4#u#v2#t4; #c+4#u#v2#t5 | Implemented; 2 | ReOCl₄/ReOBr₄ and ReOX₅−, d¹; HW 1921. Ordinary halide descriptions reuse #u#v6 and #c-#u#v7. |
+| Mng21 | Re#v7#t; #v7#t2; #c+2#v5#t3; #c+4#v3#t5 | Implemented; 4 | Re₂O₇(D)₂, MeReO₃(D)/(D)₂, methylrhenium mono-/diperoxo adducts and O[ReO(O₂)₂(H₂O)]₂; HW 1924–1925, 1930–1931. S15, Fig. 2 (5), supplies the concrete 4,4′-dimethyl-2,2′-bipyridine adduct for #v7#t2. Ordinary peroxo bonds or peroxide-O− donors; O–O bonds retained. No cluster-specific MC state. |
+| Mng22 | M#c-2#v9; #c-2#v8#h; #c-2#v7#h2; #c-2#v6#h3; #c-2#v5#h4; #c-2#v4#h5; #c-2#v3#h6; #c-2#v2#h7; #c-2#v#h8; #c-2#h9; #c+7#t9 | Implemented; 22 | MH₉²−, explicitly diamagnetic with nine terminal hydrides; HW 1919–1920. All explicit/mixed/implicit-H forms and H− donors. #c-2#v9 also covers O₃M≡N²− (1927); ReO₃Cl₃²− reuses it. Maximum electron count 18. |
+| Mng23 | Re#c-#v8#t; #c-#v7#h#t; #c-#v6#h2#t; #c-#v5#h3#t; #c-#v4#h4#t; #c-#v3#h5#t; #c-#v2#h6#t; #c-#v#h7#t; #c-#h8#t; #v6#h#t2; #v5#h2#t2; #v4#h3#t2; #v3#h4#t2; #v2#h5#t2; #v#h6#t2; #h7#t2 | Implemented; 16 | ReH₈(PR₃)− and classical ReH₇(PR₃)₂ with alkyl phosphines; HW 1919–1920. All H-count splits; H−-donor forms reuse Re#c+7#t9. The aryl-phosphine ReH₅(H₂)(PR₃)₂ description is excluded from this row. |
+| Mng24 | Re#n#v5#t3; #n#v4#h#t3; #n#v3#h2#t3; #n#v2#h3#t3; #n#v#h4#t3; #n#h5#t3; #c+5#n#t8; #n2#v3#t4; #n2#v2#h#t4; #n2#v#h2#t4; #n2#h3#t4; #c+3#n2#t7 | Implemented; 12 | Classical ReH₅(PR₃)₃ and ReH₃(PR₃)₄; HW 1919 and the closed-shell 18-electron statement on 1920. The latter page misprints ReH₄(PR₃)₃. RJ23, pp. 3, 9–10, supports the classical hydrides: trihydride H positions are inferred from the Tc analogue, pentahydride H positions located and refined. ReH(PR₃)₅ reuses Mng14. |
+| Mng25 | Re#c-4#n2#v7 | Implemented; 1 | Diamagnetic, low-spin d⁴ Re(CN)₇⁴−, HW 1923 and explicitly GKB78, p. 1412; the CN−-donor state Re#c+3#n2#t7 is reused. The Tc homologue is supported separately in Mng32. |
+| Mng26 | Tc#c+3#v4#t4; Tc#c-#v8#t; Tc#c+3#v4#t5; Re#c+3#v4#t5 | Implemented; 4 | M₂X₈²−, including an axial donor per M; explicit quadruple M–M bond. HW 1922–1923 and 1928, including p. 1922 footnote 6. Re₂Me₈²− reuses the unadducted states (1929). |
+| Mng27 | Reuses preceding rows | Implemented; 0 | Binary Re₃X₉ trimers and Re₃X₉L₃; HW 1922, 1928. Two ordinary Re=Re bonds per metal and two bridging X− donors; no aggregate MC encoding. The gas-phase trimer and adduct structures are explicitly distinguished from the extended solid. |
+| Mng28 | Re#c+4#v3#t6; #n#v5#t2; #c+2#n#v3#t4 | Implemented; 3 | Re₂Cl₉− and Re₂Cl₄(PR₃)₄ with explicit Re≡Re bonds; HW 1922–1923, 1928, Table 28.3. For the Re(II) dimer, #n is the residual paired two-electron budget after its triple bond. Bridging Cl− uses existing types. |
+| Mng29a | Mn#u6#v; #u6#h; #c+#u6#t | Implemented; 3 | MnH, ⁷Σ⁺: WA03MnRe, pp. 4086–4087, matrix IR and comparison with gas-phase spectroscopy. Explicit/implicit H and H− donor. |
+| Mng29b | Mn#u5#v#h; #u5#h2 | Implemented; 2 | MnH₂, sextet: WA03MnRe, p. 4087, isotope-resolved IR agrees with CCSD(T)/DFT frequencies. Geometry differences do not change the occupation. Explicit-H and H−-donor states reuse Mng04; these are the mixed/implicit-H forms. |
+| Mng29c | Mn#c-#n#u4#v2; #c-#n#u4#v#h; #c-#n#u4#h2; #c+#n#u4#t2 | Implemented; 4 | MnH₂−, quintet: WA03MnRe, pp. 4085, 4087–4088, Table 3 and isotope-resolved IR assignment, also tied to prior gas-phase photodetachment. All H splits and H− donors. |
+| Mng29d | Re#n#u4#v; #n#u4#h; #c+#n#u4#t | Implemented; 3 | ReH, ⁵Σ⁺: WA03MnRe, p. 4088, both DFT methods favor this over the septet and its frequency agrees with matrix IR. Explicit/implicit H and H− donor. |
+| Mng29e | Re#u5#v2; #u5#v#h; #u5#h2; #c+2#u5#t2 | Implemented; 4 | ReH₂, sextet ⁶A₁: WA03MnRe, p. 4088. Both functionals' sextet frequencies fit the isotope-resolved spectrum; the paper explicitly rejects the nearby calculated quartet's frequencies. All H splits and H− donors; no quartet proposal. |
+| Mng29f | Re#n#u#v4; #n#u#v3#h; #n#u#v2#h2; #n#u#v#h3; #n#u#h4; #c+4#n#u#t4 | Implemented; 6 | ReH₄, doublet ²A₁: WA03MnRe, pp. 4086, 4088–4089, Table 6 and reaction 5; isotope-resolved stretching and bending bands support the assignment. All H splits and H− donors. ReH₃ is calculated but not identified and supplies no proposal. |
+| Mng30 | CpMnO₂ | No addition; uncertain occupation | HW 1915. No reviewed primary occupation assignment; no prospective state is selected. MnOCl₃ and the terminal nitrido complexes are resolved below |
+| Mng30a | Mn#c+3#u2#v2#t3 | Implemented; 1 | MnOCl₃: JH75, p. 1269, explicitly assigns the triplet ³A₂ ground state; pp. 1270–1271 compare the calculated transitions with its optical spectrum. Ordinary Mn=O and three Cl− donors. The all-ordinary graph reuses Mn#u2#v5 in Mng12; HW 1907. |
+| Mng30b | Mn#n#v5#t2; #c+2#n#v3#t4 | Implemented; 2 | Mn(salen)N and saldpen analogues: C98, p. 3108, explicitly assigns the paired ¹A′ ground state. Ordinary Mn≡N; two imine donors and either ordinary Mn–O bonds or two phenolate-O− donors. HW 1911's terminal nitrido-Mn(V) class. |
+| Mng31 | Re#c+3#n#v2#t5; #c+#n#v4#t4 | Implemented; 2 | Paired Re(V): ReOCl₃(PPh₃)₂ and ReNCl₂(PPh₃)₂, FL71, p. 2691, Table 2; trans-ReO₂(en)₂+, GW66, p. 1227. Ordinary Re=O/Re≡N; ordinary or donating Cl−. The ordinary #n#v5#t2 and nitrido donor #c+2#n#v3#t4 states reuse Mng28. |
+| Mng31a | Re#c-2#n#v7; #c-#n#v6#t | Implemented; 2 | ReOCl₅²− and ReOCl₄(PPh₃)−: FL71, pp. 2689–2691, establishes paired d²; earlier large ReOCl₅²− moments arose from ReCl₆²− contamination. Chloride-donor graphs reuse Mng31. No assignment to bare ReOCl₄− is inferred from the phosphine adduct. |
+| Mng31b | ReNCl₄²−; remaining Tc/Re(V) oxocyanides | Fixture candidates; 0 new states | HW 1924, 1927–1928: ReNCl₄²−, ReO(OH)(CN)₄²− and Re₂O₃(CN)₈⁴−. TJD80/T79 establish TcO(CN)₅²− and TcO(OMe)(CN)₄²− without an explicit occupation assignment. GKB78 confirms the Re oxo-bridged dimer's formulation without assigning its occupation. Paired fixture descriptions may use analogy with the accepted oxo/nitrido assignments, reusing Mng28/Mng31/Mng31a/Mng31c. No prospective occupation states. The dioxocyanides and ReOX₄− are resolved in Mng31e–g |
+| Mng31c | Tc#c-#n#v6; #c+3#n#v2#t4; #c-2#n#v7; #c+3#n#v2#t5 | Implemented; 4 | TcOCl₄− and TcOCl₅²−, paired d²: T79, pp. 48, 74, 87–88, reports the former's susceptibility and summarizes diamagnetism of the latter. J13, pp. 1098–1101, establishes their five-/six-coordinate structures and analyzes the electronic levels. Ordinary Tc=O; ordinary or donating Cl−. |
+| Mng31d | Tc#c+2#n#v3#t4; #c+3#u#v3#t4; #c+4#u#v2#t4 | Implemented; 3 | TcNX₄²− (paired d²), TcNX₄− (d¹), X = Cl/Br, and TcOCl₄ (d¹): B98, pp. 2303–2307, explicitly assigns the occupations using spectroelectrochemistry and calculations. The reduced nitrido ions and neutral TcOCl₄ are characterized in solution; TcNX₄− salts are isolated. Ordinary graphs reuse Mng31c/Mng15. No neutral TcOBr₄ proposal. |
+| Mng31e | Re#c-3#n#v8 | Implemented; 1 | trans-ReO₂(CN)₄³−: W84, pp. 83, 148, 152, gives the measured compound and explicitly assigns the diamagnetic ¹A₁g[(b₂g)²] ground state in its spectroscopic analysis. Two ordinary Re=O and four Re–CN bonds; the CN−-donor graph reuses Re#c+#n#v4#t4 from Mng31. HW 1924. |
+| Mng31f | Tc#c-3#n#v8; #c+#n#v4#t4 | Implemented; 2 | trans-TcO₂(CN)₄³−: F82, pp. 5303, 5305, explicitly identifies diamagnetic d² Tc(V) and reports its ⁹⁹Tc NMR spectrum. Two ordinary Tc=O bonds with either four ordinary Tc–CN bonds or four CN− donors; TJD80 supplies the structure. Both allocations count 18 electrons. |
+| Mng31g | Re#c-#n#v6; #c+3#n#v2#t4 | Implemented; 2 | ReOX₄−, X = Cl/Br/I: CL66, pp. 9–11, characterizes the salts; p. 14 explicitly assigns paired d² to the square-pyramidal family, based on the measured susceptibility of the bromide. Ordinary Re=O with ordinary halide bonds or X− donors; both count 14 electrons. The solvent adducts reuse Mng31/Mng31a. |
+| Mng32 | Tc#c-4#n2#v7; #c+3#n2#t7 | Implemented; 2 | Tc(CN)₇⁴−: TJD80, pp. 1994–1995, establishes the isolated salt, pentagonal-bipyramidal structure by IR/Raman and diamagnetic d⁴ singlet ground state by susceptibility. Resolves HW 1923's tentative existence. Ordinary CN bonds or CN− donors. |
+| Mng33 | Cp₂TcH | Fixture candidate; 0 new states | HW 1928–1930; FS67, p. 93, establishes a monomeric terminal hydride by IR, NMR and mass spectroscopy, with a proposed bent structure analogous to Cp₂ReH. No electronic occupation is explicitly assigned. A paired d⁴ fixture by analogy with LH76's Cp₂ReH assignment can use H− donation and accepted Tc#c+3#n2#t7 (Mng32). The additional localized-H states Tc#c+2#n2#v#t6 and Tc#c+2#n2#h#t6 are not selected. FN59's anomalous TcI₂(diars)₂ moment remains unused |
+| Mng33a | Tc#n2#v3#t4; #n2#v2#h#t4; #n2#v#h2#t4; #n2#h3#t4 | Implemented; 4 | TcH₃(PPh₃)₄: JEA21, pp. 3096–3097, explicitly assigns paired d⁴, supported by resolved NMR; X-ray diffraction locates all three classical hydrides. All explicit/mixed/implicit-H forms; the H−-donor state reuses Mng32. The mixed PPh₃/PMe₃ nonclassical hydride is not included. |
+| Mng33b | Re#c+2#n2#u#t6 | Implemented; 1 | ReCp*₂: HW 1929; M24, accepted manuscript pp. 3–4, 9–10, explicitly assigns the low-spin d⁵ ²E₂ ground state, consistent with earlier magnetic and spectroscopic measurements. Two six-electron Cp*− donors; two pairs and one unpaired electron on Re. Counts 17 electrons; no MC state. |
+| Mng33c | Tc#n2#u#v2#t4; #c+2#n2#u#t6 | Implemented; 2 | TcX₂(dppe)₂, X = Cl/Br: FH70, pp. 454, 459–460, explicitly assigns octahedral low-spin d⁵ (²T₂), supported by magnetic moments and optical spectra. Two ordinary Tc–X bonds and four P donors, or six anionic/neutral donors; 17 electrons. FN59 leaves TcI₂(diars)₂'s anomalous moment unresolved; that compound is not used as occupation evidence. |
+| Mng33d | Re#n2#u#v2#t4 | Implemented; 1 | ReX₂(diars)₂, X = Cl/Br/I: FN59, p. 1039, explicitly assigns octahedral low-spin d⁵ with one unpaired electron. Two ordinary Re–X bonds and four As donors; the six-donor form reuses Mng33b. Both allocations count 17 electrons. |
+| Mng33e | M#c+#n#u2#v2#t4; #c+3#n#u2#t6 | Implemented; 4 | [TcX₂(dppe)₂]+ (X = Cl/Br) and [ReX₂(diars)₂]+ (X = Cl/Br/I): FH70, pp. 454, 458–459, assigns low-spin d⁴ (³T₁); FN59, p. 1039, explicitly relates the Re moments to two unpaired electrons with strong spin–orbit coupling. One pair plus two unpaired electrons. Two ordinary M–X bonds and four P/As donors, or six donors; 16 electrons. Distinct from the paired seven-coordinate d⁴ states. |
+| Mng33f | Re#n#u2#v3#t3 | Implemented; 1 | mer-ReX₃(PR₃)₃, X = Cl/Br: NMR68, p. 420, gives the ³T₁g(t₂g⁴) parent term and its spin–orbit-coupled J = 0 ground level; CLM69, pp. 1674, 1677–1678, explicitly applies the t₂g⁴/second-order-paramagnetism description to ReCl₃(PR₃)₃. GL71, pp. 2230–2231, confirms the chloride/bromide magnetic behaviour. The parent occupation gives one pair and two unpaired electrons; J = 0 does not supply a #n2 alternative. Three ordinary Re–X bonds and three P donors; the six-donor form reuses Mng33e. Both count 16 electrons. |
+| Mng33g | Re#c+2#n2#v#t6; #c+2#n2#h#t6 | Implemented; 2 | Cp₂ReH: GPW58, pp. 3916–3918, 3921, establishes the terminal hydride by NMR/IR and diamagnetism over 77–510 K. LH76, p. 1731, diagram 4, explicitly fills two nonbonding orbitals, supporting paired d⁴. Two six-electron Cp− donors and explicit/implicit H; the H−-donor state reuses Mng24. All allocations count 18 electrons. |
+| Mng34 | Polymeric MF₅ and dimeric ReBr₅ | Fixture candidates; 0 new states | HW 1921–1922 establishes the connectivity and excludes Re–Re bonding in the pentahalide dimers. HP60, pp. 1101–1102, reports ReF₅ μeff = 1.41 μB at 295 K and antiferromagnetic interactions without assigning local spin. S = 1 fixture descriptions may use analogy with Re₂Cl₁₀ (Mng34a): all-halide donation reuses M#c+5#u2#t6 (Mng17); Re also has the mixed ordinary/donor state in Mng34a. No new Tc#c+#u2#v4#t2 or MC state is selected |
+| Mng34a | Re#c+#u2#v4#t2 | Implemented; 1 | Re₂Cl₁₀: HW 1921–1922 and V24, preprint pp. 3–4, 7, 10, explicitly establish S = 1 per d² Re and no Re–Re bond. Four ordinary terminal Re–Cl bonds and two bridging Cl− donors per Re; the all-Cl−-donor form reuses Mng17. No MC state. |
+| Mng35a | Re#c+4#n#v#t4#m0; Re#c+4#v3#t4#m0 | Implemented; 2 | Re₂H₈(PR₃)₄: four bridging and four terminal hydrides, two P donors per Re. HW 1919–1920, Fig. 28.7; FRW89, p. 3208, explicitly allows ordinary single- and triple-Re–Re descriptions. The monodentate-phosphine family includes PMe₃, PEt₃ and PMe₂Ph. Separate Re–H–Re 3c2e units and terminal H− donors; charge/contribution allocation: PW. No whole-dimer MC unit |
+| Mng35b | Re#c+2#n#v3#t3#m0; Re#c+2#n#v3#t4#m0 | Implemented; 2 | Re₂H₄(PMe₂Ph)₄[P(OCH₂)₃CEt]₂: three bridging hydrides, one terminal hydride, three P donors per Re and an ordinary Re≡Re bond. GHC82, p. 2319, locates all hydrides and explicitly assigns the triple bond. This is a specific mixed-phosphine/phosphite example of HW 1920, Fig. 28.7c's core, not evidence for every [ReH₂(PR₃)₃]₂ formulation. Separate 3c2e bridges and terminal H− donation; charge/contribution allocation: PW |
+| Mng36 | Eight-coordinate Tc/Re(IV) diars complexes; Mn₁₂/Mn₈₄ aggregates, higher Tc/Re clusters, solid nitridometallates and Mg₃ReH₇ | Outside initial default selection | HW 1904, 1909–1910, 1918–1920, 1923–1927. No per-scaffold MC entries or isolated finite molecules inferred from extended structures. An eight-donor d³ state would count 19 electrons; it is not used to propose a Tc/Re capacity increase |
+| Mng37 | Intact-H₂ adducts; mixed-valent dimers with formal half-integer M–M orders; reduced phthalocyanines/noninnocent dithiolates | Deferred representation/occupation; not counted | HW 1902, 1920, 1922, 1928. Keep ligand-based redox and H₂ distinct from ordinary hydride/metal-ion assignments |
+| Mng38 | TcF₇, TcCl₆, M(CN)₈³−/M(CN)₉²−, ReR₅/ReR₇; [MnBr(pmdta)]+ as a five-coordinate example | No addition from these citations | HW 1921, 1924, 1930 marks the first species unknown or uncertain. On p. 1902, the printed Mn formula has four donor atoms but is labelled trigonal-bipyramidal; the page image confirms the inconsistency |
+
+#### Manganese-group limits and coverage
+
+For these accepted ordinary/dative states, the Counts electron count is
+`7 − charge + v + h + 2t`; the nonbonding budget is `7 − charge − v − h = 2n + u`.
+Every added state passes that arithmetic, is distinct under the registry defaults,
+and is covered by inferred resolution in the 242 new fixtures.
+
+The implemented **Mn capacity 18 → 21** covers Mng06: 19 for [Mn(edta)(H₂O)]²− and
+21 for [Mn(NO₃)₄]²− in either listed allocation. The remaining 239 states fit 18.
+Tc/Re/Bh retain 18; in particular, MH₉²− counts 18, despite its nine localized H
+bonds. The four Re MC states in Mng35a/b also fit 18.
+
+There is no default ValenceTable entry for Mn/Tc/Re/Bh. Counts consults the shifted
+element's table and uses the actual element's capacity; a supplied literal H count
+bypasses saturation-target enumeration. The fixtures supply H counts and cover all
+selected explicit/mixed/implicit-H states without table changes. Existing free-ion
+states are preserved independently of complex occupations.
+Mng31b/Mng33/Mng34 are optional fixture examples using accepted types and explicitly
+identified analogies; they do not expand the 243-state selection. Registry membership
+and a passing fixture do not establish the actual occupation of those compounds.
+
+Mng35a/b use the existing H#c-#m2 with one Re–H–Re 3c2e relation per bridge,
+contributions [0,2,0]. Terminal hydrides use existing H#c-#d; P donors and the
+ordinary Re–Re bond remain separate. Residual Re pairs follow this allocation,
+not an independently assigned ionic occupation. Only these four Re#…#m0 states
+are accepted; localized/implicit terminal-H variants are not added to this selection.
+Three conformance fixtures cover the two octahydride graphs and the actual mixed-ligand
+tetrahydride graph. AtomTyping and Counts agree under Strict and MostSaturated,
+and the electron-count validator passes. All fit Re capacity 18.
+
+Verification: all 243 additions are inferred in the new snapshots, with 1,018
+resolved atom-state/invariant checks. MostSaturated AtomTyping and both Counts
+policies agree throughout. Strict AtomTyping also agrees except for the unpinned
+TcOCl₄− and ReOBr₄− inputs, which retain paired/triplet alternatives; MostSaturated
+selects the documented paired state.
+All 2,238 earlier inputs and snapshots are unchanged. The 2,480-case conformance
+suite, 3,594 graph unit tests, 223 graph property tests and 307 chemistry tests pass;
+formatting and Clippy for both changed crates pass.
+
+#### Manganese-group primary-source checks
+
+| Key | Source | Status and use |
+| --- | --- | --- |
+| S15 | Stolte et al., “Preliminary toxicity and ecotoxicity assessment of methyltrioxorhenium and its derivatives,” *Green Chem.* **17** (2015), 1136–1144. [DOI](https://doi.org/10.1039/C4GC01919A), [publisher HTML](https://pubs.rsc.org/en/content/articlehtml/2015/gc/c4gc01919a), [archived publisher text](../materials/valence/Stolte-2015-MTO-adducts-publisher-text.txt) | Publisher HTML reviewed; Fig. 2 (5) identifies the 4,4′-dimethyl-2,2′-bipyridine adduct used for Mng21's two-donor fixture. Journal and accepted-manuscript PDFs return 403; publisher text archived. No additional atom type |
+| G85 | Girolami et al., *J. Chem. Soc., Dalton Trans.* (1985), 1339–1348. [DOI](https://doi.org/10.1039/DT9850001339), [PDF](../materials/valence/Girolami-1985-divalent-dmpe-complexes.pdf) | Existing archived PDF reviewed for Mn: high-spin halides, pp. 1340–1341; low-spin MnMe₂(dmpe)₂, p. 1343. Mng05/Mng07 |
+| WA03MnRe | Wang and Andrews, “Matrix Infrared Spectra and Density Functional Theory Calculations of Manganese and Rhenium Hydrides,” *J. Phys. Chem. A* **107** (2003), 4081–4091. [DOI](https://doi.org/10.1021/jp034392i), [PDF](../materials/valence/Wang-Andrews-2003-Mn-Re-hydrides.pdf) | Reviewed and archived. MnH septet, MnH₂ sextet, MnH₂− quintet, pp. 4085–4088; ReH quintet, ReH₂ sextet and ReH₄ doublet, pp. 4086–4089. Quartet ReH₂ frequencies explicitly rejected against experiment; ReH₃ not identified. Mng29a–f |
+| GW66 | Grove and Wilkinson, “Oxo-complexes of rhenium(V),” *J. Chem. Soc. A* (1966), 1224–1230. [DOI](https://doi.org/10.1039/J19660001224), [PDF](../materials/valence/Grove-Wilkinson-1966-rhenium-V-oxo-complexes.pdf) | Reviewed and archived. Explicit diamagnetism for ReOCl₃(PPh₃)(Me₂SO), p. 1224, and trans-ReO₂(en)₂+, p. 1227. Its inconclusive ReOCl₅²− magnetism is resolved by FL71. Mng31 |
+| TJD80 | Trop, Jones and Davison, “Technetium cyanide chemistry: synthesis and characterization of technetium(III) and -(V) cyanide complexes,” *Inorg. Chem.* **19** (1980), 1993–1997. [DOI](https://doi.org/10.1021/ic50209a032), [PDF](../materials/valence/Trop-Jones-Davison-1980-technetium-cyanides.pdf) | Reviewed and archived. Tc(CN)₇⁴− isolated and diamagnetic, with explicit singlet assignment, pp. 1994–1995. Tc(V) oxocyanide connectivity established, pp. 1995–1997; occupation not explicitly assigned. Mng31b/Mng32 |
+| RJ23 | Roca Jungfer and Abram, “[ReH₃(PPh₃)₄] – A Key Compound in the Rhenium Hydride Chemistry,” *Chem. Eur. J.* **29** (2023), e202203317. [DOI](https://doi.org/10.1002/chem.202203317), [PDF](../materials/valence/Roca-Jungfer-Abram-2023-rhenium-phosphine-hydrides.pdf) | Reviewed and archived. Classical ReH₃(PPh₃)₄ supported by IR/DFT and comparison with Tc, p. 3; its H positions were not located crystallographically. ReH₅(PPh₃)₃ polymorphs, pp. 9–10, include located/refined H positions. Pairing in Mng24 is supported by HW's closed-shell assignment, not an electronic-spin measurement in RJ23. Ref. 31 identifies JEA21 for Tc |
+| FL71 | Fergusson and Love, “The nature of the [ReOCl₅]²− anion,” *Aust. J. Chem.* **24** (1971), 2689–2693. [DOI](https://doi.org/10.1071/CH9712689), [PDF](../materials/valence/Fergusson-Love-1971-oxopentachlororhenate.pdf) | Reviewed and archived. Pure Cs/Rb salts are spin-paired; ReCl₆²− contamination explains earlier large moments, pp. 2689–2690. Table 2, p. 2691, also supports the paired oxo/nitrido phosphine complexes. Mng31/Mng31a |
+| J13 | Johnstone et al., “X-ray Crystallographic and First-Principles Theoretical Studies of K₂[TcOCl₅] and UV/Vis Investigation of the [TcOCl₅]²− and [TcOCl₄]− Ions,” *Eur. J. Inorg. Chem.* (2013), 1097–1104. [DOI](https://doi.org/10.1002/ejic.201201346), [PDF](../materials/valence/Johnstone-2013-technetium-oxochlorides.pdf) | Reviewed and archived. Five-/six-coordinate structures and electronic levels, pp. 1098–1101; no new magnetic measurement. T79 supplies the explicit paired assignment. Supplement download failed; not required for Mng31c |
+| JEA21 | Jungfer, Elsholz and Abram, “Technetium Hydrides Revisited: Syntheses, Structures, and Reactions of [TcH₃(PPh₃)₄] and [TcH(CO)₃(PPh₃)₂],” *Organometallics* **40** (2021), 3095–3112. [DOI](https://doi.org/10.1021/acs.organomet.1c00274), [PDF](../materials/valence/Jungfer-Elsholz-Abram-2021-technetium-hydrides.pdf) | Reviewed and archived. Explicit paired d⁴ interpretation supported by NMR, p. 3096; located classical H ligands, p. 3097. Mixed-phosphine product has a separate nonclassical description, p. 3098. Mng33a; monohydride reuses Mng14 |
+| T79 | Trop, “Synthesis, characterization, and reactivity of technetium and rhenium complexes in intermediate oxidation states,” MIT PhD thesis (1979). [Repository](https://hdl.handle.net/1721.1/37642), [PDF](../materials/valence/Trop-1979-technetium-rhenium-thesis.pdf) | Retrieved, reviewed and archived. TcOCl₄− susceptibility, p. 48, and explicit singlet assignment, pp. 87–88; earlier TcOCl₅²− diamagnetism summarized on p. 74. Mng31c |
+| B98 | Baldas et al., “Spectroelectrochemical and computational studies of tetrachloro and tetrabromo oxo- and nitrido-technetium(V) and their TcVI counterparts,” *J. Chem. Soc., Dalton Trans.* (1998), 2303–2314. [DOI](https://doi.org/10.1039/a802559b), [PDF](../materials/valence/Baldas-1998-technetium-oxo-nitrido-halides.pdf) | Reviewed and archived. Explicit paired Tc(V) and d¹ Tc(VI), pp. 2303–2307. Confirms Mng31d; no additional state |
+| V24 | Vorobyova et al., “Anisotropy of exchange interactions in honeycomb ladder compound ReCl₅,” *Mater. Chem. Phys.* **332** (2025), 130215. [DOI](https://doi.org/10.1016/j.matchemphys.2024.130215), [2024 preprint](https://arxiv.org/abs/2411.02965), [archived preprint](../materials/valence/Vorobyova-2024-rhenium-pentachloride-preprint.pdf) | Preprint reviewed and archived. Explicit S = 1, L = 1, J = 2 assignment from magnetic entropy, pp. 4, 10; no Re–Re bond, p. 7. Mng34a uses the spin occupation, not the J multiplicity |
+| JH75 | Jasinski and Holt, “Electronic structure and optical properties of manganese(V) oxytrichloride, MnOCl₃,” *Inorg. Chem.* **14** (1975), 1267–1273. [DOI](https://doi.org/10.1021/ic50148a013), [PDF](../materials/valence/Jasinski-Holt-1975-manganese-oxytrichloride.pdf) | Reviewed and archived. Explicit triplet ground state, p. 1269; optical-spectrum assignment, pp. 1270–1271. Mng30a adds the chloride-donor state; Mng12 already supplies the ordinary graph |
+| GKB78 | Griffith, Kiernan and Brégeault, “Studies on transition-metal cyano-complexes. Part 2. Unsubstituted cyanorhenates, [Re(CN)x]n−, and cyanorhenates with thio-, seleno-, and nitrosyl ligands,” *J. Chem. Soc., Dalton Trans.* (1978), 1411–1417. [DOI](https://doi.org/10.1039/DT9780001411), [PDF](../materials/valence/Griffith-Kiernan-Bregeault-1978-rhenium-cyanides.pdf) | Reviewed and archived. Confirms low-spin d⁴ Re(CN)₇⁴−, p. 1412, and Re(CN)₆⁵−, pp. 1414–1415. Oxocyanide formulations discussed on p. 1415 without an explicit occupation assignment. Reassigned higher-valent hexacyanide and mixed-product preparations supply no additional state |
+| C98 | Chang, Connick, Low, Day and Gray, “Electronic Structures of Nitridomanganese(V) Complexes,” *Inorg. Chem.* **37** (1998), 3107–3110. [DOI](https://doi.org/10.1021/ic970598k), [PDF](../materials/valence/Chang-1998-manganese-nitrides.pdf), [SI](../materials/valence/Chang-1998-manganese-nitrides-SI.pdf) | Main text and SI reviewed and archived. Explicit paired ¹A′ ground state, p. 3108; square-pyramidal terminal-nitrido structures, p. 3109. Mng30b |
+| W84 | Winkler, “Spectroscopy and Photochemistry of Metal-Oxo Complexes,” Caltech PhD thesis (1984), chapter 4. [DOI](https://doi.org/10.7907/DE5E-2Y69), [PDF](../materials/valence/Winkler-1984-metal-oxo-thesis.pdf) | Retrieved and archived. ReO₂(CN)₄³− preparation, p. 83; explicit diamagnetic ¹A₁g[(b₂g)²] assignment and spectral interpretation, pp. 148, 152. Mng31e. Provides the primary evidence despite the blocked Winkler–Gray 1985 article download |
+| F82 | Franklin et al., “Chemical applications of technetium-99 NMR spectroscopy: preparation of novel technetium(VII) species and their characterization by multinuclear NMR spectroscopy,” *J. Am. Chem. Soc.* **104** (1982), 5303–5306. [DOI](https://doi.org/10.1021/ja00384a007), [PDF](../materials/valence/Franklin-1982-technetium-NMR.pdf) | Reviewed and archived. Explicit diamagnetic d² TcO₂(CN)₄³− assignment and ⁹⁹Tc NMR, pp. 5303, 5305: Mng31f. TcO₃+ and its AsF₆− salt, pp. 5304, 5306: Mng13a. Also confirms TcH₉²− in Mng22. Its tentative Tc₂O₅F₄/TcO₂F₃ structures supply no additional state from this paper alone |
+| M24 | May et al., “Electronic Structure and Photophysics of Low Spin d⁵ Metallocenes,” *Inorg. Chem.* **63** (2024), 1858–1866. [DOI](https://doi.org/10.1021/acs.inorgchem.3c03451), [PDF](../materials/valence/May-2024-low-spin-metallocenes.pdf) | Accepted manuscript retrieved from NSF PAR, reviewed and archived. Explicit ²E₂ assignments for MnCp*₂ and ReCp*₂, manuscript pp. 3–4, 9–10, 19; calculations agree with prior magnetic/spectroscopic assignments. Mng33b; Mn reuses Mng07 |
+| FN59 | Fergusson and Nyholm, “New Oxidation States of Technetium,” *Nature* **183** (1959), 1039–1040. [DOI](https://doi.org/10.1038/1831039a0), [PDF](../materials/valence/Fergusson-Nyholm-1959-technetium-oxidation-states.pdf) | Reviewed and archived. ReX₂(diars)₂ explicitly low-spin d⁵; [ReX₂(diars)₂]+ has two unpaired d electrons with strong spin–orbit coupling, p. 1039. Mng33d/e. The anomalous TcI₂(diars)₂ moment is explicitly unresolved and supplies no occupation |
+| FH70 | Fergusson and Hickford, “Studies in the chemistry of technetium. Complexes of technetium-(II), -(III), and -(IV) with 1,2-bis(diphenylphosphino)ethane,” *Aust. J. Chem.* **23** (1970), 453–461. [DOI](https://doi.org/10.1071/CH9700453), [PDF](../materials/valence/Fergusson-Hickford-1970-technetium-diphosphine.pdf) | Reviewed and archived. Measured moments, p. 454; explicit low-spin d⁴/³T₁ for [TcX₂(dppe)₂]+, pp. 458–459, and low-spin d⁵/²T₂ for TcX₂(dppe)₂, pp. 459–460 (X = Cl/Br). Mng33c/e. TcBr₄(PPh₃)₂ quartet assignment confirms Mng16, pp. 459–460 |
+| RS65 | Randall and Shaw, “Assignment of the proton magnetic resonance spectra of some tris-(diethylphenylphosphine) complexes of Re(III), Re(IV), Ir(III) and Rh(III),” *Molecular Physics* **10** (1965), 41–48. [DOI](https://doi.org/10.1080/00268976600100061), [PDF](../materials/valence/Randall-Shaw-1965-rhenium-phosphine-NMR.pdf) | Reviewed and archived. Shifted sharp NMR resonances and meridional structure for ReCl₃(PMe₂Ph)₃/ReCl₃(PEt₂Ph)₃, pp. 44–47. Its contact/pseudocontact interpretation is revised by NMR68/CLM69; occupation support for Mng33f comes from those later papers |
+| CR62 | Chatt and Rowe, “Complex compounds of tertiary phosphines and a tertiary arsine with rhenium(V), rhenium(III), and rhenium(II),” *J. Chem. Soc.* (1962), 4019–4033. [DOI](https://doi.org/10.1039/JR9620004019), [PDF](../materials/valence/Chatt-Rowe-1962-rhenium-phosphines.pdf) | Reviewed and archived. ReCl₃(PEt₂Ph)₃ preparation, pp. 4031–4032; the blanket Re(III) diamagnetism statement on p. 4026 is corrected by C68/GL71 and supplies no occupation. Paired Re(V) oxophosphines, pp. 4026–4028, confirm the existing Mng31 proposal |
+| C68 | Chatt, Leigh, Mingos and Paske, “Complexes of osmium, ruthenium, rhenium, and iridium halides with some tertiary monophosphines and monoarsines,” *J. Chem. Soc. A* (1968), 2636–2641. [DOI](https://doi.org/10.1039/J19680002636), [PDF](../materials/valence/Chatt-1968-phosphine-arsine-halides.pdf) | Reviewed and archived. Explicitly corrects earlier diamagnetism of mer-ReCl₃(PR₃)₃, p. 2638; Table 4, p. 2640, reports moments and compositions. The retained bromide diamagnetism claim is corrected by GL71. Mng33f |
+| GL71 | Gunz and Leigh, “Magnetic susceptibilities of some rhenium(III) and osmium(IV) halide complexes; preparation of some new d⁴ complexes,” *J. Chem. Soc. A* (1971), 2229–2233. [DOI](https://doi.org/10.1039/J19710002229), [PDF](../materials/valence/Gunz-Leigh-1971-rhenium-osmium-magnetism.pdf) | Reviewed and archived. Tables 1–2, pp. 2230–2231, establish solid/solution and largely temperature-independent paramagnetism, including mer-ReBr₃(PEt₂Ph)₃; p. 2231 rejects its earlier diamagnetism report. NMR68/CLM69 supply the electronic interpretation used in Mng33f. Table 1's separate diamagnetic fac-ReCl₃(PMe₂Ph)₃ observation supplies no additional occupation |
+| CLM69 | Chatt, Leigh and Mingos, “Configurations of some complexes of rhenium, ruthenium, osmium, rhodium, iridium, and platinum halides with mono(tertiary phosphines) and mono(tertiary arsines),” *J. Chem. Soc. A* (1969), 1674–1680. [DOI](https://doi.org/10.1039/J19690001674), [PDF](../materials/valence/Chatt-1969-phosphine-arsine-configurations.pdf) | Reviewed and archived. Explicit t₂g⁴ ReCl₃(PR₃)₃ assignment, p. 1674; meridional phosphine environments, pp. 1677–1678. The J = 0/J = 1 second-order Zeeman interpretation on p. 1678 revises RS65's contact/pseudocontact account. Mng33f |
+| NMR68 | Chatt, Leigh, Mingos, Randall and Shaw, “Nuclear magnetic resonance in complexes exhibiting second-order paramagnetism,” *Chem. Commun. (London)* (1968), 419–420. [DOI](https://doi.org/10.1039/C19680000419), [PDF](../materials/valence/Chatt-1968-second-order-paramagnetism.pdf) | Reviewed and archived. Re(III)/Os(IV) t₂g⁴ complexes, p. 419; p. 420 explicitly derives the J = 0 ground level from the ³T₁g parent by spin–orbit coupling, applying the same reasoning to Re. Supports the #n#u2 parent occupation in Mng33f |
+| CL66 | Cotton and Lippard, “Chemical and Structural Studies of Rhenium(V) Oxyhalide Complexes. II. M[ReX₄O] and M[ReX₄OL] Complexes from KReO₄,” *Inorg. Chem.* **5** (1966), 9–16. [DOI](https://doi.org/10.1021/ic50035a003), [PDF](../materials/valence/Cotton-Lippard-1966-rhenium-oxyhalides.pdf) | Reviewed and archived. ReOX₄− salts (X = Cl/Br/I), pp. 9–11; p. 14 reports the bromide's susceptibility and explicitly assigns paired d² to the square-pyramidal family. Mng31g |
+| GPW58 | Green, Pratt and Wilkinson, “Biscyclopentadienylrhenium hydride,” *J. Chem. Soc.* (1958), 3916–3922. [DOI](https://doi.org/10.1039/JR9580003916), [PDF](../materials/valence/Green-Pratt-Wilkinson-1958-rhenocene-hydride.pdf) | Reviewed and archived. Direct Re–H bond established by NMR/IR, pp. 3916–3918; p. 3921 gives diamagnetism over 77–510 K. LH76 supplies the explicit paired occupation used in Mng33g |
+| FS67 | Fischer and Schmidt, “Dicyclopentadienyltechnetium Hydride,” *Angew. Chem. Int. Ed. Engl.* **6** (1967), 93. [DOI](https://doi.org/10.1002/anie.196700931), [PDF](../materials/valence/Fischer-Schmidt-1967-technetocene-hydride.pdf) | Reviewed and archived. Molecular weight, mass spectrum and 10:1 Cp/H NMR integration establish monomeric Cp₂TcH; IR establishes Tc–H. Bent geometry proposed by analogy with Re. No magnetic measurement or explicit electronic occupation; Mng33 permits a fixture by analogy without new states |
+| HP60 | Hargreaves and Peacock, “New Fluorides and Oxyfluorides of Rhenium,” *J. Chem. Soc.* (1960), 1099–1103. [DOI](https://doi.org/10.1039/JR9600001099), [PDF](../materials/valence/Hargreaves-Peacock-1960-rhenium-fluorides.pdf) | Reviewed and archived. ReF₅ preparation and magnetic susceptibility, pp. 1100–1102; antiferromagnetic interactions are inferred, without a local-spin assignment. Mng34 permits fixtures by analogy without new states. Its d¹ ReOF₄ discussion concerns a different compound and is not evidence for the pentafluoride occupation |
+| LH76 | Lauher and Hoffmann, “Structure and Chemistry of Bis(cyclopentadienyl)-MLₙ Complexes,” *J. Am. Chem. Soc.* **98** (1976), 1729–1742. [DOI](https://doi.org/10.1021/ja00423a017), [author copy](https://roaldhoffmann.com/sites/default/files/fromd6/109s_0.pdf), [PDF](../materials/valence/Lauher-Hoffmann-1976-bent-metallocenes.pdf) | Retrieved, reviewed for the Cp₂MH assignment and archived. Diagram 4 and accompanying text, p. 1731, explicitly show two filled nonbonding orbitals for d⁴ Cp₂ReH; p. 1738 identifies the 18-electron configuration. Mng33g. Tc is not explicitly treated |
+| FRW89 | Fanwick, Root and Walton, “Reactions of the Dirhenium(II) Complexes Re₂Cl₄(PR₃)₄ with Lithium Aluminum Hydride. A Convenient Synthetic Route to the Dirhenium Octahydride Complexes Re₂H₈(PR₃)₄,” *Inorg. Chem.* **28** (1989), 3203–3209. [DOI](https://doi.org/10.1021/ic00315a024), [PDF](../materials/valence/Fanwick-Root-Walton-1989-dirhenium-octahydrides.pdf) | Reviewed and archived. Monodentate-phosphine family and four-bridge structure; p. 3208 explicitly permits single- and triple-Re–Re interpretations. Mng35a. The distinct dppm two-bridge structure is not included in this proposal |
+| GHC82 | Green, Huffman and Caulton, “Could One Have Five? Synthesis and Structure of Re₂H₄(PMe₂Ph)₄[P(OCH₂)₃CEt]₂ and Its Conjugate Acid,” *J. Am. Chem. Soc.* **104** (1982), 2319–2320. [DOI](https://doi.org/10.1021/ja00372a040), [PDF](../materials/valence/Green-Huffman-Caulton-1982-dirhenium-hydrides.pdf) | Reviewed and archived. Three bridging and one terminal hydride located/refined; explicit Re≡Re assignment, p. 2319. Mng35b uses the actual neutral mixed-ligand compound; the protonated cation is not included |
+| DAH79 | Dedieu, Albright and Hoffmann, “Some Hydrido-Bridged Transition-Metal Dimers and Their Unsupported Analogues. Speculations on Pentuple Bonding and Pentuple Bridging,” *J. Am. Chem. Soc.* **101** (1979), 3141–3151. [DOI](https://doi.org/10.1021/ja00506a001), [PDF](../materials/valence/Dedieu-Albright-Hoffmann-1979-hydrido-bridged-dimers.pdf) | Retrieved, reviewed for Re₂H₈L₄ and archived. Figure 4, pp. 3144–3146, treats four bridging hydrides as H₄⁴− in a delocalized orbital analysis. This supports the hydride allocation; separate 3c2e graph units remain PW, not a unique partition established by the paper |
+
+Intermediates, page images and the deduplication/count audit are in
+`scratch/hw-manganese-review/`. Retained papers belong in `materials/valence/`;
+the table and its citations do not depend on retaining scratch.
+
+### Iron group
+
+HW II, chapter XXIX, pp. 1934–1988 (chemistry through p. 1986), with chapter-XXXII
+cross-references. Extraction and primary-source review started 2026-11-04.
+**Implemented: 210 additions — Fe 81, Ru 57, Os 68, S 3 and O 1.**
+These comprise 209 ordinary-bond/donor states and one hydride-bridge MC state;
+Fe capacity 21 and Os capacity 20 are implemented. The two Fe(1-norbornyl)₄ states
+are excluded because they are supported here only by this specialized example.
+All additions and the 17 retained states have conformance coverage; citations are updated.
+Additional research is concluded for this selection. End-on FeOO remains unselected;
+uncertain spin orderings that reuse accepted types do not add prospective states.
+
+#### Iron-group work table
+
+E = Fe, Ru, Os; M = Ru, Os. Element prefixes apply to every suffix in the same
+cell; a slash-separated prefix applies to each named element. New-state counts
+exclude existing entries and reuse across rows, and include every displayed H-count
+split. States use the concrete, zero-valence defaults. Oxo/nitrido bonds are ordinary
+multiple bonds; anionic-ligand donation follows the preceding chapters' convention.
+
+| ID | States / extracted family | Status; new states | Examples and evidence |
+| --- | --- | --- | --- |
+| Fg01 | E/Hs#n2#u4; Fe#c+2#n#u4; Fe#c+2#n2#u2; Fe#c+2#n3; Fe#c+3#u5; Fe#c+3#n#u3; Fe#c+3#n2#u; Ru#c+2#n3; Ru#c+3#n2#u; Fe#c+#u5#v2; Fe#u5#v3; Fe#c-#u5#v4; Fe#c-2#u5#v5; Fe#c-3#u5#v6 | Retained; 17 existing; citations updated | Atomic occupations: HW 1538; Fe spin occupations: 1962–1965; Ru low-spin II/III: 1984. Formula-charge comments corrected to FeX₂+, FeX₃, FeX₅²− and FeX₆³−. FeCl₃, FeCl₄−, Fe(N₃)₅²− and FeF₆³− support #v3–#v6 (1949–1950, 1953). B00Fe, pp. 38–39 and Table 4-3 (p. 83), explicitly calculates sextet bare Fe(OH)₂+ and FeCl₂+, supporting existing #c+#u5#v2. B00Fe supplies the bare hydroxide fixture citation; HW 1957 describes the hydrated aqueous species. |
+| Fg02 | Ru/Os#c+2#n#u4; #c+3#u5 | Implemented; 4 | Free-ion d⁶/d⁵ ground occupations, distinct from the low-spin complexes below. ASD lists ⁵D₄ and ⁶S₅/₂ for both elements. Existing Fe high-spin ions already supply these occupations. |
+| Fg03 | Fe#c-2#n#u4#v4; #c+2#n#u4#t4; #c+2#n#u4#t6; #n#u4#v2#t4; #c-2#n#u4#v4#t2; #c-4#n#u4#v6 | Implemented; 6 | High-spin FeCl₄²−, Fe(H₂O)₆²+/Fe(NH₃)₆²+, FeCl₂(H₂O)₄, FeCl₄(H₂O)₂²− and Fe(OH)₆⁴−. HW 1947, 1949–1950, 1957, 1964. Ordinary anionic-ligand bonds or ligand donation. |
+| Fg04 | Fe#c+3#u5#t3; #c+3#u5#t4; #c+3#u5#t5; #c+3#u5#t6; #u5#v3#t2; #c+2#u5#v#t5; #c+#u5#v2#t4; #u5#v3#t3; #c-#u5#v4#t2; #c-2#u5#v5#t; #c+#u5#v2#t2 | Implemented; 11 | High-spin Fe[N(SiMe₃)₂]₃, FeCl₄−, FeCl(acac)₂, Fe(H₂O)₆³+, hydrated chlorides/hydroxides, FeF₅(H₂O)²− and Fe₂Cl₆. HW 1947, 1949–1950, 1957–1958, 1962–1964. Fe₂Cl₆ uses two ordinary terminal Cl bonds and two bridging Cl− donors per Fe; Fe₂Cl₉³− reuses the three-terminal/three-donor state. Existing unadducted #v3/#v4/#v6 states are reused where applicable. |
+| Fg05 | Fe/Ru/Os#c+2#n3#t6; #c-4#n3#v6; #n3#v2#t4; #c+3#n2#u#t6; #c-3#n2#u#v6 | Implemented; 15 | Low-spin II/III hexacyanides, neutral N-donor complexes, and paired II dihalide/phosphine or diorganyl complexes. HW 1949–1952, 1962–1965, 1974, 1976–1977, 1980, 1984–1986. E(NH₃)₆²+ is evidence for Ru/Os, not low-spin Fe. Ferro-/rutheno-/osmocene reuse the six-accepted-pair II state with two six-electron Cp− donors (2189–2192). |
+| Fg06 | Fe#n2#u2#v2#t2; #c+2#n2#u2#t4; #n2#u2#v2#t4; #c+2#n2#u2#t6 | Implemented; 4 | Intermediate-spin Fe(II): FeTPP and Fe(phen)₂(ox). HW explicitly assigns two unpaired electrons, 1947, 1962–1963, 1965. Two ordinary anionic N/O bonds with remaining donors, or all donors. |
+| Fg07 | Fe#n#u3#v3#t2; #c+3#n#u3#t5 | Implemented; 2 | Intermediate-spin FeCl(S₂CNR₂)₂, explicitly three unpaired electrons; HW 1962–1963. Two ordinary anionic S bonds and one ordinary Cl bond, with two neutral S donors, or all five donors. |
+| Fg08 | Fe#n#u4#v2#t3; #c+2#n#u4#t5; #c+#n2#u#v2#t4 | Implemented; 3 | Five-coordinate high-spin deoxyheme and six-coordinate low-spin ferric cytochrome; HW 1965–1967. Ferrous cytochrome reuses Fg05. Two ordinary porphyrin N bonds with remaining donors, or all donors; no new haptic/MC state. |
+| Fg09 | Fe#n3#u#v#t4; #c+#n3#u#t5; #c+2#n#u2#v2#t4; #c+4#n#u2#t6 | Implemented; 4 | FeI(CO)₂(diars), explicitly low-spin Fe(I), and [FeCl₂(diars)₂]²+, explicitly triplet Fe(IV). HW 1962, 1969. Ordinary halide bonds or halide donation. |
+| Fg10 | Fe#n2#v4; #c+4#n2#t4 | Not selected; 0 | Tetrahedral Fe(1-norbornyl)₄ is explicitly diamagnetic/paired d⁴ (HW 1970). Excluded from the default registry: only this specialized organometallic example supports these states in the extraction. |
+| Fg11 | Fe#u2#v6; #c-2#u2#v8 | Implemented; 2 | FeO₄²−: HW 1969 explicitly gives two unpaired electrons. Two Fe=O plus two Fe–O− bonds, or four Fe=O with charge on Fe. |
+| Fg12 | Fe#c+3#u5#t7; #c-#u5#v4#t3; #c+3#u5#t8; #c-#u5#v4#t4 | Implemented; 4 | Fe(edta)(H₂O)− and Fe(NO₃)₄−: HW 1947 and high-spin discussion 1963. K71, p. 554, confirms four nearly symmetric bidentate nitrates and compares the nonbonding occupation to isoelectronic Mn(II). Seven/eight donors, or four ordinary anionic O bonds with the other donors retained. Counts gives 19/21 electrons; Fe capacity 18 → 21 implemented. |
+| Fg13a | S#c-2#n2#d2; #c-2#n#d3 | Implemented; 2 | μ₂-/μ₃-sulfide donors in the common Fe₂S₂/Fe₄S₄ families; HW 1961, 1967. Fe(II/III) local high-spin four-donor states reuse Fg03/Fg04. S²− donation is the adopted ionic graph convention; no cluster-specific MC state. |
+| Fg13b | O#c-2#n2#d2 | Implemented; 1 | μ₂-oxide donor alternative for [Cl₃Fe–O–FeCl₃]²− and the hydrated Fe(III) oxide bridge, HW 1950, 1957, 1964. Existing O#n2#v2 supplies the ordinary bridge. Local high-spin Fe(III) is retained despite antiferromagnetic coupling. |
+| Fg13c | S#c-#n2#v#d | Implemented; 1 | General terminal thiolate/dithiocarbamate donor, needed by the selected Fe–S cluster and all-donor FeCl(S₂CNR₂)₂ graphs. HW 1961–1962; anionic-donor allocation: PW. |
+| Fg14 | Fe/Ru/Os#n4#t5; #c-2#n5#t4 | Implemented; 6 | E(CO)₅ and E(CO)₄²−; HW 1947, 1970, 1984, 2111, 2135–2136. Explicit paired carbonyl occupations; Fe(CO)₄²− is Collman's reagent. |
+| Fg15 | Fe/Ru/Os#n3#v#h#t4; #n3#h2#t4 | Implemented; 6 | Classical EH₂(PR₃)₄ and EH₂(CO)₄, all explicit/mixed/implicit-H forms; HW 1948, 1974, 2136–2137. Explicit octahedral 18-electron descriptions. H− donors reuse E#c+2#n3#t6; the fully explicit state also reuses Fg05. |
+| Fg16 | Fe/Ru/Os#c-4#n3#v5#h; #c-4#n3#v4#h2; #c-4#n3#v3#h3; #c-4#n3#v2#h4; #c-4#n3#v#h5; #c-4#n3#h6 | Implemented; 18 | EH₆⁴− in Mg₂FeH₆, Mg₂RuH₆ and Mg₂OsH₆: isolated octahedral 18-electron/low-spin units; HW 1948, 1973–1974. All seven H-count splits; explicit state and H−-donor state reuse Fg05. |
+| Fg17 | Fe/Ru/Os#c-#n4#v#t4; #c-#n4#h#t4 | Implemented; 6 | EH(CO)₄−, HW 2136–2137. Explicit/implicit terminal H; H−-donor allocation reuses E#n4#t5. |
+| Fg18 | Fe#n2#v4#t3 | Implemented; 1 | Fe₂(CO)₉ and the two bridge-bearing sites of Fe₃(CO)₁₂; HW 2111–2114, Fig. 32.28. Ordinary Fe–Fe bonds and C(=O)(–Fe)₂ bridges; terminal CO remains a donor. The remaining Fe₃ site and Ru₃/Os₃(CO)₁₂ reuse #n3#v2#t4. No new MC state. |
+| Fg19 | Os#n2#v4#t3; #n2#v3#h#t3; #n2#v2#h2#t3; #n2#v#h3#t3; #n2#h4#t3; #c+4#n2#t7; #n#v6#t2; #n#v5#h#t2; #n#v4#h2#t2; #n#v3#h3#t2; #n#v2#h4#t2; #n#v#h5#t2; #n#h6#t2; #c+6#n#t8 | Implemented; 14 | Classical OsH₄(PR₃)₃ and OsH₆(PR₃)₂, all H-count splits and H− donors; HW 1974, 2071. Their 18-electron occupations are paired d⁴/d². The nonclassical Ru homologues do not support corresponding terminal-hydride states. |
+| Fg20 | Ru/Os#n3#v2#t3; #c+2#n3#t5 | Implemented; 4 | Five-coordinate MCl₂(PPh₃)₃, HW 1976–1977, low-spin II discussion 1984. RuHCl(PPh₃)₃ reuses the explicit state; its implicit H is listed separately. |
+| Fg20a | Ru#n3#v#h#t3 | Implemented; 1 | RuHCl(PPh₃)₃, HW 1976–1977: one implicit hydride and one ordinary chloride; five-donor ionic alternative reuses Fg20. |
+| Fg21 | Ru/Os#n2#u#v3#t3 | Implemented; 2 | MCl₃(PR₃)₃, HW 1976, 1984. Explicit low-spin d⁵; six-donor alternative reuses Fg05. |
+| Fg21a | Ru#c+2#n2#u#v#t5; #c+#n2#u#v2#t4; #c-#n2#u#v4#t2; #c-2#n2#u#v5#t | Implemented; 4 | [RuClₙ(H₂O)₆₋ₙ]³⁻ⁿ, n = 1–5, HW 1976; n = 0, 3, 6 reuse earlier rows. The ordinary Cl bonds preserve each isolated/aquated charge state; all-donor graphs reuse Fg05. |
+| Fg22 | Ru/Os#c-2#n#u2#v6; #c+4#n#u2#t6 | Implemented; 4 | MX₆²−: HW 1983–1984 explicitly gives low-spin d⁴ with two unpaired electrons. The spin–orbit-coupled J = 0 limit is not a paired-d⁴ alternative. Ordinary halides or donors. |
+| Fg22a | Os#n#u2#v4#t2 | Implemented; 1 | OsCl₄(PR₃)₂/OsCl₄(AsR₃)₂: NMR68, pp. 419–420, explicitly derives the J = 0 level from a ³T₁g parent. Four ordinary Cl bonds and two P/As donors; the all-donor state reuses Fg22. |
+| Fg23 | Ru/Os#c-#u3#v6; #c+5#u3#t6; #u2#v6; #c+6#u2#t6 | Implemented; 8 | MF₆− (V, three unpaired) and MF₆ (VI, two unpaired); HW 1974–1976, 1982–1983. Octahedral species with explicit occupations, not an inference about gas-phase MF₅. |
+| Fg24 | Ru#c-2#u2#v8 | Implemented; 1 | RuO₄²−, tetrahedral d² with two unpaired electrons; HW 1978–1979, 1982. All-double-bond allocation; two ordinary Ru=O plus two Ru–O− bonds reuse #u2#v6. |
+| Fg25 | Ru/Os#c-2#n#v8; #c+2#n#v4#t4; #c-#n#v7; #c+3#n#v3#t4; #c+3#n#v3#t5 | Implemented; 10 | Paired VI oxo/nitrido families MO₂X₄²−, MNX₄− and MNX₅²−; HW 1978–1979, 1982–1983 explicitly gives M=O/M≡N and the paired occupation. Ordinary or donating halides. The MO π-MO discussion adds no MC alternative. OsO₂(en)₂²+ reuses the dioxo/donor state. |
+| Fg26 | Ru/Os#u#v7; #c-#u#v8; #v8 | Implemented; 6 | MO₄− (VII, one unpaired) and MO₄ (VIII, paired d⁰); HW 1978–1979, 1982. Ordinary oxo charge allocations. The ordinary OsOF₅ graph also uses #u#v7; unsupported OsF₇ is not an example. |
+| Fg27 | Os#c+5#u#v2#t5; #c+2#v6#t2; #c+4#v4#t4; #c-#v9; #v8#t | Implemented; 5 | Donor-F alternatives for OsOF₅ (VII), OsO₃F₂ and OsO₂F₄ (VIII); OsO₃N− with Os≡N and the OsO₄·D adduct. HW 1974–1975, 1978, 1982; SS06 confirms monomeric OsOF₅. Ordinary oxyfluoride graphs reuse Fg26. |
+| Fg27a | OsF₇; monomeric OsO₂F₃ | Not selected; 0 | Do not select Os#c+7#u#t7 for OsF₇ or Os#c+3#u#v4#t3 for monomeric OsO₂F₃. SS06, pp. 7931–7934, finds only OsF₆ from attempted OsF₇ synthesis and resolves solid OsO₂F₃ as mixed-valence [OsO₃F₂·OsOF₄]₂/∞. The possible gas-phase monomer remains tentative. No replacement oligomer-specific state is proposed. |
+| Fg27b | OsOF₆ | Not selected; 0 | Do not select Os#c+6#v2#t6 for OsOF₆. C93Os, pp. 11279–11284, corrects the reported product to cis-OsO₂F₄ using composition, diffraction and spectroscopy; already covered by Fg26/Fg27. |
+| Fg28 | Os#c-2#v10; #v8#t2 | Implemented; 2 | cis-OsO₄F₂²− and cis-OsO₄(OH)₂²−; HW 1978, 1982 explicitly gives d⁰ and the six-coordinate structures. Four ordinary Os=O plus two ordinary anionic-ligand bonds, or two anionic donors. Both count 20 electrons; Os capacity 18 → 20 implemented. |
+| Fg29 | Reuses preceding rows | Implemented; 0 | Os₂X₈²−: explicit diamagnetic Os≡Os (HW 1976, 1984–1985, Fig. 29.18d). Ordinary Os#c-#n#v7 and halide-donor Os#c+3#n#v3#t4 reuse Fg25. No MC bond or axial-donor extension. |
+| Fg30 | Ru#n#v6; #c+3#n#v3#t3; #n3#v2#t2; #c+#n3#v#t3 | Implemented; 4 | Ru₂R₆ and Ru₂Cl₂(PMe₃)₄: HW 1984–1985, Table 29.5, gives paired cluster configurations and Ru≡Ru/Ru–Ru respectively. Ordinary metal–metal bonds; ordinary R/Cl bonds or donors. R = CH₂CMe₃/CH₂SiMe₃. |
+| Fg31 | Ru#n2#v4#t2; #c+2#n2#v2#t4 | Implemented; 2 | Common Grubbs-type RuCl₂(=CHR)(NHC)(PR₃) precatalysts. S19Ru, pp. 2–3, explicitly uses Ru=C and a singlet ground state. Ordinary Ru=C and Cl bonds with two neutral donors, or Cl− donation. No scaffold-specific type or MC encoding. |
+| Fg32 | Fe#c-2#n3#v4#t2 | Implemented; 1 | trans-[Fe(CN)₄(CO)₂]²−: R01, p. 6934, establishes the formula, structure and low-spin Fe(II) assignment; C02 confirms both cis/trans structures. Four ordinary CN bonds and two CO donors; all-donor graph reuses Fg05. HW 1953's CN₂ formula is erroneous. K03's Fe(0) [Fe(CN)₂(CO)₃]²− is a different compound, not a correction to the Fe(II) example. |
+| Fg32a | Fe#c-3#n3#v5#t; #c-2#n2#u#v5#t | Implemented; 2 | Fe(II/III) pentacyanide complexes Fe(CN)₅D, HW 1953, with low-spin occupations from 1962–1964. Five ordinary CN bonds and one donor; all-donor forms reuse Fg05. Nitroprusside fits the Fe(II) state with HW's explicit NO+ allocation; the distinct brown-ring nitrosyl is covered in Fg39b. |
+| Fg33 | Ru#n#u4#v2; #n2#v4 | Implemented; 2 | Molecular RuO, RuO₂ and RuO₃, with ordinary Ru=O bonds. M16Ru, pp. 74–78, 80–84, 94–95, supports quintet RuO and singlet RuO₂/RuO₃ using measured structures/spectra and correlated calculations. The RuO₂ triplet is explicitly higher. Solid rutile RuO₂ does not supply the molecular assignment. |
+| Fg34 | Fe#n#u4#v2 | Implemented; 1 | Molecular FeO, ⁵Δ ground state: W96, pp. 5298–5299, Fig. 5; C96, pp. 5266–5267, matrix and gas-phase vibrational evidence. Ordinary Fe=O; the source's Fe-derived nonbonding orbitals supply one pair and four unpaired electrons. |
+| Fg35 | Fe#n3#v2#t3#m0 | Implemented; 1 | HFe₂(CO)₈−: CB78, pp. 2314–2317, confirms one symmetric hydride bridge, two μ-CO and three terminal CO per Fe, and explicitly discusses three-center M–H–M bonding. Accepted H− contributions [0,2,0] use the adopted convention (PW); μ-CO retains the ordinary representation of Fg18. This graph counts no additional Fe–Fe bond; that partition is not determined by the crystallographic distance. HW 2137–2138, Fig. 32.44g. One MC unit, not a whole-cluster description. |
+| Fg36 | Bare RuH/OsH, RuH₂/OsH₂, MH₃/MH₄ and H₂ adducts | Not selected / deferred; 0 | WA09 leaves the earlier isolated RuH assignment provisional (p. 560); bare OsH and RuH₂/OsH₂ were not observed. No terminal MH₃/MH₄ assignment is selected; the observed MH₃ compositions are (H₂)MH. H₂ complexes retain the separate donor-model deferral; no MC substitute is proposed. The observed Fe species are below. |
+| Fg36a | Fe#n2#u3#v; #n2#u3#h; #c+#n2#u3#t | Implemented; 3 | FeH, observed quartet ⁴Δ ground state: WA09, pp. 551, 553–554, Table 4. Ordinary explicit/implicit H and H− donation. |
+| Fg36b | Fe#n#u4#v#h; #n#u4#h2; #c+2#n#u4#t2 | Implemented; 3 | FeH₂, observed quintet with gas-phase ⁵Δ assignment: WA09, pp. 551, 553–554, Table 4. Ordinary H-count splits and H− donation; the fully explicit state reuses Fg34. |
+| Fg36c | Fe#c-#n2#u3#v2; #c-#n2#u3#v#h; #c-#n2#u3#h2; #c+#n2#u3#t2 | Implemented; 4 | FeH₂−: WA09, Table 4, explicitly calculates ⁴Δg for this previously photodetachment-observed anion (p. 559, ref. 44); not observed in WA09's matrix experiment. Ordinary H-count splits and H− donation. |
+| Fg37 | FeMes₂ | Not selected; 0 | K94 establishes [Fe₂Mes₄] with two terminal and two bridging mesityls. Its magnetic analysis requires coupled centers and supports direct Fe–Fe interaction; it does not establish monomeric Fe#n2#u2#v2. No additional aryl-bridge or cluster-specific state is selected. Ru/Os tetraorganyls are settled below. |
+| Fg37a | Ru#c+4#n2#t4; Os#n2#v4; #c+4#n2#t4 | Implemented; 3 | MR₄ (R = cyclohexyl, o-tolyl; also RuMes₄): HW 1985; PRE12, pp. 5711–5712, explicitly identifies the characterized tetrahedral compounds as diamagnetic d⁴ and describes two nonbonding pairs. Four ordinary M–C bonds or anionic C donors. Ru#n2#v4 reuses Fg33; no MC state. |
+| Fg38 | End-on FeOO | Not selected; no new state | C96, pp. 5269–5270, establishes the observed triplet superoxo isomer but does not fix the local Fe/O spin allocation. No Fe-local occupation is inferred from the total triplet. Higher iron oxides are settled in Fg38i–Fg38k; no calculated-only tetrahedral/diperoxo FeO₄ states or weak O₂ adducts are added. |
+| Fg38a | Fe#n#u2#v4; #c-#n2#u#v4 | Implemented; 2 | OFeO and OFeO− with two ordinary Fe=O bonds. HT12, Fig. 1 and pp. 3092–3095, assigns neutral ³Δg and anionic ²Δg ground states using RASPT2/RCCSD(T) and the photoelectron spectrum. The Fe-derived nonbonding occupations supply #n#u2 and #n2#u. Higher quartet/quintet/sextet alternatives are not selected; the separate FeOO/Fe(O₂) isomers are not covered by this assignment. |
+| Fg38b | Os#c+4#n#v2#t4 | Implemented; 1 | OsOX₄ (X = Cl, F): HR57, pp. 25, 29, explicitly pairs the two remaining d electrons of OsOCl₄; H88, pp. 64–65, independently assigns dxy² to monomeric OsOF₄. Ordinary Os=O plus four X− donors; the all-ordinary Os#n#v6 state reuses Fg39c. |
+| Fg38c | Reuses preceding rows | Implemented; 0 | Cyclic Fe(O₂): C96, p. 5269, assigns the observed isomer as a quintet peroxide from isotopic vibrational data. An O–O single bond with two ordinary Fe–O bonds uses Fg34; two O− donors use Fg36b and existing O#c-#n2#v#d. No new state or MC bond. |
+| Fg38d | Os#n#u2#v4 | Implemented; 1 | Molecular OsO₂ with two ordinary Os=O bonds. Z00, pp. 3461–3462, identifies the matrix-isolated molecule and assigns a ³B₁ ground state with both BP86 and B3LYP; the singlet lies 12.9/14.5 kcal/mol higher. The two nonbonding unpaired electrons and one pair give this state. |
+| Fg38e | Ru/Os#c-#n2#u#v4 | Implemented; 2 | RuO₂− and OsO₂− with two ordinary M=O bonds and charge on M. Z00, Table 5 and pp. 3463–3464, assigns the observed anions as ²A₁ and ²B₁ respectively; both functionals agree. Closed-shell O atoms leave two pairs and one unpaired electron on M. |
+| Fg38f | Reuses preceding rows | Implemented; 0 | Molecular OsO₃: Z00, Table 6 and p. 3462, identifies the matrix-isolated species and assigns a planar ¹A₁′ ground state. Three ordinary Os=O bonds reuse Fg39c; no new state. |
+| Fg38g | Ru#c+2#n#v4#t2 | Implemented; 1 | Observed singlet (O₂)MO₂ peroxide isomers: Z00, Table 7 and pp. 3462–3463, explicitly gives M(VI), an O–O bond and two terminal oxo groups. Ordinary bonds reuse M#n#v6. Making the two peroxo O− atoms donors adds only the Ru state; Os reuses Fg39c and both use existing O#c-#n2#v#d. No MC bond. |
+| Fg38h | Ru#u2#v6#t2 | Implemented; 1 | RuO₃(OH)₂²−: A06, pp. 1921–1922, explicitly selects the triplet for the characterized five-coordinate ion; inclusion of spin–orbit coupling leaves its predominantly triplet character. Three ordinary Ru=O bonds plus two OH− donors add #u2#v6#t2; the all-ordinary graph reuses Fg24. Both count 18 electrons. OsO₂(OH)₄²− remains the paired six-coordinate case in Fg25. |
+| Fg38i | Fe#n#v6; #c+2#n#v4#t2 | Implemented; 2 | Observed singlet (O₂)FeO₂: C96, pp. 5270–5271, gives the structure and singlet assignment; W96, pp. 5299–5300, independently supports two terminal Fe=O bonds and an O–O unit. Two Fe=O plus two ordinary Fe–O bonds, or two peroxide O− donors. No tetrahedral FeO₄ state is inferred. |
+| Fg38j | Fe#c+2#u4#v2#t2 | Implemented; 1 | Observed quintet (O₂)FeO: C96, p. 5270, gives the C₂v isomer and multiplicity. One Fe=O plus a cyclic peroxide; the ordinary graph reuses Fg39f. Two peroxide O− donors add the second state. No MC bond. |
+| Fg38k | Reuses preceding rows | Implemented; 0 | Three-terminal-oxo FeO₃: W96, p. 5300, supports the constitution. X08, pp. 15884–15886, finds singlet and triplet structures separated by only 0.020 eV and explicitly leaves their ordering unresolved. Both supplied-spin graphs reuse independently accepted Fg38i/Fg11 states; no prospective occupation is added. |
+| Fg39 | Ru/Os μ-O/μ-N and carboxylate dimers | Research concluded | Explicit descriptions and state reuse are recorded in Fg39h–Fg39k. No additional MC state is required. |
+| Fg39a | Fe#c+2#u4#v2; #c+2#u4#v2#t5 | Implemented; 2 | Ferryl FeO²+ and [FeO(H₂O)₅]²+: HW 1969 identifies the hydrated intermediate; L08, pp. 89–93, explicitly gives S = 2 for both bare and hydrated FeO²+. Ordinary Fe=O, with five water donors in the hydrated graph. No extrapolation to Fe(V) or different ligand fields. |
+| Fg39b | Fe#c+#n2#u3#t6 | Implemented; 1 | Brown-ring [Fe(H₂O)₅(NO)]²+: C23, Fig. 1a–c and pp. 16864–16865, explicitly compares Fe(I)/NO+, high-spin Fe(II)/NO and high-spin Fe(III)/triplet NO−. All three are representable. N→Fe with N≡O+ uses existing N#v3#d and O#c+#n#v3; the NO and NO− graphs carry #c-#u and #c-2#u2#s3 on N–O (PW). Only quartet Fe(I) adds a type; 19 electrons fit accepted Fe capacity 21. Local spins are supplied; exchange coupling is not inferred by resolution. |
+| Fg39c | Os#n#v6; #c+2#n#v4#t2 | Implemented; 2 | Common Os(VI) dioxoglycolate ester in HW 1978, Fig. 29.15: two Os=O plus two Os–O bonds, or two alkoxide donors. H19 main text and SI p. S9 explicitly select low spin; Fig. SI5 compares singlet/triplet energies. Bis-pyridine/TMEDA adducts reuse #n#v6#t2 and #c+2#n#v4#t4. No MC description or further calculated-intermediate states are selected. |
+| Fg39d | Fe#u3#v5 | Implemented; 1 | FeO₄³−: one Fe=O and three Fe–O− bonds. S16 confirms K₃FeO₄; N18 SI Table SI11 explicitly uses a quartet (S = 3/2, ⟨S²⟩ = 3.810), consistent with W56's 3.6–3.7 μB. Closed-shell O atoms leave three unpaired electrons on Fe in this graph. Count: 13 electrons. |
+| Fg39e | Fe#c-3#u3#v8 | Implemented; 1 | Alternative all-double-bond FeO₄³− graph for Fg39d, placing charge on Fe. Same quartet occupation; count 19 fits the accepted Fe capacity 21. |
+| Fg39f | Fe#u4#v4 | Implemented; 1 | FeO₄⁴− in Na₄FeO₄: four Fe–O− bonds. S16 confirms the salt; N18 identifies tetrahedral units and SI Table SI11 explicitly uses a quintet (S = 2, ⟨S²⟩ = 6.045). Closed-shell O atoms leave four unpaired electrons on Fe. Count: 12 electrons. This does not extend to HW's nonmolecular Sr/Ba ferrates(IV). |
+| Fg39g | Fe#c-4#u4#v8 | Implemented; 1 | Alternative all-double-bond FeO₄⁴− graph for Fg39f, placing charge on Fe. Same quintet occupation; count 20 fits the accepted Fe capacity 21. |
+| Fg39h | Ru/Os#c+4#n2#t6 | Implemented; 2 | [M₂OCl₁₀]⁴−: HW 1980, 1983 footnote and 1984 explicitly gives π-induced pairing; D20Ru, pp. 889–890/Fig. 5, supplies a closed-shell Ru–O–Ru MO description. Adopt the all-donor graph with two paired metal nonbonding pairs and bridging O²−#n2#d2 (PW); each metal accepts five chloride pairs and one oxide pair. This does not replace the distinct #n#u2 occupations of MX₆²−. No MC state or new O state. |
+| Fg39i | Ru/Os#c-3#n2#v7; #c+2#n2#v2#t5 | Implemented; 4 | [M₂NCl₁₀]⁵− and [M₂NCl₈(H₂O)₂]³−: HW 1983–1984 explicitly gives diamagnetic M=N=M; DZ20, p. 5, independently identifies Ru=N double bonds in the hydrated dimer. Ordinary M=N+=M uses existing N#c+#v4, with the paired nonbonding remainder on M (PW). Five ordinary Cl bonds give the first state; five terminal donors give the second. No new N or MC state. |
+| Fg39j | Reuses preceding rows | Implemented; 0 | Ru₂(OAc)₄(THF)₂ and mixed-valent Ru₂(O₂CR)₄X₂−: HW 1984–1985 gives BO 2/2.5 and two/three unpaired electrons; G26 confirms the latter occupation for R = n-Pr, X = Br. Adopt M–M strings 2#u2#s3 and 3#c-#u3#s4 respectively, with four carboxylate donors and an axial donor per metal (PW). These reuse Fg39i/Fg25. Bond charge avoids assigning inequivalent II/III metal sites; no MC bond. |
+| Fg39k | Reuses preceding rows | Implemented; 0 | Os₂(OAc)₄Cl₂: GP13, archived PDF pp. 5, 15–16, gives σ²π⁴δ²δ*¹π*¹ and two unpaired electrons, supported by magnetic studies and calculations. Four carboxylate donors and one Cl− donor per Os, with Os–Os string 3#u2#s3 (PW), reuse Fg25. Reduced Os₂(OAc)₄Cl₂− also needs no new atom type if charge/spin are bond-carried; no unique reduced-ion multiplicity is selected and no additional fixture is required. |
+| Fg40 | Larger carbonyl/hydride cages, heterometallic assemblies, polymeric Mg₂RuH₄/Mg₃RuH₃, borohydrides, η²-H₂ complexes | Unselected / deferred | HW 1948, 1973–1974, 1984–1986, 2113–2138. No additional per-cage MC state, and no isolated molecular ion inferred from an extended solid's formula. The established η²-H₂ donor limitation remains separate work. Small ordinary-bond carbonyl clusters are covered above. |
+
+#### Limits and coverage
+
+Capacities are **Fe 21 and Os 20**; Ru/Hs retain 18. Fe covers the seven/eight-donor
+high-spin complexes (19/21 electrons), the ferrate(V/IV) charge alternatives (19/20)
+and the Fe(I) brown-ring description (19). Os covers the six-coordinate Os(VIII)
+oxo/fluoride states in Fg28 (20). ValenceTable targets are unchanged; supplied H
+counts remain necessary where Counts has no saturation target.
+
+**223 new conformance fixtures** cover all 210 additions and complete coverage of
+all 17 retained states. They comprise 137 donor–acceptor, 36 inorganic-ion,
+25 hydride, 17 small-molecule and 8 atomic-ion inputs. Every new fixture resolves
+under AtomTyping and Counts with both policies; exact expected atom types,
+agreement of all four outputs and valence invariants were checked independently.
+The three deoxyheme/cytochrome coordination models explicitly identify their capped
+ligands; the source-supported local occupations are supplied to resolution.
+
+Two existing Fe halide inputs now supply their known high-spin occupations;
+the bare Fe(OH)₂+ source comment is corrected. The spin-unspecified Ru²⁺/Ru³⁺
+inputs now record Strict ambiguity and the existing low-spin MostSaturated result.
+Four existing snapshots change. The full **2,703-case** suite, 3,594 graph unit tests,
+223 graph property tests and 307 chemistry tests pass; formatting and Clippy pass.
+
+#### Iron-group sources
+
+| Key | Source | Access and contribution |
+| --- | --- | --- |
+| ASD | NIST Atomic Spectra Database, ground-state tables, retrieved 2026-11-04: [Ru](../materials/valence/NIST-ASD-2026-ru-ground-states.html), [Os](../materials/valence/NIST-ASD-2026-os-ground-states.html); [database](https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html) | Reviewed and archived. Free Ru²⁺/Os²⁺: d⁶ ⁵D₄; Ru³⁺/Os³⁺: d⁵ ⁶S₅/₂. Fg02 does not substitute complex occupations for free ions. |
+| K71 | King, Logan, Morris and Wallwork, “Eight-co-ordinate Iron(III) Complex: Crystal Structure of Tetraphenylarsonium Tetranitratoferrate(III),” *Chem. Commun.* (1971), 554. [DOI](https://doi.org/10.1039/C29710000554), [PDF](../materials/valence/King-1971-tetranitratoferrate.pdf) | User supplied; reviewed and archived. Discrete Fe(NO₃)₄−, four nearly symmetric bidentate nitrates; spherical nonbonding occupation compared with Mn(NO₃)₄²−. Fg12. |
+| NMR68 | Chatt et al., “Nuclear magnetic resonance in complexes exhibiting second-order paramagnetism,” *Chem. Commun.* (1968), 419–420. [DOI](https://doi.org/10.1039/C19680000419), [PDF](../materials/valence/Chatt-1968-second-order-paramagnetism.pdf) | Already archived; OsCl₄L₂ passage rechecked. Explicit ³T₁g parent and spin–orbit-coupled J = 0 level; Fg22a. |
+| S19Ru | Śliwa, Mitoraj, Sagan and Handzlik, “Formation of active species from ruthenium alkylidene catalysts—an insight from computational perspective,” *J. Mol. Model.* **25** (2019), 331. [DOI](https://doi.org/10.1007/s00894-019-4202-5), [PDF](../materials/valence/Sliwa-2019-ruthenium-alkylidene-catalysts.pdf) | Retrieved, reviewed and archived. Structures, pp. 1–2; explicit singlet assignment and comparison with triplet/quintet energies, p. 3. Fg31. |
+| M16Ru | Miradji, “Quantum Modelling of Ruthenium Chemistry in the field of Nuclear Power Plant Safety,” Lille 1 PhD thesis (2016). [Institutional copy](https://www.irsn.fr/sites/default/files/documents/larecherche/formation_recherche/theses/theses-soutenues/psn-res/2016-These-Miradji.pdf), [PDF](../materials/valence/Miradji-2016-ruthenium-thesis.pdf) | Relevant oxide sections reviewed and archived. Quintet RuO and singlet RuO₂/RuO₃; ordinary double-bond assignments, pp. 74–78, 80–84, 94–95. Fg33. Calculated-only oxyhydroxide families are not selected. |
+| W96 | Wu, Desai and Wang, “Observation and Photoelectron Spectroscopic Study of Novel Mono- and Diiron Oxide Molecules: FeOᵧ− (y = 1–4) and Fe₂Oᵧ− (y = 1–5),” *J. Am. Chem. Soc.* **118** (1996), 5296–5301. [DOI](https://doi.org/10.1021/ja954153b), [author copy](https://bpb-us-w2.wpmucdn.com/sites.brown.edu/dist/0/196/files/2020/09/39.pdf), [PDF](../materials/valence/Wu-1996-iron-oxides.pdf) | Retrieved, relevant monoiron passages reviewed and archived. FeO occupation diagram, p. 5299; FeO₃ structural evidence. The paper explicitly leaves detailed higher-oxide electronic assignments to further calculations. Fg34/Fg38. |
+| C96 | Chertihin et al., “Reactions of Laser-Ablated Iron Atoms with Oxygen Molecules in Condensing Argon. Infrared Spectra and Density Functional Calculations of Iron Oxide Product Molecules,” *J. Phys. Chem.* **100** (1996), 5261–5273. [DOI](https://doi.org/10.1021/jp953198w), [PDF](../materials/valence/Chertihin-1996-iron-oxides.pdf) | User supplied; relevant monoiron sections reviewed and archived. Observed isomers, isotopic assignments and explicit spin discussion, pp. 5266–5270; cyclic quintet peroxide, p. 5269. Does not establish observed tetrahedral FeO₄. Fg34/Fg38/Fg38c. |
+| AA01 | Aullón and Alvarez, “Theoretical Study of Bonding, Structure, and Vibrational Spectra of the [Fe₂(CO)₈]²− Anion and Its Derivatives,” *Organometallics* **20** (2001), 818–826. [DOI](https://doi.org/10.1021/om000548e), [PDF](../materials/valence/Aullon-Alvarez-2001-iron-carbonylate.pdf) | User supplied; reviewed and archived. Parent carbonylate isomers and methylene derivatives; it does not analyze HFe₂(CO)₈−. The unbridged parent uses Fe#c-#n4#v#t4 from Fg17 with an ordinary Fe–Fe bond. |
+| SS06 | Shorafa and Seppelt, “Osmium(VII) Fluorine Compounds,” *Inorg. Chem.* **45** (2006), 7929–7934. [DOI](https://doi.org/10.1021/ic0608290), [PDF](../materials/valence/Shorafa-Seppelt-2006-osmium-fluorides.pdf) | Reviewed and archived. OsOF₅ confirmed; OsF₇ synthesis not reproduced; solid OsO₂F₃ is mixed-valence, with a gas-phase monomer left tentative. Fg26–Fg27a. |
+| CB92/C93Os | Christe and Bougon, “Osmium tetrafluoride dioxide, OsF₄O₂: a new osmium(VIII) oxide fluoride,” *Chem. Commun.* (1992), 1056a, [DOI](https://doi.org/10.1039/C3992001056A); Christe et al., “Osmium tetrafluoride dioxide, cis-OsO₂F₄,” *J. Am. Chem. Soc.* **115** (1993), 11279–11284, [DOI](https://doi.org/10.1021/ja00077a029), [PDF](../materials/valence/Christe-1993-osmium-tetrafluoride-dioxide.pdf) | C93Os relevant sections reviewed and full PDF archived; CB92 abstract reviewed. Corrects reported OsOF₆ to cis-OsO₂F₄ using composition, electron diffraction and spectroscopy; no OsOF₆-specific state selected. Fg27b. |
+| R01 | Rauchfuss et al., “The Influence of Cyanide on the Carbonylation of Iron(II): Synthesis of Fe-SR-CN-CO Centers Related to the Hydrogenase Active Sites,” *J. Am. Chem. Soc.* **123** (2001), 6933–6934. [DOI](https://doi.org/10.1021/ja015948n), [PDF](../materials/valence/Rauchfuss-2001-cyanocarbonyl.pdf) | Reviewed and archived. Formula, structure and explicit low-spin Fe(II) assignment of trans-[Fe(CN)₄(CO)₂]²−, p. 6934. Fg32. |
+| C02 | Contakes et al., “Preparative and Structural Studies on the Carbonyl Cyanides of Iron, Manganese, and Ruthenium: Fundamentals Relevant to the Hydrogenases,” *Inorg. Chem.* **41** (2002), 1670–1678. [DOI](https://doi.org/10.1021/ic011030l), [PDF](../materials/valence/Contakes-2002-cyanocarbonyls.pdf) | Retrieved, relevant iron sections reviewed and archived. Both cis/trans-[Fe(CN)₄(CO)₂]²− and [Fe(CN)₅(CO)]³−. Fg32/Fg32a. |
+| K03 | Kayal and Rauchfuss, “Protonation Studies of the New Iron Carbonyl Cyanide trans-[Fe(CO)₃(CN)₂]²−: Implications with Respect to Hydrogenases,” *Inorg. Chem.* **42** (2003), 5046–5048. [DOI](https://doi.org/10.1021/ic034455b), [PDF](../materials/valence/Kayal-2003-cyanocarbonyl.pdf) | Retrieved, reviewed and archived. Establishes the distinct Fe(0) tricarbonyl dicyanide; distinguishes it from Fg32's Fe(II) compound. |
+| HT12 | Hendrickx and Tran, “On the Electronic and Geometric Structures of FeO₂−/0 and the Assignment of the Anion Photoelectron Spectrum,” *J. Chem. Theory Comput.* **8** (2012), 3089–3096. [DOI](https://doi.org/10.1021/ct300516y), [PDF](../materials/valence/Hendrickx-Tran-2012-iron-dioxide.pdf) | Reviewed and archived. Neutral triplet and anionic doublet ground states; Fig. 1 and pp. 3092–3095 give the occupations used in Fg38a. |
+| CB78 | Chin and Bau, “Crystal Structure of [(Ph₃P)₂N]+[HFe₂(CO)₈]−,” *Inorg. Chem.* **17** (1978), 2314–2317. [DOI](https://doi.org/10.1021/ic50186a061), [PDF](../materials/valence/Chin-Bau-1978-diiron-hydride.pdf) | Reviewed and archived. Symmetric hydride bridge and explicit three-center M–H–M discussion. The H− electron allocation and exclusion of an additional Fe–Fe bond in Fg35 are the accepted graph convention. |
+| L08 | Louwerse, *Computational Modeling of Oxidation Catalysis: Studies concerning Fenton’s reaction*, Vrije Universiteit thesis (2008), chapter 5, pp. 85–104. [Thesis copy](https://www.scm.com/wp-content/uploads/Thesis_Manuel_Louwerse.pdf), [PDF](../materials/valence/Louwerse-2008-oxidation-catalysis-thesis.pdf); reprints Louwerse and Baerends (2007), [DOI](https://doi.org/10.1039/B613182D) | Relevant chapter reviewed and archived. Explicit S = 2 for bare and hydrated ferryl, pp. 89–93. Fg39a. |
+| C23 | Coates, Banerjee and Odelius, “Simulations of the Aqueous ‘Brown-Ring’ Complex Reveal Fluctuations in Electronic Character,” *Inorg. Chem.* **62** (2023), 16854–16866. [DOI](https://doi.org/10.1021/acs.inorgchem.3c02320), [PDF](../materials/valence/Coates-2023-brown-ring.pdf) | Retrieved, relevant assignments/conclusions reviewed and archived. Fig. 1a–c supplies three explicit metal/NO charge and spin descriptions. Fg39b retains all three; the bond-carried NO charge/spin allocation is PW. |
+| H19 | Hussein et al., “Mechanism of Os-Catalyzed Oxidative Cyclization of 1,5-Dienes,” *J. Org. Chem.* **84** (2019), 15173–15183. [DOI](https://doi.org/10.1021/acs.joc.9b02174), [PDF](../materials/valence/Hussein-2019-osmium-cyclization.pdf), [SI](../materials/valence/Hussein-2019-osmium-cyclization-SI.pdf), [SI source](https://doi.org/10.1021/acs.joc.9b02174.s001) | Relevant main-text and SI sections reviewed; both PDFs archived. Explicit low-spin Os(VI) glycolate and spin comparison (main p. 15175; SI p. S9) support Fg39c. |
+| HR57 | Hepworth and Robinson, “Simple and complex oxyhalides of ruthenium and osmium,” *J. Inorg. Nucl. Chem.* **4** (1957), 24–29. [DOI](https://doi.org/10.1016/0022-1902(57)80104-3), [PDF](../materials/valence/Hepworth-Robinson-1957-oxyhalides.pdf) | Reviewed and archived. OsOCl₄ is diamagnetic (p. 25); p. 29 explicitly attributes this to pairing of its two d electrons. Fg38b. Does not establish an OsOF₄ occupation. |
+| W56 | Wahl, Klemm and Wehrmeyer, “Über einige Oxokomplexe von Übergangselementen,” *Z. anorg. allg. Chem.* **285** (1956), 322–336. [DOI](https://doi.org/10.1002/zaac.19562850325), [PDF](../materials/valence/Wahl-1956-oxocomplexes.pdf) | Relevant ferrate(V) section reviewed and archived. The measured 3.6–3.7 μB supports three unpaired electrons, but sample identity was tentative, pp. 329–330. S16 confirms K₃FeO₄ and N18 independently uses the quartet occupation; Fg39d/Fg39e. |
+| WA09 | Wang and Andrews, “Infrared Spectra and Theoretical Calculations for Fe, Ru, and Os Metal Hydrides and Dihydrogen Complexes,” *J. Phys. Chem. A* **113** (2009), 551–563. [DOI](https://doi.org/10.1021/jp806845h), [PDF](../materials/valence/Wang-Andrews-2009-iron-group-hydrides.pdf) | Reviewed and archived. Observed FeH/FeH₂ and previously observed FeH₂−, with explicit ground-state assignments (Table 4). Separates H₂ complexes from calculated-only bare hydrides; Fg36–Fg36c. |
+| K94 | Klose et al., “Magnetic Properties Diagnostic for the Existence of Iron(II)–Iron(II) Bonds in Dinuclear Complexes Which Derive from Stepwise Insertion Reactions on Unsupported Iron–Aryl Bonds,” *J. Am. Chem. Soc.* **116** (1994), 9123–9135. [DOI](https://doi.org/10.1021/ja00099a030), [PDF](../materials/valence/Klose-1994-diiron-mesityl.pdf) | Relevant structure and magnetic sections reviewed and archived. Fe₂Mes₄, not a monomer; coupled-center analysis and evidence for direct Fe–Fe interaction, pp. 9131–9133. No new local occupation selected; Fg37. |
+| PRE12 | Poblador-Bahamonde, Raynaud and Eisenstein, “Structures of d⁴ MH₃X: a Computational Study of the Influence of the Metal and the Ligands,” *Inorg. Chem.* **51** (2012), 5705–5715. [DOI](https://doi.org/10.1021/ic3001448), [institutional copy](https://archive-ouverte.unige.ch/unige:26053), [PDF](../materials/valence/Poblador-Bahamonde-2012-d4-tetracoordinate.pdf) | Relevant sections reviewed and archived. Explicitly identifies characterized Ru/Os tetraorganyls as diamagnetic d⁴ (p. 5711) and describes two nonbonding pairs; Fg37a. The original 1987 synthesis paper, DOI 10.1039/DT9870000557, returned 403; PRE12 supplies the explicit occupation used here. |
+| S16 | Machalová Šišková et al., “High-valent iron (FeVI, FeV, and FeIV) species in water: characterization and oxidative transformation of estrogenic hormones,” *Phys. Chem. Chem. Phys.* **18** (2016), 18802–18810. [DOI](https://doi.org/10.1039/C6CP02216B), [accepted manuscript](../materials/valence/Siskova-2016-high-valent-iron.pdf) | Characterization sections reviewed and manuscript archived. Manuscript pp. 2–3 report 94% Fe(IV) in Na₄FeO₄ and 93% Fe(V) in K₃FeO₄, with >90% phase purity for each; residual Fe is Fe(III). Supplies identity, with spin assignments from N18. The unarchived SI is not needed for these main-text results. Fg39d–Fg39g. |
+| N18 | Novák et al., “Transformations of ferrates(IV,V,VI) in liquids: Mössbauer spectroscopy of frozen solutions,” *Phys. Chem. Chem. Phys.* **20** (2018), 30247–30256. [DOI](https://doi.org/10.1039/C8CP05952G), [PDF](../materials/valence/Novak-2018-ferrate-transformations.pdf), [SI](../materials/valence/Novak-2018-ferrate-transformations-SI.pdf) | Relevant characterization and calculation sections reviewed; main/SI archived. Tetrahedral Na₄FeO₄ and K₃FeO₄; SI Table SI11 (PDF p. 14) explicitly uses quintet FeO₄⁴− and quartet FeO₄³− in the calculations. These are calculated multiplicities, distinct from the Mössbauer line-shape labels. Fg39d–Fg39g. |
+| B00Fe | Bärsch, *Reactivity and Thermochemistry of Gaseous Iron Compounds of Different Valency*, TU Berlin thesis (2000). [Repository copy](https://webdoc.sub.gwdg.de/ebook/diss/2003/tu-berlin/diss/2000/baersch_susanne.pdf), [PDF](../materials/valence/Baersch-2000-gaseous-iron-thesis.pdf) | Relevant gas-phase calculations reviewed and thesis archived. Explicit sextet Fe(OH)₂+ (pp. 38–39) and FeCl₂+ (Table 4-3, p. 83) support the existing state in Fg01. |
+| Z00 | Zhou et al., “Infrared Spectra and Density Functional Calculations of MO₂, MO₃, (O₂)MO₂, MO₄, MO₂− (M = Re, Ru, Os) and ReO₃−, ReO₄− in Solid Neon and Argon,” *J. Phys. Chem. A* **104** (2000), 3457–3465. [DOI](https://doi.org/10.1021/jp993026p), [PDF](../materials/valence/Zhou-2000-ruthenium-osmium-oxides.pdf) | Relevant Ru/Os sections reviewed and PDF archived. Observed OsO₂, RuO₂−/OsO₂−, OsO₃ and (O₂)MO₂, with explicit calculated occupations in Tables 5–7 and pp. 3461–3464; Fg38d–Fg38g. |
+| H88 | Hope, Levason and Ogden, “Spectroscopic studies on matrix isolated osmium pentafluoride oxide, osmium tetrafluoride oxide, and osmium difluoride trioxide,” *J. Chem. Soc., Dalton Trans.* (1988), 61–65. [DOI](https://doi.org/10.1039/DT9880000061), [PDF](../materials/valence/Hope-1988-osmium-oxyfluorides.pdf) | Reviewed and archived. Monomeric OsOF₄ vibrational assignment, pp. 62–63; explicit dxy² ground occupation used to interpret its electronic spectrum, pp. 64–65. Fg38b. |
+| A06 | Avdei et al., “Ab initio study of the comparative stability of ruthenium(VI) and osmium(VI) oxo hydroxo complexes with different coordination numbers,” *Russ. J. Inorg. Chem.* **51** (2006), 1920–1924. [DOI](https://doi.org/10.1134/S0036023606120138), [PDF](../materials/valence/Avdei-2006-ruthenium-osmium-oxohydroxo.pdf) | Reviewed and archived. Triplet RuO₃(OH)₂²− and singlet OsO₂(OH)₄²−, pp. 1921–1922; spin–orbit treatment retains their predominant spin character. Fg38h/Fg25; no states selected for the uncharacterized coordination alternatives. |
+| X08 | Xue et al., “Experimental and Theoretical Study of the Reactions between Small Neutral Iron Oxide Clusters and Carbon Monoxide,” *J. Am. Chem. Soc.* **130** (2008), 15879–15888. [DOI](https://doi.org/10.1021/ja8023093), [author copy](https://bernsteinlab.colostate.edu/213.pdf), [PDF](../materials/valence/Xue-2008-neutral-iron-oxides.pdf) | Relevant monoiron sections reviewed and PDF archived. The small singlet/triplet FeO₃ separation and explicitly unresolved ordering, pp. 15884–15886, support retaining both supplied-spin descriptions through existing selections. Fg38k. |
+| D20Ru | Dissanayaka Mudiyanselage et al., “Li₄Ru₂OCl₁₀·10H₂O: crystal structure, magnetic properties and bonding interactions in ruthenium-oxo complexes,” *Acta Cryst. B* **76** (2020), 884–891. [DOI](https://doi.org/10.1107/S2052520620010914), [repository copy](https://www.osti.gov/servlets/purl/1851622), [PDF](../materials/valence/Mudiyanselage-2020-ruthenium-oxo.pdf) | Reviewed and archived. Ru(IV) established by XPS; the body, Fig. 5 and conclusion explicitly describe paired occupied MOs, pp. 889–890. Fg39h uses this description, distinct from the isolated MX₆²− occupation. |
+| DZ20 | Dzhabieva et al., “Biomimetic Water Oxidation Catalyzed by a Binuclear Ruthenium (IV) Nitrido-Chloride Complex with Lithium Counter-Cations,” *Biomimetics* **5** (2020), 3. [DOI](https://doi.org/10.3390/biomimetics5010003), [PDF](../materials/valence/Dzhabieva-2020-ruthenium-nitrido.pdf) | Relevant structural section reviewed and PDF archived. Discrete Ru₂NCl₈(H₂O)₂³−, a linear centrosymmetric bridge and explicit Ru=N double-bond assignment, pp. 4–5. Paired occupation comes from HW 1983–1984. Fg39i does not include the later tetranuclear catalyst. |
+| G26 | Grenda et al., “Electron and spin density distributions and magnetic anisotropy in mixed-valent diruthenium(V) tetracarboxylates assessed via crystallographic and theoretical analyses,” *Dalton Trans.* **55** (2026), 7173–7183. [DOI](https://doi.org/10.1039/D6DT00342G), [repository copy](https://hal.science/hal-05613872), [PDF](../materials/valence/Grenda-2026-diruthenium.pdf) | Reviewed and archived from HAL. Polarized-neutron/X-ray measurements and calculations support equivalent Ru sites, the quartet and σ²π⁴δ²(δ*π*)³, pp. 7173–7174, 7178–7179. The atom/bond allocation in Fg39j is PW; the calculated effective bond order is not substituted for the nominal graph order. |
+| GP13 | Gracia and Patmore, “Structural, spectroscopic and theoretical studies of diosmium(III,III) tetracarboxylates,” *Dalton Trans.* **42** (2013), 13118–13125. [DOI](https://doi.org/10.1039/C3DT51449H), [repository copy](https://eprints.hud.ac.uk/id/eprint/18802/), [PDF](../materials/valence/Gracia-Patmore-2013-osmium-carboxylates.pdf) | Relevant magnetic and electronic-structure sections reviewed; manuscript archived. PDF pp. 5 and 15–16 give the triplet σ²π⁴δ²δ*¹π*¹ description and distinguish it from the singlet alternative. Fg39k; no ligand-scaffold-specific state. |
+
+Intermediates and the candidate/count audit are in `scratch/hw-iron-review/`.
+Retained sources are archived in `materials/valence/`.

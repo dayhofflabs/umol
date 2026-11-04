@@ -1,0 +1,5 @@
+; (O2)FeO, quintet peroxide; C96, pp. 5269-5270; peroxide donor allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+2#u4" "O#c-" "O#c-" "O"]
+         :bonds [[1 2 "1"] [0 3 "2"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}}

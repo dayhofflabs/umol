@@ -1,0 +1,4 @@
+; FeH6(4-), low-spin octahedral ion; HW II, pp. 1948, 1973-1974
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-4#u0#h3" "H" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

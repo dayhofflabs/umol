@@ -1,0 +1,4 @@
+; OsO3N-; HW II, p. 1978
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c-1#u0" "O" "O" "O" "N"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "3"]]}}

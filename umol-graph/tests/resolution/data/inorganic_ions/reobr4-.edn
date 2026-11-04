@@ -1,0 +1,4 @@
+; ReOBr4-, paired d2; HW II, p. 1924; CL66, p. 14
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c-1" "O" "Br" "Br" "Br" "Br"]
+         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]}}

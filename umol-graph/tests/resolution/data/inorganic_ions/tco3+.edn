@@ -1,0 +1,4 @@
+; TcO3+; F82, pp. 5304, 5306
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tc#c+1" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"]]}}

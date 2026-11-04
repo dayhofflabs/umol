@@ -1,0 +1,4 @@
+; RuH6(4-), low-spin octahedral ion; HW II, pp. 1948, 1973-1974
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c-4#u0#h1" "H" "H" "H" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]}}

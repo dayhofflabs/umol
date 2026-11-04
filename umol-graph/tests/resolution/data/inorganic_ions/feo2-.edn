@@ -1,0 +1,4 @@
+; Molecular FeO2-, doublet; HT12, Fig. 1
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-1#u1" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

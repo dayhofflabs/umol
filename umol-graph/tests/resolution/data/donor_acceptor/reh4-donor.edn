@@ -1,0 +1,5 @@
+; ReH4, 1 unpaired electrons; WA03MnRe, pp. 4088-4089; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c+4#u1" "H#c-" "H#c-" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

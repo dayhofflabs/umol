@@ -1,0 +1,5 @@
+; (O2)RuO2, singlet peroxide; Z00, Table 7; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c+2#u0" "O" "O" "O#c-" "O#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [3 4 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

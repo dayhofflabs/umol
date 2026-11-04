@@ -1,0 +1,4 @@
+; Ferryl FeO(2+); HW II, p. 1969; L08, pp. 89-93
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+2#u4" "O"]
+         :bonds [[0 1 "2"]]}}

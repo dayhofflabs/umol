@@ -1,0 +1,11 @@
+; Deoxyheme coordination model, high-spin; HW II, pp. 1965-1966; porphine/imidazole ligand truncation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+2#u4" "N#c-" "C" "C#h" "C#h" "C" "C#h" "N" "C" "C#h" "C#h" "C" "C#h" "N#c-" "C" "C#h" "C#h"
+                 "C" "C#h" "N" "C" "C#h" "C#h" "C" "C#h" "N" "C#h" "N#h" "C#h" "C#h"]
+         :bonds [[1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 1 "1"] [5 6 "1"] [6 8 "2"] [7 8 "1"] [8 9 "1"]
+                 [9 10 "2"] [10 11 "1"] [11 7 "2"] [11 12 "1"] [12 14 "2"] [13 14 "1"] [14 15 "1"] [15 16 "2"]
+                 [16 17 "1"] [17 13 "1"] [17 18 "2"] [18 20 "1"] [19 20 "2"] [20 21 "1"] [21 22 "2"] [22 23 "1"]
+                 [23 19 "1"] [23 24 "2"] [24 2 "1"] [25 26 "2"] [26 27 "1"] [27 28 "1"] [28 29 "2"] [29 25 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [13] :acceptor 0 :attrs "1"} {:donors [19] :acceptor 0 :attrs "1"}
+                        {:donors [25] :acceptor 0 :attrs "1"}]}}

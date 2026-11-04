@@ -1,0 +1,3 @@
+; Mn4+, free ion d3; HW II, pp. 1901, 1907, 1917, 1923
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c+4#u3"]}}

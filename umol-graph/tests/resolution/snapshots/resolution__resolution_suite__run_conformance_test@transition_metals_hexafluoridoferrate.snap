@@ -1,5 +1,6 @@
 ---
-source: umol-graph/tests/resolution/mod.rs
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
@@ -29,7 +30,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-most-saturated {
     :output {
-      :atoms ["Fe#c-3#n2#u" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
+      :atoms ["Fe#c-3#u5" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
       :bonds [
         [0 1 :single]
         [0 2 :single]
@@ -41,7 +42,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :tie-breaks []}
   :counts-strict {
     :output {
-      :atoms ["Fe#c-3#n2#u" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
+      :atoms ["Fe#c-3#u5" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3" "F#n3"]
       :bonds [
         [0 1 :single]
         [0 2 :single]

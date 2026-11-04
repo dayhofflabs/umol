@@ -1,0 +1,3 @@
+; Os3+, free-ion d5 ground occupation; ASD
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c+3#u5"]}}

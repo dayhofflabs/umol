@@ -1,0 +1,5 @@
+; CpMnMe3; HW II, pp. 1914-1915; haptic order 3: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c+1#u3" "C#h3" "C#h3" "C#h3" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 4 "1#a"]]
+         :dative-bonds [{:donors [4 5 6 7 8] :acceptor 0 :attrs "3"}]}}
