@@ -1,0 +1,4 @@
+; GdCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Gd#c-3#u7" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

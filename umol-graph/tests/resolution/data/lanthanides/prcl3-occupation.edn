@@ -1,0 +1,4 @@
+; PrCl3 formula unit; HW II, pp. 2297-2299, 2303-2304; occupation inference.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pr" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

@@ -1,0 +1,10 @@
+; Er(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Er#c+3#u3" "C#c-#h2" "Si" "C#h3" "C#h3" "C#h3" "C#c-#h2" "Si" "C#h3" "C#h3" "C#h3" "C#c-#h2"
+                 "Si" "C#h3" "C#h3" "C#h3" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2"]
+         :bonds [[1 2 "1"] [2 3 "1"] [2 4 "1"] [2 5 "1"] [6 7 "1"] [7 8 "1"] [7 9 "1"] [7 10 "1"] [11 12 "1"]
+                 [12 13 "1"] [12 14 "1"] [12 15 "1"] [16 17 "1"] [17 18 "1"] [18 19 "1"] [19 20 "1"] [20 16 "1"]
+                 [21 22 "1"] [22 23 "1"] [23 24 "1"] [24 25 "1"] [25 21 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"} {:donors [16] :acceptor 0 :attrs "1"}
+                        {:donors [21] :acceptor 0 :attrs "1"}]}}

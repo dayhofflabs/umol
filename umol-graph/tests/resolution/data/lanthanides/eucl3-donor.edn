@@ -1,0 +1,5 @@
+; EuCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Eu#c+3#u6" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}]}}

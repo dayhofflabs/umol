@@ -21,6 +21,7 @@
 # AW69 | Allen and Warren, Inorg. Chem. 8 (1969), 1895-1901; doi:10.1021/ic50079a018
 # B00 | Baran, J. Fluorine Chem. 101 (2000), 61-63; doi:10.1016/S0022-1139(99)00194-3
 # B00Fe | Baersch, Reactivity and Thermochemistry of Gaseous Iron Compounds of Different Valency, TU Berlin thesis (2000)
+# B01Ln | Bochkarev et al., Angew. Chem. Int. Ed. 40 (2001), 3176-3178; doi:10.1002/1521-3773(20010903)40:17<3176::AID-ANIE3176>3.0.CO;2-Y
 # B04 | Balaban, Oniciu and Katritzky, Chem. Rev. 104 (2004), 2777-2812; doi:10.1021/cr0306790
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
 # B72 | Bartlett et al., Inorg. Chem. 11 (1972), 1124-1127; doi:10.1021/ic50111a042
@@ -89,6 +90,9 @@
 # DW77 | Datta and Wreford, Inorg. Chem. 16 (1977), 1134-1137; doi:10.1021/ic50171a031
 # DZ20 | Dzhabieva et al., Biomimetics 5 (2020), 3; doi:10.3390/biomimetics5010003
 # E15 | England et al., Inorg. Chem. 54 (2015), 12002–12018; doi:10.1021/acs.inorgchem.5b02415
+# E82Ln | Evans et al., J. Am. Chem. Soc. 104 (1982), 2008-2014; doi:10.1021/ja00371a035
+# E83Ln | Evans et al., J. Am. Chem. Soc. 105 (1983), 1401-1403; doi:10.1021/ja00343a071
+# E86Ln | Evans, Hughes and Hanusa, Organometallics 5 (1986), 1285-1291; doi:10.1021/om00138a001
 # E92 | Eppley et al., J. Organomet. Chem. 431 (1992), 133-142; doi:10.1016/0022-328X(92)80112-B
 # EC76 | Epiotis and Cherry, J. Am. Chem. Soc. 98 (1976), 4365-4370; doi:10.1021/ja00431a003
 # EC90 | Ellis and Chi, J. Am. Chem. Soc. 112 (1990), 6022-6025; doi:10.1021/ja00172a017
@@ -190,6 +194,7 @@
 # OC82 | Oberhammer and Christe, Inorg. Chem. 21 (1982), 273-275; doi:10.1021/ic00131a050
 # P05 | Procelewska et al., Inorg. Chem. 44 (2005), 7732–7742; doi:10.1021/ic050478+
 # P06 | Pointner, Suontamo and Schrobilgen, Inorg. Chem. 45 (2006), 1517-1534; doi:10.1021/ic0510260
+# P08Ln | Persson et al., Chem. Eur. J. 14 (2008), 3056-3066; doi:10.1002/chem.200701281
 # P71 | Pennella, Chem. Commun. (1971), 158; doi:10.1039/C2971000158A
 # P82 | Pacchioni, Fantucci and Valenti, J. Organomet. Chem. 224 (1982), 89–105; doi:10.1016/S0022-328X(00)82570-X
 # P85 | Pohl, Saak and Krebs, Z. Naturforsch. B 40 (1985), 251-257; doi:10.1515/znb-1985-0218
@@ -221,6 +226,7 @@
 # Sh73 | Shaw, Carroll and Thomas, J. Am. Chem. Soc. 95 (1973), 5870-5875; doi:10.1021/ja00799a006
 # SYB05 | Shayesteh et al., Chem. Eur. J. 11 (2005), 4709-4712; doi:10.1002/chem.200500332
 # T79 | Trop, MIT PhD thesis (1979); https://hdl.handle.net/1721.1/37642
+# T80Ln | Tilley et al., Inorg. Chem. 19 (1980), 2999-3003; doi:10.1021/ic50212a031
 # T90 | Trinquier, J. Am. Chem. Soc. 112 (1990), 2130-2137; doi:10.1021/ja00162a014
 # TB76 | Thomas and Brown, J. Organomet. Chem. 111 (1976), 297-301
 # TB84 | Thompson and Bercaw, Pure Appl. Chem. 56 (1984), 1-11; doi:10.1351/pac198456010001
@@ -2948,6 +2954,7 @@
     "La #c+3 #t2",  # LaH2+, hydride donors; WCA02, Table 6; allocation: PW
     "La #c+3 #t4",  # LaH4-, hydride donors; WCA02, Table 8; allocation: PW
     "La #c+3 #t10", # [La(C8H8)2]-, eta8/eta8; HW II, pp. 2212, 2214; haptic order 5: PW
+    "La #c+3 #t7",  # [LaI2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
     "La #c- #h4",   # LaH4- singlet; WCA02, Table 8
 ]
 1 = [
@@ -2961,6 +2968,8 @@
     "La #u #v2",      # LaH2 doublet; WCA02, Table 5
     "La #v2 #h",      # LaH3 singlet; WCA02, Table 7
     "La #c+ #v2",     # LaH2+ singlet; WCA02, Table 6
+    "La #c+ #v2 #t5", # [LaI2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+    "La #c+ #v2 #t6", # Cp*LaI2(THF)3; HW II, p. 2310; haptic order 3: PW
     "La #c- #v2 #h2", # LaH4- singlet; WCA02, Table 8
 ]
 3 = [
@@ -2977,92 +2986,443 @@
 
 [Ce]
 0 = [
-    "Ce #n #u2 #s", # Ce atom, s2d1f1
-    "Ce #c+3 #u",   # Ce3+, f1
-    "Ce #c+4",      # Ce4+
+    "Ce #n #u2 #s",    # Ce atom, s2d1f1, 1G4; HW II, p. 2228; ASD
+    "Ce #c+3 #u",      # Ce3+, f1; HW II, pp. 2297-2301
+    "Ce #c+3 #u #t3",  # CeCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c+3 #u #t6",  # CeCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c+3 #u #t8",  # [Ce(en)4]3+; HW II, p. 2307
+    "Ce #c+3 #u #t9",  # [Ce(H2O)9]3+; HW II, p. 2306
+    "Ce #c+3 #u #t7",  # Ce(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Ce #c+3 #u #t10", # [Ce(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+    "Ce #c+3 #u #t12", # [Ce(NO3)6](3-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+    "Ce #c+4",         # Ce4+; HW II, pp. 2297-2301
+    "Ce #c+4 #t4",     # CeF4 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c+4 #t6",     # CeCl6(2-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c+4 #t7",     # CeF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c+4 #t8",     # CeF8(4-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c+4 #t12",    # [Ce(NO3)6](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+2 = [
+    "Ce #c+ #u #v2 #t5", # [CeCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+    "Ce #c+ #u #v2 #t6", # Cp*CeI2(THF)3; HW II, p. 2310; haptic order 3: PW
+]
+3 = [
+    "Ce #u #v3",     # CeCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #u #v3 #t4", # Ce(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Ce #v4",     # CeF4 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #v4 #t4", # Ce(acac)4; HW II, p. 2307; ligand allocation: PW
+]
+5 = [
+    "Ce #c-2 #u #v5 #t5", # [Ce(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Ce #c-2 #v6",        # CeCl6(2-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c-2 #v6 #t6",    # [Ce(NO3)6](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+    "Ce #c-3 #u #v6",     # CeCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ce #c-3 #u #v6 #t6", # [Ce(NO3)6](3-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+7 = [
+    "Ce #c-3 #v7", # CeF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+8 = [
+    "Ce #c-4 #v8", # CeF8(4-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Pr]
 0 = [
-    "Pr #n #u3",   # Pr atom, s2f3
-    "Pr #c+3 #u2", # Pr3+, f2
-    "Pr #c+4 #u",  # Pr4+, f1
+    "Pr #n #u3",       # Pr atom, s2f3; HW II, p. 2228
+    "Pr #c+3 #u2",     # Pr3+, f2; HW II, pp. 2297-2301
+    "Pr #c+3 #u2 #t3", # PrCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #c+3 #u2 #t6", # PrCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #c+3 #u2 #t8", # [Pr(en)4]3+; HW II, p. 2307
+    "Pr #c+3 #u2 #t9", # [Pr(H2O)9]3+; HW II, p. 2306
+    "Pr #c+3 #u2 #t7", # Pr(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Pr #c+4 #u",      # Pr4+, f1; HW II, pp. 2297-2301
+    "Pr #c+4 #u #t4",  # PrF4 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #c+4 #u #t6",  # PrF6(2-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #c+4 #u #t7",  # PrF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+3 = [
+    "Pr #u2 #v3",     # PrCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #u2 #v3 #t4", # Pr(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Pr #u #v4",          # PrF4 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #c- #u2 #v4 #t5", # [Pr(EDTA)(H2O)3]-; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Pr #c-2 #u #v6",  # PrF6(2-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pr #c-3 #u2 #v6", # PrCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+7 = [
+    "Pr #c-3 #u #v7", # PrF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Nd]
 0 = [
-    "Nd #n #u4",   # Nd atom, s2f4
-    "Nd #c+3 #u3", # Nd3+, f3
+    "Nd #n #u4",       # Nd atom, s2f4; HW II, p. 2228
+    "Nd #c+2 #u4",     # Nd2+, f4; HW II, pp. 2300-2304; ASD
+    "Nd #c+2 #u4 #t2", # NdCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Nd #c+2 #u4 #t7", # NdI2(THF)5, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Nd #c+3 #u3",     # Nd3+, f3; HW II, pp. 2297-2301
+    "Nd #c+3 #u3 #t3", # NdCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Nd #c+3 #u3 #t6", # NdCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Nd #c+3 #u3 #t8", # [Nd(en)4]3+; HW II, p. 2307
+    "Nd #c+3 #u3 #t9", # [Nd(H2O)9]3+; HW II, p. 2306
+    "Nd #c+3 #u3 #t7", # Nd(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Nd #c+4 #u2",     # Nd4+, f2; HW II, pp. 2300-2304; ASD
+    "Nd #c+4 #u2 #t7", # NdF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+2 = [
+    "Nd #u4 #v2",         # NdCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Nd #u4 #v2 #t5",     # NdI2(THF)5, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Nd #c+ #u3 #v2 #t6", # CpNdCl2(THF)3; HW II, p. 2310; haptic order 3: PW
+]
+3 = [
+    "Nd #u3 #v3",     # NdCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Nd #u3 #v3 #t4", # Nd(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Nd #c-3 #u3 #v6", # NdCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+7 = [
+    "Nd #c-3 #u2 #v7", # NdF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Pm]
 0 = [
-    "Pm #n #u5",   # Pm atom, s2f5
-    "Pm #c+3 #u4", # Pm3+, f4
+    "Pm #n #u5",       # Pm atom, s2f5; HW II, p. 2228
+    "Pm #c+3 #u4",     # Pm3+, f4; HW II, pp. 2297-2301
+    "Pm #c+3 #u4 #t3", # PmCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pm #c+3 #u4 #t6", # PmCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pm #c+3 #u4 #t8", # [Pm(en)4]3+; HW II, p. 2307
+    "Pm #c+3 #u4 #t9", # [Pm(H2O)9]3+; HW II, p. 2306
+    "Pm #c+3 #u4 #t7", # Pm(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+3 = [
+    "Pm #u4 #v3",     # PmCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Pm #u4 #v3 #t4", # Pm(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Pm #c-3 #u4 #v6", # PmCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Sm]
 0 = [
-    "Sm #n #u6",   # Sm atom, s2f6
-    "Sm #c+2 #u6", # Sm2+, f6
-    "Sm #c+3 #u5", # Sm3+, f5
+    "Sm #n #u6",           # Sm atom, s2f6; HW II, p. 2228
+    "Sm #c+2 #u6",         # Sm2+, f6; HW II, pp. 2297-2301
+    "Sm #c+2 #u6 #t2",     # SmCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Sm #c+2 #u6 #t7",     # SmI2(THF)5, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Sm #c+2 #u6 #t8",     # SmI2(DME)3, 8-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Sm #c+2 #u6 #t6",     # Cp*2Sm; HW II, p. 2308; E86Ln; haptic order 3: PW
+    "Sm #c+3 #u5",         # Sm3+, f5; HW II, pp. 2297-2301
+    "Sm #c+3 #u5 #t3",     # SmCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Sm #c+3 #u5 #t6",     # SmCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Sm #c+3 #u5 #t8",     # [Sm(en)4]3+; HW II, p. 2307
+    "Sm #c+3 #u5 #t9",     # [Sm(H2O)9]3+; HW II, p. 2306
+    "Sm #c+3 #u5 #t7",     # Sm(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Sm #c+3 #u5 #t4",     # Sm(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+    "Sm #c+3 #u5 #t6 #m0", # [(Cp*)2Sm(mu-H)]2; HW II, p. 2310; E83Ln; allocation: PW
+]
+2 = [
+    "Sm #u6 #v2",         # SmCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Sm #u6 #v2 #t5",     # SmI2(THF)5, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Sm #u6 #v2 #t6",     # SmI2(DME)3, 8-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Sm #c+ #u5 #v2 #t5", # [SmI2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Sm #u5 #v3",     # SmCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Sm #u5 #v3 #t4", # Sm(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Sm #c- #u5 #v4 #t5", # [Sm(EDTA)(H2O)3]-; HW II, p. 2307; ligand allocation: PW
+    "Sm #c- #u5 #v4",     # Sm(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+]
+6 = [
+    "Sm #c-3 #u5 #v6", # SmCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Eu]
 0 = [
-    "Eu #n #u7",   # Eu atom, s2f7
-    "Eu #c+2 #u7", # Eu2+, f7
-    "Eu #c+3 #u6", # Eu3+, f6
+    "Eu #n #u7",        # Eu atom, s2f7; HW II, p. 2228
+    "Eu #c+2 #u7",      # Eu2+, f7; HW II, pp. 2297-2301
+    "Eu #c+2 #u7 #t2",  # EuCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Eu #c+2 #u7 #t6",  # Cp*2Eu; HW II, p. 2308; E86Ln; haptic order 3: PW
+    "Eu #c+2 #u7 #t7",  # Cp*2Eu(THF)1; HW II, p. 2308; T80Ln; haptic order 3: PW
+    "Eu #c+3 #u6",      # Eu3+, f6; HW II, pp. 2297-2301
+    "Eu #c+3 #u6 #t3",  # EuCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Eu #c+3 #u6 #t6",  # EuCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Eu #c+3 #u6 #t8",  # [Eu(en)4]3+; HW II, p. 2307
+    "Eu #c+3 #u6 #t9",  # [Eu(H2O)9]3+; HW II, p. 2306
+    "Eu #c+3 #u6 #t7",  # Eu(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Eu #c+3 #u6 #t10", # [Eu(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+2 = [
+    "Eu #u7 #v2", # EuCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+]
+3 = [
+    "Eu #u6 #v3",     # EuCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Eu #u6 #v3 #t4", # Eu(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Eu #c- #u6 #v4 #t4", # [Eu(EDTA)(H2O)2]-; HW II, p. 2307; ligand allocation: PW
+]
+5 = [
+    "Eu #c-2 #u6 #v5 #t5", # [Eu(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Eu #c-3 #u6 #v6", # EuCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Gd]
 0 = [
-    "Gd #n #u8",   # Gd atom, s2d1f7
-    "Gd #c+3 #u7", # Gd3+, f7
+    "Gd #n #u8",       # Gd atom, s2d1f7; HW II, p. 2228
+    "Gd #c+3 #u7",     # Gd3+, f7; HW II, pp. 2297-2301
+    "Gd #c+3 #u7 #t3", # GdCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Gd #c+3 #u7 #t6", # GdCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Gd #c+3 #u7 #t8", # [Gd(en)4]3+; HW II, p. 2307
+    "Gd #c+3 #u7 #t9", # [Gd(H2O)9]3+; HW II, p. 2306
+    "Gd #c+3 #u7 #t7", # Gd(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+2 = [
+    "Gd #c+ #u7 #v2 #t5", # [GdCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Gd #u7 #v3",     # GdCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Gd #u7 #v3 #t4", # Gd(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Gd #c- #u7 #v4 #t5", # [Gd(EDTA)(H2O)3]-; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Gd #c-3 #u7 #v6", # GdCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Tb]
 0 = [
-    "Tb #n3 #u5",     # Tb atom, s2f9
-    "Tb #c+3 #n #u6", # Tb3+, f8
-    "Tb #c+4 #u7",    # Tb4+, f7
+    "Tb #n3 #u5",         # Tb atom, s2f9; HW II, p. 2228
+    "Tb #c+3 #n #u6",     # Tb3+, f8; HW II, pp. 2297-2301
+    "Tb #c+3 #n #u6 #t3", # TbCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tb #c+3 #n #u6 #t6", # TbCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tb #c+3 #n #u6 #t8", # [Tb(en)4]3+; HW II, p. 2307
+    "Tb #c+3 #n #u6 #t9", # [Tb(H2O)9]3+; HW II, p. 2306
+    "Tb #c+3 #n #u6 #t7", # Tb(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Tb #c+4 #u7",        # Tb4+, f7; HW II, pp. 2297-2301
+    "Tb #c+4 #u7 #t4",    # TbF4 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tb #c+4 #u7 #t7",    # TbF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+2 = [
+    "Tb #c+ #n #u6 #v2 #t5", # [TbCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Tb #n #u6 #v3",     # TbCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tb #n #u6 #v3 #t3", # Tb(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Tb #n #u6 #v3 #t4", # Tb(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Tb #u7 #v4",            # TbF4 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tb #c- #n #u6 #v4 #t5", # [Tb(EDTA)(H2O)3]-; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Tb #c-3 #n #u6 #v6", # TbCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+7 = [
+    "Tb #c-3 #u7 #v7", # TbF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Dy]
 0 = [
-    "Dy #n4 #u4",      # Dy atom, s2f10
-    "Dy #c+3 #n2 #u5", # Dy3+, f9
+    "Dy #n4 #u4",          # Dy atom, s2f10; HW II, p. 2228
+    "Dy #c+2 #n3 #u4",     # Dy2+, f10; HW II, pp. 2300-2304; ASD
+    "Dy #c+2 #n3 #u4 #t2", # DyCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Dy #c+2 #n3 #u4 #t7", # DyI2(THF)5, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Dy #c+2 #n3 #u4 #t8", # DyI2(DME)3, 8-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Dy #c+3 #n2 #u5",     # Dy3+, f9; HW II, pp. 2297-2301
+    "Dy #c+3 #n2 #u5 #t3", # DyCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Dy #c+3 #n2 #u5 #t6", # DyCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Dy #c+3 #n2 #u5 #t8", # [Dy(en)4]3+; HW II, p. 2307
+    "Dy #c+3 #n2 #u5 #t9", # [Dy(H2O)9]3+; HW II, p. 2306
+    "Dy #c+3 #n2 #u5 #t7", # Dy(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Dy #c+4 #n #u6",      # Dy4+, f8; HW II, pp. 2300-2304; ASD
+    "Dy #c+4 #n #u6 #t7",  # DyF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+2 = [
+    "Dy #n3 #u4 #v2",         # DyCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Dy #n3 #u4 #v2 #t5",     # DyI2(THF)5, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Dy #n3 #u4 #v2 #t6",     # DyI2(DME)3, 8-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Dy #c+ #n2 #u5 #v2 #t5", # [DyCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Dy #n2 #u5 #v3",     # DyCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Dy #n2 #u5 #v3 #t3", # Dy(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Dy #n2 #u5 #v3 #t4", # Dy(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+4 = [
+    "Dy #c- #n2 #u5 #v4 #t5", # [Dy(EDTA)(H2O)3]-; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Dy #c-3 #n2 #u5 #v6", # DyCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+]
+7 = [
+    "Dy #c-3 #n #u6 #v7", # DyF7(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Ho]
 0 = [
-    "Ho #n5 #u3",      # Ho atom, s2f11
-    "Ho #c+3 #n3 #u4", # Ho3+, f10
+    "Ho #n5 #u3",           # Ho atom, s2f11; HW II, p. 2228
+    "Ho #c+3 #n3 #u4",      # Ho3+, f10; HW II, pp. 2297-2301
+    "Ho #c+3 #n3 #u4 #t3",  # HoCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ho #c+3 #n3 #u4 #t6",  # HoCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ho #c+3 #n3 #u4 #t8",  # [Ho(H2O)8]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Ho #c+3 #n3 #u4 #t9",  # [Ho(H2O)9]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Ho #c+3 #n3 #u4 #t7",  # Ho(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Ho #c+3 #n3 #u4 #t10", # [Ho(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+3 = [
+    "Ho #n3 #u4 #v3",     # HoCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Ho #n3 #u4 #v3 #t3", # Ho(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Ho #n3 #u4 #v3 #t4", # Ho(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+]
+5 = [
+    "Ho #c-2 #n3 #u4 #v5 #t5", # [Ho(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Ho #c-3 #n3 #u4 #v6", # HoCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Er]
 0 = [
-    "Er #n6 #u2",      # Er atom, s2f12
-    "Er #c+3 #n4 #u3", # Er3+, f11
+    "Er #n6 #u2",              # Er atom, s2f12; HW II, p. 2228
+    "Er #c+3 #n4 #u3",         # Er3+, f11; HW II, pp. 2297-2301
+    "Er #c+3 #n4 #u3 #t3",     # ErCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Er #c+3 #n4 #u3 #t6",     # ErCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Er #c+3 #n4 #u3 #t8",     # [Er(H2O)8]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Er #c+3 #n4 #u3 #t9",     # [Er(H2O)9]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Er #c+3 #n4 #u3 #t7",     # Er(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Er #c+3 #n4 #u3 #t10",    # [Er(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+    "Er #c+3 #n4 #u3 #t5",     # Er(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+    "Er #c+3 #n4 #u3 #t4",     # Er(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+    "Er #c+3 #n4 #u3 #t7 #m0", # [(MeCp)2Er(THF)(mu-H)]2; HW II, p. 2310; E82Ln; allocation: PW
+]
+1 = [
+    "Er #c+2 #n4 #u3 #v #t7", # Cp2Er(tBu)(THF); HW II, pp. 2309-2310; E82Ln, pp. 2009-2010; haptic order 3: PW
+]
+2 = [
+    "Er #c+ #n4 #u3 #v2 #t5", # [ErCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Er #n4 #u3 #v3",     # ErCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Er #n4 #u3 #v3 #t3", # Er(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Er #n4 #u3 #v3 #t4", # Er(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Er #n4 #u3 #v3 #t2", # Er(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+]
+4 = [
+    "Er #c- #n4 #u3 #v4", # Er(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+]
+5 = [
+    "Er #c-2 #n4 #u3 #v5 #t5", # [Er(NO3)5](2-), chelating nitrate; HW II, p. 2307; ligand allocation: PW
+]
+6 = [
+    "Er #c-3 #n4 #u3 #v6", # ErCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Tm]
 0 = [
-    "Tm #n7 #u",       # Tm atom, s2f13
-    "Tm #c+3 #n5 #u2", # Tm3+, f12
+    "Tm #n7 #u",           # Tm atom, s2f13; HW II, p. 2228
+    "Tm #c+2 #n6 #u",      # Tm2+, f13; HW II, pp. 2300-2304; ASD
+    "Tm #c+2 #n6 #u #t2",  # TmCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tm #c+2 #n6 #u #t7",  # TmI2(DME)2(THF), 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Tm #c+3 #n5 #u2",     # Tm3+, f12; HW II, pp. 2297-2301
+    "Tm #c+3 #n5 #u2 #t3", # TmCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tm #c+3 #n5 #u2 #t6", # TmCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tm #c+3 #n5 #u2 #t8", # [Tm(H2O)8]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Tm #c+3 #n5 #u2 #t9", # [Tm(H2O)9]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Tm #c+3 #n5 #u2 #t7", # Tm(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Tm #c+3 #n5 #u2 #t5", # Tm(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+]
+2 = [
+    "Tm #n6 #u #v2",     # TmCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tm #n6 #u #v2 #t5", # TmI2(DME)2(THF), 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+]
+3 = [
+    "Tm #n5 #u2 #v3",     # TmCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Tm #n5 #u2 #v3 #t3", # Tm(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Tm #n5 #u2 #v3 #t4", # Tm(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Tm #n5 #u2 #v3 #t2", # Tm(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+]
+6 = [
+    "Tm #c-3 #n5 #u2 #v6", # TmCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Yb]
 0 = [
-    "Yb #n8",         # Yb atom, s2f14
-    "Yb #c+2 #n7",    # Yb2+, f14
-    "Yb #c+3 #n6 #u", # Yb3+, f13
+    "Yb #n8",             # Yb atom, s2f14; HW II, p. 2228
+    "Yb #c+2 #n7",        # Yb2+, f14; HW II, pp. 2297-2301
+    "Yb #c+2 #n7 #t2",    # YbCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Yb #c+2 #n7 #t7",    # YbI2(DME)3, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Yb #c+2 #n7 #t6",    # YbI2(THF)4, 6-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Yb #c+2 #n7 #t8",    # Cp*2Yb(THF)2; HW II, p. 2308; haptic order 3: PW
+    "Yb #c+3 #n6 #u",     # Yb3+, f13; HW II, pp. 2297-2301
+    "Yb #c+3 #n6 #u #t3", # YbCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Yb #c+3 #n6 #u #t6", # YbCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Yb #c+3 #n6 #u #t8", # [Yb(H2O)8]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Yb #c+3 #n6 #u #t9", # [Yb(H2O)9]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Yb #c+3 #n6 #u #t7", # Yb(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Yb #c+3 #n6 #u #t5", # Yb(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+    "Yb #c+3 #n6 #u #t4", # Yb(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+]
+2 = [
+    "Yb #n7 #v2",            # YbCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Yb #n7 #v2 #t5",        # YbI2(DME)3, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Yb #n7 #v2 #t4",        # YbI2(THF)4, 6-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+    "Yb #c+ #n6 #u #v2 #t5", # [YbCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Yb #n6 #u #v3",     # YbCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Yb #n6 #u #v3 #t3", # Yb(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Yb #n6 #u #v3 #t4", # Yb(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Yb #n6 #u #v3 #t2", # Yb(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+]
+4 = [
+    "Yb #c- #n6 #u #v4 #t4", # [Yb(EDTA)(H2O)2]-; HW II, p. 2307; ligand allocation: PW
+    "Yb #c- #n6 #u #v4",     # Yb(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+]
+6 = [
+    "Yb #c-3 #n6 #u #v6", # YbCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Lu]
 0 = [
-    "Lu #n #u", # Lu atom, s2d1
-    "Lu #c+3",  # Lu3+, d0
+    "Lu #n #u",        # Lu atom, s2d1; HW II, p. 2228
+    "Lu #c+3",         # Lu3+, d0; HW II, pp. 2297-2301
+    "Lu #c+3 #t3",     # LuCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Lu #c+3 #t6",     # LuCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
+    "Lu #c+3 #t8",     # [Lu(H2O)8]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Lu #c+3 #t9",     # [Lu(H2O)9]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+    "Lu #c+3 #t7",     # Lu(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Lu #c+3 #t5",     # Lu(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+    "Lu #c+3 #t4",     # Lu(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+    "Lu #c+3 #t7 #m0", # [(MeCp)2Lu(THF)(mu-H)]2; HW II, p. 2310; E82Ln; allocation: PW
+]
+1 = [
+    "Lu #c+2 #v #t7", # Cp2Lu(tBu)(THF); HW II, pp. 2309-2310; E82Ln, pp. 2009-2010; haptic order 3: PW
+]
+2 = [
+    "Lu #c+ #v2 #t5", # [LuCl2(THF)5]+; HW II, p. 2307; B01Ln, p. 3177; allocation: PW
+]
+3 = [
+    "Lu #v3",     # LuCl3 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+    "Lu #v3 #t3", # Lu(dpm)3; HW II, p. 2307; ligand allocation: PW
+    "Lu #v3 #t4", # Lu(dpm)3(H2O); HW II, p. 2307; ligand allocation: PW
+    "Lu #v3 #t2", # Lu(CH2SiMe3)3(THF)2; HW II, p. 2309; ligand allocation: PW
+]
+4 = [
+    "Lu #c- #v4", # Lu(CH2SiMe3)4-; HW II, p. 2309; ligand allocation: PW
+]
+6 = [
+    "Lu #c-3 #v6", # LuCl6(3-); HW II, pp. 2301, 2303-2304; allocation: PW
 ]
 
 [Hf]

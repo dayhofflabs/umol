@@ -12,11 +12,10 @@ contains the inclusion rules, evidence and detailed chapter tables.
 
 ## Project Status (2026-11-04)
 
-**Selected scope complete through HW II, chapter XXXII, pp. 2067–2217.**
-The group selections through Ni/Pd/Pt and the chapter-XXXII additions are implemented,
-with source citations and coverage of every added state. Unselected and deferred
-candidates remain in the linked tables. Companion states belong to elements outside
-the chapter being reviewed.
+**Selected scope implemented: group chapters through Ni/Pd/Pt, chapter XXXII,
+and chapter XXXV (lanthanides).** Every added state has source citations and
+conformance coverage. Unselected and deferred candidates remain in the linked tables.
+Companion states belong to elements outside the chapter being reviewed.
 
 | Chapter / group | Registry | Conformance fixtures | Model changes and scope notes |
 | --- | --- | --- | --- |
@@ -40,6 +39,7 @@ the chapter being reviewed.
 | [Co, Rh, Ir](#cobalt-group-work-table) | 195 additions: Co 63, Rh 68, Ir 64; 13 earlier states retained, 12 sourced and covered | 199 new; 3 supplied-spin inputs revised | Capacities Co 23, Rh/Ir 19; ValenceTable unchanged; no new MC or companion types. Existing Co#c+#n3#u#v remains source-unresolved; other unselected cases below |
 | [Ni, Pd, Pt](#nickel-group-work-table) | 173 additions: Ni 59, Pd 44, Pt 69 and 1 O companion; all 7 earlier states retained and covered | 190 new; 2 bare-ion snapshots revised | Capacities Ni/Pd 20; Pt retains 18; ValenceTable unchanged. Eight local hydride-bridge MC states included; PdF₆− omitted |
 | [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
+| [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new in `lanthanides/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
 
 ### Shared changes and verification
 
@@ -51,7 +51,7 @@ the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification after XXXII | 3,113 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 312 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
+| Verification after XXXV | 3,359 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 312 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
 The Decision Log below is the historical March record; later tracking-table updates are
@@ -78,12 +78,13 @@ from the checkout used for the current verification.
 | `aromatic/` | 105 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
 | `hypervalent/` | 51 | Expanded-octet and multicenter species |
 | `transition_metals/` | 13 | Transition-metal complexes |
+| `lanthanides/` | 246 | Selected chapter-XXXV states and three La companions; localized, donor–acceptor and hydride-bridge graphs |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
 | `metabolites/` | 9 | Metabolites and related natural compounds |
 | `natural_products/` | 5 | Terpenes, steroids and alkaloids |
 | `reactive_intermediates/` | 10 | Organic radicals, ions and related intermediates |
-| **Total** | **3221** | |
+| **Total** | **3467** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -227,21 +228,21 @@ Status values:
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
 | At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
-| La | yes | yes (+3) | yes (selected) | yes (27 additions covered) | done | 29 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 for bis-COT donors |
-| Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `atomic_ions/ce+3.toml`, `atomic_ions/ce+4.toml`) | done |  |
-| Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `atomic_ions/pr+3.toml`, `atomic_ions/pr+4.toml`) | done | Counts requires `Pr` valence-table support for +4 |
-| Nd | yes | yes (+3) | no | yes (`atoms/nd.toml`, `atomic_ions/nd+3.toml`) | done |  |
-| Pm | yes | yes (+3) | no | yes (`atoms/pm.toml`, `atomic_ions/pm+3.toml`) | done |  |
-| Sm | yes | yes (+2,+3) | no | yes (`atoms/sm.toml`, `atomic_ions/sm+2.toml`, `atomic_ions/sm+3.toml`) | done |  |
-| Eu | yes | yes (+2,+3) | no | yes (`atoms/eu.toml`, `atomic_ions/eu+2.toml`, `atomic_ions/eu+3.toml`) | done |  |
-| Gd | yes | yes (+3) | no | yes (`atoms/gd.toml`, `atomic_ions/gd+3.toml`) | done |  |
-| Tb | yes | yes (+3,+4) | no | yes (`atoms/tb.toml`, `atomic_ions/tb+3.toml`, `atomic_ions/tb+4.toml`) | done |  |
-| Dy | yes | yes (+3) | no | yes (`atoms/dy.toml`, `atomic_ions/dy+3.toml`) | done |  |
-| Ho | yes | yes (+3) | no | yes (`atoms/ho.toml`, `atomic_ions/ho+3.toml`) | done |  |
-| Er | yes | yes (+3) | no | yes (`atoms/er.toml`, `atomic_ions/er+3.toml`) | done |  |
-| Tm | yes | yes (+3) | no | yes (`atoms/tm.toml`, `atomic_ions/tm+3.toml`) | done |  |
-| Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `atomic_ions/yb+2.toml`, `atomic_ions/yb+3.toml`) | done |  |
-| Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `atomic_ions/lu+3.toml`) | done |  |
+| La | yes | yes (+3) | yes (selected) | yes (30 additions covered) | done | 32 current states; both earlier states retained; includes three XXXV companions; capacity 20 for bis-COT donors |
+| Ce | yes | yes (+3,+4) | yes (selected) | yes (25 additions covered in `lanthanides/`) | done | 28 current states; 3 earlier states retained and sourced; Ce atom term retained and sourced to ASD |
+| Pr | yes | yes (+3,+4) | yes (selected) | yes (15 additions covered in `lanthanides/`) | done | 18 current states; 3 earlier states retained and sourced |
+| Nd | yes | yes (+2,+3,+4) | yes (selected) | yes (17 additions covered in `lanthanides/`) | done | 19 current states; 2 earlier states retained and sourced; charge maximum 4; crown pair excluded |
+| Pm | yes | yes (+3) | yes (selected) | yes (8 additions covered in `lanthanides/`) | done | 10 current states; 2 earlier states retained and sourced |
+| Sm | yes | yes (+2,+3) | yes (selected) | yes (20 additions covered in `lanthanides/`) | done | 23 current states; 3 earlier states retained and sourced; one hydride-bridge MC state |
+| Eu | yes | yes (+2,+3) | yes (selected) | yes (15 additions covered in `lanthanides/`) | done | 18 current states; 3 earlier states retained and sourced |
+| Gd | yes | yes (+3) | yes (selected) | yes (10 additions covered in `lanthanides/`) | done | 12 current states; 2 earlier states retained and sourced |
+| Tb | yes | yes (+3,+4) | yes (selected) | yes (15 additions covered in `lanthanides/`) | done | 18 current states; 3 earlier states retained and sourced |
+| Dy | yes | yes (+2,+3,+4) | yes (selected) | yes (21 additions covered in `lanthanides/`) | done | 23 current states; 2 earlier states retained and sourced; capacity 27; unpaired maximum 6 |
+| Ho | yes | yes (+3) | yes (selected) | yes (11 additions covered in `lanthanides/`) | done | 13 current states; 2 earlier states retained and sourced; capacity 30 |
+| Er | yes | yes (+3) | yes (selected) | yes (18 additions covered in `lanthanides/`) | done | 20 current states; 2 earlier states retained and sourced; capacity 31; one hydride-bridge MC state |
+| Tm | yes | yes (+2,+3) | yes (selected) | yes (16 additions covered in `lanthanides/`) | done | 18 current states; 2 earlier states retained and sourced; capacity 30 |
+| Yb | yes | yes (+2,+3) | yes (selected) | yes (22 additions covered in `lanthanides/`) | done | 25 current states; 3 earlier states retained and sourced; capacity 31 |
+| Lu | yes | yes (+3) | yes (selected) | yes (16 additions covered in `lanthanides/`) | done | 18 current states; 2 earlier states retained and sourced; one hydride-bridge MC state; f14 core retained |
 | Hf | yes | yes (+3,+4) | yes (selected) | yes (28 additions covered) | done | 30 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
 | Ta | yes | yes (+3,+4,+5) | yes (selected) | yes (56 additions covered) | done | 57 current states; earlier state retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
 | W | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (98 additions covered) | done | 99 current states; earlier atom retained; selected HW scope and citation audit complete; capacity 18 unchanged; 13 unselected phosphine-hydride occupations remain open |
@@ -3519,3 +3520,143 @@ HW citations are printed Band II pages. Intermediates are in
 | CDG83 | Cloke, Dix, Green, Perutz and Seddon, “Electron spin resonance and photoelectron studies of neutral bis(η-arene)metal compounds (metal = Ti, V, Nb, Ta, Mo, and W),” *Organometallics* **2** (1983), 1150–1159. [DOI](https://doi.org/10.1021/om50003a014), [PDF](../materials/valence/Cloke-1983-bisarenes.pdf) | Supplied full paper reviewed and archived. ESR measurements and simulations, pp. 1152–1154, and the explicit ²A₁, e₂⁴a₁¹ assignment on p. 1157 settle Tm13c. Photoelectron spectra independently support Nb's occupation, pp. 1155–1156; Ta's photoelectron spectrum was not obtained because of thermal decomposition. |
 | LW84 | Legzdins and Wassink, “Organometallic nitrosyl chemistry. 21. Redox properties of bis[(η⁵-cyclopentadienyl)dinitrosylchromium] and related complexes,” *Organometallics* **3** (1984), 1811–1817. [DOI](https://doi.org/10.1021/om00090a006), [archived first page](../materials/valence/Legzdins-Wassink-1984-nitrosyl-redox-first-page.pdf) | Only p. 1811 retrieved, from a repository PDF appended to the preceding article. Its abstract distinguishes the unisolated bare cation from the MeCN adduct; sufficient for the restricted Tm14 finding, not a full-paper review. |
 | TB76 | Thomas and Brown, “Zirconocene dicarbonyl and hafnocene dicarbonyl, first carbonyl derivatives of zirconocene and hafnocene,” *J. Organomet. Chem.* **111** (1976), 297–301. [Repository PDF](https://deepblue.lib.umich.edu/bitstream/handle/2027.42/21771/0000165.pdf?sequence=1), [archived PDF](../materials/valence/Thomas-Brown-1976-metallocene-dicarbonyls.pdf) | Supplied full paper reviewed and archived. MS/IR/NMR and isolation data establish the two monomeric dicarbonyls, pp. 298–300. Sharp Cp ¹H NMR signals support Tm10b's adopted paired occupation; no explicit electronic multiplicity or magnetic measurement. |
+
+### Lanthanides
+
+Reviewed 2026-11-04: HW II, chapter XXXV, pp. 2288–2310; bibliography 2310–2311.
+**Implemented: 232 additions**, including 3 La companions and 3 hydride-bridge
+MC states; all 34 earlier Ce–Lu bare-atom/ion states are retained. The capacity
+changes and Nd/Dy enumeration bounds are implemented. The two Nd crown states are
+excluded; Nd capacity remains 26. The 246 new fixtures are in
+`umol-graph/tests/resolution/data/lanthanides/`; the next chapter's 5f fixtures will
+use `actinides/`.
+
+#### Occupations used in the table
+
+Each `M` pattern below expands to the listed elements with the corresponding
+occupation suffix inserted. For example, Dy(III) `M#c+3#t9` means
+`Dy#c+3#n2#u5#t9`. These are concrete states under registry zero-valence defaults;
+empty occupation means `#n0#u0`, not an unspecified occupation.
+
+| Element | II | III | IV |
+| --- | --- | --- | --- |
+| Ce | — | #u | empty |
+| Pr | — | #u2 | #u |
+| Nd | #u4 | #u3 | #u2 |
+| Pm | — | #u4 | — |
+| Sm | #u6 | #u5 | — |
+| Eu | #u7 | #u6 | — |
+| Gd | — | #u7 | — |
+| Tb | — | #n#u6 | #u7 |
+| Dy | #n3#u4 | #n2#u5 | #n#u6 |
+| Ho | — | #n3#u4 | — |
+| Er | — | #n4#u3 | — |
+| Tm | #n6#u | #n5#u2 | — |
+| Yb | #n7 | #n6#u | — |
+| Lu | — | empty | — |
+
+HW 2297–2299 supplies the III occupations and their weak ligand-field dependence;
+2298–2301 supplies the related II/IV assignments. ASD verifies Nd(II/IV), Dy(II/IV)
+and Tm(II). Eu(III)'s J = 0 does not remove its six unpaired f electrons. Lu retains
+the existing three-valence-electron convention with 4f¹⁴ in the core; La(III) is
+also empty. No alternative spin ladder is generated from magnetic moments alone.
+
+All 34 earlier states remain supported. Ce's existing `Ce#n#u2#s` is retained:
+NIST gives ¹G₄, whereas HW 2228 prints ³H₄; the registry cites ASD for the term.
+The other existing comments now cite HW 2228, 2297–2301.
+
+#### Lanthanide work table
+
+Counts are new states after deduplication against the pre-chapter registry and
+earlier rows. Ordinary anionic-ligand bonds versus anionic donation are the adopted graph
+allocations (PW), as in preceding chapters. Cp− contributes three accepted pairs;
+COT²− contributes five. These haptic relations are dative, not MC.
+
+| ID | Family / states | Disposition; new | Evidence and scope |
+| --- | --- | --- | --- |
+| Ln01 | Nd#c+2#u4; Dy#c+2#n3#u4; Tm#c+2#n6#u; Nd#c+4#u2; Dy#c+4#n#u6 | Implemented; 5 | Chemically occurring II/IV ions, HW 2300–2304; ASD occupations. Other II/IV ions already exist. No additional gas-phase-only ionization ladder. |
+| Ln02 | Ce–Lu(III): M#v3; M#c+3#t3 | Implemented; 28 | Trihalide formula units and the tris(amido)/triorganyl family, HW 2301, 2303–2304, 2309. The formula-unit graph does not assert a three-coordinate crystal structure. |
+| Ln03 | Ce–Lu(III): M#c-3#v6; M#c+3#t6 | Implemented; 28 | Hexahalides, HW 2303. Hexamethyl anions of Pr/Nd/Sm/Er/Tm/Yb/Lu reuse these states (2309). |
+| Ln04 | Ce–Lu(III): M#c+3#t8; M#c+3#t9 | Implemented; 28 | [Ln(en)₄]³⁺ and aqua ions, HW 2306–2307. P08Ln, pp. 3061–3062, explicitly supports an eight/nine-water equilibrium for Ho–Lu; Pm uses HW's series assignment. Fractional occupancies are not fractional graph bonds. |
+| Ln05 | Tb–Lu(III): M#v3#t3 | Implemented; 7 | Monomeric Ln(dpm)₃, HW 2307. Each chelate has one ordinary Ln–O bond and one O donor; all-donor descriptions reuse Ln03. The lighter solid dimers are not assigned this monomer graph. |
+| Ln06 | Ce–Lu(III): M#v3#t4; M#c+3#t7 | Implemented; 28 | Ln(dpm)₃L, L = H₂O/ROH/R₃PO, HW 2307: the seven-coordinate shift-reagent/adduct family. The series extension follows HW's generic family, not separate structural determinations for every element. |
+| Ln07 | La/Ce/Sm/Gd/Tb/Dy/Er/Yb/Lu(III): M#c+#v2#t5; M#c+3#t7 | Implemented; 10 | [LnX₂(THF)₅]⁺, B01Ln p. 3177 explicitly lists the nine elements. Nine mixed descriptions plus La's donor state; the other donor states reuse Ln06. |
+| Ln08 | Ce/Eu/Ho/Er(III): M#c-2#v5#t5; M#c+3#t10 | Implemented; 8 | [Ln(NO₃)₅]²⁻, ten O contacts, HW 2307. These are the listed pentanitrate ions, not a coordination ladder for every lanthanide. |
+| Ln09 | Ce(III): M#c-3#v6#t6; M#c+3#t12 | Implemented; 2 | [Ce(NO₃)₆]³⁻, twelve O contacts, HW 2301, 2307; 25 counted electrons. |
+| Ln10 | Pr/Sm/Gd/Tb/Dy(III): M#c-#v4#t5; Eu/Yb(III): M#c-#v4#t4 | Implemented; 7 | [Ln(EDTA)(H₂O)₃]⁻ and [Ln(EDTA)(H₂O)₂]⁻, respectively, HW 2307. Four ordinary carboxylate bonds, two N donors and three/two waters. All-donor forms reuse Ln04. |
+| Ln11 | Nd#u3#v3#t9; Nd#c+3#u3#t12 | Not selected; 0 | Nd(18-crown-6)(NO₃)₃, HW 2307: six crown O and six nitrate O contacts; 27 counted electrons. Crown coordination is a common class, but this particular twelve-coordinate extension currently rests on one listed Nd example. |
+| Ln12 | Er/Tm/Yb/Lu(III): M#v3#t2; M#c+3#t5 | Implemented; 8 | Ln(CH₂SiMe₃)₃(THF)₂, HW 2309. Ordinary organyl bonds or three organyl-anion donors. |
+| Ln13 | Sm/Er/Yb/Lu(III): M#c-#v4; M#c+3#t4 | Implemented; 8 | [LnR₄]⁻, R = CH₂SiMe₃, tBu or 2,6-Me₂C₆H₃, HW 2309. |
+| Ln14 | Nd/Sm/Eu/Dy/Tm/Yb(II): M#v2; M#c+2#t2 | Implemented; 12 | Binary dihalide formula-unit descriptions, HW 2303–2304; III electride-like CeI₂/PrI₂/GdI₂ explicitly excluded. PW graph allocation, not a claim that the crystalline dihalides contain isolated two-coordinate molecules. |
+| Ln15 | II: M#v2#t(k−2); M#c+2#tk. k = 7: Nd/Sm/Dy/Tm/Yb; k = 8: Sm/Dy; k = 6: Yb | Implemented; 16 | Solvated diiodides, HW 2307; B01Ln pp. 3176–3177. Nd/Sm/Dy THF₅ and Tm mixed DME/THF give k = 7; Dy/Sm(DME)₃ give k = 8; Yb(THF)₄ gives k = 6. Yb(η²-DME)₂(η¹-DME) gives k = 7. |
+| Ln16 | II: Sm/Yb M#c+2#t6/#t7/#t8; Eu M#c+2#t6/#t7 | Implemented; 4 | Cp*₂Ln and donor adducts: HW 2308, E86Ln, T80Ln. Four new states after Ln15. E86Ln establishes Eu, not HW's printed Er; no Er(II) state. T80Ln's uncertain Eu ether of crystallization does not justify Eu#c+2#u7#t8. |
+| Ln17 | Ce/Pr/Tb(IV): M#v4; M#c+4#t4 | Implemented; 6 | Binary tetrafluoride formula-unit graphs, HW 2303–2304; f⁰/f¹/f⁷ occupations. As in Ln14, the graphs do not replace the extended UF₄-type crystal structures. |
+| Ln18 | Ce/Pr(IV): M#c-2#v6; M#c+4#t6 | Implemented; 4 | CeCl₆²⁻ and PrF₆²⁻, HW 2302–2304. Use CeCl₆²⁻ for the discrete octahedral example; HW describes eight-coordinate Ce in (NH₄)₂CeF₆. |
+| Ln19 | Ce/Pr/Nd/Tb/Dy(IV): M#c-3#v7; M#c+4#t7 | Implemented; 10 | Pentagonal-bipyramidal [LnF₇]³⁻, HW 2304. Nd/Dy(IV) are supported by these fluorocomplexes, not inferred neutral NdF₄/DyF₄ molecules. |
+| Ln20 | Ce(IV): M#c-4#v8; M#c+4#t8 | Implemented; 2 | CeF₈⁴⁻, square antiprismatic, HW 2304. |
+| Ln21 | Ce(IV): M#v4#t4; M#c-2#v6#t6; M#c+4#t12 | Implemented; 3 | Ce(acac)₄ and [Ce(NO₃)₆]²⁻, HW 2307. The acac all-donor description reuses Ln20. Twelve nitrate O donors count 24 electrons. |
+| Ln22 | La/Ce/Nd(III): M#c+#v2#t6 | Implemented; 3 | Cp*LaI₂(THF)₃, Cp*CeI₂(THF)₃ and CpNdCl₂(THF)₃, HW 2310. One Cp− donation plus three THF donors; two ordinary halide bonds. All-donor states reuse the existing and Ln04 entries. |
+| Ln23 | Er/Lu(III): M#c+2#v#t7 | Implemented; 2 | Cp₂Ln(tBu)(THF), E82Ln pp. 2009–2010; the ordinary organyl bond plus two Cp− and THF donations. The donor alternative reuses Ln04. |
+| Ln24 | Sm#c+3#u5#t6#m0; Er#c+3#n4#u3#t7#m0; Lu#c+3#t7#m0 | Implemented; 3 | [Cp*₂Sm(μ-H)]₂, E83Ln; [Cp′₂Ln(THF)(μ-H)]₂, Ln = Er/Lu, E82Ln. Two separate three-center bridges, each [M,H⁻,M] = [0,2,0] (PW), existing H#c-#m2; no M–M bond. Er/Sm H positions were not located directly; the authors' assignments also use spectroscopy/chemical evidence. |
+| Ln25 | Ce(COT)₂⁻; SmCp*₃; Cp₂LnCl dimers and their donor monomers | Reuse | HW 2308–2310. Ce bis-COT uses Ln08's Ce#c+3#u#t10; monomeric SmCp*₃ uses Ln04. Two chloride donors per metal in the chloride dimer use the III #t8 state and existing bridging Cl− types. |
+| Ln26 | Extended hydrides, subhalides, oxides, chalcogenides, pnictides, carbides and borides | Ions / no further types | HW 2302–2306. No molecular hydride, whole-lattice MC or cluster-specific state is inferred from bulk stoichiometry. Mixed-valent/conduction-electron phases remain distinct from molecular Ln(II) formulas. |
+| Ln27 | Neutral bisarenes; Sm–N₂ adduct; mixed Ln/Pt complex; Cp₄Ln⁻; Ce(IV) Cp₃OR; detailed hydrolysis products | Not selected for this pass | HW 2306, 2308–2310. Occupations, haptic allocations or complete donor counts are not established sufficiently here to justify extra default states. Formula alone does not supply them. No papers are outstanding for the selected rows; these cases would require a separately chosen extension. |
+| Ln28 | Agostic and σ-H₂ intermediates | Deferred model work | HW 2309–2310. Existing bond-donation limitation; no MC substitute. |
+
+B01Ln corrects HW's uniform seven-coordinate description of the DME solvates:
+DyI₂(DME)₃ has three bidentate DME ligands (eight contacts), while TmI₂(DME)₃
+has two bidentate and one monodentate DME (seven). Only those observed donor counts
+are used. P08Ln supports integer eight-/nine-water graphs; its fractional crystal
+occupancies remain source information rather than new atom states.
+
+#### Limits and conformance coverage
+
+Counts includes retained f electrons in its capacity check. For these III donor
+states, the count is `f electrons + 2 × accepted pairs`. Both the ordinary and
+all-donor encodings of a family give the same count. The implemented capacity
+increases admit the selected families below. These are model limits, not new
+claims about physical atomic capacities.
+
+| Element | Capacity required | Limiting selected family | Disposition |
+| --- | --- | --- | --- |
+| Dy | 26 → 27 | III nonaaqua / EDTA: 9 + 18 | Implemented |
+| Ho | 26 → 30 | III pentanitrate: 10 + 20 | Implemented |
+| Er | 26 → 31 | III pentanitrate: 11 + 20 | Implemented |
+| Tm | 26 → 30 | III nonaaqua: 12 + 18 | Implemented |
+| Yb | 26 → 31 | III nonaaqua: 13 + 18 | Implemented |
+| Nd | 26 → 27 | III crown trinitrate: 3 + 24 | Not selected; capacity remains 26 |
+
+Ce–Tb and Lu otherwise fit 26; the three La additions fit 20. Lu's lower electron
+count follows its existing f¹⁴-core convention. The three selected MC metal states
+fit their capacities. Nd's fallback charge maximum (3 → 4) and Dy's fallback
+unpaired maximum (5 → 6) are implemented to align invariant enumeration with
+Ln01/Ln19; explicit values bypass those fallback bounds. Valence-electron counts
+and ValenceTable are unchanged.
+
+All 232 additions have representative coverage, including both metal sites of
+the three hydride dimers. These inputs supply the source unpaired count while
+leaving paired occupation to resolution; AtomTyping and Counts agree under both
+Strict and MostSaturated. Fourteen additional trihalide inputs leave both occupation
+counts unknown: AtomTyping infers the selected fⁿ state, while Counts uses its
+minimum unpaired count by parity. All 246 fixtures pass, with 996 independent
+metal-state and molecule electron-invariant checks across the four configurations.
+Existing bare-atom/ion fixtures stay in place. No new ligand types are needed;
+the known haptic-donor-side limitation remains deferred. All 3,113 earlier snapshots
+remain unchanged. The full conformance, unit and property suites, formatting and
+Clippy pass. No selected work remains outstanding for this chapter.
+
+#### Lanthanide sources and access
+
+All six primary papers are available, reviewed and archived. HW references above
+are printed Band II pages. Extraction and the expanded candidate/count audit are
+intermediates in `scratch/hw-lanthanide-review/`; the tables here are the durable record.
+
+| Key | Source | Assignment-specific evidence |
+| --- | --- | --- |
+| E86Ln | Evans, Hughes and Hanusa, *Organometallics* **5** (1986), 1285–1291. [DOI](https://doi.org/10.1021/om00138a001), [PDF](../materials/valence/Evans-1986-Sm-Eu-metallocenes.pdf) | SmCp*₂ and EuCp*₂ structures; explicit f⁶/f⁷ occupations, p. 1286. Corrects the Er label in HW 2308. |
+| T80Ln | Tilley et al., *Inorg. Chem.* **19** (1980), 2999–3003. [DOI](https://doi.org/10.1021/ic50212a031), [archived author manuscript](../materials/valence/Tilley-1980-Eu-Yb-metallocenes.pdf), [OSTI](https://www.osti.gov/servlets/purl/1030602) | Eu/Yb metallocene ether adducts; Eu f⁷ and diamagnetic Yb f¹⁴, manuscript pp. 10–11. The additional Eu ether may be lattice solvent; it is not counted as a confirmed second donor. |
+| B01Ln | Bochkarev et al., *Angew. Chem. Int. Ed.* **40** (2001), 3176–3178. [DOI](https://doi.org/10.1002/1521-3773%2820010903%2940%3A17%3C3176%3A%3AAID-ANIE3176%3E3.0.CO%3B2-Y), [PDF](../materials/valence/Bochkarev-2001-Nd-Tm-diiodides.pdf) | NdI₂(THF)₅ and TmI₂(DME)₂(THF) structures; explicit six-/seven-/eight-coordinate comparisons and III dihalide-THF cations, pp. 3176–3177. II occupations use HW/ASD; this paper is not a spin determination. |
+| P08Ln | Persson et al., “Hydration of Lanthanoid(III) Ions in Aqueous Solution and Crystalline Hydrates Studied by EXAFS Spectroscopy and Crystallography,” *Chem. Eur. J.* **14** (2008), 3056–3066. [DOI](https://doi.org/10.1002/chem.200701281), [PDF](../materials/valence/Persson-2008-lanthanide-hydration.pdf) | Eight-/nine-water equilibrium for Ho–Lu, pp. 3061–3062; no abrupt coordination-number break at Gd. |
+| E82Ln | Evans et al., “Organolanthanide Hydride Chemistry. 1,” *J. Am. Chem. Soc.* **104** (1982), 2008–2014. [DOI](https://doi.org/10.1021/ja00371a035), [PDF](../materials/valence/Evans-1982-lanthanide-hydrides.pdf) | Er/Lu/Y hydride dimers; directly located bridge H in the Y structure, inferred Er bridges, and Lu spectroscopic/chemical characterization. The precursor organyls also support Ln23. Integer bridge allocation is PW. |
+| E83Ln | Evans, Bloom, Hunter and Atwood, “Organolanthanide Hydride Chemistry. 3,” *J. Am. Chem. Soc.* **105** (1983), 1401–1403. [DOI](https://doi.org/10.1021/ja00343a071), [PDF](../materials/valence/Evans-1983-samarium-hydride.pdf) | Sm hydride dimer, Sm(III) evidence, and explicit exclusion of a Sm–Sm bond, p. 1402. H sites were not located; bridge assignment combines the dimer structure, spectroscopy and comparison. Integer allocation is PW. |
+| ASD | NIST atomic data / Atomic Spectra Database. [Ce ground state](https://physics.nist.gov/PhysRefData/Handbook/Tables/ceriumtable1.htm), [ion query](https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html); archived [Ce](../materials/valence/NIST-Ce-atomic-data.html), [Nd](../materials/valence/NIST-Nd-ground-states.html), [Dy](../materials/valence/NIST-Dy-ground-states.html), [Tm](../materials/valence/NIST-Tm-ground-states.html) | Ce's existing singlet term; Nd²⁺ f⁴/⁵I₄, Nd⁴⁺ f²/³H₄, Dy²⁺ f¹⁰/⁵I₈, Dy⁴⁺ f⁸/⁷F₆, Tm²⁺ f¹³/²F₇/₂. Retrieved 2026-11-04. |

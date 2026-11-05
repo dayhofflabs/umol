@@ -1,0 +1,8 @@
+; [Er(H2O)9]3+; HW II, p. 2306; P08Ln, pp. 3061-3062
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Er#c+3#u3" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"}]}}
