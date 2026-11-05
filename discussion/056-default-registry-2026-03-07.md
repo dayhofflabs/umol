@@ -13,8 +13,9 @@ contains the inclusion rules, evidence and detailed chapter tables.
 ## Project Status (2026-11-04)
 
 **Selected scope implemented: group chapters through Ni/Pd/Pt, chapter XXXII,
-and chapter XXXV (lanthanides).** Every added state has source citations and
-conformance coverage. Unselected and deferred candidates remain in the linked tables.
+and chapters XXXV–XXXVI (lanthanides and actinides).** Every added state has source
+citations and conformance coverage. Unselected and deferred candidates remain in
+the linked tables.
 Companion states belong to elements outside the chapter being reviewed.
 
 | Chapter / group | Registry | Conformance fixtures | Model changes and scope notes |
@@ -40,6 +41,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | [Ni, Pd, Pt](#nickel-group-work-table) | 173 additions: Ni 59, Pd 44, Pt 69 and 1 O companion; all 7 earlier states retained and covered | 190 new; 2 bare-ion snapshots revised | Capacities Ni/Pd 20; Pt retains 18; ValenceTable unchanged. Eight local hydride-bridge MC states included; PdF₆− omitted |
 | [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
 | [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 25 in `organometallics/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
+| [Actinides, XXXVI](#actinide-work-table) | 243 additions, including 6 hydride-bridge MC states; 51 earlier states retained and sourced | 243 new: 216 in `actinides/`, 21 in `organometallics/`, 6 in `multicenter_bonds/`; all added states covered | Capacities Np/Cf 27, Pu 28; No unpaired maximum 1. ValenceTable unchanged; UF₉³⁻/UF₁₀⁴⁻ unselected |
 
 ### Shared changes and verification
 
@@ -51,7 +53,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification after XXXV | 3,359 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 312 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
+| Verification after XXXVI | 3,602 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
 The Decision Log below is the historical March record; later tracking-table updates are
@@ -66,11 +68,11 @@ from the checkout used for the current verification.
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
 | `atomic_ions/` | 217 | Atomic ions and Hg₂²⁺ |
-| `organometallics/` | 311 | Metal–carbon bonds, carbonyls, haptic ligands and related organometallic descriptions |
+| `organometallics/` | 332 | Metal–carbon bonds, carbonyls, haptic ligands and related organometallic descriptions |
 | `organoelement/` | 16 | Organic B, Si–Pb, As–Bi and Se–Po compounds |
 | `organosulfur/` | 4 | Carbon–sulfur compounds; broader organic selection is being reorganized separately |
 | `donor_acceptor/` | 46 | Molecular Lewis donor–acceptor adducts |
-| `multicenter_bonds/` | 172 | Explicit multicenter bonding, including small hydride bridges |
+| `multicenter_bonds/` | 178 | Explicit multicenter bonding, including small hydride bridges |
 | `metal_metal_bonds/` | 64 | Ordinary or dative metal–metal bonds |
 | `hydrogen/` | 2 | Hydrogen molecules |
 | `noble_gases/` | 6 | Noble-gas compounds outside the bonding classes above |
@@ -92,6 +94,7 @@ from the checkout used for the current verification.
 | `co_group/` | 179 | Co, Rh and Ir compounds |
 | `ni_group/` | 156 | Ni, Pd and Pt compounds |
 | `lanthanides/` | 218 | Chapter-XXXV compounds outside the bonding classes above |
+| `actinides/` | 216 | Chapter-XXXVI compounds outside the bonding classes above |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 82 | C/H compounds |
 | `functional_groups/` | 102 | Organic heteroatom groups (halides, amines, etc.) |
@@ -103,7 +106,7 @@ from the checkout used for the current verification.
 | `metabolites/` | 9 | Metabolites and related natural compounds |
 | `natural_products/` | 5 | Terpenes, steroids and alkaloids |
 | `reactive_intermediates/` | 10 | Organic radicals, ions and related intermediates |
-| **Total** | **3467** | |
+| **Total** | **3710** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -273,21 +276,21 @@ Status values:
 | Hg | yes | yes (+2, [Hg2]2+) | yes (selected) | yes (17 additions covered) | done | 20 current states; all three earlier states retained; selected HW scope, citation audit and capacity 22 implemented; Hg(IV) unselected |
 | Fr | yes | yes (+1) | no additions selected | yes (`atoms/fr.edn`, `atomic_ions/fr+1.edn`) | done | Two existing states retained with checked HW citations; capacity unchanged |
 | Ra | yes | yes (+2) | ionic descriptions retained | existing atom/ion fixtures | done | 2 current states retained with checked HW citations; no additional state selected |
-| Ac | yes | yes (+3) | no additions selected | existing atom/ion fixtures | done | Both existing states retained with checked HW citations; no additional default state selected |
-| Th | yes | yes (+3,+4) | no | yes (`atoms/th.toml`, `atomic_ions/th+3.toml`, `atomic_ions/th+4.toml`) | done |  |
-| Pa | yes | yes (+4,+5) | no | yes (`atoms/pa.toml`, `atomic_ions/pa+4.toml`, `atomic_ions/pa+5.toml`) | done | Valence table outer electrons adjusted to 5 |
-| U | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/u.toml`, `atomic_ions/u+3.toml`, `atomic_ions/u+4.toml`, `atomic_ions/u+5.toml`, `atomic_ions/u+6.toml`) | done | Valence table outer electrons adjusted to 6 |
-| Np | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/np.toml`, `atomic_ions/np+3.toml`, `atomic_ions/np+4.toml`, `atomic_ions/np+5.toml`, `atomic_ions/np+6.toml`) | done | Valence table outer electrons adjusted to 6 |
-| Pu | yes | yes (+3,+4,+5,+6,+7) | no | yes (`atoms/pu.toml`, `atomic_ions/pu+3.toml`, `atomic_ions/pu+4.toml`, `atomic_ions/pu+5.toml`, `atomic_ions/pu+6.toml`, `atomic_ions/pu+7.toml`) | done | Valence table outer electrons adjusted to 7 |
-| Am | yes | yes (+2,+3,+4) | no | yes (`atoms/am.toml`, `atomic_ions/am+2.toml`, `atomic_ions/am+3.toml`, `atomic_ions/am+4.toml`) | done |  |
-| Cm | yes | yes (+3,+4) | no | yes (`atoms/cm.toml`, `atomic_ions/cm+3.toml`, `atomic_ions/cm+4.toml`) | done |  |
-| Bk | yes | yes (+3,+4) | no | yes (`atoms/bk.toml`, `atomic_ions/bk+3.toml`, `atomic_ions/bk+4.toml`) | done |  |
-| Cf | yes | yes (+2,+3,+4) | no | yes (`atoms/cf.toml`, `atomic_ions/cf+2.toml`, `atomic_ions/cf+3.toml`, `atomic_ions/cf+4.toml`) | done |  |
-| Es | yes | yes (+2,+3) | no | yes (`atoms/es.toml`, `atomic_ions/es+2.toml`, `atomic_ions/es+3.toml`) | done |  |
-| Fm | yes | yes (+2,+3) | no | yes (`atoms/fm.toml`, `atomic_ions/fm+2.toml`, `atomic_ions/fm+3.toml`) | done |  |
-| Md | yes | yes (+2,+3) | no | yes (`atoms/md.toml`, `atomic_ions/md+2.toml`, `atomic_ions/md+3.toml`) | done |  |
-| No | yes | yes (+2) | no | yes (`atoms/no.toml`, `atomic_ions/no+2.toml`) | done |  |
-| Lr | yes | yes (+3) | no | yes (`atoms/lr.toml`, `atomic_ions/lr+3.toml`) | done |  |
+| Ac | yes | yes (+3) | yes (selected) | yes (3 additions covered) | done | 5 current states; 2 earlier states retained and sourced |
+| Th | yes | yes (+3,+4) | yes (selected) | yes (27 additions covered) | done | 30 current states; 3 earlier states retained and sourced; three hydride-bridge MC states |
+| Pa | yes | yes (+3,+4,+5) | yes (selected) | yes (20 additions covered) | done | 23 current states; 3 earlier states retained and sourced |
+| U | yes | yes (+3 through +6) | yes (selected) | yes (54 additions covered) | done | 59 current states; 5 earlier states retained and sourced; three hydride-bridge MC states |
+| Np | yes | yes (+3 through +6) | yes (selected) | yes (39 additions covered) | done | 44 current states; 5 earlier states retained and sourced; capacity 27 |
+| Pu | yes | yes (+3 through +7) | yes (selected) | yes (33 additions covered) | done | 39 current states; 6 earlier states retained and sourced; capacity 28 |
+| Am | yes | yes (+2 through +6) | yes (selected) | yes (26 additions covered) | done | 30 current states; 4 earlier states retained and sourced |
+| Cm | yes | yes (+3,+4) | yes (selected) | yes (10 additions covered) | done | 13 current states; 3 earlier states retained and sourced |
+| Bk | yes | yes (+3,+4) | yes (selected) | yes (12 additions covered) | done | 15 current states; 3 earlier states retained and sourced |
+| Cf | yes | yes (+2,+3,+4) | yes (selected) | yes (8 additions covered) | done | 12 current states; 4 earlier states retained and sourced; capacity 27 |
+| Es | yes | yes (+2,+3) | yes (selected) | yes (4 additions covered) | done | 7 current states; 3 earlier states retained and sourced |
+| Fm | yes | yes (+2,+3) | yes (selected) | yes (2 additions covered) | done | 5 current states; 3 earlier states retained and sourced |
+| Md | yes | yes (+2,+3) | yes (selected) | yes (2 additions covered) | done | 5 current states; 3 earlier states retained and sourced |
+| No | yes | yes (+2,+3) | yes (selected) | yes (3 additions covered) | done | 5 current states; 2 earlier states retained and sourced; unpaired maximum 1 |
+| Lr | yes | yes (+3) | no additions selected | existing atom/ion fixtures | done | 2 current states; 2 earlier states retained and sourced; f14 core retained |
 | Rf | yes | no | no | yes (`atoms/rf.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, pp. 1538, 2358; compound chemistry deferred to XXXVII |
 | Db | yes | no | no | yes (`atoms/db.edn`) | done | Existing calculated atom occupation retained; citation checked against HW II, p. 1538; compound chemistry deferred to XXXVII |
 | Sg | yes | no | no | yes (`atoms/sg.edn`) | done | Existing calculated atomic occupation retained with HW citation; no additions |
@@ -3551,8 +3554,8 @@ MC states; all 34 earlier Ce–Lu bare-atom/ion states are retained. The capacit
 changes and Nd/Dy enumeration bounds are implemented. The two Nd crown states are
 excluded; Nd capacity remains 26. The 246 new fixtures are now split across
 `lanthanides/` (218),
-`organometallics/` (25) and `multicenter_bonds/` (3). The next chapter's remaining
-5f fixtures will use `actinides/`.
+`organometallics/` (25) and `multicenter_bonds/` (3). Actinide fixtures use
+`actinides/` and the applicable bonding categories.
 
 #### Occupations used in the table
 
@@ -3683,3 +3686,156 @@ intermediates in `scratch/hw-lanthanide-review/`; the tables here are the durabl
 | E82Ln | Evans et al., “Organolanthanide Hydride Chemistry. 1,” *J. Am. Chem. Soc.* **104** (1982), 2008–2014. [DOI](https://doi.org/10.1021/ja00371a035), [PDF](../materials/valence/Evans-1982-lanthanide-hydrides.pdf) | Er/Lu/Y hydride dimers; directly located bridge H in the Y structure, inferred Er bridges, and Lu spectroscopic/chemical characterization. The precursor organyls also support Ln23. Integer bridge allocation is PW. |
 | E83Ln | Evans, Bloom, Hunter and Atwood, “Organolanthanide Hydride Chemistry. 3,” *J. Am. Chem. Soc.* **105** (1983), 1401–1403. [DOI](https://doi.org/10.1021/ja00343a071), [PDF](../materials/valence/Evans-1983-samarium-hydride.pdf) | Sm hydride dimer, Sm(III) evidence, and explicit exclusion of a Sm–Sm bond, p. 1402. H sites were not located; bridge assignment combines the dimer structure, spectroscopy and comparison. Integer allocation is PW. |
 | ASD | NIST atomic data / Atomic Spectra Database. [Ce ground state](https://physics.nist.gov/PhysRefData/Handbook/Tables/ceriumtable1.htm), [ion query](https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html); archived [Ce](../materials/valence/NIST-Ce-atomic-data.html), [Nd](../materials/valence/NIST-Nd-ground-states.html), [Dy](../materials/valence/NIST-Dy-ground-states.html), [Tm](../materials/valence/NIST-Tm-ground-states.html) | Ce's existing singlet term; Nd²⁺ f⁴/⁵I₄, Nd⁴⁺ f²/³H₄, Dy²⁺ f¹⁰/⁵I₈, Dy⁴⁺ f⁸/⁷F₆, Tm²⁺ f¹³/²F₇/₂. Retrieved 2026-11-04. |
+
+### Actinides
+
+Reviewed 2026-11-04: HW II, chapter XXXVI, pp. 2312–2346; bibliography
+2347–2348. **Implemented: 243 new states and 243 fixtures.**
+The unselected rows below are excluded from that count. Element-organized
+fixtures are in `actinides/`; organometallic and explicit MC inputs belong in
+their respective bonding categories. Added-state coverage, rather than a fixture
+for every extracted compound, remains the requirement.
+
+#### Occupations used in the table
+
+Insert the appropriate suffix into each `M` pattern, as in the lanthanide table.
+For example, Np(IV) `M#c+4#t12` expands to `Np#c+4#u3#t12`.
+Empty means zero pairs and zero unpaired electrons under the registry defaults.
+
+| Element | II | III | IV | V | VI |
+| --- | --- | --- | --- | --- | --- |
+| Ac | — | empty | — | — | — |
+| Th | — | #u | empty | — | — |
+| Pa | — | #u2 | #u | empty | — |
+| U | — | #u3 | #u2 | #u | empty |
+| Np | — | #u4 | #u3 | #u2 | #u |
+| Pu | — | #u5 | #u4 | #u3 | #u2 |
+| Am | #u7 | #u6 | #u5 | #u4 | #u3 |
+| Cm | — | #u7 | #u6 | — | — |
+| Bk | — | #n#u6 | #u7 | — | — |
+| Cf | #n3#u4 | #n2#u5 | #n#u6 | — | — |
+| Es | #n4#u3 | #n3#u4 | — | — | — |
+| Fm | #n5#u2 | #n4#u3 | — | — | — |
+| Md | #n6#u | #n5#u2 | — | — | — |
+| No | #n7 | #n6#u | — | — | — |
+| Lr | — | empty | — | — | — |
+
+HW 2228, 2320–2331 supplies the configurations and chemical oxidation states;
+ASD checks the missing ions and existing configuration comments. These are the
+retained-electron occupations used for graph counting, not total-J assignments.
+In particular, C19An finds a nonmagnetic crystal-field singlet within predominantly
+³H₄ U(IV); it does not justify replacing f² `#u2` with a paired `#n` state.
+Lr retains the existing f¹⁴-core convention. Th(III)'s single electron gives `#u`
+whether a particular complex favors 5f or 6d character.
+
+The 51 earlier Ac–Lr rows are retained. Comment corrections:
+U atom s²d¹f³; Np atom s²d¹f⁴; Am atom s²f⁷; Pu⁵⁺ labeled Pu rather than Np;
+free Th³⁺ 5f¹ rather than 6d¹; Lr atom 7s²7p¹ with f¹⁴ in the core. HW/ASD
+citations replace the unspecific or missing references. Existing Pu⁷⁺ `#u`
+is retained as the formal f¹ chemical occupation; An25's Np(VII) compounds use f⁰.
+No new bare Np⁷⁺ row is inferred from this chemical assignment.
+
+#### Actinide work table
+
+Counts are new states after deduplication against the existing registry and earlier
+rows. Ordinary anionic-ligand bonds and anionic donation use the adopted allocation
+(PW). Cp− contributes three accepted pairs, COT²− five, and allyl− two; these are
+dative descriptions. Actinyl donor alternatives retain the ordinary M=O core.
+Binary formula-unit graphs follow the earlier chapter convention and do not assert
+the coordination number of an isolated molecule or its crystal lattice.
+
+| ID | Family / states | Disposition; new | Evidence and scope |
+| --- | --- | --- | --- |
+| An01 | Pa#c+3#u2; Am#c+5#u4; Am#c+6#u3; No#c+3#n6#u | Implemented; 4 | Chemically occurring ions, HW 2325, 2328–2330, 2345; ASD occupations. No gas-phase ionization ladder. |
+| An02 | Am/Cf/Es/Fm/Md/No(II): M#v2; M#c+2#t2 | Implemented; 12 | Dihalide formula units, explicitly identified as a family in HW 2336; table 36.12 gives Am/Cf examples. No Th(II) assignment from metallic ThI₂. |
+| An03 | Ac and U–Es(III): M#v3; M#c+3#t3 | Implemented; 18 | Trihalide formula units, HW 2324, 2336–2337; tris(amido)/triorganyl descriptions reuse these where present. No Th/Pa(III) assignment from conducting iodides. |
+| An04 | Th–Cf(IV): M#v4; M#c+4#t4 | Implemented; 18 | Binary tetrafluorides, HW 2336–2337. ThO₂, U(NPh₂)₄ and ordinary tetraorganyl descriptions reuse these counts. |
+| An05 | Pa/U/Np(V): M#v5; M#c+5#t5 | Implemented; 6 | Binary pentahalide formula units, HW 2336–2338. Their solid-state bridges are not represented by an invented MC state. |
+| An06 | U/Np/Pu(VI): M#v6; M#c+6#t6 | Implemented; 6 | Molecular UF₆, UCl₆, NpF₆ and PuF₆, HW 2336–2337; six terminal ligands. |
+| An07 | U–Bk(III): M#c-3#v6; M#c+3#t6 | Implemented; 12 | Octahedral hexahalides, HW 2324, 2326, 2339. |
+| An08 | Th/Pa/U/Np/Pu/Am/Cm/Bk(IV): M#c-2#v6; M#c+4#t6 | Implemented; 16 | Hexachloro/bromo/iodo complexes of Th–Pu/Bk, HW 2339; AmF₆²⁻ and CmF₆²⁻ in fluoride-rich solution, 2327. Other solid AnF₆²⁻ salts can have shared F and higher coordination. |
+| An09 | U(IV): M#c-4#v8; M#c+4#t8 | Implemented; 2 | Discrete UF₈⁴⁻ in (NH₄)₄UF₈, C19An; f² occupation. HW 2339's generic fluoride formulas are not expanded into every element/coordination combination. |
+| An10 | Pa/U/Np/Pu(V): M#c-#v6; M#c+5#t6. Pa/U/Np(V): M#c-3#v8; M#c+5#t8 | Implemented; 14 | Hexafluoride and cubic Na₃AnF₈ examples, HW 2329, 2339. Counterion-dependent heptafluoride structures remain outside these molecular assignments. |
+| An11 | U(VI): M#c-2#v8; M#c+6#t8 | Implemented; 2 | UF₈²⁻, HW 2339; HS00An pp. 70–71, Fig. 3 and Table 1 establish eight terminal U–F contacts in single-crystal (NO)₂UF₈, with square-antiprismatic geometry. |
+| An12 | Ac(III): M#c+3#t9. U–Cf(III): M#c+3#t8; M#c+3#t9 | Implemented; 15 | Aqua ions, HW 2326. F21An supports Ac nonaqua and reviews Am/Cm hydration. U–Cf follows HW's eight/nine-water family; no separate claim of an individual structure determination for every member. |
+| An13 | Th/Pa/U/Np/Pu/Bk(IV): M#c+4#t8; M#c+4#t9 | Implemented; 11 | Aqua ions, HW 2326–2327; U#c+4#u2#t8 already counted in An09. No corresponding free aqua complexes inferred for fluoride-stabilized Am/Cm/Cf(IV). |
+| An14 | Th–Pu(IV): M#c-4#v8; M#v4#t4; M#c+4#t8 | Implemented; 9 | [An(NCS)₈]⁴⁻ and An(acac)₄, HW 2324, 2328, 2344. Th/U/Np/Pu dithiocarbamates reuse these chelate counts. |
+| An15 | Th/U/Np/Pu(IV): M#c-2#v6#t6; M#c+4#t12 | Implemented; 8 | [An(NO₃)₆]²⁻: six bidentate nitrates, HW 2324, 2344. Uses the implemented Np/Pu capacity extensions. |
+| An16 | Th/U/Pu(IV): M#c-6#v10; M#c+4#t10 | Implemented; 6 | [An(CO₃)₅]⁶⁻, ten O contacts, HW 2344. Two ordinary anionic O bonds per carbonate, or their donor alternatives. |
+| An17 | Th(IV): M#v4#t7; M#c+4#t11; M#v4#t6 | Implemented; 3 | Th(NO₃)₄(H₂O)₃ and Th(NO₃)₄(OPPh₃)₂, HW 2324, 2328. Only coordinated water counts; the second all-donor state reuses An16. |
+| An18 | U(IV): M#v4#t; M#c+4#t5; M#v4#t2 | Implemented; 3 | [U₂(NEt₂)₈] has five N contacts per U; UCl₄(OPR₃)₂ has six, HW 2324, 2328. Amido bridges use existing N donor types; no MC needed. |
+| An19 | Pa(V): M#c+2#v3; M#c+#v4 | Implemented; 2 | PaO(OH)²⁺ and PaO(OH)₂⁺ cores, HW 2328. PaO(OH)₄⁻ reuses An10's ordinary state. Hydration counts are not supplied by these formulas. |
+| An20 | U/Np/Pu/Am(V): M#c+#v4. U/Np/Pu/Am(VI): M#c+2#v4 | Implemented; 8 | Actinyl cores O=M=O, HW 2328–2329. HW's O≡U≡O²⁺ alternative uses U#v6 from An06 and existing O⁺ triple-bond types; it adds no state. |
+| An21 | U/Np/Pu/Am(VI): M#c+2#v4#t5 | Implemented; 4 | Actinyl pentaaqua ions, HW 2329–2330. |
+| An22 | U/Np/Pu/Am(V): M#c-#v6; M#c+#v4#t2. VI: M#c-2#v8; M#c+2#v4#t4 | Implemented; 12 | AnO₂(OH)₂⁻ and AnO₂(OH)₄²⁻, HW 2328–2330. Hydroxido bonds ordinary or donated; oxo bonds remain ordinary. |
+| An23 | U(VI): M#c-3#v9 | Implemented; 1 | UO₂(NCS)₅³⁻, HW 2324; donor alternative reuses An21. UO₂Cl₄²⁻/Br₄²⁻ reuse An22. |
+| An24 | U(VI): M#v6#t4; M#c-#v7#t3. U/Np/Pu/Am(V): M#c-5#v10; M#c+#v4#t6. VI: M#c-4#v10; M#c+2#v4#t6 | Implemented; 18 | UO₂(NO₃)₂(H₂O)₂ and UO₂(NO₃)₃⁻, HW 2343. U/NpO₂(O₂)₃⁴⁻, 2342–2343. Actinyl tricarbonate V/VI family, 2344, expanded to the U–Am actinyl series. Ordinary carbonate/peroxide bonds and donor alternatives reuse the same states. |
+| An25 | Np#c-3#v10; Np#c-#v8#t2 | Implemented; 2 | [NpO₄(OH)₂]³⁻, B24An pp. 16170–16172, 16182: four equatorial oxo and two axial hydroxido ligands, supported in solution and the cobalt-hexammine salt. Replaces HW 2330–2331's dioxo formulation. Ordinary Np=O with ordinary or donated OH⁻ is PW; no MC. Protonation intermediates and Pu analogues add no prospective rows. |
+| An26 | Th/Pa(III): M#c+3#t9. U/Np/Pu/Am(III): M#c+3#t10 | Implemented; 6 | Tris-Cp family Ac/Th–Cf, Cp₃An(THF) for U/Np/Pu, and [An(COT)₂]⁻ for U/Np/Pu/Am, HW 2345–2346. Other #t9 states reuse An12. D17An establishes monomeric substituted tris-Cp Np; the parent Cp₃Np crystal has additional bridging contacts. |
+| An27 | Pa(IV): M#c+4#t12. Pa/Np(IV): M#c+4#t10 | Implemented; 3 | Cp₄An (Th/Pa/U/Np) and An(COT)₂ (Th–Pu), HW 2345–2346. Other counts reuse An15/An16. D17An confirms four η⁵ rings in Cp₄Np; no MC encoding. |
+| An28 | Th/U/Np(IV): M#c+3#v#t9. Th/U(IV): M#c+2#v2#t6. U(III): M#c+2#v#t9 | Implemented; 6 | Cp₃AnX, Cp₂AnX₂ and Cp₃UCl⁻, HW 2345–2346. Use established halide/organyl representatives; all-donor alternatives already counted. Hydride topology is reviewed separately in An33. |
+| An29 | Th(IV): M#v4#t2; M#c-3#v7; M#c+4#t7 | Implemented; 3 | Th/U R₄(dmpe) and ThMe₇³⁻, HW 2345. U's corresponding phosphine state is in An18; U hexorganyl anions reuse An08. |
+| An30 | Th(III): M#c+3#t8 | Implemented; 1 | [Th(η³-allyl)₄]⁻, HW 2345. Neutral Th/U tetraallyls reuse IV #t8; four two-pair allyl donations. |
+| An31 | U(V): M#c+3#v2#t9 | Implemented; 1 | (C₅H₄Me)₃U=NAr family, HW 2346: ordinary U=N plus three Cp donations. No whole-assembly MC state. |
+| An32 | Th#v3#h; U#u2#v3#h | Implemented; 2 | Terminal HM[N(SiMe₃)₂]₃, HW 2345; S81An explicitly establishes monomeric hydrides and the f² U occupation. Explicit-H and all-donor states reuse An04. |
+| An33a | Th/U(IV): M#c+3#v#t6#m0; M#c+3#h#t6#m0; M#c+4#t7#m0 | Implemented; 6 | [Cp*₂M(μ-H)H]₂, F81An pp. 6660–6662: two separate M–H–M bridges and one terminal hydride per metal. Th bridge H located by neutron diffraction; U dimer assigned by the authors from spectroscopy. Each bridge uses existing H⁻ and contributions [0,2,0] (PW). Terminal H is ordinary, implicit or donated. Th chlorohydride dimer reuses these states. |
+| An33b | Th#c+2#v#h#t6 | Implemented; 1 | Monomeric Cp*₂Th(OtBu)H, F81An p. 6663: implicit terminal H with ordinary Th–O; explicit-H and all-donor forms reuse An28/An27. |
+| An34a | U#c-#v7; U#c+6#t7 | Implemented; 2 | UF₇⁻, HW 2339; B76An pp. 2533–2534 identifies the ion in HF solutions by Raman spectroscopy and fluoride-addition equilibria. Seven ordinary U–F bonds or seven F⁻ donations use PW. Exact geometry and counterion-dependent distortions remain distinct from this connectivity assignment; no MC state or solvent-adduct type. |
+| An34b | UF₉³⁻ | Not selected | HW 2339; I81An establishes K₃UF₉/Rb₃UF₉ compositions, U(VI) and orthorhombic unit cells, but supplies no atomic positions or discrete nine-coordinate assignment. No new state or fixture from the stoichiometry alone. |
+| An34c | UF₁₀⁴⁻ | Not selected by user | D84An and M90An p. 47 interpret the spectroscopy as a monomeric, distorted UF₁₀⁴⁻ ion; single-crystal attempts failed, and the powder data give a unit cell only. Leave this formulation out for now. U#c-4#v10 is independently covered by An24; no U#c+6#t10 addition. |
+| An35 | Cp₃U⁺; Cp₃U(CO); further III/IV organyls and oxohalides | Reuse where occupation and graph are established | HW 2339–2346. These need not all become fixtures. A new representation is not added solely to mirror each formula in the chapter. |
+| An36 | Borohydrides, extended binary phases and hydrolysis aggregates; inverse U arenes, U(C₇H₇)₂⁻, Cp₄An⁻, Cp₂U(MeCN)₅²⁺, matrix U(CO)₆ | Not selected for new default states | HW 2336–2346. No whole-lattice/cage MC states or speculative occupations. D17An also corrects HW's U(II) description of the inverse arene to U(III)/arene²⁻. Fm–Lr bonded trihalide/aqua ladders are not added from the generic series statements. |
+
+The 243 additions comprise Ac 3, Th 27, Pa 20, U 54, Np 39, Pu 33, Am 26,
+Cm 10, Bk 12, Cf 8, Es 4, Fm 2, Md 2 and No 3. Lr adds none.
+The six MC additions in An33a describe separate 3c2e hydride bridges; no
+metal–metal bond or whole-assembly MC encoding is used. F81An's U(III) hydride
+aggregate has unresolved size/topology, and monomeric Cp*₂ThH₂ appears only as
+an exchange-mechanism possibility; neither adds states. Existing companion types
+suffice for every fixture.
+
+#### Limits and coverage
+
+For these states, Counts checks retained electrons plus twice the ordinary bond
+orders, implicit H and accepted pairs. The implemented extensions are:
+
+| Element | Capacity | Limiting family | Status |
+| --- | --- | --- | --- |
+| Np | 26 → 27 | IV hexanitrate and tetrakis-Cp: 3 + 24 | Implemented |
+| Pu | 26 → 28 | IV hexanitrate: 4 + 24 | Implemented |
+| Cf | 26 → 27 | III nonaqua: 9 + 18 | Implemented |
+
+All other selected states fit the previous capacities. No's unpaired-electron
+enumeration maximum is 0 → 1 for No(III), An01; its capacity remains 26.
+ValenceTable and valence-electron counts are unchanged.
+
+The 243 independent fixtures cover every added state: 216 in `actinides/`,
+21 in `organometallics/` and six in `multicenter_bonds/`. Source occupations are
+supplied where needed to distinguish them from Counts' minimum-unpaired fallback.
+All four model/policy combinations give the selected states and pass the valence
+invariants check: 1,008 metal-site checks across 252 sites. All 3,359 earlier
+resolution snapshots are unchanged; all 3,602 available resolution cases pass.
+Graph unit (3,594), graph property (223) and chemistry (316) tests pass, as do
+formatting and Clippy. The selected chapter scope is complete.
+
+#### Actinide sources and access
+
+Available primary files are archived below. Intermediates, including the expanded
+state list, are in `scratch/hw-actinide-review/`. All requested papers are reviewed
+and archived. No source-access blocker remains for this chapter; An34b/c record
+the unselected higher-fluoride cases after full-paper review.
+
+| Key | Source | Evidence / access |
+| --- | --- | --- |
+| F21An | Ferrier et al., “Advancing understanding of actinide(III) (Ac, Am, Cm) aqueous complexation chemistry,” *Chem. Sci.* (2021). [DOI](https://doi.org/10.1039/D1SC00233C), [archived full text](../materials/valence/Ferrier-2021-actinide-hydration.xml) | Full primary text reviewed. Ac nine-water assignment and Am/Cm comparisons; does not support an extra Ac eleven-water type from the older measurement. |
+| D17An | Dutkiewicz et al., “Reduction chemistry of neptunium cyclopentadienide complexes: from structure to understanding,” *Chem. Sci.* **8** (2017), 2553–2561. [DOI](https://doi.org/10.1039/C7SC00034K), [author manuscript](../materials/valence/Dutkiewicz-2017-neptunium-cyclopentadienides-author-manuscript.pdf), [final full text](../materials/valence/Dutkiewicz-2017-neptunium-cyclopentadienides.xml) | Full text reviewed. Np(IV) Cp₄ and Np(III) Cp/donor structures; distinguishes monomeric substituted tris-Cp from parent Cp₃Np's additional contacts. |
+| C19An | Chemey et al., “Electronic, Magnetic, and Theoretical Characterization of (NH₄)₄UF₈, a Simple Molecular Uranium(IV) Fluoride,” *Inorg. Chem.* **58** (2019), 637–647. [DOI](https://doi.org/10.1021/acs.inorgchem.8b02800), [PDF](../materials/valence/Chemey-2019-octafluorouranate-IV.pdf) | Full paper reviewed. Discrete UF₈⁴⁻; f²/³H₄ and crystal-field splitting, rather than a new paired occupation. |
+| S81An | Simpson, Turner and Andersen, “Preparation and Hydrogen-Deuterium Exchange of Alkyl and Hydride Bis(trimethylsilyl)amido Derivatives of the Actinide Elements,” *Inorg. Chem.* **20** (1981), 2991–2995. [DOI](https://doi.org/10.1021/ic50223a047), [author manuscript](../materials/valence/Simpson-1981-actinide-monohydrides-author-manuscript.pdf) | Full manuscript reviewed; pp. 3–4 establish monomeric terminal Th/U hydrides, diamagnetic Th and paramagnetic f² U. |
+| HS00An | Hwang and Seppelt, “The structures of ReF₈⁻ and UF₈²⁻,” *J. Fluorine Chem.* **102** (2000), 69–72. [DOI](https://doi.org/10.1016/S0022-1139(99)00248-1), [PDF](../materials/valence/Hwang-Seppelt-2000-octafluoroanions.pdf) | Full paper reviewed. Single-crystal (NO)₂UF₈ has a discrete square-antiprismatic anion, with eight U–F distances of 207.0–215.1 pm, pp. 70–71. |
+| F81An | Fagan et al., “Synthesis and properties of bis(pentamethylcyclopentadienyl) actinide hydrocarbyls and hydrides,” *J. Am. Chem. Soc.* **103** (1981), 6650–6667. [DOI](https://doi.org/10.1021/ja00412a021), [PDF](../materials/valence/Fagan-1981-actinide-hydrocarbyls-hydrides.pdf) | Full paper reviewed. Hydride dimers and terminal alkoxohydride, pp. 6660–6663; explicit Th(IV) f⁰ / U(IV) f², p. 6665. Th neutron structure and U spectroscopic assignment are distinguished in An33a; integer bridge allocation is PW. |
+| B24An | Benthin et al., “Probing the protonation and reduction of heptavalent neptunium with computational guidance,” *Dalton Trans.* **53** (2024), 16170–16185. [DOI](https://doi.org/10.1039/D4DT01706D), [PDF](../materials/valence/Benthin-2024-neptunium-VII.pdf) | Full paper reviewed. Reproduces the tetraoxo cobalt-hexammine salt and supplies complementary solution/solid Raman evidence; confirms An25's four-oxo/two-hydroxido formulation. |
+| D84An | Družina, Milićev and Slivnik, “Synthesis and characterization of a new uranium(VI) compound with a co-ordination number larger than eight, ammonium decafluorouranate(VI),” *J. Chem. Soc., Chem. Commun.* (1984), 363–364. [DOI](https://doi.org/10.1039/C39840000363), [PDF](../materials/valence/Druzina-1984-ammonium-decafluorouranate.pdf) | Full paper reviewed. Composition, U(VI) oxidation and diamagnetism established; Raman supports coordination above eight. Distorted UF₁₀⁴⁻ is the authors' interpretation, without a structure determination. |
+| B76An | Bougon, Charpin, Desmoulin and Malm, “Structural study and properties of the alkali metal, nitrosyl, and ammonium hepta- and octafluorouranates(VI),” *Inorg. Chem.* **15** (1976), 2532–2540. [DOI](https://doi.org/10.1021/ic50164a043), [PDF](../materials/valence/Bougon-1976-hepta-octafluorouranates-VI.pdf) | Full paper reviewed. Solution Raman and fluoride-addition equilibria identify UF₇⁻ and UF₈²⁻, pp. 2533–2534. NMR shows exchange, not a unique geometry; pp. 2537–2539 discuss temperature/counterion-dependent distortions. Ordinary/donor graph allocation is PW. |
+| I81An | Iwasaki, Ishikawa, Ohwada and Fujino, “Syntheses and X-ray observations of new uranium fluoride complexes K₃UF₉ and Rb₃UF₉,” *Inorg. Chim. Acta* **54** (1981), L193–L194. [DOI](https://doi.org/10.1016/S0020-1693(00)95431-8), [PDF](../materials/valence/Iwasaki-1981-nonafluorouranates-VI.pdf) | Full paper reviewed. Composition, U(VI) absorption and indexed powder patterns; no atomic-coordinate structure or molecular connectivity assignment. |
+| M90An | Milićev, Družina and Volavšek, “Synthesis, thermal decomposition and powder diffraction data of ammonium decafluorouranate(VI), (NH₄)₄UF₁₀,” *Polyhedron* **9** (1990), 47–51. [DOI](https://doi.org/10.1016/S0277-5387(00)84246-1), [PDF](../materials/valence/Milicev-1990-ammonium-decafluorouranate.pdf) | Full paper reviewed. Repeats the spectroscopic monomeric UF₁₀⁴⁻ interpretation and reports unsuccessful single-crystal attempts, p. 47. Powder indexing and decomposition data add no atomic-coordinate determination. |
+| ASD | NIST Atomic Spectra Database. [Ion query](https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html); archived [Th](../materials/valence/NIST-Th-ground-states.html), [Pa](../materials/valence/NIST-Pa-ground-states.html), [Np](../materials/valence/NIST-Np-ground-states.html), [Am](../materials/valence/NIST-Am-ground-states.html), [No](../materials/valence/NIST-No-ground-states.html), [Lr](../materials/valence/NIST-Lr-ground-states.html) | Retrieved 2026-11-04. Free Th³⁺ 5f¹, Pa³⁺ 5f², Am⁵⁺/Am⁶⁺ f⁴/f³, No³⁺ f¹³, and Lr's 7p ground-state electron. Higher-charge free-ion core-hole configurations are not chemical oxidation-state assignments. |

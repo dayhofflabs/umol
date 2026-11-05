@@ -24,7 +24,9 @@
 # B01Ln | Bochkarev et al., Angew. Chem. Int. Ed. 40 (2001), 3176-3178; doi:10.1002/1521-3773(20010903)40:17<3176::AID-ANIE3176>3.0.CO;2-Y
 # B04 | Balaban, Oniciu and Katritzky, Chem. Rev. 104 (2004), 2777-2812; doi:10.1021/cr0306790
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
+# B24An | Benthin et al., Dalton Trans. 53 (2024), 16170-16185; doi:10.1039/D4DT01706D
 # B72 | Bartlett et al., Inorg. Chem. 11 (1972), 1124-1127; doi:10.1021/ic50111a042
+# B76An | Bougon et al., Inorg. Chem. 15 (1976), 2532-2540; doi:10.1021/ic50164a043
 # B82 | Bojes et al., J. Am. Chem. Soc. 104 (1982), 4837-4841; doi:10.1021/ja00382a017
 # B93 | Bau et al., J. Chem. Soc., Dalton Trans. (1993), 3359–3362; doi:10.1039/DT9930003359
 # B95 | Bronger and à Brassard, Angew. Chem. Int. Ed. Engl. 34 (1995), 898–900; doi:10.1002/anie.199508981
@@ -42,6 +44,7 @@
 # C01 | Christe et al., J. Am. Chem. Soc. 123 (2001), 6338-6348; doi:10.1021/ja003347a
 # C02 | Contakes et al., Inorg. Chem. 41 (2002), 1670–1678; doi:10.1021/ic011030l
 # C16 | Chen et al., Inorg. Chem. 55 (2016), 12603–12617; doi:10.1021/acs.inorgchem.6b01544
+# C19An | Chemey et al., Inorg. Chem. 58 (2019), 637-647; doi:10.1021/acs.inorgchem.8b02800
 # C23 | Coates, Banerjee and Odelius, Inorg. Chem. 62 (2023), 16854–16866; doi:10.1021/acs.inorgchem.3c02320
 # C68 | Christe and Sawodny, Z. Anorg. Allg. Chem. 357 (1968), 125-133; doi:10.1002/zaac.19683570303
 # C72D | Christe and Curtis, Inorg. Chem. 11 (1972), 35-39; doi:10.1021/ic50107a009
@@ -97,6 +100,8 @@
 # EC76 | Epiotis and Cherry, J. Am. Chem. Soc. 98 (1976), 4365-4370; doi:10.1021/ja00431a003
 # EC90 | Ellis and Chi, J. Am. Chem. Soc. 112 (1990), 6022-6025; doi:10.1021/ja00172a017
 # F18 | Falvey, ACS Omega 3 (2018), 10418-10432; doi:10.1021/acsomega.8b01038
+# F21An | Ferrier et al., Chem. Sci. (2021); doi:10.1039/D1SC00233C
+# F81An | Fagan et al., J. Am. Chem. Soc. 103 (1981), 6650-6667; doi:10.1021/ja00412a021
 # F82 | Franklin et al., J. Am. Chem. Soc. 104 (1982), 5303–5306; doi:10.1021/ja00384a007
 # FH70 | Fergusson and Hickford, Aust. J. Chem. 23 (1970), 453–461; doi:10.1071/CH9700453
 # FL71 | Fergusson and Love, Aust. J. Chem. 24 (1971), 2689–2693; doi:10.1071/CH9712689
@@ -127,6 +132,7 @@
 # HC90 | Hlatky and Crabtree, Inorg. Synth. 27 (1990), 8-14; doi:10.1002/9780470132586.ch2
 # HH79 | Huber and Herzberg, Molecular Spectra and Molecular Structure IV: Constants of Diatomic Molecules (1979); doi:10.1007/978-1-4757-0961-2
 # HR57 | Hepworth and Robinson, J. Inorg. Nucl. Chem. 4 (1957), 24-29; doi:10.1016/0022-1902(57)80104-3
+# HS00An | Hwang and Seppelt, J. Fluorine Chem. 102 (2000), 69-72; doi:10.1016/S0022-1139(99)00248-1
 # HT12 | Hendrickx and Tran, J. Chem. Theory Comput. 8 (2012), 3089–3096; doi:10.1021/ct300516y
 # I00 | Ignatyev et al., J. Am. Chem. Soc. 122 (2000), 1989–1994; doi:10.1021/ja9914083
 # I98 | Moss, IUPAC fused-ring nomenclature, Pure Appl. Chem. 70 (1998), 143-216; doi:10.1351/pac199870010143
@@ -219,6 +225,7 @@
 # S20 | Scheibe et al., Eur. J. Inorg. Chem. (2020), 4483-4496; doi:10.1002/ejic.202000845
 # S21 | Senges et al., Chem. Eur. J. 27 (2021), 13642–13650; doi:10.1002/chem.202102055
 # S68 | Sacco and Rossi, Inorg. Chim. Acta 2 (1968), 127–132; doi:10.1016/S0020-1693(00)87009-7
+# S81An | Simpson, Turner and Andersen, Inorg. Chem. 20 (1981), 2991-2995; doi:10.1021/ic50223a047
 # S98 | Stranger, McGrady and Lovell, Inorg. Chem. 37 (1998), 6795-6806; doi:10.1021/ic971511y
 # SG81 | Soares and Griffith, J. Chem. Soc., Dalton Trans. (1981), 1886-1891; doi:10.1039/DT9810001886
 # SJ73 | Schroeder and Jacobson, Inorg. Chem. 12 (1973), 210-213; doi:10.1021/ic50119a046
@@ -4339,113 +4346,468 @@
 
 [Ac]
 0 = [
-    "Ac #n #u", # Ac atom, s2d1; HW II, p. 1788
-    "Ac #c+3",  # Ac3+, d0; HW II, pp. 1788-1790
+    "Ac #n #u",    # Ac atom, s2d1; HW II, p. 1788
+    "Ac #c+3",     # Ac3+, d0; HW II, pp. 1788-1790
+    "Ac #c+3 #t3", # AcCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Ac #c+3 #t9", # [Ac(H2O)9]3+; HW II, pp. 2326-2327; F21An
+]
+3 = [
+    "Ac #v3", # AcCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
 ]
 
 [Th]
 0 = [
-    "Th #n #u2",  # Th atom, s2d2
-    "Th #c+3 #u", # Th3+, d1 (DOI: 10.1007/1-4020-3598-5_20)
-    "Th #c+4",    # Th4+, f0
+    "Th #n #u2",          # Th atom, s2d2; HW II, p. 2228
+    "Th #c+3 #u",         # Th3+, f1; HW II, pp. 2320-2331; ASD
+    "Th #c+3 #u #t9",     # Cp3Th; HW II, pp. 2345-2346; haptic assignment: PW
+    "Th #c+3 #u #t8",     # [Th(eta3-allyl)4]-; HW II, p. 2345; haptic order 2: PW
+    "Th #c+3 #h #t6 #m0", # [Cp*2Th(mu-H)H]2; HW II, p. 2346; F81An, pp. 6660-6662; assignment: PW
+    "Th #c+4",            # Th4+, f0; HW II, pp. 2320-2331; ASD
+    "Th #c+4 #t4",        # ThF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Th #c+4 #t6",        # ThCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Th #c+4 #t8",        # [Th(H2O)8]4+; HW II, pp. 2326-2327
+    "Th #c+4 #t9",        # [Th(H2O)9]4+; HW II, pp. 2326-2327
+    "Th #c+4 #t12",       # [Th(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "Th #c+4 #t10",       # [Th(CO3)5]6-; HW II, p. 2344; assignment: PW
+    "Th #c+4 #t11",       # Th(NO3)4(H2O)3; HW II, pp. 2324, 2328; assignment: PW
+    "Th #c+4 #t7",        # [ThMe7]3-; HW II, p. 2345; assignment: PW
+    "Th #c+4 #t7 #m0",    # [Cp*2Th(mu-H)H]2; HW II, p. 2346; F81An, pp. 6660-6662; assignment: PW
+]
+1 = [
+    "Th #c+2 #v #h #t6",  # Cp*2Th(OtBu)H, terminal hydride; F81An, p. 6663; haptic assignment: PW
+    "Th #c+3 #v #t9",     # Cp3ThCl; HW II, pp. 2345-2346; assignment: PW
+    "Th #c+3 #v #t6 #m0", # [Cp*2Th(mu-H)H]2; HW II, p. 2346; F81An, pp. 6660-6662; assignment: PW
+]
+2 = [
+    "Th #c+2 #v2 #t6", # Cp2ThCl2; HW II, pp. 2345-2346; assignment: PW
+]
+3 = [
+    "Th #v3 #h", # HTh[N(SiMe3)2]3, terminal hydride; HW II, p. 2345; S81An
+]
+4 = [
+    "Th #v4",     # ThF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Th #v4 #t4", # Th(acac)4; HW II, pp. 2324, 2328, 2344; assignment: PW
+    "Th #v4 #t7", # Th(NO3)4(H2O)3; HW II, pp. 2324, 2328; assignment: PW
+    "Th #v4 #t6", # Th(NO3)4(OPPh3)2; HW II, pp. 2324, 2328; assignment: PW
+    "Th #v4 #t2", # ThMe4(dmpe); HW II, p. 2345; assignment: PW
+]
+6 = [
+    "Th #c-2 #v6",     # ThCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Th #c-2 #v6 #t6", # [Th(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+]
+7 = [
+    "Th #c-3 #v7", # [ThMe7]3-; HW II, p. 2345; assignment: PW
+]
+8 = [
+    "Th #c-4 #v8", # [Th(NCS)8]4-; HW II, pp. 2324, 2344; assignment: PW
+]
+10 = [
+    "Th #c-6 #v10", # [Th(CO3)5]6-; HW II, p. 2344; assignment: PW
 ]
 
 [Pa]
 0 = [
-    "Pa #n #u3",  # Pa atom, s2d1f2
-    "Pa #c+4 #u", # Pa4+, f1 (DOI: 10.1007/1-4020-3598-5_20)
-    "Pa #c+5",    # Pa5+, f0
+    "Pa #n #u3",       # Pa atom, s2d1f2; HW II, p. 2228
+    "Pa #c+3 #u2",     # Pa3+, f2; HW II, pp. 2325, 2328-2330, 2345; ASD
+    "Pa #c+3 #u2 #t9", # Cp3Pa; HW II, pp. 2345-2346; haptic assignment: PW
+    "Pa #c+4 #u",      # Pa4+, f1; HW II, pp. 2320-2331
+    "Pa #c+4 #u #t4",  # PaF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Pa #c+4 #u #t6",  # PaCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Pa #c+4 #u #t8",  # [Pa(H2O)8]4+; HW II, pp. 2326-2327
+    "Pa #c+4 #u #t9",  # [Pa(H2O)9]4+; HW II, pp. 2326-2327
+    "Pa #c+4 #u #t12", # Cp4Pa; HW II, pp. 2345-2346; haptic assignment: PW
+    "Pa #c+4 #u #t10", # [Pa(COT)2]; HW II, pp. 2345-2346; haptic assignment: PW
+    "Pa #c+5",         # Pa5+, f0; HW II, pp. 2320-2331
+    "Pa #c+5 #t5",     # PaF5 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Pa #c+5 #t6",     # PaF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "Pa #c+5 #t8",     # PaF8(3-); HW II, pp. 2324, 2339; assignment: PW
+]
+3 = [
+    "Pa #c+2 #v3", # [PaO(OH)]2+; HW II, p. 2328
+]
+4 = [
+    "Pa #u #v4",     # PaF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Pa #u #v4 #t4", # Pa(acac)4; HW II, pp. 2324, 2328, 2344; assignment: PW
+    "Pa #c+ #v4",    # [PaO(OH)2]+; HW II, p. 2328
+]
+5 = [
+    "Pa #v5", # PaF5 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+6 = [
+    "Pa #c- #v6",     # PaF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "Pa #c-2 #u #v6", # PaCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+]
+8 = [
+    "Pa #c-3 #v8",    # PaF8(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Pa #c-4 #u #v8", # [Pa(NCS)8]4-; HW II, pp. 2324, 2344; assignment: PW
 ]
 
 [U]
 0 = [
-    "U #n #u4",   # U atom, s2d2f3
-    "U #c+3 #u3", # U3+, f3 (DOI: 10.1007/1-4020-3598-5_20)
-    "U #c+4 #u2", # U4+, f2 (DOI: 10.1007/1-4020-3598-5_20)
-    "U #c+5 #u",  # U5+, f1 (DOI: 10.1007/1-4020-3598-5_20)
-    "U #c+6",     # U6+, f0
+    "U #n #u4",              # U atom, s2d1f3; HW II, p. 2228
+    "U #c+3 #u3",            # U3+, f3; HW II, pp. 2320-2331
+    "U #c+3 #u3 #t3",        # UCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "U #c+3 #u3 #t6",        # UCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c+3 #u3 #t8",        # [U(H2O)8]3+; HW II, pp. 2326-2327
+    "U #c+3 #u3 #t9",        # [U(H2O)9]3+; HW II, pp. 2326-2327
+    "U #c+3 #u3 #t10",       # [U(COT)2]-; HW II, pp. 2345-2346; haptic assignment: PW
+    "U #c+3 #u2 #h #t6 #m0", # [Cp*2U(mu-H)H]2; HW II, p. 2346; F81An, pp. 6660-6662; assignment: PW
+    "U #c+4 #u2",            # U4+, f2; HW II, pp. 2320-2331
+    "U #c+4 #u2 #t4",        # UF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "U #c+4 #u2 #t6",        # UCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c+4 #u2 #t8",        # UF8(4-); HW II, pp. 2324, 2339; C19An; assignment: PW
+    "U #c+4 #u2 #t9",        # [U(H2O)9]4+; HW II, pp. 2326-2327
+    "U #c+4 #u2 #t12",       # [U(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "U #c+4 #u2 #t10",       # [U(CO3)5]6-; HW II, p. 2344; assignment: PW
+    "U #c+4 #u2 #t5",        # [U2(NEt2)8], two amido bridges; HW II, pp. 2324, 2328; assignment: PW
+    "U #c+4 #u2 #t7 #m0",    # [Cp*2U(mu-H)H]2; HW II, p. 2346; F81An, pp. 6660-6662; assignment: PW
+    "U #c+5 #u",             # U5+, f1; HW II, pp. 2320-2331
+    "U #c+5 #u #t5",         # UF5 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "U #c+5 #u #t6",         # UF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c+5 #u #t8",         # UF8(3-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c+6",                # U6+, f0; HW II, pp. 2320-2331
+    "U #c+6 #t6",            # UF6; HW II, pp. 2336-2338; assignment: PW
+    "U #c+6 #t8",            # UF8(2-); HW II, pp. 2324, 2339; HS00An, pp. 70-71; assignment: PW
+    "U #c+6 #t7",            # UF7(1-); HW II, pp. 2324, 2339; B76An, pp. 2533-2534; assignment: PW
+]
+1 = [
+    "U #c+2 #u3 #v #t9",     # Cp3UCl-; HW II, pp. 2345-2346; assignment: PW
+    "U #c+3 #u2 #v #t9",     # Cp3UCl; HW II, pp. 2345-2346; assignment: PW
+    "U #c+3 #u2 #v #t6 #m0", # [Cp*2U(mu-H)H]2; HW II, p. 2346; F81An, pp. 6660-6662; assignment: PW
+]
+2 = [
+    "U #c+2 #u2 #v2 #t6", # Cp2UCl2; HW II, pp. 2345-2346; assignment: PW
+    "U #c+3 #u #v2 #t9",  # [(MeCp)3U=N]2C6H4 (para); HW II, p. 2346; haptic assignment: PW
+]
+3 = [
+    "U #u3 #v3",    # UCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "U #u2 #v3 #h", # HU[N(SiMe3)2]3, terminal hydride; HW II, p. 2345; S81An
+]
+4 = [
+    "U #u2 #v4",        # UF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "U #u2 #v4 #t4",    # U(acac)4; HW II, pp. 2324, 2328, 2344; assignment: PW
+    "U #u2 #v4 #t",     # [U2(NEt2)8], two amido bridges; HW II, pp. 2324, 2328; assignment: PW
+    "U #u2 #v4 #t2",    # UCl4(OPMe3)2; HW II, pp. 2324, 2328; assignment: PW
+    "U #c+ #u #v4",     # UO2(1+); HW II, pp. 2328-2329
+    "U #c+ #u #v4 #t2", # UO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+    "U #c+ #u #v4 #t6", # UO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+    "U #c+2 #v4",       # UO2(2+); HW II, pp. 2328-2329
+    "U #c+2 #v4 #t5",   # [UO2(H2O)5]2+; HW II, pp. 2329-2330
+    "U #c+2 #v4 #t4",   # UO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+    "U #c+2 #v4 #t6",   # UO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+]
+5 = [
+    "U #u #v5", # UF5 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+6 = [
+    "U #v6",              # UF6; HW II, pp. 2336-2338; assignment: PW
+    "U #v6 #t4",          # UO2(NO3)2(H2O)2; HW II, p. 2343; assignment: PW
+    "U #c- #u #v6",       # UF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c-2 #u2 #v6",     # UCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c-2 #u2 #v6 #t6", # [U(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "U #c-3 #u3 #v6",     # UCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+]
+7 = [
+    "U #c- #v7 #t3", # UO2(NO3)3-; HW II, p. 2343; assignment: PW
+    "U #c- #v7",     # UF7(1-); HW II, pp. 2324, 2339; B76An, pp. 2533-2534; assignment: PW
+]
+8 = [
+    "U #c-2 #v8",     # UF8(2-); HW II, pp. 2324, 2339; HS00An, pp. 70-71; assignment: PW
+    "U #c-3 #u #v8",  # UF8(3-); HW II, pp. 2324, 2339; assignment: PW
+    "U #c-4 #u2 #v8", # UF8(4-); HW II, pp. 2324, 2339; C19An; assignment: PW
+]
+9 = [
+    "U #c-3 #v9", # UO2(NCS)5(3-); HW II, p. 2324; assignment: PW
+]
+10 = [
+    "U #c-4 #v10",     # UO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+    "U #c-5 #u #v10",  # UO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+    "U #c-6 #u2 #v10", # [U(CO3)5]6-; HW II, p. 2344; assignment: PW
 ]
 
 [Np]
 0 = [
-    "Np #n #u5",   # Np atom, s2d1f3
-    "Np #c+3 #u4", # Np3+, f4 (DOI: 10.1007/1-4020-3598-5_20)
-    "Np #c+4 #u3", # Np4+, f3 (DOI: 10.1007/1-4020-3598-5_20)
-    "Np #c+5 #u2", # Np5+, f2 (DOI: 10.1007/1-4020-3598-5_20)
-    "Np #c+6 #u",  # Np6+, f1 (DOI: 10.1007/1-4020-3598-5_20)
+    "Np #n #u5",        # Np atom, s2d1f4; HW II, p. 2228
+    "Np #c+3 #u4",      # Np3+, f4; HW II, pp. 2320-2331
+    "Np #c+3 #u4 #t3",  # NpCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Np #c+3 #u4 #t6",  # NpCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c+3 #u4 #t8",  # [Np(H2O)8]3+; HW II, pp. 2326-2327
+    "Np #c+3 #u4 #t9",  # [Np(H2O)9]3+; HW II, pp. 2326-2327
+    "Np #c+3 #u4 #t10", # [Np(COT)2]-; HW II, pp. 2345-2346; haptic assignment: PW
+    "Np #c+4 #u3",      # Np4+, f3; HW II, pp. 2320-2331
+    "Np #c+4 #u3 #t4",  # NpF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Np #c+4 #u3 #t6",  # NpCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c+4 #u3 #t8",  # [Np(H2O)8]4+; HW II, pp. 2326-2327
+    "Np #c+4 #u3 #t9",  # [Np(H2O)9]4+; HW II, pp. 2326-2327
+    "Np #c+4 #u3 #t12", # [Np(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "Np #c+4 #u3 #t10", # [Np(COT)2]; HW II, pp. 2345-2346; haptic assignment: PW
+    "Np #c+5 #u2",      # Np5+, f2; HW II, pp. 2320-2331
+    "Np #c+5 #u2 #t5",  # NpF5 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Np #c+5 #u2 #t6",  # NpF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c+5 #u2 #t8",  # NpF8(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c+6 #u",       # Np6+, f1; HW II, pp. 2320-2331
+    "Np #c+6 #u #t6",   # NpF6; HW II, pp. 2336-2338; assignment: PW
+]
+1 = [
+    "Np #c+3 #u3 #v #t9", # Cp3NpCl; HW II, pp. 2345-2346; assignment: PW
+]
+3 = [
+    "Np #u4 #v3", # NpCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+4 = [
+    "Np #u3 #v4",         # NpF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Np #u3 #v4 #t4",     # Np(acac)4; HW II, pp. 2324, 2328, 2344; assignment: PW
+    "Np #c+ #u2 #v4",     # NpO2(1+); HW II, pp. 2328-2329
+    "Np #c+ #u2 #v4 #t2", # NpO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+    "Np #c+ #u2 #v4 #t6", # NpO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+    "Np #c+2 #u #v4",     # NpO2(2+); HW II, pp. 2328-2329
+    "Np #c+2 #u #v4 #t5", # [NpO2(H2O)5]2+; HW II, pp. 2329-2330
+    "Np #c+2 #u #v4 #t4", # NpO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+    "Np #c+2 #u #v4 #t6", # NpO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+]
+5 = [
+    "Np #u2 #v5", # NpF5 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+6 = [
+    "Np #u #v6",           # NpF6; HW II, pp. 2336-2338; assignment: PW
+    "Np #c- #u2 #v6",      # NpF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c-2 #u3 #v6",     # NpCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c-2 #u3 #v6 #t6", # [Np(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "Np #c-3 #u4 #v6",     # NpCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+]
+8 = [
+    "Np #c- #v8 #t2",  # [NpO4(OH)2]3-; B24An, pp. 16170-16172, 16182; assignment: PW
+    "Np #c-2 #u #v8",  # NpO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+    "Np #c-3 #u2 #v8", # NpF8(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Np #c-4 #u3 #v8", # [Np(NCS)8]4-; HW II, pp. 2324, 2344; assignment: PW
+]
+10 = [
+    "Np #c-3 #v10",     # [NpO4(OH)2]3-; B24An, pp. 16170-16172, 16182; assignment: PW
+    "Np #c-4 #u #v10",  # NpO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+    "Np #c-5 #u2 #v10", # NpO2(CO3)3(5-); HW II, p. 2344; assignment: PW
 ]
 
 [Pu]
 0 = [
-    "Pu #n #u6",   # Pu atom, s2f6
-    "Pu #c+3 #u5", # Pu3+, f5 (DOI: 10.1007/1-4020-3598-5_20)
-    "Pu #c+4 #u4", # Pu4+, f4 (DOI: 10.1007/1-4020-3598-5_20)
-    "Pu #c+5 #u3", # Np5+, f3 (DOI: 10.1007/1-4020-3598-5_20)
-    "Pu #c+6 #u2", # Pu6+, f2 (DOI: 10.1007/1-4020-3598-5_20)
-    "Pu #c+7 #u",  # Pu7+, f1 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pu #n #u6",        # Pu atom, s2f6; HW II, p. 2228
+    "Pu #c+3 #u5",      # Pu3+, f5; HW II, pp. 2320-2331
+    "Pu #c+3 #u5 #t3",  # PuCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Pu #c+3 #u5 #t6",  # PuCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Pu #c+3 #u5 #t8",  # [Pu(H2O)8]3+; HW II, pp. 2326-2327
+    "Pu #c+3 #u5 #t9",  # [Pu(H2O)9]3+; HW II, pp. 2326-2327
+    "Pu #c+3 #u5 #t10", # [Pu(COT)2]-; HW II, pp. 2345-2346; haptic assignment: PW
+    "Pu #c+4 #u4",      # Pu4+, f4; HW II, pp. 2320-2331
+    "Pu #c+4 #u4 #t4",  # PuF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Pu #c+4 #u4 #t6",  # PuCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Pu #c+4 #u4 #t8",  # [Pu(H2O)8]4+; HW II, pp. 2326-2327
+    "Pu #c+4 #u4 #t9",  # [Pu(H2O)9]4+; HW II, pp. 2326-2327
+    "Pu #c+4 #u4 #t12", # [Pu(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "Pu #c+4 #u4 #t10", # [Pu(CO3)5]6-; HW II, p. 2344; assignment: PW
+    "Pu #c+5 #u3",      # Pu5+, f3; HW II, pp. 2320-2331
+    "Pu #c+5 #u3 #t6",  # PuF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "Pu #c+6 #u2",      # Pu6+, f2; HW II, pp. 2320-2331
+    "Pu #c+6 #u2 #t6",  # PuF6; HW II, pp. 2336-2338; assignment: PW
+    "Pu #c+7 #u",       # Pu7+, f1; HW II, pp. 2320-2331
+]
+3 = [
+    "Pu #u5 #v3", # PuCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+4 = [
+    "Pu #u4 #v4",          # PuF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Pu #u4 #v4 #t4",      # Pu(acac)4; HW II, pp. 2324, 2328, 2344; assignment: PW
+    "Pu #c+ #u3 #v4",      # PuO2(1+); HW II, pp. 2328-2329
+    "Pu #c+ #u3 #v4 #t2",  # PuO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+    "Pu #c+ #u3 #v4 #t6",  # PuO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+    "Pu #c+2 #u2 #v4",     # PuO2(2+); HW II, pp. 2328-2329
+    "Pu #c+2 #u2 #v4 #t5", # [PuO2(H2O)5]2+; HW II, pp. 2329-2330
+    "Pu #c+2 #u2 #v4 #t4", # PuO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+    "Pu #c+2 #u2 #v4 #t6", # PuO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+]
+6 = [
+    "Pu #u2 #v6",          # PuF6; HW II, pp. 2336-2338; assignment: PW
+    "Pu #c- #u3 #v6",      # PuF6(1-); HW II, pp. 2324, 2339; assignment: PW
+    "Pu #c-2 #u4 #v6",     # PuCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Pu #c-2 #u4 #v6 #t6", # [Pu(NO3)6]2-; HW II, pp. 2324, 2344; assignment: PW
+    "Pu #c-3 #u5 #v6",     # PuCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+]
+8 = [
+    "Pu #c-2 #u2 #v8", # PuO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+    "Pu #c-4 #u4 #v8", # [Pu(NCS)8]4-; HW II, pp. 2324, 2344; assignment: PW
+]
+10 = [
+    "Pu #c-4 #u2 #v10", # PuO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+    "Pu #c-5 #u3 #v10", # PuO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+    "Pu #c-6 #u4 #v10", # [Pu(CO3)5]6-; HW II, p. 2344; assignment: PW
 ]
 
 [Am]
 0 = [
-    "Am #n #u7",   # Am atom, s2d1f6
-    "Am #c+2 #u7", # Am2+, f7 (DOI: 10.1007/1-4020-3598-5_20)
-    "Am #c+3 #u6", # Am3+, f6 (DOI: 10.1007/1-4020-3598-5_20)
-    "Am #c+4 #u5", # Am4+, f5 (DOI: 10.1007/1-4020-3598-5_20)
+    "Am #n #u7",        # Am atom, s2f7; HW II, p. 2228
+    "Am #c+2 #u7",      # Am2+, f7; HW II, pp. 2320-2331
+    "Am #c+2 #u7 #t2",  # AmCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Am #c+3 #u6",      # Am3+, f6; HW II, pp. 2320-2331
+    "Am #c+3 #u6 #t3",  # AmCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Am #c+3 #u6 #t6",  # AmCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Am #c+3 #u6 #t8",  # [Am(H2O)8]3+; HW II, pp. 2326-2327
+    "Am #c+3 #u6 #t9",  # [Am(H2O)9]3+; HW II, pp. 2326-2327
+    "Am #c+3 #u6 #t10", # [Am(COT)2]-; HW II, pp. 2345-2346; haptic assignment: PW
+    "Am #c+4 #u5",      # Am4+, f5; HW II, pp. 2320-2331
+    "Am #c+4 #u5 #t4",  # AmF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Am #c+4 #u5 #t6",  # AmF6(2-); HW II, p. 2327; assignment: PW
+    "Am #c+5 #u4",      # Am5+, f4; HW II, pp. 2325, 2328-2330, 2345; ASD
+    "Am #c+6 #u3",      # Am6+, f3; HW II, pp. 2325, 2328-2330, 2345; ASD
+]
+2 = [
+    "Am #u7 #v2", # AmCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+3 = [
+    "Am #u6 #v3", # AmCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+4 = [
+    "Am #u5 #v4",          # AmF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Am #c+ #u4 #v4",      # AmO2(1+); HW II, pp. 2328-2329
+    "Am #c+ #u4 #v4 #t2",  # AmO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+    "Am #c+ #u4 #v4 #t6",  # AmO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+    "Am #c+2 #u3 #v4",     # AmO2(2+); HW II, pp. 2328-2329
+    "Am #c+2 #u3 #v4 #t5", # [AmO2(H2O)5]2+; HW II, pp. 2329-2330
+    "Am #c+2 #u3 #v4 #t4", # AmO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+    "Am #c+2 #u3 #v4 #t6", # AmO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+]
+6 = [
+    "Am #c- #u4 #v6",  # AmO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+    "Am #c-2 #u5 #v6", # AmF6(2-); HW II, p. 2327; assignment: PW
+    "Am #c-3 #u6 #v6", # AmCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+]
+8 = [
+    "Am #c-2 #u3 #v8", # AmO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+]
+10 = [
+    "Am #c-4 #u3 #v10", # AmO2(CO3)3(4-); HW II, p. 2344; assignment: PW
+    "Am #c-5 #u4 #v10", # AmO2(CO3)3(5-); HW II, p. 2344; assignment: PW
 ]
 
 [Cm]
 0 = [
-    "Cm #n #u8",   # Cm atom, s2d1f7
-    "Cm #c+3 #u7", # Cm3+, f7 (DOI: 10.1007/1-4020-3598-5_20)
-    "Cm #c+4 #u6", # Cm4+, f6 (DOI: 10.1007/1-4020-3598-5_20)
+    "Cm #n #u8",       # Cm atom, s2d1f7; HW II, p. 2228
+    "Cm #c+3 #u7",     # Cm3+, f7; HW II, pp. 2320-2331
+    "Cm #c+3 #u7 #t3", # CmCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Cm #c+3 #u7 #t6", # CmCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Cm #c+3 #u7 #t8", # [Cm(H2O)8]3+; HW II, pp. 2326-2327
+    "Cm #c+3 #u7 #t9", # [Cm(H2O)9]3+; HW II, pp. 2326-2327
+    "Cm #c+4 #u6",     # Cm4+, f6; HW II, pp. 2320-2331
+    "Cm #c+4 #u6 #t4", # CmF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Cm #c+4 #u6 #t6", # CmF6(2-); HW II, p. 2327; assignment: PW
+]
+3 = [
+    "Cm #u7 #v3", # CmCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+4 = [
+    "Cm #u6 #v4", # CmF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+6 = [
+    "Cm #c-2 #u6 #v6", # CmF6(2-); HW II, p. 2327; assignment: PW
+    "Cm #c-3 #u7 #v6", # CmCl6(3-); HW II, pp. 2324, 2339; assignment: PW
 ]
 
 [Bk]
 0 = [
-    "Bk #n3 #u5",     # Bk atom, s2f9
-    "Bk #c+3 #n #u6", # Bk3+, f8 (DOI: 10.1007/1-4020-3598-5_20)
-    "Bk #c+4 #u7",    # Bk4+, f7 (DOI: 10.1007/1-4020-3598-5_20)
+    "Bk #n3 #u5",         # Bk atom, s2f9; HW II, p. 2228
+    "Bk #c+3 #n #u6",     # Bk3+, f8; HW II, pp. 2320-2331
+    "Bk #c+3 #n #u6 #t3", # BkCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Bk #c+3 #n #u6 #t6", # BkCl6(3-); HW II, pp. 2324, 2339; assignment: PW
+    "Bk #c+3 #n #u6 #t8", # [Bk(H2O)8]3+; HW II, pp. 2326-2327
+    "Bk #c+3 #n #u6 #t9", # [Bk(H2O)9]3+; HW II, pp. 2326-2327
+    "Bk #c+4 #u7",        # Bk4+, f7; HW II, pp. 2320-2331
+    "Bk #c+4 #u7 #t4",    # BkF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Bk #c+4 #u7 #t6",    # BkCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Bk #c+4 #u7 #t8",    # [Bk(H2O)8]4+; HW II, pp. 2326-2327
+    "Bk #c+4 #u7 #t9",    # [Bk(H2O)9]4+; HW II, pp. 2326-2327
+]
+3 = [
+    "Bk #n #u6 #v3", # BkCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+4 = [
+    "Bk #u7 #v4", # BkF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+6 = [
+    "Bk #c-2 #u7 #v6",    # BkCl6(2-); HW II, pp. 2324, 2339; assignment: PW
+    "Bk #c-3 #n #u6 #v6", # BkCl6(3-); HW II, pp. 2324, 2339; assignment: PW
 ]
 
 [Cf]
 0 = [
-    "Cf #n4 #u4",      # Cf atom, s2f10
-    "Cf #c+2 #n3 #u4", # Cf2+, f10
-    "Cf #c+3 #n2 #u5", # Cf3+, f9 (DOI: 10.1007/1-4020-3598-5_20)
-    "Cf #c+4 #n #u6",  # Cf4+, f8 (DOI: 10.1007/1-4020-3598-5_20)
+    "Cf #n4 #u4",          # Cf atom, s2f10; HW II, p. 2228
+    "Cf #c+2 #n3 #u4",     # Cf2+, f10; HW II, pp. 2320-2331
+    "Cf #c+2 #n3 #u4 #t2", # CfCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Cf #c+3 #n2 #u5",     # Cf3+, f9; HW II, pp. 2320-2331
+    "Cf #c+3 #n2 #u5 #t3", # CfCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Cf #c+3 #n2 #u5 #t8", # [Cf(H2O)8]3+; HW II, pp. 2326-2327
+    "Cf #c+3 #n2 #u5 #t9", # [Cf(H2O)9]3+; HW II, pp. 2326-2327
+    "Cf #c+4 #n #u6",      # Cf4+, f8; HW II, pp. 2320-2331
+    "Cf #c+4 #n #u6 #t4",  # CfF4 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+2 = [
+    "Cf #n3 #u4 #v2", # CfCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+3 = [
+    "Cf #n2 #u5 #v3", # CfCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+4 = [
+    "Cf #n #u6 #v4", # CfF4 formula unit; HW II, pp. 2336-2338; assignment: PW
 ]
 
 [Es]
 0 = [
-    "Es #n5 #u3",      # Es atom, s2f11
-    "Es #c+2 #n4 #u3", # Es2+, f11 (DOI: 10.1007/1-4020-3598-5_20)
-    "Es #c+3 #n3 #u4", # Es3+, f10 (DOI: 10.1007/1-4020-3598-5_20)
+    "Es #n5 #u3",          # Es atom, s2f11; HW II, p. 2228
+    "Es #c+2 #n4 #u3",     # Es2+, f11; HW II, pp. 2320-2331
+    "Es #c+2 #n4 #u3 #t2", # EsCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Es #c+3 #n3 #u4",     # Es3+, f10; HW II, pp. 2320-2331
+    "Es #c+3 #n3 #u4 #t3", # EsCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+2 = [
+    "Es #n4 #u3 #v2", # EsCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+]
+3 = [
+    "Es #n3 #u4 #v3", # EsCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
 ]
 
 [Fm]
 0 = [
-    "Fm #n6 #u2",      # Fm atom, s2f12
-    "Fm #c+2 #n5 #u2", # Fm2+, f12 (DOI: 10.1007/1-4020-3598-5_20)
-    "Fm #c+3 #n4 #u3", # Fm3+, f11 (DOI: 10.1007/1-4020-3598-5_20)
+    "Fm #n6 #u2",          # Fm atom, s2f12; HW II, p. 2228
+    "Fm #c+2 #n5 #u2",     # Fm2+, f12; HW II, pp. 2320-2331
+    "Fm #c+2 #n5 #u2 #t2", # FmCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Fm #c+3 #n4 #u3",     # Fm3+, f11; HW II, pp. 2320-2331
+]
+2 = [
+    "Fm #n5 #u2 #v2", # FmCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
 ]
 
 [Md]
 0 = [
-    "Md #n7 #u",       # Md atom, s2f13
-    "Md #c+2 #n6 #u",  # Md2+, f13 (DOI: 10.1007/1-4020-3598-5_20)
-    "Md #c+3 #n5 #u2", # Md3+, f12 (DOI: 10.1007/1-4020-3598-5_20)
+    "Md #n7 #u",          # Md atom, s2f13; HW II, p. 2228
+    "Md #c+2 #n6 #u",     # Md2+, f13; HW II, pp. 2320-2331
+    "Md #c+2 #n6 #u #t2", # MdCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "Md #c+3 #n5 #u2",    # Md3+, f12; HW II, pp. 2320-2331
+]
+2 = [
+    "Md #n6 #u #v2", # MdCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
 ]
 
 [No]
 0 = [
-    "No #n8",      # No atom, s2f14
-    "No #c+2 #n7", # No2+, f14 (DOI: 10.1007/1-4020-3598-5_20)
+    "No #n8",          # No atom, s2f14; HW II, p. 2228
+    "No #c+2 #n7",     # No2+, f14; HW II, pp. 2320-2331
+    "No #c+2 #n7 #t2", # NoCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+    "No #c+3 #n6 #u",  # No3+, f13; HW II, pp. 2325, 2328-2330, 2345; ASD
+]
+2 = [
+    "No #n7 #v2", # NoCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
 ]
 
 [Lr]
 0 = [
-    "Lr #n #u", # Lr atom, s2d1
-    "Lr #c+3",  # Lr3+, d0
+    "Lr #n #u", # Lr atom, s2p1, f14 core; HW II, p. 2228; ASD
+    "Lr #c+3",  # Lr3+, f14 core; HW II, pp. 2320-2331; ASD
 ]
 
 [Rf]

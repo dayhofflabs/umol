@@ -1,0 +1,6 @@
+; ThMe4(dmpe); HW II, p. 2345; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Th#u0" "C#h3" "C#h3" "C#h3" "C#h3" "P" "C#h2" "C#h2" "P" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [5 9 "1"] [5 10 "1"]
+                 [8 11 "1"] [8 12 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 0 :attrs "1"}]}}

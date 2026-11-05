@@ -1,0 +1,4 @@
+; NoCl2 formula unit; HW II, pp. 2336-2338; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["No#u0" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

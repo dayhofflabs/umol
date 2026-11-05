@@ -1,0 +1,5 @@
+; PuO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pu#c+#u3" "O" "O" "O#h#c-" "O#h#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

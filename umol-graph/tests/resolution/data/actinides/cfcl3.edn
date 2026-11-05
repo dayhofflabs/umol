@@ -1,0 +1,4 @@
+; CfCl3 formula unit; HW II, pp. 2336-2338; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cf#u5" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

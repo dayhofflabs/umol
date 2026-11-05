@@ -1,0 +1,7 @@
+; [Th(eta3-allyl)4]-; HW II, p. 2345; haptic order 2: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Th#c+3#u" "C#c-#h2" "C#h" "C#h2" "C#c-#h2" "C#h" "C#h2" "C#c-#h2" "C#h" "C#h2" "C#c-#h2" "C#h"
+                 "C#h2"]
+         :bonds [[1 2 "1"] [2 3 "2"] [4 5 "1"] [5 6 "2"] [7 8 "1"] [8 9 "2"] [10 11 "1"] [11 12 "2"]]
+         :dative-bonds [{:donors [1 2 3] :acceptor 0 :attrs "2"} {:donors [4 5 6] :acceptor 0 :attrs "2"}
+                        {:donors [7 8 9] :acceptor 0 :attrs "2"} {:donors [10 11 12] :acceptor 0 :attrs "2"}]}}
