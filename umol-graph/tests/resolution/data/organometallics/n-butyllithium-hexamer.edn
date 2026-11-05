@@ -1,0 +1,60 @@
+; MSS, p. 67
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    [:a1 "C"]
+    [:b1 "C"]
+    [:c1 "C"]
+    [:d1 "C"]
+    [:a2 "C"]
+    [:b2 "C"]
+    [:c2 "C"]
+    [:d2 "C"]
+    [:a3 "C"]
+    [:b3 "C"]
+    [:c3 "C"]
+    [:d3 "C"]
+    [:a4 "C"]
+    [:b4 "C"]
+    [:c4 "C"]
+    [:d4 "C"]
+    [:a5 "C"]
+    [:b5 "C"]
+    [:c5 "C"]
+    [:d5 "C"]
+    [:a6 "C"]
+    [:b6 "C"]
+    [:c6 "C"]
+    [:d6 "C"]
+    [:l1 "Li"]
+    [:l2 "Li"]
+    [:l3 "Li"]
+    [:l4 "Li"]
+    [:l5 "Li"]
+    [:l6 "Li"]]
+  :bonds [
+    [:a1 :b1 :single]
+    [:b1 :c1 :single]
+    [:c1 :d1 :single]
+    [:a2 :b2 :single]
+    [:b2 :c2 :single]
+    [:c2 :d2 :single]
+    [:a3 :b3 :single]
+    [:b3 :c3 :single]
+    [:c3 :d3 :single]
+    [:a4 :b4 :single]
+    [:b4 :c4 :single]
+    [:c4 :d4 :single]
+    [:a5 :b5 :single]
+    [:b5 :c5 :single]
+    [:c5 :d5 :single]
+    [:a6 :b6 :single]
+    [:b6 :c6 :single]
+    [:c6 :d6 :single]]
+  :multicenter-bonds [
+    {:atoms [:a1 :l1 :l2 :l4] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a2 :l2 :l4 :l5] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a3 :l3 :l2 :l5] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a4 :l5 :l3 :l6] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a5 :l6 :l3 :l1] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a6 :l4 :l1 :l6] :attrs "[1,1,0,0]#c0#u0#s1"}]}}

@@ -1,0 +1,42 @@
+; MSS, p. 67
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    [:a1 "C"]
+    [:b1 "C"]
+    [:c1 "C"]
+    [:d1 "C"]
+    [:a2 "C"]
+    [:b2 "C"]
+    [:c2 "C"]
+    [:d2 "C"]
+    [:a3 "C"]
+    [:b3 "C"]
+    [:c3 "C"]
+    [:d3 "C"]
+    [:a4 "C"]
+    [:b4 "C"]
+    [:c4 "C"]
+    [:d4 "C"]
+    [:l1 "Li"]
+    [:l2 "Li"]
+    [:l3 "Li"]
+    [:l4 "Li"]]
+  :bonds [
+    [:a1 :b1 :single]
+    [:b1 :c1 :single]
+    [:c1 :d1 :single]
+    [:a2 :b2 :single]
+    [:b2 :c2 :single]
+    [:c2 :d2 :single]
+    [:a3 :b3 :single]
+    [:b3 :c3 :single]
+    [:c3 :d3 :single]
+    [:a4 :b4 :single]
+    [:b4 :c4 :single]
+    [:c4 :d4 :single]]
+  :multicenter-bonds [
+    {:atoms [:a1 :l1 :l2 :l3] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a2 :l2 :l3 :l4] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a3 :l3 :l4 :l1] :attrs "[1,1,0,0]#c0#u0#s1"}
+    {:atoms [:a4 :l4 :l1 :l2] :attrs "[1,1,0,0]#c0#u0#s1"}]}}

@@ -71,7 +71,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
       17 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       18 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
       19 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
-      20 ["O#c+#h2#n#v#d0#t0#a!#m!" "O#c+#n2#v#d0#t0#a!#m!"]}}
+      20 [
+        "O#c+#h2#n#v#d0#t0#a!#m!"
+        "O#c+#n2#v#d0#t0#a!#m!"
+        "O#c+#h#n#u#v#d0#t0#a!#m!"]}}
   :counts-most-saturated {
     :output {
       :aromatic-systems [

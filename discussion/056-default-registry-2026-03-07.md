@@ -44,6 +44,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 16 in `organometallics/`, 9 in `haptic_bonds/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
 | [Actinides, XXXVI](#actinide-work-table) | 243 additions, including 6 hydride-bridge MC states; 51 earlier states retained and sourced | 243 new: 216 in `actinides/`, 3 in `organometallics/`, 18 in `haptic_bonds/`, 6 in `multicenter_bonds/`; all added states covered | Capacities Np/Cf 27, Pu 28; No unpaired maximum 1. ValenceTable unchanged; UF₉³⁻/UF₁₀⁴⁻ unselected |
 | [Beyer/Walter, ch. 4–38](#beyerwalter-extraction) | 3 C additions: `C #u #v2 #a`, `C #c+ #v2 #a`, `C #c- #n #v2 #a` | 4,201 new; `succinic-anhydride` corrected | Direct chapter classes and 32 selected incidental inputs. Methano[10]annulene remains a known limit |
+| [Singh](#singh-extraction) | 7 additions: N, O, S, C, Cl and 2 Li | 10 new | Radical cations, open-shell singlet CH2, ClSO2, benzene·Cl and organolithium states |
 
 ### Shared changes and verification
 
@@ -55,9 +56,9 @@ Companion states belong to elements outside the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification | 7,836 resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass |
+| Verification | 7,846 resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass |
 | Organic reorganization | 364 existing inputs and their snapshots moved to the [current categories](#categories) with their contents unchanged |
-| Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
+| Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations |
 
 The Decision Log below is the historical March record; later tracking-table updates are
 dated.
@@ -68,7 +69,7 @@ dated.
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
 | `atomic_ions/` | 217 | Atomic ions and Hg₂²⁺ |
-| `organometallics/` | 305 | Metal–carbon bonds, carbonyls and complexes with η ≤ 2 ligands |
+| `organometallics/` | 310 | Metal–carbon bonds, carbonyls and complexes with η ≤ 2 ligands |
 | `haptic_bonds/` | 115 | At least one ligand with η > 2: Cp, arene, COT and allyl complexes; explicit MC and metal–metal cases retain their own categories |
 | `organoelement_compounds/` | 61 | Organic B, Si–Pb, As–Bi, Se–Po and Hg compounds |
 | `phosphorus_compounds/` | 44 | Organophosphorus compounds and phosphorus acid derivatives |
@@ -131,11 +132,11 @@ dated.
 | `natural_products/` | 99 | Other natural products: flavonoids, phenylpropanoids, quinones, antibiotics, pheromones |
 | `cation_intermediates/` | 176 | Carbocations, onium and diazonium ions, sigma complexes; net positive main species |
 | `anion_intermediates/` | 157 | Carbanions, enolates, alkoxides, other anions; net negative main species |
-| `radical_intermediates/` | 66 | Radicals, diradicals and radical ions |
-| `sextet_intermediates/` | 22 | Carbenes, nitrenes and tetrylenes, including N-heterocyclic carbenes |
+| `radical_intermediates/` | 70 | Radicals, diradicals and radical ions |
+| `sextet_intermediates/` | 23 | Carbenes, nitrenes and tetrylenes, including N-heterocyclic carbenes |
 | `zwitterion_intermediates/` | 25 | Neutral species with separated charges: ylides, betaines, tetrahedral zwitterions |
 | `reactive_intermediates/` | 49 | Neutral closed-shell intermediates: arynes, enols, quinone methides, adducts |
-| **Total** | **7836** | |
+| **Total** | **7846** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -188,8 +189,8 @@ single-atom cases were effectively unchanged.
 
 - Run the conformance suite with its feature flag enabled:
   - `cargo test -p umol-graph --features conformance --test resolution`
-- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. Of the 7,836
-  inputs, 7,832 succeed under AtomTyping and Counts MostSaturated; the four methano[10]annulene
+- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. Of the 7,846
+  inputs, 7,842 succeed under AtomTyping and Counts MostSaturated; the four methano[10]annulene
   inputs fail under both.
   3,376 succeed under AtomTyping Strict and 3,384 under Counts Strict; the rest are mostly
   organic inputs whose hydrogen counts are left to resolution.
@@ -482,8 +483,7 @@ Organic inputs follow the [Beyer/Walter extraction](#beyerwalter-extraction); th
 ## Beyer/Walter extraction
 
 Source: [Schirmeister, Schmuck and Wich, Beyer/Walter Organische Chemie, 25. Auflage](<../materials/valence/Schirmeister T. et al . - Beyer Walter Organische_Chemie - 25. Auflage.pdf>).
-Page references are printed pages; PDF page = printed page + 22. Working data for each
-chapter is under `scratch/bw-chNN/`.
+Page references are printed pages; PDF page = printed page + 22.
 
 ### Inclusion
 
@@ -494,12 +494,10 @@ chapter is under `scratch/bw-chNN/`.
   environment to the suite. 32 were added because they bring a new class, ring skeleton or bonding
   situation, such as tetrathiafulvalene, Lawesson's reagent, boronic acids, silazanes, ynamines and
   phosphorothioates. No stereo input was added, since none brings a new stereo kind. The rest
-  stay in `scratch/bw-chNN/incidental/`.
-- Out: 69 inorganic compounds and organometallics outside chapters 11 and 25, in
-  `scratch/bw-chNN/out/`. Coordination complexes without a metal–carbon bond are left to
+  were not added.
+- Out: 69 inorganic compounds and organometallics outside chapters 11 and 25. Coordination complexes without a metal–carbon bond are left to
   the organometallic sources.
-- Removed: 47 compounds whose structures could not be established, in
-  `scratch/bw-chNN/uncertain/`.
+- Removed: 47 compounds whose structures could not be established.
 - The book is the source of material, not a witness of correctness. Printed errors are
   corrected from PubChem or primary literature, never from memory alone.
 - Neutral phosphorus at valence 2 or 3 states `#h`. `P #v3 #h2` and `P #v2 #h3` (H2PF3,
@@ -514,6 +512,9 @@ chapter is under `scratch/bw-chNN/`.
 Inputs equal under `canonical_eq` were dropped. Same-named inputs differing only in encoding
 keep the one with the most aromatic atoms, then the later chapter. D-fructose and
 L-arabinose keep both their open-chain and cyclic forms.
+
+Added counts the direct inputs. Incidental counts the candidates before selection, of which 32
+were added.
 
 | Ch. | Class | Added | Incidental | Out | Removed |
 |---:|---|---:|---:|---:|---:|
@@ -623,6 +624,25 @@ MostSaturated with a recorded tie-break.
 - Book misprints: "Padogan" for pagodane, and C7H14 for heptane.
 - Book misprints: Tetrathiofulvalen, Tetraethylmethylendiamin for TMEDA, Mesitylchlorid for
   mesityl oxide, Latobacillinsäure, and cis-/trans-1,2-Cyclobuten.
+
+## Singh extraction
+
+Source: [Singh, Reactive Intermediates in Organic Chemistry](<../materials/valence/Shankar Singh M. - Reactive Intermediates in Organic Chemistry.pdf>).
+Page references are printed pages; PDF page = printed page + 12. Inputs are written directly in
+the DSL, not lowered from SMILES.
+
+| Entry | Species | Pages |
+|---|---|---:|
+| `N #c+ #u #v2 #h` | Dimethylamine radical cation | 57 |
+| `O #c+ #n #u #v #h` | Methanol radical cation | 57 |
+| `S #u #v5` | Chlorosulfonyl radical | 119 |
+| `C #u2 #s #h2` | Open-shell singlet methylene | 155 |
+| `Cl #n3 #u #t` | Benzene·Cl π complex | 129 |
+| `Li #m` | n-Butyllithium tetramer and hexamer | 67 |
+| `Li #v #t` | Lithiated compounds with an internal donor | 69, 91 |
+
+The N, O and C rows add candidates to 50 Strict snapshots of inputs that were already
+underdetermined; no outcome and no MostSaturated output changes.
 
 ## HW extraction spike (2026-10-31)
 
@@ -829,8 +849,7 @@ For the selected anions, all F contribute to #m, with #v2 for each Xe=O.
 
 #### Primary sources read
 
-PDFs are retained in [materials/valence](../materials/valence/); text extracts and
-page images are temporary scratch intermediates.
+PDFs are retained in [materials/valence](../materials/valence/).
 
 - **C64:** Coulson, “The Nature of the Bonding in Xenon Fluorides,” *J. Chem. Soc.* (1964), 1442–1454. [DOI](https://doi.org/10.1039/JR9640001442).
 - **P64:** Peacock, Selig and Sheft, “Complex Fluoroxenates(VI),” *Proc. Chem. Soc.* (1964), 285. [PDF](../materials/valence/Peacock-1964-fluoroxenates.pdf).
@@ -1171,7 +1190,7 @@ HW marks ClF7, BrF7, F3+ and I(OAc)7 as unestablished, and I7+, I(OSO2F)5
 and XO3+ as possible or questioned. No default entries are proposed for them
 (HW 491–492, 508–510, 545).
 
-Primary sources reviewed; retained PDFs in materials/valence, extracts in scratch:
+Primary sources reviewed; retained PDFs in materials/valence:
 
 - **Iv17:** Ivlev et al., *Z. Anorg. Allg. Chem.* **643** (2017), 1436–1443;
   [DOI](https://doi.org/10.1002/zaac.201700228), [author manuscript](../materials/valence/Ivlev-2017-sodium-hydrogen-fluorides.pdf).
@@ -2480,8 +2499,7 @@ formatting and diff whitespace checks.
 
 The five supplied PDFs and W77 are reviewed and archived. Mo01 was obtained as an
 author manuscript to verify HgH's ground-state assignment. No download remains
-necessary for the selected scope. Preserved sources are in `materials/valence/`;
-`scratch/hw-zinc-review/` holds intermediates only.
+necessary for the selected scope. Preserved sources are in `materials/valence/`.
 
 | Key | Source | Evidence used |
 | --- | --- | --- |
@@ -2571,8 +2589,7 @@ warnings denied, formatting and diff whitespace checks.
 
 #### Scandium-group primary-source checks
 
-All four supplied PDFs are reviewed and preserved in `materials/valence/`.
-`scratch/hw-scandium-review/` contains intermediates only. No additional paper is
+All four supplied PDFs are reviewed and preserved in `materials/valence/`. No additional paper is
 needed for the implemented selections above; unresolved structures and unselected extensions
 remain explicit in the work table.
 
@@ -2706,8 +2723,7 @@ this chapter's scope.
 | EC90 | Ellis and Chi, *J. Am. Chem. Soc.* **112** (1990), 6022–6025. [DOI](https://doi.org/10.1021/ja00172a017), [PDF](../materials/valence/Ellis-Chi-1990-group4-hexacarbonylates.pdf) | Supplied PDF reviewed and archived. Octahedral Ti/Zr/Hf(CO)6²− structures, low-spin d⁶ rationale and comparative ¹³C NMR, pp. 6022, 6024; Tg22c. No separate magnetic measurement |
 | CG79 | Cloke and Green, “Synthesis of zerovalent bis-(η-arene)(trimethylphosphine)-hafnium and -zirconium compounds using metal vapours,” *J. Chem. Soc., Chem. Commun.* (1979), 127–128. [DOI](https://doi.org/10.1039/C39790000127), [PDF](../materials/valence/Cloke-Green-1979-Zr-Hf-bisarenes-PMe3.pdf) | Supplied PDF reviewed and archived. Zr/Hf(arene)2(PMe3) preparation, resolved ¹H NMR and proposed bent geometry, p. 127; Tg22f. The paired occupation is our inference from the reported spectroscopy |
 
-Intermediates are in `scratch/hw-titanium-review/`; retained source PDFs are in
-`materials/valence/`. The available full papers and the explicitly identified
+Retained source PDFs are in `materials/valence/`. The available full papers and the explicitly identified
 abstract/page excerpts have been reviewed; 16 PDFs are archived. Source research,
 selection, registry implementation and conformance coverage are complete for the
 selected scope above.
@@ -2813,9 +2829,7 @@ ValenceTable changes were needed.
 | G85 | Girolami, Wilkinson, Galas, Thornton-Pett and Hursthouse, “Synthesis and properties of the divalent 1,2-bis(dimethylphosphino)ethane (dmpe) complexes MCl2(dmpe)2 and MMe2(dmpe)2 (M = Ti, V, Cr, Mn, or Fe),” *J. Chem. Soc., Dalton Trans.* (1985), 1339–1348. [DOI](https://doi.org/10.1039/DT9850001339), [PDF](../materials/valence/Girolami-1985-divalent-dmpe-complexes.pdf) | Supplied PDF reviewed and archived. Three unpaired V electrons and 3.7 ± 0.1 BM for VCl2(dmpe)2/VMe2(dmpe)2, p. 1340, Table 2; quartet ESR treatment, pp. 1341, 1343. Vg19b reuses Vg19 |
 | BLH81 | Burt, Leigh and Hughes, “Carbonyl complexes of niobium and tantalum and evidence of a niobium dinitrogen complex,” *J. Chem. Soc., Dalton Trans.* (1981), 793–799. [DOI](https://doi.org/10.1039/DT9810000793), [PDF](../materials/valence/Burt-Leigh-Hughes-1981-Nb-Ta-carbonyls.pdf) | Supplied PDF reviewed and archived. NbCl(CO)2(dmpe)2 and its Br/N3 substitutions, pp. 794–795, 798; NMR supports the selected closed-shell carbonyl convention. The reported ESR concerns Nb(IV), not the Nb(II) phosphine occupation. Vg29e |
 
-Intermediates and the deduplication/count audit are in `scratch/hw-vanadium-review/`.
-Retained papers are in `materials/valence/`; neither the work table nor its evidence
-depends on keeping the scratch directory.
+Retained papers are in `materials/valence/`.
 
 ### Chromium group
 
@@ -2940,14 +2954,13 @@ Crg31 source checks and intact-H2 accounting remain outside this selection.
 | A68 | Alyea, Basi, Bradley and Chisholm, “Low co-ordination numbers for chromium in chromium(III) compounds,” *Chem. Commun.* (1968), 495. [DOI](https://doi.org/10.1039/C19680000495), [PDF](../materials/valence/Alyea-1968-chromium-amides.pdf) | Reviewed and archived. Cr(NiPr2)3 μeff = 3.80 BM, constant over 298–123 K. Crg36 |
 | P71 | Pennella, “Tetrahydrido-complexes of molybdenum,” *Chem. Commun.* (1971), 158. [DOI](https://doi.org/10.1039/C2971000158A), [PDF](../materials/valence/Pennella-1971-molybdenum-tetrahydrides.pdf) | Reviewed and archived. Explicit diamagnetism from magnetic measurements; four hydrides from NMR integration and H/D vibrational shifts. Crg28f |
 | Ch81 | Chiu et al., “Reactions of hexamethyltungsten(VI) in the presence of trimethylphosphine,” *J. Chem. Soc., Dalton Trans.* (1981), 1204–1211. [DOI](https://doi.org/10.1039/DT9810001204), [PDF](../materials/valence/Chiu-1981-tungsten-phosphine-hydrides.pdf) | Reviewed and archived. WH2(PMe3)5, WH4(PMe3)4 and WH3(PMe3)4+; resolved NMR but no explicit electronic multiplicity. Protonation gives the trihydride plus H2, pp. 1208–1209. Occupations left open in Crg28g |
-| HC90 | Hlatky and Crabtree, “Molybdenum and tungsten phosphine polyhydrides,” *Inorg. Synth.* **27** (1990), 8–14. [DOI](https://doi.org/10.1002/9780470132586.ch2), [PDF](../materials/valence/Hlatky-Crabtree-1990-Mo-W-phosphine-polyhydrides.pdf) | Retrieved from a university-hosted copy; complete chapter reviewed and archived. Mo tetrahydride structure/relaxation, p. 10; classical WH5(PMePh2)4+ and its relaxation evidence, p. 11; WH6(PMe2Ph)3 and MoH6(PCy3)3, pp. 12–14. Crg26, Crg28f/h |
+| HC90 | Hlatky and Crabtree, “Molybdenum and tungsten phosphine polyhydrides,” *Inorg. Synth.* **27** (1990), 8–14. [DOI](https://doi.org/10.1002/9780470132586.ch2), [chapter PDF](../materials/valence/Hlatky-Crabtree-1990-Mo-W-phosphine-polyhydrides.pdf), [full volume](../materials/valence/Inorganic-Syntheses-1990-volume27.pdf) | Retrieved from a university-hosted copy; complete chapter reviewed and archived. Mo tetrahydride structure/relaxation, p. 10; classical WH5(PMePh2)4+ and its relaxation evidence, p. 11; WH6(PMe2Ph)3 and MoH6(PCy3)3, pp. 12–14. Crg26, Crg28f/h |
 | S65 | Stomberg, “Crystal structure of potassium diperoxotricyanochromate(IV),” *Nature* **205** (1965), 71. [DOI](https://doi.org/10.1038/205071a0), [PDF](../materials/valence/Stomberg-1965-potassium-diperoxotricyanochromate.pdf) | Supplied PDF reviewed and archived. Seven-coordinate, pentagonal-bipyramidal structure; O–O 1.440/1.455 Å and Cr–C 2.081–2.102 Å. No magnetic data or electronic occupation reported. Crg31b |
 
 All supplied PDFs are reviewed and archived. B77 and HC90 were additionally
 obtained from university repositories. Crg31 records the outstanding
 structure/occupation evidence. Crg28g remains open by decision.
-Intermediates and the count audit are in `scratch/hw-chromium-review/`; retained
-source material is in `materials/valence/`.
+Retained source material is in `materials/valence/`.
 
 ### Manganese group
 
@@ -3109,9 +3122,7 @@ formatting and Clippy for both changed crates pass.
 | GHC82 | Green, Huffman and Caulton, “Could One Have Five? Synthesis and Structure of Re₂H₄(PMe₂Ph)₄[P(OCH₂)₃CEt]₂ and Its Conjugate Acid,” *J. Am. Chem. Soc.* **104** (1982), 2319–2320. [DOI](https://doi.org/10.1021/ja00372a040), [PDF](../materials/valence/Green-Huffman-Caulton-1982-dirhenium-hydrides.pdf) | Reviewed and archived. Three bridging and one terminal hydride located/refined; explicit Re≡Re assignment, p. 2319. Mng35b uses the actual neutral mixed-ligand compound; the protonated cation is not included |
 | DAH79 | Dedieu, Albright and Hoffmann, “Some Hydrido-Bridged Transition-Metal Dimers and Their Unsupported Analogues. Speculations on Pentuple Bonding and Pentuple Bridging,” *J. Am. Chem. Soc.* **101** (1979), 3141–3151. [DOI](https://doi.org/10.1021/ja00506a001), [PDF](../materials/valence/Dedieu-Albright-Hoffmann-1979-hydrido-bridged-dimers.pdf) | Retrieved, reviewed for Re₂H₈L₄ and archived. Figure 4, pp. 3144–3146, treats four bridging hydrides as H₄⁴− in a delocalized orbital analysis. This supports the hydride allocation; separate 3c2e graph units remain PW, not a unique partition established by the paper |
 
-Intermediates, page images and the deduplication/count audit are in
-`scratch/hw-manganese-review/`. Retained papers belong in `materials/valence/`;
-the table and its citations do not depend on retaining scratch.
+Retained papers are in `materials/valence/`.
 
 ### Iron group
 
@@ -3271,7 +3282,6 @@ Four existing snapshots change. The full **2,703-case** suite, 3,594 graph unit 
 | G26 | Grenda et al., “Electron and spin density distributions and magnetic anisotropy in mixed-valent diruthenium(V) tetracarboxylates assessed via crystallographic and theoretical analyses,” *Dalton Trans.* **55** (2026), 7173–7183. [DOI](https://doi.org/10.1039/D6DT00342G), [repository copy](https://hal.science/hal-05613872), [PDF](../materials/valence/Grenda-2026-diruthenium.pdf) | Reviewed and archived from HAL. Polarized-neutron/X-ray measurements and calculations support equivalent Ru sites, the quartet and σ²π⁴δ²(δ*π*)³, pp. 7173–7174, 7178–7179. The atom/bond allocation in Fg39j is PW; the calculated effective bond order is not substituted for the nominal graph order. |
 | GP13 | Gracia and Patmore, “Structural, spectroscopic and theoretical studies of diosmium(III,III) tetracarboxylates,” *Dalton Trans.* **42** (2013), 13118–13125. [DOI](https://doi.org/10.1039/C3DT51449H), [repository copy](https://eprints.hud.ac.uk/id/eprint/18802/), [PDF](../materials/valence/Gracia-Patmore-2013-osmium-carboxylates.pdf) | Relevant magnetic and electronic-structure sections reviewed; manuscript archived. PDF pp. 5 and 15–16 give the triplet σ²π⁴δ²δ*¹π*¹ description and distinguish it from the singlet alternative. Fg39k; no ligand-scaffold-specific state. |
 
-Intermediates and the candidate/count audit are in `scratch/hw-iron-review/`.
 Retained sources are archived in `materials/valence/`.
 
 ### Cobalt group
@@ -3426,8 +3436,6 @@ The H₂-donor descriptions remain deferred; no unsupported assignments were add
 | KW67 | Keller and Wawersik, “Spektroskopische Untersuchungen an Komplexverbindungen VI. EPR-Spektren von (C₅H₅)₂Rh und (C₅H₅)₂Ir,” *J. Organomet. Chem.* **8** (1967), 185–188. [DOI](https://doi.org/10.1016/S0022-328X(00)84718-X), [PDF](../materials/valence/Keller-1967-metallocene-EPR.pdf) | Reviewed and archived. pp. 186–187 assign molecular doublets to monomeric RhCp₂/IrCp₂; the final orbital discussion suggests substantial ligand character. Co35a uses formal M(II) donor counting (PW), independently of the spatial spin distribution. |
 
 Supplied PDFs are archived in `materials/valence/`.
-Extraction text, download logs and the deduplicated candidate/electron-count audit
-are in `scratch/hw-cobalt-review/`.
 
 ### Nickel group
 
@@ -3530,8 +3538,7 @@ D denotes a neutral two-electron donor. No MC state is selected in Ni02–Ni36.
 #### Nickel-group sources and access
 
 HW references above are printed Band II pages. Retrieved sources are archived under
-`materials/valence/`; extraction text and candidate audits are temporary files under
-`scratch/hw-nickel-review/`. All sixteen requested papers and the oxyfluoride SI
+`materials/valence/`. All sixteen requested papers and the oxyfluoride SI
 are present, reviewed and archived; the duplicate Kowach download is one source.
 No required source check remains outstanding.
 
@@ -3560,6 +3567,10 @@ No required source check remains outstanding.
 | P82 | Pacchioni, Fantucci and Valenti, “The electronic structure of carbonyl metal clusters: I. An INDO investigation of mono-, di- and trinuclear nickel complexes,” *J. Organomet. Chem.* **224** (1982), 89–105. [DOI](https://doi.org/10.1016/S0022-328X(00)82570-X), [PDF](../materials/valence/Pacchioni-1982-nickel-carbonyl-clusters.pdf) | Reviewed and archived. Closed-shell HNi₂(CO)₆− calculation and protonation analysis; explicitly separates characterized and assumed cluster structures. Ni45a/b. H− contribution allocation is PW, not the paper’s formal Ni(−I)/H+ bookkeeping. |
 | K04 | Karpov, Wedig and Jansen, “Pt-Dumbbells in Ba₃Pt₂: Interplay of Geometric and Relativistic Effects on Pt–Pt Bonding,” *Z. Naturforsch. B* **59** (2004), 1387–1394. [DOI](https://doi.org/10.1515/znb-2004-11-1204), [PDF](../materials/valence/Karpov-2004-platinum-dumbbells.pdf) | Reviewed and archived. Pt–Pt covalency, metallic bands and partial-charge analysis; no definite local occupation for a discrete Pt₂³− graph. Ni46 remains unselected. |
 | M01 | Makiura et al., “An unusual six-co-ordinate platinum(II) complex containing a neutral I₂ ligand,” *Chem. Commun.* (2001), 1642–1643. [DOI](https://doi.org/10.1039/B103648N), [PDF](../materials/valence/Makiura-2001-platinum-diiodine.pdf) | Reviewed and archived. X-ray structure and XPS establish six-coordinate Pt(II); p. 1642 explicitly describes Pt→I₂ donation. Supports retaining capacity 18 for this graph, Ni49; no additional default state selected. |
+
+Also archived: Lawrence Berkeley Laboratory, *Chemical Sciences Division Annual
+Report 1993* (September 1994), LBL-35769
+([PDF](../materials/valence/LBL-1994-chemical-sciences-annual-report-1993.pdf)).
 
 ### Transition-metal classes (chapter XXXII)
 
@@ -3599,7 +3610,7 @@ graph allocations are PW; HW supplies the structures and bonding descriptions.
 | Tm13a | Ti: #n2#t7 | Implemented; 1 | Ti(CO)₅(dmpe), Ti(CO)₃(dmpe)₂ and Ti(CO)₄(trmpe), HW 2109; CE88, pp. 164–165, 168–170. Seven neutral pair donors and two remaining pairs give 18 electrons. Resolved ¹H couplings and multinuclear NMR support the paired allocation, which is inferred rather than an explicit spin assignment; no magnetic measurement is reported. The state covers all three isolated complexes, including the more stable tri-/tetracarbonyls. |
 | Tm13b | Neutral Co(CNR)₅ | Omitted; occupation unsupported | HW 2150 lists the formula without specifying R or an occupation. No primary evidence establishing that species and its occupation was obtained; no state is added prospectively. |
 | Tm13c | Nb/Ta: #n2#u#t6 | Implemented; 2 | HW 2207; CDG83, pp. 1152–1155, 1157: ESR explicitly supports the ²A₁, e₂⁴a₁¹ occupation for Nb(arene)₂ and Ta(C₆H₆)₂; Nb photoelectron spectra corroborate it. Nb examples include benzene, toluene and mesitylene. Two neutral six-electron arene donors give 17 electrons under the existing graph convention. |
-| Tm14 | Bare [CpM(NO)₂]⁺; Fe(NO)₄/Co(NO)₃; isolated carbene formulas | Not selected | LW84's opening page says bare [CpCr(NO)₂]⁺ could not be isolated; its MeCN adduct reuses Cr#n3#t6. No bare Mo/W state is inferred by analogy. HW 2150 questions the homoleptic Fe/Co nitrosyl identifications. Cr(CO)₄(carbene) and Ni(CO)₃(carbene)₂ on 2165 require primary verification before deriving extra acceptor/occupation states. |
+| Tm14 | Bare [CpM(NO)₂]⁺; Fe(NO)₄/Co(NO)₃; isolated carbene formulas | Not selected | LW84, pp. 1814, 1817, distinguishes the unsolvated [CpCr(NO)₂]⁺ cation, which could not be isolated, from its MeCN adduct; the latter reuses Cr#n3#t6. No bare Mo/W state is inferred by analogy. HW 2150 questions the homoleptic Fe/Co nitrosyl identifications. Cr(CO)₄(carbene) and Ni(CO)₃(carbene)₂ on 2165 require primary verification before deriving extra acceptor/occupation states. |
 | Tm15 | η²-H₂, agostic C–H and other σ-bond donors | Deferred model work | HW 2071–2074, 2169–2174 explicitly describes donation from an existing bond. Counting that pair as an independent atomic lone-pair donation would double-count it. No atom-type or MC workaround is added. |
 | Tm16 | Higher clusters, multideckers and specialized redox endpoints | Not selected | HW 2081–2084, 2113–2121, 2197–2203, 2212–2216. No per-scaffold MC types or automatic state ladders from the listed formulas. The small dimers in Tm07–Tm09 retain explicit ordinary metal–metal bonds. |
 
@@ -3617,15 +3628,19 @@ No selected work remains outstanding for this chapter.
 
 #### Chapter-XXXII sources and access
 
-HW citations are printed Band II pages. Intermediates are in
-`scratch/hw-chapter32-review/`; retained source material is under `materials/valence/`.
+HW citations are printed Band II pages. Retained source material is under
+`materials/valence/`.
 
 | Key | Source | Access / contribution |
 | --- | --- | --- |
 | CE88 | Chi, Frerichs, Stein, Blackburn and Ellis, “Highly Reduced Organometallics. 20. The First General Synthetic Route to Zerovalent Titanium Carbonyls. Synthesis and Properties of Ti(CO)₅(Me₂PCH₂CH₂PMe₂),” *J. Am. Chem. Soc.* **110** (1988), 163–171. [DOI](https://doi.org/10.1021/ja00209a026), [PDF](../materials/valence/Chi-1988-titanium-carbonyls.pdf) | Supplied full paper reviewed and archived. Seven-coordinate Ti(CO)₅(dmpe) is established by ¹³C/³¹P coupling, pp. 168–169; its detailed geometry remains tentative. Ti(CO)₃(dmpe)₂ and Ti(CO)₄(trmpe) independently share the seven-donor count. NMR supports the adopted paired occupation in Tm13a; no explicit electronic multiplicity or magnetic measurement. |
 | CDG83 | Cloke, Dix, Green, Perutz and Seddon, “Electron spin resonance and photoelectron studies of neutral bis(η-arene)metal compounds (metal = Ti, V, Nb, Ta, Mo, and W),” *Organometallics* **2** (1983), 1150–1159. [DOI](https://doi.org/10.1021/om50003a014), [PDF](../materials/valence/Cloke-1983-bisarenes.pdf) | Supplied full paper reviewed and archived. ESR measurements and simulations, pp. 1152–1154, and the explicit ²A₁, e₂⁴a₁¹ assignment on p. 1157 settle Tm13c. Photoelectron spectra independently support Nb's occupation, pp. 1155–1156; Ta's photoelectron spectrum was not obtained because of thermal decomposition. |
-| LW84 | Legzdins and Wassink, “Organometallic nitrosyl chemistry. 21. Redox properties of bis[(η⁵-cyclopentadienyl)dinitrosylchromium] and related complexes,” *Organometallics* **3** (1984), 1811–1817. [DOI](https://doi.org/10.1021/om00090a006), [archived first page](../materials/valence/Legzdins-Wassink-1984-nitrosyl-redox-first-page.pdf) | Only p. 1811 retrieved, from a repository PDF appended to the preceding article. Its abstract distinguishes the unisolated bare cation from the MeCN adduct; sufficient for the restricted Tm14 finding, not a full-paper review. |
+| LW84 | Legzdins and Wassink, “Organometallic nitrosyl chemistry. 21. Redox properties of bis[(η⁵-cyclopentadienyl)dinitrosylchromium] and related complexes,” *Organometallics* **3** (1984), 1811–1817. [DOI](https://doi.org/10.1021/om00090a006), [PDF](../materials/valence/Legzdins-Wassink-1984-nitrosyl-redox.pdf) | Full paper supplied and archived; relevant discussion reviewed. Page 1814 distinguishes the formally 16-electron cation from its 18-electron MeCN adduct; p. 1817 confirms that the unsolvated cation is thermally stable but unisolable as such. Supports Tm14's existing selection. |
 | TB76 | Thomas and Brown, “Zirconocene dicarbonyl and hafnocene dicarbonyl, first carbonyl derivatives of zirconocene and hafnocene,” *J. Organomet. Chem.* **111** (1976), 297–301. [Repository PDF](https://deepblue.lib.umich.edu/bitstream/handle/2027.42/21771/0000165.pdf?sequence=1), [archived PDF](../materials/valence/Thomas-Brown-1976-metallocene-dicarbonyls.pdf) | Supplied full paper reviewed and archived. MS/IR/NMR and isolation data establish the two monomeric dicarbonyls, pp. 298–300. Sharp Cp ¹H NMR signals support Tm10b's adopted paired occupation; no explicit electronic multiplicity or magnetic measurement. |
+
+Also archived: van der Knaap et al., “η¹- and η²-Coordination in a
+(Phosphaalkene)platinum(0) Complex,” *Organometallics* **3** (1984), 1804–1811
+([PDF](../materials/valence/Van-der-Knaap-1984-phosphaalkene-platinum.pdf)).
 
 ### Lanthanides
 
@@ -3755,8 +3770,7 @@ Clippy pass. No selected work remains outstanding for this chapter.
 #### Lanthanide sources and access
 
 All six primary papers are available, reviewed and archived. HW references above
-are printed Band II pages. Extraction and the expanded candidate/count audit are
-intermediates in `scratch/hw-lanthanide-review/`; the tables here are the durable record.
+are printed Band II pages.
 
 | Key | Source | Assignment-specific evidence |
 | --- | --- | --- |
@@ -3902,8 +3916,7 @@ formatting and Clippy. The selected chapter scope is complete.
 
 #### Actinide sources and access
 
-Available primary files are archived below. Intermediates, including the expanded
-state list, are in `scratch/hw-actinide-review/`. All requested papers are reviewed
+Available primary files are archived below. All requested papers are reviewed
 and archived. No source-access blocker remains for this chapter; An34b/c record
 the unselected higher-fluoride cases after full-paper review.
 

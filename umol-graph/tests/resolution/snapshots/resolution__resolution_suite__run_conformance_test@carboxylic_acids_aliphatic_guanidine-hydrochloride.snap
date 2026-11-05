@@ -23,7 +23,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "N#h#n#u#v#d0#t0#a!#m!"
         "N#n2#v#d0#t0#a!#m!"
         "N#n#u2#v#d0#t0#a!#m!"]
-      3 ["N#c+#h2#v2#d0#t0#a!#m!" "N#c+#n#v2#d0#t0#a!#m!"]}}
+      3 [
+        "N#c+#h2#v2#d0#t0#a!#m!"
+        "N#c+#n#v2#d0#t0#a!#m!"
+        "N#c+#h#u#v2#d0#t0#a!#m!"]}}
   :counts-most-saturated {
     :output {
       :atoms ["N#h2#n" "C" "N#h2#n" "N#c+#h2" "Cl#c-#n4"]

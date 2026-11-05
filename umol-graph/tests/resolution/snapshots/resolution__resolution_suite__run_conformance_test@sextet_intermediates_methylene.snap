@@ -7,6 +7,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
   :atom-typing-strict {
     :success false
     :tie-breaks []
-    :unresolved {0 ["C#h2#u2#v0#d0#t0#a!#m!" "C#h2#n#v0#d0#t0#a!#m!"]}}
+    :unresolved {
+      0 [
+        "C#h2#u2#v0#d0#t0#a!#m!"
+        "C#h2#u2#s#v0#d0#t0#a!#m!"
+        "C#h2#n#v0#d0#t0#a!#m!"]}}
   :counts-most-saturated {:output {:atoms ["C#h2#n"] :bonds []} :success true :tie-breaks []}
   :counts-strict {:output {:atoms ["C#h2#n"] :bonds []} :success true :tie-breaks []}}

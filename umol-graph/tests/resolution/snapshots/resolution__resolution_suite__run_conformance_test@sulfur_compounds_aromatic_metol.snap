@@ -68,7 +68,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#n#v#d0#t0#a!#m!"
         "C#n#u#v#d0#t0#a!#m!"
         "C#u3#v#d0#t0#a!#m!"]
-      1 ["N#c+#h2#v2#d0#t0#a!#m!" "N#c+#n#v2#d0#t0#a!#m!"]
+      1 [
+        "N#c+#h2#v2#d0#t0#a!#m!"
+        "N#c+#n#v2#d0#t0#a!#m!"
+        "N#c+#h#u#v2#d0#t0#a!#m!"]
       3 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       4 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       6 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
@@ -81,7 +84,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#n#v#d0#t0#a!#m!"
         "C#n#u#v#d0#t0#a!#m!"
         "C#u3#v#d0#t0#a!#m!"]
-      10 ["N#c+#h2#v2#d0#t0#a!#m!" "N#c+#n#v2#d0#t0#a!#m!"]
+      10 [
+        "N#c+#h2#v2#d0#t0#a!#m!"
+        "N#c+#n#v2#d0#t0#a!#m!"
+        "N#c+#h#u#v2#d0#t0#a!#m!"]
       12 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       13 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       15 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]

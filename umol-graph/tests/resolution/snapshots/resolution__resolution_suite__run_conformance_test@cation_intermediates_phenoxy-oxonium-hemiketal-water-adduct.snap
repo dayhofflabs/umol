@@ -39,7 +39,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#n#v#d0#t0#a!#m!"
         "C#n#u#v#d0#t0#a!#m!"
         "C#u3#v#d0#t0#a!#m!"]
-      3 ["O#c+#h2#n#v#d0#t0#a!#m!" "O#c+#n2#v#d0#t0#a!#m!"]
+      3 [
+        "O#c+#h2#n#v#d0#t0#a!#m!"
+        "O#c+#n2#v#d0#t0#a!#m!"
+        "O#c+#h#n#u#v#d0#t0#a!#m!"]
       6 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       7 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       8 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]

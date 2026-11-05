@@ -20,7 +20,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :success false
     :tie-breaks []
     :unresolved {
-      0 ["N#c+#h2#v2#d0#t0#a!#m!" "N#c+#n#v2#d0#t0#a!#m!"]
+      0 [
+        "N#c+#h2#v2#d0#t0#a!#m!"
+        "N#c+#n#v2#d0#t0#a!#m!"
+        "N#c+#h#u#v2#d0#t0#a!#m!"]
       2 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
       3 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
       4 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]

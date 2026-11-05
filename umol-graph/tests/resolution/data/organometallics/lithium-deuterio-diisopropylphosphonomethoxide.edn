@@ -1,0 +1,35 @@
+; MSS, p. 91
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    [:c "C"]
+    [:d "H#i2"]
+    [:ol "O"]
+    [:li "Li"]
+    [:p "P"]
+    [:po "O"]
+    [:ao "O"]
+    [:ac "C"]
+    [:a1 "C"]
+    [:a2 "C"]
+    [:bo "O"]
+    [:bc "C"]
+    [:b1 "C"]
+    [:b2 "C"]]
+  :bonds [
+    [:c :d :single]
+    [:c :ol :single]
+    [:ol :li :single]
+    [:c :p :single]
+    [:p :po :double]
+    [:p :ao :single]
+    [:ao :ac :single]
+    [:ac :a1 :single]
+    [:ac :a2 :single]
+    [:p :bo :single]
+    [:bo :bc :single]
+    [:bc :b1 :single]
+    [:bc :b2 :single]]
+  :dative-bonds [{:donors [:po] :acceptor :li :attrs "1"}]
+  :stereo-atoms [
+    {:site :c :ligands [[:h :c] :p :ol :d] :attrs :ccw}]}}

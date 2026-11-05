@@ -29,7 +29,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
       4 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       5 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       7 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
-      9 ["O#c+#h2#n#v#d0#t0#a!#m!" "O#c+#n2#v#d0#t0#a!#m!"]}}
+      9 [
+        "O#c+#h2#n#v#d0#t0#a!#m!"
+        "O#c+#n2#v#d0#t0#a!#m!"
+        "O#c+#h#n#u#v#d0#t0#a!#m!"]}}
   :counts-most-saturated {
     :output {
       :aromatic-systems [{:atoms [1 2 3 4 5 6] :attrs "[1,1,1,1,1,1]"}]

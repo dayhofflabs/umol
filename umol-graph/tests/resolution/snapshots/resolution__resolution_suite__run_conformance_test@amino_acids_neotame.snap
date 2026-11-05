@@ -102,7 +102,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#u#v2#d0#t0#a!#m!"
         "C#u2#v2#d0#t0#a!#m!"
         "C#n#v2#d0#t0#a!#m!"]
-      6 ["N#c+#h2#v2#d0#t0#a!#m!" "N#c+#n#v2#d0#t0#a!#m!"]
+      6 [
+        "N#c+#h2#v2#d0#t0#a!#m!"
+        "N#c+#n#v2#d0#t0#a!#m!"
+        "N#c+#h#u#v2#d0#t0#a!#m!"]
       7 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
       8 [
         "C#h2#v2#d0#t0#a!#m!"

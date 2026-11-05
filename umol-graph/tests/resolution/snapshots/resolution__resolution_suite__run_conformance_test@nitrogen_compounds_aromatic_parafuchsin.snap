@@ -83,7 +83,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
       14 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
       16 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
       17 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
-      19 ["N#c+#h2#v2#d0#t0#a!#m!" "N#c+#n#v2#d0#t0#a!#m!"]
+      19 [
+        "N#c+#h2#v2#d0#t0#a!#m!"
+        "N#c+#n#v2#d0#t0#a!#m!"
+        "N#c+#h#u#v2#d0#t0#a!#m!"]
       20 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
       21 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]}}
   :counts-most-saturated {

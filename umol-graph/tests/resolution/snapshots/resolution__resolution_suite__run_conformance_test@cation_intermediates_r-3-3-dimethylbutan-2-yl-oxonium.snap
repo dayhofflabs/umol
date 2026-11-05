@@ -28,7 +28,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#n#u#v#d0#t0#a!#m!"
         "C#u3#v#d0#t0#a!#m!"]
       1 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
-      2 ["O#c+#h2#n#v#d0#t0#a!#m!" "O#c+#n2#v#d0#t0#a!#m!"]
+      2 [
+        "O#c+#h2#n#v#d0#t0#a!#m!"
+        "O#c+#n2#v#d0#t0#a!#m!"
+        "O#c+#h#n#u#v#d0#t0#a!#m!"]
       4 [
         "C#h3#v#d0#t0#a!#m!"
         "C#h2#u#v#d0#t0#a!#m!"

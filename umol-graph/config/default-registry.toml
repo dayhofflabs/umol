@@ -8,6 +8,7 @@
 # --- | ---
 # HW  | Holleman/Wiberg, Anorganische Chemie, 103. Auflage.; I/II denote the volume (Band 1/2).
 # BW  | Schirmeister et al., Beyer/Walter Organische Chemie, 25. Auflage.
+# MSS | Singh, Reactive Intermediates in Organic Chemistry, Wiley-VCH (2014).
 # PW  | Present work — calculations and adopted assignments.
 # A01Pd | Andrews et al., J. Phys. Chem. A 105 (2001), 3052–3063; doi:10.1021/jp003721t
 # A01Pt | Andrews, Wang and Manceron, J. Chem. Phys. 114 (2001), 1559–1566; doi:10.1063/1.1333020
@@ -295,6 +296,7 @@
 0 = [
     "Li #h",      # LiH; ADD09
     "Li #u",      # Li atom, s1; HW I, p. 1483
+    "Li #m",      # (BuLi)4, (BuLi)6 C-Li3 bridges; MSS, p. 67; allocation: PW
     "Li #c+",     # Li+; HW I, p. 1485
     "Li #c+ #t",  # (LiMe)4(THF)4; HW I, p. 1492; assignment: PW
     "Li #c+ #t2", # (LiPh·TMEDA)2; HW I, p. 1493; assignment: PW
@@ -306,6 +308,7 @@
 ]
 1 = [
     "Li #v",     # LiX, Li2, LiR; HW I, pp. 1484, 1487, 1494
+    "Li #v #t",  # LiR with internal donor; MSS, pp. 69, 91
     "Li #v #t3", # LiR(THF)3, LiPh(PMDTA); HW I, pp. 1493-1494
 ]
 
@@ -410,6 +413,7 @@
     "C #h4",        # CH4; HW I, pp. 1024, 1026
     "C #u #h3",     # CH3; HW I, pp. 1026, 1076
     "C #u2 #h2",    # CH2 (triplet); HW I, pp. 1076-1077
+    "C #u2 #s #h2", # CH2 (open-shell singlet); MSS, p. 155
     "C #n #h2",     # CH2 (singlet); HW I, p. 1077
     "C #n #u #h",   # CH, X2Pi; HW I, pp. 1026, 1077; G12
     "C #u3 #h",     # CH, excited a4Sigma-; HW I, p. 1077; G12
@@ -520,6 +524,7 @@
     "N #c+ #v2 #h2",    # NH4+, alkylammonium; HW I, p. 757
     "N #c+ #v2 #a #h",  # pyridinium; HW I, p. 957
     "N #c+ #n #v2",     # singlet nitrenium ions, NH2+; F18, Tables 1-2
+    "N #c+ #u #v2 #h",  # R2NH radical cation; MSS, p. 57
     "N #c- #n2 #v2",    # NH2-, amide ions; HW I, pp. 756-758; E4N4 (E = S, Se): M12, NBO analysis; SN2(2-): V18, Fig. 1a
     "N #c- #n #v2 #a2", # S3N3-; HW I, pp. 683, 686; charge placement: PW
     "N #c- #n #v2 #d",  # terminal amido donor; HW I, pp. 757-758, Fig. 14.6b; assignment: PW
@@ -562,6 +567,7 @@
     "O #n2 #u #v",     # OH: HW I, p. 584; atom-localized O2-: HW I, p. 566; assignment: PW
     "O #c+ #n #v #h2", # [OXH2]+; HW I, pp. 572-573, 592
     "O #c+ #n2 #v",    # singlet oxenium R-O+; phenyloxenium: H13, pp. 9079-9080
+    "O #c+ #n #u #v #h", # ROH radical cation; MSS, p. 57
     "O #c- #n3 #v",    # OX-, OH-, atom-localized O2-; HW I, pp. 566, 592, 600
     "O #c- #n2 #v #d", # terminal hydroxido donor; HW II, p. 2015
     "O #c- #n #v #d2", # mu2-hydroxido donor; HW II, pp. 1860, 1880, 1893; allocation: PW
@@ -859,6 +865,7 @@
     "S #n #v4", # SO2, SOX2, SN2(2-); HW I, pp. 639, 652, 686; V18, Fig. 1a
 ]
 5 = [
+    "S #u #v5",  # ClSO2 radical; MSS, p. 119
     "S #c+ #v5", # SOF3+; HW I, p. 664
 ]
 6 = [
@@ -869,6 +876,7 @@
 0 = [
     "Cl #n3 #h",      # HCl; HW I, p. 501
     "Cl #n3 #u",      # Cl atom, s2p5; HW I, pp. 530-531
+    "Cl #n3 #u #t",   # benzene-Cl pi complex; MSS, p. 129; assignment: PW
     "Cl #n3 #m",      # terminal Cl in Cl3-, BrCl2-, ICl2-; HW I, pp. 493-494, 510-511; L97
     "Cl #c+ #n3",     # Cl+ mechanism fragment; assignment: PW
     "Cl #c- #n4",     # Cl-; HW I, pp. 493, 502
