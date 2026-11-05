@@ -39,7 +39,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | [Co, Rh, Ir](#cobalt-group-work-table) | 195 additions: Co 63, Rh 68, Ir 64; 13 earlier states retained, 12 sourced and covered | 199 new; 3 supplied-spin inputs revised | Capacities Co 23, Rh/Ir 19; ValenceTable unchanged; no new MC or companion types. Existing Co#c+#n3#u#v remains source-unresolved; other unselected cases below |
 | [Ni, Pd, Pt](#nickel-group-work-table) | 173 additions: Ni 59, Pd 44, Pt 69 and 1 O companion; all 7 earlier states retained and covered | 190 new; 2 bare-ion snapshots revised | Capacities Ni/Pd 20; Pt retains 18; ValenceTable unchanged. Eight local hydride-bridge MC states included; PdF₆− omitted |
 | [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
-| [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new in `lanthanides/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
+| [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 25 in `organometallics/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
 
 ### Shared changes and verification
 
@@ -66,19 +66,38 @@ from the checkout used for the current verification.
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
 | `atomic_ions/` | 217 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 399 | Hydrides with explicit or implicit H |
-| `inorganic_small/` | 312 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 449 | Inorganic ions |
-| `donor_acceptor/` | 1174 | Donor–acceptor complexes with dative or multicenter bonds |
+| `organometallics/` | 311 | Metal–carbon bonds, carbonyls, haptic ligands and related organometallic descriptions |
+| `organoelement/` | 16 | Organic B, Si–Pb, As–Bi and Se–Po compounds |
+| `organosulfur/` | 4 | Carbon–sulfur compounds; broader organic selection is being reorganized separately |
+| `donor_acceptor/` | 46 | Molecular Lewis donor–acceptor adducts |
+| `multicenter_bonds/` | 172 | Explicit multicenter bonding, including small hydride bridges |
+| `metal_metal_bonds/` | 64 | Ordinary or dative metal–metal bonds |
+| `hydrogen/` | 2 | Hydrogen molecules |
+| `noble_gases/` | 6 | Noble-gas compounds outside the bonding classes above |
+| `halogens/` | 54 | Halogen compounds |
+| `chalcogens/` | 84 | O, S, Se, Te and Po compounds |
+| `n_group/` | 100 | N, P, As, Sb and Bi compounds |
+| `c_group/` | 101 | C, Si, Ge, Sn and Pb compounds |
+| `b_group/` | 93 | B, Al, Ga, In and Tl compounds |
+| `alkali_earths/` | 42 | Be, Mg, Ca, Sr and Ba compounds |
+| `alkali_metals/` | 27 | Li, Na, K, Rb and Cs compounds |
+| `cu_group/` | 68 | Cu, Ag and Au compounds |
+| `zn_group/` | 40 | Zn, Cd and Hg compounds |
+| `sc_group/` | 65 | Sc, Y and La compounds |
+| `ti_group/` | 95 | Ti, Zr and Hf compounds |
+| `v_group/` | 132 | V, Nb and Ta compounds |
+| `cr_group/` | 206 | Cr, Mo and W compounds |
+| `mn_group/` | 182 | Mn, Tc and Re compounds |
+| `fe_group/` | 181 | Fe, Ru and Os compounds |
+| `co_group/` | 179 | Co, Rh and Ir compounds |
+| `ni_group/` | 156 | Ni, Pd and Pt compounds |
+| `lanthanides/` | 218 | Chapter-XXXV compounds outside the bonding classes above |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 82 | C/H compounds |
 | `functional_groups/` | 102 | Organic heteroatom groups (halides, amines, etc.) |
 | `carbonyl_derivatives/` | 86 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
 | `aromatic/` | 105 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
-| `hypervalent/` | 51 | Expanded-octet and multicenter species |
-| `transition_metals/` | 13 | Transition-metal complexes |
-| `lanthanides/` | 246 | Selected chapter-XXXV states and three La companions; localized, donor–acceptor and hydride-bridge graphs |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
 | `metabolites/` | 9 | Metabolites and related natural compounds |
@@ -172,7 +191,7 @@ Status values:
 | Be | yes | yes (+2) | yes (selected) | yes (20 additions covered) | done | 22 current states; approved additions, citation audit and capacity 12 implemented; remaining hydride/borohydride descriptions checked for reuse, with no further default additions proposed |
 | B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
 | C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
-| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `inorganic_small/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
+| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `n_group/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
 | O | yes | yes (-2) | yes (selected) | yes (all 32 states) | done | Chalcogen selection and citation audit complete; Zg24's μ₃-alkoxide and Crg37's two μ₂-hydroxido donor entries are implemented and covered |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
@@ -180,7 +199,7 @@ Status values:
 | Mg | yes | yes (+2) | yes (selected) | yes (22 additions covered) | done | 26 current states; additions, citation audit and capacity 12 implemented; KMgH3's ionic description reuses existing states |
 | Al | yes | yes (+3) | yes (selected) | yes (37 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete; capacity 12 for five-/six-coordinate donor descriptions |
 | Si | yes | yes (−4) | yes (selected) | yes (28 additions covered by 30 fixtures) | done | 39 current states; selected HW scope complete; all 11 earlier entries retained with checked citations; Al zero-π Counts companion added |
-| P | yes | yes (-3) | partial | yes (`atoms/p.edn`, `atomic_ions/p-3.edn`, `hydrides/`, `hypervalent/`) | in_progress | 44 current states; 23 additions implemented; existing-entry citation audit complete |
+| P | yes | yes (-3) | partial | yes (`atoms/p.edn`, `atomic_ions/p-3.edn`, `n_group/`, `multicenter_bonds/`) | in_progress | 44 current states; 23 additions implemented; existing-entry citation audit complete |
 | S | yes | yes (-2) | yes (selected) | yes (all 23 states) | done | Six states added, including the Tt27 thioether donor companion; citation and default-scope audit complete; S4N4 retains localized and HW three-center descriptions |
 | Cl | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 16 states added; terminal donor covered by [RhCl(NH3)5]2+ |
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
@@ -198,10 +217,10 @@ Status values:
 | Zn | yes | yes (+2) | yes (selected) | yes (19 additions covered) | done | 21 current states; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Ga | yes | yes (+1,+3) | yes (selected) | yes (39 additions covered) | done | 41 current states; selected HW scope and existing-entry citation audit complete |
 | Ge | yes | yes (−4) | partial | yes (30 additions covered) | done | 31 current states; selected HW scope and existing-entry audit complete |
-| As | yes | yes (-3) | partial | yes (`atoms/as.edn`, `atomic_ions/as-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 27 current states; 15 additions implemented; existing arsole types retained with paired aromatic/Kekulé fixtures; citation audit complete |
+| As | yes | yes (-3) | partial | yes (`atoms/as.edn`, `atomic_ions/as-3.edn`, `n_group/`) | in_progress | 27 current states; 15 additions implemented; existing arsole types retained with paired aromatic/Kekulé fixtures; citation audit complete |
 | Se | yes | yes (-2) | yes (selected) | yes (all 22 states) | done | Six states added; citation and default-scope audit complete, including localized Se4N4 |
 | Br | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 18 halogen-pass additions plus Br#c-#n#d3 for binary chalcogen bromides |
-| Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
+| Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `multicenter_bonds/krf2.edn`, `noble_gases/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1, −1) | yes (selected) | yes (5 additions covered) | done | 7 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
 | Y | yes | yes (+3) | yes (selected) | yes (26 additions covered) | done | 28 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 for bis-COT donors |
@@ -216,33 +235,33 @@ Status values:
 | Cd | yes | yes (+2) | yes (selected) | yes (17 additions covered) | done | 19 current states; selected HW scope and citation audit complete; capacity 18 unchanged |
 | In | yes | yes (+1,+3) | yes (selected) | yes (32 additions covered) | done | 34 current states; selected HW scope and existing-entry citation audit complete |
 | Sn | yes | yes (+2, −4) | partial | yes (31 additions covered) | done | 32 current states; selected HW scope and existing-entry audit complete; capacity 14 for six-donor Sn(II) |
-| Sb | yes | yes (-3) | partial | yes (`atoms/sb.edn`, `atomic_ions/sb-3.edn`, `hydrides/`, `inorganic_ions/`) | in_progress | 29 current states; 20 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
+| Sb | yes | yes (-3) | partial | yes (`atoms/sb.edn`, `atomic_ions/sb-3.edn`, `n_group/`) | in_progress | 29 current states; 20 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Te | yes | yes (-2, -1, +1) | yes (selected) | yes (all 20 states) | done | Eleven states added, including aromatic Te4²⁺; citation and default-scope audit complete |
 | I | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 22 halogen-pass additions plus I#c-#n#d3 for binary TeI4 aggregates |
-| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `inorganic_small/xe*.edn`, `inorganic_ions/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
+| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `noble_gases/xe*.edn`, `multicenter_bonds/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
 | Cs | yes | yes (+1, −1) | yes (selected) | yes (6 additions covered) | done | 8 current states; selected HW scope, citation audit and capacity 24 implemented |
 | Ba | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, eight-/nine-donor aqua fixtures and capacity 18 implemented; water bridges deferred with Ch02 |
 | Tl | yes | yes (+1,+3) | yes (selected) | yes (22 additions covered) | done | 25 current states; selected HW scope and existing-entry citation audit complete |
 | Pb | yes | yes (+2, +4, −4) | partial | yes (32 additions covered) | done | 35 current states; selected HW scope and existing-entry audit complete, including both ionic states; capacity 14 for six-donor Pb(II) |
-| Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `hydrides/`, `inorganic_ions/`, `aromatic/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
+| Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `n_group/`, `aromatic/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
 | At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
 | La | yes | yes (+3) | yes (selected) | yes (30 additions covered) | done | 32 current states; both earlier states retained; includes three XXXV companions; capacity 20 for bis-COT donors |
-| Ce | yes | yes (+3,+4) | yes (selected) | yes (25 additions covered in `lanthanides/`) | done | 28 current states; 3 earlier states retained and sourced; Ce atom term retained and sourced to ASD |
-| Pr | yes | yes (+3,+4) | yes (selected) | yes (15 additions covered in `lanthanides/`) | done | 18 current states; 3 earlier states retained and sourced |
-| Nd | yes | yes (+2,+3,+4) | yes (selected) | yes (17 additions covered in `lanthanides/`) | done | 19 current states; 2 earlier states retained and sourced; charge maximum 4; crown pair excluded |
-| Pm | yes | yes (+3) | yes (selected) | yes (8 additions covered in `lanthanides/`) | done | 10 current states; 2 earlier states retained and sourced |
-| Sm | yes | yes (+2,+3) | yes (selected) | yes (20 additions covered in `lanthanides/`) | done | 23 current states; 3 earlier states retained and sourced; one hydride-bridge MC state |
-| Eu | yes | yes (+2,+3) | yes (selected) | yes (15 additions covered in `lanthanides/`) | done | 18 current states; 3 earlier states retained and sourced |
-| Gd | yes | yes (+3) | yes (selected) | yes (10 additions covered in `lanthanides/`) | done | 12 current states; 2 earlier states retained and sourced |
-| Tb | yes | yes (+3,+4) | yes (selected) | yes (15 additions covered in `lanthanides/`) | done | 18 current states; 3 earlier states retained and sourced |
-| Dy | yes | yes (+2,+3,+4) | yes (selected) | yes (21 additions covered in `lanthanides/`) | done | 23 current states; 2 earlier states retained and sourced; capacity 27; unpaired maximum 6 |
-| Ho | yes | yes (+3) | yes (selected) | yes (11 additions covered in `lanthanides/`) | done | 13 current states; 2 earlier states retained and sourced; capacity 30 |
-| Er | yes | yes (+3) | yes (selected) | yes (18 additions covered in `lanthanides/`) | done | 20 current states; 2 earlier states retained and sourced; capacity 31; one hydride-bridge MC state |
-| Tm | yes | yes (+2,+3) | yes (selected) | yes (16 additions covered in `lanthanides/`) | done | 18 current states; 2 earlier states retained and sourced; capacity 30 |
-| Yb | yes | yes (+2,+3) | yes (selected) | yes (22 additions covered in `lanthanides/`) | done | 25 current states; 3 earlier states retained and sourced; capacity 31 |
-| Lu | yes | yes (+3) | yes (selected) | yes (16 additions covered in `lanthanides/`) | done | 18 current states; 2 earlier states retained and sourced; one hydride-bridge MC state; f14 core retained |
+| Ce | yes | yes (+3,+4) | yes (selected) | yes (25 additions covered) | done | 28 current states; 3 earlier states retained and sourced; Ce atom term retained and sourced to ASD |
+| Pr | yes | yes (+3,+4) | yes (selected) | yes (15 additions covered) | done | 18 current states; 3 earlier states retained and sourced |
+| Nd | yes | yes (+2,+3,+4) | yes (selected) | yes (17 additions covered) | done | 19 current states; 2 earlier states retained and sourced; charge maximum 4; crown pair excluded |
+| Pm | yes | yes (+3) | yes (selected) | yes (8 additions covered) | done | 10 current states; 2 earlier states retained and sourced |
+| Sm | yes | yes (+2,+3) | yes (selected) | yes (20 additions covered) | done | 23 current states; 3 earlier states retained and sourced; one hydride-bridge MC state |
+| Eu | yes | yes (+2,+3) | yes (selected) | yes (15 additions covered) | done | 18 current states; 3 earlier states retained and sourced |
+| Gd | yes | yes (+3) | yes (selected) | yes (10 additions covered) | done | 12 current states; 2 earlier states retained and sourced |
+| Tb | yes | yes (+3,+4) | yes (selected) | yes (15 additions covered) | done | 18 current states; 3 earlier states retained and sourced |
+| Dy | yes | yes (+2,+3,+4) | yes (selected) | yes (21 additions covered) | done | 23 current states; 2 earlier states retained and sourced; capacity 27; unpaired maximum 6 |
+| Ho | yes | yes (+3) | yes (selected) | yes (11 additions covered) | done | 13 current states; 2 earlier states retained and sourced; capacity 30 |
+| Er | yes | yes (+3) | yes (selected) | yes (18 additions covered) | done | 20 current states; 2 earlier states retained and sourced; capacity 31; one hydride-bridge MC state |
+| Tm | yes | yes (+2,+3) | yes (selected) | yes (16 additions covered) | done | 18 current states; 2 earlier states retained and sourced; capacity 30 |
+| Yb | yes | yes (+2,+3) | yes (selected) | yes (22 additions covered) | done | 25 current states; 3 earlier states retained and sourced; capacity 31 |
+| Lu | yes | yes (+3) | yes (selected) | yes (16 additions covered) | done | 18 current states; 2 earlier states retained and sourced; one hydride-bridge MC state; f14 core retained |
 | Hf | yes | yes (+3,+4) | yes (selected) | yes (28 additions covered) | done | 30 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
 | Ta | yes | yes (+3,+4,+5) | yes (selected) | yes (56 additions covered) | done | 57 current states; earlier state retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
 | W | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (98 additions covered) | done | 99 current states; earlier atom retained; selected HW scope and citation audit complete; capacity 18 unchanged; 13 unselected phosphine-hydride occupations remain open |
@@ -334,15 +353,20 @@ compounds; Kekulé encodings of aromatic compounds and heterocycles may be added
 
 ## Categories
 
-The [conformance suite breakdown](#conformance-suite-breakdown) lists the current
-categories. Donor–acceptor adducts use `donor_acceptor/`, including charged adducts.
-The `hydrogen_bonds/` fixtures check resolution of graphs carrying explicit Hbd
-relations, including their preservation alongside localized and multicenter bonds.
+The [conformance suite breakdown](#conformance-suite-breakdown) lists current
+directories. Bonding classes take precedence where they help compare related
+examples: `organometallics/`, `organoelement/`, `organophosphorus/`, `organosulfur/`,
+`donor_acceptor/`, `multicenter_bonds/`, `hydrogen_bonds/` and `metal_metal_bonds/`.
+`donor_acceptor/` contains molecular Lewis adducts; ordinary coordination complexes
+belong with their element group. Explicit Hbd relations belong in `hydrogen_bonds/`.
+Remaining inorganic cases use the chapter groups, with `b_group/`, `c_group/` and
+`n_group/` for groups 13–15 and `sc_group/` through `zn_group/` for transition metals.
+Categories are practical browsing groups; no exclusive chemical taxonomy is implied.
 
-Categories are a rough classification, and a compound fitting several may use any of
-them. Existing fixtures may move when a better category appears. `organometallics/`
-and `organoelement/` are noted until the HW pass finishes. The
-[organic compounds](#organic-compounds) table lists their scope.
+The 2026-11-04 reorganization moved 2,380 inputs and their snapshots without changing
+their contents or the harness. Explicit/implicit H and ordinary/donor alternatives
+stay together where they exercise the same class. The existing organic directories
+are being reorganized separately; `organophosphorus/` has no inputs in this pass.
 
 The former `implicit_h=true/false` setting was the precursor to atom defaults.
 EDN inputs use MoleculeDefaults with per-input `:config-overrides`; hydrogen
@@ -350,15 +374,13 @@ handling follows those defaults and explicit atom predicates.
 
 ## Current Conformance Set
 
+Inorganic compound directories and current counts are listed in the [breakdown above](#conformance-suite-breakdown).
+
 - `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`, `na`, `mg`, `al`, `si`, `p`, `s`, `cl`, `ar`, `k`, `ca`, `sc`, `ti`, `v`, `cr`, `mn`, `fe`, `co`, `ni`, `cu`, `zn`, `ga`, `ge`, `as`, `se`, `br`, `kr`, `rb`, `sr`, `y`, `zr`, `nb`, `mo`, `tc`, `ru`, `rh`, `pd`, `ag`, `cd`, `in`, `sn`, `sb`, `te`, `i`, `xe`, `cs`, `ba`, `tl`, `pb`, `bi`, `po`, `at`, `rn`, `la`, `ce`, `pr`, `nd`, `pm`, `sm`, `eu`, `gd`, `tb`, `dy`, `ho`, `er`, `tm`, `yb`, `lu`, `hf`, `ta`, `w`, `re`, `os`, `ir`, `pt`, `au`, `hg`, `fr`, `ra`, `ac`, `th`, `pa`, `u`, `np`, `pu`, `am`, `cm`, `bk`, `cf`, `es`, `fm`, `md`, `no`, `lr`, `rf`, `db`, `sg`, `bh`, `hs`
 - `atomic_ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`, `k+1`, `ca+2`, `sc+3`, `ti+3`, `ti+4`, `v+2`, `v+3`, `cr+2`, `cr+3`, `mn+2`, `mn+3`, `fe+2`, `fe+3`, `co+2`, `co+3`, `ni+2`, `cu+1`, `cu+2`, `zn+2`, `ga+3`, `as-3`, `se-2`, `br-1`, `rb+1`, `sr+2`, `y+3`, `zr+4`, `nb+3`, `mo+2`, `mo+3`, `ru+2`, `ru+3`, `rh+2`, `rh+3`, `pd+2`, `ag+1`, `ag+2`, `cd+2`, `in+3`, `sb-3`, `te-2`, `i-1`, `cs+1`, `ba+2`, `tl+1`, `tl+3`, `pb+2`, `pb+4`, `bi+3`, `po-2`, `at-1`, `la+3`, `ce+3`, `ce+4`, `pr+3`, `pr+4`, `nd+3`, `pm+3`, `sm+2`, `sm+3`, `eu+2`, `eu+3`, `gd+3`, `tb+3`, `tb+4`, `dy+3`, `ho+3`, `er+3`, `tm+3`, `yb+2`, `yb+3`, `lu+3`, `hf+4`, `pt+2`, `au+1`, `au+3`, `hg+2`, `hg+2_dimer`, `fr+1`, `ra+2`, `ac+3`, `th+3`, `th+4`, `pa+4`, `pa+5`, `u+3`, `u+4`, `u+5`, `u+6`, `np+3`, `np+4`, `np+5`, `np+6`, `pu+3`, `pu+4`, `pu+5`, `pu+6`, `pu+7`, `am+2`, `am+3`, `am+4`, `cm+3`, `cm+4`, `bk+3`, `bk+4`, `cf+2`, `cf+3`, `cf+4`, `es+2`, `es+3`, `fm+2`, `fm+3`, `md+2`, `md+3`, `no+2`, `lr+3`
-- `hydrides/`: `h2`, `bh3`, `ch4`, `nh3`, `h2o`, `hf`, `sih4`, `ph3`, `h2s`, `hcl`, `ash3`, `h2se`, `hbr`, `sbh3`, `h2te`, `hi`
-- `inorganic_small/`: neutral small inorganics (explicit H only): e.g. `bf2`, `bf3`, `bn`, `c2`, `ch3`, `ch2_singlet`, `ch2_triplet`, `sih3`, `sih2_*`, `nh2`, `ph2`, `ash2`, `sbh2`, `oh`, `sh`, `seh`, `teh`, `br2`, `cl2`, `cn-`, `f2`, `i2`, `n2`, `o2`, etc. Added nitrogen oxides (NO, NO2, N2O, N2O3, N2O4), carbon compounds (CO2, CS2, COS, HCN), oxyacids/hydroxides (HNO2, HNO3, HClO, H2CO3, H3BO3, HOBr, HOI), N-H compounds (N2H4, NH2OH, N2H2), peroxides (H2O2, H2S2), halides (NF3, NCl3, PF3, PCl3, SF2, SiF4, SiCl4, BCl3, ClF, BrF), and other (O3, HNCO, HOCN, HSCN, HNCS).
-- `inorganic_ions/`: molecular ions (explicit H only): e.g. `bcl4-`, `cf3-`, `ccl3+`, `nh2-`, `nh4+`, `ph2-`, `ph4+`, `ash2-`, `ash4+`, `sbh2-`, `sbh4+`, `oh-`, `oh3+`, `sh-`, `sh3+`, `seh-`, `seh3+`, `teh-`, `teh3+`, `f-`, `cl-`, `br-`, `i-`, `sif3-`, `sicl3+`, etc.
 - `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`, `k33`, `k5`; [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons). Total: 82 files.
 - `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6); ethyleneglycol, glycerol, methanediol (3); phenyloxenium (1); [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons) (28). Total: 102 files.
 - `carbonyl_derivatives/`: non-aromatic carbonyl compounds: aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid; [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons) (24). Total: 86 files.
-- `hypervalent/`: expanded-octet species (all `implicit_h=false`): SO2, SO3, H2SO3, H2SO4, SF4, SF6, H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3, HClO2, HClO3, HClO4, ClF3, IF5, SO4(2-), PO4(3-), ClO4(-). Total: 20 files.
 - `heterocycles/`: non-aromatic heterocycles. O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6); cages and polyaza rings (urotropin, tetrahydrooctaazanaphthalene). Total: 53 files.
 
 ## Decision Log
@@ -653,13 +675,13 @@ and the earlier H− gap; their lone-pair/spin fields are left for resolution.
 
 | Added fixture | Coverage |
 | --- | --- |
-| [Implicit H2](../umol-graph/tests/resolution/data/hydrides/h2-implicit.edn) | H05 |
+| [Implicit H2](../umol-graph/tests/resolution/data/hydrogen/h2-implicit.edn) | H05 |
 | [H−](../umol-graph/tests/resolution/data/atomic_ions/h-.edn) | H04 |
-| [B2H6](../umol-graph/tests/resolution/data/inorganic_small/b2h6.edn) | H06 and B#v2#m; explicit terminal H, two three-center bridges |
-| [[RhH(NH3)5]2+](../umol-graph/tests/resolution/data/donor_acceptor/pentaamminehydridorhodium-2+.edn) | H07 and Rh#c+3#n3#t6; explicit N–H bonds reuse N#v3#d |
-| [HF2−](../umol-graph/tests/resolution/data/inorganic_ions/hf2-.edn) | H08 and F#c-#n3#m2; three-center/four-electron [2,0,2] |
-| [H3+](../umol-graph/tests/resolution/data/inorganic_ions/h3+.edn) | H06 and H08; three-center/two-electron [1,0,1] |
-| [[HCr2(CO)10]−](../umol-graph/tests/resolution/data/donor_acceptor/hcr2-co10-.edn) | H09, Cr#n3#t5#m0 and C#c-#v3#d; three-center/two-electron [0,2,0] |
+| [B2H6](../umol-graph/tests/resolution/data/multicenter_bonds/b2h6.edn) | H06 and B#v2#m; explicit terminal H, two three-center bridges |
+| [[RhH(NH3)5]2+](../umol-graph/tests/resolution/data/co_group/pentaamminehydridorhodium-2+.edn) | H07 and Rh#c+3#n3#t6; explicit N–H bonds reuse N#v3#d |
+| [HF2−](../umol-graph/tests/resolution/data/multicenter_bonds/hf2-.edn) | H08 and F#c-#n3#m2; three-center/four-electron [2,0,2] |
+| [H3+](../umol-graph/tests/resolution/data/multicenter_bonds/h3+.edn) | H06 and H08; three-center/two-electron [1,0,1] |
+| [[HCr2(CO)10]−](../umol-graph/tests/resolution/data/multicenter_bonds/hcr2-co10-.edn) | H09, Cr#n3#t5#m0 and C#c-#v3#d; three-center/two-electron [0,2,0] |
 
 Both models resolve all seven under Strict and MostSaturated. In [HCr2(CO)10]−,
 the bridging H− and every CO carbon now receive #n0, as required by the supplied
@@ -828,13 +850,13 @@ change is 0.00276. The selected registry replacements put all F contributions in
 #### Selections applied
 
 Perxenate [XeO6]4− retains Xe#v8 as an accepted assumption. Its existing
-[conformance input](../umol-graph/tests/resolution/data/inorganic_ions/xeo64-.edn)
+[conformance input](../umol-graph/tests/resolution/data/noble_gases/xeo64-.edn)
 uses two Xe=O and four Xe–O− bonds, with neutral Xe. This settles the final
 noble-gas example; the atom state already has independent support from XeO4.
 
 F#c-#n2#d2 is added for the Xe2F11+ bridge, donating one pair to each
 Xe#c+#n#v#t#m4 center. Its lone-pair count is left for resolution in the
-[conformance input](../umol-graph/tests/resolution/data/donor_acceptor/xe2f11+.edn).
+[conformance input](../umol-graph/tests/resolution/data/multicenter_bonds/xe2f11+.edn).
 
 | Implemented replacement | Replaced entry | Example |
 | --- | --- | --- |
@@ -894,14 +916,14 @@ are questioned. XeO, XeO2 and Xe(OH)2 occur as possible intermediates.
 F#n3#m, F#c-#n2#d2, N#v3#d and the selected noble-gas descriptions are in the default registry.
 All noble-gas entries carry HW volume/page references. After the selections above,
 the noble-gas increment retains 26 conformance inputs, including
-[XeO3](../umol-graph/tests/resolution/data/inorganic_small/xeo3.edn),
-[XeOF4](../umol-graph/tests/resolution/data/inorganic_small/xeof4.edn),
-[XeF5−](../umol-graph/tests/resolution/data/inorganic_ions/xef5-.edn),
-[XeOF5−](../umol-graph/tests/resolution/data/inorganic_ions/xeof5-.edn),
-[XeF8²−](../umol-graph/tests/resolution/data/inorganic_ions/xef8-2.edn) and
-[XeF7−](../umol-graph/tests/resolution/data/inorganic_ions/xef7-.edn).
-The existing [XeOF3−](../umol-graph/tests/resolution/data/inorganic_ions/xeof3-.edn)
-and [XeO2F3−](../umol-graph/tests/resolution/data/inorganic_ions/xeo2f3-.edn) inputs
+[XeO3](../umol-graph/tests/resolution/data/noble_gases/xeo3.edn),
+[XeOF4](../umol-graph/tests/resolution/data/multicenter_bonds/xeof4.edn),
+[XeF5−](../umol-graph/tests/resolution/data/multicenter_bonds/xef5-.edn),
+[XeOF5−](../umol-graph/tests/resolution/data/multicenter_bonds/xeof5-.edn),
+[XeF8²−](../umol-graph/tests/resolution/data/multicenter_bonds/xef8-2.edn) and
+[XeF7−](../umol-graph/tests/resolution/data/multicenter_bonds/xef7-.edn).
+The existing [XeOF3−](../umol-graph/tests/resolution/data/multicenter_bonds/xeof3-.edn)
+and [XeO2F3−](../umol-graph/tests/resolution/data/multicenter_bonds/xeo2f3-.edn) inputs
 also use the selected replacements. Nine further fixtures cover KrF2, KrF+,
 HCN→KrF+, XeF4, XeF6, XeF+, XeF3+, XeF5+ and Xe2F11+. All **33 retained
 noble-gas states** and the three F/N companions are now exercised. Both AtomTyping
@@ -1548,38 +1570,38 @@ both use the existing Te#c+#n#v3 state (Ch19).
 
 | Coverage | Fixture paths under tests/resolution/data |
 | --- | --- |
-| EF4 and TeF6 | hypervalent/{sf4,sef4,tef4,tef6}.edn |
-| SF5 radical | hypervalent/sf5.edn |
-| EF5−, SOF3+, tellurite, implicit HTe− | inorganic_ions/{sf5-,sef5-,tef5-,sof3+,teo3-2,teh-implicit-}.edn |
-| Higher-coordinate Te anions; TeF3+ and H3Te+ | inorganic_ions/{tef7-,tef8-2,teof5-,teof6-2,tef3+,teh3+}.edn |
-| Se/Te hexahalide dianions | inorganic_ions/{sebr6-2,tecl6-2,tebr6-2}.edn |
-| Se/Te tetrahalide dianions | inorganic_ions/{sebr4-2,tecl4-2}.edn |
-| Aqua / hydroxido donors, explicit and implicit H | donor_acceptor/rh-h2o6*.edn; donor_acceptor/rh-oh*.edn |
-| Binary cubanes | donor_acceptor/{se4cl16,te4br16,te4i16}.edn |
-| Po hydride and ions | hydrides/h2po*.edn; atomic_ions/{po+2,po+4}.edn |
-| Charged diatomics, atom-localized and bond-charge/spin descriptions | inorganic_ions/{o2+-atom,o2+-bond,o2--atom,o2--bond,s2--atom,s2--bond}.edn |
-| Triplet chalcogen monoxides | inorganic_small/{so,seo,teo}.edn |
-| Ozone and ozonide, multicenter π descriptions | inorganic_small/o3-multicenter.edn; inorganic_ions/o3-.edn |
-| Trisulfide radical anion, localized and multicenter descriptions | inorganic_ions/{s3-localized-,s3-multicenter-}.edn |
-| Zundel ion, 3c2e and 3c4e descriptions with explicit, implicit and mixed terminal H | inorganic_ions/h5o2-3c2e*.edn; inorganic_ions/h5o2-3c4e*.edn |
+| EF4 and TeF6 | chalcogens/tef6.edn; multicenter_bonds/{sef4,sf4,tef4}.edn |
+| SF5 radical | multicenter_bonds/sf5.edn |
+| EF5−, SOF3+, tellurite, implicit HTe− | chalcogens/{sof3+,teh-implicit-,teo3-2}.edn; multicenter_bonds/{sef5-,sf5-,tef5-}.edn |
+| Higher-coordinate Te anions; TeF3+ and H3Te+ | chalcogens/{tef7-,tef8-2,teof5-,teof6-2,tef3+,teh3+}.edn |
+| Se/Te hexahalide dianions | multicenter_bonds/{sebr6-2,tecl6-2,tebr6-2}.edn |
+| Se/Te tetrahalide dianions | multicenter_bonds/{sebr4-2,tecl4-2}.edn |
+| Aqua / hydroxido donors, explicit and implicit H | co_group/rh-h2o6*.edn; co_group/rh-oh*.edn |
+| Binary cubanes | chalcogens/{se4cl16,te4br16,te4i16}.edn |
+| Po hydride and ions | chalcogens/h2po*.edn; atomic_ions/{po+2,po+4}.edn |
+| Charged diatomics, atom-localized and bond-charge/spin descriptions | chalcogens/{o2+-atom,o2+-bond,o2--atom,o2--bond,s2--atom,s2--bond}.edn |
+| Triplet chalcogen monoxides | chalcogens/{so,seo,teo}.edn |
+| Ozone and ozonide, multicenter π descriptions | multicenter_bonds/o3-multicenter.edn; multicenter_bonds/o3-.edn |
+| Trisulfide radical anion, localized and multicenter descriptions | chalcogens/s3-localized-.edn; multicenter_bonds/s3-multicenter-.edn |
+| Zundel ion, 3c2e and 3c4e descriptions with explicit, implicit and mixed terminal H | multicenter_bonds/h5o2-3c2e*.edn; multicenter_bonds/h5o2-3c4e*.edn |
 | Hydrogen-bond compatibility using existing atom types | hydrogen_bonds/{h7o3+,h9o4+,h13o6+,h3o2-}.edn |
-| S4N4 HW contributor | inorganic_small/s4n4.edn |
-| Small nitrides, existing states | inorganic_ions/{sn+,s2n+}.edn; inorganic_small/s4n2.edn |
-| S2N2, aromatic and singlet-diradical multicenter descriptions | aromatic/s2n2.edn; inorganic_small/s2n2-diradical.edn |
+| S4N4 HW contributor | multicenter_bonds/s4n4.edn |
+| Small nitrides, existing states | chalcogens/{sn+,s2n+}.edn; multicenter_bonds/s4n2.edn |
+| S2N2, aromatic and singlet-diradical multicenter descriptions | aromatic/s2n2.edn; multicenter_bonds/s2n2-diradical.edn |
 | Aromatic nitride ions | aromatic/{s2n3+,s3n2-2+,se3n2-2+,s4n3+,s4n4-2+,s5n5+,s3n3-}.edn |
-| Radical nitride cations | inorganic_ions/{s3n2+,se3n2+}.edn |
-| Acyclic nitride anions | inorganic_ions/{s3n-,s4n-,sn2-2}.edn |
-| S4N4 / Se4N4, localized descriptions | inorganic_small/{s4n4,se4n4}-localized.edn |
+| Radical nitride cations | multicenter_bonds/{s3n2+,se3n2+}.edn |
+| Acyclic nitride anions | chalcogens/sn2-2.edn; multicenter_bonds/{s3n-,s4n-}.edn |
+| S4N4 / Se4N4, localized descriptions | chalcogens/{s4n4,se4n4}-localized.edn |
 | Aromatic chalcogen dications | aromatic/{s4,s6,se4,te4}-2+.edn |
-| Cyclic sulfur radical cations | inorganic_ions/{s5+,s6+,s7+}.edn |
-| Localized S8²⁺/Se8²⁺ | inorganic_ions/{s8,se8}-localized-2+.edn |
-| Te6²⁺/Te6⁴⁺ resonance contributors | inorganic_ions/te6-localized-{2+,4+}.edn |
+| Cyclic sulfur radical cations | multicenter_bonds/{s5+,s6+,s7+}.edn |
+| Localized S8²⁺/Se8²⁺ | chalcogens/{s8,se8}-localized-2+.edn |
+| Te6²⁺/Te6⁴⁺ resonance contributors | chalcogens/te6-localized-{2+,4+}.edn |
 | Singlet phenyloxenium | functional_groups/phenyloxenium.edn |
-| Existing EH radicals, implicit H | inorganic_small/{oh,sh,seh}-implicit.edn |
-| Existing hydronium, sulfonium and selenonium states, implicit/mixed H | inorganic_ions/{oh3,sh3,seh3}-{implicit,mixed-h1,mixed-h2}+.edn |
-| Existing hydrochalcogenide anions, implicit H | inorganic_ions/{oh,sh,seh}-implicit-.edn |
-| Existing H2S/H2Se/H2Te states, mixed H | hydrides/{h2s,h2se,h2te}-mixed.edn |
-| Existing selenium valences | inorganic_small/seo2.edn; hypervalent/sef6.edn |
+| Existing EH radicals, implicit H | chalcogens/{oh,sh,seh}-implicit.edn |
+| Existing hydronium, sulfonium and selenonium states, implicit/mixed H | chalcogens/{oh3,sh3,seh3}-{implicit,mixed-h1,mixed-h2}+.edn |
+| Existing hydrochalcogenide anions, implicit H | chalcogens/{oh,sh,seh}-implicit-.edn |
+| Existing H2S/H2Se/H2Te states, mixed H | chalcogens/{h2s,h2se,h2te}-mixed.edn |
+| Existing selenium valences | chalcogens/seo2.edn; chalcogens/sef6.edn |
 | Existing heteroaromatic states and Kekulé notation | aromatic/{pyrylium,furan,furan-kekule}.edn |
 
 The capacity expansion removes Counts rejections of Se4Cl16, TeF8²− and TeOF6²−.
@@ -2650,7 +2672,7 @@ states already listed in earlier rows. Deferred and omitted rows add no states.
 | Vg23 | M#c+2#u#v2#t6; V#c+3#v2#t6; Nb/Ta#c+2#v3#t6; #c+5#t9 | Implemented: 8; other all-donor states reused | Cp2MX2, [Cp2VCl2]⁺ and Cp2Nb/TaX3, 1831, 1841. Two η⁵-Cp− donors plus ordinary X or X− donation. Nb/TaCp4 has two η⁵ and two η¹ rings and reuses the IV counts; Cp2MeTa=CH2 reuses the V counts |
 | Vg24 | V#c+2#u3#t6 | Reuse Vg19 | Vanadocene, HW 1830. J12 establishes S = 3/2 by EPR/HFEPR; use this evidence rather than the inconsistent 2.84 BM printed in HW 2190, Table 32.22 |
 | Vg25 | V#u3#v2; V#u3#v#h; V#u3#h2; V#c+2#u3#t2 | Implemented: 4 | Molecular VH2: MCS96, pp. 872–874, Table 2, calculates a quartet ground state; VLW95, pp. 4367, 4370–4372, establishes S = 3/2 by ESR. Ordinary, mixed/implicit H or H− donors. The geometry discussion does not change the local occupation |
-| Vg26 | V#c+2#v3#t3 | Implemented: 1 | [Cl3VN]−, HW I, pp. 757–758, Fig. 14.6g: three ordinary V–Cl bonds plus the existing N³− three-pair donor. The revised `donor_acceptor/vcl3-nitride-.edn` infers the metal occupation. The fully ordinary V≡N graph reuses Vg04 |
+| Vg26 | V#c+2#v3#t3 | Implemented: 1 | [Cl3VN]−, HW I, pp. 757–758, Fig. 14.6g: three ordinary V–Cl bonds plus the existing N³− three-pair donor. The revised `v_group/vcl3-nitride-.edn` infers the metal occupation. The fully ordinary V≡N graph reuses Vg04 |
 | Vg27 | Ta#v5#t4; #v4#h#t4; #v3#h2#t4; #v2#h3#t4; #v#h4#t4; #h5#t4; Ta#u#v3#h#t4; #u#v2#h2#t4; #u#v#h3#t4; #u#h4#t4 | Implemented: 10; explicit tetrahydride and H−-donor states reused | TaH5(dmpe)2 and TaH4(dmpe)2, 1834, 2068–2069. Five/four terminal hydrides and four phosphine donors; d⁰/d¹. Explicit, mixed and implicit H; all-H− alternatives reuse Ta#c+5#t9 and Ta#c+4#u#t8 |
 | Vg28a | Nb/Ta#u#v3#h; #u#v2#h2; #u#v#h3; #u#h4; Ta#u#v4; Ta#c+4#u#t4 | Implemented: 10; Nb explicit/donor forms reuse Vg11 | Molecular NbH4 and TaH4: WA11, pp. 14179–14182, Tables 5–6, assigns doublet D2d structures. Ordinary, mixed/implicit H or four H− donors; no change to the already accepted coordinated tetrahydrides |
 | Vg28b | Nb/Ta#u3#v2; #u3#v#h; #u3#h2; #c+2#u3#t2 | Implemented: 8 | Molecular NbH2/TaH2: WA11 establishes the molecules. VLW95, p. 4367, reports calculated NbH2 ⁴B1 and three competing TaH2 quartet states (⁴B1/⁴A2/⁴B2); their ordering does not affect #u3. This is theoretical occupation evidence, not an ESR determination for these dihydrides. Ordinary, mixed/implicit H or H− donors |
@@ -3527,9 +3549,10 @@ Reviewed 2026-11-04: HW II, chapter XXXV, pp. 2288–2310; bibliography 2310–2
 **Implemented: 232 additions**, including 3 La companions and 3 hydride-bridge
 MC states; all 34 earlier Ce–Lu bare-atom/ion states are retained. The capacity
 changes and Nd/Dy enumeration bounds are implemented. The two Nd crown states are
-excluded; Nd capacity remains 26. The 246 new fixtures are in
-`umol-graph/tests/resolution/data/lanthanides/`; the next chapter's 5f fixtures will
-use `actinides/`.
+excluded; Nd capacity remains 26. The 246 new fixtures are now split across
+`lanthanides/` (218),
+`organometallics/` (25) and `multicenter_bonds/` (3). The next chapter's remaining
+5f fixtures will use `actinides/`.
 
 #### Occupations used in the table
 
