@@ -1,0 +1,209 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "C#h3"
+        "O#n2"
+        "C"
+        "O#n2"
+        "C"
+        "C#h"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "O#n2"
+        "C#h2"
+        "O#h#n2"
+        "O#h#n2"
+        "O#h#n2"
+        "O#h#n2"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [2 4 :single]
+        [4 9 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :double]
+        [8 13 :single]
+        [13 14 :double]
+        [7 15 :single]
+        [15 16 :single]
+        [16 21 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [20 22 :single]
+        [22 23 :single]
+        [19 24 :single]
+        [18 25 :single]
+        [17 26 :single]]
+      :stereo-atoms [
+        {:attrs :ccw :ligands [6 [:h 7] 8 15] :site 7}
+        {:attrs :cw :ligands [7 [:h 8] 9 13] :site 8}
+        {:attrs :cw :ligands [8 [:h 9] 4 10] :site 9}
+        {:attrs :ccw :ligands [15 [:h 16] 21 17] :site 16}
+        {:attrs :cw :ligands [16 [:h 17] 18 26] :site 17}
+        {:attrs :ccw :ligands [17 [:h 18] 19 25] :site 18}
+        {:attrs :cw :ligands [18 [:h 19] 20 24] :site 19}
+        {:attrs :ccw :ligands [19 [:h 20] 21 22] :site 20}]}
+    :success true
+    :tie-breaks [0 5 7 8 9 10 11 13 14 16 17 18 19 20 22 23 24 25 26]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      5 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      7 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      8 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      9 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      10 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      11 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      13 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      14 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      16 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      17 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      18 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      19 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      20 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      22 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      23 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      24 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      25 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      26 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "C#h3"
+        "O#n2"
+        "C"
+        "O#n2"
+        "C"
+        "C#h"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "O#n2"
+        "C#h2"
+        "O#h#n2"
+        "O#h#n2"
+        "O#h#n2"
+        "O#h#n2"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [2 4 :single]
+        [4 9 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :double]
+        [8 13 :single]
+        [13 14 :double]
+        [7 15 :single]
+        [15 16 :single]
+        [16 21 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [20 22 :single]
+        [22 23 :single]
+        [19 24 :single]
+        [18 25 :single]
+        [17 26 :single]]
+      :stereo-atoms [
+        {:attrs :ccw :ligands [6 [:h 7] 8 15] :site 7}
+        {:attrs :cw :ligands [7 [:h 8] 9 13] :site 8}
+        {:attrs :cw :ligands [8 [:h 9] 4 10] :site 9}
+        {:attrs :ccw :ligands [15 [:h 16] 21 17] :site 16}
+        {:attrs :cw :ligands [16 [:h 17] 18 26] :site 17}
+        {:attrs :ccw :ligands [17 [:h 18] 19 25] :site 18}
+        {:attrs :cw :ligands [18 [:h 19] 20 24] :site 19}
+        {:attrs :ccw :ligands [19 [:h 20] 21 22] :site 20}]}
+    :success true
+    :tie-breaks [0 5 7 8 9 10 11 13 14 16 17 18 19 20 22 23 24 25 26]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      5 ["C#u#v3#a!" "C#h#v3#a!"]
+      7 ["C#u#v3#a!" "C#h#v3#a!"]
+      8 ["C#u#v3#a!" "C#h#v3#a!"]
+      9 ["C#u#v3#a!" "C#h#v3#a!"]
+      10 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      11 ["C#u#v3#a!" "C#h#v3#a!"]
+      13 ["C#u#v3#a!" "C#h#v3#a!"]
+      14 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      16 ["C#u#v3#a!" "C#h#v3#a!"]
+      17 ["C#u#v3#a!" "C#h#v3#a!"]
+      18 ["C#u#v3#a!" "C#h#v3#a!"]
+      19 ["C#u#v3#a!" "C#h#v3#a!"]
+      20 ["C#u#v3#a!" "C#h#v3#a!"]
+      22 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      23 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      24 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      25 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      26 ["O#n2#u#v#a!" "O#h#n2#v#a!"]}}}

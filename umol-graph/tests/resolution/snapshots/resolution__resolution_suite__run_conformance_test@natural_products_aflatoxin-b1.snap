@@ -1,0 +1,163 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [2 3 4 5 10 12 13 14 21 22] :attrs "[1,1,1,1,0,2,1,1,1,1]"}]
+      :atoms [
+        "C#h3"
+        "O#n2"
+        "C"
+        "C"
+        "C"
+        "C"
+        "C"
+        "O#n2"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#n"
+        "C"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "O#n2"
+        "C#h"
+        "O#n2"
+        "C"
+        "C#h"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 22 :single]
+        [2 3 :single]
+        [3 13 :single]
+        [3 4 :single]
+        [4 9 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :double]
+        [6 8 :single]
+        [8 9 :single]
+        [5 10 :single]
+        [10 11 :double]
+        [10 12 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [14 21 :single]
+        [14 15 :single]
+        [15 19 :single]
+        [15 16 :single]
+        [16 17 :double]
+        [17 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]]
+      :stereo-atoms [
+        {:attrs :cw :ligands [14 [:h 15] 19 16] :site 15}
+        {:attrs :cw :ligands [18 [:h 19] 15 20] :site 19}]}
+    :success true
+    :tie-breaks [0 8 9 15 16 17 19 22]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      8 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      9 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      15 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      16 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      17 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      19 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      22 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [2 3 4 5 10 12 13 14 21 22] :attrs "[1,1,1,1,0,2,1,1,1,1]"}]
+      :atoms [
+        "C#h3"
+        "O#n2"
+        "C"
+        "C"
+        "C"
+        "C"
+        "C"
+        "O#n2"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#n"
+        "C"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "O#n2"
+        "C#h"
+        "O#n2"
+        "C"
+        "C#h"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 22 :single]
+        [2 3 :single]
+        [3 13 :single]
+        [3 4 :single]
+        [4 9 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :double]
+        [6 8 :single]
+        [8 9 :single]
+        [5 10 :single]
+        [10 11 :double]
+        [10 12 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [14 21 :single]
+        [14 15 :single]
+        [15 19 :single]
+        [15 16 :single]
+        [16 17 :double]
+        [17 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]]
+      :stereo-atoms [
+        {:attrs :cw :ligands [14 [:h 15] 19 16] :site 15}
+        {:attrs :cw :ligands [18 [:h 19] 15 20] :site 19}]}
+    :success true
+    :tie-breaks [0 8 9 15 16 17 19 22]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      8 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      9 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      15 ["C#u#v3#a!" "C#h#v3#a!"]
+      16 ["C#u#v3#a!" "C#h#v3#a!"]
+      17 ["C#u#v3#a!" "C#h#v3#a!"]
+      19 ["C#u#v3#a!" "C#h#v3#a!"]
+      22 ["C#u#v2#a" "C#h#v2#a"]}}}

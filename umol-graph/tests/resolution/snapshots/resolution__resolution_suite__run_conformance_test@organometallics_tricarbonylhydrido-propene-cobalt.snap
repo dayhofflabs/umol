@@ -1,0 +1,85 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Co#n4"
+        "H"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#h3"
+        "C#h"
+        "C#h2"]
+      :bonds [
+        [2 3 :triple]
+        [4 5 :triple]
+        [6 7 :triple]
+        [8 9 :single]
+        [9 10 :double]
+        [0 1 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [9 10]}]}
+    :success true
+    :tie-breaks [8 9 10]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      8 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      9 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      10 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Co#n4"
+        "H"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#h3"
+        "C#h"
+        "C#h2"]
+      :bonds [
+        [2 3 :triple]
+        [4 5 :triple]
+        [6 7 :triple]
+        [8 9 :single]
+        [9 10 :double]
+        [0 1 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [9 10]}]}
+    :success true
+    :tie-breaks [8 9 10]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      8 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      9 ["C#u#v3#a!" "C#h#v3#a!"]
+      10 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]}}}

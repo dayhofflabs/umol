@@ -1,0 +1,80 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "O#n2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#c-#h#n"
+        "C"
+        "O#h#n2"
+        "Cl#n3"
+        "K#c+"]
+      :bonds [
+        [0 1 :double]
+        [1 7 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [7 9 :single]]
+      :stereo-atoms [{:attrs :cw :ligands [6 1 8 9] :site 7}]}
+    :success true
+    :tie-breaks [2 3 4 5 8]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      2 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      3 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      4 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      5 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      8 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "O#n2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#c-#h#n"
+        "C"
+        "O#h#n2"
+        "Cl#n3"
+        "K#c+"]
+      :bonds [
+        [0 1 :double]
+        [1 7 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [7 9 :single]]
+      :stereo-atoms [{:attrs :cw :ligands [6 1 8 9] :site 7}]}
+    :success true
+    :tie-breaks [2 3 4 5 6 8]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      2 ["C#u#v3#a!" "C#h#v3#a!"]
+      3 ["C#u#v3#a!" "C#h#v3#a!"]
+      4 ["C#u#v3#a!" "C#h#v3#a!"]
+      5 ["C#u#v3#a!" "C#h#v3#a!"]
+      6 ["C#c-#n#u#v2#a!" "C#c-#h#n#v2#a!"]
+      8 ["O#n2#u#v#a!" "O#h#n2#v#a!"]}}}

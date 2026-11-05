@@ -1,0 +1,5 @@
+; BW, p. 292; corrected: Book names the Minamata toxin (Exkurs p. 292). The Minamata sulfide is CH3HgSCH3
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms ["C" "S" "Hg" "C"]
+  :bonds [[0 1 :single] [1 2 :single] [2 3 :single]]}}

@@ -1,0 +1,36 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["C#h" "C" "C" "C" "C" "C" "C" "N#n"]
+      :bonds [
+        [0 1 :triple]
+        [1 2 :single]
+        [2 3 :triple]
+        [3 4 :single]
+        [4 5 :triple]
+        [5 6 :single]
+        [6 7 :triple]]}
+    :success true
+    :tie-breaks [0]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {0 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms ["C#h" "C" "C" "C" "C" "C" "C" "N#n"]
+      :bonds [
+        [0 1 :triple]
+        [1 2 :single]
+        [2 3 :triple]
+        [3 4 :single]
+        [4 5 :triple]
+        [5 6 :single]
+        [6 7 :triple]]}
+    :success true
+    :tie-breaks [0]}
+  :counts-strict {:success false :tie-breaks [] :unresolved {0 ["C#u#v3#a!" "C#h#v3#a!"]}}}

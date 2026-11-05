@@ -1,0 +1,188 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [2 3 4 5 6 7 8 9 10 11] :attrs "[1,1,1,1,1,1,1,1,1,1]"}
+        {:atoms [12 13 14 15 16 17] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "C#h3"
+        "O#n2"
+        "C"
+        "C"
+        "C"
+        "C#h"
+        "N#c+"
+        "C"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C"
+        "C"
+        "C#h"
+        "C"
+        "C#h2"
+        "C#h2"
+        "O#n2"
+        "C#h2"
+        "O#n2"
+        "O#n2"
+        "C#h3"
+        "O#c-#h#n3"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 11 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 9 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 19 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [7 12 :single]
+        [12 17 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [14 22 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [18 19 :single]
+        [15 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [3 23 :single]
+        [23 24 :single]]}
+    :success true
+    :tie-breaks [0 5 8 10 11 13 16 18 19 21 24]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      5 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      8 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      10 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      11 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      13 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      16 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      18 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      19 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      21 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      24 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [2 3 4 5 6 7 8 9 10 11] :attrs "[1,1,1,1,1,1,1,1,1,1]"}
+        {:atoms [12 13 14 15 16 17] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "C#h3"
+        "O#n2"
+        "C"
+        "C"
+        "C"
+        "C#h"
+        "N#c+"
+        "C"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C"
+        "C"
+        "C#h"
+        "C"
+        "C#h2"
+        "C#h2"
+        "O#n2"
+        "C#h2"
+        "O#n2"
+        "O#n2"
+        "C#h3"
+        "O#c-#h#n3"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 11 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 9 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 19 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [7 12 :single]
+        [12 17 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [14 22 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [18 19 :single]
+        [15 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [3 23 :single]
+        [23 24 :single]]}
+    :success true
+    :tie-breaks [0 5 8 10 11 13 16 18 19 21 24 25]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      5 ["C#u#v2#a" "C#h#v2#a"]
+      8 ["C#u#v2#a" "C#h#v2#a"]
+      10 ["C#u#v2#a" "C#h#v2#a"]
+      11 ["C#u#v2#a" "C#h#v2#a"]
+      13 ["C#u#v2#a" "C#h#v2#a"]
+      16 ["C#u#v2#a" "C#h#v2#a"]
+      18 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      19 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      21 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      24 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      25 ["O#c-#n3#u#v0#a!" "O#c-#h#n3#v0#a!"]}}}

@@ -1,0 +1,21 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :error "resolution contradictory: aromaticity inconsistency: aromatic valence at atom AtomId(1) cannot produce a valid aromatic system"
+    :success false
+    :tie-breaks []}
+  :atom-typing-strict {
+    :error "resolution contradictory: aromaticity inconsistency: aromatic valence at atom AtomId(1) cannot produce a valid aromatic system"
+    :success false
+    :tie-breaks []}
+  :counts-most-saturated {
+    :error "resolution contradictory: aromaticity inconsistency: aromatic valence at atom AtomId(1) cannot produce a valid aromatic system"
+    :success false
+    :tie-breaks []}
+  :counts-strict {
+    :error "resolution contradictory: aromaticity inconsistency: aromatic valence at atom AtomId(1) cannot produce a valid aromatic system"
+    :success false
+    :tie-breaks []}}

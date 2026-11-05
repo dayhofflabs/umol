@@ -1,0 +1,140 @@
+; BW, p. 166; corrected from the printed 2,6-di-tert-butylphenyl: Januszewski et al., Angew. Chem. Int. Ed. 52 (2013) 1817, Fig. 1 and Scheme 5; PubChem CID 102495030.
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"]
+  :bonds [
+    [0 1 :single]
+    [1 6 "1#a"]
+    [1 2 "1#a"]
+    [2 3 "1#a"]
+    [3 4 "1#a"]
+    [4 5 "1#a"]
+    [5 6 "1#a"]
+    [5 7 :single]
+    [7 8 :single]
+    [7 9 :single]
+    [7 10 :single]
+    [3 11 :single]
+    [11 12 :single]
+    [11 13 :single]
+    [11 14 :single]
+    [0 15 :single]
+    [15 20 "1#a"]
+    [15 16 "1#a"]
+    [16 17 "1#a"]
+    [17 18 "1#a"]
+    [18 19 "1#a"]
+    [19 20 "1#a"]
+    [19 21 :single]
+    [21 22 :single]
+    [21 23 :single]
+    [21 24 :single]
+    [17 25 :single]
+    [25 26 :single]
+    [25 27 :single]
+    [25 28 :single]
+    [0 29 :double]
+    [29 30 :double]
+    [30 31 :double]
+    [31 32 :double]
+    [32 33 :double]
+    [33 34 :double]
+    [34 35 :double]
+    [35 36 :double]
+    [36 37 :double]
+    [37 38 :single]
+    [38 43 "1#a"]
+    [38 39 "1#a"]
+    [39 40 "1#a"]
+    [40 41 "1#a"]
+    [41 42 "1#a"]
+    [42 43 "1#a"]
+    [42 44 :single]
+    [44 45 :single]
+    [44 46 :single]
+    [44 47 :single]
+    [40 48 :single]
+    [48 49 :single]
+    [48 50 :single]
+    [48 51 :single]
+    [37 52 :single]
+    [52 57 "1#a"]
+    [52 53 "1#a"]
+    [53 54 "1#a"]
+    [54 55 "1#a"]
+    [55 56 "1#a"]
+    [56 57 "1#a"]
+    [56 58 :single]
+    [58 59 :single]
+    [58 60 :single]
+    [58 61 :single]
+    [54 62 :single]
+    [62 63 :single]
+    [62 64 :single]
+    [62 65 :single]]}}

@@ -1,0 +1,39 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["Co#n4" "H" "C#c-" "O#c+#n" "C#c-" "O#c+#n" "C#c-" "O#c+#n"]
+      :bonds [[2 3 :triple] [4 5 :triple] [6 7 :triple] [0 1 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [6]}]}
+    :success true
+    :tie-breaks [0]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {0 ["Co#n3#u2#v#d0#t3#a!#m!" "Co#n4#v#d0#t3#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms ["Co#n4" "H" "C#c-" "O#c+#n" "C#c-" "O#c+#n" "C#c-" "O#c+#n"]
+      :bonds [[2 3 :triple] [4 5 :triple] [6 7 :triple] [0 1 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [6]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["Co#n4" "H" "C#c-" "O#c+#n" "C#c-" "O#c+#n" "C#c-" "O#c+#n"]
+      :bonds [[2 3 :triple] [4 5 :triple] [6 7 :triple] [0 1 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [6]}]}
+    :success true
+    :tie-breaks []}}

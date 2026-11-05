@@ -1,0 +1,106 @@
+; BW, p. 934
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "C"
+    "N#c+"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "O"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "O"
+    "O"
+    "N#c+"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "O"
+    "O"
+    "C"
+    "C"
+    "C"
+    "O"
+    "C"
+    "Cl#c-"
+    "Cl#c-"]
+  :bonds [
+    [0 1 :single]
+    [1 10 :single]
+    [1 2 :single]
+    [2 3 :single]
+    [3 4 :single]
+    [4 9 "1#a"]
+    [4 5 "1#a"]
+    [5 6 "1#a"]
+    [6 7 "1#a"]
+    [7 30 :single]
+    [7 8 "1#a"]
+    [8 9 "1#a"]
+    [9 10 :single]
+    [10 11 :single]
+    [11 12 :single]
+    [12 17 "1#a"]
+    [12 13 "1#a"]
+    [13 14 "1#a"]
+    [14 15 "1#a"]
+    [15 16 "1#a"]
+    [16 17 "1#a"]
+    [15 18 :single]
+    [18 19 :single]
+    [19 37 "1#a"]
+    [19 20 "1#a"]
+    [20 34 "1#a"]
+    [20 21 :single]
+    [21 22 :single]
+    [22 23 :single]
+    [23 28 "1#a"]
+    [23 24 "1#a"]
+    [24 25 "1#a"]
+    [25 26 "1#a"]
+    [26 27 "1#a"]
+    [27 28 "1#a"]
+    [26 29 :single]
+    [25 30 :single]
+    [21 31 :single]
+    [31 32 :single]
+    [32 33 :single]
+    [33 34 :single]
+    [34 35 "1#a"]
+    [35 36 "1#a"]
+    [36 37 "1#a"]
+    [37 38 :single]
+    [36 39 :single]
+    [39 40 :single]
+    [31 41 :single]
+    [31 42 :single]
+    [6 43 :single]
+    [43 44 :single]]
+  :stereo-atoms [
+    {:attrs :cw :ligands [9 [:h 10] 1 11] :site 10}
+    {:attrs :cw :ligands [20 [:h 21] 22 31] :site 21}]}}

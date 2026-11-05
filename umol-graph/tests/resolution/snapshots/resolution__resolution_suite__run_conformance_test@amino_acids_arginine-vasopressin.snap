@@ -1,0 +1,615 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [9 10 11 12 14 15] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [21 22 23 24 25 26] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "N#h2#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#n"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "N#h#n"
+        "C"
+        "N#h#n"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h2#n"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 49 :single]
+        [1 4 :single]
+        [4 5 :double]
+        [4 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 15 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [14 15 :single]
+        [7 16 :single]
+        [16 17 :double]
+        [16 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 26 :single]
+        [21 22 :single]
+        [22 23 :single]
+        [23 24 :single]
+        [24 25 :single]
+        [25 26 :single]
+        [19 27 :single]
+        [27 28 :double]
+        [27 29 :single]
+        [29 30 :single]
+        [30 31 :single]
+        [31 32 :single]
+        [32 33 :single]
+        [33 34 :single]
+        [33 35 :double]
+        [30 36 :single]
+        [36 37 :double]
+        [36 38 :single]
+        [38 39 :single]
+        [39 40 :single]
+        [40 41 :single]
+        [41 42 :single]
+        [41 43 :double]
+        [39 44 :single]
+        [44 45 :double]
+        [44 46 :single]
+        [46 47 :single]
+        [47 48 :single]
+        [48 49 :single]
+        [47 50 :single]
+        [50 51 :double]
+        [50 52 :single]
+        [52 56 :single]
+        [52 53 :single]
+        [53 54 :single]
+        [54 55 :single]
+        [55 56 :single]
+        [56 57 :single]
+        [57 58 :double]
+        [57 59 :single]
+        [59 60 :single]
+        [60 61 :single]
+        [61 62 :single]
+        [62 63 :single]
+        [63 64 :single]
+        [64 65 :single]
+        [65 66 :double]
+        [65 67 :single]
+        [60 68 :single]
+        [68 69 :double]
+        [68 70 :single]
+        [70 71 :single]
+        [71 72 :single]
+        [72 73 :double]
+        [72 74 :single]]
+      :stereo-atoms [
+        {:attrs :cw :ligands [0 [:h 1] 2 4] :site 1}
+        {:attrs :cw :ligands [6 [:h 7] 8 16] :site 7}
+        {:attrs :cw :ligands [18 [:h 19] 20 27] :site 19}
+        {:attrs :cw :ligands [29 [:h 30] 31 36] :site 30}
+        {:attrs :cw :ligands [38 [:h 39] 40 44] :site 39}
+        {:attrs :cw :ligands [46 [:h 47] 48 50] :site 47}
+        {:attrs :ccw :ligands [55 [:h 56] 52 57] :site 56}
+        {:attrs :cw :ligands [59 [:h 60] 61 68] :site 60}]}
+    :success true
+    :tie-breaks [
+      0
+      1
+      2
+      6
+      7
+      8
+      10
+      11
+      13
+      14
+      15
+      18
+      19
+      20
+      22
+      23
+      24
+      25
+      26
+      29
+      30
+      31
+      32
+      34
+      38
+      39
+      40
+      42
+      46
+      47
+      48
+      53
+      54
+      55
+      56
+      59
+      60
+      61
+      62
+      63
+      64
+      66
+      67
+      70
+      71
+      74]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      1 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      2 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      6 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      7 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      8 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      10 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      11 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      13 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      14 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      15 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      18 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      19 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      20 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      22 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      23 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      24 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      25 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      26 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      29 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      30 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      31 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      32 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      34 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      38 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      39 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      40 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      42 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      46 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      47 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      48 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      53 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      54 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      55 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      56 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      59 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      60 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      61 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      62 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      63 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      64 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      66 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      67 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      70 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      71 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      74 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [9 10 11 12 14 15] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [21 22 23 24 25 26] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "N#h2#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#n"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "N#h#n"
+        "C"
+        "N#h#n"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h2#n"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 49 :single]
+        [1 4 :single]
+        [4 5 :double]
+        [4 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 15 :single]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [14 15 :single]
+        [7 16 :single]
+        [16 17 :double]
+        [16 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 26 :single]
+        [21 22 :single]
+        [22 23 :single]
+        [23 24 :single]
+        [24 25 :single]
+        [25 26 :single]
+        [19 27 :single]
+        [27 28 :double]
+        [27 29 :single]
+        [29 30 :single]
+        [30 31 :single]
+        [31 32 :single]
+        [32 33 :single]
+        [33 34 :single]
+        [33 35 :double]
+        [30 36 :single]
+        [36 37 :double]
+        [36 38 :single]
+        [38 39 :single]
+        [39 40 :single]
+        [40 41 :single]
+        [41 42 :single]
+        [41 43 :double]
+        [39 44 :single]
+        [44 45 :double]
+        [44 46 :single]
+        [46 47 :single]
+        [47 48 :single]
+        [48 49 :single]
+        [47 50 :single]
+        [50 51 :double]
+        [50 52 :single]
+        [52 56 :single]
+        [52 53 :single]
+        [53 54 :single]
+        [54 55 :single]
+        [55 56 :single]
+        [56 57 :single]
+        [57 58 :double]
+        [57 59 :single]
+        [59 60 :single]
+        [60 61 :single]
+        [61 62 :single]
+        [62 63 :single]
+        [63 64 :single]
+        [64 65 :single]
+        [65 66 :double]
+        [65 67 :single]
+        [60 68 :single]
+        [68 69 :double]
+        [68 70 :single]
+        [70 71 :single]
+        [71 72 :single]
+        [72 73 :double]
+        [72 74 :single]]
+      :stereo-atoms [
+        {:attrs :cw :ligands [0 [:h 1] 2 4] :site 1}
+        {:attrs :cw :ligands [6 [:h 7] 8 16] :site 7}
+        {:attrs :cw :ligands [18 [:h 19] 20 27] :site 19}
+        {:attrs :cw :ligands [29 [:h 30] 31 36] :site 30}
+        {:attrs :cw :ligands [38 [:h 39] 40 44] :site 39}
+        {:attrs :cw :ligands [46 [:h 47] 48 50] :site 47}
+        {:attrs :ccw :ligands [55 [:h 56] 52 57] :site 56}
+        {:attrs :cw :ligands [59 [:h 60] 61 68] :site 60}]}
+    :success true
+    :tie-breaks [
+      0
+      1
+      2
+      6
+      7
+      8
+      10
+      11
+      13
+      14
+      15
+      18
+      19
+      20
+      22
+      23
+      24
+      25
+      26
+      29
+      30
+      31
+      32
+      34
+      38
+      39
+      40
+      42
+      46
+      47
+      48
+      53
+      54
+      55
+      56
+      59
+      60
+      61
+      62
+      63
+      64
+      66
+      67
+      70
+      71
+      74]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      1 ["C#u#v3#a!" "C#h#v3#a!"]
+      2 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      6 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      7 ["C#u#v3#a!" "C#h#v3#a!"]
+      8 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      10 ["C#u#v2#a" "C#h#v2#a"]
+      11 ["C#u#v2#a" "C#h#v2#a"]
+      13 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      14 ["C#u#v2#a" "C#h#v2#a"]
+      15 ["C#u#v2#a" "C#h#v2#a"]
+      18 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      19 ["C#u#v3#a!" "C#h#v3#a!"]
+      20 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      22 ["C#u#v2#a" "C#h#v2#a"]
+      23 ["C#u#v2#a" "C#h#v2#a"]
+      24 ["C#u#v2#a" "C#h#v2#a"]
+      25 ["C#u#v2#a" "C#h#v2#a"]
+      26 ["C#u#v2#a" "C#h#v2#a"]
+      29 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      30 ["C#u#v3#a!" "C#h#v3#a!"]
+      31 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      32 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      34 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      38 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      39 ["C#u#v3#a!" "C#h#v3#a!"]
+      40 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      42 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      46 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      47 ["C#u#v3#a!" "C#h#v3#a!"]
+      48 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      53 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      54 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      55 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      56 ["C#u#v3#a!" "C#h#v3#a!"]
+      59 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      60 ["C#u#v3#a!" "C#h#v3#a!"]
+      61 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      62 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      63 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      64 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      66 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      67 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      70 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      71 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      74 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]}}}

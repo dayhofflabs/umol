@@ -1,0 +1,145 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [5 6 7 8 9 10] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [13 14 15 16 17 18] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "Cl#c-#n4"
+        "N#h2#n"
+        "S"
+        "O#n2"
+        "O#n2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "N#n"
+        "N#n"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C"
+        "N#h2#n"
+        "N#c+#h3"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :double]
+        [2 4 :double]
+        [2 5 :single]
+        [5 10 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [8 11 :single]
+        [11 12 :double]
+        [12 13 :single]
+        [13 18 :single]
+        [13 14 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [18 19 :single]
+        [16 20 :single]]
+      :stereo-bonds [{:attrs :e :ligands [8 [:lp 11] 13 [:lp 12]] :site 11}]}
+    :success true
+    :tie-breaks [1 6 7 9 10 14 15 17 19 20]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      6 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      7 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      9 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      10 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      14 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      15 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      17 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      19 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      20 ["N#c+#h3#v#d0#t0#a!#m!" "N#c+#h#n#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [5 6 7 8 9 10] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [13 14 15 16 17 18] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "Cl#c-#n4"
+        "N#h2#n"
+        "S"
+        "O#n2"
+        "O#n2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "N#n"
+        "N#n"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C"
+        "N#h2#n"
+        "N#c+#h3"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :double]
+        [2 4 :double]
+        [2 5 :single]
+        [5 10 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]
+        [8 11 :single]
+        [11 12 :double]
+        [12 13 :single]
+        [13 18 :single]
+        [13 14 :single]
+        [14 15 :single]
+        [15 16 :single]
+        [16 17 :single]
+        [17 18 :single]
+        [18 19 :single]
+        [16 20 :single]]
+      :stereo-bonds [{:attrs :e :ligands [8 [:lp 11] 13 [:lp 12]] :site 11}]}
+    :success true
+    :tie-breaks [1 6 7 9 10 14 15 17 19 20]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      6 ["C#u#v2#a" "C#h#v2#a"]
+      7 ["C#u#v2#a" "C#h#v2#a"]
+      9 ["C#u#v2#a" "C#h#v2#a"]
+      10 ["C#u#v2#a" "C#h#v2#a"]
+      14 ["C#u#v2#a" "C#h#v2#a"]
+      15 ["C#u#v2#a" "C#h#v2#a"]
+      17 ["C#u#v2#a" "C#h#v2#a"]
+      19 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      20 ["N#c+#n#u#v#a!" "N#c+#h#n#v#a!" "N#c+#h2#u#v#a!" "N#c+#h3#v#a!"]}}}

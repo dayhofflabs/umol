@@ -1,0 +1,72 @@
+; BW, p. 548
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "N"
+    "C#a+"
+    "N#a+"
+    "C#a+"
+    "N#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "N"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "C"
+    "O"
+    "O"
+    "N#a+"
+    "C#a+"
+    "C#a+"
+    "O"
+    "N#h#a+"]
+  :bonds [
+    [0 1 :single]
+    [1 31 "1#a"]
+    [1 2 "1#a"]
+    [2 3 "1#a"]
+    [3 28 "1#a"]
+    [3 4 "1#a"]
+    [4 5 "1#a"]
+    [5 6 "1#a"]
+    [6 7 :single]
+    [7 8 :single]
+    [8 9 :single]
+    [9 14 "1#a"]
+    [9 10 "1#a"]
+    [10 11 "1#a"]
+    [11 12 "1#a"]
+    [12 13 "1#a"]
+    [13 14 "1#a"]
+    [12 15 :single]
+    [15 16 :double]
+    [15 17 :single]
+    [17 18 :single]
+    [18 19 :single]
+    [19 20 :single]
+    [20 21 :single]
+    [21 22 :single]
+    [21 23 :double]
+    [18 24 :single]
+    [24 25 :single]
+    [24 26 :double]
+    [6 27 "1#a"]
+    [27 28 "1#a"]
+    [28 29 "1#a"]
+    [29 30 :double]
+    [29 31 "1#a"]]
+  :stereo-atoms [{:attrs :cw :ligands [17 [:h 18] 19 24] :site 18}]}}

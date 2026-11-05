@@ -7,6 +7,7 @@
 # Key | Reference
 # --- | ---
 # HW  | Holleman/Wiberg, Anorganische Chemie, 103. Auflage.; I/II denote the volume (Band 1/2).
+# BW  | Schirmeister et al., Beyer/Walter Organische Chemie, 25. Auflage.
 # PW  | Present work — calculations and adopted assignments.
 # A01Pd | Andrews et al., J. Phys. Chem. A 105 (2001), 3052–3063; doi:10.1021/jp003721t
 # A01Pt | Andrews, Wang and Manceron, J. Chem. Phys. 114 (2001), 1559–1566; doi:10.1063/1.1333020
@@ -440,6 +441,7 @@
     "C #v2 #h2",        # CX2H2; HW I, pp. 1024, 1028
     "C #v2 #a #h",      # C6H6; HW I, pp. 1025-1026
     "C #u #v2 #h",      # CX2H; HW I, pp. 1026, 1076
+    "C #u #v2 #a",      # phenyl radical; BW, p. 229
     "C #u2 #v2",        # CX2, CH2 (triplet); HW I, pp. 1076-1077
     "C #n #v2",         # CX2, CH2 (singlet); HW I, pp. 1044-1045, 1077
     "C #v2 #d",         # carbene/NHC donor; HW I, pp. 1044-1045; II, pp. 2165-2167
@@ -447,7 +449,9 @@
     "C #v2 #m2",        # ortho-C2B10H12, retained C-C bond; M18, Table 1; assignment: PW
     "C #c+ #v2 #h",     # CX2H+; HW I, p. 1028
     "C #c+ #v2 #a0 #h", # [C7H7]+; HW I, pp. 1025, 1028; charge placement: PW
+    "C #c+ #v2 #a",     # phenyl cation; BW, p. 630
     "C #c- #n #v2 #h",  # CX2H-; HW I, p. 1027
+    "C #c- #n #v2 #a",  # aryl carbanion, thiamine ylide; BW, pp. 811, 881
     "C #c- #v2 #a2 #h", # [C5H5]-; HW I, pp. 1025-1027; charge placement: PW
     "C #c- #v2 #h #d",  # alkyl donor, mixed H; HW I, pp. 1060-1062; assignment: PW
     "C #c-2 #n2 #v2",   # allenide C3(4-); HW I, p. 1022

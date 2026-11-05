@@ -1,0 +1,378 @@
+; BW, p. 968
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "N"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "N"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "N#a+"
+    "C#a+"
+    "N#a+"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "O"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "N"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "N"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "N"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "S"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "C"
+    "N"
+    "O"
+    "C"
+    "O"
+    "N"
+    "C"
+    "C"
+    "O"
+    "C"
+    "O"
+    "O"]
+  :bonds [
+    [0 1 :single]
+    [1 2 :single]
+    [2 3 :double]
+    [2 4 :single]
+    [4 5 :single]
+    [5 6 :single]
+    [6 7 :single]
+    [6 8 :single]
+    [8 9 :single]
+    [5 10 :single]
+    [10 11 :double]
+    [10 12 :single]
+    [12 13 :single]
+    [13 14 :single]
+    [14 15 :double]
+    [14 16 :single]
+    [16 17 :single]
+    [17 18 :single]
+    [18 19 :single]
+    [19 20 :single]
+    [20 21 :single]
+    [21 22 :single]
+    [17 23 :single]
+    [23 24 :double]
+    [23 25 :single]
+    [25 26 :single]
+    [26 27 :single]
+    [27 28 :single]
+    [28 33 "1#a"]
+    [28 29 "1#a"]
+    [29 30 "1#a"]
+    [30 31 "1#a"]
+    [31 32 "1#a"]
+    [32 33 "1#a"]
+    [26 34 :single]
+    [34 35 :double]
+    [34 36 :single]
+    [36 37 :single]
+    [37 38 :single]
+    [38 39 :single]
+    [39 40 :single]
+    [39 41 :single]
+    [37 42 :single]
+    [42 43 :double]
+    [42 44 :single]
+    [44 45 :single]
+    [45 46 :single]
+    [46 47 :single]
+    [47 51 "1#a"]
+    [47 48 "1#a"]
+    [48 49 "1#a"]
+    [49 50 "1#a"]
+    [50 51 "1#a"]
+    [45 52 :single]
+    [52 53 :double]
+    [52 54 :single]
+    [54 55 :single]
+    [55 56 :single]
+    [56 57 :single]
+    [55 58 :single]
+    [58 59 :double]
+    [58 60 :single]
+    [60 61 :single]
+    [61 62 :single]
+    [61 63 :single]
+    [63 64 :double]
+    [63 65 :single]
+    [65 66 :single]
+    [66 67 :single]
+    [67 68 :single]
+    [68 69 :single]
+    [69 70 :single]
+    [70 71 :single]
+    [66 72 :single]
+    [72 73 :double]
+    [72 74 :single]
+    [74 75 :single]
+    [75 76 :single]
+    [76 77 :single]
+    [77 78 :single]
+    [78 79 :single]
+    [79 80 :single]
+    [75 81 :single]
+    [81 82 :double]
+    [81 83 :single]
+    [83 84 :single]
+    [84 85 :single]
+    [85 86 :single]
+    [86 91 "1#a"]
+    [86 87 "1#a"]
+    [87 88 "1#a"]
+    [88 89 "1#a"]
+    [89 90 "1#a"]
+    [90 91 "1#a"]
+    [84 92 :single]
+    [92 93 :double]
+    [92 94 :single]
+    [94 95 :single]
+    [95 96 :single]
+    [96 97 :double]
+    [96 98 :single]
+    [98 99 :single]
+    [99 100 :single]
+    [100 101 :single]
+    [101 102 :single]
+    [102 103 :single]
+    [103 104 :single]
+    [99 105 :single]
+    [105 106 :double]
+    [105 107 :single]
+    [107 108 :single]
+    [108 109 :single]
+    [108 110 :single]
+    [110 111 :double]
+    [110 112 :single]
+    [112 113 :single]
+    [113 114 :single]
+    [114 115 :single]
+    [115 120 "1#a"]
+    [115 116 "1#a"]
+    [116 117 "1#a"]
+    [117 118 "1#a"]
+    [118 119 "1#a"]
+    [119 120 "1#a"]
+    [113 121 :single]
+    [121 122 :double]
+    [121 123 :single]
+    [123 124 :single]
+    [124 125 :single]
+    [125 126 :single]
+    [125 127 :single]
+    [124 128 :single]
+    [128 129 :double]
+    [128 130 :single]
+    [130 131 :single]
+    [131 132 :single]
+    [132 133 :double]
+    [132 134 :single]
+    [134 135 :single]
+    [135 136 :single]
+    [136 137 :single]
+    [137 138 :single]
+    [138 139 :double]
+    [138 140 :single]
+    [135 141 :single]
+    [141 142 :double]
+    [141 143 :single]
+    [143 144 :single]
+    [144 145 :single]
+    [145 146 :single]
+    [145 147 :single]
+    [147 148 :single]
+    [144 149 :single]
+    [149 150 :double]
+    [149 151 :single]
+    [151 152 :single]
+    [152 153 :single]
+    [153 154 :single]
+    [154 155 :single]
+    [155 156 :single]
+    [152 157 :single]
+    [157 158 :double]
+    [157 159 :single]
+    [159 160 :single]
+    [160 161 :single]
+    [161 162 :single]
+    [162 163 :single]
+    [162 164 :double]
+    [160 165 :single]
+    [165 166 :double]
+    [165 167 :single]
+    [167 168 :single]
+    [168 169 :single]
+    [169 170 :single]
+    [168 171 :single]
+    [171 172 :double]
+    [171 173 :single]]
+  :stereo-atoms [
+    {:attrs :cw :ligands [4 [:h 5] 6 10] :site 5}
+    {:attrs :cw :ligands [5 [:h 6] 7 8] :site 6}
+    {:attrs :cw :ligands [16 [:h 17] 18 23] :site 17}
+    {:attrs :cw :ligands [25 [:h 26] 27 34] :site 26}
+    {:attrs :cw :ligands [36 [:h 37] 38 42] :site 37}
+    {:attrs :cw :ligands [44 [:h 45] 46 52] :site 45}
+    {:attrs :cw :ligands [54 [:h 55] 56 58] :site 55}
+    {:attrs :cw :ligands [60 [:h 61] 62 63] :site 61}
+    {:attrs :cw :ligands [65 [:h 66] 67 72] :site 66}
+    {:attrs :cw :ligands [74 [:h 75] 76 81] :site 75}
+    {:attrs :cw :ligands [83 [:h 84] 85 92] :site 84}
+    {:attrs :cw :ligands [98 [:h 99] 100 105] :site 99}
+    {:attrs :cw :ligands [107 [:h 108] 109 110] :site 108}
+    {:attrs :cw :ligands [112 [:h 113] 114 121] :site 113}
+    {:attrs :cw :ligands [123 [:h 124] 125 128] :site 124}
+    {:attrs :cw :ligands [134 [:h 135] 136 141] :site 135}
+    {:attrs :cw :ligands [143 [:h 144] 145 149] :site 144}
+    {:attrs :cw :ligands [144 [:h 145] 146 147] :site 145}
+    {:attrs :cw :ligands [151 [:h 152] 153 157] :site 152}
+    {:attrs :cw :ligands [159 [:h 160] 161 165] :site 160}
+    {:attrs :cw :ligands [167 [:h 168] 169 171] :site 168}]}}

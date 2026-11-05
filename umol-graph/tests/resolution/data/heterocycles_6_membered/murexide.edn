@@ -1,0 +1,45 @@
+; BW, p. 809
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "N#c+"
+    "O#c-"
+    "C"
+    "C"
+    "N"
+    "C"
+    "C"
+    "O"
+    "N"
+    "C"
+    "O"
+    "N"
+    "C"
+    "O"
+    "C"
+    "O"
+    "N"
+    "C"
+    "O"
+    "N"]
+  :bonds [
+    [1 2 :single]
+    [2 19 :single]
+    [2 3 :double]
+    [3 4 :single]
+    [4 5 :double]
+    [5 12 :single]
+    [5 6 :single]
+    [6 7 :double]
+    [6 8 :single]
+    [8 9 :single]
+    [9 10 :double]
+    [9 11 :single]
+    [11 12 :single]
+    [12 13 :double]
+    [3 14 :single]
+    [14 15 :double]
+    [14 16 :single]
+    [16 17 :single]
+    [17 18 :double]
+    [17 19 :single]]}}

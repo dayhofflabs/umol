@@ -1,0 +1,174 @@
+; BW, p. 503
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "O"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "O"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "O"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "O"
+    "C"
+    "C"
+    "O"
+    "C"
+    "O"
+    "C"
+    "C"
+    "O"
+    "O"
+    "C"
+    "O"
+    "C"
+    "O"
+    "C"
+    "O"
+    "C"
+    "O"
+    "C"
+    "O"
+    "O"
+    "O"
+    "O"]
+  :bonds [
+    [0 1 :single]
+    [1 6 :single]
+    [1 2 :single]
+    [2 48 :single]
+    [2 3 :single]
+    [3 4 :single]
+    [4 5 :single]
+    [5 6 :single]
+    [5 7 :single]
+    [7 8 :single]
+    [8 13 :single]
+    [8 9 :single]
+    [9 10 :single]
+    [10 11 :single]
+    [11 12 :single]
+    [12 13 :single]
+    [13 14 :single]
+    [12 15 :single]
+    [11 16 :single]
+    [16 17 :single]
+    [17 22 :single]
+    [17 18 :single]
+    [18 19 :single]
+    [19 20 :single]
+    [20 21 :single]
+    [21 22 :single]
+    [22 23 :single]
+    [21 24 :single]
+    [20 25 :single]
+    [25 26 :single]
+    [26 31 :single]
+    [26 27 :single]
+    [27 28 :single]
+    [28 29 :single]
+    [29 30 :single]
+    [30 31 :single]
+    [31 32 :single]
+    [30 33 :single]
+    [29 34 :single]
+    [34 35 :single]
+    [35 40 :single]
+    [35 36 :single]
+    [36 37 :single]
+    [37 38 :single]
+    [38 39 :single]
+    [39 40 :single]
+    [40 41 :single]
+    [39 42 :single]
+    [38 43 :single]
+    [43 44 :single]
+    [44 50 :single]
+    [44 45 :single]
+    [45 46 :single]
+    [46 47 :single]
+    [47 48 :single]
+    [47 49 :single]
+    [49 50 :single]
+    [50 51 :single]
+    [49 52 :single]
+    [45 53 :single]
+    [53 54 :single]
+    [36 55 :single]
+    [55 56 :single]
+    [27 57 :single]
+    [57 58 :single]
+    [18 59 :single]
+    [59 60 :single]
+    [9 61 :single]
+    [61 62 :single]
+    [4 63 :single]
+    [3 64 :single]
+    [0 65 :single]]
+  :stereo-atoms [
+    {:attrs :cw :ligands [0 [:h 1] 6 2] :site 1}
+    {:attrs :cw :ligands [1 [:h 2] 48 3] :site 2}
+    {:attrs :cw :ligands [2 [:h 3] 4 64] :site 3}
+    {:attrs :ccw :ligands [3 [:h 4] 5 63] :site 4}
+    {:attrs :ccw :ligands [4 [:h 5] 6 7] :site 5}
+    {:attrs :cw :ligands [7 [:h 8] 13 9] :site 8}
+    {:attrs :ccw :ligands [8 [:h 9] 10 61] :site 9}
+    {:attrs :cw :ligands [10 [:h 11] 12 16] :site 11}
+    {:attrs :cw :ligands [11 [:h 12] 13 15] :site 12}
+    {:attrs :ccw :ligands [12 [:h 13] 8 14] :site 13}
+    {:attrs :cw :ligands [16 [:h 17] 22 18] :site 17}
+    {:attrs :ccw :ligands [17 [:h 18] 19 59] :site 18}
+    {:attrs :cw :ligands [19 [:h 20] 21 25] :site 20}
+    {:attrs :cw :ligands [20 [:h 21] 22 24] :site 21}
+    {:attrs :ccw :ligands [21 [:h 22] 17 23] :site 22}
+    {:attrs :cw :ligands [25 [:h 26] 31 27] :site 26}
+    {:attrs :ccw :ligands [26 [:h 27] 28 57] :site 27}
+    {:attrs :cw :ligands [28 [:h 29] 30 34] :site 29}
+    {:attrs :cw :ligands [29 [:h 30] 31 33] :site 30}
+    {:attrs :ccw :ligands [30 [:h 31] 26 32] :site 31}
+    {:attrs :cw :ligands [34 [:h 35] 40 36] :site 35}
+    {:attrs :ccw :ligands [35 [:h 36] 37 55] :site 36}
+    {:attrs :cw :ligands [37 [:h 38] 39 43] :site 38}
+    {:attrs :cw :ligands [38 [:h 39] 40 42] :site 39}
+    {:attrs :ccw :ligands [39 [:h 40] 35 41] :site 40}
+    {:attrs :cw :ligands [43 [:h 44] 50 45] :site 44}
+    {:attrs :ccw :ligands [44 [:h 45] 46 53] :site 45}
+    {:attrs :ccw :ligands [46 [:h 47] 48 49] :site 47}
+    {:attrs :cw :ligands [47 [:h 49] 50 52] :site 49}
+    {:attrs :ccw :ligands [49 [:h 50] 44 51] :site 50}]}}

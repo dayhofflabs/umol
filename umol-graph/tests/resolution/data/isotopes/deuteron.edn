@@ -1,0 +1,2 @@
+{:config-overrides {:atom {:implicit-hydrogens :zero :charge :zero}}
+ :input {:atoms ["H#i2#c+"] :bonds []}}

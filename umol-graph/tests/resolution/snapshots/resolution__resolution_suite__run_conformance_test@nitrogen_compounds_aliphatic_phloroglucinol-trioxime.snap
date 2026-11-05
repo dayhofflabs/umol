@@ -1,0 +1,97 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "O#h#n2"
+        "N#n"
+        "C"
+        "C#h2"
+        "C"
+        "N#n"
+        "O#h#n2"
+        "C#h2"
+        "C"
+        "N#n"
+        "O#h#n2"
+        "C#h2"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :double]
+        [2 11 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [4 7 :single]
+        [7 8 :single]
+        [8 9 :double]
+        [9 10 :single]
+        [8 11 :single]]}
+    :success true
+    :tie-breaks [0 3 6 7 10 11]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      3 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      6 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      7 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      10 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      11 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "O#h#n2"
+        "N#n"
+        "C"
+        "C#h2"
+        "C"
+        "N#n"
+        "O#h#n2"
+        "C#h2"
+        "C"
+        "N#n"
+        "O#h#n2"
+        "C#h2"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :double]
+        [2 11 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [4 7 :single]
+        [7 8 :single]
+        [8 9 :double]
+        [9 10 :single]
+        [8 11 :single]]}
+    :success true
+    :tie-breaks [0 3 6 7 10 11]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      3 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      6 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      7 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      10 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      11 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]}}}

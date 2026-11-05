@@ -1,0 +1,162 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Li#c+"
+        "C#h3"
+        "C"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "Al#c-#h"
+        "O#n2"
+        "C"
+        "C#h3"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "C"
+        "C#h3"
+        "C#h3"
+        "C#h3"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [2 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [8 10 :single]
+        [8 11 :single]
+        [6 12 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [13 15 :single]
+        [13 16 :single]]}
+    :success true
+    :tie-breaks [1 3 4 9 10 11 14 15 16]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      3 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      4 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      9 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      10 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      11 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      14 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      15 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      16 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Li#c+"
+        "C#h3"
+        "C"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "Al#c-#h"
+        "O#n2"
+        "C"
+        "C#h3"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "C"
+        "C#h3"
+        "C#h3"
+        "C#h3"]
+      :bonds [
+        [1 2 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [2 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [8 10 :single]
+        [8 11 :single]
+        [6 12 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [13 15 :single]
+        [13 16 :single]]}
+    :success true
+    :tie-breaks [1 3 4 6 9 10 11 14 15 16]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      3 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      4 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      6 ["Al#c-#u#v3#a!" "Al#c-#h#v3#a!"]
+      9 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      10 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      11 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      14 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      15 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      16 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]}}}

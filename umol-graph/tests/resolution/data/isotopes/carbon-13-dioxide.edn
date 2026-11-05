@@ -1,0 +1,2 @@
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["O" "C#i13" "O"] :bonds [[0 1 :double] [1 2 :double]]}}

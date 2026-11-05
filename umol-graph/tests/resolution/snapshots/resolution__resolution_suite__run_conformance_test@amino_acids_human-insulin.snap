@@ -1,0 +1,3277 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [38 39 40 41 42] :attrs "[1,1,2,1,1]"}
+        {:atoms [150 151 152 153 155 156] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [196 197 198 199 201 202] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [235 236 237 238 239] :attrs "[1,1,2,1,1]"}
+        {:atoms [282 283 284 285 287 288] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [343 344 345 346 347 348] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [354 355 356 357 358 359] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [365 366 367 368 370 371] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "N#h2#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "N#h"
+        "C#h"
+        "N#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "S#n2"
+        "C#h2"
+        "C#h"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h2"
+        "C#h3"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h2"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h2"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "N#h"
+        "C#h"
+        "N#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "N#h#n"
+        "C"
+        "N#h#n"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#n"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "O#h#n2"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 8 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [1 9 :single]
+        [9 10 :double]
+        [9 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [13 15 :single]
+        [12 16 :single]
+        [16 17 :double]
+        [16 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [21 23 :double]
+        [19 24 :single]
+        [24 25 :double]
+        [24 26 :single]
+        [26 27 :single]
+        [27 28 :single]
+        [28 29 :single]
+        [29 30 :single]
+        [30 31 :single]
+        [30 32 :double]
+        [27 33 :single]
+        [33 34 :double]
+        [33 35 :single]
+        [35 36 :single]
+        [36 37 :single]
+        [37 38 :single]
+        [38 42 :single]
+        [38 39 :single]
+        [39 40 :single]
+        [40 41 :single]
+        [41 42 :single]
+        [36 43 :single]
+        [43 44 :double]
+        [43 45 :single]
+        [45 46 :single]
+        [46 47 :single]
+        [47 48 :single]
+        [48 49 :single]
+        [48 50 :single]
+        [46 51 :single]
+        [51 52 :double]
+        [51 53 :single]
+        [53 54 :single]
+        [54 55 :single]
+        [55 56 :single]
+        [56 57 :single]
+        [57 58 :single]
+        [58 59 :single]
+        [59 60 :single]
+        [60 61 :single]
+        [61 62 :double]
+        [61 63 :single]
+        [63 64 :single]
+        [64 65 :single]
+        [65 130 :single]
+        [63 66 :single]
+        [66 67 :single]
+        [67 68 :double]
+        [67 69 :single]
+        [69 70 :single]
+        [70 71 :single]
+        [71 72 :single]
+        [72 73 :single]
+        [72 74 :double]
+        [69 75 :single]
+        [75 76 :single]
+        [76 77 :double]
+        [76 78 :single]
+        [78 79 :single]
+        [79 80 :single]
+        [80 81 :single]
+        [81 82 :double]
+        [81 83 :single]
+        [78 84 :single]
+        [84 85 :single]
+        [85 86 :double]
+        [85 87 :single]
+        [87 88 :single]
+        [88 89 :single]
+        [88 90 :single]
+        [87 91 :single]
+        [91 92 :single]
+        [92 93 :double]
+        [92 94 :single]
+        [94 95 :single]
+        [95 96 :single]
+        [95 97 :single]
+        [97 98 :single]
+        [94 99 :single]
+        [99 100 :single]
+        [100 101 :double]
+        [100 102 :single]
+        [102 103 :single]
+        [59 104 :single]
+        [104 105 :double]
+        [104 106 :single]
+        [106 107 :single]
+        [107 108 :single]
+        [108 109 :single]
+        [108 110 :single]
+        [107 111 :single]
+        [111 112 :double]
+        [111 113 :single]
+        [113 114 :single]
+        [114 115 :single]
+        [115 116 :single]
+        [114 117 :single]
+        [117 118 :double]
+        [117 119 :single]
+        [119 120 :single]
+        [120 121 :single]
+        [121 122 :single]
+        [121 123 :single]
+        [123 124 :single]
+        [120 125 :single]
+        [125 126 :double]
+        [125 127 :single]
+        [127 128 :single]
+        [128 129 :single]
+        [129 130 :single]
+        [128 131 :single]
+        [131 132 :double]
+        [131 133 :single]
+        [133 134 :single]
+        [134 135 :single]
+        [135 136 :single]
+        [134 137 :single]
+        [137 138 :double]
+        [137 139 :single]
+        [139 140 :single]
+        [140 141 :single]
+        [141 142 :single]
+        [142 143 :single]
+        [142 144 :single]
+        [140 145 :single]
+        [145 146 :double]
+        [145 147 :single]
+        [147 148 :single]
+        [148 149 :single]
+        [149 150 :single]
+        [150 156 :single]
+        [150 151 :single]
+        [151 152 :single]
+        [152 153 :single]
+        [153 154 :single]
+        [153 155 :single]
+        [155 156 :single]
+        [148 157 :single]
+        [157 158 :double]
+        [157 159 :single]
+        [159 160 :single]
+        [160 161 :single]
+        [161 162 :single]
+        [162 163 :single]
+        [163 164 :single]
+        [163 165 :double]
+        [160 166 :single]
+        [166 167 :double]
+        [166 168 :single]
+        [168 169 :single]
+        [169 170 :single]
+        [170 171 :single]
+        [171 172 :single]
+        [171 173 :single]
+        [169 174 :single]
+        [174 175 :double]
+        [174 176 :single]
+        [176 177 :single]
+        [177 178 :single]
+        [178 179 :single]
+        [179 180 :single]
+        [180 181 :double]
+        [180 182 :single]
+        [177 183 :single]
+        [183 184 :double]
+        [183 185 :single]
+        [185 186 :single]
+        [186 187 :single]
+        [187 188 :single]
+        [188 189 :single]
+        [188 190 :double]
+        [186 191 :single]
+        [191 192 :double]
+        [191 193 :single]
+        [193 194 :single]
+        [194 195 :single]
+        [195 196 :single]
+        [196 202 :single]
+        [196 197 :single]
+        [197 198 :single]
+        [198 199 :single]
+        [199 200 :single]
+        [199 201 :single]
+        [201 202 :single]
+        [194 203 :single]
+        [203 204 :double]
+        [203 205 :single]
+        [205 206 :single]
+        [206 207 :single]
+        [207 208 :single]
+        [208 309 :single]
+        [206 209 :single]
+        [209 210 :double]
+        [209 211 :single]
+        [211 212 :single]
+        [212 213 :single]
+        [213 214 :single]
+        [214 215 :single]
+        [214 216 :double]
+        [212 217 :single]
+        [217 218 :double]
+        [217 219 :single]
+        [54 220 :single]
+        [220 221 :double]
+        [220 222 :single]
+        [222 223 :single]
+        [223 224 :single]
+        [224 225 :double]
+        [224 226 :single]
+        [226 227 :single]
+        [227 228 :single]
+        [228 229 :single]
+        [227 230 :single]
+        [230 231 :double]
+        [230 232 :single]
+        [232 233 :single]
+        [233 234 :single]
+        [234 235 :single]
+        [235 239 :single]
+        [235 236 :single]
+        [236 237 :single]
+        [237 238 :single]
+        [238 239 :single]
+        [233 240 :single]
+        [240 241 :double]
+        [240 242 :single]
+        [242 243 :single]
+        [243 244 :single]
+        [244 245 :single]
+        [245 246 :single]
+        [245 247 :single]
+        [243 248 :single]
+        [248 249 :double]
+        [248 250 :single]
+        [250 251 :single]
+        [251 252 :single]
+        [252 253 :single]
+        [252 254 :single]
+        [251 255 :single]
+        [255 256 :double]
+        [255 257 :single]
+        [257 258 :single]
+        [258 259 :single]
+        [259 260 :single]
+        [260 261 :single]
+        [261 262 :double]
+        [261 263 :single]
+        [258 264 :single]
+        [264 265 :double]
+        [264 266 :single]
+        [266 267 :single]
+        [267 268 :single]
+        [267 269 :single]
+        [269 270 :double]
+        [269 271 :single]
+        [271 272 :single]
+        [272 273 :single]
+        [273 274 :single]
+        [274 275 :single]
+        [274 276 :single]
+        [272 277 :single]
+        [277 278 :double]
+        [277 279 :single]
+        [279 280 :single]
+        [280 281 :single]
+        [281 282 :single]
+        [282 288 :single]
+        [282 283 :single]
+        [283 284 :single]
+        [284 285 :single]
+        [285 286 :single]
+        [285 287 :single]
+        [287 288 :single]
+        [280 289 :single]
+        [289 290 :double]
+        [289 291 :single]
+        [291 292 :single]
+        [292 293 :single]
+        [293 294 :single]
+        [294 295 :single]
+        [294 296 :single]
+        [292 297 :single]
+        [297 298 :double]
+        [297 299 :single]
+        [299 300 :single]
+        [300 301 :single]
+        [301 302 :single]
+        [301 303 :single]
+        [300 304 :single]
+        [304 305 :double]
+        [304 306 :single]
+        [306 307 :single]
+        [307 308 :single]
+        [308 309 :single]
+        [307 310 :single]
+        [310 311 :double]
+        [310 312 :single]
+        [312 313 :single]
+        [313 314 :single]
+        [314 315 :double]
+        [314 316 :single]
+        [316 317 :single]
+        [317 318 :single]
+        [318 319 :single]
+        [319 320 :single]
+        [320 321 :double]
+        [320 322 :single]
+        [317 323 :single]
+        [323 324 :double]
+        [323 325 :single]
+        [325 326 :single]
+        [326 327 :single]
+        [327 328 :single]
+        [328 329 :single]
+        [329 330 :single]
+        [330 331 :single]
+        [331 332 :double]
+        [331 333 :single]
+        [326 334 :single]
+        [334 335 :double]
+        [334 336 :single]
+        [336 337 :single]
+        [337 338 :single]
+        [338 339 :double]
+        [338 340 :single]
+        [340 341 :single]
+        [341 342 :single]
+        [342 343 :single]
+        [343 348 :single]
+        [343 344 :single]
+        [344 345 :single]
+        [345 346 :single]
+        [346 347 :single]
+        [347 348 :single]
+        [341 349 :single]
+        [349 350 :double]
+        [349 351 :single]
+        [351 352 :single]
+        [352 353 :single]
+        [353 354 :single]
+        [354 359 :single]
+        [354 355 :single]
+        [355 356 :single]
+        [356 357 :single]
+        [357 358 :single]
+        [358 359 :single]
+        [352 360 :single]
+        [360 361 :double]
+        [360 362 :single]
+        [362 363 :single]
+        [363 364 :single]
+        [364 365 :single]
+        [365 371 :single]
+        [365 366 :single]
+        [366 367 :single]
+        [367 368 :single]
+        [368 369 :single]
+        [368 370 :single]
+        [370 371 :single]
+        [363 372 :single]
+        [372 373 :double]
+        [372 374 :single]
+        [374 375 :single]
+        [375 376 :single]
+        [376 377 :single]
+        [376 378 :single]
+        [375 379 :single]
+        [379 380 :double]
+        [379 381 :single]
+        [381 385 :single]
+        [381 382 :single]
+        [382 383 :single]
+        [383 384 :single]
+        [384 385 :single]
+        [385 386 :single]
+        [386 387 :double]
+        [386 388 :single]
+        [388 389 :single]
+        [389 390 :single]
+        [390 391 :single]
+        [391 392 :single]
+        [392 393 :single]
+        [393 394 :single]
+        [389 395 :single]
+        [395 396 :double]
+        [395 397 :single]
+        [397 398 :single]
+        [398 399 :single]
+        [399 400 :single]
+        [399 401 :single]
+        [398 402 :single]
+        [402 403 :double]
+        [402 404 :single]]
+      :stereo-atoms [
+        {:attrs :cw :ligands [0 [:h 1] 2 9] :site 1}
+        {:attrs :cw :ligands [11 [:h 12] 13 16] :site 12}
+        {:attrs :cw :ligands [18 [:h 19] 20 24] :site 19}
+        {:attrs :cw :ligands [26 [:h 27] 28 33] :site 27}
+        {:attrs :cw :ligands [35 [:h 36] 37 43] :site 36}
+        {:attrs :cw :ligands [45 [:h 46] 47 51] :site 46}
+        {:attrs :cw :ligands [53 [:h 54] 55 220] :site 54}
+        {:attrs :ccw :ligands [58 [:h 59] 60 104] :site 59}
+        {:attrs :ccw :ligands [61 [:h 63] 64 66] :site 63}
+        {:attrs :ccw :ligands [67 [:h 69] 70 75] :site 69}
+        {:attrs :ccw :ligands [76 [:h 78] 79 84] :site 78}
+        {:attrs :ccw :ligands [85 [:h 87] 88 91] :site 87}
+        {:attrs :ccw :ligands [92 [:h 94] 95 99] :site 94}
+        {:attrs :cw :ligands [94 [:h 95] 96 97] :site 95}
+        {:attrs :cw :ligands [106 [:h 107] 108 111] :site 107}
+        {:attrs :cw :ligands [107 [:h 108] 109 110] :site 108}
+        {:attrs :cw :ligands [113 [:h 114] 115 117] :site 114}
+        {:attrs :cw :ligands [119 [:h 120] 121 125] :site 120}
+        {:attrs :cw :ligands [120 [:h 121] 122 123] :site 121}
+        {:attrs :cw :ligands [127 [:h 128] 129 131] :site 128}
+        {:attrs :cw :ligands [133 [:h 134] 135 137] :site 134}
+        {:attrs :cw :ligands [139 [:h 140] 141 145] :site 140}
+        {:attrs :cw :ligands [147 [:h 148] 149 157] :site 148}
+        {:attrs :cw :ligands [159 [:h 160] 161 166] :site 160}
+        {:attrs :cw :ligands [168 [:h 169] 170 174] :site 169}
+        {:attrs :cw :ligands [176 [:h 177] 178 183] :site 177}
+        {:attrs :cw :ligands [185 [:h 186] 187 191] :site 186}
+        {:attrs :cw :ligands [193 [:h 194] 195 203] :site 194}
+        {:attrs :cw :ligands [205 [:h 206] 207 209] :site 206}
+        {:attrs :cw :ligands [211 [:h 212] 213 217] :site 212}
+        {:attrs :cw :ligands [226 [:h 227] 228 230] :site 227}
+        {:attrs :cw :ligands [232 [:h 233] 234 240] :site 233}
+        {:attrs :cw :ligands [242 [:h 243] 244 248] :site 243}
+        {:attrs :cw :ligands [250 [:h 251] 252 255] :site 251}
+        {:attrs :cw :ligands [257 [:h 258] 259 264] :site 258}
+        {:attrs :cw :ligands [266 [:h 267] 268 269] :site 267}
+        {:attrs :cw :ligands [271 [:h 272] 273 277] :site 272}
+        {:attrs :cw :ligands [279 [:h 280] 281 289] :site 280}
+        {:attrs :cw :ligands [291 [:h 292] 293 297] :site 292}
+        {:attrs :cw :ligands [299 [:h 300] 301 304] :site 300}
+        {:attrs :cw :ligands [306 [:h 307] 308 310] :site 307}
+        {:attrs :cw :ligands [316 [:h 317] 318 323] :site 317}
+        {:attrs :cw :ligands [325 [:h 326] 327 334] :site 326}
+        {:attrs :cw :ligands [340 [:h 341] 342 349] :site 341}
+        {:attrs :cw :ligands [351 [:h 352] 353 360] :site 352}
+        {:attrs :cw :ligands [362 [:h 363] 364 372] :site 363}
+        {:attrs :cw :ligands [374 [:h 375] 376 379] :site 375}
+        {:attrs :cw :ligands [375 [:h 376] 377 378] :site 376}
+        {:attrs :ccw :ligands [384 [:h 385] 381 386] :site 385}
+        {:attrs :cw :ligands [388 [:h 389] 390 395] :site 389}
+        {:attrs :cw :ligands [397 [:h 398] 399 402] :site 398}
+        {:attrs :cw :ligands [398 [:h 399] 400 401] :site 399}]}
+    :success true
+    :tie-breaks [
+      0
+      1
+      2
+      4
+      5
+      6
+      7
+      8
+      11
+      12
+      13
+      14
+      15
+      18
+      19
+      20
+      22
+      26
+      27
+      28
+      29
+      31
+      35
+      36
+      37
+      39
+      40
+      41
+      42
+      45
+      46
+      47
+      48
+      49
+      50
+      53
+      54
+      55
+      58
+      59
+      60
+      63
+      64
+      66
+      69
+      70
+      71
+      73
+      75
+      78
+      79
+      80
+      83
+      84
+      87
+      88
+      89
+      90
+      91
+      94
+      95
+      96
+      97
+      98
+      99
+      102
+      103
+      106
+      107
+      108
+      109
+      110
+      113
+      114
+      115
+      116
+      119
+      120
+      121
+      122
+      123
+      124
+      127
+      128
+      129
+      133
+      134
+      135
+      136
+      139
+      140
+      141
+      142
+      143
+      144
+      147
+      148
+      149
+      151
+      152
+      154
+      155
+      156
+      159
+      160
+      161
+      162
+      164
+      168
+      169
+      170
+      171
+      172
+      173
+      176
+      177
+      178
+      179
+      182
+      185
+      186
+      187
+      189
+      193
+      194
+      195
+      197
+      198
+      200
+      201
+      202
+      205
+      206
+      207
+      211
+      212
+      213
+      215
+      219
+      222
+      223
+      226
+      227
+      228
+      229
+      232
+      233
+      234
+      236
+      237
+      238
+      239
+      242
+      243
+      244
+      245
+      246
+      247
+      250
+      251
+      252
+      253
+      254
+      257
+      258
+      259
+      260
+      263
+      266
+      267
+      268
+      271
+      272
+      273
+      274
+      275
+      276
+      279
+      280
+      281
+      283
+      284
+      286
+      287
+      288
+      291
+      292
+      293
+      294
+      295
+      296
+      299
+      300
+      301
+      302
+      303
+      306
+      307
+      308
+      312
+      313
+      316
+      317
+      318
+      319
+      322
+      325
+      326
+      327
+      328
+      329
+      330
+      332
+      333
+      336
+      337
+      340
+      341
+      342
+      344
+      345
+      346
+      347
+      348
+      351
+      352
+      353
+      355
+      356
+      357
+      358
+      359
+      362
+      363
+      364
+      366
+      367
+      369
+      370
+      371
+      374
+      375
+      376
+      377
+      378
+      382
+      383
+      384
+      385
+      388
+      389
+      390
+      391
+      392
+      393
+      394
+      397
+      398
+      399
+      400
+      401
+      404]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      1 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      2 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      4 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      5 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      6 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      7 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      8 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      11 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      12 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      13 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      14 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      15 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      18 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      19 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      20 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      22 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      26 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      27 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      28 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      29 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      31 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      35 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      36 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      37 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      39 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      40 ["N#n#v2#d0#t0#a#m!" "N#h#v2#d0#t0#a2#m!" "N#u#v2#d0#t0#a2#m!"]
+      41 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      42 ["N#n#v2#d0#t0#a#m!" "N#h#v2#d0#t0#a2#m!" "N#u#v2#d0#t0#a2#m!"]
+      45 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      46 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      47 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      48 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      49 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      50 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      53 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      54 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      55 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      58 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      59 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      60 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      63 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      64 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      66 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      69 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      70 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      71 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      73 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      75 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      78 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      79 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      80 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      83 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      84 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      87 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      88 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      89 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      90 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      91 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      94 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      95 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      96 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      97 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      98 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      99 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      102 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      103 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      106 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      107 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      108 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      109 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      110 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      113 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      114 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      115 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      116 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      119 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      120 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      121 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      122 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      123 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      124 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      127 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      128 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      129 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      133 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      134 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      135 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      136 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      139 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      140 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      141 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      142 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      143 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      144 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      147 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      148 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      149 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      151 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      152 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      154 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      155 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      156 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      159 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      160 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      161 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      162 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      164 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      168 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      169 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      170 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      171 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      172 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      173 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      176 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      177 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      178 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      179 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      182 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      185 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      186 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      187 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      189 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      193 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      194 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      195 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      197 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      198 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      200 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      201 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      202 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      205 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      206 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      207 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      211 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      212 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      213 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      215 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      219 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      222 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      223 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      226 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      227 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      228 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      229 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      232 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      233 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      234 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      236 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      237 ["N#n#v2#d0#t0#a#m!" "N#h#v2#d0#t0#a2#m!" "N#u#v2#d0#t0#a2#m!"]
+      238 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      239 ["N#n#v2#d0#t0#a#m!" "N#h#v2#d0#t0#a2#m!" "N#u#v2#d0#t0#a2#m!"]
+      242 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      243 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      244 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      245 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      246 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      247 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      250 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      251 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      252 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      253 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      254 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      257 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      258 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      259 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      260 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      263 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      266 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      267 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      268 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      271 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      272 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      273 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      274 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      275 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      276 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      279 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      280 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      281 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      283 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      284 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      286 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      287 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      288 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      291 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      292 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      293 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      294 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      295 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      296 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      299 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      300 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      301 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      302 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      303 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      306 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      307 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      308 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      312 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      313 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      316 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      317 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      318 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      319 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      322 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      325 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      326 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      327 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      328 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      329 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      330 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      332 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      333 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      336 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      337 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      340 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      341 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      342 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      344 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      345 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      346 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      347 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      348 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      351 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      352 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      353 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      355 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      356 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      357 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      358 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      359 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      362 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      363 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      364 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      366 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      367 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      369 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      370 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      371 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      374 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      375 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      376 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      377 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      378 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      382 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      383 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      384 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      385 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      388 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      389 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      390 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      391 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      392 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      393 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      394 [
+        "N#h2#n#v#d0#t0#a!#m!"
+        "N#h#n#u#v#d0#t0#a!#m!"
+        "N#n2#v#d0#t0#a!#m!"
+        "N#n#u2#v#d0#t0#a!#m!"]
+      397 ["N#h#n#v2#d0#t0#a!#m!" "N#n#u#v2#d0#t0#a!#m!"]
+      398 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      399 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      400 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]
+      401 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      404 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [
+        {:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [38 39 40 41 42] :attrs "[1,1,2,1,1]"}
+        {:atoms [150 151 152 153 155 156] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [196 197 198 199 201 202] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [235 236 237 238 239] :attrs "[1,1,2,1,1]"}
+        {:atoms [282 283 284 285 287 288] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [343 344 345 346 347 348] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [354 355 356 357 358 359] :attrs "[1,1,1,1,1,1]"}
+        {:atoms [365 366 367 368 370 371] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "N#h2#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "N#h"
+        "C#h"
+        "N#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "S#n2"
+        "C#h2"
+        "C#h"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h2"
+        "C#h3"
+        "N#h#n"
+        "C"
+        "O#n2"
+        "C#h2"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h2"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "N#h2#n"
+        "O#n2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "N#h"
+        "C#h"
+        "N#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "C#h3"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "S#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C"
+        "O#n2"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "N#h#n"
+        "C"
+        "N#h#n"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h2"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C"
+        "C#h"
+        "C#h"
+        "C"
+        "O#h#n2"
+        "C#h"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "N#n"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "C#h2"
+        "N#h2#n"
+        "C"
+        "O#n2"
+        "N#h#n"
+        "C#h"
+        "C#h"
+        "C#h3"
+        "O#h#n2"
+        "C"
+        "O#n2"
+        "O#h#n2"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 8 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [1 9 :single]
+        [9 10 :double]
+        [9 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [13 14 :single]
+        [13 15 :single]
+        [12 16 :single]
+        [16 17 :double]
+        [16 18 :single]
+        [18 19 :single]
+        [19 20 :single]
+        [20 21 :single]
+        [21 22 :single]
+        [21 23 :double]
+        [19 24 :single]
+        [24 25 :double]
+        [24 26 :single]
+        [26 27 :single]
+        [27 28 :single]
+        [28 29 :single]
+        [29 30 :single]
+        [30 31 :single]
+        [30 32 :double]
+        [27 33 :single]
+        [33 34 :double]
+        [33 35 :single]
+        [35 36 :single]
+        [36 37 :single]
+        [37 38 :single]
+        [38 42 :single]
+        [38 39 :single]
+        [39 40 :single]
+        [40 41 :single]
+        [41 42 :single]
+        [36 43 :single]
+        [43 44 :double]
+        [43 45 :single]
+        [45 46 :single]
+        [46 47 :single]
+        [47 48 :single]
+        [48 49 :single]
+        [48 50 :single]
+        [46 51 :single]
+        [51 52 :double]
+        [51 53 :single]
+        [53 54 :single]
+        [54 55 :single]
+        [55 56 :single]
+        [56 57 :single]
+        [57 58 :single]
+        [58 59 :single]
+        [59 60 :single]
+        [60 61 :single]
+        [61 62 :double]
+        [61 63 :single]
+        [63 64 :single]
+        [64 65 :single]
+        [65 130 :single]
+        [63 66 :single]
+        [66 67 :single]
+        [67 68 :double]
+        [67 69 :single]
+        [69 70 :single]
+        [70 71 :single]
+        [71 72 :single]
+        [72 73 :single]
+        [72 74 :double]
+        [69 75 :single]
+        [75 76 :single]
+        [76 77 :double]
+        [76 78 :single]
+        [78 79 :single]
+        [79 80 :single]
+        [80 81 :single]
+        [81 82 :double]
+        [81 83 :single]
+        [78 84 :single]
+        [84 85 :single]
+        [85 86 :double]
+        [85 87 :single]
+        [87 88 :single]
+        [88 89 :single]
+        [88 90 :single]
+        [87 91 :single]
+        [91 92 :single]
+        [92 93 :double]
+        [92 94 :single]
+        [94 95 :single]
+        [95 96 :single]
+        [95 97 :single]
+        [97 98 :single]
+        [94 99 :single]
+        [99 100 :single]
+        [100 101 :double]
+        [100 102 :single]
+        [102 103 :single]
+        [59 104 :single]
+        [104 105 :double]
+        [104 106 :single]
+        [106 107 :single]
+        [107 108 :single]
+        [108 109 :single]
+        [108 110 :single]
+        [107 111 :single]
+        [111 112 :double]
+        [111 113 :single]
+        [113 114 :single]
+        [114 115 :single]
+        [115 116 :single]
+        [114 117 :single]
+        [117 118 :double]
+        [117 119 :single]
+        [119 120 :single]
+        [120 121 :single]
+        [121 122 :single]
+        [121 123 :single]
+        [123 124 :single]
+        [120 125 :single]
+        [125 126 :double]
+        [125 127 :single]
+        [127 128 :single]
+        [128 129 :single]
+        [129 130 :single]
+        [128 131 :single]
+        [131 132 :double]
+        [131 133 :single]
+        [133 134 :single]
+        [134 135 :single]
+        [135 136 :single]
+        [134 137 :single]
+        [137 138 :double]
+        [137 139 :single]
+        [139 140 :single]
+        [140 141 :single]
+        [141 142 :single]
+        [142 143 :single]
+        [142 144 :single]
+        [140 145 :single]
+        [145 146 :double]
+        [145 147 :single]
+        [147 148 :single]
+        [148 149 :single]
+        [149 150 :single]
+        [150 156 :single]
+        [150 151 :single]
+        [151 152 :single]
+        [152 153 :single]
+        [153 154 :single]
+        [153 155 :single]
+        [155 156 :single]
+        [148 157 :single]
+        [157 158 :double]
+        [157 159 :single]
+        [159 160 :single]
+        [160 161 :single]
+        [161 162 :single]
+        [162 163 :single]
+        [163 164 :single]
+        [163 165 :double]
+        [160 166 :single]
+        [166 167 :double]
+        [166 168 :single]
+        [168 169 :single]
+        [169 170 :single]
+        [170 171 :single]
+        [171 172 :single]
+        [171 173 :single]
+        [169 174 :single]
+        [174 175 :double]
+        [174 176 :single]
+        [176 177 :single]
+        [177 178 :single]
+        [178 179 :single]
+        [179 180 :single]
+        [180 181 :double]
+        [180 182 :single]
+        [177 183 :single]
+        [183 184 :double]
+        [183 185 :single]
+        [185 186 :single]
+        [186 187 :single]
+        [187 188 :single]
+        [188 189 :single]
+        [188 190 :double]
+        [186 191 :single]
+        [191 192 :double]
+        [191 193 :single]
+        [193 194 :single]
+        [194 195 :single]
+        [195 196 :single]
+        [196 202 :single]
+        [196 197 :single]
+        [197 198 :single]
+        [198 199 :single]
+        [199 200 :single]
+        [199 201 :single]
+        [201 202 :single]
+        [194 203 :single]
+        [203 204 :double]
+        [203 205 :single]
+        [205 206 :single]
+        [206 207 :single]
+        [207 208 :single]
+        [208 309 :single]
+        [206 209 :single]
+        [209 210 :double]
+        [209 211 :single]
+        [211 212 :single]
+        [212 213 :single]
+        [213 214 :single]
+        [214 215 :single]
+        [214 216 :double]
+        [212 217 :single]
+        [217 218 :double]
+        [217 219 :single]
+        [54 220 :single]
+        [220 221 :double]
+        [220 222 :single]
+        [222 223 :single]
+        [223 224 :single]
+        [224 225 :double]
+        [224 226 :single]
+        [226 227 :single]
+        [227 228 :single]
+        [228 229 :single]
+        [227 230 :single]
+        [230 231 :double]
+        [230 232 :single]
+        [232 233 :single]
+        [233 234 :single]
+        [234 235 :single]
+        [235 239 :single]
+        [235 236 :single]
+        [236 237 :single]
+        [237 238 :single]
+        [238 239 :single]
+        [233 240 :single]
+        [240 241 :double]
+        [240 242 :single]
+        [242 243 :single]
+        [243 244 :single]
+        [244 245 :single]
+        [245 246 :single]
+        [245 247 :single]
+        [243 248 :single]
+        [248 249 :double]
+        [248 250 :single]
+        [250 251 :single]
+        [251 252 :single]
+        [252 253 :single]
+        [252 254 :single]
+        [251 255 :single]
+        [255 256 :double]
+        [255 257 :single]
+        [257 258 :single]
+        [258 259 :single]
+        [259 260 :single]
+        [260 261 :single]
+        [261 262 :double]
+        [261 263 :single]
+        [258 264 :single]
+        [264 265 :double]
+        [264 266 :single]
+        [266 267 :single]
+        [267 268 :single]
+        [267 269 :single]
+        [269 270 :double]
+        [269 271 :single]
+        [271 272 :single]
+        [272 273 :single]
+        [273 274 :single]
+        [274 275 :single]
+        [274 276 :single]
+        [272 277 :single]
+        [277 278 :double]
+        [277 279 :single]
+        [279 280 :single]
+        [280 281 :single]
+        [281 282 :single]
+        [282 288 :single]
+        [282 283 :single]
+        [283 284 :single]
+        [284 285 :single]
+        [285 286 :single]
+        [285 287 :single]
+        [287 288 :single]
+        [280 289 :single]
+        [289 290 :double]
+        [289 291 :single]
+        [291 292 :single]
+        [292 293 :single]
+        [293 294 :single]
+        [294 295 :single]
+        [294 296 :single]
+        [292 297 :single]
+        [297 298 :double]
+        [297 299 :single]
+        [299 300 :single]
+        [300 301 :single]
+        [301 302 :single]
+        [301 303 :single]
+        [300 304 :single]
+        [304 305 :double]
+        [304 306 :single]
+        [306 307 :single]
+        [307 308 :single]
+        [308 309 :single]
+        [307 310 :single]
+        [310 311 :double]
+        [310 312 :single]
+        [312 313 :single]
+        [313 314 :single]
+        [314 315 :double]
+        [314 316 :single]
+        [316 317 :single]
+        [317 318 :single]
+        [318 319 :single]
+        [319 320 :single]
+        [320 321 :double]
+        [320 322 :single]
+        [317 323 :single]
+        [323 324 :double]
+        [323 325 :single]
+        [325 326 :single]
+        [326 327 :single]
+        [327 328 :single]
+        [328 329 :single]
+        [329 330 :single]
+        [330 331 :single]
+        [331 332 :double]
+        [331 333 :single]
+        [326 334 :single]
+        [334 335 :double]
+        [334 336 :single]
+        [336 337 :single]
+        [337 338 :single]
+        [338 339 :double]
+        [338 340 :single]
+        [340 341 :single]
+        [341 342 :single]
+        [342 343 :single]
+        [343 348 :single]
+        [343 344 :single]
+        [344 345 :single]
+        [345 346 :single]
+        [346 347 :single]
+        [347 348 :single]
+        [341 349 :single]
+        [349 350 :double]
+        [349 351 :single]
+        [351 352 :single]
+        [352 353 :single]
+        [353 354 :single]
+        [354 359 :single]
+        [354 355 :single]
+        [355 356 :single]
+        [356 357 :single]
+        [357 358 :single]
+        [358 359 :single]
+        [352 360 :single]
+        [360 361 :double]
+        [360 362 :single]
+        [362 363 :single]
+        [363 364 :single]
+        [364 365 :single]
+        [365 371 :single]
+        [365 366 :single]
+        [366 367 :single]
+        [367 368 :single]
+        [368 369 :single]
+        [368 370 :single]
+        [370 371 :single]
+        [363 372 :single]
+        [372 373 :double]
+        [372 374 :single]
+        [374 375 :single]
+        [375 376 :single]
+        [376 377 :single]
+        [376 378 :single]
+        [375 379 :single]
+        [379 380 :double]
+        [379 381 :single]
+        [381 385 :single]
+        [381 382 :single]
+        [382 383 :single]
+        [383 384 :single]
+        [384 385 :single]
+        [385 386 :single]
+        [386 387 :double]
+        [386 388 :single]
+        [388 389 :single]
+        [389 390 :single]
+        [390 391 :single]
+        [391 392 :single]
+        [392 393 :single]
+        [393 394 :single]
+        [389 395 :single]
+        [395 396 :double]
+        [395 397 :single]
+        [397 398 :single]
+        [398 399 :single]
+        [399 400 :single]
+        [399 401 :single]
+        [398 402 :single]
+        [402 403 :double]
+        [402 404 :single]]
+      :stereo-atoms [
+        {:attrs :cw :ligands [0 [:h 1] 2 9] :site 1}
+        {:attrs :cw :ligands [11 [:h 12] 13 16] :site 12}
+        {:attrs :cw :ligands [18 [:h 19] 20 24] :site 19}
+        {:attrs :cw :ligands [26 [:h 27] 28 33] :site 27}
+        {:attrs :cw :ligands [35 [:h 36] 37 43] :site 36}
+        {:attrs :cw :ligands [45 [:h 46] 47 51] :site 46}
+        {:attrs :cw :ligands [53 [:h 54] 55 220] :site 54}
+        {:attrs :ccw :ligands [58 [:h 59] 60 104] :site 59}
+        {:attrs :ccw :ligands [61 [:h 63] 64 66] :site 63}
+        {:attrs :ccw :ligands [67 [:h 69] 70 75] :site 69}
+        {:attrs :ccw :ligands [76 [:h 78] 79 84] :site 78}
+        {:attrs :ccw :ligands [85 [:h 87] 88 91] :site 87}
+        {:attrs :ccw :ligands [92 [:h 94] 95 99] :site 94}
+        {:attrs :cw :ligands [94 [:h 95] 96 97] :site 95}
+        {:attrs :cw :ligands [106 [:h 107] 108 111] :site 107}
+        {:attrs :cw :ligands [107 [:h 108] 109 110] :site 108}
+        {:attrs :cw :ligands [113 [:h 114] 115 117] :site 114}
+        {:attrs :cw :ligands [119 [:h 120] 121 125] :site 120}
+        {:attrs :cw :ligands [120 [:h 121] 122 123] :site 121}
+        {:attrs :cw :ligands [127 [:h 128] 129 131] :site 128}
+        {:attrs :cw :ligands [133 [:h 134] 135 137] :site 134}
+        {:attrs :cw :ligands [139 [:h 140] 141 145] :site 140}
+        {:attrs :cw :ligands [147 [:h 148] 149 157] :site 148}
+        {:attrs :cw :ligands [159 [:h 160] 161 166] :site 160}
+        {:attrs :cw :ligands [168 [:h 169] 170 174] :site 169}
+        {:attrs :cw :ligands [176 [:h 177] 178 183] :site 177}
+        {:attrs :cw :ligands [185 [:h 186] 187 191] :site 186}
+        {:attrs :cw :ligands [193 [:h 194] 195 203] :site 194}
+        {:attrs :cw :ligands [205 [:h 206] 207 209] :site 206}
+        {:attrs :cw :ligands [211 [:h 212] 213 217] :site 212}
+        {:attrs :cw :ligands [226 [:h 227] 228 230] :site 227}
+        {:attrs :cw :ligands [232 [:h 233] 234 240] :site 233}
+        {:attrs :cw :ligands [242 [:h 243] 244 248] :site 243}
+        {:attrs :cw :ligands [250 [:h 251] 252 255] :site 251}
+        {:attrs :cw :ligands [257 [:h 258] 259 264] :site 258}
+        {:attrs :cw :ligands [266 [:h 267] 268 269] :site 267}
+        {:attrs :cw :ligands [271 [:h 272] 273 277] :site 272}
+        {:attrs :cw :ligands [279 [:h 280] 281 289] :site 280}
+        {:attrs :cw :ligands [291 [:h 292] 293 297] :site 292}
+        {:attrs :cw :ligands [299 [:h 300] 301 304] :site 300}
+        {:attrs :cw :ligands [306 [:h 307] 308 310] :site 307}
+        {:attrs :cw :ligands [316 [:h 317] 318 323] :site 317}
+        {:attrs :cw :ligands [325 [:h 326] 327 334] :site 326}
+        {:attrs :cw :ligands [340 [:h 341] 342 349] :site 341}
+        {:attrs :cw :ligands [351 [:h 352] 353 360] :site 352}
+        {:attrs :cw :ligands [362 [:h 363] 364 372] :site 363}
+        {:attrs :cw :ligands [374 [:h 375] 376 379] :site 375}
+        {:attrs :cw :ligands [375 [:h 376] 377 378] :site 376}
+        {:attrs :ccw :ligands [384 [:h 385] 381 386] :site 385}
+        {:attrs :cw :ligands [388 [:h 389] 390 395] :site 389}
+        {:attrs :cw :ligands [397 [:h 398] 399 402] :site 398}
+        {:attrs :cw :ligands [398 [:h 399] 400 401] :site 399}]}
+    :success true
+    :tie-breaks [
+      0
+      1
+      2
+      4
+      5
+      6
+      7
+      8
+      11
+      12
+      13
+      14
+      15
+      18
+      19
+      20
+      22
+      26
+      27
+      28
+      29
+      31
+      35
+      36
+      37
+      39
+      40
+      41
+      42
+      45
+      46
+      47
+      48
+      49
+      50
+      53
+      54
+      55
+      58
+      59
+      60
+      63
+      64
+      66
+      69
+      70
+      71
+      73
+      75
+      78
+      79
+      80
+      83
+      84
+      87
+      88
+      89
+      90
+      91
+      94
+      95
+      96
+      97
+      98
+      99
+      102
+      103
+      106
+      107
+      108
+      109
+      110
+      113
+      114
+      115
+      116
+      119
+      120
+      121
+      122
+      123
+      124
+      127
+      128
+      129
+      133
+      134
+      135
+      136
+      139
+      140
+      141
+      142
+      143
+      144
+      147
+      148
+      149
+      151
+      152
+      154
+      155
+      156
+      159
+      160
+      161
+      162
+      164
+      168
+      169
+      170
+      171
+      172
+      173
+      176
+      177
+      178
+      179
+      182
+      185
+      186
+      187
+      189
+      193
+      194
+      195
+      197
+      198
+      200
+      201
+      202
+      205
+      206
+      207
+      211
+      212
+      213
+      215
+      219
+      222
+      223
+      226
+      227
+      228
+      229
+      232
+      233
+      234
+      236
+      237
+      238
+      239
+      242
+      243
+      244
+      245
+      246
+      247
+      250
+      251
+      252
+      253
+      254
+      257
+      258
+      259
+      260
+      263
+      266
+      267
+      268
+      271
+      272
+      273
+      274
+      275
+      276
+      279
+      280
+      281
+      283
+      284
+      286
+      287
+      288
+      291
+      292
+      293
+      294
+      295
+      296
+      299
+      300
+      301
+      302
+      303
+      306
+      307
+      308
+      312
+      313
+      316
+      317
+      318
+      319
+      322
+      325
+      326
+      327
+      328
+      329
+      330
+      332
+      333
+      336
+      337
+      340
+      341
+      342
+      344
+      345
+      346
+      347
+      348
+      351
+      352
+      353
+      355
+      356
+      357
+      358
+      359
+      362
+      363
+      364
+      366
+      367
+      369
+      370
+      371
+      374
+      375
+      376
+      377
+      378
+      382
+      383
+      384
+      385
+      388
+      389
+      390
+      391
+      392
+      393
+      394
+      397
+      398
+      399
+      400
+      401
+      404]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      1 ["C#u#v3#a!" "C#h#v3#a!"]
+      2 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      4 ["C#u#v2#a" "C#h#v2#a"]
+      5 ["C#u#v2#a" "C#h#v2#a"]
+      6 ["C#u#v2#a" "C#h#v2#a"]
+      7 ["C#u#v2#a" "C#h#v2#a"]
+      8 ["C#u#v2#a" "C#h#v2#a"]
+      11 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      12 ["C#u#v3#a!" "C#h#v3#a!"]
+      13 ["C#u#v3#a!" "C#h#v3#a!"]
+      14 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      15 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      18 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      19 ["C#u#v3#a!" "C#h#v3#a!"]
+      20 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      22 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      26 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      27 ["C#u#v3#a!" "C#h#v3#a!"]
+      28 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      29 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      31 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      35 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      36 ["C#u#v3#a!" "C#h#v3#a!"]
+      37 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      39 ["C#u#v2#a" "C#h#v2#a"]
+      40 ["N#n#v2#a" "N#u#v2#a2" "N#h#v2#a2"]
+      41 ["C#u#v2#a" "C#h#v2#a"]
+      42 ["N#n#v2#a" "N#u#v2#a2" "N#h#v2#a2"]
+      45 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      46 ["C#u#v3#a!" "C#h#v3#a!"]
+      47 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      48 ["C#u#v3#a!" "C#h#v3#a!"]
+      49 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      50 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      53 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      54 ["C#u#v3#a!" "C#h#v3#a!"]
+      55 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      58 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      59 ["C#u#v3#a!" "C#h#v3#a!"]
+      60 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      63 ["C#u#v3#a!" "C#h#v3#a!"]
+      64 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      66 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      69 ["C#u#v3#a!" "C#h#v3#a!"]
+      70 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      71 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      73 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      75 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      78 ["C#u#v3#a!" "C#h#v3#a!"]
+      79 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      80 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      83 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      84 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      87 ["C#u#v3#a!" "C#h#v3#a!"]
+      88 ["C#u#v3#a!" "C#h#v3#a!"]
+      89 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      90 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      91 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      94 ["C#u#v3#a!" "C#h#v3#a!"]
+      95 ["C#u#v3#a!" "C#h#v3#a!"]
+      96 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      97 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      98 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      99 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      102 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      103 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      106 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      107 ["C#u#v3#a!" "C#h#v3#a!"]
+      108 ["C#u#v3#a!" "C#h#v3#a!"]
+      109 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      110 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      113 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      114 ["C#u#v3#a!" "C#h#v3#a!"]
+      115 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      116 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      119 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      120 ["C#u#v3#a!" "C#h#v3#a!"]
+      121 ["C#u#v3#a!" "C#h#v3#a!"]
+      122 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      123 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      124 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      127 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      128 ["C#u#v3#a!" "C#h#v3#a!"]
+      129 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      133 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      134 ["C#u#v3#a!" "C#h#v3#a!"]
+      135 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      136 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      139 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      140 ["C#u#v3#a!" "C#h#v3#a!"]
+      141 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      142 ["C#u#v3#a!" "C#h#v3#a!"]
+      143 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      144 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      147 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      148 ["C#u#v3#a!" "C#h#v3#a!"]
+      149 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      151 ["C#u#v2#a" "C#h#v2#a"]
+      152 ["C#u#v2#a" "C#h#v2#a"]
+      154 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      155 ["C#u#v2#a" "C#h#v2#a"]
+      156 ["C#u#v2#a" "C#h#v2#a"]
+      159 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      160 ["C#u#v3#a!" "C#h#v3#a!"]
+      161 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      162 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      164 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      168 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      169 ["C#u#v3#a!" "C#h#v3#a!"]
+      170 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      171 ["C#u#v3#a!" "C#h#v3#a!"]
+      172 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      173 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      176 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      177 ["C#u#v3#a!" "C#h#v3#a!"]
+      178 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      179 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      182 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      185 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      186 ["C#u#v3#a!" "C#h#v3#a!"]
+      187 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      189 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      193 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      194 ["C#u#v3#a!" "C#h#v3#a!"]
+      195 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      197 ["C#u#v2#a" "C#h#v2#a"]
+      198 ["C#u#v2#a" "C#h#v2#a"]
+      200 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      201 ["C#u#v2#a" "C#h#v2#a"]
+      202 ["C#u#v2#a" "C#h#v2#a"]
+      205 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      206 ["C#u#v3#a!" "C#h#v3#a!"]
+      207 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      211 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      212 ["C#u#v3#a!" "C#h#v3#a!"]
+      213 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      215 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      219 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      222 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      223 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      226 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      227 ["C#u#v3#a!" "C#h#v3#a!"]
+      228 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      229 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      232 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      233 ["C#u#v3#a!" "C#h#v3#a!"]
+      234 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      236 ["C#u#v2#a" "C#h#v2#a"]
+      237 ["N#n#v2#a" "N#u#v2#a2" "N#h#v2#a2"]
+      238 ["C#u#v2#a" "C#h#v2#a"]
+      239 ["N#n#v2#a" "N#u#v2#a2" "N#h#v2#a2"]
+      242 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      243 ["C#u#v3#a!" "C#h#v3#a!"]
+      244 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      245 ["C#u#v3#a!" "C#h#v3#a!"]
+      246 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      247 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      250 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      251 ["C#u#v3#a!" "C#h#v3#a!"]
+      252 ["C#u#v3#a!" "C#h#v3#a!"]
+      253 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      254 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      257 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      258 ["C#u#v3#a!" "C#h#v3#a!"]
+      259 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      260 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      263 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      266 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      267 ["C#u#v3#a!" "C#h#v3#a!"]
+      268 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      271 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      272 ["C#u#v3#a!" "C#h#v3#a!"]
+      273 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      274 ["C#u#v3#a!" "C#h#v3#a!"]
+      275 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      276 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      279 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      280 ["C#u#v3#a!" "C#h#v3#a!"]
+      281 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      283 ["C#u#v2#a" "C#h#v2#a"]
+      284 ["C#u#v2#a" "C#h#v2#a"]
+      286 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      287 ["C#u#v2#a" "C#h#v2#a"]
+      288 ["C#u#v2#a" "C#h#v2#a"]
+      291 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      292 ["C#u#v3#a!" "C#h#v3#a!"]
+      293 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      294 ["C#u#v3#a!" "C#h#v3#a!"]
+      295 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      296 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      299 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      300 ["C#u#v3#a!" "C#h#v3#a!"]
+      301 ["C#u#v3#a!" "C#h#v3#a!"]
+      302 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      303 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      306 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      307 ["C#u#v3#a!" "C#h#v3#a!"]
+      308 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      312 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      313 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      316 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      317 ["C#u#v3#a!" "C#h#v3#a!"]
+      318 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      319 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      322 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      325 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      326 ["C#u#v3#a!" "C#h#v3#a!"]
+      327 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      328 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      329 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      330 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      332 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      333 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      336 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      337 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      340 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      341 ["C#u#v3#a!" "C#h#v3#a!"]
+      342 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      344 ["C#u#v2#a" "C#h#v2#a"]
+      345 ["C#u#v2#a" "C#h#v2#a"]
+      346 ["C#u#v2#a" "C#h#v2#a"]
+      347 ["C#u#v2#a" "C#h#v2#a"]
+      348 ["C#u#v2#a" "C#h#v2#a"]
+      351 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      352 ["C#u#v3#a!" "C#h#v3#a!"]
+      353 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      355 ["C#u#v2#a" "C#h#v2#a"]
+      356 ["C#u#v2#a" "C#h#v2#a"]
+      357 ["C#u#v2#a" "C#h#v2#a"]
+      358 ["C#u#v2#a" "C#h#v2#a"]
+      359 ["C#u#v2#a" "C#h#v2#a"]
+      362 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      363 ["C#u#v3#a!" "C#h#v3#a!"]
+      364 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      366 ["C#u#v2#a" "C#h#v2#a"]
+      367 ["C#u#v2#a" "C#h#v2#a"]
+      369 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      370 ["C#u#v2#a" "C#h#v2#a"]
+      371 ["C#u#v2#a" "C#h#v2#a"]
+      374 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      375 ["C#u#v3#a!" "C#h#v3#a!"]
+      376 ["C#u#v3#a!" "C#h#v3#a!"]
+      377 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      378 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      382 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      383 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      384 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      385 ["C#u#v3#a!" "C#h#v3#a!"]
+      388 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      389 ["C#u#v3#a!" "C#h#v3#a!"]
+      390 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      391 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      392 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      393 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      394 ["N#n2#v#a!" "N#h#n#u#v#a!" "N#h2#n#v#a!"]
+      397 ["N#n#u#v2#a!" "N#h#n#v2#a!"]
+      398 ["C#u#v3#a!" "C#h#v3#a!"]
+      399 ["C#u#v3#a!" "C#h#v3#a!"]
+      400 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]
+      401 ["O#n2#u#v#a!" "O#h#n2#v#a!"]
+      404 ["O#n2#u#v#a!" "O#h#n2#v#a!"]}}}

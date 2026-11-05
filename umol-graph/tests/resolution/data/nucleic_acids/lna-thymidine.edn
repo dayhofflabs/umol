@@ -1,0 +1,50 @@
+; BW, p. 995
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "O"
+    "C"
+    "C"
+    "C"
+    "O"
+    "O"
+    "C"
+    "N#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "O"
+    "N#a+"
+    "C#a+"
+    "O"
+    "C"
+    "C"
+    "O"]
+  :bonds [
+    [0 1 :single]
+    [1 2 :single]
+    [2 17 :single]
+    [2 3 :single]
+    [3 4 :single]
+    [4 16 :single]
+    [2 5 :single]
+    [5 6 :single]
+    [6 7 :single]
+    [7 14 "1#a"]
+    [7 8 "1#a"]
+    [8 9 "1#a"]
+    [9 10 :single]
+    [9 11 "1#a"]
+    [11 12 :double]
+    [11 13 "1#a"]
+    [13 14 "1#a"]
+    [14 15 :double]
+    [6 16 :single]
+    [16 17 :single]
+    [17 18 :single]]
+  :stereo-atoms [
+    {:attrs :cw :ligands [1 17 3 5] :site 2}
+    {:attrs :cw :ligands [5 [:h 6] 7 16] :site 6}
+    {:attrs :ccw :ligands [6 [:h 16] 4 17] :site 16}
+    {:attrs :cw :ligands [16 [:h 17] 2 18] :site 17}]}}

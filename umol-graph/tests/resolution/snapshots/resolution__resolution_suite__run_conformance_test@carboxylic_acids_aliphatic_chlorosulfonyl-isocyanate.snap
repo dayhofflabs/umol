@@ -1,0 +1,53 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["O#n2" "C" "N#n" "S" "Cl#n3" "O#n2" "O#n2"]
+      :bonds [
+        [0 1 :double]
+        [1 2 :double]
+        [2 3 :single]
+        [3 4 :single]
+        [3 5 :double]
+        [3 6 :double]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["O#n2" "C" "N#n" "S" "Cl#n3" "O#n2" "O#n2"]
+      :bonds [
+        [0 1 :double]
+        [1 2 :double]
+        [2 3 :single]
+        [3 4 :single]
+        [3 5 :double]
+        [3 6 :double]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["O#n2" "C" "N#n" "S" "Cl#n3" "O#n2" "O#n2"]
+      :bonds [
+        [0 1 :double]
+        [1 2 :double]
+        [2 3 :single]
+        [3 4 :single]
+        [3 5 :double]
+        [3 6 :double]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["O#n2" "C" "N#n" "S" "Cl#n3" "O#n2" "O#n2"]
+      :bonds [
+        [0 1 :double]
+        [1 2 :double]
+        [2 3 :single]
+        [3 4 :single]
+        [3 5 :double]
+        [3 6 :double]]}
+    :success true
+    :tie-breaks []}}

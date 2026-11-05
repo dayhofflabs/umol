@@ -1,0 +1,100 @@
+; BW, p. 166; named class in the text; Januszewski et al., Angew. Chem. Int. Ed. 52 (2013) 1817, Scheme 5.
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C#a+"
+    "C#a+"
+    "C"]
+  :bonds [
+    [0 1 :single]
+    [1 8 "1#a"]
+    [1 2 "1#a"]
+    [2 3 :single]
+    [2 4 "1#a"]
+    [4 5 "1#a"]
+    [5 6 :single]
+    [5 7 "1#a"]
+    [7 8 "1#a"]
+    [8 9 :single]
+    [0 10 :single]
+    [10 17 "1#a"]
+    [10 11 "1#a"]
+    [11 12 :single]
+    [11 13 "1#a"]
+    [13 14 "1#a"]
+    [14 15 :single]
+    [14 16 "1#a"]
+    [16 17 "1#a"]
+    [17 18 :single]
+    [0 19 :double]
+    [19 20 :double]
+    [20 21 :double]
+    [21 22 :double]
+    [22 23 :double]
+    [23 24 :double]
+    [24 25 :double]
+    [25 26 :double]
+    [26 27 :double]
+    [27 28 :single]
+    [28 35 "1#a"]
+    [28 29 "1#a"]
+    [29 30 :single]
+    [29 31 "1#a"]
+    [31 32 "1#a"]
+    [32 33 :single]
+    [32 34 "1#a"]
+    [34 35 "1#a"]
+    [35 36 :single]
+    [27 37 :single]
+    [37 44 "1#a"]
+    [37 38 "1#a"]
+    [38 39 :single]
+    [38 40 "1#a"]
+    [40 41 "1#a"]
+    [41 42 :single]
+    [41 43 "1#a"]
+    [43 44 "1#a"]
+    [44 45 :single]]}}

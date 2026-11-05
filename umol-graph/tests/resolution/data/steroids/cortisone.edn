@@ -1,0 +1,67 @@
+; BW, p. 743
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "C"
+    "O"
+    "C"
+    "O"
+    "O"
+    "C"]
+  :bonds [
+    [0 1 :single]
+    [1 7 :single]
+    [1 11 :single]
+    [1 2 :single]
+    [2 3 :single]
+    [3 4 :single]
+    [4 5 :double]
+    [4 6 :single]
+    [6 7 :double]
+    [7 8 :single]
+    [8 9 :single]
+    [9 10 :single]
+    [10 16 :single]
+    [10 11 :single]
+    [11 12 :single]
+    [12 13 :double]
+    [12 14 :single]
+    [14 15 :single]
+    [15 19 :single]
+    [15 16 :single]
+    [16 17 :single]
+    [17 18 :single]
+    [18 19 :single]
+    [19 20 :single]
+    [20 21 :double]
+    [20 22 :single]
+    [22 23 :single]
+    [19 24 :single]
+    [15 25 :single]]
+  :stereo-atoms [
+    {:attrs :ccw :ligands [0 7 11 2] :site 1}
+    {:attrs :cw :ligands [9 [:h 10] 16 11] :site 10}
+    {:attrs :cw :ligands [10 [:h 11] 1 12] :site 11}
+    {:attrs :ccw :ligands [14 19 16 25] :site 15}
+    {:attrs :ccw :ligands [15 [:h 16] 10 17] :site 16}
+    {:attrs :cw :ligands [18 15 20 24] :site 19}]}}

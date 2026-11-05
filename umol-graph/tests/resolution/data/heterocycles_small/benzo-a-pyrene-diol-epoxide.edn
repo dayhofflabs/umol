@@ -1,0 +1,61 @@
+; BW, p. 683
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C"
+    "C"
+    "O"
+    "C"
+    "C"
+    "O"
+    "O"
+    "C#a+"
+    "C#a+"]
+  :bonds [
+    [0 5 "1#a"]
+    [0 1 "1#a"]
+    [1 2 "1#a"]
+    [2 22 "1#a"]
+    [2 3 "1#a"]
+    [3 9 "1#a"]
+    [3 4 "1#a"]
+    [4 5 "1#a"]
+    [4 6 "1#a"]
+    [6 7 "1#a"]
+    [7 8 "1#a"]
+    [8 13 "1#a"]
+    [8 9 "1#a"]
+    [9 10 "1#a"]
+    [10 11 "1#a"]
+    [11 12 "1#a"]
+    [12 18 :single]
+    [12 13 "1#a"]
+    [13 14 :single]
+    [14 16 :single]
+    [14 15 :single]
+    [15 16 :single]
+    [15 17 :single]
+    [17 18 :single]
+    [18 19 :single]
+    [17 20 :single]
+    [10 21 "1#a"]
+    [21 22 "1#a"]]
+  :stereo-atoms [
+    {:attrs :cw :ligands [13 [:h 14] 16 15] :site 14}
+    {:attrs :cw :ligands [14 [:h 15] 16 17] :site 15}
+    {:attrs :ccw :ligands [15 [:h 17] 18 20] :site 17}
+    {:attrs :cw :ligands [17 [:h 18] 12 19] :site 18}]}}

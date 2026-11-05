@@ -1,0 +1,6 @@
+; BW, p. 280
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms ["C" "S" "C" "B"]
+  :bonds [[0 1 :single] [1 2 :single]]
+  :dative-bonds [{:donors [1] :acceptor 3 :attrs "1"}]}}

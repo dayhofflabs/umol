@@ -1,0 +1,3 @@
+; BW, p. 447
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["C#h0" "N"] :bonds [[0 1 :triple]]}}

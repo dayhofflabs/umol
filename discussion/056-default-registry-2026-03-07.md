@@ -10,10 +10,11 @@ This document tracks expansion of the default atom-type registry through source 
 explicit selection and conformance coverage. The [HW extraction](#hw-extraction-spike-2026-10-31)
 contains the inclusion rules, evidence and detailed chapter tables.
 
-## Project Status (2026-11-04)
+## Project Status (2026-11-05)
 
 **Selected scope implemented: group chapters through Ni/Pd/Pt, chapter XXXII,
-and chapters XXXV–XXXVI (lanthanides and actinides).** Every added state has source
+chapters XXXV–XXXVI (lanthanides and actinides), and the Beyer/Walter chapter classes
+through chapter 38.** Every added state has source
 citations and conformance coverage. Unselected and deferred candidates remain in
 the linked tables.
 Companion states belong to elements outside the chapter being reviewed.
@@ -42,6 +43,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
 | [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 16 in `organometallics/`, 9 in `haptic_bonds/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
 | [Actinides, XXXVI](#actinide-work-table) | 243 additions, including 6 hydride-bridge MC states; 51 earlier states retained and sourced | 243 new: 216 in `actinides/`, 3 in `organometallics/`, 18 in `haptic_bonds/`, 6 in `multicenter_bonds/`; all added states covered | Capacities Np/Cf 27, Pu 28; No unpaired maximum 1. ValenceTable unchanged; UF₉³⁻/UF₁₀⁴⁻ unselected |
+| [Beyer/Walter, ch. 4–38](#beyerwalter-extraction) | 3 C additions: `C #u #v2 #a`, `C #c+ #v2 #a`, `C #c- #n #v2 #a` | 4,201 new; `succinic-anhydride` corrected | Direct chapter classes and 32 selected incidental inputs. Methano[10]annulene remains a known limit |
 
 ### Shared changes and verification
 
@@ -53,8 +55,8 @@ Companion states belong to elements outside the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification after XXXVI | 3,602 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
-| Haptic fixture split | 115 fixtures and their snapshots moved to `haptic_bonds/`; contents unchanged. All 3,602 resolution cases pass after the move (8.84 s) |
+| Verification | 7,836 resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass |
+| Organic reorganization | 364 existing inputs and their snapshots moved to the [current categories](#categories) with their contents unchanged |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
 The Decision Log below is the historical March record; later tracking-table updates are
@@ -62,18 +64,15 @@ dated.
 
 ### Conformance suite breakdown
 
-Counts include the 108 Beyer/Walter chapter-4 inputs recorded below; these were absent
-from the checkout used for the current verification.
-
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
 | `atomic_ions/` | 217 | Atomic ions and Hg₂²⁺ |
-| `organometallics/` | 217 | Metal–carbon bonds, carbonyls and complexes with η ≤ 2 ligands |
+| `organometallics/` | 305 | Metal–carbon bonds, carbonyls and complexes with η ≤ 2 ligands |
 | `haptic_bonds/` | 115 | At least one ligand with η > 2: Cp, arene, COT and allyl complexes; explicit MC and metal–metal cases retain their own categories |
-| `organoelement/` | 16 | Organic B, Si–Pb, As–Bi and Se–Po compounds |
-| `organosulfur/` | 4 | Carbon–sulfur compounds; broader organic selection is being reorganized separately |
-| `donor_acceptor/` | 46 | Molecular Lewis donor–acceptor adducts |
+| `organoelement_compounds/` | 61 | Organic B, Si–Pb, As–Bi, Se–Po and Hg compounds |
+| `phosphorus_compounds/` | 44 | Organophosphorus compounds and phosphorus acid derivatives |
+| `dative_bonds/` | 54 | Molecular Lewis donor–acceptor adducts |
 | `multicenter_bonds/` | 178 | Explicit multicenter bonding, including small hydride bridges |
 | `metal_metal_bonds/` | 64 | Ordinary or dative metal–metal bonds |
 | `hydrogen/` | 2 | Hydrogen molecules |
@@ -98,17 +97,45 @@ from the checkout used for the current verification.
 | `lanthanides/` | 218 | Chapter-XXXV compounds outside the bonding classes above |
 | `actinides/` | 216 | Chapter-XXXVI compounds outside the bonding classes above |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
-| `hydrocarbons/` | 82 | C/H compounds |
-| `functional_groups/` | 102 | Organic heteroatom groups (halides, amines, etc.) |
-| `carbonyl_derivatives/` | 86 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
-| `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
-| `aromatic/` | 105 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
-| `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
-| `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| `metabolites/` | 9 | Metabolites and related natural compounds |
-| `natural_products/` | 5 | Terpenes, steroids and alkaloids |
-| `reactive_intermediates/` | 10 | Organic radicals, ions and related intermediates |
-| **Total** | **3710** | |
+| `hydrocarbons_aliphatic/` | 161 | Non-aromatic C/H compounds, including cycloalkanes, polycycles and the `k33` and `k5` graph-topology inputs |
+| `hydrocarbons_aromatic/` | 107 | Arenes, biaryls, arylalkanes and fused aromatic hydrocarbons |
+| `non_benzenoid_aromatics/` | 40 | Azulenes, annulenes, tropylium, cyclopentadienide and carbon-free aromatic rings |
+| `heterocycles_small/` | 56 | Smallest hetero ring has 3 or 4 members, including β-lactams |
+| `heterocycles_5_membered/` | 327 | Smallest hetero ring has 5 members and is not fused, including lactones and bridged systems |
+| `heterocycles_5_fused/` | 183 | Smallest hetero ring has 5 members and is fused to another ring: indoles, purines, benzodioxoles |
+| `heterocycles_6_membered/` | 244 | Smallest hetero ring has 6 members and is not fused, including bridged systems |
+| `heterocycles_6_fused/` | 128 | Smallest hetero ring has 6 members and is fused to another ring: quinolines, acridines, pteridines |
+| `heterocycles_large/` | 37 | Smallest hetero ring has 7 or more members: azepines, diazepines, crown ethers |
+| `carbonyl_derivatives_aliphatic/` | 75 | Non-aromatic aldehydes, ketones and quinones |
+| `carbonyl_derivatives_aromatic/` | 78 | Aromatic aldehydes and ketones |
+| `carboxylic_acids_aliphatic/` | 354 | Non-aromatic carboxylic acids, their derivatives and carbonic acid derivatives |
+| `carboxylic_acids_aromatic/` | 178 | Aromatic carboxylic acids, their derivatives and carbonic acid derivatives |
+| `nitrogen_compounds_aliphatic/` | 134 | Non-aromatic amines, nitro, nitroso, hydrazine, azo and related compounds |
+| `nitrogen_compounds_aromatic/` | 150 | Aromatic amines, nitro, azo, diazo and related compounds |
+| `sulfur_compounds_aliphatic/` | 88 | Non-aromatic thiols, sulfides, sulfoxides, sulfones, sulfonic acids and sulfates |
+| `sulfur_compounds_aromatic/` | 83 | Aromatic sulfur compounds |
+| `functional_groups_aliphatic/` | 139 | Remaining non-aromatic compounds: alcohols, ethers, halides |
+| `functional_groups_aromatic/` | 118 | Remaining aromatic compounds: phenols, aryl ethers, aryl halides |
+| `isotopes/` | 35 | Explicit isotopes in atoms, ions and small molecules: 2H, 3H, 13C, 14C, 15N, 22Na |
+| `stereo_tetrahedral/` | 110 | Tetrahedral stereoisomer sets and mechanisms |
+| `stereo_cis_trans/` | 73 | Cis/trans stereoisomer sets |
+| `carbohydrates/` | 199 | Sugars and their derivatives, alditols, inositols, glycosides |
+| `amino_acids/` | 127 | Amino acids, their derivatives and peptides |
+| `nucleic_acids/` | 99 | Nucleobases, nucleosides, nucleotides, oligonucleotides and purine catabolites |
+| `lipids/` | 50 | Fatty acids, glycerides, phospholipids, sphingolipids and prostanoids |
+| `vitamins_cofactors/` | 81 | Vitamins, coenzymes, acyl-CoA esters and tetrapyrroles |
+| `metabolites/` | 92 | Other metabolites: hydroxy and keto acids, biogenic amines, pathway intermediates, drug metabolites |
+| `terpenes/` | 115 | Terpenes, terpenoids and carotenoids |
+| `steroids/` | 76 | Steroids, cardiac glycosides and steroid drugs |
+| `alkaloids/` | 102 | Alkaloids and their skeletons |
+| `natural_products/` | 99 | Other natural products: flavonoids, phenylpropanoids, quinones, antibiotics, pheromones |
+| `cation_intermediates/` | 176 | Carbocations, onium and diazonium ions, sigma complexes; net positive main species |
+| `anion_intermediates/` | 157 | Carbanions, enolates, alkoxides, other anions; net negative main species |
+| `radical_intermediates/` | 66 | Radicals, diradicals and radical ions |
+| `sextet_intermediates/` | 22 | Carbenes, nitrenes and tetrylenes, including N-heterocyclic carbenes |
+| `zwitterion_intermediates/` | 25 | Neutral species with separated charges: ylides, betaines, tetrahedral zwitterions |
+| `reactive_intermediates/` | 49 | Neutral closed-shell intermediates: arynes, enols, quinone methides, adducts |
+| **Total** | **7836** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -161,11 +188,13 @@ single-atom cases were effectively unchanged.
 
 - Run the conformance suite with its feature flag enabled:
   - `cargo test -p umol-graph --features conformance --test resolution`
-- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. All 2,703
-  inputs succeed under MostSaturated. 296 fail under at least one Strict configuration,
-  mostly organic inputs whose hydrogen counts are left to resolution: 271 of the 278 inputs in
-  `hydrocarbons/`, `functional_groups/`, `carbonyl_derivatives/`, `heterocycles/` and the two
-  stereo categories.
+- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. Of the 7,836
+  inputs, 7,832 succeed under AtomTyping and Counts MostSaturated; the four methano[10]annulene
+  inputs fail under both.
+  3,376 succeed under AtomTyping Strict and 3,384 under Counts Strict; the rest are mostly
+  organic inputs whose hydrogen counts are left to resolution.
+- `rstest` lists the input files at compile time. After adding, moving or removing inputs,
+  touch `umol-graph/tests/resolution/resolution_suite.rs` so that the list is rebuilt.
 
 ## Tracking Table
 
@@ -196,7 +225,7 @@ Status values:
 | Be | yes | yes (+2) | yes (selected) | yes (20 additions covered) | done | 22 current states; approved additions, citation audit and capacity 12 implemented; remaining hydride/borohydride descriptions checked for reuse, with no further default additions proposed |
 | B | yes | no | yes (selected) | yes (27 additions covered; Tr02–Tr11, Tr35) | done | 50 current states; selected boron pass and existing-entry citation audit complete; borolide charge corrected and unsupported B–H row removed |
 | C | yes | yes (−4) | yes (selected) | yes (12 tetrel additions and 4 carborane companions covered) | done | 52 current states; selected tetrel/carborane scope implemented; earlier entries retained with checked citations |
-| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `donor_acceptor/`, `n_group/`, `aromatic/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
+| N | yes | yes (-3) | partial | yes (`atoms/n.edn`, `atomic_ions/n-3.edn`, `dative_bonds/`, `n_group/`, `heterocycles_*/`) | in_progress | 53 current states; 17 pnictogen additions, both NO− fixtures and Tr37's general pyridine donor implemented; existing-entry citation audit complete |
 | O | yes | yes (-2) | yes (selected) | yes (all 32 states) | done | Chalcogen selection and citation audit complete; Zg24's μ₃-alkoxide and Crg37's two μ₂-hydroxido donor entries are implemented and covered |
 | F | yes | yes (-1) | partial | yes (selected HW states) | done | Three higher HF-aggregate states removed; H-bond fixtures use existing types. Triply bridging F− restored 2026-11-01; terminal donor covered by [RhF6]3− |
 | Ne | yes | no | n/a | yes (`atoms/ne.edn`) | done | HW review complete; zero-lone-pair description retained |
@@ -225,7 +254,7 @@ Status values:
 | As | yes | yes (-3) | partial | yes (`atoms/as.edn`, `atomic_ions/as-3.edn`, `n_group/`) | in_progress | 27 current states; 15 additions implemented; existing arsole types retained with paired aromatic/Kekulé fixtures; citation audit complete |
 | Se | yes | yes (-2) | yes (selected) | yes (all 22 states) | done | Six states added; citation and default-scope audit complete, including localized Se4N4 |
 | Br | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 18 halogen-pass additions plus Br#c-#n#d3 for binary chalcogen bromides |
-| Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `multicenter_bonds/krf2.edn`, `noble_gases/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
+| Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `multicenter_bonds/krf2.edn`, `noble_gases/krf+.edn`, `dative_bonds/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1, −1) | yes (selected) | yes (5 additions covered) | done | 7 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
 | Y | yes | yes (+3) | yes (selected) | yes (26 additions covered) | done | 28 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 for bis-COT donors |
@@ -243,12 +272,12 @@ Status values:
 | Sb | yes | yes (-3) | partial | yes (`atoms/sb.edn`, `atomic_ions/sb-3.edn`, `n_group/`) | in_progress | 29 current states; 20 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Te | yes | yes (-2, -1, +1) | yes (selected) | yes (all 20 states) | done | Eleven states added, including aromatic Te4²⁺; citation and default-scope audit complete |
 | I | yes | yes (+1, -1) | partial | yes (selected HW states) | done | 22 halogen-pass additions plus I#c-#n#d3 for binary TeI4 aggregates |
-| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `noble_gases/xe*.edn`, `multicenter_bonds/xe*.edn`, `donor_acceptor/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
+| Xe | yes | no | yes (selected) | yes (`atoms/xe.edn`, `noble_gases/xe*.edn`, `multicenter_bonds/xe*.edn`, `dative_bonds/`) | done | All 26 retained states covered after restoring [F(XeOF4)3]− |
 | Cs | yes | yes (+1, −1) | yes (selected) | yes (6 additions covered) | done | 8 current states; selected HW scope, citation audit and capacity 24 implemented |
 | Ba | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, eight-/nine-donor aqua fixtures and capacity 18 implemented; water bridges deferred with Ch02 |
 | Tl | yes | yes (+1,+3) | yes (selected) | yes (22 additions covered) | done | 25 current states; selected HW scope and existing-entry citation audit complete |
 | Pb | yes | yes (+2, +4, −4) | partial | yes (32 additions covered) | done | 35 current states; selected HW scope and existing-entry audit complete, including both ionic states; capacity 14 for six-donor Pb(II) |
-| Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `n_group/`, `aromatic/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
+| Bi | yes | yes (+3, −3) | partial | yes (`atoms/bi.edn`, `atomic_ions/`, `n_group/`, `heterocycles_*/`) | in_progress | 17 current states; 15 additions and capacity 12 → 14 implemented; existing-entry citation audit complete |
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
 | At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
@@ -304,23 +333,24 @@ Extend this table as new elements are considered.
 ### Organic compounds
 
 Chapters refer to Beyer/Walter, 25th edition. Polycyclic, charged and stereo-defined
-compounds from any chapter may also fall under the classes below.
+compounds from any chapter may also fall under the classes below. Current file counts
+are in the [breakdown](#conformance-suite-breakdown).
 
-| Class | Scope | Conformance dir | Chapters | Status | Notes |
-|-------|-------|-----------------|----------|--------|-------|
-| Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles, non-aromatic annulenes | `hydrocarbons/` | 4, 5, 25 | in_progress | 82 files, including the `k33` and `k5` graph-topology inputs |
-| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, thiols, ethers, thioethers, amines, nitroso, nitro, sulfoxides, hydrazines, diazo/azo; N, P, S and Si groups to be extended | `functional_groups/` | 6–10, 16 | in_progress | 102 files |
-| Carbonyl derivatives | Aldehydes, ketones, carboxylic acids, esters, amides, other acid derivatives, carbonic acid derivatives | `carbonyl_derivatives/` | 12–16 | in_progress | 86 files, non-aromatic |
-| Heterocycles | Non-aromatic heterocycles, crown ethers, bridged/fused | `heterocycles/` | 8, 9, 28–36 | review | 53 files |
-| Aromatic | Aromatic carbocycles, heterocycles and ions | `aromatic/` | 18–25, 28–35 | in_progress | 105 files, including non-carbon rings |
-| Stereochemistry | Tetrahedral and cis/trans inputs | `stereo_tetrahedral/`, `stereo_cis_trans/` | any | review | 36 files |
-| Organometallics | Main-group and transition-metal organyls | `organometallics/` (noted) | 11 | todo | Created after the HW pass finishes |
-| Organoelement compounds | Organic P, As, Si and B compounds | `organoelement/` (noted) | 10 | todo | Created after the HW pass finishes |
-| Reactive intermediates | Carbocations, carbanions, radicals, carbenes, nitrenes, ylides | `reactive_intermediates/` | any | in_progress | 10 files; expanded in a separate reaction-mechanism step |
-| Metabolites | Carbohydrates, amino acids, peptides, nucleic acid components, lipids, cofactors, pigments, vitamins, hydroxy acids | `metabolites/` | 13, 15, 17, 28, 35, 37, 38 | in_progress | 9 files; vitamins occur across chapters |
-| Natural products | Terpenes, steroids, alkaloids | `natural_products/` | 26, 27, 36 | in_progress | 5 files |
-
-Extend this table as new organic classes are added.
+| Class | Conformance dirs | Chapters | Status |
+|-------|-----------------|----------|--------|
+| Hydrocarbons | `hydrocarbons_aliphatic/`, `hydrocarbons_aromatic/`, `non_benzenoid_aromatics/` | 4, 5, 18, 23–25 | implemented |
+| Heterocycles | `heterocycles_small/`, `heterocycles_5_membered/`, `heterocycles_5_fused/`, `heterocycles_6_membered/`, `heterocycles_6_fused/`, `heterocycles_large/` | 28–35 | implemented |
+| Carbonyl derivatives | `carbonyl_derivatives_aliphatic/`, `carbonyl_derivatives_aromatic/` | 12, 21 | implemented |
+| Carboxylic and carbonic acids and derivatives | `carboxylic_acids_aliphatic/`, `carboxylic_acids_aromatic/` | 13–16, 21 | implemented |
+| Nitrogen compounds | `nitrogen_compounds_aliphatic/`, `nitrogen_compounds_aromatic/` | 8, 19, 22 | implemented |
+| Sulfur compounds | `sulfur_compounds_aliphatic/`, `sulfur_compounds_aromatic/` | 6, 9, 10, 19 | implemented |
+| Other functional groups | `functional_groups_aliphatic/`, `functional_groups_aromatic/` | 6, 7, 9, 19, 20 | implemented |
+| Phosphorus and organoelement compounds | `phosphorus_compounds/`, `organoelement_compounds/` | 10 | implemented |
+| Organometallics | `organometallics/`, `haptic_bonds/` | 11, 25 | implemented; further sources planned |
+| Stereochemistry | `stereo_tetrahedral/`, `stereo_cis_trans/` | any | implemented |
+| Reactive intermediates | `cation_intermediates/`, `anion_intermediates/`, `radical_intermediates/`, `sextet_intermediates/`, `zwitterion_intermediates/`, `reactive_intermediates/` | any | implemented |
+| Metabolites | `carbohydrates/`, `amino_acids/`, `nucleic_acids/`, `lipids/`, `vitamins_cofactors/`, `metabolites/` | 13, 15, 17, 28, 35, 37, 38 and others | implemented |
+| Natural products | `terpenes/`, `steroids/`, `alkaloids/`, `natural_products/` | 26, 27, 36 and others | implemented |
 
 ## Conformance Policy
 
@@ -359,19 +389,41 @@ compounds; Kekulé encodings of aromatic compounds and heterocycles may be added
 ## Categories
 
 The [conformance suite breakdown](#conformance-suite-breakdown) lists current
-directories. Bonding classes take precedence where they help compare related
-examples: `organometallics/`, `organoelement/`, `organophosphorus/`, `organosulfur/`,
-`donor_acceptor/`, `multicenter_bonds/`, `hydrogen_bonds/` and `metal_metal_bonds/`.
-`donor_acceptor/` contains molecular Lewis adducts; ordinary coordination complexes
-belong with their element group. Explicit Hbd relations belong in `hydrogen_bonds/`.
-Remaining inorganic cases use the chapter groups, with `b_group/`, `c_group/` and
-`n_group/` for groups 13–15 and `sc_group/` through `zn_group/` for transition metals.
-Categories are practical browsing groups; no exclusive chemical taxonomy is implied.
+directories. All inputs run together, so categories are browsing groups only; no
+exclusive chemical taxonomy is implied, and pragmatic sizes matter more than precise
+splits. Bonding classes take precedence where they help compare related examples:
+`organometallics/`, `haptic_bonds/`, `dative_bonds/`, `multicenter_bonds/`,
+`hydrogen_bonds/` and `metal_metal_bonds/`. `dative_bonds/` contains molecular Lewis
+adducts; ordinary coordination complexes belong with their element group. Explicit Hbd
+relations belong in `hydrogen_bonds/`. Remaining inorganic cases use the chapter groups,
+with `b_group/`, `c_group/` and `n_group/` for groups 13–15 and `sc_group/` through
+`zn_group/` for transition metals.
 
-The 2026-11-04 reorganization moved 2,380 inputs and their snapshots without changing
-their contents or the harness. Explicit/implicit H and ordinary/donor alternatives
-stay together where they exercise the same class. The existing organic directories
-are being reorganized separately; `organophosphorus/` has no inputs in this pass.
+Organic inputs follow the source class first. Natural products and metabolites go to
+their compound class, and the stereo sets stay together. Intermediates are sorted by the
+resolved main species, ignoring counterions: radical first, then net charge, then separated
+charges, then a carbon, nitrogen or heavier tetrel sextet; the rest are in
+`reactive_intermediates/`. The others go to the first
+match:
+
+1. An aromatic input without carbon: `non_benzenoid_aromatics/`.
+2. A hetero ring: the `heterocycles_*` group of the smallest hetero ring. Five- and
+   six-membered rings sharing exactly one bond with another ring of up to eight members
+   go to `heterocycles_5_fused/` or `heterocycles_6_fused/`; bridged rings do not.
+3. An aromatic carbocycle other than a six-membered ring: `non_benzenoid_aromatics/`.
+   Hydrocarbons that also contain a six-membered aromatic ring, such as fluoranthene, stay
+   in `hydrocarbons_aromatic/`.
+4. Phosphorus: `phosphorus_compounds/`. Other main-group elements:
+   `organoelement_compounds/`.
+5. C/H only: `hydrocarbons_*`.
+6. Carboxylic or carbonic class, or a carbonyl carbon bonded to O, N, S or halogen:
+   `carboxylic_acids_*`.
+7. Sulfur: `sulfur_compounds_*`. C=O: `carbonyl_derivatives_*`. Nitrogen:
+   `nitrogen_compounds_*`. Otherwise `functional_groups_*`.
+
+The `_aromatic` and `_aliphatic` suffixes record whether the input has an aromatic ring.
+`heterocycles_5_membered/`, `heterocycles_6_membered/`, `carboxylic_acids_aliphatic/` and
+`organometallics/` exceed the inorganic groups' size of about 200 files.
 
 The former `implicit_h=true/false` setting was the precursor to atom defaults.
 EDN inputs use MoleculeDefaults with per-input `:config-overrides`; hydrogen
@@ -383,10 +435,7 @@ Inorganic compound directories and current counts are listed in the [breakdown a
 
 - `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`, `na`, `mg`, `al`, `si`, `p`, `s`, `cl`, `ar`, `k`, `ca`, `sc`, `ti`, `v`, `cr`, `mn`, `fe`, `co`, `ni`, `cu`, `zn`, `ga`, `ge`, `as`, `se`, `br`, `kr`, `rb`, `sr`, `y`, `zr`, `nb`, `mo`, `tc`, `ru`, `rh`, `pd`, `ag`, `cd`, `in`, `sn`, `sb`, `te`, `i`, `xe`, `cs`, `ba`, `tl`, `pb`, `bi`, `po`, `at`, `rn`, `la`, `ce`, `pr`, `nd`, `pm`, `sm`, `eu`, `gd`, `tb`, `dy`, `ho`, `er`, `tm`, `yb`, `lu`, `hf`, `ta`, `w`, `re`, `os`, `ir`, `pt`, `au`, `hg`, `fr`, `ra`, `ac`, `th`, `pa`, `u`, `np`, `pu`, `am`, `cm`, `bk`, `cf`, `es`, `fm`, `md`, `no`, `lr`, `rf`, `db`, `sg`, `bh`, `hs`
 - `atomic_ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`, `k+1`, `ca+2`, `sc+3`, `ti+3`, `ti+4`, `v+2`, `v+3`, `cr+2`, `cr+3`, `mn+2`, `mn+3`, `fe+2`, `fe+3`, `co+2`, `co+3`, `ni+2`, `cu+1`, `cu+2`, `zn+2`, `ga+3`, `as-3`, `se-2`, `br-1`, `rb+1`, `sr+2`, `y+3`, `zr+4`, `nb+3`, `mo+2`, `mo+3`, `ru+2`, `ru+3`, `rh+2`, `rh+3`, `pd+2`, `ag+1`, `ag+2`, `cd+2`, `in+3`, `sb-3`, `te-2`, `i-1`, `cs+1`, `ba+2`, `tl+1`, `tl+3`, `pb+2`, `pb+4`, `bi+3`, `po-2`, `at-1`, `la+3`, `ce+3`, `ce+4`, `pr+3`, `pr+4`, `nd+3`, `pm+3`, `sm+2`, `sm+3`, `eu+2`, `eu+3`, `gd+3`, `tb+3`, `tb+4`, `dy+3`, `ho+3`, `er+3`, `tm+3`, `yb+2`, `yb+3`, `lu+3`, `hf+4`, `pt+2`, `au+1`, `au+3`, `hg+2`, `hg+2_dimer`, `fr+1`, `ra+2`, `ac+3`, `th+3`, `th+4`, `pa+4`, `pa+5`, `u+3`, `u+4`, `u+5`, `u+6`, `np+3`, `np+4`, `np+5`, `np+6`, `pu+3`, `pu+4`, `pu+5`, `pu+6`, `pu+7`, `am+2`, `am+3`, `am+4`, `cm+3`, `cm+4`, `bk+3`, `bk+4`, `cf+2`, `cf+3`, `cf+4`, `es+2`, `es+3`, `fm+2`, `fm+3`, `md+2`, `md+3`, `no+2`, `lr+3`
-- `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`, `k33`, `k5`; [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons). Total: 82 files.
-- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6); ethyleneglycol, glycerol, methanediol (3); phenyloxenium (1); [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons) (28). Total: 102 files.
-- `carbonyl_derivatives/`: non-aromatic carbonyl compounds: aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid; [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons) (24). Total: 86 files.
-- `heterocycles/`: non-aromatic heterocycles. O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6); cages and polyaza rings (urotropin, tetrahydrooctaazanaphthalene). Total: 53 files.
+Organic inputs follow the [Beyer/Walter extraction](#beyerwalter-extraction); the directories are the list.
 
 ## Decision Log
 
@@ -436,42 +485,109 @@ Source: [Schirmeister, Schmuck and Wich, Beyer/Walter Organische Chemie, 25. Auf
 Page references are printed pages; PDF page = printed page + 22. Working data for each
 chapter is under `scratch/bw-chNN/`.
 
-### After the HW pass
+### Inclusion
+
+- Direct, added: the chapter's class, plus natural products, metabolites, hydrocarbons and
+  reactive intermediates from any chapter.
+- Incidental: other structurally defined organic compounds. After filtering against the direct
+  inputs with `canonical_eq`, 818 remained. 759 of them add no atom state or one-sphere
+  environment to the suite. 32 were added because they bring a new class, ring skeleton or bonding
+  situation, such as tetrathiafulvalene, Lawesson's reagent, boronic acids, silazanes, ynamines and
+  phosphorothioates. No stereo input was added, since none brings a new stereo kind. The rest
+  stay in `scratch/bw-chNN/incidental/`.
+- Out: 69 inorganic compounds and organometallics outside chapters 11 and 25, in
+  `scratch/bw-chNN/out/`. Coordination complexes without a metal–carbon bond are left to
+  the organometallic sources.
+- Removed: 47 compounds whose structures could not be established, in
+  `scratch/bw-chNN/uncertain/`.
+- The book is the source of material, not a witness of correctness. Printed errors are
+  corrected from PubChem or primary literature, never from memory alone.
+- Neutral phosphorus at valence 2 or 3 states `#h`. `P #v3 #h2` and `P #v2 #h3` (H2PF3,
+  H3PO2) raise a bare `P` to P(V) under AtomTyping MostSaturated, and those rows stay.
+- Each input states `#h` only where removing it changes the MostSaturated result under
+  AtomTyping or Counts: radicals, carbenes, NH tautomers and neutral phosphorus. 219 inputs
+  keep 253 such pins.
+- Each input cites its printed page as `; BW, p. N`.
+
+### Results
+
+Inputs equal under `canonical_eq` were dropped. Same-named inputs differing only in encoding
+keep the one with the most aromatic atoms, then the later chapter. D-fructose and
+L-arabinose keep both their open-chain and cyclic forms.
+
+| Ch. | Class | Added | Incidental | Out | Removed |
+|---:|---|---:|---:|---:|---:|
+| 4 | Saturated hydrocarbons | 53 | 52 | 8 | 0 |
+| 5 | Unsaturated aliphatic hydrocarbons | 90 | 105 | 21 | 4 |
+| 6 | Alcohols and thiols | 127 | 30 | 2 | 0 |
+| 7 | Halogen compounds | 51 | 13 | 2 | 0 |
+| 8 | Nitrogen compounds | 141 | 24 | 0 | 0 |
+| 9 | Ethers and thioethers | 50 | 6 | 0 | 1 |
+| 10 | Inorganic acid derivatives, organoelement compounds | 167 | 6 | 1 | 0 |
+| 11 | Organometallics | 82 | 25 | 0 | 1 |
+| 12 | Aldehydes and ketones | 182 | 28 | 3 | 0 |
+| 13 | Carboxylic acids | 126 | 66 | 2 | 4 |
+| 14 | Carboxylic acid derivatives | 107 | 9 | 3 | 1 |
+| 15 | Substituted carboxylic acids | 184 | 16 | 2 | 0 |
+| 16 | Carbonic and cyanic acid derivatives | 177 | 15 | 5 | 1 |
+| 17 | Carbohydrates | 158 | 16 | 1 | 0 |
+| 18 | Arenes | 91 | 21 | 5 | 1 |
+| 19 | Aromatic halogen, nitro and sulfonic compounds | 136 | 10 | 1 | 0 |
+| 20 | Phenols | 164 | 9 | 0 | 2 |
+| 21 | Aromatic carbonyl and carboxyl compounds | 216 | 35 | 1 | 0 |
+| 22 | Aromatic nitrogen compounds | 87 | 6 | 1 | 2 |
+| 23 | Oligo- and polyphenyls, arylalkanes | 83 | 8 | 2 | 0 |
+| 24 | Fused aromatic systems | 177 | 5 | 0 | 0 |
+| 25 | Non-benzenoid aromatics and annulenes | 91 | 11 | 0 | 4 |
+| 26 | Terpenes | 142 | 12 | 0 | 1 |
+| 27 | Steroids | 87 | 16 | 1 | 0 |
+| 28 | Five-membered rings, one heteroatom | 88 | 12 | 5 | 2 |
+| 29 | Benzo-fused five-membered rings | 111 | 23 | 0 | 1 |
+| 30 | Five-membered rings, two heteroatoms | 181 | 54 | 1 | 1 |
+| 31 | Five-membered rings, three or more heteroatoms | 80 | 24 | 0 | 0 |
+| 32 | Six-membered rings, one heteroatom | 101 | 12 | 0 | 4 |
+| 33 | Benzo-fused six-membered rings | 128 | 33 | 0 | 7 |
+| 34 | Six-membered rings, two or three heteroatoms | 132 | 31 | 1 | 3 |
+| 35 | Nitrogen bicycles | 114 | 25 | 0 | 5 |
+| 36 | Alkaloids | 88 | 27 | 1 | 2 |
+| 37 | Amino acids, peptides, proteins | 86 | 21 | 0 | 0 |
+| 38 | Nucleic acids | 91 | 12 | 0 | 0 |
+| | **Total** | **4,169** | **818** | **69** | **47** |
+
+New atom types, all aromatic sigma carbon:
+
+| Entry | Species | Pages |
+|---|---|---:|
+| `C #u #v2 #a` | Phenyl radical | 229 |
+| `C #c+ #v2 #a` | Phenyl cation | 630 |
+| `C #c- #n #v2 #a` | 4,5-Dimethylisoxazol-3-yl anion, thiamine ylide | 811, 881 |
+
+`C #u #v2 #a` ties with `C #v2 #a #h` on bare aromatic CH, as aliphatic CH already does.
+Such inputs are underdetermined under AtomTyping Strict and resolve to CH under
+MostSaturated with a recorded tie-break.
+
+### Open
 
 - Make parsing and resolution settings available in conformance inputs. `:config-overrides`
   sets raising defaults only; the harness fixes the valence tie-break, running every input
   under Strict and MostSaturated. Until then, inputs keep hydrogens implicit, so most
   organic inputs do not resolve under Strict.
-- Create `organometallics/` and `organoelement/`, and add the held compounds.
 
-### Chapter 4: saturated hydrocarbons
+### Checks
 
-Implemented; pages 99–127. All 108 inputs resolve under MostSaturated in AtomTyping and
-Counts, so the chapter requires no new atom types or ValenceTable entries. Hydrogens are
-implicit; the three hydrogen-free inputs also resolve under Strict, and the other 105 do
-not. All 2,811 resolution cases pass with existing snapshots unchanged.
-
-| Category | Count | Compounds (printed page) |
-|---|---:|---|
-| `hydrocarbons/` | 29 | heptane (100), octane (104), decane (100), dodecane (103), heptadecane (102), hectane (100), 2-2-dimethylhexane (104), 2-2-3-3-tetramethylbutane (104), di-tert-butylethyne (124), cyclodecane (110), cycloeicosane (111), sterane (118), norbornene (123), dicyclopentadiene (123), tetrahydrodicyclopentadiene (123), bicyclo-3.3.1-non-1-ene (120), bicyclo-4.2.1-non-1-ene (120), bicyclo-4.2.1-non-6-ene (120), twistane (120), diamantane (120), dodecahedrane (122), pagodane (125), dewar-benzene (121), benzvalene (121), 1-1-1-propellane (121), tetra-tert-butyltetrahedrane (124), 1-2-dimethylenecyclopropane (126), 3-3-dimethylene-1-1-bi-cyclobutylidene (126), trimethylene-trispirododecane (126) |
-| `functional_groups/` | 28 | propyl-iodide (105), 1-bromo-3-chloropropane (110), 1-3-dibromopropane (111), 1-4-dibromobutane (111), allyl-chloride (110), methallyl-dichloride (123), cyclobutyl-bromide (113), cyclobutanol (114), cyclopropylmethanol (116), cyclobutylamine (116), cyclopropylmethylamine (116), cyclopropanone-hydrate (114), cyclohexyl-hydroperoxide (117), 1-1-2-2-tetrafluorocyclobutane (112), octafluorocyclobutane (112), tetrachlorotetrafluorocyclobutane (112), 1-3-diiodobicyclo-1.1.1-pentane (126), bicyclo-1.1.1-pentane-1-3-dithiol (126), 1-chloro-7-7-dimethylnorbornane (125), 1-nitronorbornane (126), 1-3-5-7-tetranitrocubane (127), octanitrocubane (127), pentaerythritol (122), cyclodecyl-tosylate (110), amantadine (125), memantine (125), rimantadine (125), isodrin (125) |
-| `carbonyl_derivatives/` | 24 | cyclobutanone (114), cyclopentanone (114), cycloheptanone (115), cyclodecanone (110), cyclopent-2-enone (115), 2-chlorocyclohexanone (114), 2-bromocyclopentadienone (124), tetra-tert-butylcyclopentadienone (124), tetramethylcyclobutane-1-3-dione (112), 3-tert-butylfuran-2-5-dione (124), cyclobutanecarboxylic-acid (113), cyclobutane-1-1-dicarboxylic-acid (112), ethyl-cyclopentanecarboxylate (114), diethyl-malonate (111), diethyl-cyclopropane-1-1-dicarboxylate (112), diethyl-cyclobutane-1-1-dicarboxylate (113), adipic-acid (114), pimelic-acid (115), suberic-acid (115), spiro-3.3-heptane-2-6-dicarboxylic-acid (118), bicyclo-1.1.1-pentane-1-3-dicarboxylic-acid (123), 1-3-diacetylbicyclo-1.1.1-pentane (123), dimethyl-cubane-1-4-dicarboxylate (124), cubane-1-3-5-7-tetracarboxylic-acid (127) |
-| `aromatic/` | 3 | ketamine (117), alpha-truxillic-acid (113), beta-truxinic-acid (113) |
-| `metabolites/` | 9 | the eight inositol diastereomers, with both chiro enantiomers: cis, epi, allo, myo, muco, neo, scyllo, 1D-chiro, 1L-chiro (109–110) |
-| `natural_products/` | 5 | curcumenol (107), chrysanthemic-acid (107), r-muscone (111), civetone (111), cholesterol (119) |
-| `reactive_intermediates/` | 10 | ethyl-radical (106), propyl-radical (106), butyl-radical (106), cyclobutyl-cation (116), cyclopropylmethyl-cation (116), cyclobutyldiazonium (116), cyclopropylmethyldiazonium (116), 7-7-dimethylnorborn-1-yl-cation (125), 7-7-dimethylnorborn-1-yl-radical (125), 7-7-dimethylnorborn-1-yl-anion (125) |
-| **Total** | **108** | |
-
-Checks:
-
-- PubChem named each uncharged, closed-shell structure as intended, with the same formula
-  that umol resolves. It treats radicals and cations as their parent compounds, so those
-  hydrogen counts were checked directly.
-- `canonical_eq` found no duplicate among 1,432 existing inputs after hydrindane was dropped
-  as `hydrocarbons/bicyclo-4.3.0-nonane`.
+- Each input's resolved formula was compared with PubChem where a record exists, and each
+  printed name with its page text. PubChem treats radicals and most cations as their parent
+  compounds, so those hydrogen counts were checked directly.
+- The chloroketene adducts are the 6-ones, against the printed 7-one and in line with
+  [Brady and Roe, J. Am. Chem. Soc. 92 (1970), 4618](<../materials/valence/Brady-Roe-1970-alkylhaloketene-cycloadditions.pdf>),
+  doi:10.1021/ja00718a025.
+- The [9]cumulenes use 3,5-di-tert-butylphenyl and mesityl, against the printed
+  2,6-di-tert-butylphenyl, following
+  [Januszewski et al., Angew. Chem. Int. Ed. 52 (2013), 1817](<../materials/valence/Januszewski-2013-tetraarylcumulenes.pdf>),
+  doi:10.1002/anie.201208058.
+- The fixture formerly named `succinic-anhydride` was dihydrofuran-2,3-dione; it now holds
+  the book's succinic anhydride.
 - `:stereo-atoms` input matches the `#T` input of `stereo_tetrahedral/l-alanine`.
-- Inputs were lowered from SMILES with the fixture defaults, so `#h0` on bracket atoms
-  survives. Resolved outputs were unchanged by that correction.
 - The nine inositols follow [IUPAC, Nomenclature of Cyclitols, Eur. J. Biochem. 57 (1975), 1–7](<../materials/valence/IUPAC-1975-nomenclature-of-cyclitols.pdf>),
   doi:10.1111/j.1432-1033.1975.tb02270.x, formulas (1)–(9) and Recommendation I-10. Inputs
   rebuilt from those fractions and numbering directions equal the fixtures under
@@ -482,8 +598,14 @@ Checks:
 - NIST WebBook 2D files agree for myo, scyllo, allo, epi, muco and chiro. Its 3D myo file is
   all-cis, contradicting that record's name and descriptor.
 
-Limits:
+### Limits
 
+- Methano[10]annulene and its three derivatives do not resolve as aromatic: the 10-atom
+  perimeter is not a relevant cycle, and the union of the two seven-membered rings includes
+  the CH2 bridge. A fix would need a different ring enumeration; none is planned.
+- The phenyl cation states its π contribution with `C#c+#a`. Left open, `C#c+#a+` reads the
+  boron row under Counts, whose contribution of 0 suits a π cation such as tropylium but not
+  this σ cation.
 - The DSL has only tetrahedral and cis/trans stereo. Axial and planar chirality are not
   planned for now, so spiro[3.3]heptane-2,6-dicarboxylic acid and bicyclo[3.3.1]non-1-ene
   carry no stereo.
@@ -494,54 +616,11 @@ Limits:
   forming.
 - Bissecododecahedradiene and propellane polymers are omitted: the first needs its structure
   confirmed, the second is not a single compound.
-- Held for `organometallics/`: methylsodium, diethylzinc, methyllithium, tert-butyllithium,
-  cyclobutylmagnesium bromide, 4-bornanelithium and carboplatin.
-- Book misprints: "Padogan" for pagodane, and C7H14 for heptane.
-
-### Chapter 5: unsaturated aliphatic hydrocarbons
-
-Proposed, awaiting review; the suite is unchanged. Pages 129–174. All 237 proposed inputs
-resolve under MostSaturated in AtomTyping and Counts, so the chapter requires no new atom
-types or ValenceTable entries. Inputs are in `scratch/bw-ch05/proposed/`.
-
-| Category | Count | Compounds (printed page) |
-|---|---:|---|
-| `hydrocarbons/` | 29 | 2-methylbut-1-ene (129), 3-methylbut-1-ene (129), pent-1-ene (129), 2-methylpent-1-ene (131), dec-1-ene (131), hex-1-ene (131), oct-1-ene (131), 2-3-dimethylbut-2-ene (135), isododecane (141), 5-ethylidenenorbornene (143), isooctane (147), cyclooctane (149), 2-3-dimethylbuta-1-3-diene (150), isoprene (150), penta-1-3-diene (154), 3-methylhexa-1-5-diene (156), hepta-1-5-diene (156), hexa-1-5-diene (156), dimethylfulvene (158), fulvalene (158), 6-methylfulvene (159), bicyclo-3.2.0-hepta-2-6-diene (159), cycloheptatriene (159), norcaradiene (159), cyclooctatetraene (160), cyclododecane (162), fulvene (167), isohexane (167), 18-annulene (171) |
-| `functional_groups/` | 71 | 1-2-dibromoethane (130), isopropyl-hydrogen-sulfate (132), 1-2-dichloropropane (133), 1-chloropropan-2-ol (133), acrylonitrile (133), allyl-alcohol (133), ethanolamine (133), ethylenediamine (133), propylene-glycol (133), vinyl-chloride (133), vinylidene-dichloride (133), 1-2-dibromopropane (135), 1-bromopropane (135), 2-3-dibromo-2-3-dimethylbutane (135), 2-iodopropane (135), allyl-bromide (135), diacetyl-peroxide (136), ethyl-hydrogen-sulfate (136), 1-chloro-2-nitrosoethane (137), 1-chloro-2-nitrosoethane-dimer (137), peracetic-acid (137), triethylamine (139), triethylammonium (139), aibn (140), cumene-hydroperoxide (140), thiophenol (141), dibenzoyl-peroxide (142), tetrafluoroethene (144), 1-1-2-trichloroethane (145), isobutyl-vinyl-ether (145), vinyl-alcohol (146), 1-2-dibromocyclopropane (147), cyclopropylamine (147), cyclopropyltrimethylammonium-hydroxide (147), isobutyl-alcohol (147), cyclobutyltrimethylammonium-hydroxide (148), cyclopentanol (148), performic-acid (148), cyclopentyl-bromide (149), 3-4-dibromobut-1-ene (152), 3-4-dichlorobut-1-ene (152), chloroprene (152), 1-chlorobut-2-ene (153), 3-chlorobut-1-ene (153), 3-methylbutane-1-3-diol (157), acetonitrile (157), butane-1-3-diol (157), bicyclo-2.2.2-oct-5-ene-2-2-3-3-tetracarbonitrile (159), bicyclo-3.2.0-hept-2-en-6-ol (159), bicyclo-3.2.0-hept-2-en-6-yl-methanesulfonate (159), tetracyanoethylene (159), tmeda (160), 7-8-dibromobicyclo-4.2.0-octa-2-4-diene (161), 1-4-dibromobut-2-yne (164), 2-3-dichloroprop-1-ene (164), tetrabromomethane (166), 6-6-dibromobicyclo-3.1.0-hex-2-ene (167), 1-1-2-2-tetrachloroethane (170), pentan-1-ol (170), tetrachloroethene (170), trichloroethene (170), 1-1-diiodoethane (171), vinyl-iodide (171), but-3-yn-2-ol (172), ethyl-vinyl-ether (172), hex-3-yne-2-5-diol (172), adiponitrile (173), but-2-yne-1-4-diol (173), butane-1-4-diol (173), hexamethylenediamine (173), propargyl-alcohol (173) |
-| `carbonyl_derivatives/` | 32 | acetone-cyanohydrin (133), acrolein (133), acrylic-acid (133), butyraldehyde (133), diacetone-alcohol (133), isobutyl-methyl-ketone (133), mesityl-oxide (133), methyl-methacrylate (133), vinyl-acetate (133), acetaldol (157), n-methyl-2-pyrrolidone (157), cyclopentadienecarboxylic-acid (158), divinyl-ketone (158), benzyl-methyl-carbonate (159), bicyclo-3.2.0-hept-2-en-6-one (159), ketene (159), monomethyl-carbonate (159), chloro-ethyl-ketene (160), chloro-isopropyl-ketene (160), chloro-methyl-ketene (160), cyclododecanone (162), cyclododecanone-oxime (162), laurolactam (162), carbon-suboxide (163), dihydrophthalic-acid (167), dihydrophthalic-anhydride (167), bicyclo-2.2.0-hex-5-ene-2-3-dicarboxylic-acid (168), bicyclo-2.2.0-hex-5-ene-2-3-dicarboxylic-anhydride (168), vinylacetic-acid (168), methyl-9-10-dibromostearate (170), vinyl-stearate (172), methyl-vinyl-ketone (173) |
-| `heterocycles/` | 7 | epichlorohydrin (133), propylene-oxide (133), 1-2-4-trioxolane (139), tetrathiafulvalene (158), benzvalene-derived-azo-compound (167), benzvalene-ptad-adduct (167), ptad (167) |
-| `aromatic/` | 26 | cumene (133), ethylbenzene (133), phenol (133), styrene (133), m-chlorobenzoic-acid (137), m-chloroperbenzoic-acid (137), hydroquinone (141), pyrogallol (141), methyl-benzoate (149), benzaldehyde (158), benzophenone (158), hexaphenylfulvalene (158), phenylfulvene (158), phenylacetaldehyde (161), terephthalaldehyde (161), sa-1-3-di-naphthalen-1-yl-1-3-diphenylpropa-1-2-diene (164), diphenylbutadiyne (165), 1-1-6-6-tetraphenylhexa-2-4-diyne-1-6-diol (166), 1-6-diiodo-1-1-6-6-tetraphenylhexa-2-4-diyne (166), diaryl-penta-diynol (166), tetraaryl-9-cumulene (166), tetraaryl-octatetrayne-diol (166), tetraphenylbutatriene (166), tetraphenylhexapentaene (166), 7-phenylbicyclo-4.2.0-octa-1-3-diene (167), phthalic-acid (167) |
-| `stereo_cis_trans/` | 16 | e-but-2-ene (129), e-pent-2-ene (129), z-pent-2-ene (129), e-cycloheptene (149), z-cycloheptene (149), e-1-4-dibromobut-2-ene (152), e-1-4-dichlorobut-2-ene (152), z-1-4-dibromobut-2-ene (152), e-z-hexa-2-4-diene (153), z-z-cycloocta-1-5-diene (160), e-e-e-cyclododeca-1-5-9-triene (162), e-e-z-cyclododeca-1-5-9-triene (162), 1-4-bis-4-nitrobiphenyl-2-2-diyl-butatriene (165), 1-4-dibromo-1-4-diphenylbutatriene (165), 2-3-dichloro-1-1-4-4-tetraphenylbut-2-ene (166), e-1-2-dichloroethene (170) |
-| `stereo_tetrahedral/` | 14 | cis-9-oxabicyclo-6.1.0-nonane (137), trans-9-oxabicyclo-6.1.0-nonane (137), cis-cyclopentane-1-2-diol (149), r-r-trans-cyclopentane-1-2-diol (149), s-s-trans-cyclopentane-1-2-diol (149), s-1-phenylethylamine (150), cis-3-4-dimethylcyclobutene (154), trans-3-4-dimethylcyclobutene (154), endo-6-chloro-6-methylbicyclo-3.2.0-hept-2-en-7-one (160), exo-6-chloro-6-methylbicyclo-3.2.0-hept-2-en-7-one (160), bicyclo-4.2.0-octa-2-4-7-triene (162), 7-phenylbicyclo-4.2.0-octa-1-4-diene (167), r-rasagiline (174), r-selegiline (174) |
-| `metabolites/` | 12 | 1-aminocyclopropane-1-carboxylic-acid (146), dihydrosterculic-acid (148), lactobacillic-acid (148), sterculic-acid (148), calcitriol (162), cholecalciferol (162), previtamin-d3 (163), methyl-oleate (169), oleic-acid (169), stearolic-acid (170), stearic-acid (172), dopamine (174) |
-| `natural_products/` | 5 | cocaine (159), pseudopelletierine (160), 7-dehydrocholesterol (162), nystatin-a1 (163), ethinylestradiol (174) |
-| `reactive_intermediates/` | 25 | propyl-cation (134), isopropyl-cation (135), tetramethylethylene-bromonium (135), 1-bromopropan-2-yl-radical (136), acetoxy-radical (136), carbonyl-oxide (139), phenylthiyl-radical (141), 3-amino-1-cyanoethyl-anion (142), ethyl-cation (146), ethyloxonium (146), cyclopropenylidene (148), cyclopropenylium (148), allyl-cation (151), 4-bromobut-2-enyl-cation (152), methylallyl-cation (153), pentadienyl-radical (155), allyl-radical (156), 3-hydroxy-1-1-dimethylpropyl-cation (157), hydroxymethyl-cation (157), cyclooctatetraene-dianion (160), 4-bromo-1-4-diphenylbutatrienyl-cation (165), isobenzene (166), dibromocarbene (167), acetylide (168), vinyl-cation (170) |
-| **Total** | **237** | |
-
-Of 423 extracted entries, 81 duplicate existing inputs under `canonical_eq` and 67 are simple
-inorganic reagents left to the HW pass. 30 are held for `organometallics/` and
-`organoelement/`. Tropone and tropolone are omitted as Kekulé forms of `aromatic/` inputs;
-the amide anion, hydrogen sulfate, methyl radical and methylene as existing or inorganic
-species; atropine until chapter 36, because its C3 configuration is undefined in PubChem.
-
-Checks:
-
-- Every compound name found in the page text is on its listed page. PubChem names were
-  compared with the intended structures; it treats radicals and most cations as parent
-  compounds and misreads the cyclopropenylium SMILES, so those were checked directly.
-- PubChem has no record for 14 inputs, so these rest on the book's drawings alone.
-
-Limits and items to review:
-
 - Resolution rejects `#C` on a cumulene's central bond, so the book's E/Z cumulene pairs are
   one stereo-free input each. Axial and planar chirality are likewise unencoded.
-- The [9]cumulene family uses 2,6-di-tert-butylphenyl as drawn on p. 166. The literature
-  compounds are believed to carry 3,5-di-tert-butylphenyl; this is not checked against a
-  primary source.
-- The chloroketene adducts follow the drawn 7-one on p. 160, opposite to the book's own
-  neighbouring scheme and to the known 6-one regiochemistry.
 - isooctane, isododecane and isohexane are assumed single isomers; the book gives no
   structure.
+- Book misprints: "Padogan" for pagodane, and C7H14 for heptane.
 - Book misprints: Tetrathiofulvalen, Tetraethylmethylendiamin for TMEDA, Mesitylchlorid for
   mesityl oxide, Latobacillinsäure, and cis-/trans-1,2-Cyclobuten.
 
@@ -1592,22 +1671,22 @@ both use the existing Te#c+#n#v3 state (Ch19).
 | Hydrogen-bond compatibility using existing atom types | hydrogen_bonds/{h7o3+,h9o4+,h13o6+,h3o2-}.edn |
 | S4N4 HW contributor | multicenter_bonds/s4n4.edn |
 | Small nitrides, existing states | chalcogens/{sn+,s2n+}.edn; multicenter_bonds/s4n2.edn |
-| S2N2, aromatic and singlet-diradical multicenter descriptions | aromatic/s2n2.edn; multicenter_bonds/s2n2-diradical.edn |
-| Aromatic nitride ions | aromatic/{s2n3+,s3n2-2+,se3n2-2+,s4n3+,s4n4-2+,s5n5+,s3n3-}.edn |
+| S2N2, aromatic and singlet-diradical multicenter descriptions | non_benzenoid_aromatics/s2n2.edn; multicenter_bonds/s2n2-diradical.edn |
+| Aromatic nitride ions | non_benzenoid_aromatics/{s2n3+,s3n2-2+,se3n2-2+,s4n3+,s4n4-2+,s5n5+,s3n3-}.edn |
 | Radical nitride cations | multicenter_bonds/{s3n2+,se3n2+}.edn |
 | Acyclic nitride anions | chalcogens/sn2-2.edn; multicenter_bonds/{s3n-,s4n-}.edn |
 | S4N4 / Se4N4, localized descriptions | chalcogens/{s4n4,se4n4}-localized.edn |
-| Aromatic chalcogen dications | aromatic/{s4,s6,se4,te4}-2+.edn |
+| Aromatic chalcogen dications | non_benzenoid_aromatics/{s4,s6,se4,te4}-2+.edn |
 | Cyclic sulfur radical cations | multicenter_bonds/{s5+,s6+,s7+}.edn |
 | Localized S8²⁺/Se8²⁺ | chalcogens/{s8,se8}-localized-2+.edn |
 | Te6²⁺/Te6⁴⁺ resonance contributors | chalcogens/te6-localized-{2+,4+}.edn |
-| Singlet phenyloxenium | functional_groups/phenyloxenium.edn |
+| Singlet phenyloxenium | functional_groups_aromatic/phenyloxenium.edn |
 | Existing EH radicals, implicit H | chalcogens/{oh,sh,seh}-implicit.edn |
 | Existing hydronium, sulfonium and selenonium states, implicit/mixed H | chalcogens/{oh3,sh3,seh3}-{implicit,mixed-h1,mixed-h2}+.edn |
 | Existing hydrochalcogenide anions, implicit H | chalcogens/{oh,sh,seh}-implicit-.edn |
 | Existing H2S/H2Se/H2Te states, mixed H | chalcogens/{h2s,h2se,h2te}-mixed.edn |
 | Existing selenium valences | chalcogens/seo2.edn; chalcogens/sef6.edn |
-| Existing heteroaromatic states and Kekulé notation | aromatic/{pyrylium,furan,furan-kekule}.edn |
+| Existing heteroaromatic states and Kekulé notation | heterocycles_6_membered/pyrylium.edn; heterocycles_5_membered/{furan,furan-kekule}.edn |
 
 The capacity expansion removes Counts rejections of Se4Cl16, TeF8²− and TeOF6²−.
 After the [accounting correction](240-validation-constraint-ops-2026-10-18.md#counts-electron-accounting)
@@ -2123,7 +2202,7 @@ solid/Cp graph probes confirm the specific registry gaps recorded in Ae23; Count
 resolves both under both policies. These checks add no registry rows or permanent
 fixtures; the approved states already have conformance coverage.
 
-Ae24 adds five donor_acceptor fixtures. All 20 outputs agree across both models
+Ae24 adds five dative_bonds fixtures. All 20 outputs agree across both models
 and policies, satisfy the invariants and need no tie break. The 1424 earlier
 snapshots are unchanged. The KMgH3 ionic probe also agrees across all four
 configurations and satisfies the invariants; it needs no additional registry row.
@@ -2822,7 +2901,7 @@ preserves unpaired occupations when Counts' default pairing would differ.
 Crg27 adds the only two metal MC states; no aromatic metal state was added.
 
 All 260 new metal states and both O companions have inferred coverage in 262
-independent fixtures: 170 `donor_acceptor`, 41 `hydrides`, 32 `inorganic_ions`,
+independent fixtures: 170 `dative_bonds`, 41 `hydrides`, 32 `inorganic_ions`,
 11 `atomic_ions` and 8 `inorganic_small`. Their inputs omit target-atom lone pairs,
 localized valence and accepted-pair counts. AtomTyping and Counts, each with Strict and
 MostSaturated, infer the expected states and agree on the complete output graphs.
@@ -3299,7 +3378,7 @@ the existing Counts route for these elements.
 
 | Coverage | Result |
 | --- | --- |
-| New fixtures | 199: donor_acceptor 112, hydrides 51, inorganic_ions 18, atomic_ions 9, inorganic_small 9 |
+| New fixtures | 199: dative_bonds 112, hydrides 51, inorganic_ions 18, atomic_ions 9, inorganic_small 9 |
 | Added states | All 195; each input resolves to the expected state under AtomTyping/Counts × Strict/MostSaturated and passes ValenceInvariantsValidator |
 | Retained states | All 12 supported states covered; Co38 retained with its source gap explicit |
 | Existing inputs | Rh²⁺/Rh³⁺ low-spin inputs and cobalt porphine now supply their intended spin; their existing snapshots are unchanged. Separate free-ion inputs retain ground-state occupations |

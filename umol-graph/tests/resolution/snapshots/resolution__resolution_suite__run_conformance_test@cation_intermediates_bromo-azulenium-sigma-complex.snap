@@ -1,0 +1,66 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [4 5 6 7 8 9 10] :attrs "[1,0,1,1,1,1,1]"}]
+      :atoms ["Br#n3" "C#h" "C#h" "C#h" "C" "C#c+#h" "C#h" "C#h" "C#h" "C#h" "C"]
+      :bonds [
+        [0 1 :single]
+        [1 10 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 10 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]]}
+    :success true
+    :tie-breaks [1 2 3 6 7 8 9]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      2 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      3 ["C#h#v3#d0#t0#a!#m!" "C#u#v3#d0#t0#a!#m!"]
+      6 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      7 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      8 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      9 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [4 5 6 7 8 9 10] :attrs "[1,0,1,1,1,1,1]"}]
+      :atoms ["Br#n3" "C#h" "C#h" "C#h" "C" "C#c+#h" "C#h" "C#h" "C#h" "C#h" "C"]
+      :bonds [
+        [0 1 :single]
+        [1 10 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 10 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :single]]}
+    :success true
+    :tie-breaks [1 2 3 5 6 7 8 9]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 ["C#u#v3#a!" "C#h#v3#a!"]
+      2 ["C#u#v3#a!" "C#h#v3#a!"]
+      3 ["C#u#v3#a!" "C#h#v3#a!"]
+      5 ["C#c+#u#v2#a0" "C#c+#h#v2#a0"]
+      6 ["C#u#v2#a" "C#h#v2#a"]
+      7 ["C#u#v2#a" "C#h#v2#a"]
+      8 ["C#u#v2#a" "C#h#v2#a"]
+      9 ["C#u#v2#a" "C#h#v2#a"]}}}
