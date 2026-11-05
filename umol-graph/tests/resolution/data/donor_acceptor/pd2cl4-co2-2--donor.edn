@@ -1,0 +1,6 @@
+; Pd2Cl4(mu-CO)2(2-), paired M-M bond; HW II, p. 2057; bridging CO allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#c+1#u0" "Pd#c+1#u0" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "C" "O" "C" "O"]
+         :bonds [[0 1 "1"] [6 7 "2"] [0 6 "1"] [1 6 "1"] [8 9 "2"] [0 8 "1"] [1 8 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 1 :attrs "1"} {:donors [5] :acceptor 1 :attrs "1"}]}}

@@ -8,13 +8,15 @@
 # --- | ---
 # HW  | Holleman/Wiberg, Anorganische Chemie, 103. Auflage.; I/II denote the volume (Band 1/2).
 # PW  | Present work — calculations and adopted assignments.
+# A01Pd | Andrews et al., J. Phys. Chem. A 105 (2001), 3052–3063; doi:10.1021/jp003721t
+# A01Pt | Andrews, Wang and Manceron, J. Chem. Phys. 114 (2001), 1559–1566; doi:10.1063/1.1333020
 # A06 | Avdei et al., Russ. J. Inorg. Chem. 51 (2006), 1920–1924; doi:10.1134/S0036023606120138
 # A07 | Aragoni et al., Bioinorg. Chem. Appl. (2007), 17416; doi:10.1155/2007/17416
 # A12 | Arp et al., J. Am. Chem. Soc. 134 (2012), 6409-6415; doi:10.1021/ja300654t
 # A68 | Alyea et al., Chem. Commun. (1968), 495; doi:10.1039/C19680000495
 # A93 | Arduengo et al., Inorg. Chem. 32 (1993), 1541-1542; doi:10.1021/ic00061a004
 # ADD09 | Aymar, Deiglmayr and Dulieu, Can. J. Phys. 87 (2009), 543-556; doi:10.1139/P09-005
-# ASD | NIST Atomic Spectra Database, Ru/Os ground states (2026); https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html
+# ASD | NIST Atomic Spectra Database, atomic and ionic ground states (2026); https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html
 # AW03H | Andrews and Wang, J. Am. Chem. Soc. 125 (2003), 11751-11760; doi:10.1021/ja036307q
 # AW69 | Allen and Warren, Inorg. Chem. 8 (1969), 1895-1901; doi:10.1021/ic50079a018
 # B00 | Baran, J. Fluorine Chem. 101 (2000), 61-63; doi:10.1016/S0022-1139(99)00194-3
@@ -23,8 +25,12 @@
 # B07 | Brock et al., J. Am. Chem. Soc. 129 (2007), 3598-3611; doi:10.1021/ja0673480
 # B72 | Bartlett et al., Inorg. Chem. 11 (1972), 1124-1127; doi:10.1021/ic50111a042
 # B82 | Bojes et al., J. Am. Chem. Soc. 104 (1982), 4837-4841; doi:10.1021/ja00382a017
+# B93 | Bau et al., J. Chem. Soc., Dalton Trans. (1993), 3359–3362; doi:10.1039/DT9930003359
+# B95 | Bronger and à Brassard, Angew. Chem. Int. Ed. Engl. 34 (1995), 898–900; doi:10.1002/anie.199508981
 # B98 | Baldas et al., J. Chem. Soc., Dalton Trans. (1998), 2303–2314; doi:10.1039/a802559b
+# B99 | Bare et al., J. Phys. Chem. A 103 (1999), 5456–5462; doi:10.1021/jp990823e
 # BHN71 | Bradley, Hursthouse and Newing, J. Chem. Soc. D (1971), 411-412; doi:10.1039/C2971000411B
+# BL62 | Bartlett and Lohmann, J. Chem. Soc. (1962), 5253–5261; doi:10.1039/JR9620005253
 # BLH81 | Burt, Leigh and Hughes, J. Chem. Soc., Dalton Trans. (1981), 793-799; doi:10.1039/DT9810000793
 # Be94 | Beck, Angew. Chem. Int. Ed. Engl. 33 (1994), 163-172; doi:10.1002/anie.199401631
 # BPS26 | Bajnóczi, Sigfridsson Clauss and Persson, J. Solution Chem. 55 (2026), 851-865; doi:10.1007/s10953-025-01559-9
@@ -34,6 +40,7 @@
 # C00 | Chirik, Caltech thesis (2000), ch. 1; doi:10.7907/2qx2-9753
 # C01 | Christe et al., J. Am. Chem. Soc. 123 (2001), 6338-6348; doi:10.1021/ja003347a
 # C02 | Contakes et al., Inorg. Chem. 41 (2002), 1670–1678; doi:10.1021/ic011030l
+# C16 | Chen et al., Inorg. Chem. 55 (2016), 12603–12617; doi:10.1021/acs.inorgchem.6b01544
 # C23 | Coates, Banerjee and Odelius, Inorg. Chem. 62 (2023), 16854–16866; doi:10.1021/acs.inorgchem.3c02320
 # C68 | Christe and Sawodny, Z. Anorg. Allg. Chem. 357 (1968), 125-133; doi:10.1002/zaac.19683570303
 # C72D | Christe and Curtis, Inorg. Chem. 11 (1972), 35-39; doi:10.1021/ic50107a009
@@ -54,9 +61,12 @@
 # C93T | Christe et al., Inorg. Chem. 32 (1993), 4089-4093; doi:10.1021/ic00071a020
 # C94P | Christe et al., J. Am. Chem. Soc. 116 (1994), 2850-2858; doi:10.1021/ja00086a018
 # C96 | Chertihin et al., J. Phys. Chem. 100 (1996), 5261–5273; doi:10.1021/jp953198w
+# C97 | Chertihin et al., J. Phys. Chem. A 101 (1997), 8793–8802; doi:10.1021/jp972022m
+# C97Ni | Citra et al., J. Phys. Chem. A 101 (1997), 3109–3118; doi:10.1021/jp970019x
 # C98 | Chang, Connick, Low, Day and Gray, Inorg. Chem. 37 (1998), 3107–3110; doi:10.1021/ic970598k
 # CA94 | Chertihin and Andrews, J. Am. Chem. Soc. 116 (1994), 8322-8327; doi:10.1021/ja00097a045
 # CA95 | Chertihin and Andrews, J. Phys. Chem. 99 (1995), 15004-15010; doi:10.1021/j100041a014
+# CA99 | Citra and Andrews, J. Phys. Chem. A 103 (1999), 4845–4854; doi:10.1021/jp990864a
 # CB78 | Chin and Bau, Inorg. Chem. 17 (1978), 2314–2317; doi:10.1021/ic50186a061
 # CG79 | Cloke and Green, J. Chem. Soc., Chem. Commun. (1979), 127-128; doi:10.1039/C39790000127
 # CL66 | Cotton and Lippard, Inorg. Chem. 5 (1966), 9–16; doi:10.1021/ic50035a003
@@ -76,6 +86,7 @@
 # DB91 | Das and Balasubramanian, J. Phys. Chem. 95 (1991), 3979-3984; doi:10.1021/j100163a018
 # DW77 | Datta and Wreford, Inorg. Chem. 16 (1977), 1134-1137; doi:10.1021/ic50171a031
 # DZ20 | Dzhabieva et al., Biomimetics 5 (2020), 3; doi:10.3390/biomimetics5010003
+# E15 | England et al., Inorg. Chem. 54 (2015), 12002–12018; doi:10.1021/acs.inorgchem.5b02415
 # E92 | Eppley et al., J. Organomet. Chem. 431 (1992), 133-142; doi:10.1016/0022-328X(92)80112-B
 # EC76 | Epiotis and Cherry, J. Am. Chem. Soc. 98 (1976), 4365-4370; doi:10.1021/ja00431a003
 # EC90 | Ellis and Chi, J. Am. Chem. Soc. 112 (1990), 6022-6025; doi:10.1021/ja00172a017
@@ -87,8 +98,11 @@
 # FRW89 | Fanwick, Root and Walton, Inorg. Chem. 28 (1989), 3203–3209; doi:10.1021/ic00315a024
 # FS77 | Fieselmann and Stucky, J. Organomet. Chem. 137 (1977), 43-54; doi:10.1016/S0022-328X(00)80841-4
 # Fr24 | Fritsch et al., Chem. Eur. J. (2024), e202400357; doi:10.1002/chem.202400357
+# G05 | Gordon, Spectroscopy of selected metal-containing diatomic molecules, Waterloo thesis (2005)
 # G09 | Ghadwal et al., Angew. Chem. Int. Ed. 48 (2009), 5683-5686; doi:10.1002/anie.200901766
+# G09Ir | Gong et al., Angew. Chem. Int. Ed. 48 (2009), 7879–7883; doi:10.1002/anie.200902733
 # G10 | Grant et al., Inorg. Chem. 49 (2010), 261-270; doi:10.1021/ic901956g
+# G11 | Gong et al., Theor. Chem. Acc. 129 (2011), 667–676; doi:10.1007/s00214-011-0919-7
 # G12 | Goebbert, Chem. Phys. Lett. 551 (2012), 19-25; doi:10.1016/j.cplett.2012.08.065
 # G16 | Goettel et al., Angew. Chem. Int. Ed. 55 (2016), 13780-13783; doi:10.1002/anie.201607583
 # G18 | Ganesamoorthy et al., Nat. Commun. 9 (2018), 87; doi:10.1038/s41467-017-02581-2
@@ -103,19 +117,26 @@
 # H13 | Hanway et al., J. Am. Chem. Soc. 135 (2013), 9078-9082; doi:10.1021/ja403370k
 # H19 | Hussein et al., J. Org. Chem. 84 (2019), 15173–15183; doi:10.1021/acs.joc.9b02174
 # H81 | Harrison, J. Am. Chem. Soc. 103 (1981), 7406-7413; doi:10.1021/ja00415a002
+# HC88 | Hamilton and Crabtree, J. Am. Chem. Soc. 110 (1988), 4126–4133; doi:10.1021/ja00221a005
 # HC90 | Hlatky and Crabtree, Inorg. Synth. 27 (1990), 8-14; doi:10.1002/9780470132586.ch2
 # HH79 | Huber and Herzberg, Molecular Spectra and Molecular Structure IV: Constants of Diatomic Molecules (1979); doi:10.1007/978-1-4757-0961-2
 # HR57 | Hepworth and Robinson, J. Inorg. Nucl. Chem. 4 (1957), 24-29; doi:10.1016/0022-1902(57)80104-3
 # HT12 | Hendrickx and Tran, J. Chem. Theory Comput. 8 (2012), 3089–3096; doi:10.1021/ct300516y
+# I00 | Ignatyev et al., J. Am. Chem. Soc. 122 (2000), 1989–1994; doi:10.1021/ja9914083
 # I98 | Moss, IUPAC fused-ring nomenclature, Pure Appl. Chem. 70 (1998), 143-216; doi:10.1351/pac199870010143
 # J12 | Jackson et al., Organometallics 31 (2012), 8265-8274; doi:10.1021/om300892y
 # J13 | Johnstone et al., Eur. J. Inorg. Chem. (2013), 1097–1104; doi:10.1002/ejic.201201346
 # J19 | Jones et al., ACS Cent. Sci. 5 (2019), 1507-1513; doi:10.1021/acscentsci.9b00403
+# JA16 | Jimenez-Izal and Alexandrova, Phys. Chem. Chem. Phys. 18 (2016), 11644–11652; doi:10.1039/C5CP04330A
 # JEA21 | Jungfer, Elsholz and Abram, Organometallics 40 (2021), 3095–3112; doi:10.1021/acs.organomet.1c00274
 # JH75 | Jasinski and Holt, Inorg. Chem. 14 (1975), 1267–1273; doi:10.1021/ic50148a013
+# K12 | Krzystek et al., Inorg. Chem. 51 (2012), 4954–4964; doi:10.1021/ic202185x
+# K15 | Kanungo et al., Angew. Chem. Int. Ed. (2015); doi:10.1002/anie.201411959
 # K18 | Karadakov et al., Chem. Eur. J. 24 (2018), 16791-16803; doi:10.1002/chem.201804292
 # K21 | King, Levason and Reid, Dalton Trans. 50 (2021), 17751-17765; doi:10.1039/D1DT03339E
+# K24 | Kick et al., Angew. Chem. Int. Ed. 63 (2024), e202408356; doi:10.1002/anie.202408356
 # K71 | King, Logan, Morris and Wallwork, Chem. Commun. (1971), 554; doi:10.1039/C29710000554
+# K71Co | Klein, Angew. Chem. Int. Ed. Engl. 10 (1971), 343; doi:10.1002/anie.197103431
 # K84 | Krebs, Schäffer and Pohl, Z. Naturforsch. B 39 (1984), 1633-1641; doi:10.1515/znb-1984-1202
 # K91 | Krebs et al., Z. Anorg. Allg. Chem. 592 (1991), 17-34; doi:10.1002/zaac.19915920103
 # KBK80 | de Koning et al., J. Organomet. Chem. 195 (1980), 1-12; doi:10.1016/S0022-328X(00)93381-3
@@ -123,11 +144,17 @@
 # KH74 | Kruck and Hempel, Angew. Chem. Int. Ed. Engl. 13 (1974), 201-202; doi:10.1002/anie.197402011
 # KJ86 | Karpas and Jasien, Int. J. Mass Spectrom. Ion Processes 69 (1986), 115-119; doi:10.1016/0168-1176(86)87046-X
 # KP04 | Krossing and Passmore, Inorg. Chem. 43 (2004), 1000-1011; doi:10.1021/ic0207303
+# KW67 | Keller and Wawersik, J. Organomet. Chem. 8 (1967), 185–188; doi:10.1016/S0022-328X(00)84718-X
 # L08 | Louwerse, Computational Modeling of Oxidation Catalysis, VU thesis (2008), ch. 5; Louwerse and Baerends (2007), doi:10.1039/B613182D
+# L09 | Liptak et al., J. Phys. Chem. B 113 (2009), 5245–5254; doi:10.1021/jp810136d
+# L14 | Linton et al., J. Mol. Spectrosc. 304 (2014), 37–42; doi:10.1016/j.jms.2014.08.003
+# L21F | Li et al., Angew. Chem. Int. Ed. 60 (2021), 6391–6394; doi:10.1002/anie.202015501
+# L21O | Li et al., Inorg. Chem. Front. 8 (2021), 1215–1228; doi:10.1039/D0QI01151G
 # L83 | Luetkens, Huffman and Sattelberger, J. Am. Chem. Soc. 105 (1983), 4474-4475; doi:10.1021/ja00351a058
 # L84 | Luetkens et al., Inorg. Chem. 23 (1984), 1718-1726; doi:10.1021/ic00180a017
 # L95 | Lukens, Berkeley thesis (1995), LBL-37646; https://digital.library.unt.edu/ark:/67531/metadc621122/
 # L97 | Landrum, Goldberg and Hoffmann, J. Chem. Soc., Dalton Trans. (1997), 3605-3613; doi:10.1039/A703736H
+# L97Ni | Li et al., J. Chem. Phys. 106 (1997), 2055–2059; doi:10.1063/1.473342
 # LH76 | Lauher and Hoffmann, J. Am. Chem. Soc. 98 (1976), 1729–1742; doi:10.1021/ja00423a017
 # LKF05 | Lein, Krapp and Frenking, J. Am. Chem. Soc. 127 (2005), 6290-6299; doi:10.1021/ja042295c
 # Le04 | Lehmann et al., Inorg. Chem. 43 (2004), 6905-6921; doi:10.1021/ic040015o
@@ -155,12 +182,16 @@
 # Mo01 | Mosyagin et al., GRECP/RCC calculation of HgH (2001); arXiv:physics/0101047v4
 # N14 | Närhi et al., Spectrochim. Acta A 117 (2014), 728-738; doi:10.1016/j.saa.2013.09.063
 # N18 | Novák et al., Phys. Chem. Chem. Phys. 20 (2018), 30247–30256; doi:10.1039/C8CP05952G
+# N84 | Navon and Kläui, Inorg. Chem. 23 (1984), 2722–2725; doi:10.1021/ic00185a036
 # NBS74 | McNesby, Measures for Air Quality (1972-1973), NBS Technical Note 828 (1974), p. 123
 # NMR68 | Chatt, Leigh, Mingos, Randall and Shaw, Chem. Commun. (London) (1968), 419–420; doi:10.1039/C19680000419
 # OC82 | Oberhammer and Christe, Inorg. Chem. 21 (1982), 273-275; doi:10.1021/ic00131a050
+# P05 | Procelewska et al., Inorg. Chem. 44 (2005), 7732–7742; doi:10.1021/ic050478+
 # P06 | Pointner, Suontamo and Schrobilgen, Inorg. Chem. 45 (2006), 1517-1534; doi:10.1021/ic0510260
 # P71 | Pennella, Chem. Commun. (1971), 158; doi:10.1039/C2971000158A
+# P82 | Pacchioni, Fantucci and Valenti, J. Organomet. Chem. 224 (1982), 89–105; doi:10.1016/S0022-328X(00)82570-X
 # P85 | Pohl, Saak and Krebs, Z. Naturforsch. B 40 (1985), 251-257; doi:10.1515/znb-1985-0218
+# P90 | Pérés et al., Organometallics 9 (1990), 1041–1047; doi:10.1021/om00118a021
 # PRE12 | Poblador-Bahamonde, Raynaud and Eisenstein, Inorg. Chem. 51 (2012), 5705–5715; doi:10.1021/ic3001448
 # PS95 | Persson et al., Z. Naturforsch. A 50 (1995), 21-37; doi:10.1515/zna-1995-0105
 # Q15 | Quiñonero, Molecules 20 (2015), 11632-11659; doi:10.3390/molecules200711632
@@ -172,12 +203,15 @@
 # RB94 | Ram and Bernath, J. Chem. Phys. 101 (1994), 74-79; doi:10.1063/1.468130
 # RJ23 | Roca Jungfer and Abram, Chem. Eur. J. 29 (2023), e202203317; doi:10.1002/chem.202203317
 # S03 | Shayesteh et al., J. Chem. Phys. 118 (2003), 3622-3627; doi:10.1063/1.1539850
+# S03Co | Sofin, Neue Alkalioxometallate über die Azid/Nitrat-Route, Stuttgart thesis (2003)
 # S06 | Segawa, Yamashita and Nozaki, Science 314 (2006), 113-115; doi:10.1126/science.1131914
 # S15 | Stolte et al., Green Chem. 17 (2015), 1136–1144; doi:10.1039/C4GC01919A
 # S16 | Machalová Šišková et al., Phys. Chem. Chem. Phys. 18 (2016), 18802–18810; doi:10.1039/C6CP02216B
 # S19 | Shi et al., Phys. Rev. Materials 3 (2019), 034604; doi:10.1103/PhysRevMaterials.3.034604
 # S19Ru | Śliwa, Mitoraj, Sagan and Handzlik, J. Mol. Model. 25 (2019), 331; doi:10.1007/s00894-019-4202-5
 # S20 | Scheibe et al., Eur. J. Inorg. Chem. (2020), 4483-4496; doi:10.1002/ejic.202000845
+# S21 | Senges et al., Chem. Eur. J. 27 (2021), 13642–13650; doi:10.1002/chem.202102055
+# S68 | Sacco and Rossi, Inorg. Chim. Acta 2 (1968), 127–132; doi:10.1016/S0020-1693(00)87009-7
 # S98 | Stranger, McGrady and Lovell, Inorg. Chem. 37 (1998), 6795-6806; doi:10.1021/ic971511y
 # SG81 | Soares and Griffith, J. Chem. Soc., Dalton Trans. (1981), 1886-1891; doi:10.1039/DT9810001886
 # SJ73 | Schroeder and Jacobson, Inorg. Chem. 12 (1973), 210-213; doi:10.1021/ic50119a046
@@ -191,11 +225,15 @@
 # Tu25 | Tuna et al., J. Turkish Chem. Soc. A 12 (2025), 15-22; doi:10.18596/jotcsa.1590991
 # V18 | Valjus et al., Can. J. Chem. 96 (2018), 591-598; doi:10.1139/cjc-2018-0047
 # V24 | Vorobyova et al., Mater. Chem. Phys. 332 (2025), 130215; doi:10.1016/j.matchemphys.2024.130215
+# VH92 | Van Zee et al., J. Chem. Phys. 97 (1992), 8123–8129; doi:10.1063/1.463433
 # VLW95 | Van Zee, Li and Weltner, J. Chem. Phys. 102 (1995), 4367-4374; doi:10.1063/1.469485
+# VO92 | Van Zee et al., J. Phys. Chem. 96 (1992), 7247–7251; doi:10.1021/j100197a022
 # W02 | Walker et al., J. Am. Soc. Mass Spectrom. 13 (2002), 469-476; doi:10.1016/S1044-0305(02)00369-0
+# W16 | Wilson et al., Inorg. Chem. 55 (2016), 1108–1123; doi:10.1021/acs.inorgchem.5b02273
 # W75 | Willett, LaBonville and Ferraro, J. Chem. Phys. 63 (1975), 1474-1478; doi:10.1063/1.431510
 # W84 | Winkler, Caltech PhD thesis (1984), chapter 4; doi:10.7907/DE5E-2Y69
 # W96 | Wu, Desai and Wang, J. Am. Chem. Soc. 118 (1996), 5296–5301; doi:10.1021/ja954153b
+# WA02 | Wang and Andrews, J. Phys. Chem. A 106 (2002), 3706–3713; doi:10.1021/jp013624f
 # WA02W | Wang and Andrews, J. Phys. Chem. A 106 (2002), 6720-6729; doi:10.1021/jp025920d
 # WA03 | Wang and Andrews, J. Am. Chem. Soc. 125 (2003), 6581-6587; doi:10.1021/ja029862l
 # WA03Cr | Wang and Andrews, J. Phys. Chem. A 107 (2003), 570-578; doi:10.1021/jp026930h
@@ -491,6 +529,7 @@
     "O #c- #n3 #h",    # OH-; HW I, p. 592
     "O #c- #n2 #h #d", # terminal hydroxido donor; HW II, p. 2015
     "O #c- #n #h #d2", # mu2-hydroxido donor; HW II, pp. 1860, 1880, 1893; allocation: PW
+    "O #c- #n2 #u #d", # oxyl O- donor in OMF2 (M = Ni/Pd/Pt); L21O, Tables 1/3; allocation: PW
     "O #c-2 #n4",      # O2-; HW I, pp. 572-573
     "O #c-2 #n2 #d2",  # mu2-oxide donor, Fe2OCl6(2-); HW II, pp. 1950, 1964; allocation: PW
 ]
@@ -1382,27 +1421,167 @@
 
 [Co]
 0 = [
-    "Co #n3 #u3",      # Co atom, s2d7
-    "Co #c+2 #n2 #u3", # Co2+, d7 high-spin
-    "Co #c+2 #n3 #u",  # Co2+, d7 low-spin
-    "Co #c+3 #n3",     # Co3+, d6 low-spin
-    "Co #c+3 #n #u4",  # Co3+, d6 high-spin
+    "Co #n3 #u3",          # Co atom, s2d7; HW II, p. 1538; ASD
+    "Co #n4 #h #t4",       # HCo(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137
+    "Co #n3 #u2 #h",       # Molecular CoH, triplet; G05, pp. 2-3, 51-65; allocation: PW
+    "Co #n3 #u #h2",       # Matrix-isolated CoH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Co #n3 #h3 #t3",      # CoH3(PPh3)3, classical Co(III) trihydride; HW II, pp. 2000-2002; S68, p. 130, Table V
+    "Co #n4 #u #t4",       # Co(PMe3)4, tetrahedral d9 doublet; K71Co, p. 343
+    "Co #c+ #n3 #u2",      # Co+, free-ion d8 triplet; ASD
+    "Co #c+ #n4 #t5",      # HCo(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137; anionic donors: PW
+    "Co #c+ #n3 #u2 #t4",  # CoCl(PPh3)3, triplet; K12, pp. 4954-4956, 4962-4963; anionic donors: PW
+    "Co #c+ #n4 #t4",      # Cob(I)alamin, paired corrin donors; HW II, pp. 2003-2004; K12; PW
+    "Co #c+ #n3 #u2 #t",   # Molecular CoH, triplet; G05, pp. 2-3, 51-65; anionic donors: PW
+    "Co #c+ #n3 #h2 #t4",  # cis-CoH2(PMe3)4+, classical paired dihydride; HW II, pp. 2000-2002; P90, pp. 1043, 1045-1046
+    "Co #c+ #n3 #u2 #t6",  # Co(tpy)2+, d8 triplet; E15, pp. 12005-12007, 12016
+    "Co #c+2 #n2 #u3",     # Co2+ free-ion ground state; Co(II) high-spin; HW II, pp. 1994, 2001-2002; ASD
+    "Co #c+2 #n3 #u",      # Co(II), d7 low-spin; HW II, pp. 1994, 2001-2002
+    "Co #c+2 #n2 #u3 #t4", # Co(H2O)4(2+), high-spin; HW II, pp. 1994, 2001-2002
+    "Co #c+2 #n2 #u3 #t6", # Co(H2O)6(2+), high-spin; HW II, pp. 1994, 1996-1997
+    "Co #c+2 #n3 #u #t4",  # Co(CN)4(2-), low-spin; HW II, pp. 1994, 2001-2002; anionic donors: PW
+    "Co #c+2 #n3 #u #t5",  # Co(CN)5(3-), low-spin; HW II, pp. 1994, 2001-2002; anionic donors: PW
+    "Co #c+2 #n3 #u #t6",  # Co(tpy)2(2+), low-spin; HW II, pp. 1997, 2002
+    "Co #c+2 #n2 #u3 #t7", # Co(NO3)4(2-), high-spin; HW II, p. 1991; C16; ligand allocation: PW
+    "Co #c+2 #n2 #u3 #t8", # Co(NO3)4(2-), high-spin; HW II, p. 1991; C16; ligand allocation: PW
+    "Co #c+2 #n3 #u #t2",  # Matrix-isolated CoH2, observed doublet; VH92, pp. 8123, 8126-8129; anionic donors: PW
+    "Co #c+3 #n3",         # Co(III), d6 low-spin; HW II, pp. 1994, 2000-2002
+    "Co #c+3 #n #u4",      # Co3+ free-ion ground state; Co(III) high-spin; HW II, pp. 1994, 2000; ASD
+    "Co #c+3 #n3 #t6",     # Co(III) ammine/chloride, paired; HW II, pp. 1994, 2000-2002
+    "Co #c+3 #n #u4 #t6",  # CoF6(3-), high-spin; HW II, pp. 1994, 2000; anionic donors: PW
+    "Co #c+4 #n2 #u #t6",  # CoF6(2-), low-spin; HW II, p. 2004; anionic donors: PW
+    "Co #c- #n5 #t4",      # Co(CO)4-, paired carbonylate; HW II, pp. 2131-2135
+    "Co #c-3 #n6 #t3",     # Co(CO)3(3-), paired carbonylate; HW II, pp. 2131-2135
+    "Co #c-4 #n4 #h5",     # CoH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
 ]
 1 = [
-    "Co #c+ #v #n3 #u", # CoX-, d7 low-spin
+    "Co #n4 #v #t4",        # HCo(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137
+    "Co #n3 #u2 #v #t3",    # CoCl(PPh3)3, triplet; K12, pp. 4954-4956, 4962-4963
+    "Co #n4 #v #t3",        # Cob(I)alamin, paired corrin donor allocation; HW II, pp. 2003-2004; K12; PW
+    "Co #n3 #u2 #v",        # Molecular CoH, triplet; G05, pp. 2-3, 51-65; allocation: PW
+    "Co #n3 #u #v #h",      # Matrix-isolated CoH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Co #n3 #v #h2 #t3",    # CoH3(PPh3)3, classical Co(III) trihydride; HW II, pp. 2000-2002; S68, p. 130, Table V
+    "Co #c+ #v #n3 #u",     # CoX+, low-spin allocation; source unresolved
+    "Co #c+ #n3 #u #v #t3", # Four-coordinate cob(II)alamin; L09; corrin donor allocation: PW
+    "Co #c+ #n3 #u #v #t4", # Five-coordinate cob(II)alamin; L09; corrin donor allocation: PW
+    "Co #c+ #n3 #v #h #t4", # cis-CoH2(PMe3)4+, classical paired dihydride; HW II, pp. 2000-2002; P90, pp. 1043, 1045-1046
+    "Co #c+2 #n3 #v #t5",   # Co(III) ammine/chloride, paired; HW II, pp. 1994, 2000-2002
+    "Co #c-4 #n4 #v #h4",   # CoH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+2 = [
+    "Co #n2 #u3 #v2 #t2",  # CoCl2(PPh3)2, high-spin; HW II, pp. 2001-2002; K12
+    "Co #n2 #u3 #v2 #t4",  # Co(acac)2(H2O)2, high-spin; HW II, pp. 1994, 1996-1997, 2001-2002
+    "Co #n3 #u #v2 #t2",   # Co(salen), low-spin; HW II, pp. 1994, 2001-2002
+    "Co #n3 #u #v2",       # Matrix-isolated CoH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Co #n2 #u3 #v2",      # Molecular CoO, quartet; C97, pp. 8795-8796, 8798; allocation: PW
+    "Co #n3 #v2 #h #t3",   # CoH3(PPh3)3, classical Co(III) trihydride; HW II, pp. 2000-2002; S68, p. 130, Table V
+    "Co #c+ #n3 #v2 #t4",  # Co(III) ammine/chloride, paired; HW II, pp. 1994, 2000-2002
+    "Co #c-4 #n4 #v2 #h3", # CoH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+3 = [
+    "Co #n3 #v3 #t3",      # Co(III) ammine/chloride, paired; HW II, pp. 1994, 2000-2002
+    "Co #n #u4 #v3 #t3",   # CoF3(H2O)3, high-spin; HW II, p. 2000; N84, p. 2722
+    "Co #c-4 #n4 #v3 #h2", # CoH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
 ]
 4 = [
-    "Co #c-2 #v4 #n3 #u", # CoX4-, d7 low-spin
+    "Co #n2 #u #v4",           # Molecular O=Co=O, doublet; VO92, pp. 7247, 7249-7251
+    "Co #u5 #v4",              # CoO4(4-), high-spin d5; K15, manuscript pp. 1-3; charge allocation: PW
+    "Co #c-2 #v4 #n3 #u",      # Co(CN)4(2-), low-spin; HW II, pp. 1994, 2001-2002
+    "Co #c-2 #n2 #u3 #v4",     # CoCl4(2-), high-spin; HW II, pp. 1994, 2001-2002
+    "Co #c-2 #n2 #u3 #v4 #t3", # Co(NO3)4(2-), high-spin; HW II, p. 1991; C16; ligand allocation: PW
+    "Co #c-2 #n2 #u3 #v4 #t4", # Co(NO3)4(2-), high-spin; HW II, p. 1991; C16; ligand allocation: PW
+    "Co #c-3 #n3 #u2 #v4",     # CoO2(3-), d8 triplet; HW II, p. 1999; S03Co, pp. 97-98; charge allocation: PW
+    "Co #c-4 #n4 #v4 #h",      # CoH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
 ]
 5 = [
-    "Co #c-3 #v5 #n3 #u", # CoX5-, d7 low-spin
+    "Co #n2 #v5 #t2",        # Co4(CO)12, bridged tetrahedral cluster; HW II, pp. 2112-2114, Fig. 32.28
+    "Co #c-3 #v5 #n3 #u",    # Co(CN)5(3-), low-spin; HW II, pp. 1994, 2001-2002
+    "Co #c-3 #n3 #u #v5 #t", # Co(CN)5(H2O)(3-), low-spin; HW II, pp. 1997, 2002
+    "Co #c-3 #n3 #v5 #h",    # CoH(CN)5(3-), paired; HW II, pp. 1994, 2014
+    "Co #c-4 #n4 #v5",       # Co(CN)5(4-), paired; HW II, pp. 1994-1995, 2002
+]
+6 = [
+    "Co #c-2 #n2 #u #v6",  # CoF6(2-), low-spin; HW II, p. 2004
+    "Co #c-3 #n3 #v6",     # Co(CN)6(3-), paired; HW II, pp. 1994, 2000-2002
+    "Co #c-3 #n #u4 #v6",  # CoF6(3-), high-spin; HW II, pp. 1994, 2000
+    "Co #c-4 #n2 #u3 #v6", # Co(OH)6(4-), high-spin; HW II, pp. 1994, 1996-1997
 ]
 
 [Ni]
 0 = [
-    "Ni #n4 #u2",      # Ni atom, s2d8
-    "Ni #c+2 #n3 #u2", # Ni2+, d8 high-spin
-    "Ni #c+2 #n4",     # Ni2+, d8 low-spin
+    "Ni #n4 #u2",          # Ni atom, s2d8; HW II, p. 1538, Table 19.1; ASD
+    "Ni #n5 #t2",          # Ni{P(OEt)3}2, hydrocyanation intermediate; HW II, p. 2038
+    "Ni #n5 #t3",          # Ni(PPh3)3, paired; HW II, pp. 2026, 2038
+    "Ni #n5 #t4",          # Ni(CO)4, paired; HW II, pp. 2026, 2038
+    "Ni #n4 #u #h",        # NiH, doublet; L97Ni, pp. 2056-2059
+    "Ni #n4 #h2",          # NiH2; L97Ni, pp. 2057-2059
+    "Ni #n5 #t3 #m0",      # HNi2(CO)6-, paired; P82, pp. 93-94, 98; I00, p. 1989; H- bridge [0,2,0]: PW
+    "Ni #c+ #n4 #u",       # Ni1+, free-ion ground occupation; ASD
+    "Ni #c+ #n4 #u #t4",   # NiCl(PPh3)3, doublet; HW II, pp. 2026, 2032; anionic donors: PW
+    "Ni #c+ #n4 #u #t5",   # NiI{N(CH2CH2PMe2)3}, doublet; HW II, pp. 2026, 2032; anionic donors: PW
+    "Ni #c+ #n4 #u #t",    # Molecular NiF, doublet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #c+2 #n3 #u2",     # Ni2+, d8 free-ion triplet; HW II, p. 2028; ASD
+    "Ni #c+2 #n4",         # Ni(II), paired complex occupation; HW II, pp. 2029, 2033
+    "Ni #c+2 #n4 #t4",     # Ni(CN)4(2-), paired; HW II, pp. 2029, 2033; anionic donors: PW
+    "Ni #c+2 #n4 #t5",     # Ni(CN)5(3-), paired; HW II, pp. 2029, 2033; anionic donors: PW
+    "Ni #c+2 #n3 #u2 #t4", # NiCl4(2-), triplet; HW II, p. 2033; anionic donors: PW
+    "Ni #c+2 #n3 #u2 #t5", # Ni(OAsMe3)5(2+), triplet; HW II, p. 2033
+    "Ni #c+2 #n3 #u2 #t6", # Ni(H2O)6(2+), triplet; HW II, pp. 2028, 2033
+    "Ni #c+2 #n3 #u2 #t2", # Molecular NiF2, triplet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #c+2 #n4 #t2",     # NiH2; L97Ni, pp. 2057-2059; anionic donors: PW
+    "Ni #c+3 #n2 #u3",     # Ni3+, free-ion ground occupation; ASD
+    "Ni #c+3 #n3 #u #t5",  # NiBr3(PMe3)2, doublet; HW II, pp. 2026-2027, 2036; anionic donors: PW
+    "Ni #c+3 #n3 #u #t6",  # NiF6(3-), doublet; HW II, p. 2036; anionic donors: PW
+    "Ni #c+3 #n2 #u3 #t3", # Molecular NiF3, quartet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #c+3 #n3 #u #t3",  # ONiF2, triplet; L21O, Tables 1/3 and SI Table S3.7; atom-local oxyl allocation: PW
+    "Ni #c+4 #n3 #t6",     # NiF6(2-), paired; HW II, p. 2036; anionic donors: PW
+    "Ni #c+4 #n2 #u2 #t4", # Molecular NiF4, triplet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #c+4 #n3 #t4",     # Linear ONiO, singlet; C97Ni, Table 2; O(2-) donation: PW
+    "Ni #c-4 #n5 #h4",     # NiH4(4-), paired; HW II, pp. 2027, 2069
+]
+1 = [
+    "Ni #n4 #u #v #t3",      # NiCl(PPh3)3, doublet; HW II, pp. 2026, 2032
+    "Ni #n4 #u #v #t4",      # NiI{N(CH2CH2PMe2)3}, doublet; HW II, pp. 2026, 2032
+    "Ni #n4 #v #h #t2",      # NiHCl(PMe3)2, paired; HW II, pp. 2027, 2071
+    "Ni #n4 #v #h #t3",      # NiH(CN)(PMe3)3, paired; HW II, pp. 2027, 2071
+    "Ni #n4 #u #v",          # Molecular NiF, doublet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #n4 #v #h",          # NiH2; L97Ni, pp. 2057-2059
+    "Ni #c+ #n4 #v #t4",     # NiBr{N(CH2CH2PMe2)3}+, paired; HW II, p. 2033
+    "Ni #c+ #n3 #u2 #v #t4", # NiBr{N(CH2CH2NMe2)3}+, triplet; HW II, p. 2033
+    "Ni #c+ #n4 #v #t3",     # Ni2(CN)6(4-), paired Ni-Ni bond; HW II, p. 2029; anionic donors: PW
+    "Ni #c- #n5 #v #t2",     # NiMe(eta2-C2H4)2-; HW II, p. 2037; olefin donation: PW
+    "Ni #c-4 #n5 #v #h3",    # NiH4(4-), paired; HW II, pp. 2027, 2069
+]
+2 = [
+    "Ni #n4 #v2 #t2",        # NiCl2(PMe3)2, paired; HW II, pp. 2033-2035
+    "Ni #n4 #v2 #t3",        # Ni(CN)2(PMe3)3, paired; HW II, pp. 2026, 2033
+    "Ni #n3 #u2 #v2 #t2",    # NiCl2(PPh3)2, tetrahedral triplet; HW II, pp. 2033-2035
+    "Ni #n3 #u2 #v2 #t4",    # NiCl2(H2O)4, triplet; HW II, pp. 2028, 2033
+    "Ni #n3 #u2 #v2",        # Molecular NiF2, triplet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #n4 #v2",            # NiH2; L97Ni, pp. 2057-2059
+    "Ni #c+ #n3 #u #v2 #t4", # NiCl2(diars)2+, doublet; HW II, pp. 2027, 2036
+    "Ni #c-4 #n5 #v2 #h2",   # NiH4(4-), paired; HW II, pp. 2027, 2069
+]
+3 = [
+    "Ni #n3 #u #v3 #t2",  # NiBr3(PMe3)2, doublet; HW II, pp. 2026-2027, 2036
+    "Ni #n2 #u3 #v3",     # Molecular NiF3, quartet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #n3 #u #v3",      # ONiF2, triplet; L21O, Tables 1/3 and SI Table S3.7; atom-local oxyl allocation: PW
+    "Ni #c-4 #n5 #v3 #h", # NiH4(4-), paired; HW II, pp. 2027, 2069
+]
+4 = [
+    "Ni #n2 #u2 #v4",      # Molecular NiF4, triplet; L21F, Scheme 1/Table 1; formal allocation: PW
+    "Ni #n3 #v4",          # Linear ONiO, singlet; C97Ni, Table 2
+    "Ni #c-2 #n4 #v4",     # Ni(CN)4(2-), paired; HW II, pp. 2029, 2033
+    "Ni #c-2 #n3 #u2 #v4", # NiCl4(2-), triplet; HW II, p. 2033
+    "Ni #c-3 #n4 #u #v4",  # Ni(CN)4(3-), doublet; HW II, pp. 2029, 2032
+    "Ni #c-4 #n5 #v4",     # NiH4(4-), paired; HW II, pp. 2027, 2069
+]
+5 = [
+    "Ni #c-3 #n4 #v5", # Ni(CN)5(3-), paired; HW II, pp. 2029, 2033
+]
+6 = [
+    "Ni #c-2 #n3 #v6",     # NiF6(2-), paired; HW II, p. 2036
+    "Ni #c-3 #n3 #u #v6",  # NiF6(3-), doublet; HW II, p. 2036
+    "Ni #c-4 #n3 #u2 #v6", # Ni(OH)6(4-), triplet; HW II, pp. 2030-2033
 ]
 
 [Cu]
@@ -2212,16 +2391,154 @@
 
 [Rh]
 0 = [
-    "Rh #n3 #u3",      # Rh atom, s1d8
-    "Rh #c+2 #n3 #u",  # Rh2+, d7 low-spin
-    "Rh #c+3 #n3",     # Rh3+, d6 low-spin
-    "Rh #c+3 #n3 #t6", # [RhH(NH3)5]2+; HW II, pp. 2068, 2071; assignment: PW
+    "Rh #n3 #u3",         # Rh atom, s1d8; HW II, p. 1538; ASD
+    "Rh #n4 #h #t4",      # HRh(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137
+    "Rh #n4 #h #t3",      # RhH(CO)(PPh3)2, paired; HW II, p. 2013
+    "Rh #n3 #u #h2",      # Matrix-isolated RhH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Rh #n3 #u2 #h",      # Molecular RhH, triplet; WA02, pp. 3706-3709; allocation: PW
+    "Rh #n4 #u #t4",      # Rh(dppe)2, d9 doublet; K24, pp. 5-6, Figs. 3-4; allocation: PW
+    "Rh #c+ #n3 #u2",     # Rh+, free-ion d8 triplet; ASD
+    "Rh #c+ #n4 #t5",     # HRh(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137; anionic donors: PW
+    "Rh #c+ #n4 #t4",     # Wilkinson's RhCl(PPh3)3; HW II, pp. 2012-2013, 2017; anionic donors: PW
+    "Rh #c+ #n4 #t3",     # Rh(PPh3)3+, T-shaped paired ion; HW II, pp. 2013, 2017
+    "Rh #c+ #n3 #u2 #t",  # Molecular RhH, triplet; WA02, pp. 3706-3709; anionic donors: PW
+    "Rh #c+2 #n3 #u",     # Rh(II), d7 low-spin; HW II, pp. 2012, 2017
+    "Rh #c+2 #n2 #u3",    # Rh2+, free-ion ground occupation; ASD
+    "Rh #c+2 #n3 #u #t4", # RhCl2(PPh3)2, low-spin; HW II, pp. 2012, 2017; anionic donors: PW
+    "Rh #c+2 #n3 #u #t2", # Matrix-isolated RhH2, observed doublet; VH92, pp. 8123, 8126-8129; anionic donors: PW
+    "Rh #c+2 #n3 #u #t6", # Monomeric RhCp2, doublet; HW II, pp. 2189-2195; KW67, pp. 186-187; donor allocation: PW
+    "Rh #c+3 #n3",        # Rh(III), d6 low-spin; HW II, pp. 2011-2014, 2017
+    "Rh #c+3 #n3 #t6",    # Rh(III) aqua/ammine complexes, paired; HW II, pp. 2011-2014, 2017; anionic donors: PW
+    "Rh #c+3 #n #u4",     # Rh3+, free-ion ground occupation; ASD
+    "Rh #c+3 #n3 #t5",    # RhH2Cl(PPh3)2, classical paired dihydride; HW II, p. 2013; anionic donors: PW
+    "Rh #c+4 #n2 #u #t6", # RhF6(2-); HW II, pp. 1594, 2010-2012, 2017; anionic donors: PW
+    "Rh #c+4 #n2 #u #t4", # Rh(O2)2, doublet bis-peroxide; G11, pp. 672-674; anionic donors: PW
+    "Rh #c+5 #n #u2 #t6", # RhF6(1-); HW II, pp. 1594, 2010-2012, 2017; anionic donors: PW
+    "Rh #c+6 #u3 #t6",    # RhF6; HW II, pp. 1594, 2010-2012, 2017; anionic donors: PW
+    "Rh #c- #n5 #t4",     # Rh(CO)4-, paired carbonylate; HW II, pp. 2131-2135
+    "Rh #c-3 #n4 #h4",    # RhH4(3-), square-planar paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-3 #n3 #h6",    # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-3 #n6 #t3",    # Rh(CO)3(3-), paired carbonylate; HW II, pp. 2131-2135
+    "Rh #c-4 #n4 #h5",    # RhH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+1 = [
+    "Rh #n4 #v #t4",      # HRh(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137
+    "Rh #n4 #v #t3",      # Wilkinson's RhCl(PPh3)3; HW II, pp. 2012-2013, 2017
+    "Rh #n3 #v #h2 #t3",  # RhH2Cl(PPh3)3, classical paired dihydride; HW II, pp. 2013, 2017
+    "Rh #n3 #v #h2 #t2",  # RhH2Cl(PPh3)2, classical paired dihydride; HW II, p. 2013
+    "Rh #n3 #u #v #h",    # Matrix-isolated RhH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Rh #n3 #u2 #v",      # Molecular RhH, triplet; WA02, pp. 3706-3709; allocation: PW
+    "Rh #c+2 #n3 #v #t5", # Rh(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Rh #c-3 #n4 #v #h3", # RhH4(3-), square-planar paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-3 #n3 #v #h5", # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-4 #n4 #v #h4", # RhH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+2 = [
+    "Rh #n3 #u #v2 #t2",   # RhCl2(PPh3)2, low-spin; HW II, pp. 2012, 2017
+    "Rh #n3 #v2 #h #t3",   # RhH2Cl(PPh3)3, classical paired dihydride; HW II, pp. 2013, 2017
+    "Rh #n3 #v2 #h #t2",   # RhH2Cl(PPh3)2, classical paired dihydride; HW II, p. 2013
+    "Rh #n3 #u #v2",       # Matrix-isolated RhH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Rh #n2 #u3 #v2",      # Molecular RhO, quartet; CA99, pp. 4846-4847; allocation: PW
+    "Rh #c+ #n3 #v2 #t4",  # Rh(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Rh #c- #n4 #v2 #t2",  # RhI2(CO)2-, Monsanto catalyst; HW II, p. 2021
+    "Rh #c-3 #n4 #v2 #h2", # RhH4(3-), square-planar paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-3 #n3 #v2 #h4", # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-4 #n4 #v2 #h3", # RhH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+3 = [
+    "Rh #n3 #v3 #t3",      # Rh(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Rh #n3 #v3 #t2",      # RhH2Cl(PPh3)2, classical paired dihydride; HW II, p. 2013
+    "Rh #c-3 #n4 #v3 #h",  # RhH4(3-), square-planar paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-3 #n3 #v3 #h3", # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-4 #n4 #v3 #h2", # RhH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+4 = [
+    "Rh #n2 #u #v4",         # Molecular O=Rh=O, doublet; VO92, pp. 7247, 7249-7251
+    "Rh #c+2 #n #u #v4 #t2", # (O2)RhO2, doublet peroxide; G11, pp. 672, 675; anionic donors: PW
+    "Rh #c- #n3 #v4 #t2",    # Rh(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Rh #c- #n3 #v4 #t",     # Rh(COMe)I3(CO)-, Monsanto acyl intermediate; HW II, p. 2021
+    "Rh #c- #n3 #v4",        # Molecular RhO2-, singlet; G11, Fig. 7b and Table 6
+    "Rh #c-3 #n4 #v4",       # RhH4(3-), square-planar paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-3 #n3 #v4 #h2",   # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-4 #n4 #v4 #h",    # RhH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+5 = [
+    "Rh #n2 #v5 #t2",     # Rh4(CO)12, bridged tetrahedral cluster; HW II, pp. 2112-2114, Fig. 32.28
+    "Rh #c-2 #n3 #v5 #t", # Rh(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Rh #c-3 #n3 #v5 #h", # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Rh #c-4 #n4 #v5",    # RhH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+6 = [
+    "Rh #u3 #v6",         # RhF6; HW II, pp. 1594, 2010-2012, 2017
+    "Rh #n #u #v6",       # RhO4(2-), one unpaired electron; HW II, p. 2014; charge allocation: PW
+    "Rh #c- #n #u2 #v6",  # RhF6(1-); HW II, pp. 1594, 2010-2012, 2017
+    "Rh #c-2 #n2 #u #v6", # RhF6(2-); HW II, pp. 1594, 2010-2012, 2017
+    "Rh #c-3 #n3 #v6",    # RhH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+]
+8 = [
+    "Rh #c-2 #n #u #v8", # RhO4(2-), one unpaired electron; HW II, p. 2014; charge allocation: PW
 ]
 
 [Pd]
 0 = [
-    "Pd #n5",      # Pd atom, d10
-    "Pd #c+2 #n4", # Pd2+ d8 low-spin
+    "Pd #n5",              # Pd atom, d10; HW II, p. 1538, Table 19.1; ASD
+    "Pd #n5 #t2",          # Pd(PPh3)2, paired; HW II, p. 2056
+    "Pd #n5 #t3",          # Pd(PPh3)3, paired; HW II, p. 2056
+    "Pd #n5 #t4",          # Pd(PPh3)4, paired; HW II, p. 2056
+    "Pd #n5 #t",           # Pd(PtBu3), coupling intermediate; HW II, p. 2064
+    "Pd #n4 #u #h",        # PdH, doublet; A01Pd, Table 3
+    "Pd #c+ #n4 #u",       # Pd1+, free-ion ground occupation; ASD
+    "Pd #c+ #n4 #u #t",    # Molecular PdF, doublet; W16, Table 1; formal allocation: PW
+    "Pd #c+ #n4 #u #t2",   # PdH2-; A01Pd, Table 8; anionic donors: PW
+    "Pd #c+ #n4 #u #m0",   # Pd2H2, two local 3c2e hydride bridges; A01Pd, pp. 3061-3062, Table 9; allocation: PW
+    "Pd #c+2 #n4",         # Pd(II), paired complex occupation; HW II, pp. 2047, 2055
+    "Pd #c+2 #n3 #u2",     # Pd2+, free-ion ground occupation; ASD
+    "Pd #c+2 #n4 #t4",     # Pd(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pd #c+2 #n4 #t5",     # CpPdCl(PMe3), paired; HW II, p. 2061; Cp-/halide donation: PW
+    "Pd #c+2 #n4 #t6",     # PdCl2(diars)2, paired octahedral; HW II, p. 2056; anionic donors: PW
+    "Pd #c+2 #n4 #t3",     # PhPdCl(PtBu3), coupling intermediate; HW II, p. 2064; anionic donors: PW
+    "Pd #c+2 #n3 #u2 #t2", # Molecular PdF2, triplet; W16, Table 1; formal allocation: PW
+    "Pd #c+2 #n3 #u2 #t6", # Solid PdF2, octahedral PdF6 coordination; HW II, p. 2045; anionic donors: PW
+    "Pd #c+2 #n4 #t2",     # Cyclic Pd(O2), singlet; B99, Tables 1-2; peroxide allocation: PW
+    "Pd #c+3 #n2 #u3",     # Pd3+, free-ion ground occupation; ASD
+    "Pd #c+3 #n3 #u #t3",  # OPdF2, triplet; L21O, Tables 1/3 and SI Table S3.7; atom-local oxyl allocation: PW
+    "Pd #c+4 #n3 #t6",     # PdF6(2-), paired; HW II, pp. 2047-2049, 2055; anionic donors: PW
+    "Pd #c+4 #n2 #u2 #t4", # Molecular PdF4, triplet; W16, Table 1; formal allocation: PW
+    "Pd #c- #n4 #u #h2",   # PdH2-; A01Pd, Table 8
+    "Pd #c-2 #n5 #h2",     # PdH2(2-), paired; HW II, pp. 2044, 2069
+]
+1 = [
+    "Pd #n4 #v #h #t2",    # PdHCl(PEt3)2, paired; HW II, p. 2048
+    "Pd #n4 #u #v",        # Molecular PdF, doublet; W16, Table 1; formal allocation: PW
+    "Pd #c+ #n4 #v #t3",   # Pd(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pd #c+ #n4 #v #t4",   # CpPdCl(PMe3), paired; HW II, p. 2061; Cp-/halide donation: PW
+    "Pd #c- #n4 #u #v #h", # PdH2-; A01Pd, Table 8
+    "Pd #c-2 #n5 #v #h",   # PdH2(2-), paired; HW II, pp. 2044, 2069
+]
+2 = [
+    "Pd #n4 #v2 #t2",    # Pd(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pd #n4 #v2 #t4",    # PdCl2(diars)2, paired octahedral; HW II, p. 2056
+    "Pd #n4 #v2 #t",     # PhPdCl(PtBu3), coupling intermediate; HW II, p. 2064
+    "Pd #n3 #u2 #v2",    # Molecular PdF2, triplet; W16, Table 1; formal allocation: PW
+    "Pd #n4 #v2",        # Cyclic Pd(O2), singlet; B99, Tables 1-2; peroxide allocation: PW
+    "Pd #c- #n4 #u #v2", # PdH2-; A01Pd, Table 8
+    "Pd #c-2 #n5 #v2",   # PdH2(2-), paired; HW II, pp. 2044, 2069
+]
+3 = [
+    "Pd #n3 #u #v3",      # OPdF2, triplet; L21O, Tables 1/3 and SI Table S3.7; atom-local oxyl allocation: PW
+    "Pd #c+ #n3 #v3 #t2", # Pd2Cl4(mu-CO)2(2-), paired M-M bond; HW II, p. 2057; bridging CO allocation: PW
+    "Pd #c- #n4 #v3 #t",  # Pd(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+]
+4 = [
+    "Pd #n3 #v4 #t2",  # PdCl4(py)2, paired; HW II, pp. 2047-2049, 2055
+    "Pd #n2 #u2 #v4",  # Molecular PdF4, triplet; W16, Table 1; formal allocation: PW
+    "Pd #c-2 #n4 #v4", # Pd(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+]
+5 = [
+    "Pd #c- #n3 #v5", # Pd2Cl4(mu-CO)2(2-), paired M-M bond; HW II, p. 2057; bridging CO allocation: PW
+]
+6 = [
+    "Pd #c-2 #n3 #v6", # PdF6(2-), paired; HW II, pp. 2047-2049, 2055
 ]
 
 [Ag]
@@ -3204,13 +3521,172 @@
 
 [Ir]
 0 = [
-    "Ir #n3 #u3", # Ir atom, s2d7
+    "Ir #n3 #u3",         # Ir atom, s2d7; HW II, p. 1538; ASD
+    "Ir #n4 #h #t4",      # HIr(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137
+    "Ir #n3 #u #h2",      # Matrix-isolated IrH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Ir #n3 #u2 #h",      # Molecular IrH, triplet; L14, pp. 39-41; allocation: PW
+    "Ir #n2 #h5 #t2",     # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+    "Ir #n3 #h3 #t3",     # fac-IrH3(PPh2Me)3, classical Ir(III) trihydride; HW II, p. 2017; B93, pp. 3359, 3361-3362
+    "Ir #c+ #n2 #u4",     # Ir+, free-ion 5d7 6s quintet; ASD
+    "Ir #c+ #n4 #t5",     # HIr(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137; anionic donors: PW
+    "Ir #c+ #n4 #t4",     # Vaska's IrCl(CO)(PPh3)2; HW II, pp. 2012-2013, 2017; anionic donors: PW
+    "Ir #c+ #n3 #u2 #t",  # Molecular IrH, triplet; L14, pp. 39-41; anionic donors: PW
+    "Ir #c+ #n3 #h2 #t4", # IrH2(CO)2(PPh3)2+, classical paired dihydride; HW II, p. 2017; HC88, Table II, pp. 4128, 4130
+    "Ir #c+2 #n2 #u3",    # Ir2+, free-ion ground occupation; ASD
+    "Ir #c+2 #n3 #u #t2", # Matrix-isolated IrH2, observed doublet; VH92, pp. 8123, 8126-8129; anionic donors: PW
+    "Ir #c+2 #n3 #u #t6", # Monomeric IrCp2, doublet; HW II, pp. 2189-2195; KW67, pp. 186-187; donor allocation: PW
+    "Ir #c+3 #n #u4",     # Ir3+, free-ion ground occupation; ASD
+    "Ir #c+3 #n3 #t6",    # Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Ir #c+4 #n2 #u #t6", # IrF6(2-); HW II, pp. 1594, 2010-2012, 2017; anionic donors: PW
+    "Ir #c+5 #n #u2 #t6", # IrF6(1-); HW II, pp. 1594, 2010-2012, 2017; anionic donors: PW
+    "Ir #c+5 #n2 #t7",    # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; anionic donors: PW
+    "Ir #c+6 #u3 #t6",    # IrF6; HW II, pp. 1594, 2010-2012, 2017; anionic donors: PW
+    "Ir #c- #n5 #t4",     # Ir(CO)4-, paired carbonylate; HW II, pp. 2131-2135
+    "Ir #c-3 #n3 #h6",    # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Ir #c-3 #n6 #t3",    # Ir(CO)3(3-), paired carbonylate; HW II, pp. 2131-2135
+    "Ir #c-4 #n4 #h5",    # IrH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+1 = [
+    "Ir #n4 #v #t4",        # HIr(CO)4, paired; HW II, pp. 1992, 2009-2010, 2136-2137
+    "Ir #n4 #v #t3",        # Vaska's IrCl(CO)(PPh3)2; HW II, pp. 2012-2013, 2017
+    "Ir #n3 #v #h2 #t3",    # IrH2Cl(PPh3)3, classical paired dihydride; HW II, pp. 2013, 2017
+    "Ir #n3 #u #v #h",      # Matrix-isolated IrH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Ir #n3 #u2 #v",        # Molecular IrH, triplet; L14, pp. 39-41; allocation: PW
+    "Ir #n2 #v #h4 #t2",    # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+    "Ir #c+ #n3 #v #h #t4", # IrH2(CO)2(PPh3)2+, classical paired dihydride; HW II, p. 2017; HC88, Table II, pp. 4128, 4130
+    "Ir #c+2 #n3 #v #t5",   # Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Ir #c-3 #n3 #v #h5",   # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Ir #c-4 #n4 #v #h4",   # IrH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+2 = [
+    "Ir #n3 #v2 #h #t3",     # IrH2Cl(PPh3)3, classical paired dihydride; HW II, pp. 2013, 2017
+    "Ir #n2 #u #v2 #h2 #t2", # IrH2Cl2(PiPr3)2, 17-electron paramagnetic hydride; HW II, p. 2068
+    "Ir #n3 #u #v2",         # Matrix-isolated IrH2, observed doublet; VH92, pp. 8123, 8126-8129
+    "Ir #n2 #v2 #h3 #t2",    # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+    "Ir #c+ #n3 #v2 #t4",    # Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Ir #c-3 #n3 #v2 #h4",   # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Ir #c-4 #n4 #v2 #h3",   # IrH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+3 = [
+    "Ir #n3 #v3 #t3",        # Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Ir #n2 #u #v3 #h #t2",  # IrH2Cl2(PiPr3)2, 17-electron paramagnetic hydride; HW II, p. 2068
+    "Ir #n2 #v3 #h2 #t2",    # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+    "Ir #c+ #n2 #u #v3 #t3", # Ir(IV) aquochloride, low-spin; HW II, pp. 2012, 2017
+    "Ir #c-3 #n3 #v3 #h3",   # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Ir #c-4 #n4 #v3 #h2",   # IrH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+4 = [
+    "Ir #n2 #u #v4 #t2",     # Ir(IV) aquochloride, low-spin; HW II, pp. 2012, 2017
+    "Ir #n2 #u #v4",         # Molecular O=Ir=O, doublet; VO92, pp. 7247, 7249-7251
+    "Ir #n2 #v4 #h #t2",     # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+    "Ir #c+2 #n #u #v4 #t2", # (O2)IrO2, doublet peroxide; G09Ir, p. 7881; anionic donors: PW
+    "Ir #c- #n3 #v4 #t2",    # Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Ir #c-3 #n3 #v4 #h2",   # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Ir #c-4 #n4 #v4 #h",    # IrH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+5 = [
+    "Ir #n2 #v5 #t2",       # IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+    "Ir #c- #n2 #u #v5 #t", # Ir(IV) aquochloride, low-spin; HW II, pp. 2012, 2017
+    "Ir #c-2 #n3 #v5 #t",   # Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+    "Ir #c-3 #n3 #v5 #h",   # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+    "Ir #c-4 #n4 #v5",      # IrH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+]
+6 = [
+    "Ir #u3 #v6",         # IrF6; HW II, pp. 1594, 2010-2012, 2017
+    "Ir #n #u #v6",       # (O2)IrO2, doublet peroxide; G09Ir, p. 7881
+    "Ir #c- #n #u2 #v6",  # IrF6(1-); HW II, pp. 1594, 2010-2012, 2017
+    "Ir #c-2 #n2 #u #v6", # IrF6(2-); HW II, pp. 1594, 2010-2012, 2017
+    "Ir #c-3 #n3 #v6",    # IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+]
+8 = [
+    "Ir #u #v8", # IrO4, doublet d1; G09Ir, pp. 7880-7882
 ]
 
 [Pt]
 0 = [
-    "Pt #n4 #u2",  # Pt atom, s1d9
-    "Pt #c+2 #n4", # Pt2+, d8 low-spin
+    "Pt #n4 #u2",          # Pt atom, s1d9; HW II, p. 1538, Table 19.1; ASD
+    "Pt #n5 #t2",          # Pt(PCy3)2, paired; HW II, p. 2056
+    "Pt #n5 #t3",          # Pt(PPh3)3, paired; HW II, p. 2056
+    "Pt #n5 #t4",          # Pt(PPh3)4, paired; HW II, p. 2056
+    "Pt #n4 #h2 #t2",      # PtH2(PMe3)2, paired; HW II, pp. 2044, 2048
+    "Pt #n4 #u #h",        # PtH, doublet; A01Pt, pp. 1561-1562
+    "Pt #n4 #h2",          # PtH2; A01Pt, Table IV
+    "Pt #n3 #u #h3",       # PtH3; A01Pt, Fig. 6/Table V
+    "Pt #c+ #n4 #u",       # Pt1+, free-ion ground occupation; ASD
+    "Pt #c+ #n4 #u #t",    # Molecular PtF, doublet; S21, Table 2; formal allocation: PW
+    "Pt #c+2 #n4",         # Pt(II), paired complex occupation; HW II, pp. 2047, 2055
+    "Pt #c+2 #n3 #u2",     # Pt2+, free-ion ground occupation; ASD
+    "Pt #c+2 #n4 #t4",     # Pt(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pt #c+2 #n4 #t5",     # CpPtCl(PMe3), paired; HW II, p. 2061; Cp-/halide donation: PW
+    "Pt #c+2 #n3 #u2 #t2", # Molecular PtF2, triplet; S21, Table 2; formal allocation: PW
+    "Pt #c+2 #n4 #t2",     # PtH2; A01Pt, Table IV; anionic donors: PW
+    "Pt #c+2 #n4 #t4 #m0", # Pt2H9(5-), paired; B95, pp. 899-900; terminal H- donors and bridge [0,2,0]: PW
+    "Pt #c+3 #n2 #u3",     # Pt3+, free-ion ground occupation; ASD
+    "Pt #c+3 #n3 #u #t3",  # Molecular PtF3, doublet; S21, Table 2; formal allocation: PW
+    "Pt #c+4 #n3 #t6",     # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+    "Pt #c+4 #n3 #t5",     # PtMe3(dppe)+, five-coordinate intermediate; P05; paired: HW II, p. 2055; anionic donors: PW
+    "Pt #c+4 #n2 #u2 #t4", # Molecular PtF4, triplet; S21, Table 2; formal allocation: PW
+    "Pt #c+4 #n3 #t4",     # Molecular PtF4, singlet; S21, Table 2; formal allocation: PW
+    "Pt #c+5 #n2 #u #t5",  # Molecular PtF5, doublet; S21, Table 2; formal allocation: PW
+    "Pt #c+5 #n2 #u #t6",  # PtF6-, doublet d(pi)5; BL62, pp. 5260-5261; anionic donors: PW
+    "Pt #c+6 #n2 #t6",     # Molecular PtF6, singlet; S21, Table 2; formal allocation: PW
+    "Pt #c-2 #n6",         # Pt(2-) in Cs2Pt, d10s2; HW II, pp. 2042-2043
+    "Pt #c-2 #n4 #h4",     # PtH4(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n3 #h6",     # PtH6(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n4 #h4 #m0", # Pt2H9(5-), paired; B95, pp. 899-900; H- bridge [0,2,0]: PW
+]
+1 = [
+    "Pt #n4 #v #h #t2",       # PtH2(PMe3)2, paired; HW II, pp. 2044, 2048
+    "Pt #n4 #u #v",           # Molecular PtF, doublet; S21, Table 2; formal allocation: PW
+    "Pt #n4 #v #h",           # PtH2; A01Pt, Table IV
+    "Pt #n3 #u #v #h2",       # PtH3; A01Pt, Fig. 6/Table V
+    "Pt #c+ #n4 #v #t3",      # Pt(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pt #c+ #n4 #v #t4",      # CpPtCl(PMe3), paired; HW II, p. 2061; Cp-/halide donation: PW
+    "Pt #c+3 #n3 #v #t5",     # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+    "Pt #c+3 #n3 #v #t4",     # Pt2(SO4)4(2-), paired Pt-Pt bond; HW II, pp. 2056-2057; allocation: PW
+    "Pt #c-2 #n4 #v #h3",     # PtH4(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n3 #v #h5",     # PtH6(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n4 #v #h3 #m0", # Pt2H9(5-), paired; B95, pp. 899-900; H- bridge [0,2,0]: PW
+]
+2 = [
+    "Pt #n4 #v2 #t2",          # Pt(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pt #n3 #v2 #h2 #t2",      # PtH2Cl2(PMe3)2, paired; HW II, p. 2048
+    "Pt #n3 #u2 #v2",          # Molecular PtF2, triplet; S21, Table 2; formal allocation: PW
+    "Pt #n4 #v2",              # PtH2; A01Pt, Table IV
+    "Pt #n3 #u #v2 #h",        # PtH3; A01Pt, Fig. 6/Table V
+    "Pt #c+2 #n3 #v2 #t4",     # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+    "Pt #c-2 #n4 #v2 #h2",     # PtH4(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n3 #v2 #h4",     # PtH6(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n4 #v2 #h2 #m0", # Pt2H9(5-), paired; B95, pp. 899-900; H- bridge [0,2,0]: PW
+]
+3 = [
+    "Pt #n3 #v3 #h #t2",      # PtHCl3(PMe3)2, paired; HW II, p. 2048
+    "Pt #n3 #u #v3",          # Molecular PtF3, doublet; S21, Table 2; formal allocation: PW
+    "Pt #c+ #n3 #v3 #t3",     # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+    "Pt #c+ #n3 #v3 #t2",     # Pt2Cl4(mu-CO)2(2-), paired M-M bond; HW II, p. 2057; bridging CO allocation: PW
+    "Pt #c- #n4 #v3 #t",      # Pt(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pt #c-2 #n4 #v3 #h",     # PtH4(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n3 #v3 #h3",    # PtH6(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n4 #v3 #h #m0", # Pt2H9(5-), paired; B95, pp. 899-900; H- bridge [0,2,0]: PW
+]
+4 = [
+    "Pt #n3 #v4 #t2",      # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+    "Pt #n2 #u2 #v4",      # Molecular PtF4, triplet; S21, Table 2; formal allocation: PW
+    "Pt #n3 #v4",          # Molecular PtF4, singlet; S21, Table 2; formal allocation: PW
+    "Pt #c-2 #n4 #v4",     # Pt(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+    "Pt #c-2 #n3 #v4 #h2", # PtH6(2-), paired; HW II, pp. 2044, 2069
+    "Pt #c-2 #n4 #v4 #m0", # Pt2H9(5-), paired; B95, pp. 899-900; H- bridge [0,2,0]: PW
+]
+5 = [
+    "Pt #n2 #u #v5",      # Molecular PtF5, doublet; S21, Table 2; formal allocation: PW
+    "Pt #c- #n3 #v5 #t",  # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+    "Pt #c- #n3 #v5",     # Pt2(SO4)4(2-), paired Pt-Pt bond; HW II, pp. 2056-2057; allocation: PW
+    "Pt #c-2 #n3 #v5 #h", # PtH6(2-), paired; HW II, pp. 2044, 2069
+]
+6 = [
+    "Pt #n2 #v6",        # Molecular PtF6, singlet; S21, Table 2; formal allocation: PW
+    "Pt #c- #n2 #u #v6", # PtF6-, doublet d(pi)5; BL62, pp. 5260-5261
+    "Pt #c-2 #n3 #v6",   # Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
 ]
 
 [Au]

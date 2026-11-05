@@ -1,0 +1,3 @@
+; Ni(II), supplied paired occupation; HW II, pp. 2033-2035, 2055-2056
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c+2#u0"]}}

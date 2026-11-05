@@ -1,0 +1,4 @@
+; PtH6(2-), paired; HW II, pp. 2044, 2069
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c-2#u0#h5" "H"]
+         :bonds [[0 1 "1"]]}}

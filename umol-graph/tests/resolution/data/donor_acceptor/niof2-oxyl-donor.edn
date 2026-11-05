@@ -1,0 +1,5 @@
+; ONiF2, triplet; L21O, Tables 1/3 and SI Table S3.7; atom-local oxyl allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c+3#u1" "O#c-#u1" "F#c-" "F#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}]}}

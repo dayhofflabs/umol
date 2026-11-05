@@ -1,0 +1,4 @@
+; PdH, doublet; A01Pd, Table 3
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#u1" "H"]
+         :bonds [[0 1 "1"]]}}

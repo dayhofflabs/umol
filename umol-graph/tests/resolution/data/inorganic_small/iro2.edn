@@ -1,0 +1,4 @@
+; Molecular O=Ir=O, doublet; VO92, pp. 7247, 7249-7251
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#u1" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

@@ -1,0 +1,4 @@
+; RhO4(2-), one unpaired electron; HW II, p. 2014; charge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c-2#u1" "O" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "2"]]}}

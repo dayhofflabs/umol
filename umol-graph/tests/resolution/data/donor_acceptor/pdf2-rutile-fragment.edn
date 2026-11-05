@@ -1,0 +1,9 @@
+; PdF2 rutile fragment, two edge-sharing PdF6 octahedra cut at boundary F; HW II, p. 2045; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#c+2#u2" "Pd#c+2#u2" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-" "F#c-"]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 1 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [10] :acceptor 1 :attrs "1"} {:donors [11] :acceptor 1 :attrs "1"}]}}

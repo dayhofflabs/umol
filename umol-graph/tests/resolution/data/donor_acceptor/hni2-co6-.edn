@@ -1,0 +1,9 @@
+; HNi2(CO)6-, paired; P82, pp. 93-94, 98; I00, p. 1989; H- bridge [0,2,0]: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#u0" "Ni#u0" "H#c-" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"
+                 "C#c-" "O#c+"]
+         :bonds [[3 4 "3"] [5 6 "3"] [7 8 "3"] [9 10 "3"] [11 12 "3"] [13 14 "3"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [11] :acceptor 1 :attrs "1"} {:donors [13] :acceptor 1 :attrs "1"}]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]#c0#u0#s1"}]}}

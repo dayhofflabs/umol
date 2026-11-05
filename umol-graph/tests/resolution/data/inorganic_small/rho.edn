@@ -1,0 +1,4 @@
+; Molecular RhO, quartet; CA99, pp. 4846-4847; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#u3" "O"]
+         :bonds [[0 1 "2"]]}}

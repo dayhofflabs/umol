@@ -1,0 +1,8 @@
+; Pt2H9(5-), paired; B95, pp. 899-900; terminal H- donors and bridge [0,2,0]: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c+2#u0" "Pt#c+2#u0" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-"]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 1 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [9] :acceptor 1 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]#c0#u0#s1"}]}}

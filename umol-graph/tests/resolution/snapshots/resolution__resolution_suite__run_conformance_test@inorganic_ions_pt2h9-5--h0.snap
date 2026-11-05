@@ -1,0 +1,66 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["Pt#c-2#n4" "Pt#c-2#n4" "H#c-" "H" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [0 6 :single]
+        [1 7 :single]
+        [1 8 :single]
+        [1 9 :single]
+        [1 10 :single]]
+      :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["Pt#c-2#n4" "Pt#c-2#n4" "H#c-" "H" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [0 6 :single]
+        [1 7 :single]
+        [1 8 :single]
+        [1 9 :single]
+        [1 10 :single]]
+      :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["Pt#c-2#n4" "Pt#c-2#n4" "H#c-" "H" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [0 6 :single]
+        [1 7 :single]
+        [1 8 :single]
+        [1 9 :single]
+        [1 10 :single]]
+      :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["Pt#c-2#n4" "Pt#c-2#n4" "H#c-" "H" "H" "H" "H" "H" "H" "H" "H"]
+      :bonds [
+        [0 3 :single]
+        [0 4 :single]
+        [0 5 :single]
+        [0 6 :single]
+        [1 7 :single]
+        [1 8 :single]
+        [1 9 :single]
+        [1 10 :single]]
+      :multicenter-bonds [{:atoms [0 2 1] :attrs "[0,2,0]"}]}
+    :success true
+    :tie-breaks []}}

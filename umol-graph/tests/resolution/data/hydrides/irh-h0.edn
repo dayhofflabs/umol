@@ -1,0 +1,4 @@
+; Molecular IrH, triplet; L14, pp. 39-41; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#u2" "H"]
+         :bonds [[0 1 "1"]]}}

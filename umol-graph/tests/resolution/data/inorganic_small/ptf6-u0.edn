@@ -1,0 +1,4 @@
+; Molecular PtF6, singlet; S21, Table 2; formal allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#u0" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

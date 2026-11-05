@@ -1,0 +1,10 @@
+; Pt2(SO4)4(2-), paired Pt-Pt bond; HW II, pp. 2056-2057; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c+3#u0" "Pt#c+3#u0" "S" "O#c-" "O#c-" "O" "O" "S" "O#c-" "O#c-" "O" "O" "S" "O#c-" "O#c-" "O"
+                 "O" "S" "O#c-" "O#c-" "O" "O"]
+         :bonds [[0 1 "1"] [2 3 "1"] [2 4 "1"] [2 5 "2"] [2 6 "2"] [7 8 "1"] [7 9 "1"] [7 10 "2"] [7 11 "2"]
+                 [12 13 "1"] [12 14 "1"] [12 15 "2"] [12 16 "2"] [17 18 "1"] [17 19 "1"] [17 20 "2"] [17 21 "2"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 1 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [13] :acceptor 0 :attrs "1"} {:donors [14] :acceptor 1 :attrs "1"}
+                        {:donors [18] :acceptor 0 :attrs "1"} {:donors [19] :acceptor 1 :attrs "1"}]}}

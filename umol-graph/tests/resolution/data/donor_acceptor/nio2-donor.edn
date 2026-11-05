@@ -1,0 +1,4 @@
+; Linear ONiO, singlet; C97Ni, Table 2; O(2-) donation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c+4#u0" "O#c-2" "O#c-2"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "2"} {:donors [2] :acceptor 0 :attrs "2"}]}}

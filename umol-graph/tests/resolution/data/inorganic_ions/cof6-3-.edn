@@ -1,0 +1,4 @@
+; CoF6(3-), high-spin; HW II, pp. 1994, 2000
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#c-3#u4" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

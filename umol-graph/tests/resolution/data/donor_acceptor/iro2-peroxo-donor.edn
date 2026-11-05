@@ -1,0 +1,5 @@
+; (O2)IrO2, doublet peroxide; G09Ir, p. 7881; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#c+2#u1" "O" "O" "O#c-" "O#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [3 4 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

@@ -12,8 +12,8 @@ contains the inclusion rules, evidence and detailed chapter tables.
 
 ## Project Status (2026-11-04)
 
-**Selected scope complete through HW II, chapter XXIX (Fe, Ru, Os), pp. 1934–1988.**
-Chapter selections through Fe/Ru/Os are implemented, with existing-entry citation audits and
+**Selected scope complete through HW II, chapter XXXI (Ni, Pd, Pt), pp. 2023–2065.**
+Chapter selections through Ni/Pd/Pt are implemented, with existing-entry citation audits and
 coverage of the added states. Unselected and deferred candidates remain in the linked
 tables. Companion states belong to elements outside the chapter being reviewed.
 
@@ -36,6 +36,8 @@ tables. Companion states belong to elements outside the chapter being reviewed.
 | [Cr, Mo, W](#chromium-group-work-table) | 260 additions: Cr 72, Mo 94, W 94; 2 hydroxido O companions; 11 earlier states retained | 262 new | Capacity 18 and ValenceTable unchanged. Two Mo/W hydride-bridge MC states included; 13 W phosphine-hydride occupations remain open |
 | [Mn, Tc, Re](#manganese-group-work-table) | 243 additions: Mn 62, Tc 60, Re 121; 9 earlier states retained | 242 new | Mn capacity 21; Tc/Re/Bh retain 18; ValenceTable unchanged. Four Re states support separate 3c2e hydride bridges; uncertain occupations excluded |
 | [Fe, Ru, Os](#iron-group-work-table) | 210 additions: Fe 81, Ru 57, Os 68; 3 S and 1 O companions; 17 earlier states retained | 223 new; 2 Fe halide spin inputs revised; 1 source comment corrected | Capacities Fe 21, Os 20; Ru/Hs retain 18; ValenceTable unchanged. One compact hydride-bridge MC state; uncertain occupations and specialized Fe(1-norbornyl)₄ states excluded |
+| [Co, Rh, Ir](#cobalt-group-work-table) | 195 additions: Co 63, Rh 68, Ir 64; 13 earlier states retained, 12 sourced and covered | 199 new; 3 supplied-spin inputs revised | Capacities Co 23, Rh/Ir 19; ValenceTable unchanged; no new MC or companion types. Existing Co#c+#n3#u#v remains source-unresolved; other unselected cases below |
+| [Ni, Pd, Pt](#nickel-group-work-table) | 173 additions: Ni 59, Pd 44, Pt 69 and 1 O companion; all 7 earlier states retained and covered | 190 new; 2 bare-ion snapshots revised | Capacities Ni/Pd 20; Pt retains 18; ValenceTable unchanged. Eight local hydride-bridge MC states included; PdF₆− omitted |
 
 ### Shared changes and verification
 
@@ -47,7 +49,7 @@ tables. Companion states belong to elements outside the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification after Fe/Ru/Os | 2,703 resolution cases, 3,594 graph unit tests, 223 graph property tests and 307 chemistry tests pass; formatting and Clippy pass |
+| Verification after Ni/Pd/Pt | 3,092 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 312 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
 The Decision Log below is the historical March record; later tracking-table updates are
@@ -55,25 +57,31 @@ dated.
 
 ### Conformance suite breakdown
 
+Counts include the 108 Beyer/Walter chapter-4 inputs recorded below; these were absent
+from the checkout used for the current verification.
+
 | Category | Files | Description |
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
-| `atomic_ions/` | 196 | Atomic ions and Hg₂²⁺ |
-| `hydrides/` | 309 | Hydrides with explicit or implicit H |
-| `inorganic_small/` | 281 | Small inorganic molecules and salts |
-| `inorganic_ions/` | 411 | Inorganic ions |
-| `donor_acceptor/` | 944 | Donor–acceptor complexes with dative or multicenter bonds |
+| `atomic_ions/` | 217 | Atomic ions and Hg₂²⁺ |
+| `hydrides/` | 399 | Hydrides with explicit or implicit H |
+| `inorganic_small/` | 312 | Small inorganic molecules and salts |
+| `inorganic_ions/` | 449 | Inorganic ions |
+| `donor_acceptor/` | 1153 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
-| `hydrocarbons/` | 53 | C/H compounds |
-| `functional_groups/` | 74 | Organic heteroatom groups (halides, amines, etc.) |
-| `carbonyl_derivatives/` | 62 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
+| `hydrocarbons/` | 82 | C/H compounds |
+| `functional_groups/` | 102 | Organic heteroatom groups (halides, amines, etc.) |
+| `carbonyl_derivatives/` | 86 | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
 | `heterocycles/` | 53 | Non-aromatic O/N/S heterocycles, crown ethers |
-| `aromatic/` | 102 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
+| `aromatic/` | 105 | Aromatic carbocycles, heterocycles and ions; aromatic and Kekulé inputs |
 | `hypervalent/` | 51 | Expanded-octet and multicenter species |
 | `transition_metals/` | 13 | Transition-metal complexes |
 | `stereo_tetrahedral/` | 22 | Tetrahedral stereochemistry |
 | `stereo_cis_trans/` | 14 | Cis/trans stereochemistry |
-| **Total** | **2703** | |
+| `metabolites/` | 9 | Metabolites and related natural compounds |
+| `natural_products/` | 5 | Terpenes, steroids and alkaloids |
+| `reactive_intermediates/` | 10 | Organic radicals, ions and related intermediates |
+| **Total** | **3200** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -272,17 +280,17 @@ compounds from any chapter may also fall under the classes below.
 
 | Class | Scope | Conformance dir | Chapters | Status | Notes |
 |-------|-------|-----------------|----------|--------|-------|
-| Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles, non-aromatic annulenes | `hydrocarbons/` | 4, 5, 25 | done | 53 files, including the `k33` and `k5` graph-topology inputs |
-| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, thiols, ethers, thioethers, amines, nitroso, nitro, sulfoxides, hydrazines, diazo/azo; N, P, S and Si groups to be extended | `functional_groups/` | 6–10, 16 | review | 74 files |
-| Carbonyl derivatives | Aldehydes, ketones, carboxylic acids, esters, amides, other acid derivatives, carbonic acid derivatives | `carbonyl_derivatives/` | 12–16 | review | 62 files, non-aromatic |
+| Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles, non-aromatic annulenes | `hydrocarbons/` | 4, 5, 25 | in_progress | 82 files, including the `k33` and `k5` graph-topology inputs |
+| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, thiols, ethers, thioethers, amines, nitroso, nitro, sulfoxides, hydrazines, diazo/azo; N, P, S and Si groups to be extended | `functional_groups/` | 6–10, 16 | in_progress | 102 files |
+| Carbonyl derivatives | Aldehydes, ketones, carboxylic acids, esters, amides, other acid derivatives, carbonic acid derivatives | `carbonyl_derivatives/` | 12–16 | in_progress | 86 files, non-aromatic |
 | Heterocycles | Non-aromatic heterocycles, crown ethers, bridged/fused | `heterocycles/` | 8, 9, 28–36 | review | 53 files |
-| Aromatic | Aromatic carbocycles, heterocycles and ions | `aromatic/` | 18–25, 28–35 | review | 102 files, including non-carbon rings |
+| Aromatic | Aromatic carbocycles, heterocycles and ions | `aromatic/` | 18–25, 28–35 | in_progress | 105 files, including non-carbon rings |
 | Stereochemistry | Tetrahedral and cis/trans inputs | `stereo_tetrahedral/`, `stereo_cis_trans/` | any | review | 36 files |
 | Organometallics | Main-group and transition-metal organyls | `organometallics/` (noted) | 11 | todo | Created after the HW pass finishes |
 | Organoelement compounds | Organic P, As, Si and B compounds | `organoelement/` (noted) | 10 | todo | Created after the HW pass finishes |
-| Reactive intermediates | Carbocations, carbanions, radicals, carbenes, nitrenes, ylides | `reactive_intermediates/` (planned) | any | todo | Expanded in a separate reaction-mechanism step |
-| Metabolites | Carbohydrates, amino acids, peptides, nucleic acid components, lipids, cofactors, pigments, vitamins, hydroxy acids | `metabolites/` (planned) | 13, 15, 17, 28, 35, 37, 38 | todo | Vitamins occur across chapters |
-| Natural products | Terpenes, steroids, alkaloids | `natural_products/` (planned) | 26, 27, 36 | todo | |
+| Reactive intermediates | Carbocations, carbanions, radicals, carbenes, nitrenes, ylides | `reactive_intermediates/` | any | in_progress | 10 files; expanded in a separate reaction-mechanism step |
+| Metabolites | Carbohydrates, amino acids, peptides, nucleic acid components, lipids, cofactors, pigments, vitamins, hydroxy acids | `metabolites/` | 13, 15, 17, 28, 35, 37, 38 | in_progress | 9 files; vitamins occur across chapters |
+| Natural products | Terpenes, steroids, alkaloids | `natural_products/` | 26, 27, 36 | in_progress | 5 files |
 
 Extend this table as new organic classes are added.
 
@@ -328,9 +336,8 @@ The `hydrogen_bonds/` fixtures check resolution of graphs carrying explicit Hbd
 relations, including their preservation alongside localized and multicenter bonds.
 
 Categories are a rough classification, and a compound fitting several may use any of
-them. Existing fixtures may move when a better category appears. `metabolites/`,
-`natural_products/` and `reactive_intermediates/` are planned; `organometallics/` and
-`organoelement/` are noted until the HW pass finishes. The
+them. Existing fixtures may move when a better category appears. `organometallics/`
+and `organoelement/` are noted until the HW pass finishes. The
 [organic compounds](#organic-compounds) table lists their scope.
 
 The former `implicit_h=true/false` setting was the precursor to atom defaults.
@@ -344,9 +351,9 @@ handling follows those defaults and explicit atom predicates.
 - `hydrides/`: `h2`, `bh3`, `ch4`, `nh3`, `h2o`, `hf`, `sih4`, `ph3`, `h2s`, `hcl`, `ash3`, `h2se`, `hbr`, `sbh3`, `h2te`, `hi`
 - `inorganic_small/`: neutral small inorganics (explicit H only): e.g. `bf2`, `bf3`, `bn`, `c2`, `ch3`, `ch2_singlet`, `ch2_triplet`, `sih3`, `sih2_*`, `nh2`, `ph2`, `ash2`, `sbh2`, `oh`, `sh`, `seh`, `teh`, `br2`, `cl2`, `cn-`, `f2`, `i2`, `n2`, `o2`, etc. Added nitrogen oxides (NO, NO2, N2O, N2O3, N2O4), carbon compounds (CO2, CS2, COS, HCN), oxyacids/hydroxides (HNO2, HNO3, HClO, H2CO3, H3BO3, HOBr, HOI), N-H compounds (N2H4, NH2OH, N2H2), peroxides (H2O2, H2S2), halides (NF3, NCl3, PF3, PCl3, SF2, SiF4, SiCl4, BCl3, ClF, BrF), and other (O3, HNCO, HOCN, HSCN, HNCS).
 - `inorganic_ions/`: molecular ions (explicit H only): e.g. `bcl4-`, `cf3-`, `ccl3+`, `nh2-`, `nh4+`, `ph2-`, `ph4+`, `ash2-`, `ash4+`, `sbh2-`, `sbh4+`, `oh-`, `oh3+`, `sh-`, `sh3+`, `seh-`, `seh3+`, `teh-`, `teh3+`, `f-`, `cl-`, `br-`, `i-`, `sif3-`, `sicl3+`, etc.
-- `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`, `k33`, `k5`
-- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6); ethyleneglycol, glycerol, methanediol (3); phenyloxenium (1). Total: 74 files.
-- `carbonyl_derivatives/`: non-aromatic carbonyl compounds: aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid. Total: 62 files.
+- `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`, `k33`, `k5`; [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons). Total: 82 files.
+- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6); ethyleneglycol, glycerol, methanediol (3); phenyloxenium (1); [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons) (28). Total: 102 files.
+- `carbonyl_derivatives/`: non-aromatic carbonyl compounds: aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid; [Beyer/Walter additions](#chapter-4-saturated-hydrocarbons) (24). Total: 86 files.
 - `hypervalent/`: expanded-octet species (all `implicit_h=false`): SO2, SO3, H2SO3, H2SO4, SF4, SF6, H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3, HClO2, HClO3, HClO4, ClF3, IF5, SO4(2-), PO4(3-), ClO4(-). Total: 20 files.
 - `heterocycles/`: non-aromatic heterocycles. O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6); cages and polyaza rings (urotropin, tetrahydrooctaazanaphthalene). Total: 53 files.
 
@@ -397,6 +404,115 @@ handling follows those defaults and explicit atom predicates.
 Source: [Schirmeister, Schmuck and Wich, Beyer/Walter Organische Chemie, 25. Auflage](<../materials/valence/Schirmeister T. et al . - Beyer Walter Organische_Chemie - 25. Auflage.pdf>).
 Page references are printed pages; PDF page = printed page + 22. Working data for each
 chapter is under `scratch/bw-chNN/`.
+
+### After the HW pass
+
+- Make parsing and resolution settings available in conformance inputs. `:config-overrides`
+  sets raising defaults only; the harness fixes the valence tie-break, running every input
+  under Strict and MostSaturated. Until then, inputs keep hydrogens implicit, so most
+  organic inputs do not resolve under Strict.
+- Create `organometallics/` and `organoelement/`, and add the held compounds.
+
+### Chapter 4: saturated hydrocarbons
+
+Implemented; pages 99–127. All 108 inputs resolve under MostSaturated in AtomTyping and
+Counts, so the chapter requires no new atom types or ValenceTable entries. Hydrogens are
+implicit; the three hydrogen-free inputs also resolve under Strict, and the other 105 do
+not. All 2,811 resolution cases pass with existing snapshots unchanged.
+
+| Category | Count | Compounds (printed page) |
+|---|---:|---|
+| `hydrocarbons/` | 29 | heptane (100), octane (104), decane (100), dodecane (103), heptadecane (102), hectane (100), 2-2-dimethylhexane (104), 2-2-3-3-tetramethylbutane (104), di-tert-butylethyne (124), cyclodecane (110), cycloeicosane (111), sterane (118), norbornene (123), dicyclopentadiene (123), tetrahydrodicyclopentadiene (123), bicyclo-3.3.1-non-1-ene (120), bicyclo-4.2.1-non-1-ene (120), bicyclo-4.2.1-non-6-ene (120), twistane (120), diamantane (120), dodecahedrane (122), pagodane (125), dewar-benzene (121), benzvalene (121), 1-1-1-propellane (121), tetra-tert-butyltetrahedrane (124), 1-2-dimethylenecyclopropane (126), 3-3-dimethylene-1-1-bi-cyclobutylidene (126), trimethylene-trispirododecane (126) |
+| `functional_groups/` | 28 | propyl-iodide (105), 1-bromo-3-chloropropane (110), 1-3-dibromopropane (111), 1-4-dibromobutane (111), allyl-chloride (110), methallyl-dichloride (123), cyclobutyl-bromide (113), cyclobutanol (114), cyclopropylmethanol (116), cyclobutylamine (116), cyclopropylmethylamine (116), cyclopropanone-hydrate (114), cyclohexyl-hydroperoxide (117), 1-1-2-2-tetrafluorocyclobutane (112), octafluorocyclobutane (112), tetrachlorotetrafluorocyclobutane (112), 1-3-diiodobicyclo-1.1.1-pentane (126), bicyclo-1.1.1-pentane-1-3-dithiol (126), 1-chloro-7-7-dimethylnorbornane (125), 1-nitronorbornane (126), 1-3-5-7-tetranitrocubane (127), octanitrocubane (127), pentaerythritol (122), cyclodecyl-tosylate (110), amantadine (125), memantine (125), rimantadine (125), isodrin (125) |
+| `carbonyl_derivatives/` | 24 | cyclobutanone (114), cyclopentanone (114), cycloheptanone (115), cyclodecanone (110), cyclopent-2-enone (115), 2-chlorocyclohexanone (114), 2-bromocyclopentadienone (124), tetra-tert-butylcyclopentadienone (124), tetramethylcyclobutane-1-3-dione (112), 3-tert-butylfuran-2-5-dione (124), cyclobutanecarboxylic-acid (113), cyclobutane-1-1-dicarboxylic-acid (112), ethyl-cyclopentanecarboxylate (114), diethyl-malonate (111), diethyl-cyclopropane-1-1-dicarboxylate (112), diethyl-cyclobutane-1-1-dicarboxylate (113), adipic-acid (114), pimelic-acid (115), suberic-acid (115), spiro-3.3-heptane-2-6-dicarboxylic-acid (118), bicyclo-1.1.1-pentane-1-3-dicarboxylic-acid (123), 1-3-diacetylbicyclo-1.1.1-pentane (123), dimethyl-cubane-1-4-dicarboxylate (124), cubane-1-3-5-7-tetracarboxylic-acid (127) |
+| `aromatic/` | 3 | ketamine (117), alpha-truxillic-acid (113), beta-truxinic-acid (113) |
+| `metabolites/` | 9 | the eight inositol diastereomers, with both chiro enantiomers: cis, epi, allo, myo, muco, neo, scyllo, 1D-chiro, 1L-chiro (109–110) |
+| `natural_products/` | 5 | curcumenol (107), chrysanthemic-acid (107), r-muscone (111), civetone (111), cholesterol (119) |
+| `reactive_intermediates/` | 10 | ethyl-radical (106), propyl-radical (106), butyl-radical (106), cyclobutyl-cation (116), cyclopropylmethyl-cation (116), cyclobutyldiazonium (116), cyclopropylmethyldiazonium (116), 7-7-dimethylnorborn-1-yl-cation (125), 7-7-dimethylnorborn-1-yl-radical (125), 7-7-dimethylnorborn-1-yl-anion (125) |
+| **Total** | **108** | |
+
+Checks:
+
+- PubChem named each uncharged, closed-shell structure as intended, with the same formula
+  that umol resolves. It treats radicals and cations as their parent compounds, so those
+  hydrogen counts were checked directly.
+- `canonical_eq` found no duplicate among 1,432 existing inputs after hydrindane was dropped
+  as `hydrocarbons/bicyclo-4.3.0-nonane`.
+- `:stereo-atoms` input matches the `#T` input of `stereo_tetrahedral/l-alanine`.
+- Inputs were lowered from SMILES with the fixture defaults, so `#h0` on bracket atoms
+  survives. Resolved outputs were unchanged by that correction.
+- The nine inositols follow [IUPAC, Nomenclature of Cyclitols, Eur. J. Biochem. 57 (1975), 1–7](<../materials/valence/IUPAC-1975-nomenclature-of-cyclitols.pdf>),
+  doi:10.1111/j.1432-1033.1975.tb02270.x, formulas (1)–(9) and Recommendation I-10. Inputs
+  rebuilt from those fractions and numbering directions equal the fixtures under
+  `canonical_eq`, and the nine are pairwise distinct with only the chiro pair chiral.
+- 1D- and 1L-chiro-inositol share the fraction 1,2,4/3,5,6 and differ in numbering direction.
+  The book's Abb. 4.21 uses the older enantiomer-specific prefixes: (+) 1,2,5/3,4,6 and
+  (−) 1,2,4/3,5,6. Its (+) equals 1D and its (−) equals 1L.
+- NIST WebBook 2D files agree for myo, scyllo, allo, epi, muco and chiro. Its 3D myo file is
+  all-cis, contradicting that record's name and descriptor.
+
+Limits:
+
+- The DSL has only tetrahedral and cis/trans stereo. Axial and planar chirality are not
+  planned for now, so spiro[3.3]heptane-2,6-dicarboxylic acid and bicyclo[3.3.1]non-1-ene
+  carry no stereo.
+- The truxillic and truxinic acid structures carry no stereo because the book's scheme gives
+  none. Ketamine is the racemate.
+- [1.1.1]Propellane uses an ordinary central bond; the book only reports a proposed 3c2e bond.
+- The 7,7-dimethylnorborn-1-yl cation is included although the book presents it as not
+  forming.
+- Bissecododecahedradiene and propellane polymers are omitted: the first needs its structure
+  confirmed, the second is not a single compound.
+- Held for `organometallics/`: methylsodium, diethylzinc, methyllithium, tert-butyllithium,
+  cyclobutylmagnesium bromide, 4-bornanelithium and carboplatin.
+- Book misprints: "Padogan" for pagodane, and C7H14 for heptane.
+
+### Chapter 5: unsaturated aliphatic hydrocarbons
+
+Proposed, awaiting review; the suite is unchanged. Pages 129–174. All 237 proposed inputs
+resolve under MostSaturated in AtomTyping and Counts, so the chapter requires no new atom
+types or ValenceTable entries. Inputs are in `scratch/bw-ch05/proposed/`.
+
+| Category | Count | Compounds (printed page) |
+|---|---:|---|
+| `hydrocarbons/` | 29 | 2-methylbut-1-ene (129), 3-methylbut-1-ene (129), pent-1-ene (129), 2-methylpent-1-ene (131), dec-1-ene (131), hex-1-ene (131), oct-1-ene (131), 2-3-dimethylbut-2-ene (135), isododecane (141), 5-ethylidenenorbornene (143), isooctane (147), cyclooctane (149), 2-3-dimethylbuta-1-3-diene (150), isoprene (150), penta-1-3-diene (154), 3-methylhexa-1-5-diene (156), hepta-1-5-diene (156), hexa-1-5-diene (156), dimethylfulvene (158), fulvalene (158), 6-methylfulvene (159), bicyclo-3.2.0-hepta-2-6-diene (159), cycloheptatriene (159), norcaradiene (159), cyclooctatetraene (160), cyclododecane (162), fulvene (167), isohexane (167), 18-annulene (171) |
+| `functional_groups/` | 71 | 1-2-dibromoethane (130), isopropyl-hydrogen-sulfate (132), 1-2-dichloropropane (133), 1-chloropropan-2-ol (133), acrylonitrile (133), allyl-alcohol (133), ethanolamine (133), ethylenediamine (133), propylene-glycol (133), vinyl-chloride (133), vinylidene-dichloride (133), 1-2-dibromopropane (135), 1-bromopropane (135), 2-3-dibromo-2-3-dimethylbutane (135), 2-iodopropane (135), allyl-bromide (135), diacetyl-peroxide (136), ethyl-hydrogen-sulfate (136), 1-chloro-2-nitrosoethane (137), 1-chloro-2-nitrosoethane-dimer (137), peracetic-acid (137), triethylamine (139), triethylammonium (139), aibn (140), cumene-hydroperoxide (140), thiophenol (141), dibenzoyl-peroxide (142), tetrafluoroethene (144), 1-1-2-trichloroethane (145), isobutyl-vinyl-ether (145), vinyl-alcohol (146), 1-2-dibromocyclopropane (147), cyclopropylamine (147), cyclopropyltrimethylammonium-hydroxide (147), isobutyl-alcohol (147), cyclobutyltrimethylammonium-hydroxide (148), cyclopentanol (148), performic-acid (148), cyclopentyl-bromide (149), 3-4-dibromobut-1-ene (152), 3-4-dichlorobut-1-ene (152), chloroprene (152), 1-chlorobut-2-ene (153), 3-chlorobut-1-ene (153), 3-methylbutane-1-3-diol (157), acetonitrile (157), butane-1-3-diol (157), bicyclo-2.2.2-oct-5-ene-2-2-3-3-tetracarbonitrile (159), bicyclo-3.2.0-hept-2-en-6-ol (159), bicyclo-3.2.0-hept-2-en-6-yl-methanesulfonate (159), tetracyanoethylene (159), tmeda (160), 7-8-dibromobicyclo-4.2.0-octa-2-4-diene (161), 1-4-dibromobut-2-yne (164), 2-3-dichloroprop-1-ene (164), tetrabromomethane (166), 6-6-dibromobicyclo-3.1.0-hex-2-ene (167), 1-1-2-2-tetrachloroethane (170), pentan-1-ol (170), tetrachloroethene (170), trichloroethene (170), 1-1-diiodoethane (171), vinyl-iodide (171), but-3-yn-2-ol (172), ethyl-vinyl-ether (172), hex-3-yne-2-5-diol (172), adiponitrile (173), but-2-yne-1-4-diol (173), butane-1-4-diol (173), hexamethylenediamine (173), propargyl-alcohol (173) |
+| `carbonyl_derivatives/` | 32 | acetone-cyanohydrin (133), acrolein (133), acrylic-acid (133), butyraldehyde (133), diacetone-alcohol (133), isobutyl-methyl-ketone (133), mesityl-oxide (133), methyl-methacrylate (133), vinyl-acetate (133), acetaldol (157), n-methyl-2-pyrrolidone (157), cyclopentadienecarboxylic-acid (158), divinyl-ketone (158), benzyl-methyl-carbonate (159), bicyclo-3.2.0-hept-2-en-6-one (159), ketene (159), monomethyl-carbonate (159), chloro-ethyl-ketene (160), chloro-isopropyl-ketene (160), chloro-methyl-ketene (160), cyclododecanone (162), cyclododecanone-oxime (162), laurolactam (162), carbon-suboxide (163), dihydrophthalic-acid (167), dihydrophthalic-anhydride (167), bicyclo-2.2.0-hex-5-ene-2-3-dicarboxylic-acid (168), bicyclo-2.2.0-hex-5-ene-2-3-dicarboxylic-anhydride (168), vinylacetic-acid (168), methyl-9-10-dibromostearate (170), vinyl-stearate (172), methyl-vinyl-ketone (173) |
+| `heterocycles/` | 7 | epichlorohydrin (133), propylene-oxide (133), 1-2-4-trioxolane (139), tetrathiafulvalene (158), benzvalene-derived-azo-compound (167), benzvalene-ptad-adduct (167), ptad (167) |
+| `aromatic/` | 26 | cumene (133), ethylbenzene (133), phenol (133), styrene (133), m-chlorobenzoic-acid (137), m-chloroperbenzoic-acid (137), hydroquinone (141), pyrogallol (141), methyl-benzoate (149), benzaldehyde (158), benzophenone (158), hexaphenylfulvalene (158), phenylfulvene (158), phenylacetaldehyde (161), terephthalaldehyde (161), sa-1-3-di-naphthalen-1-yl-1-3-diphenylpropa-1-2-diene (164), diphenylbutadiyne (165), 1-1-6-6-tetraphenylhexa-2-4-diyne-1-6-diol (166), 1-6-diiodo-1-1-6-6-tetraphenylhexa-2-4-diyne (166), diaryl-penta-diynol (166), tetraaryl-9-cumulene (166), tetraaryl-octatetrayne-diol (166), tetraphenylbutatriene (166), tetraphenylhexapentaene (166), 7-phenylbicyclo-4.2.0-octa-1-3-diene (167), phthalic-acid (167) |
+| `stereo_cis_trans/` | 16 | e-but-2-ene (129), e-pent-2-ene (129), z-pent-2-ene (129), e-cycloheptene (149), z-cycloheptene (149), e-1-4-dibromobut-2-ene (152), e-1-4-dichlorobut-2-ene (152), z-1-4-dibromobut-2-ene (152), e-z-hexa-2-4-diene (153), z-z-cycloocta-1-5-diene (160), e-e-e-cyclododeca-1-5-9-triene (162), e-e-z-cyclododeca-1-5-9-triene (162), 1-4-bis-4-nitrobiphenyl-2-2-diyl-butatriene (165), 1-4-dibromo-1-4-diphenylbutatriene (165), 2-3-dichloro-1-1-4-4-tetraphenylbut-2-ene (166), e-1-2-dichloroethene (170) |
+| `stereo_tetrahedral/` | 14 | cis-9-oxabicyclo-6.1.0-nonane (137), trans-9-oxabicyclo-6.1.0-nonane (137), cis-cyclopentane-1-2-diol (149), r-r-trans-cyclopentane-1-2-diol (149), s-s-trans-cyclopentane-1-2-diol (149), s-1-phenylethylamine (150), cis-3-4-dimethylcyclobutene (154), trans-3-4-dimethylcyclobutene (154), endo-6-chloro-6-methylbicyclo-3.2.0-hept-2-en-7-one (160), exo-6-chloro-6-methylbicyclo-3.2.0-hept-2-en-7-one (160), bicyclo-4.2.0-octa-2-4-7-triene (162), 7-phenylbicyclo-4.2.0-octa-1-4-diene (167), r-rasagiline (174), r-selegiline (174) |
+| `metabolites/` | 12 | 1-aminocyclopropane-1-carboxylic-acid (146), dihydrosterculic-acid (148), lactobacillic-acid (148), sterculic-acid (148), calcitriol (162), cholecalciferol (162), previtamin-d3 (163), methyl-oleate (169), oleic-acid (169), stearolic-acid (170), stearic-acid (172), dopamine (174) |
+| `natural_products/` | 5 | cocaine (159), pseudopelletierine (160), 7-dehydrocholesterol (162), nystatin-a1 (163), ethinylestradiol (174) |
+| `reactive_intermediates/` | 25 | propyl-cation (134), isopropyl-cation (135), tetramethylethylene-bromonium (135), 1-bromopropan-2-yl-radical (136), acetoxy-radical (136), carbonyl-oxide (139), phenylthiyl-radical (141), 3-amino-1-cyanoethyl-anion (142), ethyl-cation (146), ethyloxonium (146), cyclopropenylidene (148), cyclopropenylium (148), allyl-cation (151), 4-bromobut-2-enyl-cation (152), methylallyl-cation (153), pentadienyl-radical (155), allyl-radical (156), 3-hydroxy-1-1-dimethylpropyl-cation (157), hydroxymethyl-cation (157), cyclooctatetraene-dianion (160), 4-bromo-1-4-diphenylbutatrienyl-cation (165), isobenzene (166), dibromocarbene (167), acetylide (168), vinyl-cation (170) |
+| **Total** | **237** | |
+
+Of 423 extracted entries, 81 duplicate existing inputs under `canonical_eq` and 67 are simple
+inorganic reagents left to the HW pass. 30 are held for `organometallics/` and
+`organoelement/`. Tropone and tropolone are omitted as Kekulé forms of `aromatic/` inputs;
+the amide anion, hydrogen sulfate, methyl radical and methylene as existing or inorganic
+species; atropine until chapter 36, because its C3 configuration is undefined in PubChem.
+
+Checks:
+
+- Every compound name found in the page text is on its listed page. PubChem names were
+  compared with the intended structures; it treats radicals and most cations as parent
+  compounds and misreads the cyclopropenylium SMILES, so those were checked directly.
+- PubChem has no record for 14 inputs, so these rest on the book's drawings alone.
+
+Limits and items to review:
+
+- Resolution rejects `#C` on a cumulene's central bond, so the book's E/Z cumulene pairs are
+  one stereo-free input each. Axial and planar chirality are likewise unencoded.
+- The [9]cumulene family uses 2,6-di-tert-butylphenyl as drawn on p. 166. The literature
+  compounds are believed to carry 3,5-di-tert-butylphenyl; this is not checked against a
+  primary source.
+- The chloroketene adducts follow the drawn 7-one on p. 160, opposite to the book's own
+  neighbouring scheme and to the known 6-one regiochemistry.
+- isooctane, isododecane and isohexane are assumed single isomers; the book gives no
+  structure.
+- Book misprints: Tetrathiofulvalen, Tetraethylmethylendiamin for TMEDA, Mesitylchlorid for
+  mesityl oxide, Latobacillinsäure, and cis-/trans-1,2-Cyclobuten.
 
 ## HW extraction spike (2026-10-31)
 
@@ -3045,3 +3161,290 @@ Four existing snapshots change. The full **2,703-case** suite, 3,594 graph unit 
 
 Intermediates and the candidate/count audit are in `scratch/hw-iron-review/`.
 Retained sources are archived in `materials/valence/`.
+
+### Cobalt group
+
+HW II, chapter XXX, pp. 1989–2022, with chapter-XXXII cross-references.
+**Accepted selection implemented: 195 additions — Co 63, Rh 68, Ir 64.**
+Capacities are Co 23 and Rh/Ir 19; no new MC or companion types, and no ValenceTable
+change. All 13 earlier states remain: 12 have sources and conformance coverage;
+Co38 remains source-unresolved. The other open and excluded cases below add no states.
+
+#### Cobalt-group work table
+
+Element prefixes apply to every suffix in the same cell; slash-separated prefixes
+apply to each named element. Counts exclude existing states and reuse across rows,
+and include every displayed H-count split. States use concrete, zero-valence defaults.
+Anionic-ligand donation follows the adopted convention of the preceding chapters.
+The capacity changes and all 195 additions are approved.
+
+| ID | States / extracted family | Status; new states | Examples and evidence |
+| --- | --- | --- | --- |
+| Co01 | Co/Rh/Ir#n3#u3; Co#c+2#n2#u3; Co/Rh#c+2#n3#u; Co/Rh#c+3#n3; Co#c+3#n#u4; Co#c-2#n3#u#v4; Co#c-3#n3#u#v5; Rh#c+3#n3#t6 | Retained; 12 existing; citations updated | Atomic occupations: HW 1538 and ASD. Co(II/III): HW 1994, 2000–2002; Rh(II/III): 2017. Corrected Co #v4/#v5 example charges: Co(CN)₄²−/Co(CN)₅³−. Rh's #t6 hydride-donor state is supported by HW 2068, 2071 and by the six-donor III complexes here. The thirteenth existing state is unresolved in Co38. |
+| Co02a | Co/Rh#c+#n3#u2 | Implemented; 2 | Free M+ ions: d⁸ ³F₄, ASD. These do not replace paired d⁸ complex occupations. |
+| Co02b | Rh/Ir#c+2#n2#u3; #c+3#n#u4 | Implemented; 4 | Free M²+/M³+: d⁷ ⁴F₉/₂ and d⁶ ⁵D₄, ASD. Existing Co states already cover both; retain the existing low-spin Rh states. |
+| Co02c | Ir#c+#n2#u4 | Implemented; 1 | Free Ir+ is 5d⁷6s, ⁵F₅ (ASD), not the d⁸ triplet of free Co+/Rh+. |
+| Co03 | Co#c-2#n2#u3#v4; #c+2#n2#u3#t4; #n2#u3#v2#t2 | Implemented; 3 | High-spin CoCl₄²−, Co(H₂O)₄²+, CoCl₂D₂ (D = pyridine/phosphine). HW 1994, 2001–2002; K12 also identifies S = 3/2 CoX₂(PPh₃)₂. Ordinary anionic-ligand bonds or donation. |
+| Co04 | Co#c+2#n2#u3#t6; #n2#u3#v2#t4; #c-4#n2#u3#v6 | Implemented; 3 | High-spin Co(H₂O)₆²+/Co(NH₃)₆²+, Co(acac)₂(H₂O)₂ and Co(OH)₆⁴−; HW 1994, 1996–1997, 2001–2002. Each graph counts 19 electrons, within Co capacity 23. |
+| Co05 | Co#c+2#n3#u#t4; #c+2#n3#u#t5; #n3#u#v2#t2 | Implemented; 3 | Low-spin Co(CN)₄²−/Co(CN)₅³−, Co(CNR)₅²+, Co(salen) and Co(pc); HW 1994, 2001–2002. The ordinary cyanide states already exist. Salen/pc use two ordinary anionic N/O bonds plus two donors, or all donors. |
+| Co06 | Co#c+2#n3#u#t6; #c-3#n3#u#v5#t | Implemented; 2 | Low-spin Co(terpy)₂²+ and Co(CN)₅(H₂O)³−, HW 1997, 2002. Cobaltocene also uses the first state with two six-electron Cp− donors (2189–2195). These graphs count 19 electrons. |
+| Co07 | Co#c+3#n3#t6; #c+2#n3#v#t5; #c+#n3#v2#t4; #n3#v3#t3; #c-3#n3#v6 | Implemented; 5 | Paired Co(III): hexaaqua/ammine/cyanide, CoX(NH₃)₅²+, CoCl₂(NH₃)₄+, Co(acac)₃ and cobalamins; HW 1994, 1996–1997, 2000–2004. Cobalamin's corrin/axial anions can be ordinary bonds or donors. The Co(III) centers of the peroxide/superoxide examples reuse these states; ligand radical allocation does not require a metal MC state. |
+| Co08 | Co#c-3#n#u4#v6; #c+3#n#u4#t6 | Implemented; 2 | High-spin CoF₆³−, HW 1994, 2000: four unpaired electrons. Ordinary F bonds or F− donation. CoF₃(H₂O)₃ is settled separately in Co30. |
+| Co09 | Co#c-4#n4#v5; #n4#v#t4 | Implemented; 2 | Co₂(CN)₁₀⁶− and Co₂(CN)₈⁸− with ordinary Co–Co bonds; HW 1994–1995, 2002 explicitly gives pairing by dimerization. Co(CN)₅⁴− also uses Co#c-4#n4#v5. Co₂(CN)₁₀⁶− with ordinary CN bonds reuses Co07. |
+| Co10 | Co#n4#h#t4; #c+#n4#t5; Rh/Ir#n4#v#t4; #n4#h#t4; #c+#n4#t5 | Implemented; 8 | MH(PR₃)₄ and HM(CO)₄: paired 18-electron monohydrides; HW 1992, 2009–2010, 2068–2069, 2136–2137. Explicit/implicit H and H− donation. M₂(CO)₈ with four terminal CO per M reuses the ordinary #v#t4 state for its M–M bond (2112). |
+| Co11a | Co#c-4#n4#v4#h; #c-4#n4#v3#h2; #c-4#n4#v2#h3; #c-4#n4#v#h4; #c-4#n4#h5; Rh/Ir#c-4#n4#v5; #c-4#n4#v4#h; #c-4#n4#v3#h2; #c-4#n4#v2#h3; #c-4#n4#v#h4; #c-4#n4#h5 | Implemented; 17 | MH₅⁴− in Mg₂CoH₅ and Ca₂/Sr₂MH₅ (M = Rh, Ir): square-pyramidal, paired d⁸; HW 1992, 2009–2010, 2069. All six H-count splits; H− donors reuse Co10. |
+| Co11b | Rh#c-3#n4#v4; #c-3#n4#v3#h; #c-3#n4#v2#h2; #c-3#n4#v#h3; #c-3#n4#h4; #c+#n4#t4 | Implemented; 6 | Square-planar RhH₄³− in Li₃RhH₄, HW 2009–2010, 2069; Rh(I) diamagnetism, 2017. All five H-count splits and H− donors. |
+| Co11c | Rh#c-3#n3#v6; #c-3#n3#v5#h; #c-3#n3#v4#h2; #c-3#n3#v3#h3; #c-3#n3#v2#h4; #c-3#n3#v#h5; #c-3#n3#h6; Ir#c-3#n3#v6; #c-3#n3#v5#h; #c-3#n3#v4#h2; #c-3#n3#v3#h3; #c-3#n3#v2#h4; #c-3#n3#v#h5; #c-3#n3#h6; #c+3#n3#t6 | Implemented; 15 | Octahedral MH₆³− in Li₃IrH₆ and Na₃MH₆; HW 2009–2010, 2069. Paired III occupation, all seven H-count splits and H− donors. Rh's six-accepted-pair state already exists. |
+| Co12 | Co#n3#u2#v#t3; #c+#n3#u2#t4 | Implemented; 2 | CoX(PR₃)₃, X = Cl/Br/I: tetrahedral S = 1; K12, pp. 4954–4956, 4962–4963, HFEPR and electronic-structure analysis. Ordinary halide or donation. Distinct from paired square-planar Rh/Ir(I). |
+| Co13a | Co#c+#n4#t4; #n4#v#t3 | Implemented; 2 | Square-planar cob(I)alamin: K12, p. 4954, explicitly gives diamagnetic Co(I); HW 2003–2004 gives the corrin family. Four donors, or one ordinary anionic corrin N bond and three donors. |
+| Co13b | Co#c+#n3#u#v#t3; #c+#n3#u#v#t4 | Implemented; 2 | Four-/five-coordinate cob(II)alamin, L09: EPR and electronic-structure analysis explicitly give low-spin d⁷, S = 1/2. One ordinary anionic corrin N bond and three/four donors. All-donor Co²+ states reuse Co05. |
+| Co14 | Co#c+2#n2#u3#t7; #c-2#n2#u3#v4#t3; #c+2#n2#u3#t8; #c-2#n2#u3#v4#t4 | Implemented; 4 | Co(NO₃)₄²−: C16 establishes seven/eight O donors and S = 3/2. All O donors, or four ordinary anionic O bonds plus the other donors. Counts 21/23 electrons; covered by Co capacity 23. Eight coordination is also in HW 1991. |
+| Co15 | Co#c-2#n2#u#v6; #c+4#n2#u#t6 | Implemented; 2 | CoF₆²−: low-spin Co(IV), one unpaired electron; HW 2004. Ordinary F bonds or F− donation. |
+| Co16 | Rh/Ir#c+2#n3#v#t5; #c+#n3#v2#t4; #n3#v3#t3; #c-#n3#v4#t2; #c-2#n3#v5#t | Implemented; 10 | Paired M(III), [MClₖ(H₂O)₆₋ₖ]³⁻ᵏ (k = 0–6), corresponding ammines and hexacyanides; HW 2011–2014, 2017. The full substitution series is explicit. Ordinary anionic-ligand bonds or all donors. |
+| Co17a | Rh/Ir#c-2#n2#u#v6; #c+4#n2#u#t6 | Implemented; 4 | MX₆²−, X = F/Cl/Br: low-spin d⁵, one unpaired electron; HW 2012, 2017. Ordinary bonds or donors. |
+| Co17b | Ir#c+#n2#u#v3#t3; #n2#u#v4#t2; #c-#n2#u#v5#t | Implemented; 3 | IrCl₃(H₂O)₃+, IrCl₄(H₂O)₂ and IrCl₅(H₂O)−, HW 2012, 2017; same low-spin IV occupation. Their all-donor form reuses Co17a. |
+| Co18 | Rh/Ir#c-#n#u2#v6; #c+5#n#u2#t6; #u3#v6; #c+6#u3#t6 | Implemented; 8 | MF₆−: octahedral d⁴ with two unpaired electrons (HW 2012). Molecular MF₆: octahedral d³ (2010–2011; t₂g³ occupation under HW's octahedral splitting, 1594). Ordinary F bonds or F− donors; no hypothetical IrF₇. |
+| Co19a | Rh#n4#v#t3; Ir#n4#v#t3; #c+#n4#t4 | Implemented; 3 | Paired square-planar M(I): Wilkinson's RhCl(PPh₃)₃ and Vaska's IrCl(CO)(PPh₃)₂, HW 2012–2013, 2017. Ordinary Cl or chloride donation. The five-coordinate CO adduct of Vaska's complex reuses Co10. |
+| Co19b | Rh#c+#n4#t3; #c-#n4#v2#t2 | Implemented; 2 | T-shaped Rh(PPh₃)₃+ (2013), square-planar Rh(CN)₄³− (2014), and the Monsanto catalyst RhI₂(CO)₂− (2021). Explicit paired Rh(I) description; all-donor alternatives reuse Co19a. |
+| Co20 | Rh#n3#u#v2#t2; #c+2#n3#u#t4 | Implemented; 2 | RhX₂(PR₃)₂, square-planar low-spin Rh(II), one unpaired electron; HW 2012, 2017. No unsupported Ir analogue. |
+| Co21a | Rh/Ir#n3#v2#h#t3; #n3#v#h2#t3 | Implemented; 4 | MH₂Cl(PR₃)₃ and IrH₂Cl(CO)(PPh₃)₂: explicit classical III dihydrides formed by oxidative addition, HW 2013, 2017. All H splits with one ordinary Cl; all-donor M³+ forms reuse Co16. |
+| Co21b | Rh#n3#v3#t2; #n3#v2#h#t2; #n3#v#h2#t2; #c+3#n3#t5; #c-#n3#v4#t | Implemented; 5 | Five-coordinate RhH₂Cl(PPh₃)₂ (2013), and the acyl Rh(III) intermediate in the Monsanto cycle (2021). Classical H/Cl or acyl/I bonds plus neutral donors; five-donor alternative. No new type for the six-coordinate oxidative-addition intermediate, which reuses Co16. |
+| Co22 | Rh#n4#h#t3 | Implemented; 1 | RhH(CO)(PPh₃)₂, HW 2013: paired Rh(I) monohydride, explicit/implicit H. H− donors reuse Co19a. |
+| Co23 | Co#c-3#n3#v5#h | Implemented; 1 | MH(CN)₅³−, HW 1994 and 2014. Implicit-H counterpart; explicit H and H− donors reuse the paired III states above. |
+| Co24 | Ir#n2#u#v3#h#t2; #n2#u#v2#h2#t2 | Implemented; 2 | IrH₂Cl₂(PiPr₃)₂, HW 2068, explicitly a rare paramagnetic 17-electron hydride. Ordinary H/Cl with two P donors; all H splits. The IV all-donor state already occurs in Co17a. |
+| Co25a | Rh#n#u#v6 | Implemented; 1 | RhO₄²−: HW 2014 gives one unpaired electron. Two Rh=O plus two Rh–O− bonds retain that occupation; the proposed tetrahedral geometry is qualified in HW. |
+| Co25b | Rh#c-2#n#u#v8 | Implemented; 1 | The same RhO₄²− with four ordinary Rh=O bonds and charge on Rh. Counts 19 electrons; Rh capacity 18 → 19 is approved. This is a charge-allocation alternative, not a different spin assignment. |
+| Co26 | Co/Rh/Ir#c-#n5#t4; #c-3#n6#t3 | Implemented; 6 | M(CO)₄− and the superreduced M(CO)₃³−, HW 2131–2135. The mononuclear carbonylate table and closed-shell description support these paired 18-electron states. No cluster-specific MC state. |
+| Co27 | Co/Rh#n2#v5#t2 | Implemented; 2 | Co₂(CO)₈ and Co₄/Rh₄(CO)₁₂, HW 2112–2114, Fig. 32.28: ordinary M–M bonds and C(=O)(–M)₂ bridges. Terminal CO remains a donor. The #v3 state is reused; basal bridge-bearing tetrahedral-cluster sites add #v5#t2. All-terminal Ir₄(CO)₁₂ reuses Ir#n3#v3#t3. |
+| Co28 | Reuses preceding rows | Implemented; 0 | Rh₂(H₂O)₁₀⁴+ and common Rh₂(O₂CR)₄L₂: explicit diamagnetic Rh–Rh single bond, HW 2018. Five donors per Rh, or two ordinary carboxylate O bonds and three donors. Mixed-valent Rh₂⁵+ remains in Co35 until its bond-carried charge/spin graph is worked through. |
+| Co29 | Co#n3#u2#v; #n3#u2#h; #c+#n3#u2#t | Implemented; 3 | Molecular CoH: G05, pp. 2–3 and 51–65, establishes X³Φ and gives one bonding pair plus three nonbonding pairs and two unpaired electrons. Explicit/implicit ordinary H and H− donation. |
+| Co30 | Co#n#u4#v3#t3 | Implemented; 1 | High-spin CoF₃(H₂O)₃: N84, p. 2722, explicitly lists it with CoF₆³−, citing Cotton/Wilkinson (1980), p. 775; its own NMR experiment concerns a different compound. This supports HW 2000 over the contradictory low-spin wording on 1994. Three ordinary F bonds and three water donors; all-donor form reuses Co08. |
+| Co31a | Co/Rh/Ir#n3#u#v2; #n3#u#v#h; #n3#u#h2; #c+2#n3#u#t2 | Implemented; 12 | Matrix-isolated MH₂: VH92, pp. 8123, 8126–8129, establishes bent S = 1/2 species with predominantly metal-local spin; WA02 independently supports RhH₂ (²A₁). All H splits and H− donation. CoH₂ is the observed doublet, not a claim to have resolved its conflict with calculated quartet ground states; no prospective quartet H variants are selected. |
+| Co31b | Rh#n3#u2#v; #n3#u2#h; #c+#n3#u2#t | Implemented; 3 | Molecular RhH: WA02, pp. 3706–3709, Table 2, gives the observed X³Δ molecule with three pairs and two unpaired electrons after the ordinary Rh–H bond. Explicit/implicit H and H− donation. Its distinct H₂ adducts do not justify further hydride states. |
+| Co31c | Ir#n3#u2#v; #n3#u2#h; #c+#n3#u2#t | Implemented; 3 | Molecular IrH: L14, pp. 39–41, finds a predominantly two-open-shell X³Φ₄ configuration from the hyperfine constants. Use three nonbonding pairs and two unpaired electrons, with explicit/implicit ordinary H or H− donation (PW). The reported four-open-shell admixture does not add a separate occupation. |
+| Co31d | RhH₃ and Rh hydride–H₂ adducts | No new states selected | WA02 observes (H₂)RhH₃, not bare RhH₃; the other intact-H₂ adducts also do not establish additional classical hydride states. H₂-donor accounting remains outside this pass. |
+| Co32a | Co#n2#u3#v2 | Implemented; 1 | Molecular CoO with an ordinary Co=O bond: C97, pp. 8795–8796, 8798, retains the experimentally established X⁴Δ state. Two nonbonding pairs and three unpaired electrons; the erroneous calculated sextet ordering is not adopted. |
+| Co32b | Co/Rh/Ir#n2#u#v4 | Implemented; 3 | Molecular O=M=O: VO92, pp. 7247, 7249–7251, ESR establishes doublets with predominantly metal-local spin and little oxygen spin. Two ordinary M=O bonds. Later bent RhO₂ calculations in G11 change no atom count; these are distinct from peroxide/superoxide isomers. |
+| Co32c | Ir#u#v8 | Implemented; 1 | IrO₄ with four ordinary Ir=O bonds: G09Ir, pp. 7880–7882, identifies the matrix-isolated D₂d ²A₁ molecule and explicitly gives d¹ Ir(VIII). Counts 17 electrons; no capacity change. |
+| Co32d | Rh#c+2#n#u#v4#t2; Ir#n#u#v6; #c+2#n#u#v4#t2 | Implemented; 3 | Observed (η²-O₂)MO₂ peroxide isomers: G09Ir, p. 7881, and G11, pp. 672, 675, explicitly assign ²A₂ and a closed-shell peroxide plus two oxo groups. Two ordinary M=O bonds and two M–O bonds, or two peroxide O− donors. Rh's all-ordinary state reuses Co25a; existing O#c-#n2#v#d suffices. |
+| Co32e | Rh#c+4#n2#u#t4 | Implemented; 1 | Observed D₂d bis-peroxide Rh(η²-O₂)₂: G11, pp. 672–674, assigns ²B₁, distinct from its D₂h quartet bis-superoxide isomer. Two O–O single bonds and four ordinary Rh–O bonds reuse Co32b; four peroxide O− donors add the displayed state. No MC bond. |
+| Co32f | Rh#c-#n3#v4 | Implemented; 1 | Observed RhO₂− with two ordinary Rh=O bonds and charge on Rh: G11, Fig. 7b and Table 6, assigns ¹A₁. Three nonbonding pairs; no prospective triplet alternative. |
+| Co32g | Cyclic Co(O₂) | Covered by implemented types; 0 | C97, pp. 8796, 8798–8799, establishes a peroxide-like ring but leaves doublet/quartet ordering unresolved. An O–O single bond and two ordinary Co–O bonds use Co31a/Co32a for the respective supplied occupations. No additional prospective occupation or donor state is selected. |
+| Co32h | CoOO; (η¹-O₂)MO₂ (M = Rh, Ir); Rh(η²-O₂) and the D₂h bis-superoxide Rh(η²-O₂)₂ | Open local occupations; no new states selected | C97/G09Ir/G11 establish these constitutions and discuss total multiplicities, but do not fix the metal/ligand spin allocation. CA99 supplies charges and total multiplicities, not the missing local spins; its earlier bis-dioxygen interpretation does not replace G11's distinction between isomers. G09Ir SI Fig. S9 shows spin density only for IrO₄, not the end-on isomer. |
+| Co32i | Molecular RhO₃ and IrO₃ | Open; occupation sources still to locate | HW 2014 identifies the volatile trioxides. The reviewed papers do not settle the three-terminal-oxo occupations; oxide-peroxide MO₄ isomers are not substitutes. No hypothetical RhO₄ state is selected: G11 reports no experimental identification. |
+| Co32j | Rh#n2#u3#v2 | Implemented; 1 | Molecular RhO: CA99, pp. 4846–4847, identifies the matrix-isolated monoxide and gives the experimentally supported X⁴Σ− ground state. An ordinary Rh=O graph assigns two nonbonding pairs and three unpaired electrons to Rh (PW). |
+| Co33a | CoO₄³− | Open; occupation source still to locate | HW 2004–2005 identifies the Co(V) anion. Co(I)/Co(IV) occupations are settled separately in Co33f/Co33g; neither establishes this d⁴ occupation. |
+| Co33b | RhO₄³− | Open; occupation source still to locate | HW 2014 identifies the orange Rh(V) solution and its disproportionation but does not specify the occupation. The one-unpaired-electron measurement there concerns RhO₄²−, not this ion. |
+| Co33c | CoN₂⁵− | Triplet occupation supported; bond allocation open | B19, §VII, explicitly gives Co(I) d⁸, three pairs and two unpaired electrons, in LiSr₂[CoN₂]/LiCa₂[CoN₂]. The paper does not assign integer Co–N bond orders or donor contributions; no atom state has yet been selected from that occupation alone. |
+| Co33d | CoN₃⁶− in reported Ca₃CoN₃ | Not selected; identity challenged | HW 2000 lists the planar anion. B07, p. 165, reassigns the earlier reported Ca₃CoN₃ powder pattern to Ca₅[CoN₂]₂ with CaO impurities. No prospective Co(III) state is selected from this disputed identification; the independently established CoN₂⁵− family remains in Co33c. |
+| Co33e | CoO₃⁴−, CoO₄⁶− and Co₄O₉¹⁰− | Covered by implemented types; 0 | M98, pp. 3198–3201, establishes d⁷ quartet Co(II) in the isolated oxoanions and supports the same local occupation in the linked Co₄O₉¹⁰− units. One Co=O per Co with remaining ordinary Co–O bonds in CoO₃⁴−/Co₄O₉¹⁰−, or four Co–O− bonds in CoO₄⁶−, uses Co#c-2#n2#u3#v4 from Co03 (PW graph allocation). All-double-bond CoO₃⁴− reuses Co04 within the approved Co capacity. |
+| Co33f | Co#c-3#n3#u2#v4 | Implemented; 1 | CoO₂³−: S01 establishes the near-linear anion in Rb₃CoO₂; S03Co, §3.6.4, pp. 97–98, explicitly fits S = 1 Co(I), g = 2.19, μeff = 3.10 μB. Two ordinary Co=O bonds as in HW 1999 give three pairs and two unpaired electrons, with charge on Co (PW). Counts 16 electrons; existing O states suffice. |
+| Co33g | Co#u5#v4 | Implemented; 1 | CoO₄⁴− in Na₄CoO₄: K15, manuscript pp. 1–3/Figs. 3–4, explicitly gives tetrahedral d⁵ S = 5/2. Four ordinary Co–O− bonds preserve that occupation (PW); existing O#c-#n3#v suffices. Counts 13 electrons; no capacity change. |
+| Co34 | CoH₂(PPh₃)₂ | Open; source for this exact formulation still to locate | HW 1992 lists this phosphine dihydride. The sourced CoH₃(PR₃)₃ and CoH₂(PMe₃)₄+ compounds do not establish its occupation or hydride/H₂ partition. |
+| Co34a | Co#c+#n3#v#h#t4; #c+#n3#h2#t4 | Implemented; 2 | cis-CoH₂(PMe₃)₄+: P90, pp. 1043, 1045–1046, assigns two terminal hydrides from X-ray, IR/isotope and NMR evidence. The paired six-coordinate Co(III) occupation follows HW 1992/2000–2002 and reuses Co07 for explicit H and H− donation; only mixed/implicit-H variants are new. This assignment is specific to PMe₃, not every CoH₂(PR₃)₄+ formula. |
+| Co34b | Ir#c+#n3#v#h#t4; #c+#n3#h2#t4 | Implemented; 2 | IrH₂(CO)₂(PPh₃)₂+: HC88, Table II, p. 4128 and p. 4130, explicitly establishes a classical octahedral d⁶ dihydride. Paired Ir(III) follows HW 2017; explicit H and H− donation reuse Co16/Co11c. Only mixed/implicit-H variants are new. |
+| Co34c | Ir#n2#v5#t2; #n2#v4#h#t2; #n2#v3#h2#t2; #n2#v2#h3#t2; #n2#v#h4#t2; #n2#h5#t2; #c+5#n2#t7 | Implemented; 7 | IrH₅(PR₃)₂, HW 2010: HC88, Tables I–II, establishes the classical PCy₃ complex; JA16, §§2–3.1 and Fig. 1A/D, uses closed-shell calculations for the neutral PPh₃/PMe₃ complexes. Its bare-IrH₅ model also recovers five localized 2c2e bonds (Fig. 2A). The ordinary graph leaves two nonbonding pairs on Ir (PW); all H-count splits and H− donation count 18 electrons. |
+| Co34d | Co#n3#v2#h#t3; #n3#v#h2#t3; #n3#h3#t3 | Implemented; 3 | CoH₃(PR₃)₃, PR₃ = PPh₃, PEtPh₂, PEt₂Ph: S68, p. 130/Table V, explicitly assigns octahedral Co(III) with a trans H–Co–H pair from IR/H–D substitution; SV19, Table 3, retains the classical hydride treatment. Reuses Co07's paired III occupation, explicit-H and H−-donor states; three mixed/implicit-H variants are new. |
+| Co34e | Ir#n3#h3#t3 | Implemented; 1 | fac-IrH₃(PPh₂Me)₃: B93, pp. 3359, 3361–3362, directly locates three terminal H atoms by neutron diffraction, Ir–H = 1.627(4) Å. L90, p. 858/Table VII, independently classifies IrH₃(PMe₂Ph)₃ as classical (T₁ = 465 ms). Reuses paired octahedral Ir(III), Co16/Co21a; only the all-implicit-H state is new. |
+| Co34f | IrH₂(η²-H₂)(PMe₂Ph)₃+ | Assignment supported; H₂-donor accounting deferred; 0 | L90, pp. 858–859/Table VII, assigns two terminal hydrides and one intact H₂ ligand from T₁ = 20 ms and reactivity. Retain the H₂ donor description under the shared deferral; this does not support a four-terminal-hydride state. |
+| Co35 | Mixed-valent Rh₂⁵+ carboxylates | Open; graph check | HW 2018 gives the Rh₂⁵+ bond occupation; work through its bond-carried charge/spin allocation before deciding whether another type is needed. |
+| Co35a | Rh/Ir#c+2#n3#u#t6 | Implemented; 2 | Monomeric RhCp₂ and IrCp₂: KW67, pp. 186–187, establishes S = 1/2. Formal M(II) with two six-electron Cp− donors uses the same graph allocation as Co06 (PW), counting 19 electrons; Rh/Ir capacity 18 → 19 is approved. KW67 discusses ligand character of the singly occupied orbital; #u on M is the formal allocation, not a claim that the spin density is confined to M. |
+| Co36 | Co#c+#n3#u2#t6 | Implemented; 1 | Six-coordinate Co(I) polypyridyl complexes Co(tpy)₂+, Co(tbpy)₃+ and Co(phen)₃+: E15, pp. 12005–12007, Table 4 and p. 12016, establishes neutral ligands and d⁸ S = 1 by crystallography, magnetic measurements and electronic-structure analysis. Six N donors give 20 electrons; covered by Co capacity 23. No ligand-radical or MC state is needed. |
+| Co36a | Co#n4#u#t4 | Implemented; 1 | Co(PMe₃)₄: K71Co, p. 343, establishes the monomer and explicitly assigns tetrahedral d⁹ from μeff = 1.70 μB and EPR. Four P donors, four nonbonding pairs and one unpaired electron; 17 electrons. Distinct from the paired HCo(PMe₃)₄ in Co10. |
+| Co36b | Rh#n4#u#t4 | Implemented; 1 | Rh(dppe)₂: K24, pp. 5–6 and Figs. 3–4, treats the observed paramagnetic Rh(0) species as d⁹ with one singly occupied orbital. Four P donors give the displayed 17-electron state (PW). The +I/−I complexes reuse Co19a/Co26; partial spin delocalization does not require a new MC type. |
+| Co37 | Co(1-norbornyl)₄/CoR₄+, high-nuclearity carbonyl/hydride clusters, specialized Rh/Ir oxo/nitrido assemblies | Not selected for this pass | HW 2005, 2015–2019, 2115–2117, 2137–2138. These do not justify additional scaffold-specific default states. Small ordinary-bond carbonyl clusters are covered in Co10/Co27. Hypothetical IrF₇ is also excluded (2011–2012). |
+| Co38 | Existing Co#c+#n3#u#v | Open; 1 existing state | Corrected the old CoX− comment to CoX+. A supporting bare low-spin CoX+ example has not yet been established. Do not silently retain an unsupported citation, substitute a ligated example, or remove the state before completing that check. |
+
+#### Implementation and coverage
+
+Co capacity 23 covers the eight-donor tetranitrate graph (Co14); the seven-donor
+form counts 21, Co04/Co06 count 19, and the six-donor Co(I) triplet counts 20.
+Rh/Ir capacity 19 covers the formal M(II) metallocene donors; Rh also needs 19 for
+the all-double-bond RhO₄²− graph. These approved increases change graph-count limits,
+not free-ion configurations. ValenceTable remains unchanged: fixed H counts use
+the existing Counts route for these elements.
+
+| Coverage | Result |
+| --- | --- |
+| New fixtures | 199: donor_acceptor 112, hydrides 51, inorganic_ions 18, atomic_ions 9, inorganic_small 9 |
+| Added states | All 195; each input resolves to the expected state under AtomTyping/Counts × Strict/MostSaturated and passes ValenceInvariantsValidator |
+| Retained states | All 12 supported states covered; Co38 retained with its source gap explicit |
+| Existing inputs | Rh²⁺/Rh³⁺ low-spin inputs and cobalt porphine now supply their intended spin; their existing snapshots are unchanged. Separate free-ion inputs retain ground-state occupations |
+| Corrin fixtures | Peripheral substituents replaced by H, following L09's computational model; Co(I/II) occupations and donor allocations follow Co13 |
+| Regression checks | 2,902 available conformance cases, 3,594 graph unit tests, 223 graph property tests and 310 chemistry tests pass; formatting and Clippy pass |
+
+Open source/graph cases remain Co32h–i, Co33a–c, Co34, Co35 and Co38.
+The H₂-donor descriptions remain deferred; no unsupported assignments were added.
+
+#### Cobalt-group sources and access
+
+| Key | Source | Contribution / access |
+| --- | --- | --- |
+| ASD | NIST Atomic Spectra Database, ground configurations/terms. Archived query outputs: [Co](../materials/valence/NIST-ASD-2026-co-ground-states.html), [Rh](../materials/valence/NIST-ASD-2026-rh-ground-states.html), [Ir](../materials/valence/NIST-ASD-2026-ir-ground-states.html); [live database](https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html) | Atomic and free-ion occupations in Co01/Co02, checked independently of complex spin states. |
+| K12 | Krzystek et al., “High Spin Co(I): High-Frequency and -Field EPR Spectroscopy of CoX(PPh₃)₃ (X = Cl, Br),” *Inorg. Chem.* **51** (2012), 4954–4964. [DOI](https://doi.org/10.1021/ic202185x), [author copy](https://nationalmaglab.org/library/publications/NHMFL_Publication-6133.pdf), [PDF](../materials/valence/Krzystek-2012-cobaltI.pdf) | Retrieved and reviewed. Explicit triplet phosphine/halide complexes; paired corrin and five-coordinate Co(I) comparison. Co12/Co13a. |
+| C16 | Chen et al., “Slow Magnetic Relaxations in Cobalt(II) Tetranitrate Complexes,” *Inorg. Chem.* **55** (2016), 12603–12617. [DOI](https://doi.org/10.1021/acs.inorgchem.6b01544), [repository copy](https://www.osti.gov/servlets/purl/1341566), [PDF](../materials/valence/Chen-2016-cobalt-tetranitrate.pdf) | Retrieved and reviewed. Manuscript pp. 11–12: seven/eight coordination; pp. 14–18: S = 3/2 and spectroscopic magnetic analysis. Co14. |
+| G05 | Gordon, *Spectroscopy of selected metal-containing diatomic molecules*, Waterloo PhD thesis (2005). [Repository copy](https://dspacemainprd01.lib.uwaterloo.ca/server/api/core/bitstreams/17bd1ee2-64d8-4615-8f65-7f7ae4acc04a/content), [PDF](../materials/valence/Gordon-2005-metal-hydrides-thesis.pdf) | Relevant CoH sections reviewed; pp. 2–3 give the orbital occupation, pp. 51–65 report the spectroscopy. Co29. |
+| L09 | Liptak et al., “Spectroscopic and Computational Characterization of the Base-off Forms of Cob(II)alamin,” *J. Phys. Chem. B* **113** (2009), 5245–5254. [DOI](https://doi.org/10.1021/jp810136d), [full text](https://pmc.ncbi.nlm.nih.gov/articles/PMC3127260/), [archived HTML](../materials/valence/Liptak-2009-cobII.html) | Full text retrieved and relevant EPR/occupation sections reviewed. Explicit four-/five-coordinate low-spin Co(II), Co13b. The PDF request returned a challenge page; the complete HTML was available. |
+| N84 | Navon and Kläui, “⁵⁹Co NMR of a cobalt(III) spin-crossover compound,” *Inorg. Chem.* **23** (1984), 2722–2725. [DOI](https://doi.org/10.1021/ic00185a036), [PDF](../materials/valence/Navon-Klaui-1984-cobalt-spin.pdf) | Reviewed and archived. Introductory high-spin assignment for CoF₃(H₂O)₃, p. 2722, citing Cotton/Wilkinson; not an experimental study of that hydrate. Co30. |
+| VH92 | Van Zee et al., “Electron-spin resonance of the Co, Rh, and Ir dihydride molecules,” *J. Chem. Phys.* **97** (1992), 8123–8129. [DOI](https://doi.org/10.1063/1.463433), [PDF](../materials/valence/VanZee-1992-dihydrides.pdf) | Reviewed and archived. ESR-observed metal-centered doublets for all three MH₂ molecules; CoH₂ conflict with calculated quartet ground states is retained explicitly. Co31a. |
+| WA02 | Wang and Andrews, “Infrared Spectra of Rhodium Hydrides in Solid Argon, Neon, and Deuterium with Supporting Density Functional Calculations,” *J. Phys. Chem. A* **106** (2002), 3706–3713. [DOI](https://doi.org/10.1021/jp013624f), [PDF](../materials/valence/Wang-Andrews-2002-rhodium-hydrides.pdf) | Reviewed and archived. RhH triplet, RhH₂ doublet, and separation of bare hydrides from intact-H₂ adducts, pp. 3706–3709, 3711–3713. Co31a/Co31b/Co31d. |
+| A12 | Adam et al., “Laser spectroscopy of iridium monohydride and iridium monodeuteride,” *Chem. Phys. Lett.* **535** (2012), 21–25. [DOI](https://doi.org/10.1016/j.cplett.2012.03.038), [PDF](../materials/valence/Adam-2012-iridium-hydride.pdf) | Reviewed and archived. Ω = 4 ground level; the discussion on pp. 23–24 leaves the two-/four-open-shell mixture unresolved. L14 is the experimental follow-up, Co31c. |
+| VO92 | Van Zee et al., “Cobalt, Rhodium, and Iridium Dioxide Molecules and Walsh-Type Rules,” *J. Phys. Chem.* **96** (1992), 7247–7251. [DOI](https://doi.org/10.1021/j100197a022), [PDF](../materials/valence/VanZee-1992-dioxides.pdf) | Reviewed and archived. ESR assigns doublet O=M=O molecules with predominantly metal-local spin; does not assign peroxide/superoxide isomers. Co32b. |
+| C97 | Chertihin et al., “Reactions of Laser-Ablated Cobalt Atoms with O₂: Infrared Spectra of Cobalt Oxides in Solid Argon,” *J. Phys. Chem. A* **101** (1997), 8793–8802. [DOI](https://doi.org/10.1021/jp972022m), [PDF](../materials/valence/Chertihin-1997-cobalt-oxides.pdf) | Reviewed and archived. CoO quartet; separate OCoO, cyclic peroxide and end-on superoxide descriptions, pp. 8795–8799. Co32a/Co32g/Co32h. |
+| G09Ir | Gong et al., “Formation and Characterization of the Iridium Tetroxide Molecule with Iridium in the Oxidation State +VIII,” *Angew. Chem. Int. Ed.* **48** (2009), 7879–7883. [DOI](https://doi.org/10.1002/anie.200902733), [PDF](../materials/valence/Gong-2009-iridium-tetroxide.pdf), [SI](../materials/valence/Gong-2009-iridium-tetroxide-SI.pdf) | Main paper and SI reviewed and archived. Explicit d¹ IrO₄ and doublet peroxide (η²-O₂)IrO₂, p. 7881, Co32c/Co32d. SI Table S3 confirms the peroxide doublet below the quartet; Fig. S9 supplies spin density only for IrO₄. No local occupation is added for (η¹-O₂)IrO₂. |
+| G11 | Gong et al., “Is rhodium tetroxide in the formal oxidation state VIII stable? A quantum chemical and matrix isolation investigation of rhodium oxides,” *Theor. Chem. Acc.* **129** (2011), 667–676. [DOI](https://doi.org/10.1007/s00214-011-0919-7), [PDF](../materials/valence/Gong-2011-rhodium-oxides.pdf) | Reviewed and archived. Doublet oxo-peroxide and bis-peroxide, singlet RhO₂−; separate superoxide isomers and no experimentally identified RhO₄. Fig. 7, pp. 672–675; Co32d–Co32i. |
+| L14 | Linton et al., “Hyperfine structure and Stark effect in the [18.0] 4–X³Φ₄ transition of iridium hydride, IrH and [18.2] 4–X³Φ₄ transition of iridium deuteride, IrD,” *J. Mol. Spectrosc.* **304** (2014), 37–42. [DOI](https://doi.org/10.1016/j.jms.2014.08.003), [PDF](../materials/valence/Linton-2014-iridium-hydride.pdf) | Reviewed and archived. Hyperfine analysis and conclusions, pp. 39–41, identify a predominantly two-open-shell configuration with significant four-open-shell admixture. Co31c uses the dominant occupation; the admixture is not a second registry state. |
+| B19 | Ballé et al., “Ferromagnetic ordering of linearly coordinated Co ions in LiSr₂[CoN₂],” *Phys. Rev. B* **99** (2019), 094422. [DOI](https://doi.org/10.1103/PhysRevB.99.094422), [author manuscript](https://arxiv.org/abs/1811.00867), [PDF](../materials/valence/Balle-2019-nitridocobaltate-author-manuscript.pdf) | Retrieved and relevant structural/magnetic sections reviewed. §VII, manuscript pp. 12–14, gives the d⁸ triplet ground configuration. Co33c. |
+| M98 | Möller, “Synthesis, Structures, Magnetic Properties, and Absorption Spectra of the Alkaline Oxocobaltates(II): Li₆CoO₄, Na₄CoO₃, and Na₁₀Co₄O₉,” *Chem. Mater.* **10** (1998), 3196–3201. [DOI](https://doi.org/10.1021/cm9802907), [PDF](../materials/valence/Moller-1998-oxocobaltates.pdf) | Reviewed and archived. Structural, absorption and magnetic analysis, pp. 3198–3201, supports high-spin d⁷ Co(II) in tetrahedral/trigonal-planar oxide environments; Co33e reuses proposed types. Does not settle the Co(I/IV/V) anions in Co33a. |
+| K71Co | Klein, “Tetrakis(trimethylphosphane)cobalt(0): Preparation and Reactions,” *Angew. Chem. Int. Ed. Engl.* **10** (1971), 343. [DOI](https://doi.org/10.1002/anie.197103431), [PDF](../materials/valence/Klein-1971-cobalt0-phosphine.pdf) | Reviewed and archived. Molecular-weight, magnetic and EPR evidence explicitly supports monomeric tetrahedral d⁹ Co(PMe₃)₄; Co36a. |
+| CA99 | Citra and Andrews, “Reactions of Laser-Ablated Rhodium Atoms with O₂. Infrared Spectra and DFT Calculations for RhO, ORhO, (O₂)RhO₂, Rh₂O₂, Rh(O₂) and (O₂)Rh(O₂) in Solid Argon,” *J. Phys. Chem. A* **103** (1999), 4845–4854. [DOI](https://doi.org/10.1021/jp990864a), [PDF](../materials/valence/Citra-Andrews-1999-rhodium-oxides.pdf) | Reviewed and archived. RhO quartet, pp. 4846–4847, supports Co32j; peroxide discussion, pp. 4850–4851, corroborates Co32d. Charges and total multiplicities do not settle Co32h's local spins. G11 supplies the later distinction between bis-peroxide/bis-superoxide isomers. |
+| B07 | Bendyna, Höhn and Kniep, “Crystal structure of pentacalcium bis(dinitridocobaltate(I)), Ca₅[CoN₂]₂, and a note on ‘Ca₃CoN₃’,” *Z. Kristallogr. NCS* **222** (2007), 165–166. [DOI](https://doi.org/10.1524/ncrs.2007.0068), [PDF](../materials/valence/Bendyna-2007-dinitridocobaltate.pdf) | Reviewed and archived. Reassigns the 1993 Ca₃CoN₃ powder pattern to Ca₅[CoN₂]₂/CaO, p. 165; Co33d. |
+| K24 | Kick et al., “Understanding Ligand Effects on Bielectronic Transitions: Chemo- and Electroreduction of Rhodium Bis(Diphosphine) Complexes to Low Oxidation States,” *Angew. Chem. Int. Ed.* **63** (2024), e202408356. [DOI](https://doi.org/10.1002/anie.202408356), [PDF](../materials/valence/Kick-2024-rhodium-diphosphines.pdf) | Relevant sections reviewed and PDF archived, pp. 5–6/Figs. 3–4: d⁹ Rh(0), a singly occupied orbital, and prior EPR observation; Co36b. |
+| E15 | England et al., “Molecular and Electronic Structures of Homoleptic Six-Coordinate Cobalt(I) Complexes of 2,2′:6′,2″-Terpyridine, 2,2′-Bipyridine, and 1,10-Phenanthroline. An Experimental and Computational Study,” *Inorg. Chem.* **54** (2015), 12002–12018. [DOI](https://doi.org/10.1021/acs.inorgchem.5b02415), [PDF](../materials/valence/England-2015-cobaltI-polypyridyl.pdf) | Relevant structural, magnetic and electronic-structure sections reviewed; PDF archived. Neutral polypyridyl ligands and Co(I) d⁸ triplet, pp. 12005–12007, Table 4 and p. 12016; Co36. Co(II/III) results are consistent with the occupations already represented in Co04/Co06/Co07. |
+| P90 | Pérés et al., “Reaction of CH₂O with [Co(PMe₃)₄]X (X = PF₆ and BPh₄). Structural Characterization of [Co(CO)(PMe₃)₄]PF₆ and the Nonstoichiometric Complex [CoH₂₋₂ₓ(CO)ₓ(PMe₃)₄]BPh₄,” *Organometallics* **9** (1990), 1041–1047. [DOI](https://doi.org/10.1021/om00118a021), [PDF](../materials/valence/Peres-1990-cobalt-dihydride-carbonyl.pdf) | Reviewed and archived. X-ray and IR/isotope/NMR evidence supports cis-octahedral Co(III) with two terminal hydrides, pp. 1043, 1045–1046. The paired occupation uses HW’s existing six-coordinate Co(III) description; Co34a. |
+| HC88 | Hamilton and Crabtree, “An NMR Method for Distinguishing Classical from Nonclassical Structures in Transition-Metal Polyhydrides,” *J. Am. Chem. Soc.* **110** (1988), 4126–4133. [DOI](https://doi.org/10.1021/ja00221a005), [PDF](../materials/valence/Hamilton-Crabtree-1988-polyhydride-NMR.pdf) | Relevant Ir hydride sections reviewed; PDF archived. Tables I–II and p. 4130 establish classical IrH₅(PCy₃)₂ and IrH₂(CO)₂(PPh₃)₂+. The dihydride reuses paired octahedral Ir(III); JA16 supplies the computational paired description for the pentahydride family. Co34b/Co34c. |
+| JA16 | Jimenez-Izal and Alexandrova, “σ-Aromaticity in polyhydride complexes of Ru, Ir, Os, and Pt,” *Phys. Chem. Chem. Phys.* **18** (2016), 11644–11652. [DOI](https://doi.org/10.1039/C5CP04330A), [advance-publication PDF](../materials/valence/Jimenez-Izal-2016-polyhydrides.pdf) | Relevant methods, hydride analysis and figures reviewed; PDF archived. §§2–3.1/Fig. 1A,D give closed-shell neutral IrH₅(PR₃)₂ calculations; the explicitly singlet bare-IrH₅ model also supports five localized 2c2e bonds (Fig. 2A). Co34c uses the paired ordinary-bond graph (PW); no aromatic/MC type is required. Main-text evidence suffices; SI not needed for this assignment. |
+| S01 | Sofin and Jansen, “Rb₃CoO₂, a Novel Oxocobaltate(I) Synthesized via the Azide/Nitrate Route,” *Z. Anorg. Allg. Chem.* **627** (2001), 2115–2117. [DOI](https://doi.org/10.1002/1521-3749%28200109%29627%3A9%3C2115%3A%3AAID-ZAAC2115%3E3.0.CO%3B2-L), [PDF](../materials/valence/Sofin-2001-rubidium-oxocobaltate.pdf) | Supplied scan/OCR reviewed against the pages and archived. Near-linear CoO₂³−, Table 3, p. 2117; no magnetic measurement in this paper. S03Co supplies the occupation for Co33f. |
+| S03Co | Sofin, *Neue Alkalioxometallate über die Azid/Nitrat-Route*, Stuttgart PhD thesis (2003). [Repository PDF](https://elib.uni-stuttgart.de/server/api/core/bitstreams/50ed890c-50bd-4ae2-b745-57662b32ef90/content), [PDF](../materials/valence/Sofin-2003-alkali-oxometallates-thesis.pdf) | Retrieved and archived; §3.6.4, pp. 97–98, reviewed. Impurity-corrected susceptibility of Rb₃CoO₂ is fitted as high-spin Co(I), S = 1, with g = 2.19 and μeff = 3.10 μB. The same d⁸ triplet assignment is explicit for the CoO₂³− unit in Na₅[CoO₂]CO₃, §IV.6.4, p. 117. Co33f. |
+| K15 | Kanungo et al., “Na₄IrO₄: Square-Planar Coordination of a Transition Metal in d⁵ Configuration due to Weak On-Site Coulomb Interactions,” *Angew. Chem. Int. Ed.* (2015). [DOI](https://doi.org/10.1002/anie.201411959), [author manuscript](https://arxiv.org/abs/1502.02275), [PDF](../materials/valence/Kanungo-2015-iridate-cobaltate-author-manuscript.pdf) | Retrieved and archived. The Na₄CoO₄ comparison explicitly assigns high-spin d⁵, S = 5/2; manuscript pp. 1–3/Figs. 3–4. Co33g uses that occupation with ordinary Co–O− bonds (PW). |
+| S68 | Sacco and Rossi, “Nitrogen fixation. I. Hydrido- and nitrogen-complexes of cobalt,” *Inorg. Chim. Acta* **2** (1968), 127–132. [DOI](https://doi.org/10.1016/S0020-1693(00)87009-7), [PDF](../materials/valence/Sacco-1968-cobalt-hydrides.pdf) | Reviewed and archived. CoH₃(PR₃)₃ characterization and H/D infrared data, p. 130/Table V, support an octahedral classical trihydride. The explicit diamagnetism statement on p. 132 concerns CoH(N₂)(PPh₃)₃, not the trihydride. Co34d reuses the accepted paired Co(III) occupation. |
+| SV19 | Schnieders et al., “Metal Hydride Vibrations: The Trans Effect of the Hydride,” *Inorg. Chem.* **58** (2019), 12467–12479. [DOI](https://doi.org/10.1021/acs.inorgchem.9b02302), [author manuscript](https://hdl.handle.net/1807/105558), [PDF](../materials/valence/Schnieders-2019-hydride-vibrations-author-manuscript.pdf) | Retrieved and archived; Table 3 and accompanying discussion reviewed. CoH₃(PRAr₂)₃/CoH₃(PAr₃)₃ and IrH₃(PAr₃)₃ are treated with classical trans-hydride force constants. Corroborates Co34d/Co34e; no separate spin measurement claimed. |
+| B93 | Bau et al., “Neutron diffraction study of fac-[IrH₃(PPh₂Me)₃]·MeOH,” *J. Chem. Soc., Dalton Trans.* (1993), 3359–3362. [DOI](https://doi.org/10.1039/DT9930003359), [PDF](../materials/valence/Bau-1993-iridium-trihydride.pdf) | Reviewed and archived. Neutron diffraction directly locates three normal terminal hydrides, with distorted octahedral coordination and Ir–H = 1.627(4) Å. Co34e. |
+| L90 | Lundquist et al., “Reactivity of the Molecular Hydrogen Complex [IrH₄(PMe₂Ph)₃]BF₄ toward Olefins,” *J. Am. Chem. Soc.* **112** (1990), 855–863. [DOI](https://doi.org/10.1021/ja00158a054), [PDF](../materials/valence/Lundquist-1990-iridium-dihydrogen.pdf) | Reviewed and archived. pp. 858–859/Table VII distinguish classical IrH₃(PMe₂Ph)₃ (T₁ = 465 ms) from IrH₂(η²-H₂)(PMe₂Ph)₃+ (20 ms), supported by H₂ loss/reactivity. Co34e/Co34f. |
+| KW67 | Keller and Wawersik, “Spektroskopische Untersuchungen an Komplexverbindungen VI. EPR-Spektren von (C₅H₅)₂Rh und (C₅H₅)₂Ir,” *J. Organomet. Chem.* **8** (1967), 185–188. [DOI](https://doi.org/10.1016/S0022-328X(00)84718-X), [PDF](../materials/valence/Keller-1967-metallocene-EPR.pdf) | Reviewed and archived. pp. 186–187 assign molecular doublets to monomeric RhCp₂/IrCp₂; the final orbital discussion suggests substantial ligand character. Co35a uses formal M(II) donor counting (PW), independently of the spatial spin distribution. |
+
+Supplied PDFs are archived in `materials/valence/`.
+Extraction text, download logs and the deduplicated candidate/electron-count audit
+are in `scratch/hw-cobalt-review/`.
+
+### Nickel group
+
+HW II, chapter XXXI, pp. 2023–2065, with hydride, carbonyl and metallocene
+cross-references in chapter XXXII. **173 additions implemented: Ni 59, Pd 44, Pt 69,
+and one O companion; all seven existing metal states retained and covered.** Eight
+states cover three local hydride-bridge patterns. Source review, registry changes
+and conformance coverage are complete. Ni/Pd capacity is 20; Pt retains 18.
+PdF₆− is omitted because its occupation is unresolved.
+
+#### Nickel-group work table
+
+Element prefixes apply to each suffix in their cell. Counts exclude existing states
+and reuse across rows, and include all displayed explicit/mixed/implicit H forms.
+States use concrete, zero-valence defaults. **Implemented** entries are in the
+registry and covered by resolution fixtures.
+**PW** marks the adopted graph allocation,
+including anionic-ligand donation and the ordinary bridging-carbonyl convention.
+D denotes a neutral two-electron donor. No MC state is selected in Ni02–Ni36.
+
+| ID | States / extracted family | Status; new states | Examples and evidence |
+| --- | --- | --- | --- |
+| Ni01 | Ni/Pt#n4#u2; Pd#n5; Ni#c+2#n3#u2; Ni/Pd/Pt#c+2#n4 | Retained; 7 covered | Atomic ground occupations and free Ni²+ triplet: ASD and HW 1538. Paired d⁸ complex occupations: HW 2033–2035, 2055–2056. The existing paired Pd²+/Pt²+ states remain alongside the free-ion triplets in Ni02; none is replaced. |
+| Ni02 | Ni: #c+#n4#u, #c+3#n2#u3; Pd: #c+#n4#u, #c+2#n3#u2, #c+3#n2#u3; Pt: #c+#n4#u, #c+2#n3#u2, #c+3#n2#u3 | Implemented; 8 | Free M+ and M³+: d⁹ ²D₅/₂ and d⁷ ⁴F₉/₂; free Pd²+/Pt²+: d⁸ ³F₄. ASD; distinct from paired complex occupations. |
+| Ni03 | Pt: #c-2#n6 | Implemented; 1 | Cs₂Pt: Pt²−, filled 5d¹⁰6s² shell; HW 2042–2043. Ba₂Pt contains the same ion plus electride electrons. |
+| Ni04 | Ni: #n5#t2, #n5#t3, #n5#t4; Pd: #n5#t2, #n5#t3, #n5#t4; Pt: #n5#t2, #n5#t3, #n5#t4 | Implemented; 9 | Paired M(0): Ni(PR₃)₂/₃/₄, M(PR₃)₂/₃/₄ (Pd/Pt), Ni(CO)₄ and corresponding PF₃ complexes; HW 2026, 2032, 2038, 2056, 2109–2111. Olefin/N₂ donors reuse the same accepted-pair totals. |
+| Ni05 | Pd: #n5#t | Implemented; 1 | Monophosphine Pd(0) in the aryl-halide coupling cycle, HW 2064. One donor; no scaffold-specific state. |
+| Ni06 | Ni: #c-2#n4#v4, #c+2#n4#t4, #n4#v2#t2 | Implemented; 3 | Paired four-coordinate Ni(II): Ni(CN)₄²−, NiR₂D₂, NiX₂D₂, Ni(dmg)₂; HW 2029–2035. Ordinary anionic-ligand bonds or donation. The halide-bridged [R₂Ni(μ-X)₂NiR₂]²− graph reuses #n4#v2#t2 (2036). |
+| Ni07 | Ni: #c-3#n4#v5, #c+2#n4#t5, #n4#v2#t3, #c+#n4#v#t4 | Implemented; 4 | Paired five-coordinate Ni(II): Ni(CN)₅³−, Ni(CN)₂(PR₃)₃, NiBr(As₄)+ and NiBr(NP₃)+; HW 2026, 2029, 2033. No paired six-coordinate family inferred. |
+| Ni08 | Ni: #c-2#n3#u2#v4, #c+2#n3#u2#t4, #n3#u2#v2#t2 | Implemented; 3 | Triplet tetrahedral Ni(II): NiCl₄²− and NiX₂D₂; HW 2033–2035 explicitly distinguishes the paramagnetic and diamagnetic forms. |
+| Ni09 | Ni: #c+2#n3#u2#t5, #c+#n3#u2#v#t4 | Implemented; 2 | Triplet five-coordinate Ni(II): Ni(OAsMe₃)₅²+ and NiBr{N(CH₂CH₂NMe₂)₃}+; HW 2033. |
+| Ni10 | Ni: #c+2#n3#u2#t6, #n3#u2#v2#t4, #c-4#n3#u2#v6 | Implemented; 3 | Triplet octahedral Ni(II): aqua/ammine, NiCl₂(H₂O)₄, Ni(acac)₂(H₂O)₂, Ni(OH)₆⁴−; HW 2028, 2030–2033. Each graph counts 20 electrons. Nickelocene reuses the first state with two six-electron Cp− donors (2036–2037, 2194–2195). |
+| Ni11 | Ni: #n4#u#v#t3, #c+#n4#u#t4, #c-3#n4#u#v4 | Implemented; 3 | Doublet Ni(I): NiX(PR₃)₃ and Ni(CN)₄³−; HW 2026–2027, 2029, 2032. The localized O=Ni=O³− formula in HW 2031 reuses the last state; no extra oxide state inferred. |
+| Ni12 | Ni: #n4#u#v#t4, #c+#n4#u#t5 | Implemented; 2 | Five-coordinate NiI(NP₃), NP₃ = N(CH₂CH₂PR₂)₃; HW 2026, 2032 identifies one unpaired electron. Both graphs count 19 electrons. |
+| Ni13 | Ni: #n3#u#v3#t2, #c+3#n3#u#t5, #c+3#n3#u#t6, #c+#n3#u#v2#t4, #c-3#n3#u#v6 | Implemented; 5 | Low-spin Ni(III): NiX₃(PR₃)₂, NiCl₂(diars)₂+, NiF₆³− and Ni(phen)₃³+; HW 2027, 2036. Explicit doublet occupation. Six-coordinate graphs count 19. The earlier high-spin solid NiF₃ interpretation is reviewed in Ni37. |
+| Ni14 | Ni: #c-2#n3#v6, #c+4#n3#t6 | Implemented; 2 | Paired Ni(IV), NiF₆²−; HW 2036. NiCp*₂²+ reuses the donor state. Solid NiF₄ is not used to assert a molecular four-coordinate occupation. |
+| Ni15 | Ni: #c-4#n5#v4, #c-4#n5#v3#h, #c-4#n5#v2#h2, #c-4#n5#v#h3, #c-4#n5#h4 | Implemented; 5 | NiH₄⁴− in Mg₂NiH₄: tetrahedral, paired d¹⁰; HW 2027, 2069. All explicit/mixed/implicit H counts. Ni(CN)₄⁴− independently supports the all-explicit valence; H− donation reuses Ni04. |
+| Ni16 | Ni: #n4#v#h#t2, #n4#v#h#t3 | Implemented; 2 | Implicit H in square-planar NiHX(PR₃)₂ and five-coordinate NiH(CN)(PR₃)₃; HW 2027, 2071. Explicit-H and all-donor states reuse Ni06/Ni07. |
+| Ni17 | Ni: #c+#n4#v#t3 | Implemented; 1 | Ni₂(CN)₆⁴−: paired Ni–Ni single bond, HW 2029. Cyanide donors give this state; ordinary Ni–CN bonds reuse Ni06. |
+| Ni18 | Ni: #c-#n5#v#t2 | Implemented; 1 | NiMe(η²-C₂H₄)₂−, HW 2037: ordinary Ni–Me plus two olefin donations. Methyl-anion donation reuses Ni04. Other Ni olefin, allyl and Cp examples reuse the ordinary/donor families above. |
+| Ni19 | Pd: #c+2#n4#t4, #c+#n4#v#t3, #n4#v2#t2, #c-#n4#v3#t, #c-2#n4#v4; Pt: #c+2#n4#t4, #c+#n4#v#t3, #n4#v2#t2, #c-#n4#v3#t, #c-2#n4#v4 | Implemented; 10 | Paired square-planar M(II): MClₖD₄₋ₖ²⁻ᵏ, cyanides, aqua/ammines, cisplatin, MR₂D₂, Zeise salt, acetate and polysulfide complexes; HW 2047–2056, 2060–2064. Full chloro/aqua/ammine substitution series; ordinary anionic-ligand bonds or donors. |
+| Ni20 | Pd: #c+2#n4#t5, #c+#n4#v#t4; Pt: #c+2#n4#t5, #c+#n4#v#t4 | Implemented; 4 | Paired five-coordinate M(II): MIL′+ (four As donors), HW 2056. CpMX(PR₃) and CpM(allyl) use the same accepted-pair totals (2061). |
+| Ni21 | Pd: #c+2#n4#t6, #n4#v2#t4 | Implemented; 2 | Diamagnetic octahedral PdCl₂(diars)₂, HW 2056. Ordinary chloride or Cl− donation; both count 20 electrons. No six-donor Pt(II) analogue inferred. |
+| Ni22 | Pd: #c+4#n3#t6, #n3#v4#t2, #c-2#n3#v6 | Implemented; 3 | Paired Pd(IV): PdX₆²−, Pd(CN)₆²−, PdCl₄(py)₂ and octahedral organopalladium(IV) compounds; HW 2047–2049, 2055, 2061. No unsupported Pd(IV) aqua/ammine substitution series. |
+| Ni23 | Pt: #c+4#n3#t6, #c+3#n3#v#t5, #c+2#n3#v2#t4, #c+#n3#v3#t3, #n3#v4#t2, #c-#n3#v5#t, #c-2#n3#v6 | Implemented; 7 | Paired octahedral Pt(IV): full chloro/aqua/ammine series, Pt(CN)₆²−, Pt(OH)₆²−, PtMe₆²−, PtMe₄D₂, Me₃PtD₃+ and [Me₃PtX]₄; HW 2047–2049, 2053–2055, 2061–2062. Ordinary anionic ligands or donation. |
+| Ni24 | Pd: #c+#n4#v#t3; Pt: #c+#n4#v#t3 | Implemented; 0 | Paired M(I) dimers with ordinary M–M single bonds: M₂(CNMe)₆²+ and M₂Cl₂(dppm)₂; HW 2056–2057. Ordinary terminal Cl plus M–M reuses Ni19; Cl− donation gives these states. |
+| Ni25 | Pt: #c+3#n3#v#t4, #c+3#n3#v#t5, #c-#n3#v5, #c-#n3#v5#t | Implemented; 2 | Pt₂(SO₄)₄L₂²−, with L absent or H₂O: explicit Pt–Pt single bond and diamagnetic dimer; HW 2056–2057, Fig. 31.18a. Four ordinary Pt–O sulfate bonds or four O− donors per Pt; optional axial water. The wider Pt(III) paddlewheel family provides reuse. |
+| Ni26 | Pd: #c-#n3#v5, #c+#n3#v3#t2; Pt: #c-#n3#v5, #c+#n3#v3#t2 | Implemented; 3 | M₂Cl₄(μ-CO)₂²−, HW 2057: ordinary M–M and bridging M–C bonds with C=O, following the adopted μ-CO graph convention. Terminal chloride ordinary or donated. No MC type; one Pt state already occurs in Ni25. |
+| Ni27 | Pd: #c-2#n5#v2, #c-2#n5#v#h, #c-2#n5#h2 | Implemented; 3 | Linear PdH₂²− in Li₂/Na₂/Cs₂PdH₂, HW 2044, 2069; paired d¹⁰. K₃PdH₃ contains this ion plus separate H−. All three H-count splits; donor form reuses Ni04. |
+| Ni28 | Pt: #c-2#n4#v4, #c-2#n4#v3#h, #c-2#n4#v2#h2, #c-2#n4#v#h3, #c-2#n4#h4 | Implemented; 4 | Square-planar PtH₄²−, HW 2044, 2069. K₃PtH₅ contains this ion plus separate H−, not PtH₅³−. All five H-count splits; explicit/donor forms reuse Ni19. |
+| Ni29 | Pt: #c-2#n3#v6, #c-2#n3#v5#h, #c-2#n3#v4#h2, #c-2#n3#v3#h3, #c-2#n3#v2#h4, #c-2#n3#v#h5, #c-2#n3#h6 | Implemented; 6 | Octahedral PtH₆²−, HW 2044, 2069. All seven H-count splits; explicit/donor forms reuse Ni23. |
+| Ni30 | Pt: #n4#v2#t2, #n4#v#h#t2, #n4#h2#t2 | Implemented; 2 | cis/trans-PtH₂(PR₃)₂ and PtHX(PR₃)₂: paired planar Pt(II), HW 2044, 2048. All H-count splits; terminal hydride donors reuse Ni19. |
+| Ni31 | Pd: #n4#v#h#t2 | Implemented; 1 | PdHCl(PEt₃)₂ and the PdHX(PR₃)₂ catalytic intermediate, HW 2048, 2063. Implicit H; explicit and all-donor descriptions reuse Ni19. No unsupported PdH₂(PR₃)₂ analogue. |
+| Ni32 | Pt: #n3#v3#h#t2, #n3#v2#h2#t2 | Implemented; 2 | Classical PtHCl₃(PR₃)₂ and PtH₂Cl₂(PR₃)₂, HW 2048. Mixed/implicit H; explicit and donor alternatives reuse Ni23. |
+| Ni33 | Pd: #n4#v2#t, #c+2#n4#t3 | Implemented; 2 | Three-coordinate 14-electron Pd(II): Wacker intermediate, Fig. 31.24q, and ArPdX(PtBu₃) in the coupling cycle; HW 2063–2064. Two ordinary anionic ligands plus one donor, or all donors. |
+| Ni34 | Pt: #c+#n3#v3#t2, #c+4#n3#t5 | Implemented; 1 | Me₃PtD₂+ formulas in HW 2061; paired Pt(IV) occupation from HW 2055. P05 explicitly identifies five-coordinate Me₃Pt(diphosphine)+ intermediates in reductive elimination. Ordinary methyl bonds or methyl-anion donors. |
+| Ni35 | Pt: #n4#u#v, #c+#n4#u#t, #n3#u2#v2, #c+2#n3#u2#t2, #n3#u#v3, #c+3#n3#u#t3, #n2#u2#v4, #c+4#n2#u2#t4, #n3#v4, #c+4#n3#t4, #n2#u#v5, #c+5#n2#u#t5, #n2#v6, #c+6#n2#t6 | Implemented; 14 | Molecular PtF₁–₆: S21, Table 2 and pp. 2–5, gives doublet/triplet/doublet/(triplet and singlet)/doublet/singlet respectively. Both PtF₄ states are spectroscopically supported. Ordinary Pt–F or F− donation; no MC states. |
+| Ni36 | Ni: #n4#u#v, #c+#n4#u#t, #n3#u2#v2, #c+2#n3#u2#t2, #n2#u3#v3, #c+3#n2#u3#t3, #n2#u2#v4, #c+4#n2#u2#t4 | Implemented; 8 | Molecular NiF₁–₄: L21F, Scheme 1/Table 1, gives doublet, triplet, quartet and triplet ground states. Ordinary Ni–F or F− donation, with formal metal occupation (PW); the paper reports appreciable ligand spin density, not an atom-local spin measurement. |
+| Ni37 | R-NiF₃: reuse Ni10/Ni14 | Resolved; 0 | S99, pp. 561–563, neutron diffraction at 2 K supports predominantly NiII/NiIV, including low-spin d⁶ Ni(IV). No extra Ni#c+3#n2#u3#t6 from Z95’s earlier high-spin interpretation. The H/P polymorph occupations remain unselected; the R result is not generalized to them. |
+| Ni38a | Pd: #n4#u#v, #c+#n4#u#t, #n3#u2#v2, #c+2#n3#u2#t2, #n2#u2#v4, #c+4#n2#u2#t4 | Implemented; 6 | Molecular PdF, PdF₂ and PdF₄: W16, Table 1, pp. 1110–1111, 1121–1122. Doublet, triplet and scalar-parent triplet; the SOC A₁ label of PdF₄ is not a singlet assignment. Ordinary Pd–F or F− donation (PW). PdF₃ identification is ambiguous; no PdF₅/₆ selected. |
+| Ni38b | Pd: #c+2#n3#u2#t6 | Implemented; 1 | Octahedral triplet Pd(II) in PdF₂ and mixed-valent PdII[PdIVF₆]: HW 2045 explicitly gives two unpaired electrons for the latter. Bridging F− donors use existing #d2/#d3 states; paired Pd(IV) reuses Ni22. Counts 20 electrons. |
+| Ni38c | NiF₃+; solid NiF₄; tentative molecular PdF₃/PdF₅/PdF₆ | Not selected for additional types | Z95 does not settle solid NiF₄ coordination/spin or NiF₃+ coordination. W16 leaves the PdF₃/PdF₆ band assignment ambiguous and does not establish PdF₅. No speculative occupation series. Molecular NiF₄ is independently covered in Ni36. |
+| Ni39a | Ni: #n4#u#h; Pd: #n4#u#h; Pt: #n4#u#h | Implemented; 3 | Implicit H in doublet NiH/PdH/PtH; L97Ni p. 2056, A01Pd Table 3, A01Pt pp. 1561–1562. Explicit-H and H−-donor states reuse Ni35/Ni36/Ni38a. |
+| Ni39b | Ni: #n4#v2, #n4#v#h, #n4#h2, #c+2#n4#t2 | Implemented; 4 | Bent singlet NiH₂ observed in L97Ni, pp. 2057–2059; the paper leaves computed singlet/triplet ground-state ordering unresolved. Select the observed bent singlet, not extra triplet H-count variants. Three H-count splits and H− donors. |
+| Ni39c | Pd: #c-#n4#u#v2, #c-#n4#u#v#h, #c-#n4#u#h2, #c+#n4#u#t2 | Implemented; 4 | Linear doublet PdH₂−: A01Pd Table 8 and pp. 3060–3062; ELF explicitly identifies two ordinary Pd–H bonds. Three H-count splits and H− donors. The bare neutral PdH₂/PdH₃ molecules were not observed. |
+| Ni39d | Pt: #n4#v2, #n4#v#h, #n4#h2, #c+2#n4#t2 | Implemented; 4 | Bent singlet PtH₂: A01Pt Table IV, pp. 1562–1565. Three H-count splits and H− donors. |
+| Ni39e | Pt: #n3#u#v3, #n3#u#v2#h, #n3#u#v#h2, #n3#u#h3, #c+3#n3#u#t3 | Implemented; 3 | Observed Cₛ PtH₃ doublet: A01Pt Fig. 6/Table V, pp. 1562–1565. Three ordinary Pt–H bonds, with all H-count splits. Explicit-H and donor forms reuse Ni35. The calculated (H₂)PtH isomer and higher intact-H₂ adducts remain deferred. |
+| Ni39f | Pd: #c+#n4#u#m0 | Implemented; 1 | Rhombic singlet (PdH)₂: A01Pd pp. 3061–3062/Table 9 explicitly finds two Pd–H–Pd 3c2e basins, no Pd–Pd basin. PW graph: two H− bridges with contributions [0,2,0], two Pd(I) d⁹ centers whose unpaired electrons couple to a singlet; no Pd–Pd edge. Existing H#c-#m2. |
+| Ni39g | Intact-H₂ complexes, including Pd(H₂)₁–₃, (H₂)PdH and PtH₂(H₂) | Deferred; 0 | A01Pd/A01Pt distinguish these from dissociated hydrides. Retain the shared η²-H₂ donor deferral; no ordinary-H-count or MC substitutes. Interstitial PdHₓ is not a molecular MHₙ graph. |
+| Ni40a | Ni: #n3#v4, #c+4#n3#t4 | Implemented; 2 | Linear singlet O=Ni=O: C97Ni Table 2, pp. 3113–3114. Ordinary double bonds or two-pair O²− donors (PW); existing O#c-2#n2#d2. NiO triplet reuses Ni36; PtO triplet and OPtO singlet reuse Ni35 (B99 Tables 2–3). |
+| Ni40b | Ni: #n4#v2, #c+2#n4#t2; Pd: #n4#v2, #c+2#n4#t2; Pt: #n4#v2, #c+2#n4#t2 | Implemented; 2 | Cyclic singlet M(O₂): C97Ni Table 2/pp. 3114–3115 and B99 Tables 1–2/pp. 5459–5460. PW closed-shell peroxide graphs: O–O and two M–O single bonds, or two O− donors. Ni/Pt reuse Ni39b/Ni39d; Pd adds two states. Source supplies the cyclic structure and singlet; the integer bond/charge allocation is our convention. |
+| Ni40c | Remaining O₂ adducts/oxide clusters, ONiO−, trigonal PtO₃ and calculated OPdO/NiO₃ | Not selected for additional types | C97Ni/B99 distinguish the isomers. Do not assign all molecular spin to the metal in superoxo/O₂ complexes. ONiO− and trigonal PtO₃ identifications are tentative (C97Ni p. 3115; B99 p. 5461); OPdO/NiO₃ are unobserved calculated structures. No further default types selected from these cases. |
+| Ni41a | Pt: #c-#n2#u#v6, #c+5#n2#u#t6 | Implemented; 2 | PtF₆−: BL62 pp. 5260–5261 explicitly assigns nonbonding dπ⁵. Ordinary Pt–F or F− donation. The O₂+ counterion uses existing types. |
+| Ni41b | PdF₆−; candidate Pd#c-#n2#u#v6 / Pd#c+5#n2#u#t6 | Omitted; 0 | F76 confirms the octahedral anion and reports susceptibility close to O₂PtF₆, but does not explicitly assign the d⁵ occupation. The displayed doublet is an analogy with PtF₆−, not a directly established local assignment; omitted from this selection. |
+| Ni42 | Pt: #c-2#n4#v4#m0, #c-2#n4#v3#h#m0, #c-2#n4#v2#h2#m0, #c-2#n4#v#h3#m0, #c-2#n4#h4#m0, #c+2#n4#t4#m0 | Implemented; 6 | [Pt₂H₉]⁵−: B95 pp. 899–900 establishes four terminal hydrides per Pt, one linear Pt–H–Pt bridge and temperature-independent diamagnetism. PW bridge [0,2,0] on H−; no Pt–Pt bond (3.704 Å). Five terminal-H splits plus all-terminal-H− donors; existing H#c-#m2. |
+| Ni43 | NiN₂⁴− in Sr₂NiN₂ | Not selected for additional types | K00, pp. 547–550, gives isolated linear units, metallic/Pauli behavior and a band description. This does not settle a unique atom-local Ni occupation; no new nitride state inferred from formal Ni(II). |
+| Ni44a | Ni: #n3#u#v3, #c+3#n3#u#t3; Pd: #n3#u#v3, #c+3#n3#u#t3 | Implemented; 4 | OMF₂ triplets: L21O Tables 1/3, SI pp. 7–10, 33 and Fig. S2.17 explicitly support oxyl character. PW integer localization: O#n2#u#v with an ordinary M–O single bond, or O•− donation. One metal unpaired electron plus one on O. Pt reuses Ni35; quartet OMF/OPtF₃ and triplet FOPdF also reuse fluoride states. No MC. |
+| Ni44b | O: #c-#n2#u#d | Implemented; 1 | Terminal O•− donor companion for the Ni44a all-donor graphs and OMF/OPtF₃. L21O explicitly assigns oxyl radical character; the integer donor allocation is PW. Ordinary M–O• graphs already use O#n2#u#v. |
+| Ni45a | Ni: #n5#t3#m0 | Implemented; 1 | HNi₂(CO)₆−: L79 pp. C42–C43 gives the Ni₂(CO)₆ framework and infers bridging H from steric energy maps; P82 pp. 93–94, 98 treats the closed-shell cluster; I00 p. 1989 explicitly identifies a three-center Ni–H–Ni bond. PW graph: H− bridge [0,2,0], paired Ni(0) centers, three CO donors each and no separate Ni–Ni edge. Existing H#c-#m2; no additional capacity. |
+| Ni45b | Ni₂(CO)₆²− | Not selected for additional types | L79 p. C43 gives indirect solution evidence, not an isolated or structurally characterized dianion. P82 pp. 93–94 explicitly uses an assumed geometry and distinguishes HNi₂(CO)₆− as the characterized dinuclear species. No new state from the uncertain dianion or calculated dihydride. |
+| Ni46 | Pt₂ units in Ca₃Pt₂/Ba₃Pt₂ | Not selected for additional types | K04 pp. 1391–1393 supports Pt–Pt covalency within a metallic band structure. Its Bader charges (−1.2/−1.5 per Pt) are partial charges, not formal atomic charges; neither a discrete Pt₂³− ion nor a local pair/unpaired occupation is established. No additional Pt type or MC substitute selected. |
+| Ni47 | PdCl₅³−, PdBr₅³−, PdBr₆⁴− | No additional default types selected | HW 2047 lists these formulas without settling coordination versus longer contacts. Paired five-/six-donor types are independently supported in Ni20/Ni21; these examples are not needed for their inclusion or coverage. |
+| Ni48 | Higher carbonyl/thiolate clusters, triple-decker Ni₂Cp₃+, Pt₁₂O₈(SO₄)₁₂⁴−, Pt₄ acetate and ligand-specific hydride/borohydride assemblies | Not selected for new default types | HW 2029, 2036–2038, 2052, 2057, 2070–2071, 2131. No per-scaffold MC types. The selected M–M dimers and ordinary/donor families remain in Ni17/Ni24–Ni26. Weak stacking contacts and extended metallic structures do not add resolution bonds. |
+| Ni49 | [PtI(dmpe)₂(κ-I₂)]+ | Not selected for new default types | M01, p. 1642, establishes six-coordinate Pt(II) and explicitly describes Pt d(z²) → I₂ σ* donation. Four phosphine donors and one I− donor give 18 electrons in that graph; the outgoing pair is already part of Pt’s eight electrons. This specialized complex supplies capacity evidence, not additional registry states. |
+
+#### Nickel-group limits and coverage
+
+| Item | Finding / next action |
+| --- | --- |
+| Capacity | Ni/Pd capacity raised from 18 to 20. Octahedral Ni(II) in Ni10 and Pd(II) in Ni21/Ni38b require 20; Ni12/Ni13 also require 19. Pt retains 18. The six-coordinate M01 complex has five incoming donor pairs and one Pt→I₂ donation, so its graph also counts 18. This changes the graph-count limit, not free-ion occupations. |
+| ValenceTable | Unchanged. Selected graphs have fixed H counts and no metal aromatic contribution; Counts resolves them without Ni/Pd/Pt table entries. |
+| State audit | 173 distinct additions: 172 metal states and one O companion. Each satisfies E − charge − valence − implicit H − 2 × donated pairs − MC contribution = 2 × lone pairs + unpaired electrons (E = 10 for Ni/Pd/Pt, 6 for O). Capacity audit uses E − charge + valence + implicit H + 2 × accepted pairs. |
+| MC review | All eight MC states implemented and covered. Six Pt₂H₉⁵− states: five explicit/mixed/implicit terminal-H variants of Pt#c-2#n4#v4#m0, plus Pt#c+2#n4#t4#m0. Ni#n5#t3#m0 for HNi₂(CO)₆− and Pd#c+#n4#u#m0 for two separate 3c2e bridges in (PdH)₂ complete the set. Each bridge uses existing H#c-#m2 with [0,2,0]. No whole-cluster MC bond. The integer charge/contribution allocations are PW graph choices. |
+| Other graph selections | Ni40b uses the closed-shell peroxide allocation for cyclic singlet M(O₂). Ni44a/b uses the atom-local oxyl allocation with accepted O#c-#n2#u#d for its all-donor alternative. Fractional spin populations in L21O are evidence for oxyl character, not literal integer graph attributes. |
+| Conformance | 190 new fixtures: 12 atomic ions, 39 hydrides, 22 small inorganic molecules, 20 inorganic ions and 97 donor–acceptor graphs. All 173 added states are inferred with AtomTyping and Counts under Strict and MostSaturated; all 760 resolved graphs pass valence invariants. Both Ni(II) and PtF₄ occupations have distinguishing inputs. All seven retained metal states are covered. |
+| Existing cases | Inputs preserved. Bare Pd²⁺/Pt²⁺ snapshots now leave the paired/triplet choice unresolved under Strict AtomTyping; MostSaturated retains the paired result. Separate supplied-occupation fixtures cover both states. Other existing snapshots are unchanged. |
+| Verification | 3,092 resolution cases, 223 graph property tests, 3,594 graph unit tests and 312 chemistry tests pass; formatting and Clippy pass. Registry audit confirms exactly the accepted 173 additions, no removed states, correct valence buckets and charge ordering. |
+| Outstanding scope | Selected nickel-group scope complete; no implementation or source work remains. PdF₆− is omitted; no further occupation search is pending. Other tentative or locally unresolved cases are explicitly unselected. η²-H₂ and specialized aggregates remain deferred/unselected. Ds belongs to the later superheavy-element chapter. |
+
+#### Nickel-group sources and access
+
+HW references above are printed Band II pages. Retrieved sources are archived under
+`materials/valence/`; extraction text and candidate audits are temporary files under
+`scratch/hw-nickel-review/`. All sixteen requested papers and the oxyfluoride SI
+are present, reviewed and archived; the duplicate Kowach download is one source.
+No required source check remains outstanding.
+
+| Key | Source | Contribution / access |
+| --- | --- | --- |
+| ASD | NIST Atomic Spectra Database, ground configurations/terms. Archived query outputs: [Ni](../materials/valence/NIST-ASD-2026-ni-ground-states.html), [Pd](../materials/valence/NIST-ASD-2026-pd-ground-states.html), [Pt](../materials/valence/NIST-ASD-2026-pt-ground-states.html); [live database](https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html) | Reviewed free-atom/ion occupations, Ni01/Ni02. Kept separate from complex spin states. |
+| S21 | Senges et al., “Matrix Isolation Spectroscopic and Relativistic Quantum Chemical Study of Molecular Platinum Fluorides PtFₙ (n = 1–6) Reveals Magnetic Bistability of PtF₄,” *Chem. Eur. J.* **27** (2021), 13642–13650. [DOI](https://doi.org/10.1002/chem.202102055), [PDF](../materials/valence/Senges-2021-platinum-fluorides.pdf) | Main paper reviewed and archived. Table 2 and manuscript pp. 2–5 support Ni35, including both observed PtF₄ occupations and closed-shell PtF₆. SI download failed; it is not needed for these main-text assignments. |
+| L21F | Li et al., “Searching for Monomeric Nickel Tetrafluoride: Unravelling Infrared Matrix Isolation Spectra of Higher Nickel Fluorides,” *Angew. Chem. Int. Ed.* **60** (2021), 6391–6394. [DOI](https://doi.org/10.1002/anie.202015501), [repository copy](https://publikationen.bibliothek.kit.edu/1000130872/107155258), [PDF](../materials/valence/Li-2021-nickel-fluorides.pdf) | Reviewed and archived. Scheme 1/Table 1 explicitly give NiF₁–₄ ground terms; Ni36. The ligand-spin discussion qualifies the formal metal allocation. Its introduction identifies the later bulk R-NiF₃ reassignment, Ni37. |
+| Z95 | Žemva et al., “Thermodynamically Unstable Fluorides of Nickel: NiF₄ and NiF₃ Syntheses and Some Properties,” *J. Am. Chem. Soc.* **117** (1995), 10025–10034. [DOI](https://doi.org/10.1021/ja00145a013), [PDF](../materials/valence/Zemva-1995-nickel-fluorides.pdf) | Retrieved and relevant structural/magnetic sections reviewed. Distinguishes the three solid NiF₃ forms; high-spin interpretation at pp. 10030–10031, with mixed-valence contributions not excluded. Solid NiF₄ and NiF₃+ remain incompletely characterized here. |
+| L21T | Li, *Matrix Isolation and IR Spectroscopic Study on Late-Transition Fluorides, Metal Oxo Complexes and Actinide Halides*, FU Berlin dissertation (2021). [Repository PDF](https://d-nb.info/1232726710/34), [PDF](../materials/valence/Li-2021-molecular-fluorides-thesis.pdf) | Overview reviewed and archived. The public thesis removes the published articles and their SI; L21O and its SI have now been reviewed separately. |
+| P05 | Procelewska et al., “Mechanistic information on the reductive elimination from cationic trimethylplatinum(IV) complexes to form carbon-carbon bonds,” *Inorg. Chem.* **44** (2005), 7732–7742. [DOI](https://doi.org/10.1021/ic050478%2B), [abstract](https://pubmed.ncbi.nlm.nih.gov/16241122/), [archived PubMed record](../materials/valence/Procelewska-2005-five-coordinate-abstract.xml) | Abstract reviewed and archived: explicitly distinguishes the five-coordinate cationic intermediate from a six-coordinate solvent adduct. Supports coordination in Ni34; its paired occupation comes from HW, not an inferred magnetic measurement in this paper. |
+| S99 | Shen et al., *C. R. Acad. Sci. Paris, Série IIc* **2** (1999), 557–563, R-NiF₃ structure and mixed nickel fluorides. [DOI](https://doi.org/10.1016/S1387-1609%2800%2988566-7), [PDF](../materials/valence/Shen-1999-nickel-fluoride.pdf) | Reviewed and archived. Neutron diffraction supports the R-NiF₃ mixed-valent description, Ni37; no new high-spin Ni(III) type. |
+| L97Ni | Li et al., magneto-infrared study of matrix-isolated NiH/NiH₂, *J. Chem. Phys.* **106** (1997), 2055. [DOI](https://doi.org/10.1063/1.473342), [PDF](../materials/valence/Li-1997-nickel-hydrides.pdf) | Reviewed and archived. Doublet NiH and observed bent singlet NiH₂; calculated singlet/triplet ordering remains unresolved in this paper. Ni39a/b. |
+| A01Pd | Andrews, Wang, Alikhani and Manceron, “Observed and Calculated Infrared Spectra of Pd(H₂)₁,₂,₃ Complexes and Palladium Hydrides in Solid Argon and Neon,” *J. Phys. Chem. A* **105** (2001), 3052. [DOI](https://doi.org/10.1021/jp003721t), [PDF](../materials/valence/Andrews-2001-palladium-hydrides.pdf) | Reviewed and archived. PdH/PdH₂−, intact-H₂ complexes, and the two explicitly assigned 3c2e bridges of (PdH)₂ (pp. 3061–3062/Table 9). Ni39a/c/f/g. |
+| A01Pt | Andrews, Wang and Manceron, “Infrared spectra and density functional calculations of platinum hydrides,” *J. Chem. Phys.* **114** (2001), 1559–1566. [DOI](https://doi.org/10.1063/1.1333020), [PDF](../materials/valence/Andrews-2001-platinum-hydrides.pdf) | Reviewed and archived. PtH doublet, PtH₂ singlet and observed PtH₃ doublet; distinguishes the latter from the calculated (H₂)PtH isomer. Ni39a/d/e/g. |
+| C97Ni | Citra et al., nickel/O₂ matrix-isolation study, *J. Phys. Chem. A* **101** (1997), 3109–3118. [DOI](https://doi.org/10.1021/jp970019x), [PDF](../materials/valence/Citra-1997-nickel-oxides.pdf) | Reviewed and archived. NiO/ONiO and cyclic peroxide structures/states; separates the other O₂/oxide isomers and tentative ONiO−. Ni40. |
+| B99 | Bare et al., platinum/palladium–O₂ matrix-isolation study, *J. Phys. Chem. A* **103** (1999), 5456–5462. [DOI](https://doi.org/10.1021/jp990823e), [PDF](../materials/valence/Bare-1999-platinum-palladium-oxides.pdf) | Reviewed and archived. PtO/OPtO and cyclic Pd/Pt(O₂) states; PtO₃ identification remains tentative and OPdO was not observed. Ni40. |
+| W16 | Wilson et al., “A Matrix Isolation and Computational Study of Molecular Palladium Fluorides: Does PdF₆ Exist?” *Inorg. Chem.* **55** (2016), 1108–1123. [DOI](https://doi.org/10.1021/acs.inorgchem.5b02273), [PDF](../materials/valence/Wilson-2016-palladium-fluorides.pdf) | Reviewed and archived. PdF/PdF₂/PdF₄ assignments, scalar versus SOC labels, and limits of the higher-fluoride identifications. Ni38a/c. |
+| BL62 | Bartlett and Lohmann, “Fluorides of the noble metals. Part II. Dioxygenyl hexafluoroplatinate(V),” *J. Chem. Soc.* (1962), 5253. [DOI](https://doi.org/10.1039/JR9620005253), [PDF](../materials/valence/Bartlett-Lohmann-1962-platinum-fluoride.pdf) | Reviewed and archived. Explicit Pt(V) nonbonding dπ⁵ assignment, pp. 5260–5261. Ni41a. |
+| F76 | Falconer et al., “Dioxygenyl hexafluoropalladate(V),” *J. Inorg. Nucl. Chem.*, supplement (1976), 59–60. [DOI](https://doi.org/10.1016/0022-1902%2876%2980595-7), [PDF](../materials/valence/Falconer-1976-palladium-fluoride.pdf) | Reviewed and archived. Octahedral PdF₆− and bulk susceptibility; no explicit d⁵ local occupation. Ni41b omitted because the local occupation remains unresolved. |
+| B95 | Bronger and à Brassard, “Li₅Pt₂H₉, a Complex Hydride Containing Isolated [Pt₂H₉]⁵− Ions,” *Angew. Chem. Int. Ed. Engl.* **34** (1995), 898–900. [DOI](https://doi.org/10.1002/anie.199508981), [PDF](../materials/valence/Bronger-1995-lithium-platinum-hydride.pdf) | Reviewed and archived. Terminal/bridging hydrides and diamagnetism of Li₅Pt₂H₉. Ni42; integer bridge contributions are PW. |
+| K00 | Kowach et al., “An Unusual Metallic Nitride: Sr₂NiN₂,” *J. Solid State Chem.* **154** (2000), 542–550. [DOI](https://doi.org/10.1006/jssc.2000.8877), [PDF](../materials/valence/Kowach-2000-strontium-nickel-nitride.pdf) | Reviewed and archived. Isolated NiN₂ units and metallic band description; no unique local occupation selected. Ni43. |
+| L21O | Li et al., “Molecular oxofluorides OMFₙ of nickel, palladium and platinum: oxyl radicals with moderate ligand field inversion,” *Inorg. Chem. Front.* **8** (2021), 1215–1228. [DOI](https://doi.org/10.1039/D0QI01151G), [PDF](../materials/valence/Li-2021-oxofluorides.pdf), [SI](../materials/valence/Li-2021-oxofluorides-SI.pdf) | Main paper and SI reviewed and archived. Explicit oxyl character, OMF/OMF₂/OPtF₃ multiplicities, and FOPdF d⁸ assignment. Ni44a/b. |
+| I00 | Ignatyev et al., “Binuclear Homoleptic Nickel Carbonyls,” *J. Am. Chem. Soc.* **122** (2000), 1989–1994. [DOI](https://doi.org/10.1021/ja9914083), [PDF](../materials/valence/Ignatyev-2000-binuclear-nickel-carbonyls.pdf) | Retrieved and archived; p. 1989 identifies the Ni–H–Ni bridge in HNi₂(CO)₆− and its primary sources. Its calculated neutral Ni₂(CO)₅–₇ structures are not added as characterized compounds. |
+| L79 | Longoni, Manassero and Sansoni, “Synthesis and crystal structure of [(Ph₃P)₂N][Ni₂(CO)₆H],” *J. Organomet. Chem.* **174** (1979), C41–C44. [DOI](https://doi.org/10.1016/S0022-328X(00)91513-4), [PDF](../materials/valence/Longoni-1979-dinickel-carbonyl-hydride.pdf) | Reviewed and archived. Ni₂(CO)₆ framework, bridging-H inference from steric energy maps, and indirect evidence for the unisolated dianion. Ni45a/b. |
+| P82 | Pacchioni, Fantucci and Valenti, “The electronic structure of carbonyl metal clusters: I. An INDO investigation of mono-, di- and trinuclear nickel complexes,” *J. Organomet. Chem.* **224** (1982), 89–105. [DOI](https://doi.org/10.1016/S0022-328X(00)82570-X), [PDF](../materials/valence/Pacchioni-1982-nickel-carbonyl-clusters.pdf) | Reviewed and archived. Closed-shell HNi₂(CO)₆− calculation and protonation analysis; explicitly separates characterized and assumed cluster structures. Ni45a/b. H− contribution allocation is PW, not the paper’s formal Ni(−I)/H+ bookkeeping. |
+| K04 | Karpov, Wedig and Jansen, “Pt-Dumbbells in Ba₃Pt₂: Interplay of Geometric and Relativistic Effects on Pt–Pt Bonding,” *Z. Naturforsch. B* **59** (2004), 1387–1394. [DOI](https://doi.org/10.1515/znb-2004-11-1204), [PDF](../materials/valence/Karpov-2004-platinum-dumbbells.pdf) | Reviewed and archived. Pt–Pt covalency, metallic bands and partial-charge analysis; no definite local occupation for a discrete Pt₂³− graph. Ni46 remains unselected. |
+| M01 | Makiura et al., “An unusual six-co-ordinate platinum(II) complex containing a neutral I₂ ligand,” *Chem. Commun.* (2001), 1642–1643. [DOI](https://doi.org/10.1039/B103648N), [PDF](../materials/valence/Makiura-2001-platinum-diiodine.pdf) | Reviewed and archived. X-ray structure and XPS establish six-coordinate Pt(II); p. 1642 explicitly describes Pt→I₂ donation. Supports retaining capacity 18 for this graph, Ni49; no additional default state selected. |

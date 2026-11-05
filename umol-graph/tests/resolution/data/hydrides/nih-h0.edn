@@ -1,0 +1,4 @@
+; NiH, doublet; L97Ni, pp. 2056-2059
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#u1" "H"]
+         :bonds [[0 1 "1"]]}}

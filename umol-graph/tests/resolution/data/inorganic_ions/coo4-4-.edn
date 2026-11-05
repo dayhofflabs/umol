@@ -1,0 +1,4 @@
+; CoO4(4-), high-spin d5; K15, manuscript pp. 1-3; charge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#u5" "O#c-" "O#c-" "O#c-" "O#c-"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

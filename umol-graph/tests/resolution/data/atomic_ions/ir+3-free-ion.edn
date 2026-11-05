@@ -1,0 +1,3 @@
+; Ir3+, free-ion ground occupation; ASD
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#c+3#u4"]}}

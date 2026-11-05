@@ -1,0 +1,4 @@
+; Molecular RhO2-, singlet; G11, Fig. 7b and Table 6
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c-1#u0" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

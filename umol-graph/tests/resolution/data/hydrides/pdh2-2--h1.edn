@@ -1,0 +1,4 @@
+; PdH2(2-), paired; HW II, pp. 2044, 2069
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#c-2#u0#h1" "H"]
+         :bonds [[0 1 "1"]]}}

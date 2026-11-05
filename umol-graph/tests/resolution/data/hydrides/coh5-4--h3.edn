@@ -1,0 +1,4 @@
+; CoH5(4-), paired; HW II, pp. 1992, 2009-2010, 2069
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#c-4#u0#h3" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

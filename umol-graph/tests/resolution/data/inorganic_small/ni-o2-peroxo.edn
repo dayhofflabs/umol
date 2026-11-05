@@ -1,0 +1,4 @@
+; Cyclic Ni(O2), singlet; C97Ni, Table 2; peroxide allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#u0" "O" "O"]
+         :bonds [[1 2 "1"] [0 1 "1"] [0 2 "1"]]}}
