@@ -68,6 +68,8 @@
 # CA95 | Chertihin and Andrews, J. Phys. Chem. 99 (1995), 15004-15010; doi:10.1021/j100041a014
 # CA99 | Citra and Andrews, J. Phys. Chem. A 103 (1999), 4845–4854; doi:10.1021/jp990864a
 # CB78 | Chin and Bau, Inorg. Chem. 17 (1978), 2314–2317; doi:10.1021/ic50186a061
+# CDG83 | Cloke et al., Organometallics 2 (1983), 1150-1159; doi:10.1021/om50003a014
+# CE88 | Chi et al., J. Am. Chem. Soc. 110 (1988), 163-171; doi:10.1021/ja00209a026
 # CG79 | Cloke and Green, J. Chem. Soc., Chem. Commun. (1979), 127-128; doi:10.1039/C39790000127
 # CL66 | Cotton and Lippard, Inorg. Chem. 5 (1966), 9–16; doi:10.1021/ic50035a003
 # CLM69 | Chatt, Leigh and Mingos, J. Chem. Soc. A (1969), 1674–1680; doi:10.1039/J19690001674
@@ -220,6 +222,7 @@
 # SYB05 | Shayesteh et al., Chem. Eur. J. 11 (2005), 4709-4712; doi:10.1002/chem.200500332
 # T79 | Trop, MIT PhD thesis (1979); https://hdl.handle.net/1721.1/37642
 # T90 | Trinquier, J. Am. Chem. Soc. 112 (1990), 2130-2137; doi:10.1021/ja00162a014
+# TB76 | Thomas and Brown, J. Organomet. Chem. 111 (1976), 297-301
 # TB84 | Thompson and Bercaw, Pure Appl. Chem. 56 (1984), 1-11; doi:10.1351/pac198456010001
 # TJD80 | Trop, Jones and Davison, Inorg. Chem. 19 (1980), 1993–1997; doi:10.1021/ic50209a032
 # Tu25 | Tuna et al., J. Turkish Chem. Soc. A 12 (2025), 15-22; doi:10.18596/jotcsa.1590991
@@ -948,6 +951,7 @@
     "Sc #c+3 #t4",    # ScH4-, hydride donors; WCA02, Table 8; allocation: PW
     "Sc #c+3 #t7",    # Cp*2ScX (X = Cl, alkyl, aryl); TB84, pp. 2-4; haptic order 3: PW
     "Sc #c+3 #t8",    # [Cp2Sc(mu-Cl)]2, Cp*2ScMe(THF); TB84, pp. 2-4; donors: PW
+    "Sc #c+3 #t10",   # [Sc(C8H8)2]-, eta8/eta8; HW II, pp. 2212, 2214; haptic order 5: PW
     "Sc #c- #h4",     # ScH4- singlet; WCA02, Table 8
 ]
 1 = [
@@ -985,6 +989,7 @@
     "Ti #u2 #h2",        # TiH2 triplet; HW II, p. 1798; MCS96, pp. 872-873
     "Ti #n #u2 #t6",     # Ti(CO)6 triplet; HW II, p. 1805; D20, p. 10493
     "Ti #n2 #t6",        # Ti(arene)2, paired; HW II, pp. 1808, 1811, 1817; C87; haptic order 3: PW
+    "Ti #n2 #t7",        # Ti(CO)5(dmpe), Ti(CO)3(dmpe)2, Ti(CO)4(trmpe); HW II, p. 2109; CE88; occupation: PW
     "Ti #c+ #u3 #t",     # TiH quartet; HW II, p. 1798; CA94, pp. 8325-8326; donors: PW
     "Ti #c+2 #u2",       # Ti2+, d2 triplet; HW II, pp. 1797, 1804; CS79, p. 20
     "Ti #c+2 #u2 #t2",   # TiH2 triplet; HW II, p. 1798; MCS96, pp. 872-873; donors: PW
@@ -1157,12 +1162,14 @@
     "Cr #c+6",            # Cr6+, d0; HW II, pp. 1849, 1854-1856
     "Cr #c- #n3 #h #t5",  # [HCr(CO)5]-; HW II, pp. 2136-2137
     "Cr #c-2 #n4 #t5",    # Cr(CO)5(2-); HW II, pp. 1861, 2111
+    "Cr #c-4 #n5 #t4",    # Cr(NO)4, NO+ donors; HW II, pp. 2150-2151; allocation: PW
 ]
 1 = [
     "Cr #u4 #v #h",       # CrH2, 4 unpaired electrons; WA03Cr, Tables 1-2
     "Cr #n #v #h3 #t4",   # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
     "Cr #u5 #v",          # CrH, 5 unpaired electrons; WA03Cr, Tables 1-2
     "Cr #c+ #u4 #v #t4",  # [CrBr{N(CH2CH2NMe2)3}]+, d4 high-spin; HW II, p. 1864
+    "Cr #c+ #n2 #v #t6",  # [CpCr(CO)3]2, M-M single bond; HW II, pp. 2202-2203; donors: PW
     "Cr #c+2 #u3 #v #t5", # CrCl(NH3)5(2+), d3 quartet; HW II, pp. 1860-1861
     "Cr #c- #n3 #v #t5",  # Cr2(CO)10(2-), M-M single bond; HW II, pp. 1861, 2111
 ]
@@ -1171,6 +1178,7 @@
     "Cr #n #u2 #v2 #t4",  # CrCl2(dmpe)2, two unpaired electrons; HW II, p. 1862; G85, p. 1340
     "Cr #u4 #v2",         # CrH2, 4 unpaired electrons; WA03Cr, Tables 1-2
     "Cr #n #v2 #h2 #t4",  # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #n2 #v2 #t5",     # (CO)5Cr=C(R)(OR), localized carbene; HW II, pp. 2165-2168
     "Cr #c+ #u3 #v2 #t4", # CrCl2(NH3)4+, d3 quartet; HW II, pp. 1860-1861
     "Cr #c+3 #u #v2 #t3", # CrOCl3, d1; HW II, p. 1854; anionic donors: PW
     "Cr #c+3 #u #v2 #t5", # CrOCl5(2-), d1; HW II, p. 1854; anionic donors: PW
@@ -1180,10 +1188,11 @@
     "Cr #c+4 #v2 #t6",    # CrO(O2)2·bipy; HW II, pp. 1853-1854; anionic donors: PW
 ]
 3 = [
-    "Cr #u3 #v3 #t2",   # CrCl3(NMe3)2, d3 quartet; HW II, pp. 1860-1861
-    "Cr #u3 #v3 #t3",   # CrCl3(NH3)3, d3 quartet; HW II, pp. 1860-1861
-    "Cr #n #v3 #h #t4", # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
-    "Cr #u3 #v3",       # Cr(NiPr2)3, d3 quartet; HW II, p. 1860; A68; BHN71
+    "Cr #u3 #v3 #t2",    # CrCl3(NMe3)2, d3 quartet; HW II, pp. 1860-1861
+    "Cr #u3 #v3 #t3",    # CrCl3(NH3)3, d3 quartet; HW II, pp. 1860-1861
+    "Cr #n #v3 #h #t4",  # CrH4(dmpe)2, paired d2; HW II, pp. 1861-1862
+    "Cr #u3 #v3",        # Cr(NiPr2)3, d3 quartet; HW II, p. 1860; A68; BHN71
+    "Cr #c+ #n #v3 #t5", # [CpCr(CO)2]2, M-M triple bond; HW II, pp. 2202-2203; donors: PW
 ]
 4 = [
     "Cr #u2 #v4",         # CrCl4, d2 triplet; HW II, pp. 1854-1856
@@ -1380,6 +1389,7 @@
     "Fe #u5 #v3 #t2",      # FeCl(acac)2, high-spin; HW II, pp. 1947, 1963; anionic donors: PW
     "Fe #u5 #v3 #t3",      # Fe(III) aquochloride, high-spin; HW II, pp. 1949-1950, 1957-1958, 1963
     "Fe #n #u3 #v3 #t2",   # FeCl(S2CNMe2)2, intermediate-spin; HW II, pp. 1962-1963; anionic donors: PW
+    "Fe #c+ #n2 #v3 #t4",  # [CpFe(CO)2]2, two mu-CO and M-M; HW II, pp. 2202-2203; allocation: PW
     "Fe #c-4 #n3 #v3 #h3", # FeH6(4-), low-spin octahedral ion; HW II, pp. 1948, 1973-1974
 ]
 4 = [
@@ -1933,20 +1943,21 @@
 
 [Y]
 0 = [
-    "Y #n #u",    # Y atom, s2d1; HW II, p. 1788
-    "Y #n #h",    # YH singlet; WCA02, Table 4
-    "Y #u #h2",   # YH2 doublet; WCA02, Table 5
-    "Y #h3",      # YH3 singlet; WCA02, Table 7
-    "Y #c+ #h2",  # YH2+ singlet; WCA02, Table 6
-    "Y #c+3",     # Y3+, d0; HW II, pp. 1788-1790
-    "Y #c+3 #t8", # [Y(H2O)8]3+; HW II, pp. 1788, 1790
-    "Y #c+3 #t6", # Y(NCS)6(3-); HW II, p. 1788; allocation: PW
-    "Y #c+3 #t7", # Y(acac)3(H2O); HW II, p. 1788; allocation: PW
-    "Y #c+3 #t3", # YR3, organyl donors; HW II, p. 1791; allocation: PW
-    "Y #c+3 #t5", # YR3(THF)2; HW II, pp. 1788, 1791; organyl donors: PW
-    "Y #c+3 #t2", # YH2+, hydride donors; WCA02, Table 6; allocation: PW
-    "Y #c+3 #t4", # YH4-, hydride donors; WCA02, Table 8; allocation: PW
-    "Y #c- #h4",  # YH4- singlet; WCA02, Table 8
+    "Y #n #u",     # Y atom, s2d1; HW II, p. 1788
+    "Y #n #h",     # YH singlet; WCA02, Table 4
+    "Y #u #h2",    # YH2 doublet; WCA02, Table 5
+    "Y #h3",       # YH3 singlet; WCA02, Table 7
+    "Y #c+ #h2",   # YH2+ singlet; WCA02, Table 6
+    "Y #c+3",      # Y3+, d0; HW II, pp. 1788-1790
+    "Y #c+3 #t8",  # [Y(H2O)8]3+; HW II, pp. 1788, 1790
+    "Y #c+3 #t6",  # Y(NCS)6(3-); HW II, p. 1788; allocation: PW
+    "Y #c+3 #t7",  # Y(acac)3(H2O); HW II, p. 1788; allocation: PW
+    "Y #c+3 #t3",  # YR3, organyl donors; HW II, p. 1791; allocation: PW
+    "Y #c+3 #t5",  # YR3(THF)2; HW II, pp. 1788, 1791; organyl donors: PW
+    "Y #c+3 #t2",  # YH2+, hydride donors; WCA02, Table 6; allocation: PW
+    "Y #c+3 #t4",  # YH4-, hydride donors; WCA02, Table 8; allocation: PW
+    "Y #c+3 #t10", # [Y(C8H8)2]-, eta8/eta8; HW II, pp. 2212, 2214; haptic order 5: PW
+    "Y #c- #h4",   # YH4- singlet; WCA02, Table 8
 ]
 1 = [
     "Y #n #v",      # YH singlet; WCA02, Table 4
@@ -1982,6 +1993,7 @@
     "Zr #c+2 #n #t2",  # ZrH2 singlet, hydride donors; WDB90, p. 152; allocation: PW
     "Zr #c+2 #u2 #t2", # ZrH2 triplet, hydride donors; WDB90, p. 152; allocation: PW
     "Zr #c+2 #h2 #t6", # Cp*2ZrH2; C00, ch. 1, pp. 3-6; haptic order 3: PW
+    "Zr #c+2 #n #t8",  # Cp2Zr(CO)2, paired; HW II, pp. 2201-2203; TB76; occupation/donors: PW
     "Zr #c+3 #u",      # Zr3+, d1; HW II, pp. 1812-1814
     "Zr #c+3 #h #t6",  # Cp2ZrH+; HW II, pp. 1817-1818; haptic order 3: PW
     "Zr #c+3 #u #t3",  # ZrH3 doublet; CA95, pp. 15007-15008; donors: PW
@@ -2041,6 +2053,7 @@
     "Nb #u5",          # Nb atom, s1d4; HW II, p. 1538
     "Nb #u #h4",       # NbH4 doublet; WA11, pp. 14179-14182
     "Nb #u3 #h2",      # NbH2 quartet; WA11; VLW95, p. 4367
+    "Nb #n2 #u #t6",   # Nb(arene)2, doublet; HW II, p. 2207; CDG83, pp. 1152-1157; haptic order 3: PW
     "Nb #c+ #n2 #t7",  # CpNb(CO)4; HW II, pp. 1830, 1833, 1841, 2111; haptic order 3: PW
     "Nb #c+2 #u3 #t2", # NbH2 quartet; WA11; VLW95, p. 4367; anionic donors: PW
     "Nb #c+3 #u2",     # Nb3+, d2; HW II, pp. 1833, 1837
@@ -2154,6 +2167,7 @@
     "Mo #u2 #v #h3",        # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
     "Mo #v #h5",            # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
     "Mo #n #v #h3 #t4",     # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #c+ #n2 #v #t6",    # [CpMo(CO)3]2, M-M single bond; HW II, pp. 2202-2203; donors: PW
     "Mo #c+2 #n #v #h #t6", # Cp2MoH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
     "Mo #c+3 #v #h2 #t6",   # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
     "Mo #c+3 #u2 #v #t6",   # Mo2Cl9(3-), M-M single bond, two local unpaired electrons; HW II, p. 1893; MSL97, p. 6270; chloride donors: PW
@@ -2175,14 +2189,15 @@
     "Mo #c+4 #v2 #t6",    # MoO(O2)2(H2O)2; HW II, p. 1882; anionic donors: PW
 ]
 3 = [
-    "Mo #u3 #v3 #t3",   # MoCl3(py)3, d3 quartet; HW II, p. 1891
-    "Mo #v3 #h3 #t3",   # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
-    "Mo #u2 #v3 #h",    # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
-    "Mo #v3 #h3",       # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
-    "Mo #n #v3 #h #t4", # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
-    "Mo #c+3 #v3 #t3",  # Mo2(OtBu)6, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
-    "Mo #c+3 #v3 #t4",  # Mo2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
-    "Mo #c+3 #v3 #t6",  # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+    "Mo #u3 #v3 #t3",    # MoCl3(py)3, d3 quartet; HW II, p. 1891
+    "Mo #v3 #h3 #t3",    # MoH6(PCy3)3, d0; HW II, p. 1871; HC90
+    "Mo #u2 #v3 #h",     # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #v3 #h3",        # MoH6, 0 unpaired electrons; WA05Mo, Tables 2-6
+    "Mo #n #v3 #h #t4",  # MoH4(PMePh2)4, paired d2; HW II, p. 1871; P71; HC90, p. 10
+    "Mo #c+ #n #v3 #t5", # [CpMo(CO)2]2, M-M triple bond; HW II, pp. 2202-2203; donors: PW
+    "Mo #c+3 #v3 #t3",   # Mo2(OtBu)6, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "Mo #c+3 #v3 #t4",   # Mo2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
+    "Mo #c+3 #v3 #t6",   # Cp2MoH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
 ]
 4 = [
     "Mo #u2 #v4",        # MoH4, 2 unpaired electrons; WA05Mo, Tables 2-6
@@ -2350,6 +2365,7 @@
 ]
 3 = [
     "Ru #n2 #u #v3 #t3",   # RuCl3(PR3)3, low-spin; HW II, pp. 1976, 1984
+    "Ru #c+ #n2 #v3 #t4",  # [CpRu(CO)2]2, two mu-CO and M-M; HW II, pp. 2202-2203; allocation: PW
     "Ru #c+3 #n #v3 #t4",  # RuNCl4-, paired d2; HW II, pp. 1978-1979, 1982-1983; anionic donors: PW
     "Ru #c+3 #n #v3 #t5",  # RuNCl5(2-), Ru2(O2CR)4X2-; HW II, pp. 1978-1979, 1983-1985; G26; allocation: PW
     "Ru #c+3 #n #v3 #t3",  # Ru2(CH2CMe3)6, Ru-Ru triple; HW II, pp. 1984-1985
@@ -2918,20 +2934,21 @@
 
 [La]
 0 = [
-    "La #n #u",    # La atom, s2d1; HW II, p. 1788
-    "La #n #h",    # LaH singlet; WCA02, Table 4
-    "La #u #h2",   # LaH2 doublet; WCA02, Table 5
-    "La #h3",      # LaH3 singlet; WCA02, Table 7
-    "La #c+ #h2",  # LaH2+ singlet; WCA02, Table 6
-    "La #c+3",     # La3+, d0; HW II, pp. 1788-1790
-    "La #c+3 #t9", # [La(H2O)9]3+; HW II, pp. 1788, 1790
-    "La #c+3 #t6", # La(NCS)6(3-), LaCl6(3-); HW II, pp. 1788, 1790; M02G; allocation: PW
-    "La #c+3 #t8", # [La(bipyO2)4]3+; HW II, p. 1788
-    "La #c+3 #t3", # LaR3, organyl donors; HW II, p. 1791; allocation: PW
-    "La #c+3 #t5", # LaR3(THF)2; HW II, pp. 1788, 1791; organyl donors: PW
-    "La #c+3 #t2", # LaH2+, hydride donors; WCA02, Table 6; allocation: PW
-    "La #c+3 #t4", # LaH4-, hydride donors; WCA02, Table 8; allocation: PW
-    "La #c- #h4",  # LaH4- singlet; WCA02, Table 8
+    "La #n #u",     # La atom, s2d1; HW II, p. 1788
+    "La #n #h",     # LaH singlet; WCA02, Table 4
+    "La #u #h2",    # LaH2 doublet; WCA02, Table 5
+    "La #h3",       # LaH3 singlet; WCA02, Table 7
+    "La #c+ #h2",   # LaH2+ singlet; WCA02, Table 6
+    "La #c+3",      # La3+, d0; HW II, pp. 1788-1790
+    "La #c+3 #t9",  # [La(H2O)9]3+; HW II, pp. 1788, 1790
+    "La #c+3 #t6",  # La(NCS)6(3-), LaCl6(3-); HW II, pp. 1788, 1790; M02G; allocation: PW
+    "La #c+3 #t8",  # [La(bipyO2)4]3+; HW II, p. 1788
+    "La #c+3 #t3",  # LaR3, organyl donors; HW II, p. 1791; allocation: PW
+    "La #c+3 #t5",  # LaR3(THF)2; HW II, pp. 1788, 1791; organyl donors: PW
+    "La #c+3 #t2",  # LaH2+, hydride donors; WCA02, Table 6; allocation: PW
+    "La #c+3 #t4",  # LaH4-, hydride donors; WCA02, Table 8; allocation: PW
+    "La #c+3 #t10", # [La(C8H8)2]-, eta8/eta8; HW II, pp. 2212, 2214; haptic order 5: PW
+    "La #c- #h4",   # LaH4- singlet; WCA02, Table 8
 ]
 1 = [
     "La #n #v",      # LaH singlet; WCA02, Table 4
@@ -3059,6 +3076,7 @@
     "Hf #c+ #n #u #t", # HfH doublet; RB94, pp. 74-75, 78-79; donors: PW
     "Hf #c+2 #n #t2",  # HfH2 singlet; DB91, pp. 3981-3982; donors: PW
     "Hf #c+2 #h2 #t6", # Cp*2HfH2; C00, ch. 1, pp. 3-6; haptic order 3: PW
+    "Hf #c+2 #n #t8",  # Cp2Hf(CO)2, paired; HW II, pp. 2201-2203; TB76; occupation/donors: PW
     "Hf #c+3 #u",      # Hf3+, d1; HW II, pp. 1812-1814
     "Hf #c+4",         # Hf4+, d0; HW II, p. 1811
     "Hf #c+4 #t4",     # HfX4, HfR4; HW II, pp. 1813, 1817; donors: PW
@@ -3099,6 +3117,7 @@
     "Ta #u #h4",       # TaH4 doublet; WA11, pp. 14179-14182
     "Ta #u3 #h2",      # TaH2 quartet; WA11; VLW95, p. 4367
     "Ta #n2 #h #t6",   # TaH(CO)2(dmpe)2, paired d4; DW77, pp. 1134-1136; occupation: PW
+    "Ta #n2 #u #t6",   # Ta(arene)2, doublet; HW II, p. 2207; CDG83, pp. 1152-1157; haptic order 3: PW
     "Ta #c+ #n2 #t7",  # CpTa(CO)4; HW II, pp. 1830, 1833, 1841, 2111; haptic order 3: PW
     "Ta #c+2 #u3 #t2", # TaH2 quartet; WA11; VLW95, p. 4367; anionic donors: PW
     "Ta #c+3 #u2",     # Ta3+, d2; HW II, pp. 1833-1837
@@ -3215,6 +3234,7 @@
     "W #u2 #v #h3",        # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
     "W #v #h5",            # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
     "W #c+ #v #h4 #t4",    # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+ #n2 #v #t6",    # [CpW(CO)3]2, M-M single bond; HW II, pp. 2202-2203; donors: PW
     "W #c+2 #n #v #h #t6", # Cp2WH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
     "W #c+3 #v #h2 #t6",   # Cp2WH3+; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
     "W #c+3 #n #v #t7",    # [HW(CN)7](4-), paired d2; HW II, p. 1876; SG81, pp. 1886-1887; anionic donors: PW
@@ -3226,6 +3246,7 @@
     "W #u3 #v2 #h",      # WH3, 3 unpaired electrons; WA02W, Tables 2-5, 7
     "W #u2 #v2 #h2",     # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
     "W #v2 #h4",         # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #n2 #v2 #t5",     # (CO)5W=C(R)(OR), localized carbene; HW II, pp. 2165-2168
     "W #c+ #v2 #h3 #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
     "W #c+2 #n #v2 #t6", # Cp2WH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
     "W #c+3 #u #v2 #t3", # WOCl3, d1; HW II, p. 1873; anionic donors: PW
@@ -3241,6 +3262,7 @@
     "W #u2 #v3 #h",      # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
     "W #v3 #h3",         # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
     "W #c+ #v3 #h2 #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
+    "W #c+ #n #v3 #t5",  # [CpW(CO)2]2, M-M triple bond; HW II, pp. 2202-2203; donors: PW
     "W #c+3 #v3 #t3",    # W2(OtBu)6, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
     "W #c+3 #v3 #t4",    # W2(OtBu)6(py)2, M-M triple bond; HW II, pp. 1892-1893; ligand allocation: PW
     "W #c+3 #v3 #t6",    # W2Cl9(3-), M-M triple bond; HW II, pp. 1891-1893; chloride donors: PW
@@ -3249,6 +3271,7 @@
     "W #u2 #v4",        # WH4, 2 unpaired electrons; WA02W, Tables 2-5, 7
     "W #v4 #h2 #t3",    # WH6(PMe2Ph)3, d0; HW II, p. 1871; HC90
     "W #v4 #h2",        # WH6, 0 unpaired electrons; WA02W, Tables 2-5, 7
+    "W #n #v4 #t4",     # (CO)4XW≡CR, W-C triple bond; HW II, p. 2168
     "W #c+ #u #v4 #t2", # W2Cl10, d1; HW II, p. 1872; bridge donors: PW
     "W #c+ #v4 #h #t4", # [WH5(PMePh2)4]+, classical pentahydride, d0; HW II, p. 1872; HC90, p. 11
     "W #c+2 #v4 #t2",   # WO2F2; HW II, p. 1873; anionic donors: PW
@@ -3453,6 +3476,7 @@
     "Os #n3 #v #h #t4",   # OsH2(CO)4, paired; HW II, pp. 1948, 1974, 2136-2137
     "Os #n2 #v #h3 #t3",  # OsH4(PR3)3, classical paired hydride; HW II, pp. 1974, 2071
     "Os #n #v #h5 #t2",   # OsH6(PR3)2, classical paired hydride; HW II, pp. 1974, 2071
+    "Os #c+ #n3 #v #t5",  # [CpOs(CO)2]2, terminal CO and M-M; HW II, pp. 2202-2203; donors: PW
     "Os #c- #n4 #v #t4",  # OsH(CO)4-, paired; HW II, pp. 2136-2137
     "Os #c-4 #n3 #v #h5", # OsH6(4-), low-spin octahedral ion; HW II, pp. 1948, 1973-1974
 ]

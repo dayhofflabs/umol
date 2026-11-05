@@ -1,0 +1,8 @@
+; Cp2Hf(CO)2; HW II, pp. 2201-2203; Thomas and Brown (1976), pp. 298-300; NMR-supported pairing and donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Hf#c+2#u0" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-" "O#c+" "C#c-#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+" "C#c-" "O#c+"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 1 "1#a"] [6 7 "3"] [8 9 "1#a"] [9 10 "1#a"]
+                 [10 11 "1#a"] [11 12 "1#a"] [12 8 "1#a"] [13 14 "3"]]
+         :dative-bonds [{:donors [1 2 3 4 5] :acceptor 0 :attrs "3"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [8 9 10 11 12] :acceptor 0 :attrs "3"} {:donors [13] :acceptor 0 :attrs "1"}]}}

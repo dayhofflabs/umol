@@ -12,10 +12,11 @@ contains the inclusion rules, evidence and detailed chapter tables.
 
 ## Project Status (2026-11-04)
 
-**Selected scope complete through HW II, chapter XXXI (Ni, Pd, Pt), pp. 2023–2065.**
-Chapter selections through Ni/Pd/Pt are implemented, with existing-entry citation audits and
-coverage of the added states. Unselected and deferred candidates remain in the linked
-tables. Companion states belong to elements outside the chapter being reviewed.
+**Selected scope complete through HW II, chapter XXXII, pp. 2067–2217.**
+The group selections through Ni/Pd/Pt and the chapter-XXXII additions are implemented,
+with source citations and coverage of every added state. Unselected and deferred
+candidates remain in the linked tables. Companion states belong to elements outside
+the chapter being reviewed.
 
 | Chapter / group | Registry | Conformance fixtures | Model changes and scope notes |
 | --- | --- | --- | --- |
@@ -30,7 +31,7 @@ tables. Companion states belong to elements outside the chapter being reviewed.
 | [Alkali metals](#alkali-metal-work-table) | 34 additions: Li 9, Na 7, K 7, Rb 5, Cs 6; 13 earlier states retained | 35 new | Capacities Li/Na/Rb 16, K 20, Cs 24; Fr retains 8. Specialized carbon-contact/Cp assemblies excluded; bridging water deferred |
 | [Cu, Ag, Au](#copper-group-work-table) | 77 additions: Cu 29, Ag 18, Au 30; 11 earlier states retained, including free-ion Au³⁺ triplet | 78 new | Capacities Cu/Ag 21; Au retains 18. Ambiguous Cs2AgF6 adds no states; η²-H2 donors deferred |
 | [Zn, Cd, Hg](#zinc-group-work-table) | 53 additions: Zn 19, Cd 17, Hg 17; 1 μ₃-alkoxide O companion; 7 earlier states retained | 52 new; 4 ZnMe2 inputs revised | Hg capacity 22; Zn/Cd limits unchanged. Selected hydride bridges included; Hg oxidation states above II excluded |
-| [Sc, Y, La, Ac](#scandium-group-work-table) | 79 additions: Sc 28, Y 25, La 26; 8 earlier states retained | 82 new | Capacity 18 and ValenceTable unchanged. Uncertain hydrides, H2 adducts and formula-only cases remain unselected |
+| [Sc, Y, La, Ac](#scandium-group-work-table) | 79 additions: Sc 28, Y 25, La 26; 8 earlier states retained | 82 new | Sc/Y/La capacity 20 after XXXII; Ac retains 18; ValenceTable unchanged. Uncertain hydrides, H2 adducts and formula-only cases remain unselected |
 | [Ti, Zr, Hf](#titanium-group-work-table) | 118 additions: Ti 47, Zr 44, Hf 27; 8 earlier states retained | 135 new | Capacities Zr/Hf 20; Ti retains 18. Both ZrH2 occupations included; broad borohydride MC states and specialized assemblies excluded |
 | [V, Nb, Ta](#vanadium-group-work-table) | 160 additions: V 57, Nb 48, Ta 55; 8 earlier states retained | 165 new; 1 nitride input revised | Capacity 18 and ValenceTable unchanged; no new MC types. Four uncertain Nb/Ta(II) phosphine occupations omitted |
 | [Cr, Mo, W](#chromium-group-work-table) | 260 additions: Cr 72, Mo 94, W 94; 2 hydroxido O companions; 11 earlier states retained | 262 new | Capacity 18 and ValenceTable unchanged. Two Mo/W hydride-bridge MC states included; 13 W phosphine-hydride occupations remain open |
@@ -38,6 +39,7 @@ tables. Companion states belong to elements outside the chapter being reviewed.
 | [Fe, Ru, Os](#iron-group-work-table) | 210 additions: Fe 81, Ru 57, Os 68; 3 S and 1 O companions; 17 earlier states retained | 223 new; 2 Fe halide spin inputs revised; 1 source comment corrected | Capacities Fe 21, Os 20; Ru/Hs retain 18; ValenceTable unchanged. One compact hydride-bridge MC state; uncertain occupations and specialized Fe(1-norbornyl)₄ states excluded |
 | [Co, Rh, Ir](#cobalt-group-work-table) | 195 additions: Co 63, Rh 68, Ir 64; 13 earlier states retained, 12 sourced and covered | 199 new; 3 supplied-spin inputs revised | Capacities Co 23, Rh/Ir 19; ValenceTable unchanged; no new MC or companion types. Existing Co#c+#n3#u#v remains source-unresolved; other unselected cases below |
 | [Ni, Pd, Pt](#nickel-group-work-table) | 173 additions: Ni 59, Pd 44, Pt 69 and 1 O companion; all 7 earlier states retained and covered | 190 new; 2 bare-ion snapshots revised | Capacities Ni/Pd 20; Pt retains 18; ValenceTable unchanged. Eight local hydride-bridge MC states included; PdF₆− omitted |
+| [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
 
 ### Shared changes and verification
 
@@ -49,7 +51,7 @@ tables. Companion states belong to elements outside the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification after Ni/Pd/Pt | 3,092 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 312 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
+| Verification after XXXII | 3,113 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 312 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
 The Decision Log below is the historical March record; later tracking-table updates are
@@ -67,7 +69,7 @@ from the checkout used for the current verification.
 | `hydrides/` | 399 | Hydrides with explicit or implicit H |
 | `inorganic_small/` | 312 | Small inorganic molecules and salts |
 | `inorganic_ions/` | 449 | Inorganic ions |
-| `donor_acceptor/` | 1153 | Donor–acceptor complexes with dative or multicenter bonds |
+| `donor_acceptor/` | 1174 | Donor–acceptor complexes with dative or multicenter bonds |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
 | `hydrocarbons/` | 82 | C/H compounds |
 | `functional_groups/` | 102 | Organic heteroatom groups (halides, amines, etc.) |
@@ -81,7 +83,7 @@ from the checkout used for the current verification.
 | `metabolites/` | 9 | Metabolites and related natural compounds |
 | `natural_products/` | 5 | Terpenes, steroids and alkaloids |
 | `reactive_intermediates/` | 10 | Organic radicals, ions and related intermediates |
-| **Total** | **3200** | |
+| **Total** | **3221** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -151,6 +153,7 @@ Ti/Zr/Hf rows record the completed selected scope on 2026-11-03.
 V/Nb/Ta/Db rows record the completed selected scope on 2026-11-03.
 Cr/Mo/W/Sg rows record the completed selected scope on 2026-11-04.
 Mn/Tc/Re/Bh rows record the completed selected scope on 2026-11-04.
+Elements with chapter-XXXII additions include that completed scope on 2026-11-04.
 Other rows retain the March record.
 
 Status values:
@@ -182,12 +185,12 @@ Status values:
 | Ar | yes | no | n/a | yes (`atoms/ar.edn`) | done | HW review complete; zero-lone-pair description retained |
 | K | yes | yes (+1, −1) | yes (selected) | yes (7 additions covered) | done | 9 current states; selected HW scope, citation audit and capacity 20 implemented |
 | Ca | yes | yes (+2) | yes (selected) | yes (12 additions covered) | done | 14 current states; additions, citation audit, seven-donor aqua fixture and capacity 16 implemented; water bridges deferred with Ch02 |
-| Sc | yes | yes (+3) | yes (selected) | yes (28 additions covered) | done | 30 current states; both earlier states retained; selected HW scope and citation audit complete |
-| Ti | yes | yes (+2,+3,+4) | yes (selected) | yes (47 additions covered) | done | 50 current states; all 3 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
+| Sc | yes | yes (+3) | yes (selected) | yes (29 additions covered) | done | 31 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 for bis-COT donors |
+| Ti | yes | yes (+2,+3,+4) | yes (selected) | yes (48 additions covered) | done | 51 current states; all 3 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | V | yes | yes (+2,+3,+4,+5) | yes (selected) | yes (57 additions covered) | done | 61 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
-| Cr | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (72 additions covered) | done | 77 current states; all 5 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
+| Cr | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (76 additions covered) | done | 81 current states; all 5 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Mn | yes | yes (+2 through +7) | yes (selected) | yes (62 additions covered) | done | 68 current states; all 6 earlier states retained; citation audit complete; capacity 21 implemented for high-coordinate Mn(II) |
-| Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `atomic_ions/fe+2.toml`, `atomic_ions/fe+3.toml`) | done |  |
+| Fe | yes | yes (selected) | yes (selected) | yes (82 additions covered) | done | 94 current states; selected group and XXXII scopes implemented; capacity 21 |
 | Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `atomic_ions/co+2.toml`, `atomic_ions/co+3.toml`) | done |  |
 | Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `atomic_ions/ni+2.toml`) | done |  |
 | Cu | yes | yes (+1,+2) | yes (selected) | yes (29 additions covered) | done | 32 current states; selected HW scope, citation audit and capacity 21 implemented |
@@ -200,12 +203,12 @@ Status values:
 | Kr | yes | no | yes (selected) | yes (`atoms/kr.edn`, `inorganic_small/krf2.edn`, `inorganic_ions/krf+.edn`, `donor_acceptor/hcn-krf+.edn`) | done | HW review complete; all four retained states covered |
 | Rb | yes | yes (+1, −1) | yes (selected) | yes (5 additions covered) | done | 7 current states; selected HW scope, citation audit and capacity 16 implemented |
 | Sr | yes | yes (+2) | yes (selected) | yes (11 additions covered) | done | 13 current states; additions, citation audit, seven-/eight-donor aqua fixtures and capacity 16 implemented; water bridges deferred with Ch02 |
-| Y | yes | yes (+3) | yes (selected) | yes (25 additions covered) | done | 27 current states; both earlier states retained; selected HW scope and citation audit complete |
-| Zr | yes | yes (+3,+4) | yes (selected) | yes (44 additions covered) | done | 46 current states; both earlier states retained; both ZrH2 occupations, Schwartz's reagent and selected donor states implemented; capacity 20 implemented |
-| Nb | yes | yes (+3,+4,+5) | yes (selected) | yes (48 additions covered) | done | 50 current states; both earlier states retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
-| Mo | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (94 additions covered) | done | 98 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
+| Y | yes | yes (+3) | yes (selected) | yes (26 additions covered) | done | 28 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 for bis-COT donors |
+| Zr | yes | yes (+3,+4) | yes (selected) | yes (45 additions covered) | done | 47 current states; both earlier states retained; both ZrH2 occupations, Schwartz's reagent and selected donor states implemented; capacity 20 implemented |
+| Nb | yes | yes (+3,+4,+5) | yes (selected) | yes (49 additions covered) | done | 51 current states; both earlier states retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
+| Mo | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (96 additions covered) | done | 100 current states; all 4 earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
 | Tc | yes | yes (+2 through +7) | yes (selected) | yes (60 additions covered) | done | 61 current states; earlier atom retained; selected scope and citation audit complete; capacity 18 unchanged |
-| Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `atomic_ions/ru+2.toml`, `atomic_ions/ru+3.toml`) | done |  |
+| Ru | yes | yes (selected) | yes (selected) | yes (58 additions covered) | done | 61 current states; selected group and XXXII scopes implemented; capacity 18 |
 | Rh | yes | yes (+2,+3) | partial | yes (`atoms/rh.edn`, `atomic_ions/rh+2.edn`, `atomic_ions/rh+3.edn`, Rh–H donor fixture below) | done | Hydrogen companion addition: Rh#c+3#n3#t6 |
 | Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `atomic_ions/pd+2.toml`) | done |  |
 | Ag | yes | yes (+1,+2) | yes (selected) | yes (18 additions covered) | done | 22 current states; selected HW scope, citation audit and capacity 21 implemented; ambiguous Cs2AgF6 unselected |
@@ -224,7 +227,7 @@ Status values:
 | Po | yes | yes (+2, +4, −2) | yes (selected) | yes (all seven states) | done | Five states added; citation and default-scope audit complete; PoF6 omitted for lack of composition evidence |
 | At | yes | yes (+1, -1) | partial | yes (selected HW states) | done | Nine states added; terminal At− donor and [At(py)2]+ not selected |
 | Rn | yes | no | none selected | yes (`atoms/rn.edn`) | done | HW review complete; unsupported compound states removed; Rn#n4 retained |
-| La | yes | yes (+3) | yes (selected) | yes (26 additions covered) | done | 28 current states; both earlier states retained; selected HW scope and citation audit complete |
+| La | yes | yes (+3) | yes (selected) | yes (27 additions covered) | done | 29 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 for bis-COT donors |
 | Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `atomic_ions/ce+3.toml`, `atomic_ions/ce+4.toml`) | done |  |
 | Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `atomic_ions/pr+3.toml`, `atomic_ions/pr+4.toml`) | done | Counts requires `Pr` valence-table support for +4 |
 | Nd | yes | yes (+3) | no | yes (`atoms/nd.toml`, `atomic_ions/nd+3.toml`) | done |  |
@@ -239,11 +242,11 @@ Status values:
 | Tm | yes | yes (+3) | no | yes (`atoms/tm.toml`, `atomic_ions/tm+3.toml`) | done |  |
 | Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `atomic_ions/yb+2.toml`, `atomic_ions/yb+3.toml`) | done |  |
 | Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `atomic_ions/lu+3.toml`) | done |  |
-| Hf | yes | yes (+3,+4) | yes (selected) | yes (27 additions covered) | done | 29 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
-| Ta | yes | yes (+3,+4,+5) | yes (selected) | yes (55 additions covered) | done | 56 current states; earlier state retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
-| W | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (94 additions covered) | done | 95 current states; earlier atom retained; selected HW scope and citation audit complete; capacity 18 unchanged; 13 unselected phosphine-hydride occupations remain open |
+| Hf | yes | yes (+3,+4) | yes (selected) | yes (28 additions covered) | done | 30 current states; both earlier states retained; selected HW scope and citation audit complete; capacity 20 implemented; tentative HfH3 unselected |
+| Ta | yes | yes (+3,+4,+5) | yes (selected) | yes (56 additions covered) | done | 57 current states; earlier state retained; selected HW scope and citation audit complete; uncertain II phosphine states omitted; capacity 18 unchanged |
+| W | yes | yes (+2,+3,+4,+5,+6) | yes (selected) | yes (98 additions covered) | done | 99 current states; earlier atom retained; selected HW scope and citation audit complete; capacity 18 unchanged; 13 unselected phosphine-hydride occupations remain open |
 | Re | yes | yes (+2 through +7) | yes (selected) | yes (121 additions covered) | done | 122 current states; earlier atom retained; selected scope and citation audit complete, including four hydride-bridge states; capacity 18 unchanged |
-| Os | yes | no | no | yes (`atoms/os.toml`) | done |  |
+| Os | yes | yes (selected) | yes (selected) | yes (69 additions covered) | done | 70 current states; selected group and XXXII scopes implemented; capacity 20 |
 | Ir | yes | no | no | yes (`atoms/ir.toml`) | done |  |
 | Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `atomic_ions/pt+2.toml`) | done |  |
 | Au | yes | yes (−1,+1,+3) | yes (selected) | yes (30 additions and existing Au³⁺ triplet covered by 31 new fixtures) | done | 34 current states; all four earlier states retained; selected HW scope and citation audit complete; capacity 18 unchanged |
@@ -2433,11 +2436,13 @@ remain dative. Their counts describe the supplied graph, not measured population
 
 #### Scandium-group Counts comparison and coverage
 
-The current model gives all four elements three valence electrons and capacity 18.
+The group-3 review used three valence electrons and capacity 18 for all four elements.
+The later [chapter-XXXII selection](#transition-metal-classes-chapter-xxxii) raises
+Sc/Y/La capacity to 20 for bis-COT anions; Ac retains 18.
 For the 79 additions, `E = 3 − charge + h + v + 2t` and
 `2n + u = 3 − charge − h − v − 2d`; none has an MC contribution.
-All are distinct from the existing entries. Required capacities range from 3 to
-18; capacities are unchanged. The hydride singlet/doublet occupations and
+All are distinct from the existing entries. That batch required capacities from 3 to
+18 and did not change the limits. The hydride singlet/doublet occupations and
 Sc(II) doublet are taken from the reviewed sources, rather than from free-ion spin.
 There are no direct Sc/Y/La/Ac ValenceTable entries. Explicit-H and nonhydride
 graphs default implicit H to zero; deliberate implicit-H variants supply #h.
@@ -3448,3 +3453,69 @@ No required source check remains outstanding.
 | P82 | Pacchioni, Fantucci and Valenti, “The electronic structure of carbonyl metal clusters: I. An INDO investigation of mono-, di- and trinuclear nickel complexes,” *J. Organomet. Chem.* **224** (1982), 89–105. [DOI](https://doi.org/10.1016/S0022-328X(00)82570-X), [PDF](../materials/valence/Pacchioni-1982-nickel-carbonyl-clusters.pdf) | Reviewed and archived. Closed-shell HNi₂(CO)₆− calculation and protonation analysis; explicitly separates characterized and assumed cluster structures. Ni45a/b. H− contribution allocation is PW, not the paper’s formal Ni(−I)/H+ bookkeeping. |
 | K04 | Karpov, Wedig and Jansen, “Pt-Dumbbells in Ba₃Pt₂: Interplay of Geometric and Relativistic Effects on Pt–Pt Bonding,” *Z. Naturforsch. B* **59** (2004), 1387–1394. [DOI](https://doi.org/10.1515/znb-2004-11-1204), [PDF](../materials/valence/Karpov-2004-platinum-dumbbells.pdf) | Reviewed and archived. Pt–Pt covalency, metallic bands and partial-charge analysis; no definite local occupation for a discrete Pt₂³− graph. Ni46 remains unselected. |
 | M01 | Makiura et al., “An unusual six-co-ordinate platinum(II) complex containing a neutral I₂ ligand,” *Chem. Commun.* (2001), 1642–1643. [DOI](https://doi.org/10.1039/B103648N), [PDF](../materials/valence/Makiura-2001-platinum-diiodine.pdf) | Reviewed and archived. X-ray structure and XPS establish six-coordinate Pt(II); p. 1642 explicitly describes Pt→I₂ donation. Supports retaining capacity 18 for this graph, Ni49; no additional default state selected. |
+
+### Transition-metal classes (chapter XXXII)
+
+Selected scope implemented 2026-11-04. HW II, pp. 2067–2217 covers inorganic complexes,
+carbonyls and related ligands, and organometallic families; pp. 2217–2223 contains
+the bibliography. Much of the inorganic/carbonyl evidence already supports the
+completed group tables. The cross-group selection and source checks are complete.
+
+**21 additions implemented** (Cr 4, Mo 2, W 4;
+Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each), covered by 21 independent fixtures.
+Sc/Y/La capacity is raised from 18 to 20. ValenceTable is unchanged; no new MC or
+C/N/O companion state is added. The NMR-supported Ti/Zr/Hf paired occupations
+are accepted assignments.
+
+#### Chapter-XXXII work table
+
+Element prefixes apply to each suffix. States use concrete, zero-valence defaults.
+The selected graphs retain the existing Cp− six-electron donor and terminal-CO
+donor conventions. Bridging CO uses ordinary M–C bonds and C=O. These integer
+graph allocations are PW; HW supplies the structures and bonding descriptions.
+
+| ID | Family / states | Disposition | Evidence and scope |
+| --- | --- | --- | --- |
+| Tm01 | Hydrides, halides, cyanides, oxides, nitrides and N₂/O₂ complexes | Reuse / evidence | HW 2067–2108 reinforces the group selections. Ordinary ligand bonds, anionic donation and the selected hydride bridges cover the reviewed common motifs. Extended solids and higher nuclearity cages do not supply molecular types merely from stoichiometry. |
+| Tm02 | Carbonyls; CS/CSe/CTe, CNR and PF₃ substitutions | Mainly existing states | HW 2108–2150. The reviewed substitutions reuse existing metal acceptor totals and C/N/P/S/Se/Te ligand states. The Ti addition and unsupported neutral Co(CNR)₅ are separated in Tm13a/b. |
+| Tm03 | Cr: #c-4#n5#t4 | Implemented; 1 | Cr(NO)₄ with four NO⁺ donors. HW 2150–2151 explicitly gives the NO⁺ description and diamagnetism. Existing N#v3#d and O#c+#n#v3 suffice. |
+| Tm04 | Other selected nitrosyls | Existing states | HW 2151–2157: Co(CO)₃NO, Fe(CO)₂(NO)₂, Mn(CO)(NO)₃, Mn(CO)₄NO, V(CO)₅NO, and the Fe/Co nitrosyl-halide dimers reuse existing types. The NO− description of bent [Co(NH₃)₅NO]²⁺ also does. HW 2154 gives exceptions to assigning NO charge from geometry alone; no universal linear/bent rule is adopted. |
+| Tm05 | Cr/W: #n2#v2#t5 | Implemented; 2 | Localized M=C in (CO)₅M=C(R)(OR), HW 2165–2167, Figs. 32.63c/32.64. Mo's corresponding state already exists. The alternative neutral-carbene donation uses existing M#n3#t6 and C#v2#d. |
+| Tm06 | W: #n#v4#t4 | Implemented; 1 | X–W≡CR with four CO donors, HW 2168, Fig. 32.65b; ordinary halide and carbyne bonds. Cr/Mo counterparts already exist. The separate Schrock W(OR)₃≡CR example uses existing W#v6. |
+| Tm07 | Cr/Mo/W: #c+#n2#v#t6 | Implemented; 3 | [CpM(CO)₃]₂: one ordinary M–M bond, three terminal CO donors per metal. HW 2202–2203, Fig. 32.100f explicitly describes the single bond. |
+| Tm08 | Cr/Mo/W: #c+#n#v3#t5 | Implemented; 3 | [CpM(CO)₂]₂: ordinary M≡M and two terminal CO donors per metal. HW 2202 explicitly assigns the triple bond; Fig. 32.100g. |
+| Tm09 | Fe/Ru: #c+#n2#v3#t4; Os: #c+#n3#v#t5 | Implemented; 3 | [CpM(CO)₂]₂, HW 2202–2203, Fig. 32.100i. Fe/Ru: two μ-CO bridges, one terminal CO per metal and M–M. Os: no bridging CO, as explicitly noted in the figure; M–M plus two terminal CO per metal. |
+| Tm10a | Olefins, dienes, allyls, Cp and arenes | Existing coverage / graph choices | HW 2175–2216 adds examples for existing acceptor totals: Ni(olefin)₃, Ni(COD)₂, Fe(CO)₃(diene), M(CO)₃(arene) (Cr/Mo/W), and the common metallocenes. Hapticity is represented by dative relations; it does not itself require MC states. Mixed hapticity must be read from the particular structure. |
+| Tm10b | Zr/Hf: #c+2#n#t8 | Implemented; 2 | Cp₂M(CO)₂, HW 2201–2203, Table 32.24/Fig. 32.100a: two Cp− and two terminal CO donors, with HW's 18-electron count. TB76, pp. 298–300, establishes monomers by MS/IR/NMR; sharp Cp ¹H signals at τ 4.89/4.97 support the paired allocation alongside the existing Ti counterpart (Tg20c). Pairing is inferred; the paper reports no magnetic measurement or explicit electronic multiplicity. |
+| Tm11 | Fe: #n3#u2#t6 | Not selected | Fe(η⁶-C₆Me₆)₂: HW 2180 explicitly gives 20 electrons and two unpaired electrons; see also 2207. Fits Fe capacity 21, but excluded from the default additions because the present support is this narrow example. Fe(C₆H₆)₂ has η⁶/η⁴ coordination and reuses Fe#n4#t5. |
+| Tm12 | Sc/Y/La: #c+3#t10 | Implemented; 3 | [M(η⁸-C₈H₈)₂]−, HW 2212, 2214: two COT²− ten-electron donors to M³⁺. Capacity raised from 18 to 20, without MC or new ligand types. HW 2214 explicitly lists these three true sandwich structures; Ac's formula on 2212 alone is not used to extend the assignment. |
+| Tm13a | Ti: #n2#t7 | Implemented; 1 | Ti(CO)₅(dmpe), Ti(CO)₃(dmpe)₂ and Ti(CO)₄(trmpe), HW 2109; CE88, pp. 164–165, 168–170. Seven neutral pair donors and two remaining pairs give 18 electrons. Resolved ¹H couplings and multinuclear NMR support the paired allocation, which is inferred rather than an explicit spin assignment; no magnetic measurement is reported. The state covers all three isolated complexes, including the more stable tri-/tetracarbonyls. |
+| Tm13b | Neutral Co(CNR)₅ | Omitted; occupation unsupported | HW 2150 lists the formula without specifying R or an occupation. No primary evidence establishing that species and its occupation was obtained; no state is added prospectively. |
+| Tm13c | Nb/Ta: #n2#u#t6 | Implemented; 2 | HW 2207; CDG83, pp. 1152–1155, 1157: ESR explicitly supports the ²A₁, e₂⁴a₁¹ occupation for Nb(arene)₂ and Ta(C₆H₆)₂; Nb photoelectron spectra corroborate it. Nb examples include benzene, toluene and mesitylene. Two neutral six-electron arene donors give 17 electrons under the existing graph convention. |
+| Tm14 | Bare [CpM(NO)₂]⁺; Fe(NO)₄/Co(NO)₃; isolated carbene formulas | Not selected | LW84's opening page says bare [CpCr(NO)₂]⁺ could not be isolated; its MeCN adduct reuses Cr#n3#t6. No bare Mo/W state is inferred by analogy. HW 2150 questions the homoleptic Fe/Co nitrosyl identifications. Cr(CO)₄(carbene) and Ni(CO)₃(carbene)₂ on 2165 require primary verification before deriving extra acceptor/occupation states. |
+| Tm15 | η²-H₂, agostic C–H and other σ-bond donors | Deferred model work | HW 2071–2074, 2169–2174 explicitly describes donation from an existing bond. Counting that pair as an independent atomic lone-pair donation would double-count it. No atom-type or MC workaround is added. |
+| Tm16 | Higher clusters, multideckers and specialized redox endpoints | Not selected | HW 2081–2084, 2113–2121, 2197–2203, 2212–2216. No per-scaffold MC types or automatic state ladders from the listed formulas. The small dimers in Tm07–Tm09 retain explicit ordinary metal–metal bonds. |
+
+The capacity expansion admits two ten-electron COT²− donors to Sc/Y/La³⁺ in Tm12:
+20 electrons, with no change to their three valence electrons or to Ac's capacity.
+The other states count 18 electrons, except Nb/Ta bisarenes at 17.
+
+All 21 added states have inferred occupation coverage in 21 donor–acceptor fixtures;
+both metal sites are checked in each dimer. AtomTyping and Counts agree under
+Strict and MostSaturated for every new input, with passing electron-count validation
+(120 atom-state checks across the four configurations). All 3,092 earlier snapshots
+remain unchanged. The full 3,113-case conformance suite, 223 graph property tests,
+3,594 graph unit tests and 312 chemistry tests pass, as do formatting and Clippy.
+No selected work remains outstanding for this chapter.
+
+#### Chapter-XXXII sources and access
+
+HW citations are printed Band II pages. Intermediates are in
+`scratch/hw-chapter32-review/`; retained source material is under `materials/valence/`.
+
+| Key | Source | Access / contribution |
+| --- | --- | --- |
+| CE88 | Chi, Frerichs, Stein, Blackburn and Ellis, “Highly Reduced Organometallics. 20. The First General Synthetic Route to Zerovalent Titanium Carbonyls. Synthesis and Properties of Ti(CO)₅(Me₂PCH₂CH₂PMe₂),” *J. Am. Chem. Soc.* **110** (1988), 163–171. [DOI](https://doi.org/10.1021/ja00209a026), [PDF](../materials/valence/Chi-1988-titanium-carbonyls.pdf) | Supplied full paper reviewed and archived. Seven-coordinate Ti(CO)₅(dmpe) is established by ¹³C/³¹P coupling, pp. 168–169; its detailed geometry remains tentative. Ti(CO)₃(dmpe)₂ and Ti(CO)₄(trmpe) independently share the seven-donor count. NMR supports the adopted paired occupation in Tm13a; no explicit electronic multiplicity or magnetic measurement. |
+| CDG83 | Cloke, Dix, Green, Perutz and Seddon, “Electron spin resonance and photoelectron studies of neutral bis(η-arene)metal compounds (metal = Ti, V, Nb, Ta, Mo, and W),” *Organometallics* **2** (1983), 1150–1159. [DOI](https://doi.org/10.1021/om50003a014), [PDF](../materials/valence/Cloke-1983-bisarenes.pdf) | Supplied full paper reviewed and archived. ESR measurements and simulations, pp. 1152–1154, and the explicit ²A₁, e₂⁴a₁¹ assignment on p. 1157 settle Tm13c. Photoelectron spectra independently support Nb's occupation, pp. 1155–1156; Ta's photoelectron spectrum was not obtained because of thermal decomposition. |
+| LW84 | Legzdins and Wassink, “Organometallic nitrosyl chemistry. 21. Redox properties of bis[(η⁵-cyclopentadienyl)dinitrosylchromium] and related complexes,” *Organometallics* **3** (1984), 1811–1817. [DOI](https://doi.org/10.1021/om00090a006), [archived first page](../materials/valence/Legzdins-Wassink-1984-nitrosyl-redox-first-page.pdf) | Only p. 1811 retrieved, from a repository PDF appended to the preceding article. Its abstract distinguishes the unisolated bare cation from the MeCN adduct; sufficient for the restricted Tm14 finding, not a full-paper review. |
+| TB76 | Thomas and Brown, “Zirconocene dicarbonyl and hafnocene dicarbonyl, first carbonyl derivatives of zirconocene and hafnocene,” *J. Organomet. Chem.* **111** (1976), 297–301. [Repository PDF](https://deepblue.lib.umich.edu/bitstream/handle/2027.42/21771/0000165.pdf?sequence=1), [archived PDF](../materials/valence/Thomas-Brown-1976-metallocene-dicarbonyls.pdf) | Supplied full paper reviewed and archived. MS/IR/NMR and isolation data establish the two monomeric dicarbonyls, pp. 298–300. Sharp Cp ¹H NMR signals support Tm10b's adopted paired occupation; no explicit electronic multiplicity or magnetic measurement. |

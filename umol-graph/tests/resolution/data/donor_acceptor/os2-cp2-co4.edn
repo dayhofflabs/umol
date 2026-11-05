@@ -1,0 +1,9 @@
+; [CpOs(CO)2]2, terminal CO, M-M single bond; HW II, pp. 2202-2203; donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c+#u0" "Os#c+#u0" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-" "O#c+" "C#c-" "O#c+"
+                 "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-" "O#c+" "C#c-" "O#c+"]
+         :bonds [[0 1 "1"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 2 "1#a"] [7 8 "3"] [9 10 "3"]
+                 [11 12 "1#a"] [12 13 "1#a"] [13 14 "1#a"] [14 15 "1#a"] [15 11 "1#a"] [16 17 "3"] [18 19 "3"]]
+         :dative-bonds [{:donors [2 3 4 5 6] :acceptor 0 :attrs "3"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [11 12 13 14 15] :acceptor 1 :attrs "3"}
+                        {:donors [16] :acceptor 1 :attrs "1"} {:donors [18] :acceptor 1 :attrs "1"}]}}
