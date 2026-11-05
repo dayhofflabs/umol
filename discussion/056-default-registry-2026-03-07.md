@@ -40,8 +40,8 @@ Companion states belong to elements outside the chapter being reviewed.
 | [Co, Rh, Ir](#cobalt-group-work-table) | 195 additions: Co 63, Rh 68, Ir 64; 13 earlier states retained, 12 sourced and covered | 199 new; 3 supplied-spin inputs revised | Capacities Co 23, Rh/Ir 19; ValenceTable unchanged; no new MC or companion types. Existing Co#c+#n3#u#v remains source-unresolved; other unselected cases below |
 | [Ni, Pd, Pt](#nickel-group-work-table) | 173 additions: Ni 59, Pd 44, Pt 69 and 1 O companion; all 7 earlier states retained and covered | 190 new; 2 bare-ion snapshots revised | Capacities Ni/Pd 20; Pt retains 18; ValenceTable unchanged. Eight local hydride-bridge MC states included; PdF₆− omitted |
 | [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
-| [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 25 in `organometallics/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
-| [Actinides, XXXVI](#actinide-work-table) | 243 additions, including 6 hydride-bridge MC states; 51 earlier states retained and sourced | 243 new: 216 in `actinides/`, 21 in `organometallics/`, 6 in `multicenter_bonds/`; all added states covered | Capacities Np/Cf 27, Pu 28; No unpaired maximum 1. ValenceTable unchanged; UF₉³⁻/UF₁₀⁴⁻ unselected |
+| [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 16 in `organometallics/`, 9 in `haptic_bonds/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
+| [Actinides, XXXVI](#actinide-work-table) | 243 additions, including 6 hydride-bridge MC states; 51 earlier states retained and sourced | 243 new: 216 in `actinides/`, 3 in `organometallics/`, 18 in `haptic_bonds/`, 6 in `multicenter_bonds/`; all added states covered | Capacities Np/Cf 27, Pu 28; No unpaired maximum 1. ValenceTable unchanged; UF₉³⁻/UF₁₀⁴⁻ unselected |
 
 ### Shared changes and verification
 
@@ -54,6 +54,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
 | Verification after XXXVI | 3,602 available resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass; formatting and Clippy pass. The 108 Beyer/Walter inputs recorded below were absent from this checkout |
+| Haptic fixture split | 115 fixtures and their snapshots moved to `haptic_bonds/`; contents unchanged. All 3,602 resolution cases pass after the move (8.84 s) |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations. `scratch/` contains intermediates only |
 
 The Decision Log below is the historical March record; later tracking-table updates are
@@ -68,7 +69,8 @@ from the checkout used for the current verification.
 |---|---|---|
 | `atoms/` | 108 | Free atoms (ground/excited states), H through Hs |
 | `atomic_ions/` | 217 | Atomic ions and Hg₂²⁺ |
-| `organometallics/` | 332 | Metal–carbon bonds, carbonyls, haptic ligands and related organometallic descriptions |
+| `organometallics/` | 217 | Metal–carbon bonds, carbonyls and complexes with η ≤ 2 ligands |
+| `haptic_bonds/` | 115 | At least one ligand with η > 2: Cp, arene, COT and allyl complexes; explicit MC and metal–metal cases retain their own categories |
 | `organoelement/` | 16 | Organic B, Si–Pb, As–Bi and Se–Po compounds |
 | `organosulfur/` | 4 | Carbon–sulfur compounds; broader organic selection is being reorganized separately |
 | `donor_acceptor/` | 46 | Molecular Lewis donor–acceptor adducts |
@@ -3552,9 +3554,9 @@ Reviewed 2026-11-04: HW II, chapter XXXV, pp. 2288–2310; bibliography 2310–2
 **Implemented: 232 additions**, including 3 La companions and 3 hydride-bridge
 MC states; all 34 earlier Ce–Lu bare-atom/ion states are retained. The capacity
 changes and Nd/Dy enumeration bounds are implemented. The two Nd crown states are
-excluded; Nd capacity remains 26. The 246 new fixtures are now split across
-`lanthanides/` (218),
-`organometallics/` (25) and `multicenter_bonds/` (3). Actinide fixtures use
+excluded; Nd capacity remains 26. The 246 new fixtures are split across
+`lanthanides/` (218), `organometallics/` (16), `haptic_bonds/` (9) and
+`multicenter_bonds/` (3). Actinide fixtures use
 `actinides/` and the applicable bonding categories.
 
 #### Occupations used in the table
@@ -3692,7 +3694,7 @@ intermediates in `scratch/hw-lanthanide-review/`; the tables here are the durabl
 Reviewed 2026-11-04: HW II, chapter XXXVI, pp. 2312–2346; bibliography
 2347–2348. **Implemented: 243 new states and 243 fixtures.**
 The unselected rows below are excluded from that count. Element-organized
-fixtures are in `actinides/`; organometallic and explicit MC inputs belong in
+fixtures are in `actinides/`; organometallic, haptic and explicit MC inputs belong in
 their respective bonding categories. Added-state coverage, rather than a fixture
 for every extracted compound, remains the requirement.
 
@@ -3810,8 +3812,9 @@ enumeration maximum is 0 → 1 for No(III), An01; its capacity remains 26.
 ValenceTable and valence-electron counts are unchanged.
 
 The 243 independent fixtures cover every added state: 216 in `actinides/`,
-21 in `organometallics/` and six in `multicenter_bonds/`. Source occupations are
-supplied where needed to distinguish them from Counts' minimum-unpaired fallback.
+three in `organometallics/`, 18 in `haptic_bonds/` and six in `multicenter_bonds/`.
+Source occupations are supplied where needed to distinguish them from Counts'
+minimum-unpaired fallback.
 All four model/policy combinations give the selected states and pass the valence
 invariants check: 1,008 metal-site checks across 252 sites. All 3,359 earlier
 resolution snapshots are unchanged; all 3,602 available resolution cases pass.
