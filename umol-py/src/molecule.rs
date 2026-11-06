@@ -2484,6 +2484,7 @@ mod tests {
                     "C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!",
                     "C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!",
                     "C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!",
+                    "C#c0#h2#n0#u2#s#v0#d0#t0#a!#m!",
                     "C#c0#h2#n#u0#s#v0#d0#t0#a!#m!",
                     "C#c0#h#n#u#s2#v0#d0#t0#a!#m!",
                     "C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!",
