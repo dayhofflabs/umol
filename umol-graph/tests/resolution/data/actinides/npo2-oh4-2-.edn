@@ -1,0 +1,4 @@
+; NpO2(OH)4(2-); HW II, pp. 2328-2330; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Np#c-2#u" "O" "O" "O#h" "O#h" "O#h" "O#h"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

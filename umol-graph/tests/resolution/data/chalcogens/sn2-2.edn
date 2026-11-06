@@ -1,0 +1,4 @@
+; Sulfur diimide dianion: N(-)=S=N(-); HW I, p. 686; V18, Fig. 1a and Table 2.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N#c-" "S" "N#c-"]
+         :bonds [[0 1 :double] [1 2 :double]]}}

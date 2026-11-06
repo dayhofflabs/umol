@@ -1,0 +1,10 @@
+; VH(PF3)6, diamagnetic; Kruck and Hempel (1974), pp. 201-202; doi:10.1002/anie.197402011.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V" "H" "P" "F" "F" "F" "P" "F" "F" "F" "P" "F" "F" "F" "P" "F" "F" "F" "P" "F" "F" "F" "P" "F"
+                 "F" "F"]
+         :bonds [[0 1 "1"] [2 3 "1"] [2 4 "1"] [2 5 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"] [10 11 "1"] [10 12 "1"]
+                 [10 13 "1"] [14 15 "1"] [14 16 "1"] [14 17 "1"] [18 19 "1"] [18 20 "1"] [18 21 "1"] [22 23 "1"]
+                 [22 24 "1"] [22 25 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [14] :acceptor 0 :attrs "1"}
+                        {:donors [18] :acceptor 0 :attrs "1"} {:donors [22] :acceptor 0 :attrs "1"}]}}

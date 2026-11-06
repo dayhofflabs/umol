@@ -1,0 +1,4 @@
+; CoO2(3-), d8 triplet; HW II, p. 1999; S03Co, pp. 97-98; charge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#c-3#u2" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

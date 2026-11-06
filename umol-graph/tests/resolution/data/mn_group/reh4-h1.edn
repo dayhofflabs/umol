@@ -1,0 +1,4 @@
+; ReH4, 1 unpaired electrons; WA03MnRe, pp. 4088-4089
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#u1#h1" "H" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

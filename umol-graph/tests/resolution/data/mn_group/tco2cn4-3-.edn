@@ -1,0 +1,5 @@
+; trans-TcO2(CN)4(3-), paired d2; HW II, p. 1924; F82, pp. 5303, 5305
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tc#c-3" "O" "O" "C" "N" "C" "N" "C" "N" "C" "N"]
+         :bonds [[0 1 "2"] [0 2 "2"] [3 4 "3"] [0 3 "1"] [5 6 "3"] [0 5 "1"] [7 8 "3"] [0 7 "1"] [9 10 "3"]
+                 [0 9 "1"]]}}

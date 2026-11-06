@@ -1,0 +1,4 @@
+; Molecular ZnH doublet; Wang and Andrews (2004), Tables 5-6; doi:10.1021/jp046414m.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zn" "H"]
+         :bonds [[0 1 "1"]]}}

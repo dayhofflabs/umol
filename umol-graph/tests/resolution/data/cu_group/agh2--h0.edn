@@ -1,0 +1,4 @@
+; Linear singlet AgH2-; Andrews and Wang (2003), pp. 11753-11756; doi:10.1021/ja036307q.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ag#c-" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

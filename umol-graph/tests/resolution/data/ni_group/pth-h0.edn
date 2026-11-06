@@ -1,0 +1,4 @@
+; PtH, doublet; A01Pt, pp. 1561-1562
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#u1" "H"]
+         :bonds [[0 1 "1"]]}}

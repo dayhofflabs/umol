@@ -1,0 +1,4 @@
+; AsH4+/SbH4+ salts; HW I, p. 951.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["As#c+#h2" "H" "H"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

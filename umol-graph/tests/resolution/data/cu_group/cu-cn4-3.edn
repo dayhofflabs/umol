@@ -1,0 +1,4 @@
+; [Cu(CN)4](-3); HW II, p. 1697, Fig. 22.5; ordinary bonds: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu#c-3" "C" "N" "C" "N" "C" "N" "C" "N"]
+         :bonds [[0 1 "1"] [0 3 "1"] [0 5 "1"] [0 7 "1"] [1 2 "3"] [3 4 "3"] [5 6 "3"] [7 8 "3"]]}}

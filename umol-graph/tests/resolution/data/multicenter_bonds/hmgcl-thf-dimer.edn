@@ -1,0 +1,9 @@
+; [HMgCl(THF)]2; HW I, p. 1444. Two bridging H, terminal Cl and THF at each Mg; 3c2e contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg" "Mg" "H" "H" "Cl" "O" "C#h2" "C#h2" "C#h2" "C#h2" "Cl" "O" "C#h2" "C#h2" "C#h2"
+                 "C#h2"]
+         :bonds [[0 4 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"] [1 10 "1"] [11 12 "1"]
+                 [12 13 "1"] [13 14 "1"] [14 15 "1"] [15 11 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 1 :attrs "1"}]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

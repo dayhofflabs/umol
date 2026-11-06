@@ -1,0 +1,4 @@
+; Molecular PdF, doublet; W16, Table 1; formal allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#u1" "F"]
+         :bonds [[0 1 "1"]]}}

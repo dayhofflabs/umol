@@ -1,0 +1,4 @@
+; Matrix-isolated CoH2, observed doublet; VH92, pp. 8123, 8126-8129
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#u1" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

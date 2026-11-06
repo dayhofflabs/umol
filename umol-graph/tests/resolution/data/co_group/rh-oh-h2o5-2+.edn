@@ -1,0 +1,10 @@
+; [Rh(OH)(H2O)5]2+; HW II, p. 2015.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c+3" "O#c-#h" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :bonds []
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

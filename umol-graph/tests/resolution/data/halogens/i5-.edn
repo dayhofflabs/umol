@@ -1,0 +1,7 @@
+; V-shaped I5- as I- associated with two I2 molecules; HW I, pp. 493-494, Fig. 12.7f.
+; Two I- donations use the existing halide-donor and I2-acceptor states.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I#c-" "I" "I" "I" "I"]
+         :bonds [[1 2 :single] [3 4 :single]]
+         :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}
+                        {:donors [0] :acceptor 3 :attrs "1"}]}}

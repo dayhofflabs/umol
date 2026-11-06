@@ -1,0 +1,5 @@
+; [Cu(OH)4]-; HW II, p. 1707; paired d8, bond allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu#c+3" "O#c-#h" "O#c-#h" "O#c-#h" "O#c-#h"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

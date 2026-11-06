@@ -1,0 +1,5 @@
+; [Cl3VN]-; HW I, pp. 757-758, Fig. 14.6g; ionic allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c+2" "Cl" "Cl" "Cl" "N#c-3"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "3"}]}}

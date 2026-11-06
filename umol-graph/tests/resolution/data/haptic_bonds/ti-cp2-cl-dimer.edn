@@ -1,0 +1,14 @@
+; [Cp2Ti(mu-Cl)]2, d1; HW II, p. 1807; bridging chloride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#c+3" "Ti#c+3" "Cl#c-" "Cl#c-" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+"
+                 "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+"
+                 "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[4 5 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 4 "1#a"] [9 10 "1#a"] [10 11 "1#a"]
+                 [11 12 "1#a"] [12 13 "1#a"] [13 9 "1#a"] [14 15 "1#a"] [15 16 "1#a"] [16 17 "1#a"] [17 18 "1#a"]
+                 [18 14 "1#a"] [19 20 "1#a"] [20 21 "1#a"] [21 22 "1#a"] [22 23 "1#a"] [23 19 "1#a"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"}
+                        {:donors [4 5 6 7 8] :acceptor 0 :attrs "3"}
+                        {:donors [9 10 11 12 13] :acceptor 0 :attrs "3"}
+                        {:donors [14 15 16 17 18] :acceptor 1 :attrs "3"}
+                        {:donors [19 20 21 22 23] :acceptor 1 :attrs "3"}]}}

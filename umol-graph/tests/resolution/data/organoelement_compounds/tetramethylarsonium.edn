@@ -1,0 +1,5 @@
+; BW, p. 272; generic class in the book, methyl member; PubChem CID 22065.
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms ["C" "As#c+" "C" "C" "C"]
+  :bonds [[0 1 :single] [1 2 :single] [1 3 :single] [1 4 :single]]}}

@@ -1,0 +1,170 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "U#c-3"
+        "O#n2"
+        "O#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [3 4 :double]
+        [4 5 :double]
+        [0 3 :single]
+        [6 7 :double]
+        [7 8 :double]
+        [0 6 :single]
+        [9 10 :double]
+        [10 11 :double]
+        [0 9 :single]
+        [12 13 :double]
+        [13 14 :double]
+        [0 12 :single]
+        [15 16 :double]
+        [16 17 :double]
+        [0 15 :single]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "U#c-3"
+        "O#n2"
+        "O#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [3 4 :double]
+        [4 5 :double]
+        [0 3 :single]
+        [6 7 :double]
+        [7 8 :double]
+        [0 6 :single]
+        [9 10 :double]
+        [10 11 :double]
+        [0 9 :single]
+        [12 13 :double]
+        [13 14 :double]
+        [0 12 :single]
+        [15 16 :double]
+        [16 17 :double]
+        [0 15 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "U#c-3"
+        "O#n2"
+        "O#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [3 4 :double]
+        [4 5 :double]
+        [0 3 :single]
+        [6 7 :double]
+        [7 8 :double]
+        [0 6 :single]
+        [9 10 :double]
+        [10 11 :double]
+        [0 9 :single]
+        [12 13 :double]
+        [13 14 :double]
+        [0 12 :single]
+        [15 16 :double]
+        [16 17 :double]
+        [0 15 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "U#c-3"
+        "O#n2"
+        "O#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"
+        "N#n"
+        "C"
+        "S#n2"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [3 4 :double]
+        [4 5 :double]
+        [0 3 :single]
+        [6 7 :double]
+        [7 8 :double]
+        [0 6 :single]
+        [9 10 :double]
+        [10 11 :double]
+        [0 9 :single]
+        [12 13 :double]
+        [13 14 :double]
+        [0 12 :single]
+        [15 16 :double]
+        [16 17 :double]
+        [0 15 :single]]}
+    :success true
+    :tie-breaks []}}

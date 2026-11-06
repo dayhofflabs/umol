@@ -1,0 +1,35 @@
+; BW, p. 700
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "Cl"
+    "Hg"
+    "C#c-#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "Cl"
+    "Hg"
+    "C#c-#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "C#a+"
+    "Fe#c+2"]
+  :bonds [
+    [0 1 :single]
+    [1 2 :single]
+    [2 6 "1#a"]
+    [2 3 "1#a"]
+    [3 4 "1#a"]
+    [4 5 "1#a"]
+    [5 6 "1#a"]
+    [7 8 :single]
+    [8 9 :single]
+    [9 13 "1#a"]
+    [9 10 "1#a"]
+    [10 11 "1#a"]
+    [11 12 "1#a"]
+    [12 13 "1#a"]]
+  :dative-bonds [{:donors [2 3 4 5 6] :acceptor 14 :attrs "3"} {:donors [9 10 11 12 13] :acceptor 14 :attrs "3"}]}}

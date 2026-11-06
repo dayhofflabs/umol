@@ -1,0 +1,4 @@
+; MgH doublet; Pang et al. (2023), Table 1; doi:10.1021/acsomega.3c00352.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#h0" "H"]
+         :bonds [[0 1 "1"]]}}

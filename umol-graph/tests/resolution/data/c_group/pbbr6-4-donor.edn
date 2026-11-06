@@ -1,0 +1,11 @@
+; Isolated [PbBr6](4-) in Cs4PbBr6; HW I, p. 1174; S19.
+; Pb(II) ns2 core and six bromide donors; allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#c+2" "Br#c-" "Br#c-" "Br#c-" "Br#c-" "Br#c-" "Br#c-"]
+         :bonds []
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; Molecular FeO; W96, pp. 5298-5299; C96
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u4" "O"]
+         :bonds [[0 1 "2"]]}}

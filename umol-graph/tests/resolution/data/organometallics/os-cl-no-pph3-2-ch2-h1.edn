@@ -1,0 +1,27 @@
+; OsCl(NO)(PPh3)2(CH2); HW II, pp. 2166-2167, Figs. 32.63d and 32.64g.
+; Neutral carbene donation and NO+ allocation: PW; Os occupation supplied.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#n4#u0#s1" "C#h1" "Cl#c-" "N" "O#c+" "P"
+                 "P" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "C" "C#h" "C#h" "C#h" "C#h"
+                 "C#h" "H"]
+         :bonds [[3 4 :triple] [5 7 :single] [7 8 :double] [8 9 :single]
+                 [9 10 :double] [10 11 :single] [11 12 :double] [12 7 :single]
+                 [5 13 :single] [13 14 :double] [14 15 :single] [15 16 :double]
+                 [16 17 :single] [17 18 :double] [18 13 :single] [5 19 :single]
+                 [19 20 :double] [20 21 :single] [21 22 :double] [22 23 :single]
+                 [23 24 :double] [24 19 :single] [6 25 :single] [25 26 :double]
+                 [26 27 :single] [27 28 :double] [28 29 :single] [29 30 :double]
+                 [30 25 :single] [6 31 :single] [31 32 :double] [32 33 :single]
+                 [33 34 :double] [34 35 :single] [35 36 :double] [36 31 :single]
+                 [6 37 :single] [37 38 :double] [38 39 :single] [39 40 :double]
+                 [40 41 :single] [41 42 :double] [42 37 :single] [1 43 :single]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; Formal I+ electrophile in reaction mechanisms.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I#c+"]
+         :bonds []}}

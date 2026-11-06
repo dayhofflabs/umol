@@ -1,0 +1,4 @@
+; Molecular PtF2, triplet; S21, Table 2; formal allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c+2#u2" "F#c-" "F#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}}

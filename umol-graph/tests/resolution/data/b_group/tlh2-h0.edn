@@ -1,0 +1,4 @@
+; TlH2; HW I, pp. 1388-1389.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tl#h0" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

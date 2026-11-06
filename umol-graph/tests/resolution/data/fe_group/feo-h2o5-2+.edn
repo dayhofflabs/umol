@@ -1,0 +1,7 @@
+; Ferryl FeO(2+) pentaaqua ion; HW II, p. 1969; L08, pp. 89-93
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+2#u4" "O" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :bonds [[0 1 "2"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

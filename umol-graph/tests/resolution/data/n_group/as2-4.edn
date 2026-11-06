@@ -1,0 +1,4 @@
+; As2(4-) unit in CaAs; HW I, p. 948.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["As#c-2" "As#c-2"]
+         :bonds [[0 1 :single]]}}

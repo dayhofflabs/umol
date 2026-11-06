@@ -1,0 +1,4 @@
+; PbOH+, hydrolysis-species core; HW I, p. 1185; solvent omitted.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#c+" "O#h"]
+         :bonds [[0 1 "1"]]}}

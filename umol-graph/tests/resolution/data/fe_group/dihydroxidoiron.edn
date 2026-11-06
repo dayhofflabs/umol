@@ -1,0 +1,4 @@
+; Fe(OH)2+, sextet; B00Fe, pp. 38-39.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+" "O#h" "O#h"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

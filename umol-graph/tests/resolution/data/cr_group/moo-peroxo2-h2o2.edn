@@ -1,0 +1,5 @@
+; MoO(O2)2(H2O)2; HW II, p. 1882
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo" "O" "O" "O" "O" "O" "O#h2" "O#h2"]
+         :bonds [[0 1 "2"] [2 3 "1"] [0 2 "1"] [0 3 "1"] [4 5 "1"] [0 4 "1"] [0 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}]}}

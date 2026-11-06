@@ -1,0 +1,3 @@
+; Pt(2-) in Cs2Pt, d10s2; HW II, pp. 2042-2043
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c-2#u0"]}}

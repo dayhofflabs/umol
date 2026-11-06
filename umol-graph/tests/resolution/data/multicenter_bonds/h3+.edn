@@ -1,0 +1,6 @@
+; HW I, p. 290, Fig. 8.3: three-center/two-electron H3+.
+; Atom-centered charge placement: assignment PW; H#m, H#c+#m0, H#m.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["H" "H#c+" "H"]
+         :bonds []
+         :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,0,1]#c0#u0#s1"}]}}

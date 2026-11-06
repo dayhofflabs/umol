@@ -1,0 +1,4 @@
+; MnCl6(4-), high-spin; HW II, pp. 1903, 1906
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c-4#u5" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]}}

@@ -1,0 +1,3 @@
+; H2 with one implicit H; HW I, pp. 287-290.
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["H#h"] :bonds []}}

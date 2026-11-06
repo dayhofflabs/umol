@@ -1,0 +1,4 @@
+; OsNCl4-, paired d2; HW II, pp. 1978-1979, 1982-1983
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c-1#u0" "N" "Cl" "Cl" "Cl" "Cl"]
+         :bonds [[0 1 "3"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]}}

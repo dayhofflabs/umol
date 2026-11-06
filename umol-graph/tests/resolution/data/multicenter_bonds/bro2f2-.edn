@@ -1,0 +1,6 @@
+; BrO2F2-; HW I, p. 545; doi:10.1039/DT9760002391, p. 2393.
+; Axial 3c4e assignment follows ClO2F2-.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Br#c-" "O" "O" "F" "F"]
+         :bonds [[0 1 :double] [0 2 :double]]
+         :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}]}}

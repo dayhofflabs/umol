@@ -1,0 +1,3 @@
+; Molecular ZrH2 singlet; Wang et al. (1990), p. 152; doi:10.1080/00268979000100101.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#u0#h2"]}}

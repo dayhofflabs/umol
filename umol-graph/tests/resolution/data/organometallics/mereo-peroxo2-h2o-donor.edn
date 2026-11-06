@@ -1,0 +1,7 @@
+; MeReO(O2)2(H2O); HW II, pp. 1930-1931; peroxo allocation: PW; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c+4" "O" "O#c-" "O#c-" "O#c-" "O#c-" "C#h3" "O#h2"]
+         :bonds [[0 1 "2"] [2 3 "1"] [4 5 "1"] [0 6 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,12 @@
+; [HAlNiPr]4; HW I, pp. 1368-1369; imido-donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al#c+2#h1" "Al#c+2#h1" "Al#c+2#h1" "Al#c+2#h1" "N#c-2" "N#c-2" "N#c-2" "N#c-2" "C#h" "C#h3"
+                 "C#h3" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3"]
+         :bonds [[4 8 "1"] [8 9 "1"] [8 10 "1"] [5 11 "1"] [11 12 "1"] [11 13 "1"] [6 14 "1"] [14 15 "1"]
+                 [14 16 "1"] [7 17 "1"] [17 18 "1"] [17 19 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 1 :attrs "1"} {:donors [4] :acceptor 2 :attrs "1"}
+                        {:donors [4] :acceptor 3 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 2 :attrs "1"} {:donors [5] :acceptor 3 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 1 :attrs "1"}
+                        {:donors [6] :acceptor 3 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 1 :attrs "1"} {:donors [7] :acceptor 2 :attrs "1"}]}}

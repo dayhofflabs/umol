@@ -1,0 +1,3 @@
+; Pb2(6-) dumbbell in Ba5Pb3; HW I, p. 1165.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#c-3" "Pb#c-3"] :bonds [[0 1 "1"]]}}

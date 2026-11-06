@@ -1,0 +1,4 @@
+; HW I, p. 466; Xe#c+#n3#v.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c+" "F"]
+         :bonds [[0 1 :single]]}}

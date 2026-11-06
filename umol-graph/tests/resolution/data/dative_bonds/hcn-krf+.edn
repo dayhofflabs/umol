@@ -1,0 +1,5 @@
+; HW I, p. 469; HCN->KrF+, Kr#c+#n3#v#t.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Kr#c+" "F" "N" "C" "H"]
+         :bonds [[0 1 :single] [2 3 :triple] [3 4 :single]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"}]}}

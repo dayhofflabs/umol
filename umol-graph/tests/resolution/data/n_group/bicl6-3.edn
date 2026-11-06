@@ -1,0 +1,7 @@
+; BiCl6(3-) as BiCl3 + three Cl- donors; HW I, p. 957; Lo17, manuscript p. 4.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi" "Cl" "Cl" "Cl" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

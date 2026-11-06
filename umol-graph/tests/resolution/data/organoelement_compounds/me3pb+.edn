@@ -1,0 +1,4 @@
+; Me3Pb+, solution cation core; HW I, p. 1195; NBS Technical Note 828 (1974), p. 123.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#c+" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

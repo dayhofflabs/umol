@@ -1,0 +1,6 @@
+; Fe2Cl6; HW II, pp. 1949-1950, 1963; bridging chloride donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+1#u5" "Fe#c+1#u5" "Cl" "Cl" "Cl" "Cl" "Cl#c-" "Cl#c-"]
+         :bonds [[0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 1 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 1 :attrs "1"}]}}

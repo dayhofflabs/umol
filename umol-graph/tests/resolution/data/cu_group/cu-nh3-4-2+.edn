@@ -1,0 +1,5 @@
+; [Cu(NH3)4]2+; HW II, pp. 1694, 1705.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu#c+2" "N#h3" "N#h3" "N#h3" "N#h3"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

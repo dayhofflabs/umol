@@ -1,0 +1,74 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["Os" "O#n2" "O#n2" "O#n2" "O#n2" "N" "C#h" "C#h" "C#h" "C#h" "C#h"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [0 3 :double]
+        [0 4 :double]
+        [5 6 :double]
+        [6 7 :single]
+        [7 8 :double]
+        [8 9 :single]
+        [9 10 :double]
+        [5 10 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["Os" "O#n2" "O#n2" "O#n2" "O#n2" "N" "C#h" "C#h" "C#h" "C#h" "C#h"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [0 3 :double]
+        [0 4 :double]
+        [5 6 :double]
+        [6 7 :single]
+        [7 8 :double]
+        [8 9 :single]
+        [9 10 :double]
+        [5 10 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["Os" "O#n2" "O#n2" "O#n2" "O#n2" "N" "C#h" "C#h" "C#h" "C#h" "C#h"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [0 3 :double]
+        [0 4 :double]
+        [5 6 :double]
+        [6 7 :single]
+        [7 8 :double]
+        [8 9 :single]
+        [9 10 :double]
+        [5 10 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["Os" "O#n2" "O#n2" "O#n2" "O#n2" "N" "C#h" "C#h" "C#h" "C#h" "C#h"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :double]
+        [0 3 :double]
+        [0 4 :double]
+        [5 6 :double]
+        [6 7 :single]
+        [7 8 :double]
+        [8 9 :single]
+        [9 10 :double]
+        [5 10 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}}

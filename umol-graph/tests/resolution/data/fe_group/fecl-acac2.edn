@@ -1,0 +1,6 @@
+; FeCl(acac)2, high-spin; HW II, pp. 1947, 1963; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u5" "Cl" "O" "C" "C#h" "C" "O" "C#h3" "C#h3" "O" "C" "C#h" "C" "O" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [2 3 "1"] [3 4 "2"] [4 5 "1"] [5 6 "2"] [3 7 "1"] [5 8 "1"] [0 2 "1"] [9 10 "1"]
+                 [10 11 "2"] [11 12 "1"] [12 13 "2"] [10 14 "1"] [12 15 "1"] [0 9 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"} {:donors [13] :acceptor 0 :attrs "1"}]}}

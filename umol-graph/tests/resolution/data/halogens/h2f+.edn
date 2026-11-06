@@ -1,0 +1,4 @@
+; H2F+; HW I, pp. 498-499.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["F#c+" "H" "H"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

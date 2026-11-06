@@ -1,0 +1,3 @@
+; Mn6+, free ion d1; HW II, pp. 1901, 1907, 1917, 1923
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c+6#u1"]}}

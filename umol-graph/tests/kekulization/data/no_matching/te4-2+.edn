@@ -1,0 +1,4 @@
+; Te4(2+): square 6pi aromatic ring; HW I, pp. 700-701; charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#c+#a+" "Te#a+" "Te#c+#a+" "Te#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 0 "1#a"]]}}

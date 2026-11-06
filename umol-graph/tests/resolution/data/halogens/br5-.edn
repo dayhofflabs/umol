@@ -1,0 +1,7 @@
+; V-shaped Br5- as Br- associated with two Br2 molecules; HW I, pp. 493-494.
+; Two Br- donations apply the halide-donor convention.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Br#c-" "Br" "Br" "Br" "Br"]
+         :bonds [[1 2 :single] [3 4 :single]]
+         :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}
+                        {:donors [0] :acceptor 3 :attrs "1"}]}}

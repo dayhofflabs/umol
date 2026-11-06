@@ -1,0 +1,126 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Ru#c+2#n2"
+        "Ru#c+2#n2"
+        "N#c+"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [[0 2 :double] [1 2 :double]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 1 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 0 :attrs :single :donors [11]}
+        {:acceptor 1 :attrs :single :donors [12]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Ru#c+2#n2"
+        "Ru#c+2#n2"
+        "N#c+"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [[0 2 :double] [1 2 :double]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 1 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 0 :attrs :single :donors [11]}
+        {:acceptor 1 :attrs :single :donors [12]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Ru#c+2#n2"
+        "Ru#c+2#n2"
+        "N#c+"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [[0 2 :double] [1 2 :double]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 1 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 0 :attrs :single :donors [11]}
+        {:acceptor 1 :attrs :single :donors [12]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Ru#c+2#n2"
+        "Ru#c+2#n2"
+        "N#c+"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "Cl#c-#n3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [[0 2 :double] [1 2 :double]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 1 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 0 :attrs :single :donors [11]}
+        {:acceptor 1 :attrs :single :donors [12]}]}
+    :success true
+    :tie-breaks []}}

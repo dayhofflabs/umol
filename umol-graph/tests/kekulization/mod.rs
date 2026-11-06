@@ -548,7 +548,7 @@ fn test_kekulizer_transform_error(#[case] mut input: Molecule, #[case] expected:
 }
 
 #[derive(FromEdn)]
-struct ResolutionFixture {
+struct KekulizationInput {
     input: MoleculeDsl,
     #[edn(default)]
     config_overrides: MoleculeOverrides,
@@ -556,10 +556,10 @@ struct ResolutionFixture {
 
 #[rstest]
 fn test_kekulizer_transform_corpus(
-    #[files("tests/resolution/data/aromatic/*.edn")] path: PathBuf,
+    #[files("tests/kekulization/data/success/*.edn")] path: PathBuf,
     #[values(false, true)] counts: bool,
 ) {
-    let fixture = ResolutionFixture::from_edn_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let fixture = KekulizationInput::from_edn_str(&fs::read_to_string(&path).unwrap()).unwrap();
     let defaults = MoleculeDefaults::default().with_overrides(fixture.config_overrides);
     let mut model = ChemistryModel {
         valence: if counts {
@@ -586,49 +586,73 @@ fn test_kekulizer_transform_corpus(
         Ok(Solution::Determined(()))
     );
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
-    let output = kekulizer.transform(input.clone());
+    let output = kekulizer.transform(input.clone()).unwrap();
     let mut in_place = input.clone();
-    let result = kekulizer.transform_into(&mut in_place);
-    if path.file_stem().unwrap() == "f420" {
-        assert_eq!(output, Err(KekulizeError::NoMatching(AromaticSystemId(0))));
-        assert_eq!(result, Err(KekulizeError::NoMatching(AromaticSystemId(0))));
-        assert_eq!(in_place, input);
-        assert_eq!(kekulizer.transform_iter(&input).collect::<Vec<_>>(), vec![]);
-    } else {
-        let output = output.unwrap();
-        assert_eq!(result, Ok(()));
-        assert_eq!(in_place, output);
-        assert_eq!(
-            ValenceInvariantsValidator.validate(&output),
-            Ok(Solution::Determined(()))
-        );
-        assert_eq!(output.aromatic_systems().count(), 0);
-        assert_eq!(output.atoms().count(), input.atoms().count());
-        assert_eq!(output.bonds().count(), input.bonds().count());
-        for atom in input.atoms().iter() {
-            let localized = output.atom(atom.id());
-            assert_eq!(localized.element(), atom.element());
-            assert_eq!(localized.charge(), atom.charge());
-            assert_eq!(localized.implicit_hydrogens(), atom.implicit_hydrogens());
-            assert_eq!(localized.unpaired_electrons(), atom.unpaired_electrons());
-        }
+    assert_eq!(kekulizer.transform_into(&mut in_place), Ok(()));
+    assert_eq!(in_place, output);
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&output),
+        Ok(Solution::Determined(()))
+    );
+    assert_eq!(output.aromatic_systems().count(), 0);
+    assert_eq!(output.atoms().count(), input.atoms().count());
+    assert_eq!(output.bonds().count(), input.bonds().count());
+    for atom in input.atoms().iter() {
+        let localized = output.atom(atom.id());
+        assert_eq!(localized.element(), atom.element());
+        assert_eq!(localized.charge(), atom.charge());
+        assert_eq!(localized.implicit_hydrogens(), atom.implicit_hydrogens());
+        assert_eq!(localized.unpaired_electrons(), atom.unpaired_electrons());
     }
 }
 
 #[rstest]
-#[case::f420(include_str!("../resolution/data/aromatic/f420.edn"))]
-fn test_kekulizer_transform_hydrogens(#[case] source: &str, #[values(false, true)] counts: bool) {
-    let fixture = ResolutionFixture::from_edn_str(source).unwrap();
+#[case::no_matching(KekulizeError::NoMatching(AromaticSystemId(0)))]
+fn test_kekulizer_transform_corpus_error(
+    #[files("tests/kekulization/data/no_matching/*.edn")] path: PathBuf,
+    #[values(false, true)] counts: bool,
+    #[case] expected: KekulizeError,
+) {
+    let fixture = KekulizationInput::from_edn_str(&fs::read_to_string(&path).unwrap()).unwrap();
     let defaults = MoleculeDefaults::default().with_overrides(fixture.config_overrides);
-    let mut input = fixture.input.into_ir(&defaults);
-    input
-        .atom_mut(AtomId(17))
-        .attributes_mut()
-        .implicit_hydrogens = NumForm::Lit(0);
-    input
-        .atom_mut(AtomId(20))
-        .attributes_mut()
-        .implicit_hydrogens = NumForm::Lit(1);
+    let mut model = ChemistryModel {
+        valence: if counts {
+            ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
+        } else {
+            ValenceModel::default()
+        },
+        ..Default::default()
+    };
+    model.valence.tie_break = ValenceTieBreak::MostSaturated;
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
+    let solution = resolver.resolve(fixture.input.into_ir(&defaults)).unwrap();
+    let Solution::Determined(input) = solution else {
+        panic!("corpus resolution failed: {solution:?}");
+    };
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&input),
+        Ok(Solution::Determined(()))
+    );
+    let kekulizer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
+    assert_eq!(kekulizer.transform(input.clone()), Err(expected.clone()));
+    let mut in_place = input.clone();
+    assert_eq!(kekulizer.transform_into(&mut in_place), Err(expected));
+    assert_eq!(in_place, input);
+    assert_eq!(kekulizer.transform_iter(&input).collect::<Vec<_>>(), vec![]);
+}
+
+#[rstest]
+#[case::f420(include_str!("data/success/f420-hydrogens.edn"))]
+fn test_kekulizer_transform_hydrogens(#[case] source: &str, #[values(false, true)] counts: bool) {
+    let fixture = KekulizationInput::from_edn_str(source).unwrap();
+    let defaults = MoleculeDefaults::default().with_overrides(fixture.config_overrides);
+    let input = fixture.input.into_ir(&defaults);
     let mut model = ChemistryModel {
         valence: if counts {
             ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))

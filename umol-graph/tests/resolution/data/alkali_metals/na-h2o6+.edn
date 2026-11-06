@@ -1,0 +1,6 @@
+; [Na(H2O)6]+; Mähler and Persson (2012), pp. 431, 436; doi:10.1021/ic2018693.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Na#c+" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

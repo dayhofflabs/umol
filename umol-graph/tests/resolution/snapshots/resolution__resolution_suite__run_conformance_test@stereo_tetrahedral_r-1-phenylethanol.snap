@@ -1,5 +1,5 @@
 ---
-source: umol-graph/tests/resolution/mod.rs
+source: umol-graph/tests/resolution/resolution_suite.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
@@ -19,7 +19,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [7 8 :single]]
       :stereo-atoms [{:attrs :cw :ligands [0 2 3 [:h 1]] :site 1}]}
     :success true
-    :tie-breaks [0 2]}
+    :tie-breaks [0 2 4 5 6 7 8]}
   :atom-typing-strict {
     :success false
     :tie-breaks []
@@ -31,7 +31,12 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#n#v#d0#t0#a!#m!"
         "C#n#u#v#d0#t0#a!#m!"
         "C#u3#v#d0#t0#a!#m!"]
-      2 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]}}
+      2 ["O#h#n2#v#d0#t0#a!#m!" "O#n2#u#v#d0#t0#a!#m!"]
+      4 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      5 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      6 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      7 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]
+      8 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]}}
   :counts-most-saturated {
     :output {
       :aromatic-systems [{:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}]

@@ -1,0 +1,8 @@
+; cis-CoH2(PMe3)4+, classical paired dihydride; HW II, pp. 2000-2002; P90, pp. 1043, 1045-1046
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#c+1#u0#h1" "H" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3" "P"
+                 "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [2 3 "1"] [2 4 "1"] [2 5 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"] [10 11 "1"] [10 12 "1"]
+                 [10 13 "1"] [14 15 "1"] [14 16 "1"] [14 17 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [14] :acceptor 0 :attrs "1"}]}}

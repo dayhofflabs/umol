@@ -1,0 +1,3 @@
+; Zr3+, d1; HW II, pp. 1812-1814.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+3#u1"]}}

@@ -1,0 +1,4 @@
+; Triplet BH2-, calculated; Cernusak et al. (2003), doi:10.1135/cccc20030075.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B#c-#u2#s3#h" "H"]
+         :bonds [[0 1 "1"]]}}

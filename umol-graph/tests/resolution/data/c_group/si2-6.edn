@@ -1,0 +1,4 @@
+; Si2(6-) dumbbell in BaMg2Si2; HW I, p. 1070.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#c-3" "Si#c-3"]
+         :bonds [[0 1 "1"]]}}

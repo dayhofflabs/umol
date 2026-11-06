@@ -1,0 +1,6 @@
+; Ni(CN)4(2-), paired; HW II, pp. 2029, 2033; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c+2#u0" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N"]
+         :bonds [[1 2 "3"] [3 4 "3"] [5 6 "3"] [7 8 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}]}}

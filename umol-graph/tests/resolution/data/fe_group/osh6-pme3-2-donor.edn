@@ -1,0 +1,9 @@
+; OsH6(PR3)2, classical paired hydride; HW II, pp. 1974, 2071; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c+6#u0" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-" "H#c-" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3"
+                 "C#h3"]
+         :bonds [[7 8 "1"] [7 9 "1"] [7 10 "1"] [11 12 "1"] [11 13 "1"] [11 14 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 0 :attrs "1"}]}}

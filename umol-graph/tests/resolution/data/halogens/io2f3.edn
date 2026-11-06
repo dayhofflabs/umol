@@ -1,0 +1,5 @@
+; IO2F3 monomer above 100 degrees C.
+; HW I, p. 546; selected localized assignment without a central lone pair.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["I" "O" "O" "F" "F" "F"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :single] [0 4 :single] [0 5 :single]]}}

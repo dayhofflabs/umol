@@ -1,0 +1,4 @@
+; TcO4-; HW II, pp. 1912-1913, 1924-1925
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tc" "O" "O" "O" "O#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "1"]]}}

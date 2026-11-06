@@ -1,0 +1,2 @@
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["N#i15#c+"] :bonds []}}

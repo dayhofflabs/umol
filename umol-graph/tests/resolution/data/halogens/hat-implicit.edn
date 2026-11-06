@@ -1,0 +1,4 @@
+; HAt; HW I, p. 502.
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["At#u0"]
+         :bonds []}}

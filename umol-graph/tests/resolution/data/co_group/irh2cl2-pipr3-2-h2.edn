@@ -1,0 +1,8 @@
+; IrH2Cl2(PiPr3)2, 17-electron paramagnetic hydride; HW II, p. 2068
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#u1#h2" "Cl" "Cl" "P" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3" "P" "C#h"
+                 "C#h3" "C#h3" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [4 6 "1"] [3 7 "1"] [7 8 "1"] [7 9 "1"] [3 10 "1"]
+                 [10 11 "1"] [10 12 "1"] [13 14 "1"] [14 15 "1"] [14 16 "1"] [13 17 "1"] [17 18 "1"] [17 19 "1"]
+                 [13 20 "1"] [20 21 "1"] [20 22 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [13] :acceptor 0 :attrs "1"}]}}

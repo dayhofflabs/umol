@@ -1,0 +1,4 @@
+; GeH4; HW I, pp. 1167-1168.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ge#s1#h2" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

@@ -1,0 +1,174 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Co#n2#u3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 5 :double]
+        [2 6 :single]
+        [4 7 :single]
+        [0 8 :single]
+        [8 9 :single]
+        [9 10 :double]
+        [10 11 :single]
+        [11 12 :double]
+        [9 13 :single]
+        [11 14 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [12]}
+        {:acceptor 0 :attrs :single :donors [15]}
+        {:acceptor 0 :attrs :single :donors [16]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Co#n2#u3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 5 :double]
+        [2 6 :single]
+        [4 7 :single]
+        [0 8 :single]
+        [8 9 :single]
+        [9 10 :double]
+        [10 11 :single]
+        [11 12 :double]
+        [9 13 :single]
+        [11 14 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [12]}
+        {:acceptor 0 :attrs :single :donors [15]}
+        {:acceptor 0 :attrs :single :donors [16]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Co#n2#u3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 5 :double]
+        [2 6 :single]
+        [4 7 :single]
+        [0 8 :single]
+        [8 9 :single]
+        [9 10 :double]
+        [10 11 :single]
+        [11 12 :double]
+        [9 13 :single]
+        [11 14 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [12]}
+        {:acceptor 0 :attrs :single :donors [15]}
+        {:acceptor 0 :attrs :single :donors [16]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Co#n2#u3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#n2"
+        "C"
+        "C#h"
+        "C"
+        "O#n"
+        "C#h3"
+        "C#h3"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :double]
+        [3 4 :single]
+        [4 5 :double]
+        [2 6 :single]
+        [4 7 :single]
+        [0 8 :single]
+        [8 9 :single]
+        [9 10 :double]
+        [10 11 :single]
+        [11 12 :double]
+        [9 13 :single]
+        [11 14 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [12]}
+        {:acceptor 0 :attrs :single :donors [15]}
+        {:acceptor 0 :attrs :single :donors [16]}]}
+    :success true
+    :tie-breaks []}}

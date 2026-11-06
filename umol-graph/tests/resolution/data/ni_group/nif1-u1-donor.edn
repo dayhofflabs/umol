@@ -1,0 +1,4 @@
+; Molecular NiF, doublet; L21F, Scheme 1/Table 1; formal allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c+1#u1" "F#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

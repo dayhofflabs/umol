@@ -1,0 +1,5 @@
+; Furan, Kekule notation; I98, Appendix 2, entry 71.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O" "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 :single] [1 2 :double] [2 3 :single]
+                 [3 4 :double] [4 0 :single]]}}

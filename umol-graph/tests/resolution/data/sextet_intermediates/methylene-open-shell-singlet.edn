@@ -1,0 +1,3 @@
+; MSS, p. 155
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["C#u2#s1"] :bonds []}}

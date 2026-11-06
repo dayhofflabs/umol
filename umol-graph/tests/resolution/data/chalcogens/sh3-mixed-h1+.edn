@@ -1,0 +1,4 @@
+; H3S+; HW I, p. 625; one implicit H.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#c+#h" "H" "H"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

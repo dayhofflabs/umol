@@ -1,0 +1,6 @@
+; HW I, p. 471; Brock et al. (2010), doi:10.1021/ja103730c (structure).
+; Selected Xe#c-#n2#v2#m3 description: Xe=O and a four-center/six-electron XeF3 unit.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe#c-" "O" "F" "F" "F"]
+         :bonds [[0 1 :double]]
+         :multicenter-bonds [{:atoms [0 2 3 4] :attrs "[3,1,1,1]#c0#u0#s1"}]}}

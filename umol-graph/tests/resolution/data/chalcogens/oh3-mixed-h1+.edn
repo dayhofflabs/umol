@@ -1,0 +1,4 @@
+; H3O+; HW I, pp. 572-573, 592; one implicit H.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#c+#h" "H" "H"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

@@ -1,0 +1,3 @@
+; BW, p. 300
+{:config-overrides {:atom {:charge :zero}}
+ :input { :atoms ["Co#h0" "H" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"] :bonds [[2 3 :triple] [4 5 :triple] [6 7 :triple] [0 1 :single]] :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

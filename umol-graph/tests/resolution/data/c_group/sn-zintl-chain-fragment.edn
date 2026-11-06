@@ -1,0 +1,5 @@
+; Counting fragment for the two-bond Sn(2-) environment in CaSn; HW I, p. 1165.
+; Terminal Sn(3-) centers close the finite fragment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sn#c-3" "Sn#c-2" "Sn#c-3"]
+         :bonds [[0 1 "1"] [1 2 "1"]]}}

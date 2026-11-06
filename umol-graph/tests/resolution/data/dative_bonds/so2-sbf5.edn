@@ -1,0 +1,6 @@
+; O-bound SO2->SbF5; HW I, p. 958.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sb" "F" "F" "F" "F" "F" "O" "S" "O"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]
+                 [0 5 :single] [6 7 :double] [7 8 :double]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

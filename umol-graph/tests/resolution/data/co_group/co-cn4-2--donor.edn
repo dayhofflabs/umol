@@ -1,0 +1,6 @@
+; Co(CN)4(2-), low-spin; HW II, pp. 1994, 2001-2002; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#c+2#u1" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N"]
+         :bonds [[1 2 "3"] [3 4 "3"] [5 6 "3"] [7 8 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}]}}

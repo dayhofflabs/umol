@@ -1,0 +1,4 @@
+; CeF8(4-); HW II, pp. 2301, 2303-2304; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ce#c-4#u0" "F" "F" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"] [0 7 "1"] [0 8 "1"]]}}

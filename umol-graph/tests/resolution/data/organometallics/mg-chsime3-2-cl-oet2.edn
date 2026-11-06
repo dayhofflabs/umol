@@ -1,0 +1,7 @@
+; (Me3Si)2CHMgCl(OEt2); HW I, p. 1452, Fig. 17.13d.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg" "C#h" "Si" "C#h3" "C#h3" "C#h3" "Si" "C#h3" "C#h3" "C#h3" "Cl" "O" "C#h2" "C#h3"
+                 "C#h2" "C#h3"]
+         :bonds [[2 3 "1"] [2 4 "1"] [2 5 "1"] [1 2 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"] [1 6 "1"] [0 1 "1"]
+                 [0 10 "1"] [12 13 "1"] [11 12 "1"] [14 15 "1"] [11 14 "1"]]
+         :dative-bonds [{:donors [11] :acceptor 0 :attrs "1"}]}}

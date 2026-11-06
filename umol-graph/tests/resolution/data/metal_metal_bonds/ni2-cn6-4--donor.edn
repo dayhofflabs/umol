@@ -1,0 +1,7 @@
+; Ni2(CN)6(4-), paired Ni-Ni bond; HW II, p. 2029; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c+1#u0" "Ni#c+1#u0" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N"]
+         :bonds [[0 1 "1"] [2 3 "3"] [4 5 "3"] [6 7 "3"] [8 9 "3"] [10 11 "3"] [12 13 "3"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [10] :acceptor 1 :attrs "1"} {:donors [12] :acceptor 1 :attrs "1"}]}}

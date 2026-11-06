@@ -1,0 +1,8 @@
+; UO2(CO3)3(5-); HW II, p. 2344; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["U#c+#u" "O" "O" "C" "O" "O#c-" "O#c-" "C" "O" "O#c-" "O#c-" "C" "O" "O#c-" "O#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [3 4 "2"] [3 5 "1"] [3 6 "1"] [7 8 "2"] [7 9 "1"] [7 10 "1"] [11 12 "2"]
+                 [11 13 "1"] [11 14 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 0 :attrs "1"}
+                        {:donors [13] :acceptor 0 :attrs "1"} {:donors [14] :acceptor 0 :attrs "1"}]}}

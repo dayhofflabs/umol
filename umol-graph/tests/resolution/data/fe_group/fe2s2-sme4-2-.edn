@@ -1,0 +1,8 @@
+; Fe2S2(SMe)4(2-), local high-spin; HW II, pp. 1961, 1967; ionic donor allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+3#u5" "Fe#c+3#u5" "S#c-2" "S#c-2" "S#c-" "C#h3" "S#c-" "C#h3" "S#c-" "C#h3" "S#c-" "C#h3"]
+         :bonds [[4 5 "1"] [6 7 "1"] [8 9 "1"] [10 11 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 1 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}]}}

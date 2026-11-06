@@ -1,0 +1,8 @@
+; BeH2 network: central Be and four local 3c2e Be-H-Be bridges; HW I, pp. 1433-1434. Cut-boundary Be
+; occupations supplied; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Be" "Be#n#u0#s1" "Be#n#u0#s1" "Be#n0#u#s2" "Be#n0#u#s2" "H" "H" "H" "H"]
+         :multicenter-bonds [{:atoms [0 5 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 6 2] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 7 3] :attrs "[0,1,1]#c0#u0#s1"}
+                             {:atoms [0 8 4] :attrs "[0,1,1]#c0#u0#s1"}]}}

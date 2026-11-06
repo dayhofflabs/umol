@@ -1,0 +1,5 @@
+; IrH5(PMe3)2, paired ordinary-bond model; HW II, p. 2010; JA16, Fig. 1; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#u0#h3" "H" "H" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"] [3 6 "1"] [7 8 "1"] [7 9 "1"] [7 10 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}]}}

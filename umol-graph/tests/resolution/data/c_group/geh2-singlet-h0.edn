@@ -1,0 +1,4 @@
+; GeH2, singlet; HW I, p. 1077.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ge#s1#h0" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

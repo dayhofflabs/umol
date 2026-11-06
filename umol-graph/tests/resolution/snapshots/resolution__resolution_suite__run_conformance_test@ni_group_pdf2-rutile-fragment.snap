@@ -1,0 +1,130 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Pd#c+2#n3#u2"
+        "Pd#c+2#n3#u2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 1 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 1 :attrs :single :donors [11]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Pd#c+2#n3#u2"
+        "Pd#c+2#n3#u2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 1 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 1 :attrs :single :donors [11]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Pd#c+2#n3#u2"
+        "Pd#c+2#n3#u2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 1 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 1 :attrs :single :donors [11]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Pd#c+2#n3#u2"
+        "Pd#c+2#n3#u2"
+        "F#c-#n2"
+        "F#c-#n2"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"
+        "F#c-#n3"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 1 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 1 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 1 :attrs :single :donors [8]}
+        {:acceptor 1 :attrs :single :donors [9]}
+        {:acceptor 1 :attrs :single :donors [10]}
+        {:acceptor 1 :attrs :single :donors [11]}]}
+    :success true
+    :tie-breaks []}}

@@ -1,0 +1,5 @@
+; PtH2Cl2(PMe3)2, paired; HW II, p. 2048
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#u0#h2" "Cl" "Cl" "P" "C#h3" "C#h3" "C#h3" "P" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"] [3 6 "1"] [7 8 "1"] [7 9 "1"] [7 10 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; At ions; HW I, pp. 490, 492, 499.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["At#c+"]
+         :bonds []}}

@@ -1,0 +1,4 @@
+; MnH1, 6 unpaired electrons; WA03MnRe, pp. 4086-4087
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#u6" "H"]
+         :bonds [[0 1 "1"]]}}

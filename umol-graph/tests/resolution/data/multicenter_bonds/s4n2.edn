@@ -1,0 +1,7 @@
+; S4N2: six-membered ring with one N-S-N 3c4e pi unit.
+; HW I, pp. 675, 682, Figs. 13.48/13.53; contributions [1,2,1]: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "N" "S" "N" "S" "S"]
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single]
+                 [3 4 :single] [4 5 :single] [5 0 :single]]
+         :multicenter-bonds [{:atoms [1 2 3] :attrs "[1,2,1]"}]}}

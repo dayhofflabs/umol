@@ -1,0 +1,10 @@
+; TmI2, dme2-thf, 7-coordinate; HW II, p. 2307; B01Ln, pp. 3176-3177; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tm#c+2#u" "I#c-" "I#c-" "C#h3" "O" "C#h2" "C#h2" "O" "C#h3" "C#h3" "O" "C#h2" "C#h2" "O"
+                 "C#h3" "O" "C#h2" "C#h2" "C#h2" "C#h2"]
+         :bonds [[3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [9 10 "1"] [10 11 "1"] [11 12 "1"]
+                 [12 13 "1"] [13 14 "1"] [15 16 "1"] [16 17 "1"] [17 18 "1"] [18 19 "1"] [19 15 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [13] :acceptor 0 :attrs "1"}
+                        {:donors [15] :acceptor 0 :attrs "1"}]}}

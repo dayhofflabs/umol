@@ -1,0 +1,10 @@
+; HFe2(CO)8-; HW II, pp. 2137-2138; CB78, pp. 2314-2317; H- bridge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u0" "Fe#u0" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-"
+                 "O#c+" "C" "O" "C" "O" "H#c-"]
+         :bonds [[2 3 "3"] [4 5 "3"] [6 7 "3"] [8 9 "3"] [10 11 "3"] [12 13 "3"] [14 15 "2"] [0 14 "1"] [1 14 "1"]
+                 [16 17 "2"] [0 16 "1"] [1 16 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [10] :acceptor 1 :attrs "1"} {:donors [12] :acceptor 1 :attrs "1"}]
+         :multicenter-bonds [{:atoms [0 18 1] :attrs "[0,2,0]#c0#u0#s1"}]}}

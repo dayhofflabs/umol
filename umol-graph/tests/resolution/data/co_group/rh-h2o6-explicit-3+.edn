@@ -1,0 +1,13 @@
+; [Rh(H2O)6]3+; HW II, p. 2015; O donation: HW I, p. 572.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c+3" "O" "O" "O" "O" "O" "O"
+                 "H" "H" "H" "H" "H" "H" "H" "H" "H" "H" "H" "H"]
+         :bonds [[1 7 :single] [1 8 :single] [2 9 :single] [2 10 :single]
+                 [3 11 :single] [3 12 :single] [4 13 :single] [4 14 :single]
+                 [5 15 :single] [5 16 :single] [6 17 :single] [6 18 :single]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

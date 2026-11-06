@@ -1,0 +1,8 @@
+; Me3Si(py)+; HW I, p. 1144, Fig. 15.89.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#c+" "C#h3" "C#h3" "C#h3" "N" "C#h"
+                 "C#h" "C#h" "C#h" "C#h"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2"]
+                 [5 6 "1"] [6 7 "2"] [7 8 "1"] [8 9 "2"]
+                 [9 4 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"}]}}

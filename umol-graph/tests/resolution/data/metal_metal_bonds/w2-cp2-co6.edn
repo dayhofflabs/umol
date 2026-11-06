@@ -1,0 +1,11 @@
+; [CpW(CO)3]2, terminal CO, M-M single bond; HW II, pp. 2202-2203; donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c+#u0" "W#c+#u0" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-"
+                 "O#c+" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"]
+         :bonds [[0 1 "1"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 2 "1#a"] [7 8 "3"] [9 10 "3"] [11 12 "3"]
+                 [13 14 "1#a"] [14 15 "1#a"] [15 16 "1#a"] [16 17 "1#a"] [17 13 "1#a"] [18 19 "3"] [20 21 "3"]
+                 [22 23 "3"]]
+         :dative-bonds [{:donors [2 3 4 5 6] :acceptor 0 :attrs "3"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 0 :attrs "1"}
+                        {:donors [13 14 15 16 17] :acceptor 1 :attrs "3"} {:donors [18] :acceptor 1 :attrs "1"}
+                        {:donors [20] :acceptor 1 :attrs "1"} {:donors [22] :acceptor 1 :attrs "1"}]}}

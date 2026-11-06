@@ -1,0 +1,8 @@
+; W(CN)7(5-), paired d4; HW II, pp. 1876, 1891; SG81, p. 1886; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c+2" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N" "C#c-" "N"]
+         :bonds [[1 2 "3"] [3 4 "3"] [5 6 "3"] [7 8 "3"] [9 10 "3"] [11 12 "3"] [13 14 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 0 :attrs "1"}
+                        {:donors [13] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,9 @@
+; TaH5(dmpe)2; HW II, pp. 1834, 2068-2069.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ta" "H" "H" "H" "H" "H" "P" "C#h2" "C#h2" "P" "C#h3" "C#h3" "C#h3" "C#h3" "P" "C#h2" "C#h2" "P"
+                 "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [6 10 "1"]
+                 [6 11 "1"] [9 12 "1"] [9 13 "1"] [14 15 "1"] [15 16 "1"] [16 17 "1"] [14 18 "1"] [14 19 "1"]
+                 [17 20 "1"] [17 21 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 0 :attrs "1"}
+                        {:donors [14] :acceptor 0 :attrs "1"} {:donors [17] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; Molecular HfH2; Das and Balasubramanian (1991), pp. 3981-3982; doi:10.1021/j100163a018.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Hf#u0" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

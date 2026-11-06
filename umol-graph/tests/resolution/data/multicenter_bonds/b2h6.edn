@@ -1,0 +1,7 @@
+; HW I, pp. 311, 1236: two three-center/two-electron B-H-B bridges.
+; Neutral B/H contributions: assignment PW. AtomTyping resolves B#v2#m and H#m.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["B" "B" "H" "H" "H" "H" "H" "H"]
+         :bonds [[0 2 :single] [0 3 :single] [1 4 :single] [1 5 :single]]
+         :multicenter-bonds [{:atoms [0 6 1] :attrs "[1,1,0]#c0#u0#s1"}
+                            {:atoms [0 7 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

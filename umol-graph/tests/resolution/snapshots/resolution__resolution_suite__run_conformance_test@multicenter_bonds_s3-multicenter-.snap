@@ -1,0 +1,33 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["S#n2" "S#n" "S#n2"]
+      :bonds [[0 1 :single] [1 2 :single]]
+      :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,2,1]#c-#u"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["S#n2" "S#n" "S#n2"]
+      :bonds [[0 1 :single] [1 2 :single]]
+      :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,2,1]#c-#u"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["S#n2" "S#n" "S#n2"]
+      :bonds [[0 1 :single] [1 2 :single]]
+      :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,2,1]#c-#u"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["S#n2" "S#n" "S#n2"]
+      :bonds [[0 1 :single] [1 2 :single]]
+      :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,2,1]#c-#u"}]}
+    :success true
+    :tie-breaks []}}

@@ -1,0 +1,218 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Pt#c-#n3"
+        "Pt#c-#n3"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [2 5 :double]
+        [2 6 :double]
+        [0 3 :single]
+        [1 4 :single]
+        [7 8 :single]
+        [7 9 :single]
+        [7 10 :double]
+        [7 11 :double]
+        [0 8 :single]
+        [1 9 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [12 15 :double]
+        [12 16 :double]
+        [0 13 :single]
+        [1 14 :single]
+        [17 18 :single]
+        [17 19 :single]
+        [17 20 :double]
+        [17 21 :double]
+        [0 18 :single]
+        [1 19 :single]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Pt#c-#n3"
+        "Pt#c-#n3"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [2 5 :double]
+        [2 6 :double]
+        [0 3 :single]
+        [1 4 :single]
+        [7 8 :single]
+        [7 9 :single]
+        [7 10 :double]
+        [7 11 :double]
+        [0 8 :single]
+        [1 9 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [12 15 :double]
+        [12 16 :double]
+        [0 13 :single]
+        [1 14 :single]
+        [17 18 :single]
+        [17 19 :single]
+        [17 20 :double]
+        [17 21 :double]
+        [0 18 :single]
+        [1 19 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Pt#c-#n3"
+        "Pt#c-#n3"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [2 5 :double]
+        [2 6 :double]
+        [0 3 :single]
+        [1 4 :single]
+        [7 8 :single]
+        [7 9 :single]
+        [7 10 :double]
+        [7 11 :double]
+        [0 8 :single]
+        [1 9 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [12 15 :double]
+        [12 16 :double]
+        [0 13 :single]
+        [1 14 :single]
+        [17 18 :single]
+        [17 19 :single]
+        [17 20 :double]
+        [17 21 :double]
+        [0 18 :single]
+        [1 19 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Pt#c-#n3"
+        "Pt#c-#n3"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "S"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [2 5 :double]
+        [2 6 :double]
+        [0 3 :single]
+        [1 4 :single]
+        [7 8 :single]
+        [7 9 :single]
+        [7 10 :double]
+        [7 11 :double]
+        [0 8 :single]
+        [1 9 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [12 15 :double]
+        [12 16 :double]
+        [0 13 :single]
+        [1 14 :single]
+        [17 18 :single]
+        [17 19 :single]
+        [17 20 :double]
+        [17 21 :double]
+        [0 18 :single]
+        [1 19 :single]]}
+    :success true
+    :tie-breaks []}}

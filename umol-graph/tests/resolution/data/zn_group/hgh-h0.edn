@@ -1,0 +1,4 @@
+; Molecular HgH doublet; Mosyagin et al. (2001), Table III; arXiv:physics/0101047v4.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Hg" "H"]
+         :bonds [[0 1 "1"]]}}

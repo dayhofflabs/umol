@@ -1,0 +1,10 @@
+; W2Cl9(3-), M-M triple bond; HW II, pp. 1891-1893; chloride donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c+3" "W#c+3" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds [[0 1 "3"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 1 :attrs "1"}
+                        {:donors [6] :acceptor 1 :attrs "1"} {:donors [7] :acceptor 1 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}]}}

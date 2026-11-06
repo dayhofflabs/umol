@@ -1,0 +1,3 @@
+; FeH2-; WA09, Table 4, pp. 551, 553-554, 559
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-1#u3#h2"]}}

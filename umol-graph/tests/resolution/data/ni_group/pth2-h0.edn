@@ -1,0 +1,4 @@
+; PtH2; A01Pt, Table IV
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#u0" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

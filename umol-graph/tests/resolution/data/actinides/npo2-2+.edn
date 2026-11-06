@@ -1,0 +1,4 @@
+; NpO2(2+); HW II, pp. 2328-2329
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Np#c+2#u" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

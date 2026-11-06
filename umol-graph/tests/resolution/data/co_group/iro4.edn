@@ -1,0 +1,4 @@
+; IrO4, doublet d1; G09Ir, pp. 7880-7882
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#u1" "O" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "2"]]}}

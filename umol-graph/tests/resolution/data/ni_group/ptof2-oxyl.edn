@@ -1,0 +1,4 @@
+; OPtF2, triplet; L21O, Tables 1/3 and SI Table S3.7; atom-local oxyl allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#u1" "O#u1" "F" "F"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}}

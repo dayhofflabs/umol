@@ -939,8 +939,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::boron("[BH3]", "[BH3]", "B")]
-    #[case::water("[OH2]", "[OH2]", "O")]
+    #[case::boron("[BH3]", "B", "B")]
+    #[case::water("[OH2]", "O", "O")]
     fn test_smiles_convey_model(
         #[case] input: &str,
         #[case] counts: &str,
@@ -955,7 +955,7 @@ mod tests {
             },
             ..Default::default()
         };
-        model.valence.tie_break = ValenceTieBreak::Strict;
+        model.valence.tie_break = ValenceTieBreak::MostSaturated;
         let config = ResolveConfig {
             isotope: IsotopePolicy::Natural,
             ..Default::default()

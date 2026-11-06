@@ -1,0 +1,7 @@
+; Cp2MoH2; HW II, pp. 2199-2201; occupation: PW; haptic order 3: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo#c+2#h1" "H" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 2 "1#a"] [7 8 "1#a"] [8 9 "1#a"]
+                 [9 10 "1#a"] [10 11 "1#a"] [11 7 "1#a"]]
+         :dative-bonds [{:donors [2 3 4 5 6] :acceptor 0 :attrs "3"} {:donors [7 8 9 10 11] :acceptor 0 :attrs "3"}]}}

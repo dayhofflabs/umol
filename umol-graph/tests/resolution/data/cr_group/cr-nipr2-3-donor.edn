@@ -1,0 +1,9 @@
+; Cr(NiPr2)3, d3 quartet; HW II, p. 1860; A68; BHN71; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c+3#u3" "N#c-" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3" "N#c-" "C#h" "C#h3" "C#h3" "C#h" "C#h3"
+                 "C#h3" "N#c-" "C#h" "C#h3" "C#h3" "C#h" "C#h3" "C#h3"]
+         :bonds [[1 2 "1"] [2 3 "1"] [2 4 "1"] [1 5 "1"] [5 6 "1"] [5 7 "1"] [8 9 "1"] [9 10 "1"] [9 11 "1"]
+                 [8 12 "1"] [12 13 "1"] [12 14 "1"] [15 16 "1"] [16 17 "1"] [16 18 "1"] [15 19 "1"] [19 20 "1"]
+                 [19 21 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 0 :attrs "1"}
+                        {:donors [15] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; OsO2(OCH2CH2O), paired d2; HW II, p. 1978, Fig. 29.15; H19, SI p. S9
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#u0" "O" "O" "O" "C#h2" "C#h2" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [0 3 "1"] [0 6 "1"]]}}

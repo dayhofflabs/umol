@@ -1,0 +1,4 @@
+; AmO2(OH)2-; HW II, pp. 2328-2330; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Am#c-#u4" "O" "O" "O#h" "O#h"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "1"] [0 4 "1"]]}}

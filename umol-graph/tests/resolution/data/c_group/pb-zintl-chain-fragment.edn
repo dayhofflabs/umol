@@ -1,0 +1,5 @@
+; Counting fragment for the two-bond Pb(2-) environment in BaPb; HW I, p. 1165.
+; Terminal Pb(3-) centers close the finite fragment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#c-3" "Pb#c-2" "Pb#c-3"]
+         :bonds [[0 1 "1"] [1 2 "1"]]}}

@@ -1,0 +1,5 @@
+; Asymmetric PBr4- in [Et4N][PBr4]; C94P, p. 2858; Br- -> PBr3.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P" "Br" "Br" "Br" "Br#c-"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"}]}}

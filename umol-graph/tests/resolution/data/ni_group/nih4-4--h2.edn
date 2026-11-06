@@ -1,0 +1,4 @@
+; NiH4(4-), paired; HW II, pp. 2027, 2069
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#c-4#u0#h2" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

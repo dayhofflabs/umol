@@ -1,0 +1,5 @@
+; S2N2: four S-N sigma bonds and a six-electron aromatic pi system.
+; K18, doi:10.1002/chem.201804292; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#a+" "N#a+" "S#a+" "N#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 0 "1#a"]]}}

@@ -1,0 +1,4 @@
+; SnOH+, hydrolysis-species core; HW I, p. 1181; solvent omitted.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sn#c+" "O#h"]
+         :bonds [[0 1 "1"]]}}

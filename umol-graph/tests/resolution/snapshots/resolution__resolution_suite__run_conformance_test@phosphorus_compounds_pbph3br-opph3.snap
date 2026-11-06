@@ -1,0 +1,370 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Pb"
+        "Br#n3"
+        "O#n"
+        "P"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :double]
+        [0 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :double]
+        [7 8 :single]
+        [8 9 :double]
+        [4 9 :single]
+        [0 10 :single]
+        [10 11 :double]
+        [11 12 :single]
+        [12 13 :double]
+        [13 14 :single]
+        [14 15 :double]
+        [10 15 :single]
+        [0 16 :single]
+        [16 17 :double]
+        [17 18 :single]
+        [18 19 :double]
+        [19 20 :single]
+        [20 21 :double]
+        [16 21 :single]
+        [3 22 :single]
+        [22 23 :double]
+        [23 24 :single]
+        [24 25 :double]
+        [25 26 :single]
+        [26 27 :double]
+        [22 27 :single]
+        [3 28 :single]
+        [28 29 :double]
+        [29 30 :single]
+        [30 31 :double]
+        [31 32 :single]
+        [32 33 :double]
+        [28 33 :single]
+        [3 34 :single]
+        [34 35 :double]
+        [35 36 :single]
+        [36 37 :double]
+        [37 38 :single]
+        [38 39 :double]
+        [34 39 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Pb"
+        "Br#n3"
+        "O#n"
+        "P"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :double]
+        [0 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :double]
+        [7 8 :single]
+        [8 9 :double]
+        [4 9 :single]
+        [0 10 :single]
+        [10 11 :double]
+        [11 12 :single]
+        [12 13 :double]
+        [13 14 :single]
+        [14 15 :double]
+        [10 15 :single]
+        [0 16 :single]
+        [16 17 :double]
+        [17 18 :single]
+        [18 19 :double]
+        [19 20 :single]
+        [20 21 :double]
+        [16 21 :single]
+        [3 22 :single]
+        [22 23 :double]
+        [23 24 :single]
+        [24 25 :double]
+        [25 26 :single]
+        [26 27 :double]
+        [22 27 :single]
+        [3 28 :single]
+        [28 29 :double]
+        [29 30 :single]
+        [30 31 :double]
+        [31 32 :single]
+        [32 33 :double]
+        [28 33 :single]
+        [3 34 :single]
+        [34 35 :double]
+        [35 36 :single]
+        [36 37 :double]
+        [37 38 :single]
+        [38 39 :double]
+        [34 39 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Pb"
+        "Br#n3"
+        "O#n"
+        "P"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :double]
+        [0 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :double]
+        [7 8 :single]
+        [8 9 :double]
+        [4 9 :single]
+        [0 10 :single]
+        [10 11 :double]
+        [11 12 :single]
+        [12 13 :double]
+        [13 14 :single]
+        [14 15 :double]
+        [10 15 :single]
+        [0 16 :single]
+        [16 17 :double]
+        [17 18 :single]
+        [18 19 :double]
+        [19 20 :single]
+        [20 21 :double]
+        [16 21 :single]
+        [3 22 :single]
+        [22 23 :double]
+        [23 24 :single]
+        [24 25 :double]
+        [25 26 :single]
+        [26 27 :double]
+        [22 27 :single]
+        [3 28 :single]
+        [28 29 :double]
+        [29 30 :single]
+        [30 31 :double]
+        [31 32 :single]
+        [32 33 :double]
+        [28 33 :single]
+        [3 34 :single]
+        [34 35 :double]
+        [35 36 :single]
+        [36 37 :double]
+        [37 38 :single]
+        [38 39 :double]
+        [34 39 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Pb"
+        "Br#n3"
+        "O#n"
+        "P"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [0 1 :single]
+        [2 3 :double]
+        [0 4 :single]
+        [4 5 :double]
+        [5 6 :single]
+        [6 7 :double]
+        [7 8 :single]
+        [8 9 :double]
+        [4 9 :single]
+        [0 10 :single]
+        [10 11 :double]
+        [11 12 :single]
+        [12 13 :double]
+        [13 14 :single]
+        [14 15 :double]
+        [10 15 :single]
+        [0 16 :single]
+        [16 17 :double]
+        [17 18 :single]
+        [18 19 :double]
+        [19 20 :single]
+        [20 21 :double]
+        [16 21 :single]
+        [3 22 :single]
+        [22 23 :double]
+        [23 24 :single]
+        [24 25 :double]
+        [25 26 :single]
+        [26 27 :double]
+        [22 27 :single]
+        [3 28 :single]
+        [28 29 :double]
+        [29 30 :single]
+        [30 31 :double]
+        [31 32 :single]
+        [32 33 :double]
+        [28 33 :single]
+        [3 34 :single]
+        [34 35 :double]
+        [35 36 :single]
+        [36 37 :double]
+        [37 38 :single]
+        [38 39 :double]
+        [34 39 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [2]}]}
+    :success true
+    :tie-breaks []}}

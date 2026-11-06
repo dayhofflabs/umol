@@ -1,0 +1,3 @@
+; AlH2 radical; Cernusak et al. (2003), Tables II-IV; doi:10.1135/cccc20030075.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al#h2"]}}

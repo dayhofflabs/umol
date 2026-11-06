@@ -1,0 +1,150 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [9 10 11 12 13] :attrs "[2,1,1,1,1]"}]
+      :atoms [
+        "Ta#c+#n2"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [1 2 :triple]
+        [3 4 :triple]
+        [5 6 :triple]
+        [7 8 :triple]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [9 13 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :triple :donors [9 10 11 12 13]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :aromatic-systems [{:atoms [9 10 11 12 13] :attrs "[2,1,1,1,1]"}]
+      :atoms [
+        "Ta#c+#n2"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [1 2 :triple]
+        [3 4 :triple]
+        [5 6 :triple]
+        [7 8 :triple]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [9 13 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :triple :donors [9 10 11 12 13]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [9 10 11 12 13] :attrs "[2,1,1,1,1]"}]
+      :atoms [
+        "Ta#c+#n2"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [1 2 :triple]
+        [3 4 :triple]
+        [5 6 :triple]
+        [7 8 :triple]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [9 13 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :triple :donors [9 10 11 12 13]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :aromatic-systems [{:atoms [9 10 11 12 13] :attrs "[2,1,1,1,1]"}]
+      :atoms [
+        "Ta#c+#n2"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-"
+        "O#c+#n"
+        "C#c-#h"
+        "C#h"
+        "C#h"
+        "C#h"
+        "C#h"]
+      :bonds [
+        [1 2 :triple]
+        [3 4 :triple]
+        [5 6 :triple]
+        [7 8 :triple]
+        [9 10 :single]
+        [10 11 :single]
+        [11 12 :single]
+        [12 13 :single]
+        [9 13 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :triple :donors [9 10 11 12 13]}]}
+    :success true
+    :tie-breaks []}}

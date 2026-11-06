@@ -22,7 +22,7 @@ concurrency:
 jobs:
   linux-wheel:
     name: Linux x86-64 abi3 wheel
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -109,10 +109,10 @@ jobs:
       matrix:
         include:
           - artifact: python-dist-linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             python: "3.9"
           - artifact: python-dist-linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             python: "3.13"
           - artifact: python-dist-macos-aarch64
             runner: macos-latest

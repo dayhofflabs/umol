@@ -1,0 +1,5 @@
+; H-bridged Ga2H2; HW I, p. 1389; bridge contributions and lone pairs: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ga" "Ga" "H" "H"]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

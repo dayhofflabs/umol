@@ -1,0 +1,7 @@
+; Ca2H4, two terminal H and two bridges; Wang and Andrews (2004), doi:10.1021/jp046046m. Local 3c2e
+; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ca#h0" "Ca#h0" "H" "H" "H" "H"]
+         :bonds [[0 4 "1"] [1 5 "1"]]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

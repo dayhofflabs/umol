@@ -1,0 +1,4 @@
+; S2N3+: five-membered 6pi ring; HW I, pp. 683-684; charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N#a+" "N#a+" "S#c+#a+" "S#a+" "N#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}}

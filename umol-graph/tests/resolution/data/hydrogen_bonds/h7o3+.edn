@@ -1,0 +1,7 @@
+; H3O+.(H2O)2 with two hydrogen bonds; HW I, pp. 593-594, Fig. 13.17m.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#c+" "O" "O" "H" "H" "H" "H" "H" "H" "H"]
+         :bonds [[0 3 :single] [0 4 :single] [0 5 :single]
+                 [1 6 :single] [1 7 :single] [2 8 :single] [2 9 :single]]
+         :noncovalent-bonds [{:atoms [3 1] :attrs "Hbd"}
+                            {:atoms [4 2] :attrs "Hbd"}]}}

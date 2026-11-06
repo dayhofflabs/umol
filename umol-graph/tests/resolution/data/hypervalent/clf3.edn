@@ -1,2 +1,0 @@
-{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
- :input {:atoms ["Cl" "F" "F" "F"] :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]}}

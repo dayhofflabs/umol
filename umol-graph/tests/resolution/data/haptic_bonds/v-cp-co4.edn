@@ -1,0 +1,9 @@
+; V(CO)4Cp; HW II, pp. 1830, 1833, 1841, 2111; CO/Cp donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c+1" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+"]
+         :bonds [[1 2 "3"] [3 4 "3"] [5 6 "3"] [7 8 "3"] [9 10 "1#a"] [10 11 "1#a"] [11 12 "1#a"] [12 13 "1#a"]
+                 [13 9 "1#a"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [9 10 11 12 13] :acceptor 0 :attrs "3"}]}}

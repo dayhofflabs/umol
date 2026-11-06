@@ -1,0 +1,3 @@
+; IrH6(3-), octahedral paired ion; HW II, pp. 2009-2010, 2069
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#c-3#u0#h6"]}}

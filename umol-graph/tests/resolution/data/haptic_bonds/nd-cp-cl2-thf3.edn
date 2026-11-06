@@ -1,0 +1,9 @@
+; CpNdCl2(THF)3; HW II, p. 2310; haptic order 3: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Nd#c+#u3" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "Cl" "Cl" "O" "C#h2" "C#h2" "C#h2"
+                 "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 1 "1#a"] [0 6 "1"] [0 7 "1"] [8 9 "1"]
+                 [9 10 "1"] [10 11 "1"] [11 12 "1"] [12 8 "1"] [13 14 "1"] [14 15 "1"] [15 16 "1"] [16 17 "1"]
+                 [17 13 "1"] [18 19 "1"] [19 20 "1"] [20 21 "1"] [21 22 "1"] [22 18 "1"]]
+         :dative-bonds [{:donors [1 2 3 4 5] :acceptor 0 :attrs "3"} {:donors [8] :acceptor 0 :attrs "1"}
+                        {:donors [13] :acceptor 0 :attrs "1"} {:donors [18] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,6 @@
+; (CO)4ClW≡CMe, localized carbyne; HW II, p. 2168; CO donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#u0" "Cl" "C" "C#h3" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"]
+         :bonds [[0 1 "1"] [0 2 "3"] [2 3 "1"] [4 5 "3"] [6 7 "3"] [8 9 "3"] [10 11 "3"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 0 :attrs "1"}]}}

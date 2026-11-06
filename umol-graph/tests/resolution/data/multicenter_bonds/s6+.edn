@@ -1,0 +1,7 @@
+; S6+: six ring singles and an eleven-electron multicenter system.
+; Ring: HW I, p. 621; KP04, SI p. 2. Electron allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "S" "S" "S" "S" "S"]
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single]
+                 [3 4 :single] [4 5 :single] [5 0 :single]]
+         :multicenter-bonds [{:atoms [0 1 2 3 4 5] :attrs "[2,2,2,2,2,2]#c+#s2"}]}}

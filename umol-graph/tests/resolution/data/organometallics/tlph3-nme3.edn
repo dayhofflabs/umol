@@ -1,0 +1,10 @@
+; TlPh3.NMe3; HW I, p. 1407; Maher and Evans (1963), p. 5537, doi:10.1039/JR9630005534.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tl" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "N" "C#h3" "C#h3"
+                 "C#h3"]
+         :bonds [[0 1 "1"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 1 "1#a"] [0 7 "1"]
+                 [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"] [10 11 "1#a"] [11 12 "1#a"] [12 7 "1#a"] [0 13 "1"]
+                 [13 14 "1#a"] [14 15 "1#a"] [15 16 "1#a"] [16 17 "1#a"] [17 18 "1#a"] [18 13 "1#a"]
+                 [19 20 "1"] [19 21 "1"] [19 22 "1"]]
+         :dative-bonds [{:donors [19] :acceptor 0 :attrs "1"}]}}

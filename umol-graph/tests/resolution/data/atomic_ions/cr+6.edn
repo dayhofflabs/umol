@@ -1,0 +1,3 @@
+; Cr6+, d0; HW II, pp. 1849, 1854-1856
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#c+6"]}}

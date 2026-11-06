@@ -1,0 +1,4 @@
+; NH with unspecified spin; HW I, p. 779 gives singlet and triplet states.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["N#u*#s*#h"]
+         :bonds []}}

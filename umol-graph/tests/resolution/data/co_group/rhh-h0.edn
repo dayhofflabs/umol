@@ -1,0 +1,4 @@
+; Molecular RhH, triplet; WA02, pp. 3706-3709; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#u2" "H"]
+         :bonds [[0 1 "1"]]}}

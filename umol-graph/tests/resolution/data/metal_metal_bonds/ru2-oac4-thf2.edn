@@ -1,0 +1,12 @@
+; Ru2(OAc)4(THF)2; HW II, pp. 1984-1985; bond spin allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c+2#u0" "Ru#c+2#u0" "C" "C#h3" "O" "O#c-" "C" "C#h3" "O" "O#c-" "C" "C#h3" "O" "O#c-" "C"
+                 "C#h3" "O" "O#c-" "O" "C#h2" "C#h2" "C#h2" "C#h2" "O" "C#h2" "C#h2" "C#h2" "C#h2"]
+         :bonds [[0 1 "2#u2#s3"] [2 3 "1"] [2 4 "2"] [2 5 "1"] [6 7 "1"] [6 8 "2"] [6 9 "1"] [10 11 "1"]
+                 [10 12 "2"] [10 13 "1"] [14 15 "1"] [14 16 "2"] [14 17 "1"] [18 19 "1"] [19 20 "1"] [20 21 "1"]
+                 [21 22 "1"] [22 18 "1"] [23 24 "1"] [24 25 "1"] [25 26 "1"] [26 27 "1"] [27 23 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 1 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [12] :acceptor 0 :attrs "1"} {:donors [13] :acceptor 1 :attrs "1"}
+                        {:donors [16] :acceptor 0 :attrs "1"} {:donors [17] :acceptor 1 :attrs "1"}
+                        {:donors [18] :acceptor 0 :attrs "1"} {:donors [23] :acceptor 1 :attrs "1"}]}}

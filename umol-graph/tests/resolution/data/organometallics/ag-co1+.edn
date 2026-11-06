@@ -1,0 +1,5 @@
+; [Ag(CO)1]+; HW II, p. 1718; CO charge allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ag#c+" "C#c-" "O#c+"]
+         :bonds [[1 2 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

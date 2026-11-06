@@ -1,0 +1,5 @@
+; Reiersolmoen et al. (2020), doi:10.1039/D0SC02076A, pp. 7983-7986; N-X-N 3c4e, selected [2,0,2] contributions.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Br#c+" "N#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "N#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 1 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"] [10 11 "1#a"] [11 12 "1#a"] [12 7 "1#a"]]
+         :multicenter-bonds [{:atoms [1 0 7] :attrs "[2,0,2]#c0#u0#s1"}]}}

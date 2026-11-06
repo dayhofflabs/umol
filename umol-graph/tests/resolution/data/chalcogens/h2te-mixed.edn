@@ -1,0 +1,3 @@
+; H2Te; HW I, p. 704; one explicit and one implicit H.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#h" "H"] :bonds [[0 1 :single]]}}

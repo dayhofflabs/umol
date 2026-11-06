@@ -1,0 +1,5 @@
+; [Au(NH3)4]3+; HW II, pp. 1737-1738.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Au#c+3" "N#h3" "N#h3" "N#h3" "N#h3"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}]}}

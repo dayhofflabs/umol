@@ -1,0 +1,4 @@
+; TcH9(2-), diamagnetic; HW II, pp. 1919-1920
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tc#c-2#h7" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

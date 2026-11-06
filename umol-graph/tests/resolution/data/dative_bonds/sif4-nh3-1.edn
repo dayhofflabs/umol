@@ -1,0 +1,5 @@
+; SiF4(NH3); HW I, p. 1094.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si" "F" "F" "F" "F" "N#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"}]}}

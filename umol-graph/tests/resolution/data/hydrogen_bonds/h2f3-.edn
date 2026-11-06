@@ -1,0 +1,7 @@
+; F-.2HF with hydrogen bonds; HW I, p. 498, Fig. 12.8; Ivlev et al. (2017).
+; doi:10.1002/zaac.201700228.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["F#c-" "H" "F" "H" "F"]
+         :bonds [[1 2 :single] [3 4 :single]]
+         :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}
+                            {:atoms [0 3] :attrs "Hbd"}]}}

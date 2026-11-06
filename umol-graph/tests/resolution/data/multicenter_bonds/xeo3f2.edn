@@ -1,0 +1,6 @@
+; Holleman/Wiberg 103, Band 1, pp. 471.
+; Xe#v6#m2: inferred from the neutral Xe=O / even-fluoride construction convention.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe" "O" "O" "O" "F" "F"]
+         :bonds [[0 1 :double] [0 2 :double] [0 3 :double]]
+         :multicenter-bonds [{:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}]}}

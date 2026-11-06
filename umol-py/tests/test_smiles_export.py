@@ -35,7 +35,7 @@ def test_molecule_to_smiles(source, expected):
 @pytest.mark.parametrize(
     ("valence", "expected"),
     [
-        (ChemistryModel.default().valence, "[CH3][CH2]O"),
+        (ChemistryModel.default().valence, "[CH3][CH2][OH]"),
         (ValenceModel.smiles(), "CCO"),
     ],
 )
@@ -104,7 +104,7 @@ def test_reaction_to_reaction_smiles(source, expected):
 @pytest.mark.parametrize(
     ("valence", "expected"),
     [
-        (ChemistryModel.default().valence, "[CH3][CH2]O>>[CH3][CH2]O"),
+        (ChemistryModel.default().valence, "[CH3][CH2][OH]>>[CH3][CH2][OH]"),
         (ValenceModel.smiles(), "CCO>>CCO"),
     ],
 )

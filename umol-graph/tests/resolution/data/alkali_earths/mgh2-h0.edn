@@ -1,0 +1,4 @@
+; Molecular MgH2; Wang and Andrews (2004), doi:10.1021/jp046410h.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#h0" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

@@ -1,0 +1,4 @@
+; [PaO(OH)2]+; HW II, p. 2328
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pa#c+#u0" "O" "O#h" "O#h"]
+         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"]]}}

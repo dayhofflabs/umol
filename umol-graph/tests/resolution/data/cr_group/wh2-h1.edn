@@ -1,0 +1,4 @@
+; WH2, 4 unpaired electrons; WA02W, Tables 2-5, 7
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#u4#h1" "H"]
+         :bonds [[0 1 "1"]]}}

@@ -1,0 +1,4 @@
+; PuO2(1+); HW II, pp. 2328-2329
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pu#c+#u3" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

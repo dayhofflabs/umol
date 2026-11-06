@@ -1,0 +1,6 @@
+; [Me3SiMgBr]2; HW I, p. 1452, Fig. 17.13e; halide-donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#c+" "Mg#c+" "Si" "C#h3" "C#h3" "C#h3" "Si" "C#h3" "C#h3" "C#h3" "Br#c-" "Br#c-"]
+         :bonds [[2 3 "1"] [2 4 "1"] [2 5 "1"] [0 2 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"] [1 6 "1"]]
+         :dative-bonds [{:donors [10] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"} {:donors [11] :acceptor 1 :attrs "1"}]}}

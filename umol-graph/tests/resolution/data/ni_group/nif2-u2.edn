@@ -1,0 +1,4 @@
+; Molecular NiF2, triplet; L21F, Scheme 1/Table 1; formal allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#u2" "F" "F"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

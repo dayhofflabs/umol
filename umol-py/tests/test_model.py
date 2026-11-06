@@ -54,7 +54,7 @@ def test_atom_type_registry_from_atoms():
 
     atom.charge = 1
     atom.isotope_mass = 13
-    assert registry.patterns_for_element_and_charge(Element("C"), 0) == [
+    assert registry.lookup(Element("C"), 4) == [
         AtomForm.parse("C#c0#v4")
     ]
 
@@ -73,6 +73,14 @@ def test_atom_type_registry_from_atoms():
         (
             AtomForm.parse("C#c128"),
             "invalid atom type registry: registry entry charge 128 is outside -128..=127",
+        ),
+        (
+            AtomForm.parse("C#c0"),
+            "invalid atom type registry: registry entries must have literal valences",
+        ),
+        (
+            AtomForm.parse("C#c0#v{1,2}"),
+            "invalid atom type registry: registry entries must have literal valences",
         ),
         (
             AtomForm.parse("C#i=#c0"),
@@ -103,14 +111,14 @@ def test_atom_type_registry_from_atoms_error(atom, message):
 
 def test_atom_type_registry_from_toml():
     registry = AtomTypeRegistry.from_toml(
-        '[C]\n0 = ["C#c0#v4"]\n1 = ["C#c+#v3"]\n[O]\n0 = ["O#c0#v2"]'
+        '[C]\n4 = ["C#c0#v4"]\n3 = ["C#c+#v3"]\n[O]\n2 = ["O#c0#v2"]'
     )
 
-    assert registry.patterns_for_element(Element("C")) == [
-        AtomForm.parse("C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
+    assert registry.lookup_by_element(Element("C")) == [
         AtomForm.parse("C#c+#h0#n0#u0#s#v3#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
     ]
-    assert registry.patterns_for_element_and_charge(Element("O"), 0) == [
+    assert registry.lookup(Element("O"), 2) == [
         AtomForm.parse("O#c0#h0#n0#u0#s#v2#d0#t0#a!#m!")
     ]
 
@@ -119,6 +127,10 @@ def test_atom_type_registry_from_toml():
     ("input", "message"),
     [
         ('[X]\n0 = ["X#c0"]', "invalid atom type registry: unknown element: X"),
+        (
+            '[C]\n3 = ["C#v4"]',
+            "invalid atom type registry: atom 'C#v4' valence 4 does not match section valence 3",
+        ),
         *[
             (
                 f'[C]\n0 = ["{atom}"]',
@@ -135,19 +147,39 @@ def test_atom_type_registry_from_toml_error(input, message):
         AtomTypeRegistry.from_toml(input)
 
 
-def test_atom_type_registry_patterns():
+def test_atom_type_registry_lookup_by_element():
     registry = AtomTypeRegistry.from_atoms(
         [AtomForm.parse("C#c0#v4"), AtomForm.parse("C#c+#v3")]
     )
-    patterns = registry.patterns_for_element(Element("C"))
+    patterns = registry.lookup_by_element(Element("C"))
 
     patterns[0].charge = -1
     patterns[0].isotope_mass = 13
     patterns.pop()
 
-    assert registry.patterns_for_element(Element("C")) == [
-        AtomForm.parse("C#c0#v4"),
+    assert registry.lookup_by_element(Element("C")) == [
         AtomForm.parse("C#c+#v3"),
+        AtomForm.parse("C#c0#v4"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("element", "valence", "expected"),
+    [
+        ("C", 3, ["C#c+#v3", "C#c0#v3", "C#c-#v3"]),
+        ("C", 4, ["C#c0#v4"]),
+        ("C", 0, []),
+        ("O", 2, []),
+    ],
+)
+def test_atom_type_registry_lookup(element, valence, expected):
+    registry = AtomTypeRegistry.from_atoms(
+        [AtomForm.parse(row) for row in (
+            "C#c0#v4", "C#c+#v3", "C#c0#v3", "C#c-#v3"
+        )]
+    )
+    assert registry.lookup(Element(element), valence) == [
+        AtomForm.parse(row) for row in expected
     ]
 
 
@@ -1317,7 +1349,7 @@ def test_chemistry_model_default():
 
     assert model.connectivity == ConnectivityModel.default()
     assert model.valence == ValenceModel.atom_typing(AtomTypeRegistry.default())
-    assert model.aromaticity == AromaticityModel.daylight()
+    assert model.aromaticity == AromaticityModel.permissive()
     assert model.stereo == StereoModel.default()
     assert model == ChemistryModel.default()
     assert model == ChemistryModel(
@@ -1409,18 +1441,12 @@ def test_chemistry_model_new_error():
                 allow_disconnected_constraints=True,
             ),
             valence=ChemistryModel.default().valence,
-            aromaticity=AromaticityModel.daylight(),
+            aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel.default(),
         ),
         ChemistryModel(
             connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.counts(ValenceTable(entries={})),
-            aromaticity=AromaticityModel.daylight(),
-            stereo=StereoModel.default(),
-        ),
-        ChemistryModel(
-            connectivity=ChemistryModel.default().connectivity,
-            valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
             aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel.default(),
         ),
@@ -1428,6 +1454,12 @@ def test_chemistry_model_new_error():
             connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
             aromaticity=AromaticityModel.daylight(),
+            stereo=StereoModel.default(),
+        ),
+        ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
+            valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
+            aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel(
                 kind_models={},
                 para_stereo=False,

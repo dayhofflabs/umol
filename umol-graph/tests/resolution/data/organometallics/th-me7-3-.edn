@@ -1,0 +1,4 @@
+; [ThMe7]3-; HW II, p. 2345; assignment: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Th#c-3#u0" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"] [0 7 "1"]]}}

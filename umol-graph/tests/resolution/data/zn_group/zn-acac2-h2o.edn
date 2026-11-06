@@ -1,0 +1,8 @@
+; Zn(acac)2(H2O); HW II, p. 1754; ligand charge allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zn#c+2" "C#h3" "C" "O#c-" "C#h" "C" "O" "C#h3" "C#h3" "C" "O#c-" "C#h" "C" "O" "C#h3" "O#h2"]
+         :bonds [[1 2 "1"] [2 3 "1"] [2 4 "2"] [4 5 "1"] [5 6 "2"] [5 7 "1"] [8 9 "1"] [9 10 "1"] [9 11 "2"]
+                 [11 12 "1"] [12 13 "2"] [12 14 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [13] :acceptor 0 :attrs "1"}
+                        {:donors [15] :acceptor 0 :attrs "1"}]}}

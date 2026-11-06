@@ -1,0 +1,178 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "C"
+        "C"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"]
+      :bonds [
+        [0 12 :single]
+        [1 13 :single]
+        [2 14 :single]
+        [3 15 :single]
+        [4 16 :single]
+        [5 17 :single]
+        [6 18 :single]
+        [7 19 :single]
+        [8 20 :single]
+        [9 21 :single]
+        [10 22 :single]
+        [11 23 :single]]
+      :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8 9 10 11] :attrs "[3,3,2,2,2,2,2,2,2,2,2,2]"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "C"
+        "C"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"]
+      :bonds [
+        [0 12 :single]
+        [1 13 :single]
+        [2 14 :single]
+        [3 15 :single]
+        [4 16 :single]
+        [5 17 :single]
+        [6 18 :single]
+        [7 19 :single]
+        [8 20 :single]
+        [9 21 :single]
+        [10 22 :single]
+        [11 23 :single]]
+      :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8 9 10 11] :attrs "[3,3,2,2,2,2,2,2,2,2,2,2]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "C"
+        "C"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"]
+      :bonds [
+        [0 12 :single]
+        [1 13 :single]
+        [2 14 :single]
+        [3 15 :single]
+        [4 16 :single]
+        [5 17 :single]
+        [6 18 :single]
+        [7 19 :single]
+        [8 20 :single]
+        [9 21 :single]
+        [10 22 :single]
+        [11 23 :single]]
+      :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8 9 10 11] :attrs "[3,3,2,2,2,2,2,2,2,2,2,2]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "C"
+        "C"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "B"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"
+        "H"]
+      :bonds [
+        [0 12 :single]
+        [1 13 :single]
+        [2 14 :single]
+        [3 15 :single]
+        [4 16 :single]
+        [5 17 :single]
+        [6 18 :single]
+        [7 19 :single]
+        [8 20 :single]
+        [9 21 :single]
+        [10 22 :single]
+        [11 23 :single]]
+      :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8 9 10 11] :attrs "[3,3,2,2,2,2,2,2,2,2,2,2]"}]}
+    :success true
+    :tie-breaks []}}

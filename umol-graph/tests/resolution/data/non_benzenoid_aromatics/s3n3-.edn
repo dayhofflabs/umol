@@ -1,0 +1,5 @@
+; S3N3-: six-membered 10pi ring; HW I, pp. 683, 686; charge placement: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S#a+" "N#c-#a+" "S#a+" "N#a+" "S#a+" "N#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 5 "1#a"] [5 0 "1#a"]]}}

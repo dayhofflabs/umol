@@ -1,0 +1,3 @@
+; BW, p. 238
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["C#h3"] :bonds []}}

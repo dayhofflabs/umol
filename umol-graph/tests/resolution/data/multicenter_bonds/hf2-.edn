@@ -1,0 +1,6 @@
+; HW I, pp. 174-176, 311, 320: three-center/four-electron hydrogen bridge.
+; F-/H+/F- charge placement: assignment PW; H#c+#m0, F#c-#n3#m2.
+{:config-overrides {:atom {:implicit-hydrogens :zero}}
+ :input {:atoms ["F#c-" "H#c+" "F#c-"]
+         :bonds []
+         :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,2]#c0#u0#s1"}]}}

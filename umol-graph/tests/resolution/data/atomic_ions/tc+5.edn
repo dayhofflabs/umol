@@ -1,0 +1,3 @@
+; Tc5+, free ion d2; HW II, pp. 1901, 1907, 1917, 1923
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Tc#c+5#u2"]}}

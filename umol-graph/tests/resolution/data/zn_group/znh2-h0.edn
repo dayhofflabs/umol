@@ -1,0 +1,4 @@
+; Linear singlet ZnH2; Shayesteh et al. (2005), pp. 4710-4711; doi:10.1002/chem.200500332.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zn" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

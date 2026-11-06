@@ -1,0 +1,7 @@
+; Fe2OCl6(2-), local high-spin; HW II, pp. 1950, 1964; oxide donor allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c+3#u5" "Fe#c+3#u5" "O#c-2" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 1 :attrs "1"}
+                        {:donors [7] :acceptor 1 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}]}}

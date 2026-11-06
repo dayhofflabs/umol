@@ -1,0 +1,4 @@
+; TeF3+; HW I, p. 711: isolated [TeF3][Sb2F11], pyramidal TeF3+.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Te#c+" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]}}

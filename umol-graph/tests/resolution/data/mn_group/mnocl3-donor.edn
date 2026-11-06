@@ -1,0 +1,6 @@
+; MnOCl3, triplet; HW II, p. 1907; JH75, p. 1269; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#c+3#u2" "O" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds [[0 1 "2"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}]}}

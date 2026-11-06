@@ -1,0 +1,4 @@
+; closo-C2B10H12; HW I, pp. 1273-1277; whole-cage allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["C#h" "C#h" "B#h" "B#h" "B#h" "B#h" "B#h" "B#h" "B#h" "B#h" "B#h" "B#h"]
+         :multicenter-bonds [{:atoms [0 1 2 3 4 5 6 7 8 9 10 11] :attrs "[3,3,2,2,2,2,2,2,2,2,2,2]#c0#u0#s1"}]}}

@@ -1,0 +1,4 @@
+; ReO4-; HW II, pp. 1912-1913, 1924-1925
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c-1" "O" "O" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "2"]]}}

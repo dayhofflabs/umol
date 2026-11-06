@@ -1,0 +1,4 @@
+; MnO2Cl2, d1; HW II, p. 1907
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mn#u1" "O" "O" "Cl" "Cl"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "1"] [0 4 "1"]]}}

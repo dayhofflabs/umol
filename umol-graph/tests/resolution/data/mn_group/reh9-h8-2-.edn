@@ -1,0 +1,4 @@
+; ReH9(2-), diamagnetic; HW II, pp. 1919-1920
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c-2#h8" "H"]
+         :bonds [[0 1 "1"]]}}

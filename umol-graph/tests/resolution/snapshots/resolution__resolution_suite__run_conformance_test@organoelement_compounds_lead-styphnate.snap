@@ -1,0 +1,94 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [2 3 7 8 12 14] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "Pb#c+2#n"
+        "O#c-#n3"
+        "C"
+        "C"
+        "N#c+"
+        "O#n2"
+        "O#c-#n3"
+        "C#h"
+        "C"
+        "N#c+"
+        "O#n2"
+        "O#c-#n3"
+        "C"
+        "O#c-#n3"
+        "C"
+        "N#c+"
+        "O#n2"
+        "O#c-#n3"]
+      :bonds [
+        [1 2 :single]
+        [2 14 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :double]
+        [4 6 :single]
+        [3 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :double]
+        [9 11 :single]
+        [8 12 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [14 15 :single]
+        [15 16 :double]
+        [15 17 :single]]}
+    :success true
+    :tie-breaks [7]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {7 ["C#h#v2#d0#t0#a#m!" "C#u#v2#d0#t0#a#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [2 3 7 8 12 14] :attrs "[1,1,1,1,1,1]"}]
+      :atoms [
+        "Pb#c+2#n"
+        "O#c-#n3"
+        "C"
+        "C"
+        "N#c+"
+        "O#n2"
+        "O#c-#n3"
+        "C#h"
+        "C"
+        "N#c+"
+        "O#n2"
+        "O#c-#n3"
+        "C"
+        "O#c-#n3"
+        "C"
+        "N#c+"
+        "O#n2"
+        "O#c-#n3"]
+      :bonds [
+        [1 2 :single]
+        [2 14 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :double]
+        [4 6 :single]
+        [3 7 :single]
+        [7 8 :single]
+        [8 9 :single]
+        [9 10 :double]
+        [9 11 :single]
+        [8 12 :single]
+        [12 13 :single]
+        [12 14 :single]
+        [14 15 :single]
+        [15 16 :double]
+        [15 17 :single]]}
+    :success true
+    :tie-breaks [7]}
+  :counts-strict {:success false :tie-breaks [] :unresolved {7 ["C#u#v2#a" "C#h#v2#a"]}}}

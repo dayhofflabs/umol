@@ -21,6 +21,7 @@ use umol_graph_ir::ir::{
 use umol_utils::solution::Solution;
 
 use super::{AtomCompletions, ValenceEntry, ValenceTable};
+use crate::ops::invariant::ValenceInvariants;
 use crate::ops::model::ValenceTieBreak;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -56,19 +57,21 @@ impl fmt::Display for CountsMismatch {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct CountsInput {
     valence: i64,
+    donated_pairs: i64,
     accepted_pairs: i64,
-    is_aromatic: bool,
+    aromatic_valence: AromaticValenceForm,
+    multicenter_valence: i64,
 }
 
 impl CountsInput {
     fn for_molecule_atom(
         molecule: &Molecule,
         atom_id: AtomId,
-        is_aromatic: bool,
-    ) -> Result<Self, CountsError> {
+        aromatic_valence: AromaticValenceForm,
+    ) -> Result<Option<Self>, CountsError> {
         let atom = molecule.atom(atom_id);
         let constraints = atom.constraints();
         let Some(AtomConstraintForm::Valence(valence)) =
@@ -76,15 +79,36 @@ impl CountsInput {
         else {
             return Err(CountsError::NoMatch);
         };
-        Ok(Self {
-            valence: valence.as_lit().unwrap_or(0),
-            accepted_pairs: atom
-                .accepted_pairs()
-                .ok_or(CountsError::NoMatch)?
-                .as_lit()
-                .unwrap_or(0),
-            is_aromatic,
-        })
+        let Some(AtomConstraintForm::DonatedPairs(donated_pairs)) =
+            constraints.evidenced_complete(AtomConstraintKey::DonatedPairs)
+        else {
+            return Err(CountsError::NoMatch);
+        };
+        let Some(AtomConstraintForm::AcceptedPairs(accepted_pairs)) =
+            constraints.evidenced_complete(AtomConstraintKey::AcceptedPairs)
+        else {
+            return Err(CountsError::NoMatch);
+        };
+        let Some(AtomConstraintForm::MulticenterValence(multicenter_valence)) =
+            constraints.evidenced_complete(AtomConstraintKey::MulticenterValence)
+        else {
+            return Err(CountsError::NoMatch);
+        };
+        let (Some(valence), Some(donated_pairs), Some(accepted_pairs), Some(multicenter_valence)) = (
+            valence.as_lit(),
+            donated_pairs.as_lit(),
+            accepted_pairs.as_lit(),
+            multicenter_valence.as_lit(),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            valence,
+            donated_pairs,
+            accepted_pairs,
+            aromatic_valence,
+            multicenter_valence: multicenter_valence.valence_count(),
+        }))
     }
 }
 
@@ -131,10 +155,12 @@ impl<'a> CountsValence<'a> {
         atom_id: AtomId,
     ) -> Result<Option<SmallVec<[AtomForm; 1]>>, CountsError> {
         let atom = molecule.atom(atom_id);
-        let aromatic = atom
+        let Some(AtomConstraintForm::AromaticValence(aromatic)) = atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::AromaticValence)
-            .ok_or(CountsError::NoMatch)?;
+        else {
+            return Err(CountsError::NoMatch);
+        };
         if atom.is_ground() {
             // A field-ground atom whose aromatic evidence is present but
             // whose contribution is undetermined is still under resolution:
@@ -143,20 +169,22 @@ impl<'a> CountsValence<'a> {
             // complete.
             let contribution_open = matches!(
                 aromatic,
-                AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(
-                    NumForm::Undetermined
-                ))
+                AromaticValenceForm::Aromatic(NumForm::Undetermined)
             );
             if !contribution_open {
                 return Ok(None);
             }
             let element = atom.element().as_lit().expect("ground element");
             let charge = atom.charge().as_lit().expect("ground charge");
-            let accepted_pairs = atom
-                .accepted_pairs()
-                .ok_or(CountsError::NoMatch)?
-                .as_lit()
-                .unwrap_or(0);
+            let Some(AtomConstraintForm::AcceptedPairs(accepted_pairs)) = atom
+                .constraints()
+                .evidenced_complete(AtomConstraintKey::AcceptedPairs)
+            else {
+                return Err(CountsError::NoMatch);
+            };
+            let Some(accepted_pairs) = accepted_pairs.as_lit() else {
+                return Ok(None);
+            };
             let Some(entry) = element
                 .shift((2 * accepted_pairs - charge) as i8)
                 .and_then(|shifted| self.table.entry(shifted))
@@ -185,22 +213,9 @@ impl<'a> CountsValence<'a> {
             return Ok(None);
         };
 
-        if atom
-            .valence()
-            .ok_or(CountsError::NoMatch)?
-            .as_lit()
-            .is_none()
-        {
+        let Some(input) = CountsInput::for_molecule_atom(molecule, atom_id, aromatic)? else {
             return Ok(None);
-        }
-        let input = CountsInput::for_molecule_atom(
-            molecule,
-            atom_id,
-            matches!(
-                aromatic,
-                AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(_))
-            ),
-        )?;
+        };
         let candidates = self.candidate_states(atom.attributes(), input)?;
         Ok(Some(candidates))
     }
@@ -216,9 +231,12 @@ impl<'a> CountsValence<'a> {
     ) -> Result<SmallVec<[AtomForm; 1]>, CountsError> {
         let CountsInput {
             valence,
+            donated_pairs,
             accepted_pairs,
-            is_aromatic,
+            aromatic_valence,
+            multicenter_valence,
         } = input;
+        let is_aromatic = matches!(aromatic_valence, AromaticValenceForm::Aromatic(_));
         let element = atom.element.as_lit().unwrap();
         let charge = atom.charge.as_lit().unwrap();
 
@@ -226,7 +244,7 @@ impl<'a> CountsValence<'a> {
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.table.entry(shifted));
 
-        let aromatic_constraint = atom.constraints.aromatic_valence();
+        let aromatic_constraint = &aromatic_valence;
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
@@ -257,8 +275,8 @@ impl<'a> CountsValence<'a> {
             bonding_budget,
             entry.is_none(),
         )?;
-        let electron_budget = i64::from(element.valence_electrons()) - charge;
-        let electron_count = electron_budget + valence + 2 * accepted_pairs;
+        let electron_count =
+            ValenceInvariants::electron_count(element, charge, 0, valence, 0, accepted_pairs);
         let valence_capacity = i64::from(element.valence_capacity());
 
         let mut candidates = SmallVec::new();
@@ -284,8 +302,15 @@ impl<'a> CountsValence<'a> {
                     if electron_count + implicit_hydrogens + aromatic_covalence > valence_capacity {
                         continue;
                     }
-                    let nonbonding =
-                        electron_budget - valence - aromatic_valence - implicit_hydrogens;
+                    let nonbonding = ValenceInvariants::nonbonding_electrons(
+                        element,
+                        charge,
+                        implicit_hydrogens,
+                        valence,
+                        aromatic_valence,
+                        donated_pairs,
+                        multicenter_valence,
+                    );
                     if nonbonding < 0 {
                         continue;
                     }
@@ -327,7 +352,7 @@ impl<'a> CountsValence<'a> {
     /// Classify molecule atom (including ground atoms) against valence table:
     /// - `Determined` if some state admits it.
     /// - `Contradictory` if no consistent state exists.
-    /// - `Underdetermined` if atom is not ground.
+    /// - `Underdetermined` if the atom or a required contribution is not determined.
     pub fn classify_molecule_atom(
         &self,
         molecule: &Molecule,
@@ -345,18 +370,15 @@ impl<'a> CountsValence<'a> {
             .constraints()
             .evidenced_complete(AtomConstraintKey::AromaticValence)
             .ok_or(CountsError::NoMatch)
-            .and_then(|aromatic| {
-                CountsInput::for_molecule_atom(
-                    molecule,
-                    atom_id,
-                    matches!(
-                        aromatic,
-                        AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(_))
-                    ),
-                )
+            .and_then(|reading| {
+                let AtomConstraintForm::AromaticValence(aromatic) = reading else {
+                    unreachable!()
+                };
+                CountsInput::for_molecule_atom(molecule, atom_id, aromatic)
             });
         let input = match input {
-            Ok(input) => input,
+            Ok(Some(input)) => input,
+            Ok(None) => return Solution::Underdetermined(()),
             Err(_) => {
                 return Solution::Contradictory(CountsMismatch {
                     element,
@@ -365,18 +387,19 @@ impl<'a> CountsValence<'a> {
                 })
             }
         };
+        let valence = input.valence;
         match self.candidate_states(atom.attributes(), input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,
                 charge,
-                valence: Some(input.valence),
+                valence: Some(valence),
             }),
         }
     }
 
     /// Infer implicit H under the valence policy, ignoring stored H and lone pairs.
-    /// Complete constraint readings meet stored #v and #a with relation evidence.
+    /// Complete constraint readings meet stored #v, #d, #t, #a and #m with relation evidence.
     /// Uses the first table covalence at or above #v and retains charge/spin evidence.
     /// Returns None for missing concrete evidence, no admissible H count, or distinct H
     /// counts under Strict. MostSaturated selects the greatest admissible count.
@@ -391,20 +414,20 @@ impl<'a> CountsValence<'a> {
         let atom = molecule.atoms().get(atom_id)?;
         let element = atom.element().as_lit()?;
         let charge = atom.charge().as_lit()?;
-        let constraints = atom.constraints();
-        let AtomConstraintForm::Valence(valence) =
-            constraints.evidenced_complete(AtomConstraintKey::Valence)?
+        let AtomConstraintForm::AromaticValence(aromatic) = atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AromaticValence)?
         else {
             unreachable!()
         };
-        let valence = valence.as_lit()?;
-        let AtomConstraintForm::AromaticValence(aromatic) =
-            constraints.evidenced_complete(AtomConstraintKey::AromaticValence)?
-        else {
-            unreachable!()
-        };
-        let aromatic = aromatic.as_lit()?.valence_count();
-        let accepted_pairs = atom.accepted_pairs()?.as_lit()?;
+        let CountsInput {
+            valence,
+            donated_pairs,
+            accepted_pairs,
+            aromatic_valence,
+            multicenter_valence,
+        } = CountsInput::for_molecule_atom(molecule, atom_id, aromatic).ok()??;
+        let aromatic = aromatic_valence.as_lit()?.valence_count();
         let shifted_number = i64::from(element.atomic_number())
             .checked_add(accepted_pairs.checked_mul(2)?)?
             .checked_sub(charge)?;
@@ -422,19 +445,28 @@ impl<'a> CountsValence<'a> {
             })
             .map(|c| c.checked_sub(valence))
             .unwrap_or(Some(0))?;
-        let nonbonding_budget = i64::from(element.valence_electrons())
-            .checked_sub(charge)?
-            .checked_sub(valence)?
-            .checked_sub(aromatic)?;
+        let nonbonding_budget = ValenceInvariants::nonbonding_electrons(
+            element,
+            charge,
+            0,
+            valence,
+            aromatic,
+            donated_pairs,
+            multicenter_valence,
+        );
         let spin = atom.unpaired_electrons();
         let unpaired_count = spin.count.as_lit();
         let valence_capacity = i64::from(element.valence_capacity());
         let max_lone_pairs = valence_capacity / 2;
         let aromatic_covalence = aromatic_covalence(aromatic);
-        let electron_count = i64::from(element.valence_electrons()) - charge
-            + valence
-            + aromatic_covalence
-            + 2 * accepted_pairs;
+        let electron_count = ValenceInvariants::electron_count(
+            element,
+            charge,
+            0,
+            valence,
+            aromatic,
+            accepted_pairs,
+        );
         let mut hydrogens = None;
         for h in 0..=bonding_budget {
             if entry.is_some() && h.checked_add(aromatic_covalence)? > bonding_budget {
@@ -608,6 +640,7 @@ mod tests {
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
+    use crate::ops::invariant::ValenceInvariantsValidator;
     use crate::ops::valence::ValenceTable;
 
     #[rstest]
@@ -746,15 +779,131 @@ mod tests {
     }
 
     #[rstest]
+    #[case::multicenter(
+        r#"{:atoms ["H#c-#h0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        Ok(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!")]))
+    )]
+    #[case::asserted_multicenter(
+        r#"{:atoms ["H#c-#h0#m2"]}"#,
+        Ok(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!#m2")]))
+    )]
+    #[case::multicenter_zero(
+        r#"{:atoms ["H#c+#h0" "O" "O"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[0,1,1]"}]}"#,
+        Ok(Some(smallvec![atom_dsl!("H#c+#h0#n0#u0#s#v0#a!")]))
+    )]
+    #[case::unknown_multicenter(
+        r#"{:atoms ["H#c-#h0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
+        Ok(None)
+    )]
+    #[case::asserted_unknown_multicenter(r#"{:atoms ["H#c-#h0#m+"]}"#, Ok(None))]
+    #[case::asserted_multicenter_narrows_relation(
+        r#"{:atoms ["H#c-#h0#m2" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
+        Ok(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!#m2")]))
+    )]
+    #[case::conflicting_multicenter(
+        r#"{:atoms ["H#c-#h0#m0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        Err(CountsError::NoMatch)
+    )]
+    #[case::donated_pair(
+        r#"{:atoms ["N#c0#h3" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        Ok(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!")]))
+    )]
+    #[case::asserted_donated_pair(
+        r#"{:atoms ["N#c0#h3#d"]}"#,
+        Ok(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!#d")]))
+    )]
+    #[case::unknown_donated_pair(
+        r#"{:atoms ["N#c0#h3" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
+        Ok(None)
+    )]
+    #[case::asserted_donation_narrows_relation(
+        r#"{:atoms ["N#c0#h3#d" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
+        Ok(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!#d")]))
+    )]
+    #[case::conflicting_donation(
+        r#"{:atoms ["N#c0#h3#d0" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        Err(CountsError::NoMatch)
+    )]
+    #[case::unknown_accepted_pair(
+        r#"{:atoms ["B#c0#h3" "N"]
+            :dative-bonds [{:donors [1] :acceptor 0 :attrs "*"}]}"#,
+        Ok(None)
+    )]
+    #[case::conflicting_acceptance(
+        r#"{:atoms ["B#c0#h3#t0" "N"]
+            :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#,
+        Err(CountsError::NoMatch)
+    )]
+    #[case::aromatic_contribution(
+        r#"{:atoms ["C#c0#h0" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]}"#,
+        Ok(Some(smallvec![atom_dsl!("C#c0#h0#n1#u0#s#v2#a0")]))
+    )]
+    fn test_counts_valence_admitted_completions_contributions(
+        #[case] input: &str,
+        #[case] expected: Result<Option<SmallVec<[AtomForm; 1]>>, CountsError>,
+    ) {
+        let molecule = mol_dsl!(input);
+        let original = molecule.clone();
+        assert_eq!(
+            CountsValence::new(ValenceTable::default_table())
+                .admitted_completions(&molecule, AtomId(0)),
+            expected,
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::ammonia_borane(
+        r#"{:atoms ["N#c0#h3" "B#c0#h3"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        vec!["N#c0#h3#n0#u0#s#v0#a!", "B#c0#h3#n0#u0#s#v0#a!"]
+    )]
+    #[case::xenon_difluoride(
+        r#"{:atoms ["Xe#c0#h0" "F#c0#h0" "F#c0#h0"]
+            :multicenter-bonds [{:atoms [1 0 2] :attrs "[1,2,1]"}]}"#,
+        vec!["Xe#c0#h0#n3#u0#s#v0#a!", "F#c0#h0#n3#u0#s#v0#a!", "F#c0#h0#n3#u0#s#v0#a!"]
+    )]
+    fn test_counts_valence_admit_invariants(#[case] input: &str, #[case] expected: Vec<&str>) {
+        let mut molecule = mol_dsl!(input);
+        let completions = AtomCompletions::from_iter(
+            expected
+                .iter()
+                .enumerate()
+                .map(|(id, atom)| (AtomId(id as u32), smallvec![atom_dsl!(atom)])),
+        );
+        assert_eq!(
+            CountsValence::new(ValenceTable::default_table()).admit(&molecule),
+            Solution::Determined(completions.clone()),
+        );
+        for (id, candidates) in completions.iter() {
+            *molecule.atom_mut(id).attributes_mut() = candidates[0].clone();
+        }
+        assert_eq!(
+            ValenceInvariantsValidator.validate(&molecule),
+            Ok(Solution::Determined(())),
+        );
+    }
+
+    #[rstest]
     #[case::literal(NumForm::Lit(1), NumForm::Undetermined, Some(true))]
     #[case::singleton(NumForm::lit_set([1]), NumForm::lit_set([1]), Some(true))]
     #[case::set_assertion(NumForm::Lit(1), NumForm::lit_set([0, 1]), Some(true))]
     #[case::conflict(NumForm::Lit(1), NumForm::Lit(2), None)]
     #[case::asserted_bottom(NumForm::Lit(1), NumForm::lit_set([]), None)]
     #[case::derived_bottom(NumForm::lit_set([]), NumForm::Undetermined, None)]
-    #[case::unknown_derivation(NumForm::Undetermined, NumForm::Lit(1), Some(false))]
-    #[case::unknown_with_bottom_assertion(NumForm::Undetermined, NumForm::lit_set([]), Some(false))]
-    #[case::set_derivation(NumForm::lit_set([1, 2]), NumForm::Lit(1), Some(false))]
+    #[case::unknown_derivation(NumForm::Undetermined, NumForm::Lit(1), Some(true))]
+    #[case::unknown_with_bottom_assertion(NumForm::Undetermined, NumForm::lit_set([]), None)]
+    #[case::set_derivation(NumForm::lit_set([1, 2]), NumForm::Lit(1), Some(true))]
     fn test_counts_valence_admit_valence(
         #[case] order: NumForm,
         #[case] assertion: NumForm,
@@ -975,6 +1124,37 @@ mod tests {
         None
     )]
     #[case::open_charge(r#"{:atoms ["C#u0#s"]}"#, None, None)]
+    #[case::donated_pair_budget(
+        r#"{:atoms ["C#c0#u0#s" "O" "Cr"] :bonds [[0 1 "2"]]
+            :dative-bonds [{:donors [0] :acceptor 2 :attrs "1"}]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::asserted_donation_budget(
+        r#"{:atoms ["C#c0#u0#s#d" "O"] :bonds [[0 1 "2"]]}"#,
+        Some(0),
+        Some(0)
+    )]
+    #[case::unknown_donation(
+        r#"{:atoms ["C#c0#u0#s" "O" "Cr"] :bonds [[0 1 "2"]]
+            :dative-bonds [{:donors [0] :acceptor 2 :attrs "*"}]}"#,
+        None,
+        None
+    )]
+    #[case::conflicting_donation(
+        r#"{:atoms ["C#c0#u0#s#d0" "O" "Cr"] :bonds [[0 1 "2"]]
+            :dative-bonds [{:donors [0] :acceptor 2 :attrs "1"}]}"#,
+        None,
+        None
+    )]
+    #[case::multicenter_budget(r#"{:atoms ["S#c0#u0#s#m6"]}"#, Some(0), Some(0))]
+    #[case::unknown_multicenter(r#"{:atoms ["S#c0#u0#s#m+"]}"#, None, None)]
+    #[case::conflicting_multicenter(
+        r#"{:atoms ["H#c-#u0#s#m0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        None,
+        None
+    )]
     #[case::open_aromatic(r#"{:atoms ["C#c0#u0#s#a+"]}"#, None, None)]
     #[case::aromatic_system(
         r#"{:atoms ["C#c0#h1#u0#s" "C" "C" "C" "C" "C"]
@@ -1036,74 +1216,74 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::methane_h("C#c0#h4", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["C#c0#h4#n0#u0#s#v0#a!"])]
-    #[case::methane_h_inferred("C#c0#h*", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::methane_h("C#c0#h4", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["C#c0#h4#n0#u0#s#v0#a!"])]
+    #[case::methane_h_inferred("C#c0#h*", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "C#c0#h0#n2#u0#s#v0#a!",
         "C#c0#h#n#u#s2#v0#a!",
         "C#c0#h2#n#u0#s#v0#a!",
         "C#c0#h3#n0#u#s2#v0#a!",
         "C#c0#h4#n0#u0#s#v0#a!",
     ])]
-    #[case::ammonia("N#c0#h3", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["N#c0#h3#n#u0#s#v0#a!"])]
-    #[case::water("O#c0#h2", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["O#c0#h2#n2#u0#s#v0#a!"])]
-    #[case::methyl_radical("C#c0#h3", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["C#c0#h3#n0#u#s2#v0#a!"])]
-    #[case::methyl_radical_h_inferred("C#c0#u", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::ammonia("N#c0#h3", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["N#c0#h3#n#u0#s#v0#a!"])]
+    #[case::water("O#c0#h2", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["O#c0#h2#n2#u0#s#v0#a!"])]
+    #[case::methyl_radical("C#c0#h3", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["C#c0#h3#n0#u#s2#v0#a!"])]
+    #[case::methyl_radical_h_inferred("C#c0#u", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "C#c0#h#n#u#s2#v0#a!",
         "C#c0#h3#n0#u#s2#v0#a!",
     ])]
-    #[case::methyl_anion("C#c-1#h3", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["C#c-#h3#n#u0#s#v0#a!"])]
-    #[case::hydroxyl_radical("O#c0#h1", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["O#c0#h#n2#u#s2#v0#a!"])]
-    #[case::fluoride("F#c-1#h0", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["F#c-#h0#n4#u0#s#v0#a!"])]
-    #[case::fluorine_atom("F#c0#h0", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["F#c0#h0#n3#u#s2#v0#a!"])]
-    #[case::magnesium_atom("Mg#c0#h0", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["Mg#c0#h0#n#u0#s#v0#a!"])]
-    #[case::ethane_carbon("C#c0#v1", CountsInput { valence: 1, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::methyl_anion("C#c-1#h3", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["C#c-#h3#n#u0#s#v0#a!"])]
+    #[case::hydroxyl_radical("O#c0#h1", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["O#c0#h#n2#u#s2#v0#a!"])]
+    #[case::fluoride("F#c-1#h0", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["F#c-#h0#n4#u0#s#v0#a!"])]
+    #[case::fluorine_atom("F#c0#h0", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["F#c0#h0#n3#u#s2#v0#a!"])]
+    #[case::magnesium_atom("Mg#c0#h0", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["Mg#c0#h0#n#u0#s#v0#a!"])]
+    #[case::ethane_carbon("C#c0#v1", CountsInput { valence: 1, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "C#c0#h0#n#u#s2#v#a!",
         "C#c0#h#n#u0#s#v#a!",
         "C#c0#h2#n0#u#s2#v#a!",
         "C#c0#h3#n0#u0#s#v#a!",
     ])]
-    #[case::methylene_carbon("C#c0#v2", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::methylene_carbon("C#c0#v2", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "C#c0#h0#n#u0#s#v2#a!",
         "C#c0#h#n0#u#s2#v2#a!",
         "C#c0#h2#n0#u0#s#v2#a!",
     ])]
-    #[case::methine_carbon("C#c0#v3", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::methine_carbon("C#c0#v3", CountsInput { valence: 3, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "C#c0#h0#n0#u#s2#v3#a!",
         "C#c0#h#n0#u0#s#v3#a!",
     ])]
-    #[case::amine_nitrogen("N#c0#v1", CountsInput { valence: 1, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::amine_nitrogen("N#c0#v1", CountsInput { valence: 1, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "N#c0#h0#n2#u0#s#v#a!",
         "N#c0#h#n#u#s2#v#a!",
         "N#c0#h2#n#u0#s#v#a!",
     ])]
-    #[case::alcohol_oxygen("O#c0#v1", CountsInput { valence: 1, accepted_pairs: 0, is_aromatic: false }, vec![
+    #[case::alcohol_oxygen("O#c0#v1", CountsInput { valence: 1, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec![
         "O#c0#h0#n2#u#s2#v#a!",
         "O#c0#h#n2#u0#s#v#a!",
     ])]
-    #[case::benzene_carbon("C#c0#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h#n0#u0#s#v2#a"])]
-    #[case::benzene_carbon_h_inferred("C#c0#v2#h*#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec![
+    #[case::benzene_carbon("C#c0#v2#h1#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["C#c0#h#n0#u0#s#v2#a"])]
+    #[case::benzene_carbon_h_inferred("C#c0#v2#h*#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec![
         "C#c0#h0#n0#u#s2#v2#a",
         "C#c0#h#n0#u0#s#v2#a",
     ])]
-    #[case::fused_aromatic_carbon_h_inferred("C#c0#v3#h*#a+", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h0#n0#u0#s#v3#a"])]
-    #[case::aromatic_carbon_unpaired("C#c0#v2#h*#u1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h0#n0#u#s2#v2#a"])]
-    #[case::pyridine_nitrogen("N#c0#v2#h0#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec![
+    #[case::fused_aromatic_carbon_h_inferred("C#c0#v3#h*#a+", CountsInput { valence: 3, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["C#c0#h0#n0#u0#s#v3#a"])]
+    #[case::aromatic_carbon_unpaired("C#c0#v2#h*#u1#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["C#c0#h0#n0#u#s2#v2#a"])]
+    #[case::pyridine_nitrogen("N#c0#v2#h0#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec![
         "N#c0#h0#n#u0#s#v2#a",
         "N#c0#h0#n0#u#s2#v2#a2",
     ])]
-    #[case::pyrrole_nitrogen("N#c0#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec![
+    #[case::pyrrole_nitrogen("N#c0#v2#h1#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec![
         "N#c0#h#n0#u0#s#v2#a2",
     ])]
-    #[case::furan_oxygen("O#c0#v2#h0#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["O#c0#h0#n#u0#s#v2#a2"])]
-    #[case::furan_oxygen_h_inferred("O#c0#v2#h*#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["O#c0#h0#n#u0#s#v2#a2"])]
-    #[case::borazine_boron("B#c0#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["B#c0#h#n0#u0#s#v2#a0"])]
-    #[case::cyclopentadienyl_carbanion("C#c-1#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec![
+    #[case::furan_oxygen("O#c0#v2#h0#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["O#c0#h0#n#u0#s#v2#a2"])]
+    #[case::furan_oxygen_h_inferred("O#c0#v2#h*#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["O#c0#h0#n#u0#s#v2#a2"])]
+    #[case::borazine_boron("B#c0#v2#h1#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["B#c0#h#n0#u0#s#v2#a0"])]
+    #[case::cyclopentadienyl_carbanion("C#c-1#v2#h1#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec![
         "C#c-#h#n0#u0#s#v2#a2",
     ])]
-    #[case::tropylium_carbocation("C#c1#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c+#h#n0#u0#s#v2#a0"])]
-    #[case::exocyclic_carbonyl_carbon("C#c0#v4#h*#a+", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h0#n0#u0#s#v4#a0"])]
-    #[case::sp3_carbon_h_pinned("C#c0#v2#h2#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h2#n0#u0#s#v2#a0"])]
-    #[case::iron_out_of_table("Fe#c0#h0", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["Fe#c0#h0#n4#u0#s#v0#a!"])]
+    #[case::tropylium_carbocation("C#c1#v2#h1#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["C#c+#h#n0#u0#s#v2#a0"])]
+    #[case::exocyclic_carbonyl_carbon("C#c0#v4#h*#a+", CountsInput { valence: 4, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["C#c0#h0#n0#u0#s#v4#a0"])]
+    #[case::sp3_carbon_h_pinned("C#c0#v2#h2#a+", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, vec!["C#c0#h2#n0#u0#s#v2#a0"])]
+    #[case::iron_out_of_table("Fe#c0#h0", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["Fe#c0#h0#n4#u0#s#v0#a!"])]
     fn test_counts_valence_candidate_states(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
@@ -1124,12 +1304,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::chloronium("Cl#c1", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c+#h0#n2#u0#s#v2#a!"])]
-    #[case::chlorine_trifluoride("Cl#c0", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c0#h0#n2#u0#s#v3#a!"])]
-    #[case::chlorine_anion("Cl#c-#h0", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c-#h0#n3#u0#s#v2#a!"])]
-    #[case::carbon("C#c0#h0", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: false }, vec!["C#c0#h0#n0#u0#s#v4#a!"])]
-    #[case::carbon_anion("C#c-#h0", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: false }, vec!["C#c-#h0#n#u0#s#v3#a!"])]
-    #[case::accepted_pairs("C#c0#h2", CountsInput { valence: 0, accepted_pairs: 1, is_aromatic: false }, vec!["C#c0#h2#n#u0#s#v0#a!"])]
+    #[case::chloronium("Cl#c1", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["Cl#c+#h0#n2#u0#s#v2#a!"])]
+    #[case::chlorine_trifluoride("Cl#c0", CountsInput { valence: 3, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["Cl#c0#h0#n2#u0#s#v3#a!"])]
+    #[case::chlorine_anion("Cl#c-#h0", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["Cl#c-#h0#n3#u0#s#v2#a!"])]
+    #[case::carbon("C#c0#h0", CountsInput { valence: 4, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["C#c0#h0#n0#u0#s#v4#a!"])]
+    #[case::carbon_anion("C#c-#h0", CountsInput { valence: 3, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["C#c-#h0#n#u0#s#v3#a!"])]
+    #[case::accepted_pairs("C#c0#h2", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 1, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, vec!["C#c0#h2#n#u0#s#v0#a!"])]
     fn test_counts_valence_candidate_states_saturated(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
@@ -1150,13 +1330,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_aromatic_out_of_table("Fe#c0#h0#a+", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: true }, CountsError::UndeterminedAromaticValence)]
-    #[case::over_valence("C#c0", CountsInput { valence: 5, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
-    #[case::carbon_anion_supplied_h("C#c-#h0", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
-    #[case::carbon_anion_inferred_h("C#c-", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
-    #[case::divalent_fluorine("F#c0", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
-    #[case::aromatic_over_capacity("C#c-#h1#a1", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, CountsError::NoMatch)]
-    #[case::accepted_pairs_over_capacity("C#c0#h3", CountsInput { valence: 0, accepted_pairs: 1, is_aromatic: false }, CountsError::NoMatch)]
+    #[case::undetermined_aromatic_out_of_table("Fe#c0#h0#a+", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, CountsError::UndeterminedAromaticValence)]
+    #[case::over_valence("C#c0", CountsInput { valence: 5, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, CountsError::NoMatch)]
+    #[case::carbon_anion_supplied_h("C#c-#h0", CountsInput { valence: 4, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, CountsError::NoMatch)]
+    #[case::carbon_anion_inferred_h("C#c-", CountsInput { valence: 4, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, CountsError::NoMatch)]
+    #[case::divalent_fluorine("F#c0", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, CountsError::NoMatch)]
+    #[case::aromatic_over_capacity("C#c-#h1#a1", CountsInput { valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValenceForm::Aromatic(NumForm::Undetermined), multicenter_valence: 0 }, CountsError::NoMatch)]
+    #[case::accepted_pairs_over_capacity("C#c0#h3", CountsInput { valence: 0, donated_pairs: 0, accepted_pairs: 1, aromatic_valence: AromaticValenceForm::NotAromatic, multicenter_valence: 0 }, CountsError::NoMatch)]
     fn test_counts_valence_candidate_states_error(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
@@ -1224,6 +1404,49 @@ mod tests {
         assert_eq!(
             resolver.classify_molecule_atom(&molecule, AtomId(0)),
             expected
+        );
+    }
+
+    #[rstest]
+    #[case::donor(
+        r#"{:atoms ["N#i=#c0#h3#n0#u0#s" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        Solution::Determined(())
+    )]
+    #[case::unknown_donor(
+        r#"{:atoms ["N#i=#c0#h3#n0#u0#s" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
+        Solution::Underdetermined(())
+    )]
+    #[case::conflicting_donor(
+        r#"{:atoms ["N#i=#c0#h3#n0#u0#s#d0" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
+        Solution::Contradictory(CountsMismatch { element: Element::N, charge: 0, valence: Some(0) })
+    )]
+    #[case::multicenter(
+        r#"{:atoms ["H#i=#c-#h0#n0#u0#s" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        Solution::Determined(())
+    )]
+    #[case::unknown_multicenter(
+        r#"{:atoms ["H#i=#c-#h0#n0#u0#s" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
+        Solution::Underdetermined(())
+    )]
+    #[case::conflicting_multicenter(
+        r#"{:atoms ["H#i=#c-#h0#n0#u0#s#m0" "Cr" "Cr"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+        Solution::Contradictory(CountsMismatch { element: Element::H, charge: -1, valence: Some(0) })
+    )]
+    fn test_counts_valence_classify_molecule_atom_contributions(
+        #[case] input: &str,
+        #[case] expected: Solution<(), CountsMismatch>,
+    ) {
+        let molecule = mol_dsl!(input);
+        assert_eq!(
+            CountsValence::new(ValenceTable::default_table())
+                .classify_molecule_atom(&molecule, AtomId(0)),
+            expected,
         );
     }
 }

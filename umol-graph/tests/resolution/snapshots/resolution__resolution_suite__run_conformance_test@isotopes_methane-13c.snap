@@ -1,0 +1,30 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {:output {:atoms ["C#i13#h4"] :bonds []} :success true :tie-breaks [0]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#i13#h4#v0#d0#t0#a!#m!"
+        "C#i13#h3#u#v0#d0#t0#a!#m!"
+        "C#i13#h2#u2#v0#d0#t0#a!#m!"
+        "C#i13#h2#u2#s#v0#d0#t0#a!#m!"
+        "C#i13#h2#n#v0#d0#t0#a!#m!"
+        "C#i13#h#n#u#v0#d0#t0#a!#m!"
+        "C#i13#h#u3#v0#d0#t0#a!#m!"
+        "C#i13#n#u2#v0#d0#t0#a!#m!"]}}
+  :counts-most-saturated {:output {:atoms ["C#i13#h4"] :bonds []} :success true :tie-breaks [0]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#i13#n2#v0#a!"
+        "C#i13#h#n#u#v0#a!"
+        "C#i13#h2#n#v0#a!"
+        "C#i13#h3#u#v0#a!"
+        "C#i13#h4#v0#a!"]}}}

@@ -1,0 +1,4 @@
+; Molecular CoO, quartet; C97, pp. 8795-8796, 8798; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#u3" "O"]
+         :bonds [[0 1 "2"]]}}

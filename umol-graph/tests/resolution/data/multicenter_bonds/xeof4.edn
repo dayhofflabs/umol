@@ -1,0 +1,6 @@
+; Holleman/Wiberg 103, Band 1, pp. 471.
+; Xe registry state: Xe#n#v2#m4.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Xe" "O" "F" "F" "F" "F"]
+         :bonds [[0 1 :double]]
+         :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]#c0#u0#s1"} {:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}]}}

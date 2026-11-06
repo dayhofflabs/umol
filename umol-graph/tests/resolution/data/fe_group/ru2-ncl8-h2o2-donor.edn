@@ -1,0 +1,10 @@
+; M2NCl8(H2O)2(3-), paired M=N=M; HW II, pp. 1983-1984; DZ20; charge allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c+2#u0" "Ru#c+2#u0" "N#c+" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"
+                 "O#h2" "O#h2"]
+         :bonds [[0 2 "2"] [1 2 "2"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 1 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [9] :acceptor 1 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}
+                        {:donors [11] :acceptor 0 :attrs "1"} {:donors [12] :acceptor 1 :attrs "1"}]}}

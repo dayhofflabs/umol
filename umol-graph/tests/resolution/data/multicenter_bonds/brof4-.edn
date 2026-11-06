@@ -1,0 +1,6 @@
+; BrOF4-; HW I, p. 545; doi:10.1021/ic50181a003, pp. 537-538; adopted IOF4- bond partition.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Br#c-" "O" "F" "F" "F" "F"]
+         :bonds [[0 1 :double]]
+         :multicenter-bonds [{:atoms [2 0 3] :attrs "[1,2,1]#c0#u0#s1"}
+                            {:atoms [4 0 5] :attrs "[1,2,1]#c0#u0#s1"}]}}

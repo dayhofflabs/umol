@@ -20,7 +20,7 @@ use crate::atom::AtomForm;
 use crate::element::Element;
 
 /// An immutable collection of atom patterns used by atom-typing valence resolution.
-/// Entries have literal elements and charges in -128..=127, and undetermined isotopes.
+/// Entries have literal elements, charges in -128..=127 and valences, and undetermined isotopes.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AtomTypeRegistry(GraphAtomTypeRegistry);
@@ -33,7 +33,7 @@ impl AtomTypeRegistry {
         Self::from_rust(GraphAtomTypeRegistry::default_registry())
     }
 
-    /// Construct a registry from patterns with literal elements and charges, and undetermined isotopes.
+    /// Construct a registry from patterns with literal elements, charges and valences, and undetermined isotopes.
     /// Raises ValueError for an invalid entry, including a charge outside -128..=127.
     #[staticmethod]
     fn from_atoms(py: Python<'_>, atoms: Vec<Py<AtomForm>>) -> PyResult<Self> {
@@ -66,20 +66,20 @@ impl AtomTypeRegistry {
         self.0.content_hash_hex()
     }
 
-    /// All patterns registered for an element, detached from the registry.
-    fn patterns_for_element(&self, element: Element) -> Vec<AtomForm> {
+    /// All patterns for an element in ascending valence order, detached from the registry.
+    fn lookup_by_element(&self, element: Element) -> Vec<AtomForm> {
         self.0
-            .patterns_for_element(ChemElement::from(&element))
+            .lookup_by_element(ChemElement::from(&element))
             .iter()
             .cloned()
             .map(AtomForm::from_rust)
             .collect()
     }
 
-    /// Patterns registered for an element and charge, detached from the registry.
-    fn patterns_for_element_and_charge(&self, element: Element, charge: i8) -> Vec<AtomForm> {
+    /// Patterns registered for an element and localized valence, detached from the registry.
+    fn lookup(&self, element: Element, valence: u8) -> Vec<AtomForm> {
         self.0
-            .patterns_for_element_and_charge(ChemElement::from(&element), charge)
+            .lookup(ChemElement::from(&element), valence)
             .iter()
             .cloned()
             .map(AtomForm::from_rust)
@@ -93,7 +93,7 @@ impl AtomTypeRegistry {
 
         let atoms = (1..=MAX_ATOMIC_NUMBER)
             .filter_map(ChemElement::from_atomic_number)
-            .flat_map(|element| self.0.patterns_for_element(element))
+            .flat_map(|element| self.0.lookup_by_element(element))
             .map(|atom| format!("AtomForm.parse({:?})", atom.to_string()))
             .collect::<Vec<_>>()
             .join(", ");
@@ -524,7 +524,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_type_registry_from_toml() {
-        let input = "[C]\n0 = [\"C#c0#v4\"]\n[O]\n0 = [\"O#c0#v2\"]";
+        let input = "[C]\n4 = [\"C#c0#v4\"]\n[O]\n2 = [\"O#c0#v2\"]";
 
         assert_eq!(
             AtomTypeRegistry::from_toml(input).unwrap().0,
@@ -558,32 +558,29 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_type_registry_patterns_for_element() {
+    fn test_atom_type_registry_lookup_by_element() {
         let registry = AtomTypeRegistry(registry!["C#c0#v4", "C#c+#v3", "O#c0#v2"]);
 
         assert_eq!(
             registry
-                .patterns_for_element(Element::from(ChemElement::C))
+                .lookup_by_element(Element::from(ChemElement::C))
                 .into_iter()
                 .map(|atom| atom.to_rust().clone())
                 .collect::<Vec<_>>(),
-            registry.0.patterns_for_element(ChemElement::C)
+            registry.0.lookup_by_element(ChemElement::C)
         );
     }
 
     #[rstest]
-    #[case::neutral(0, registry!["C#c0#v4"].patterns_for_element_and_charge(ChemElement::C, 0).to_vec())]
-    #[case::positive(1, registry!["C#c+#v3"].patterns_for_element_and_charge(ChemElement::C, 1).to_vec())]
-    #[case::missing(-1, Vec::new())]
-    fn test_atom_type_registry_patterns_for_element_and_charge(
-        #[case] charge: i8,
-        #[case] expected: Vec<GraphIrAtomForm>,
-    ) {
+    #[case::valence_four(4, vec!["C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!".parse().unwrap()])]
+    #[case::valence_three(3, vec!["C#c+#h0#n0#u0#s#v3#d0#t0#a!#m!".parse().unwrap()])]
+    #[case::missing(0, Vec::new())]
+    fn test_atom_type_registry_lookup(#[case] valence: u8, #[case] expected: Vec<GraphIrAtomForm>) {
         let registry = AtomTypeRegistry(registry!["C#c0#v4", "C#c+#v3", "O#c0#v2"]);
 
         assert_eq!(
             registry
-                .patterns_for_element_and_charge(Element::from(ChemElement::C), charge)
+                .lookup(Element::from(ChemElement::C), valence)
                 .into_iter()
                 .map(|atom| atom.to_rust().clone())
                 .collect::<Vec<_>>(),

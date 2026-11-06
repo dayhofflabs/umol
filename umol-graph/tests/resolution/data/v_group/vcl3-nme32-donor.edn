@@ -1,0 +1,7 @@
+; VCl3·2NMe3, d2 triplet; HW II, pp. 1828-1829; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c+3#u2" "Cl#c-" "Cl#c-" "Cl#c-" "N" "C#h3" "C#h3" "C#h3" "N" "C#h3" "C#h3" "C#h3"]
+         :bonds [[4 5 "1"] [4 6 "1"] [4 7 "1"] [8 9 "1"] [8 10 "1"] [8 11 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [8] :acceptor 0 :attrs "1"}]}}

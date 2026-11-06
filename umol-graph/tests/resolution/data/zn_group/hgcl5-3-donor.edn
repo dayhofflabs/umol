@@ -1,0 +1,6 @@
+; [HgCl5](3-); HW II, pp. 1772-1773; chloride donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Hg#c+2" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}]}}

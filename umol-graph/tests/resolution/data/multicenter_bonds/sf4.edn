@@ -1,0 +1,5 @@
+; SF4; HW I, p. 633; axial 3c4e unit: doi:10.1021/ja003347a, p. 6347.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["S" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single]]
+         :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]#c0#u0#s1"}]}}

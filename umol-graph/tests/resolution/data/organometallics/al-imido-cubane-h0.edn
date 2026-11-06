@@ -1,0 +1,18 @@
+; Threefold imido donor motif, N-R = N-H; HW I, pp. 757-758, Fig. 14.6f; ionic allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al#c+2#n0#u0#s1" "Al#c+2#n0#u0#s1" "Al#c+2#n0#u0#s1" "Al#c+2#n0#u0#s1" "N#c-2#h0"
+                 "N#c-2#h0" "N#c-2#h0" "N#c-2#h0" "C#h3" "C#h3" "C#h3" "C#h3" "H" "H" "H" "H"]
+         :bonds [[0 8 :single] [1 9 :single] [2 10 :single] [3 11 :single]
+                 [4 12 :single] [5 13 :single] [6 14 :single] [7 15 :single]]
+         :dative-bonds [{:donors [4] :acceptor 1 :attrs "1"}
+                        {:donors [4] :acceptor 2 :attrs "1"}
+                        {:donors [4] :acceptor 3 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 2 :attrs "1"}
+                        {:donors [5] :acceptor 3 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 1 :attrs "1"}
+                        {:donors [6] :acceptor 3 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 1 :attrs "1"}
+                        {:donors [7] :acceptor 2 :attrs "1"}]}}

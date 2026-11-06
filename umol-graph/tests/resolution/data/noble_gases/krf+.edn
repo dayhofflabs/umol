@@ -1,0 +1,4 @@
+; HW I, p. 469; Kr#c+#n3#v.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Kr#c+" "F"]
+         :bonds [[0 1 :single]]}}

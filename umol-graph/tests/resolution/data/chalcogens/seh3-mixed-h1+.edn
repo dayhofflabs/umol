@@ -1,0 +1,4 @@
+; H3Se+; HW I, p. 705; one implicit H.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se#c+#h" "H" "H"]
+         :bonds [[0 1 :single] [0 2 :single]]}}

@@ -13,12 +13,9 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::model::{
-    AromaticityModel, ChemistryModel, StereoModel, ValenceModel, ValenceTieBreak,
-};
+use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph::ops::valence::{ResolveReport, ValenceTable};
-use umol_graph::ops::validate::ConnectivityModel;
 use umol_graph_ir::dsl::{AtomDefaults, AtomDsl, MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_graph_ir::ir::{FromIr, IntoIr, Molecule, RollbackMethod};
 use umol_utils::solution::Solution;
@@ -168,9 +165,7 @@ fn counts_chemistry(tie_break: ValenceTieBreak) -> ChemistryModel {
             tie_break,
             ..ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
         },
-        connectivity: ConnectivityModel::default(),
-        aromaticity: AromaticityModel::daylight(),
-        stereo: StereoModel::default(),
+        ..ChemistryModel::default()
     }
 }
 

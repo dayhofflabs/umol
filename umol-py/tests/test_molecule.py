@@ -545,7 +545,7 @@ def test_molecule_from_smiles_io_config(io_config):
     [
         (
             True,
-            '{:atoms ["C#i=#c0#h4#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
+            '{:atoms ["C#i=#c0#h2#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
             ':dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}',
         ),
         (
@@ -714,15 +714,17 @@ def test_molecule_resolve_with_report_default_model():
 
     assert isinstance(solution, Solution.Underdetermined)
     assert report.unresolved.get(0) == [
-        AtomForm.parse("C#c-#h3#n#u0#s#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h2#n0#u2#s#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h2#n#u0#s#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h#n#u#s2#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c0#h0#n#u2#s3#v0#d0#t0#a!#m!"),
         AtomForm.parse("C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c-#h3#n#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c-4#h0#n4#u0#s#v0#d0#t0#a!#m!"),
     ]
 
 

@@ -1,0 +1,8 @@
+; Re2Cl8(2-); HW II, pp. 1922-1923, 1928; halide allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Re#c+3" "Re#c+3" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds [[0 1 "4"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 1 :attrs "1"} {:donors [7] :acceptor 1 :attrs "1"}
+                        {:donors [8] :acceptor 1 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}]}}

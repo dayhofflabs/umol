@@ -1,0 +1,13 @@
+; [Cp2ZrCl(mu-H)]2; HW II, p. 1817; Jones et al. (2019), Fig. 1; doi:10.1021/acscentsci.9b00403; local 3c2e bridge contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+3" "Zr#c+3" "Cl" "Cl" "H#c-" "H#c-" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"
+                 "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"
+                 "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 2 "1"] [1 3 "1"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"] [10 6 "1#a"] [11 12 "1#a"]
+                 [12 13 "1#a"] [13 14 "1#a"] [14 15 "1#a"] [15 11 "1#a"] [16 17 "1#a"] [17 18 "1#a"] [18 19 "1#a"]
+                 [19 20 "1#a"] [20 16 "1#a"] [21 22 "1#a"] [22 23 "1#a"] [23 24 "1#a"] [24 25 "1#a"] [25 21 "1#a"]]
+         :dative-bonds [{:donors [6 7 8 9 10] :acceptor 0 :attrs "3"}
+                        {:donors [11 12 13 14 15] :acceptor 0 :attrs "3"}
+                        {:donors [16 17 18 19 20] :acceptor 1 :attrs "3"}
+                        {:donors [21 22 23 24 25] :acceptor 1 :attrs "3"}]
+         :multicenter-bonds [{:atoms [0 4 1] :attrs "[0,2,0]#c0#u0#s1"} {:atoms [0 5 1] :attrs "[0,2,0]#c0#u0#s1"}]}}

@@ -1,0 +1,4 @@
+; NiH2; L97Ni, pp. 2057-2059
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ni#u0" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

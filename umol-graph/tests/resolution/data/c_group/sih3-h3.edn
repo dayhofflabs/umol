@@ -1,0 +1,3 @@
+; SiH3 radical; HW I, p. 1090.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Si#s2#h3"]}}

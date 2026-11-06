@@ -1,0 +1,118 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Sn"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "S#n"
+        "C#h3"
+        "C#h3"
+        "S#n"
+        "C#h3"
+        "C#h3"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [5 6 :single]
+        [5 7 :single]
+        [8 9 :single]
+        [8 10 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [8]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Sn"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "S#n"
+        "C#h3"
+        "C#h3"
+        "S#n"
+        "C#h3"
+        "C#h3"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [5 6 :single]
+        [5 7 :single]
+        [8 9 :single]
+        [8 10 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [8]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Sn"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "S#n"
+        "C#h3"
+        "C#h3"
+        "S#n"
+        "C#h3"
+        "C#h3"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [5 6 :single]
+        [5 7 :single]
+        [8 9 :single]
+        [8 10 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [8]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Sn"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "Cl#n3"
+        "S#n"
+        "C#h3"
+        "C#h3"
+        "S#n"
+        "C#h3"
+        "C#h3"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [5 6 :single]
+        [5 7 :single]
+        [8 9 :single]
+        [8 10 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [8]}]}
+    :success true
+    :tie-breaks []}}

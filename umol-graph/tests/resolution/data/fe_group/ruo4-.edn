@@ -1,0 +1,4 @@
+; RuO4-, d1; HW II, pp. 1978-1979, 1982
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#u1" "O" "O" "O" "O#c-"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "1"]]}}

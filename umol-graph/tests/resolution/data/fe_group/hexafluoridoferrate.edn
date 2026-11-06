@@ -1,0 +1,4 @@
+; FeF6(3-), high-spin; HW II, pp. 1950, 1963.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#c-3#u5" "F" "F" "F" "F" "F" "F"]
+         :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single] [0 5 :single] [0 6 :single]]}}

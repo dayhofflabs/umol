@@ -1,0 +1,7 @@
+; BiCl4-; W02, p. 473; Bi3+ with four Cl- donors: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi#c+3" "Cl#c-" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}]}}

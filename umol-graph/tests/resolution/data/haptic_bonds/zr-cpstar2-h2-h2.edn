@@ -1,0 +1,9 @@
+; Cp*2ZrH2; Chirik (2000), ch. 1, pp. 3-6; doi:10.7907/2qx2-9753; haptic order 3: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Zr#c+2#u0#h2" "C#c-#a+" "C#a+" "C#a+" "C#a+" "C#a+" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3" "C#c-#a+"
+                 "C#a+" "C#a+" "C#a+" "C#a+" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 1 "1#a"] [1 6 "1"] [2 7 "1"] [3 8 "1"]
+                 [4 9 "1"] [5 10 "1"] [11 12 "1#a"] [12 13 "1#a"] [13 14 "1#a"] [14 15 "1#a"] [15 11 "1#a"]
+                 [11 16 "1"] [12 17 "1"] [13 18 "1"] [14 19 "1"] [15 20 "1"]]
+         :dative-bonds [{:donors [1 2 3 4 5] :acceptor 0 :attrs "3"}
+                        {:donors [11 12 13 14 15] :acceptor 0 :attrs "3"}]}}

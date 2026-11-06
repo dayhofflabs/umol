@@ -1,0 +1,21 @@
+; [La(2,2-bipyridine-N,N-dioxide)4]3+; HW II, p. 1788.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["La#c+3" "N#c+#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "O#c-" "N#c+#a+" "C#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+" "C#h#a+" "O#c-" "N#c+#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "O#c-"
+                 "N#c+#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "O#c-" "N#c+#a+" "C#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+" "O#c-" "N#c+#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "O#c-" "N#c+#a+"
+                 "C#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "O#c-" "N#c+#a+" "C#a+" "C#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "O#c-"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 1 "1#a"] [1 7 "1"] [8 9 "1#a"]
+                 [9 10 "1#a"] [10 11 "1#a"] [11 12 "1#a"] [12 13 "1#a"] [13 8 "1#a"] [8 14 "1"] [2 9 "1"]
+                 [15 16 "1#a"] [16 17 "1#a"] [17 18 "1#a"] [18 19 "1#a"] [19 20 "1#a"] [20 15 "1#a"] [15 21 "1"]
+                 [22 23 "1#a"] [23 24 "1#a"] [24 25 "1#a"] [25 26 "1#a"] [26 27 "1#a"] [27 22 "1#a"] [22 28 "1"]
+                 [16 23 "1"] [29 30 "1#a"] [30 31 "1#a"] [31 32 "1#a"] [32 33 "1#a"] [33 34 "1#a"] [34 29 "1#a"]
+                 [29 35 "1"] [36 37 "1#a"] [37 38 "1#a"] [38 39 "1#a"] [39 40 "1#a"] [40 41 "1#a"] [41 36 "1#a"]
+                 [36 42 "1"] [30 37 "1"] [43 44 "1#a"] [44 45 "1#a"] [45 46 "1#a"] [46 47 "1#a"] [47 48 "1#a"]
+                 [48 43 "1#a"] [43 49 "1"] [50 51 "1#a"] [51 52 "1#a"] [52 53 "1#a"] [53 54 "1#a"] [54 55 "1#a"]
+                 [55 50 "1#a"] [50 56 "1"] [44 51 "1"]]
+         :dative-bonds [{:donors [7] :acceptor 0 :attrs "1"} {:donors [14] :acceptor 0 :attrs "1"}
+                        {:donors [21] :acceptor 0 :attrs "1"} {:donors [28] :acceptor 0 :attrs "1"}
+                        {:donors [35] :acceptor 0 :attrs "1"} {:donors [42] :acceptor 0 :attrs "1"}
+                        {:donors [49] :acceptor 0 :attrs "1"} {:donors [56] :acceptor 0 :attrs "1"}]}}

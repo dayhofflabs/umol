@@ -1,0 +1,6 @@
+; Pd(PtBu3), coupling intermediate; HW II, p. 2064
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#u0" "P" "C" "C#h3" "C#h3" "C#h3" "C" "C#h3" "C#h3" "C#h3" "C" "C#h3" "C#h3" "C#h3"]
+         :bonds [[2 3 "1"] [2 4 "1"] [2 5 "1"] [1 2 "1"] [6 7 "1"] [6 8 "1"] [6 9 "1"] [1 6 "1"] [10 11 "1"]
+                 [10 12 "1"] [10 13 "1"] [1 10 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,4 @@
+; WH, 5 unpaired electrons; WA02W, Tables 2-5, 7; anionic donors: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c+1#u5" "H#c-"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}}

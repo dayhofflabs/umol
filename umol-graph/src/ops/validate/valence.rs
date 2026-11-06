@@ -87,7 +87,7 @@ mod tests {
         let counts = ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()));
         let atom_typing =
             ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
-                "C#c0#h4"
+                "C#c0#h4#v0"
             )])));
 
         assert!(matches!(

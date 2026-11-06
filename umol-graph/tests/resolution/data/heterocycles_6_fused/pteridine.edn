@@ -1,0 +1,21 @@
+{:input {:atoms ["C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "N#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "N#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "N#i=#c0#u0#a+"
+                 "C#i=#c0#u0#a+"
+                 "N#i=#c0#u0#a+"]
+         :bonds [[0 5 :aromatic]
+                 [0 1 :aromatic]
+                 [1 2 :aromatic]
+                 [2 3 :aromatic]
+                 [3 9 :aromatic]
+                 [3 4 :aromatic]
+                 [4 5 :aromatic]
+                 [4 6 :aromatic]
+                 [6 7 :aromatic]
+                 [7 8 :aromatic]
+                 [8 9 :aromatic]]}}

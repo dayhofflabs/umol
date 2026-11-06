@@ -1,0 +1,4 @@
+; Molecular RuO; M16Ru, pp. 74-78
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#u4" "O"]
+         :bonds [[0 1 "2"]]}}

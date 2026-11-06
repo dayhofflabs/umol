@@ -1,0 +1,34 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["B#h2" "N#h3" "H"]
+      :bonds [[0 2 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [1]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["B#h2" "N#h3" "H"]
+      :bonds [[0 2 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [1]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["B#h2" "N#h3" "H"]
+      :bonds [[0 2 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [1]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["B#h2" "N#h3" "H"]
+      :bonds [[0 2 :single]]
+      :dative-bonds [{:acceptor 0 :attrs :single :donors [1]}]}
+    :success true
+    :tie-breaks []}}

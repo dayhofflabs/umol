@@ -1,0 +1,5 @@
+; CrCl2(MeCN)2, d4 high-spin; HW II, p. 1864
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cr#u4" "Cl" "Cl" "N" "C" "C#h3" "N" "C" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "3"] [4 5 "1"] [6 7 "3"] [7 8 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

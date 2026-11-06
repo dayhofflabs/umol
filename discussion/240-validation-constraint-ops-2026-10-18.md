@@ -7,7 +7,8 @@ Relates: [166](166-molecule-ops-2026-07-27.md),
 [195](195-molecule-constraint-matching-2026-08-12.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
 [237](237-release-0-10-scope-2026-10-15.md),
-[242](242-stereo-transformers-2026-10-29.md)
+[242](242-stereo-transformers-2026-10-29.md),
+[056](056-default-registry-2026-03-07.md)
 
 ## Scope
 
@@ -19,6 +20,9 @@ construction is implemented; the remaining validation and constraint work is
 outstanding.
 S15a, the counts-resolver valence-capacity correction, remains in doc 166 and
 in scope for 0.10.
+
+This record also tracks the implemented Counts electron-accounting correction
+identified during the hydrogen registry work in doc 056.
 
 The relocation and discharge contracts below carry forward the agreed design.
 S13a records the rejected grouping and the replacement proposal separately.
@@ -48,6 +52,41 @@ There is no corresponding upper bound of four for dative orders. Extending
 ValenceInvariantsValidator would also affect the composite Validator that uses
 it; the former promise of unchanged composite behavior cannot be carried over
 to that proposal without review.
+
+## Counts electron accounting
+
+Implemented 2026-11-02.
+
+Counts now includes donated pairs and multicenter contributions:
+`2*n + u = valence_electrons - charge - v - h - a - m - 2*d`.
+The bridging H− and CO carbons in [HCr2(CO)10]− consequently resolve to #n0.
+
+[ValenceInvariants](../umol-graph/src/ops/invariant.rs) exposes public electron_count
+and nonbonding_electrons calculations. Counts uses them for candidate admission,
+classification and implicit-H inference; invariant validation and enumeration share
+the same orbital/electron balance. The dependency runs from Counts to the invariant
+calculator. Table selection, capacity limits and tie-breaking are unchanged;
+Counts does not adopt the broader invariant enumeration described in
+[099](099-counts-as-invariants-2026-05-23.md).
+
+Molecule contributions use evidenced_complete readings of #v, #d, #t, #a and #m.
+These meet assertions with relation evidence, preserve conflicts and unknown required
+contributions, and close absent overlays under the existing reading semantics.
+Supplied aromatic contributions constrain Counts enumeration too. Bare-atom validation
+retains its standalone convention. Multi-donor dative projection remains unchanged
+and requires separate work.
+
+Regression coverage includes absent, supplied, unknown and conflicting contributions,
+classification, invariant enumeration and both implicit-H policies. All 107 changed
+conformance snapshots preserve AtomTyping results; their 214 Counts outputs match
+AtomTyping and pass ValenceInvariantsValidator. The full 906-case resolution suite
+and 215 graph properties pass.
+
+The existing Counts-admission benchmarks measured about 3–6% overhead for octane,
+benzene and pyridine, and about 10% (25 ns) for the single-atom cases. The 64-carbon
+chain comparison was within Criterion's noise threshold. These measurements used
+the pre-change baseline and a 20-sample, two-second final run; they do not measure
+the change in full-resolution time.
 
 ## Stereo-ligand validator API
 
@@ -786,6 +825,8 @@ subitems are required.
 
 ## Completion criteria
 
+- Counts accounts for supplied donated pairs and multicenter contributions in both
+  candidate generation and implicit-H inference, with the regression coverage above.
 - S13a's replacement is agreed, implemented, and verified against its explicit
   predicates without integer-width checks.
 - The standalone stereo-ligand validator checks ligand lists against actual

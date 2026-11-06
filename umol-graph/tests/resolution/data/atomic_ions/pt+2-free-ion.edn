@@ -1,0 +1,3 @@
+; Pt2+, free-ion ground occupation; ASD
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c+2#u2"]}}

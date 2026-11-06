@@ -1,0 +1,6 @@
+; H5O2+, 3c4e bridge; HW I, pp. 174-176, 311, 593-594.
+; O/H+/O contributions [2,0,2]: assignment PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#h2" "H#c+" "O#h2"]
+         :bonds []
+         :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,2]"}]}}

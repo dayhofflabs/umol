@@ -1,0 +1,109 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Pr#c+3#u2"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [8]}
+        {:acceptor 0 :attrs :single :donors [9]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Pr#c+3#u2"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [8]}
+        {:acceptor 0 :attrs :single :donors [9]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Pr#c+3#u2"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [8]}
+        {:acceptor 0 :attrs :single :donors [9]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Pr#c+3#u2"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"
+        "O#h2#n"]
+      :bonds []
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}
+        {:acceptor 0 :attrs :single :donors [6]}
+        {:acceptor 0 :attrs :single :donors [7]}
+        {:acceptor 0 :attrs :single :donors [8]}
+        {:acceptor 0 :attrs :single :donors [9]}]}
+    :success true
+    :tie-breaks []}}

@@ -1,0 +1,14 @@
+; IMes-GeI2; Arduengo et al. (1993), doi:10.1021/ic00061a004, compound 2.
+; IMes = 1,3-dimesitylimidazol-2-ylidene; neutral carbene donation.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ge" "I" "I" "C" "N" "C#h" "C#h" "N"
+                 "C" "C" "C#h" "C" "C#h" "C" "C#h3" "C#h3" "C#h3"
+                 "C" "C" "C#h" "C" "C#h" "C" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"]
+                 [5 6 "2"] [6 7 "1"] [7 3 "1"] [4 8 "1"]
+                 [8 9 "2"] [9 10 "1"] [10 11 "2"] [11 12 "1"]
+                 [12 13 "2"] [13 8 "1"] [9 14 "1"] [11 15 "1"] [13 16 "1"]
+                 [7 17 "1"] [17 18 "2"] [18 19 "1"] [19 20 "2"]
+                 [20 21 "1"] [21 22 "2"] [22 17 "1"]
+                 [18 23 "1"] [20 24 "1"] [22 25 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,7 @@
+; [HW(CO)5]-; HW II, pp. 2136-2137
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["W#c-1#h1" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+" "C#c-" "O#c+"]
+         :bonds [[1 2 "3"] [3 4 "3"] [5 6 "3"] [7 8 "3"] [9 10 "3"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [7] :acceptor 0 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"}]}}

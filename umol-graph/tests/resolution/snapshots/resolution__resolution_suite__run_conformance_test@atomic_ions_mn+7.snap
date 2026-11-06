@@ -1,0 +1,9 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {:output {:atoms ["Mn#c+7"] :bonds []} :success true :tie-breaks []}
+  :atom-typing-strict {:output {:atoms ["Mn#c+7"] :bonds []} :success true :tie-breaks []}
+  :counts-most-saturated {:output {:atoms ["Mn#c+7"] :bonds []} :success true :tie-breaks []}
+  :counts-strict {:output {:atoms ["Mn#c+7"] :bonds []} :success true :tie-breaks []}}

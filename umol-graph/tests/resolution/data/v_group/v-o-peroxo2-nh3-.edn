@@ -1,0 +1,5 @@
+; [VO(O2)2(NH3)]-; HW II, p. 1825; peroxide O-O bonds retained.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["V#c-" "O" "O" "O" "O" "O" "N#h3"]
+         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [2 3 "1"] [0 4 "1"] [0 5 "1"] [4 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

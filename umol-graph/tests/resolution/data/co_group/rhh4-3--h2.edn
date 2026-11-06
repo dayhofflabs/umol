@@ -1,0 +1,4 @@
+; RhH4(3-), square-planar paired ion; HW II, pp. 2009-2010, 2069
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c-3#u0#h2" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

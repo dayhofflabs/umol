@@ -1,0 +1,4 @@
+; PH(2-) in Li2PH; HW I, p. 871.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#c-2#h"]
+         :bonds []}}

@@ -1,0 +1,8 @@
+; FeI(CO)2(diars), low-spin Fe(I); HW II, p. 1962
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Fe#u1" "I" "C#c-" "O#c+" "C#c-" "O#c+" "C" "C" "C#h" "C#h" "C#h" "C#h" "As" "C#h3" "C#h3" "As"
+                 "C#h3" "C#h3"]
+         :bonds [[0 1 "1"] [2 3 "3"] [4 5 "3"] [6 7 "2"] [7 8 "1"] [8 9 "2"] [9 10 "1"] [10 11 "2"] [11 6 "1"]
+                 [6 12 "1"] [12 13 "1"] [12 14 "1"] [7 15 "1"] [15 16 "1"] [15 17 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [12] :acceptor 0 :attrs "1"} {:donors [15] :acceptor 0 :attrs "1"}]}}

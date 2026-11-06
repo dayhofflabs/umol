@@ -1,0 +1,3 @@
+; SeO; HW I, pp. 714-715; HH79, SeO entry, X3Sigma-; bond-spin encoding: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Se" "O"] :bonds [[0 1 "2#s3"]]}}

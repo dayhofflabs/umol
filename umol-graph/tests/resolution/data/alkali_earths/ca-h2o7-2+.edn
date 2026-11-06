@@ -1,0 +1,7 @@
+; [Ca(H2O)7]2+; Bajnóczi et al. (2026), section 3.2; doi:10.1007/s10953-025-01559-9.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ca#c+2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}
+                        {:donors [7] :acceptor 0 :attrs "1"}]}}

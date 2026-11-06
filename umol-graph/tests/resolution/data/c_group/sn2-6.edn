@@ -1,0 +1,3 @@
+; Sn2(6-) dumbbell in Sr5Sn3/Ba5Sn3; HW I, p. 1165.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Sn#c-3" "Sn#c-3"] :bonds [[0 1 "1"]]}}

@@ -1,0 +1,8 @@
+; (MgMe2)n chain fragment: interior Mg and four local 3c2e Mg-C-Mg bridges; HW I, pp. 1452, 1475. Cut-
+; boundary Mg occupations supplied; contributions: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg" "Mg#n0#u#s2" "Mg#n0#u#s2" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :multicenter-bonds [{:atoms [0 3 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 4 1] :attrs "[0,1,1]#c0#u0#s1"}
+                             {:atoms [0 5 2] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 6 2] :attrs "[0,1,1]#c0#u0#s1"}]}}

@@ -1,0 +1,10 @@
+; [RhCl(NH3)5]2+; HW II, pp. 2015-2016; ammine donation: HW I, pp. 757-758.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Rh#c+3" "Cl#c-" "N#h3" "N#h3" "N#h3" "N#h3" "N#h3"]
+         :bonds []
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}
+                        {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"}
+                        {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

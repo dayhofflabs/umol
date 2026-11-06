@@ -1,0 +1,94 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+assertion_line: 225
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms [
+        "Ti#c+4"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "O#n"
+        "C#h2"
+        "C#h3"
+        "C#h2"
+        "C#h3"]
+      :bonds [[5 6 :single] [6 7 :single] [5 8 :single] [8 9 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms [
+        "Ti#c+4"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "O#n"
+        "C#h2"
+        "C#h3"
+        "C#h2"
+        "C#h3"]
+      :bonds [[5 6 :single] [6 7 :single] [5 8 :single] [8 9 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms [
+        "Ti#c+4"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "O#n"
+        "C#h2"
+        "C#h3"
+        "C#h2"
+        "C#h3"]
+      :bonds [[5 6 :single] [6 7 :single] [5 8 :single] [8 9 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms [
+        "Ti#c+4"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "C#c-#h3"
+        "O#n"
+        "C#h2"
+        "C#h3"
+        "C#h2"
+        "C#h3"]
+      :bonds [[5 6 :single] [6 7 :single] [5 8 :single] [8 9 :single]]
+      :dative-bonds [
+        {:acceptor 0 :attrs :single :donors [1]}
+        {:acceptor 0 :attrs :single :donors [2]}
+        {:acceptor 0 :attrs :single :donors [3]}
+        {:acceptor 0 :attrs :single :donors [4]}
+        {:acceptor 0 :attrs :single :donors [5]}]}
+    :success true
+    :tie-breaks []}}

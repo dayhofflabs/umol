@@ -1,0 +1,4 @@
+; Molecular CoH, triplet; G05, pp. 2-3, 51-65; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#u2" "H"]
+         :bonds [[0 1 "1"]]}}

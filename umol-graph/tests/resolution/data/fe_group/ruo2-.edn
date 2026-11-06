@@ -1,0 +1,4 @@
+; Molecular RuO2-, doublet; Z00, Table 5
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c-1#u1" "O" "O"]
+         :bonds [[0 1 "2"] [0 2 "2"]]}}

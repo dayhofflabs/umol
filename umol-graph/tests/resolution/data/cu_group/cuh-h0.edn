@@ -1,0 +1,4 @@
+; Molecular CuH; HW II, p. 1695.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Cu" "H"]
+         :bonds [[0 1 "1"]]}}

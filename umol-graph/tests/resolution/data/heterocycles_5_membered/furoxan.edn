@@ -1,0 +1,17 @@
+; BW, p. 823
+{:config-overrides {:atom {:charge :zero}}
+ :input {
+  :atoms [
+    "O#c-"
+    "N#c+#a+"
+    "C#a+"
+    "C#a+"
+    "N#a+"
+    "O#a+"]
+  :bonds [
+    [0 1 :single]
+    [1 5 "1#a"]
+    [1 2 "1#a"]
+    [2 3 "1#a"]
+    [3 4 "1#a"]
+    [4 5 "1#a"]]}}

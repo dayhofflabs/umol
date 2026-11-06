@@ -1,0 +1,6 @@
+; CoF3(H2O)3, high-spin; HW II, p. 2000; N84, p. 2722
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#u4" "F" "F" "F" "O#h2" "O#h2" "O#h2"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"} {:donors [5] :acceptor 0 :attrs "1"}
+                        {:donors [6] :acceptor 0 :attrs "1"}]}}

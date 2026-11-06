@@ -1,0 +1,6 @@
+; CpPtCl(PMe3), paired; HW II, p. 2061; Cp-/halide donation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c+1#u0" "Cl" "P" "C#h3" "C#h3" "C#h3" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1"] [2 3 "1"] [2 4 "1"] [2 5 "1"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]
+                 [10 6 "1#a"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [6 7 8 9 10] :acceptor 0 :attrs "3"}]}}

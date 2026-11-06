@@ -1,0 +1,6 @@
+; Amido-bridged Al/Ga hydrides; HW I, pp. 1340, 1390-1391; ionic donor allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ga#c+#h2" "Ga#c+#h2" "N#c-" "N#c-" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[2 4 "1"] [2 5 "1"] [3 6 "1"] [3 7 "1"]]
+         :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"}]}}

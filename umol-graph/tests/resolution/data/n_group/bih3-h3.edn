@@ -1,0 +1,4 @@
+; BiH3; HW I, pp. 949-951.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Bi#h3"]
+         :bonds []}}

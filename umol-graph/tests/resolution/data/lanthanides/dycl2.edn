@@ -1,0 +1,4 @@
+; DyCl2 formula unit; HW II, pp. 2301, 2303-2304; allocation: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Dy#u4" "Cl" "Cl"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

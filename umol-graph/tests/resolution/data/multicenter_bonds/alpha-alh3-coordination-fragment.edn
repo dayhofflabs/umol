@@ -1,0 +1,11 @@
+; Central Al and six Al-H-Al bridges in alpha-AlH3; HW I, p. 1339. Cut-boundary Al occupations supplied; local
+; counting fragment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al" "Al#n#u#s2" "Al#n#u#s2" "Al#n#u#s2" "Al#n#u0#s1" "Al#n#u0#s1" "Al#n#u0#s1" "H" "H" "H"
+                 "H" "H" "H"]
+         :multicenter-bonds [{:atoms [0 7 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 8 2] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 9 3] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 10 4] :attrs "[0,1,1]#c0#u0#s1"}
+                             {:atoms [0 11 5] :attrs "[0,1,1]#c0#u0#s1"}
+                             {:atoms [0 12 6] :attrs "[0,1,1]#c0#u0#s1"}]}}

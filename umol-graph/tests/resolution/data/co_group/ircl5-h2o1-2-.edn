@@ -1,0 +1,5 @@
+; Ir(III) aquochloride, paired; HW II, pp. 2011-2014, 2017
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ir#c-2#u0" "Cl" "Cl" "Cl" "Cl" "Cl" "O#h2"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

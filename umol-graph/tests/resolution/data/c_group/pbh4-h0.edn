@@ -1,0 +1,4 @@
+; PbH4; HW I, p. 1169; Wang and Andrews (2003), doi:10.1021/ja029862l.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pb#s1#h0" "H" "H" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}}

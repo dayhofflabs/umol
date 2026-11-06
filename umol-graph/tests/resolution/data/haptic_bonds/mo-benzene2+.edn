@@ -1,0 +1,8 @@
+; [Mo(C6H6)2]+, d5 doublet; HW II, p. 2207; haptic order 3: PW
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mo#c+1" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"
+                 "C#h#a+" "C#h#a+"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 1 "1#a"] [7 8 "1#a"] [8 9 "1#a"]
+                 [9 10 "1#a"] [10 11 "1#a"] [11 12 "1#a"] [12 7 "1#a"]]
+         :dative-bonds [{:donors [1 2 3 4 5 6] :acceptor 0 :attrs "3"}
+                        {:donors [7 8 9 10 11 12] :acceptor 0 :attrs "3"}]}}

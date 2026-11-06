@@ -1,0 +1,33 @@
+---
+source: umol-graph/tests/resolution/resolution_suite.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["Br#c+#n" "F#n3" "F#n3" "F#n3" "F#n3"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["Br#c+#n" "F#n3" "F#n3" "F#n3" "F#n3"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["Br#c+#n" "F#n3" "F#n3" "F#n3" "F#n3"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["Br#c+#n" "F#n3" "F#n3" "F#n3" "F#n3"]
+      :bonds [[0 1 :single] [0 2 :single]]
+      :multicenter-bonds [{:atoms [3 0 4] :attrs "[1,2,1]"}]}
+    :success true
+    :tie-breaks []}}

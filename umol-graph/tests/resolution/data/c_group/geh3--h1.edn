@@ -1,0 +1,4 @@
+; GeH3-; HW I, p. 1168.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ge#c-#s1#h1" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

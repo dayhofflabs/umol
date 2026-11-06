@@ -1,0 +1,4 @@
+; Formal Br+ electrophile in reaction mechanisms.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Br#c+"]
+         :bonds []}}

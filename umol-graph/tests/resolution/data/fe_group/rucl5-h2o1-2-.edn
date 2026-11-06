@@ -1,0 +1,5 @@
+; Ru(III) aquochlorides, low-spin; HW II, pp. 1976, 1984
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ru#c-2#u1" "Cl" "Cl" "Cl" "Cl" "Cl" "O#h2"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

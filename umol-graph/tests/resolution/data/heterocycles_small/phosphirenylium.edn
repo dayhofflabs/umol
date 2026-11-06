@@ -1,0 +1,4 @@
+; Phosphirenylium ring; HW I, pp. 937-938, Fig. 14.91a; P contribution zero: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#c+#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 0 "1#a"]]}}

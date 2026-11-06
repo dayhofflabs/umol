@@ -1,0 +1,5 @@
+; Phosphole, explicit-h; EC76, pp. 4365, 4368-4370; M02, pp. 1208, 1211-1213; aromatic allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "H"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
+                 [4 0 "1#a"] [0 5 :single]]}}

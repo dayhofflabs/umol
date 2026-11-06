@@ -9,6 +9,10 @@ The normative grammar is `umol-graph-ir/spec/umol-dsl-spec.md`. Read it for edge
 (value-expr precedence, stereo strings, constraints, dative/noncovalent/multicenter).
 This is the practical reference for the common 90%.
 
+What to state about a compound, and how to check it, is in
+[Writing chemical structures](../../../docs/chemistry/representation.md). Read it before writing
+new structures.
+
 ## Construction macros (umol-graph-ir)
 
 | Macro | Input | Produces | Use for |
@@ -37,9 +41,12 @@ a match wildcard), **concrete molecules → `mol_ground!`** (defaults fill the s
 - Optional keys: `:dative-bonds :aromatic-systems :multicenter-bonds :noncovalent-bonds
   :stereo-atoms :stereo-bonds :atom-aliases :constraints :guards`. Each structural
   entry needs `:attrs`.
-- **Aromaticity is not a bond order** — never write order 1.5/"aromatic". Use an
-  `:aromatic-systems` entry plus ordinary (Kekulé) `:bonds`; the atom `#a` / bond `#a`
-  flags mark membership.
+- **Aromaticity is not a bond order** — never write order 1.5/"aromatic". Write the
+  aromatic and Kekulé descriptions as **separate inputs**. The aromatic input uses
+  localized σ-skeleton bonds with `:aromatic-systems` or atom/bond `#a` membership
+  marks. The Kekulé input uses localized single/double bonds without aromatic marks
+  or overlays. Combining both descriptions of the same π electrons counts them
+  twice and fails the electron-count invariants.
 
 ## Atom-string: `element` then `#tag payload`
 
@@ -123,7 +130,8 @@ atom_ground!("N#c+#h4")                                               // ammoniu
 
 - `#c` charge **must** carry sign/zero; bare `#c` is a parse error.
 - Bare count payload = 1, not 0 (`#h` = 1 H). Use `#h0` / `#R!` for zero.
-- Aromatic ≠ a bond order; declare `:aromatic-systems` + Kekulé `:bonds`.
+- Keep aromatic and Kekulé descriptions in separate inputs; do not combine their
+  π-electron assignments in one structure.
 - Wildcard bond order is `"*"` (e.g. `[0 1 "*"]`), wildcard atom is `"*"`.
 - `#R`/`#D`/`#X`/`#x`/`#H`/`#T` are **derived** — they filter matches against the
   target graph and never change whether an atom is "ground".

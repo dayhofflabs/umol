@@ -1,0 +1,4 @@
+; Allenide C3(4-) in Li4C3/Mg2C3; HW I, p. 1022.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["C#c-2" "C" "C#c-2"]
+         :bonds [[0 1 :double] [1 2 :double]]}}

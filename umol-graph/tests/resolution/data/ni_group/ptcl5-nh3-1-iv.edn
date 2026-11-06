@@ -1,0 +1,5 @@
+; Pt(IV) chloro/ammine series, paired; HW II, pp. 2047-2049, 2055
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pt#c-1#u0" "Cl" "Cl" "Cl" "Cl" "Cl" "N#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]
+         :dative-bonds [{:donors [6] :acceptor 0 :attrs "1"}]}}

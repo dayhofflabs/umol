@@ -1,0 +1,7 @@
+; Ta2Cl9(3-), triplet M=M; HW II, p. 1837; Stranger et al. (1998), pp. 6802-6806, doi:10.1021/ic971511y; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ta" "Ta" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl" "Cl#c-" "Cl#c-" "Cl#c-"]
+         :bonds [[0 1 "2#u2#s3"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+         :dative-bonds [{:donors [8] :acceptor 0 :attrs "1"} {:donors [8] :acceptor 1 :attrs "1"}
+                        {:donors [9] :acceptor 0 :attrs "1"} {:donors [9] :acceptor 1 :attrs "1"}
+                        {:donors [10] :acceptor 0 :attrs "1"} {:donors [10] :acceptor 1 :attrs "1"}]}}

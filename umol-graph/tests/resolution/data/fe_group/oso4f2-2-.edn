@@ -1,0 +1,4 @@
+; cis-OsO4F2(2-); HW II, pp. 1978, 1982
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Os#c-2#u0" "O" "O" "O" "O" "F" "F"]
+         :bonds [[0 1 "2"] [0 2 "2"] [0 3 "2"] [0 4 "2"] [0 5 "1"] [0 6 "1"]]}}

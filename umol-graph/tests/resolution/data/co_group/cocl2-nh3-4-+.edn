@@ -1,0 +1,6 @@
+; Co(III) ammine/chloride, paired; HW II, pp. 1994, 2000-2002
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#c+1#u0" "Cl" "Cl" "N#h3" "N#h3" "N#h3" "N#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}

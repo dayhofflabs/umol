@@ -1,0 +1,3 @@
+; H2Po; HW I, p. 704.
+{:config-overrides {:atom {:charge :zero}}
+ :input {:atoms ["Po#h2"] :bonds []}}

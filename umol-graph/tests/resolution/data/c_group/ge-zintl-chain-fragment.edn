@@ -1,0 +1,5 @@
+; Counting fragment for the two-bond Ge(2-) environment in CaGe; HW I, p. 1165.
+; Terminal Ge(3-) centers close the finite fragment.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ge#c-3" "Ge#c-2" "Ge#c-3"]
+         :bonds [[0 1 "1"] [1 2 "1"]]}}

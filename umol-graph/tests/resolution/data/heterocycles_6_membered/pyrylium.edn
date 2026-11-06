@@ -1,0 +1,5 @@
+; Pyrylium; Quinonero (2015), p. 11633, Scheme 1; doi:10.3390/molecules200711632.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O#c+#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"]
+                 [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}}

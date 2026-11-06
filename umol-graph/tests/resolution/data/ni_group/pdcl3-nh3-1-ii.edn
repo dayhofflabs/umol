@@ -1,0 +1,5 @@
+; Pd(II) chloro/ammine series, paired; HW II, pp. 2047-2056
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Pd#c-1#u0" "Cl" "Cl" "Cl" "N#h3"]
+         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+         :dative-bonds [{:donors [4] :acceptor 0 :attrs "1"}]}}

@@ -1,0 +1,7 @@
+; TiMe4·1OEt2; HW II, p. 1806; ligand allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Ti#c+4" "C#c-#h3" "C#c-#h3" "C#c-#h3" "C#c-#h3" "O" "C#h2" "C#h3" "C#h2" "C#h3"]
+         :bonds [[5 6 "1"] [6 7 "1"] [5 8 "1"] [8 9 "1"]]
+         :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}
+                        {:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"}]}}

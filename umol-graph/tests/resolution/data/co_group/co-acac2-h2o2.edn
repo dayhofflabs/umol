@@ -1,0 +1,7 @@
+; Co(acac)2(H2O)2, high-spin; HW II, pp. 1994, 1996-1997, 2001-2002
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Co#u3" "O" "C" "C#h" "C" "O" "C#h3" "C#h3" "O" "C" "C#h" "C" "O" "C#h3" "C#h3" "O#h2" "O#h2"]
+         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [2 6 "1"] [4 7 "1"] [0 8 "1"] [8 9 "1"]
+                 [9 10 "2"] [10 11 "1"] [11 12 "2"] [9 13 "1"] [11 14 "1"]]
+         :dative-bonds [{:donors [5] :acceptor 0 :attrs "1"} {:donors [12] :acceptor 0 :attrs "1"}
+                        {:donors [15] :acceptor 0 :attrs "1"} {:donors [16] :acceptor 0 :attrs "1"}]}}

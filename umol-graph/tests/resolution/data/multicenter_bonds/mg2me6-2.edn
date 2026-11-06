@@ -1,0 +1,7 @@
+; [Mg2Me6]2-; HW I, p. 1453, Fig. 17.14m. Two local 3c2e Mg-C-Mg bridges; contributions and charge
+; allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Mg#c-" "Mg#c-" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3" "C#h3"]
+         :bonds [[0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+         :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]#c0#u0#s1"}
+                             {:atoms [0 3 1] :attrs "[0,1,1]#c0#u0#s1"}]}}

@@ -1,0 +1,9 @@
+; [Y(eta8-C8H8)2]-, two COT2- donors; HW II, pp. 2212, 2214; haptic order 5 and ring-charge allocation: PW.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Y#c+3" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+"
+                 "C#h#a+" "C#h#a+" "C#h#a+" "C#c-#h#a+" "C#h#a+" "C#h#a+" "C#h#a+"]
+         :bonds [[1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 1 "1#a"]
+                 [9 10 "1#a"] [10 11 "1#a"] [11 12 "1#a"] [12 13 "1#a"] [13 14 "1#a"] [14 15 "1#a"] [15 16 "1#a"]
+                 [16 9 "1#a"]]
+         :dative-bonds [{:donors [1 2 3 4 5 6 7 8] :acceptor 0 :attrs "5"}
+                        {:donors [9 10 11 12 13 14 15 16] :acceptor 0 :attrs "5"}]}}

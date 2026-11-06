@@ -1,0 +1,4 @@
+; AlH4-; HW I, pp. 1342-1343.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["Al#c-#h2" "H" "H"]
+         :bonds [[0 1 "1"] [0 2 "1"]]}}

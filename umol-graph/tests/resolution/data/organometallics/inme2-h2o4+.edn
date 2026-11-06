@@ -1,0 +1,6 @@
+; [Me2In(H2O)4]+; HW I, p. 1407.
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["In#c+" "C#h3" "C#h3" "O#h2" "O#h2" "O#h2" "O#h2"]
+         :bonds [[0 1 "1"] [0 2 "1"]]
+         :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"} {:donors [4] :acceptor 0 :attrs "1"}
+                        {:donors [5] :acceptor 0 :attrs "1"} {:donors [6] :acceptor 0 :attrs "1"}]}}
