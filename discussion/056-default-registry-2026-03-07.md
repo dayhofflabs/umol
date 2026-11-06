@@ -43,7 +43,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | [Transition-metal classes, XXXII](#transition-metal-classes-chapter-xxxii) | 21 additions: Cr 4, Mo 2, W 4; Sc/Ti/Fe/Y/Zr/Nb/Ru/La/Hf/Ta/Os 1 each | 21 new; all added states covered | Sc/Y/La capacity 20 for bis-COT anions. ValenceTable unchanged; no new MC or companion types. Ti/Zr/Hf NMR-supported pairing accepted |
 | [Lanthanides, XXXV](#lanthanide-work-table) | 232 additions, including 3 MC and 3 La companions; 34 earlier states retained and sourced | 246 new: 218 in `lanthanides/`, 16 in `organometallics/`, 9 in `haptic_bonds/`, 3 in `multicenter_bonds/`; all added states covered | Capacities Dy 27, Ho/Tm 30, Er/Yb 31; Nd stays 26. Nd charge maximum 4, Dy unpaired maximum 6. ValenceTable unchanged; Nd crown pair excluded |
 | [Actinides, XXXVI](#actinide-work-table) | 243 additions, including 6 hydride-bridge MC states; 51 earlier states retained and sourced | 243 new: 216 in `actinides/`, 3 in `organometallics/`, 18 in `haptic_bonds/`, 6 in `multicenter_bonds/`; all added states covered | Capacities Np/Cf 27, Pu 28; No unpaired maximum 1. ValenceTable unchanged; UF₉³⁻/UF₁₀⁴⁻ unselected |
-| [Beyer/Walter, ch. 4–38](#beyerwalter-extraction) | 3 C additions: `C #u #v2 #a`, `C #c+ #v2 #a`, `C #c- #n #v2 #a` | 4,201 new; `succinic-anhydride` corrected | Direct chapter classes and 32 selected incidental inputs. Methano[10]annulene remains a known limit |
+| [Beyer/Walter, ch. 4–38](#beyerwalter-extraction) | 3 C additions: `C #u #v2 #a`, `C #c+ #v2 #a`, `C #c- #n #v2 #a` | 575 retained BW-sourced inputs, including corrected `succinic-anhydride` | Direct chapter classes and 32 selected incidental inputs. Methano[10]annulene remains a known limit |
 | [Singh](#singh-extraction) | 7 additions: N, O, S, C, Cl and 2 Li | 10 new | Radical cations, open-shell singlet CH2, ClSO2, benzene·Cl and organolithium states |
 
 ### Shared changes and verification
@@ -56,7 +56,7 @@ Companion states belong to elements outside the chapter being reviewed.
 | Registry lookup | Element/valence grouping implemented; API and measurements [below](#registry-lookup-2026-11-02) |
 | Convey-model test | Uses MostSaturated; both models omit H counts for BH3 and H2O |
 | Deferred shared work | Multiple neutral-water/alcohol/ether donations (Ch02) and η²-H2 donor descriptions remain deferred |
-| Verification | 7,846 resolution cases, 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests pass |
+| Verification | 4,219 resolution cases pass after pruning: 12.31 s test time, 23.00 s including compilation. Earlier checks: 3,594 graph unit tests, 223 graph property tests and 316 chemistry tests passed |
 | Organic reorganization | 364 existing inputs and their snapshots moved to the [current categories](#categories) with their contents unchanged |
 | Sources | Retained sources are archived under `materials/valence/`; chapter source tables record access limitations |
 
@@ -64,6 +64,13 @@ The Decision Log below is the historical March record; later tracking-table upda
 dated.
 
 ### Conformance suite breakdown
+
+Organic selection (2026-11-05): removed 3,627 BW inputs and their snapshots,
+retaining a few representatives per class, distinct representations and selected
+larger examples. The retained set preserves all observed resolved atom-state
+signatures, unresolved candidate lists, error messages and four-setting outcome
+patterns. Inorganic categories are unchanged. Chapter extraction tables below
+record the original collection; this breakdown gives the retained suite.
 
 | Category | Files | Description |
 |---|---|---|
@@ -98,45 +105,45 @@ dated.
 | `lanthanides/` | 218 | Chapter-XXXV compounds outside the bonding classes above |
 | `actinides/` | 216 | Chapter-XXXVI compounds outside the bonding classes above |
 | `hydrogen_bonds/` | 10 | Resolution compatibility with explicit hydrogen-bond relations |
-| `hydrocarbons_aliphatic/` | 161 | Non-aromatic C/H compounds, including cycloalkanes, polycycles and the `k33` and `k5` graph-topology inputs |
-| `hydrocarbons_aromatic/` | 107 | Arenes, biaryls, arylalkanes and fused aromatic hydrocarbons |
-| `non_benzenoid_aromatics/` | 40 | Azulenes, annulenes, tropylium, cyclopentadienide and carbon-free aromatic rings |
-| `heterocycles_small/` | 56 | Smallest hetero ring has 3 or 4 members, including β-lactams |
-| `heterocycles_5_membered/` | 327 | Smallest hetero ring has 5 members and is not fused, including lactones and bridged systems |
-| `heterocycles_5_fused/` | 183 | Smallest hetero ring has 5 members and is fused to another ring: indoles, purines, benzodioxoles |
-| `heterocycles_6_membered/` | 244 | Smallest hetero ring has 6 members and is not fused, including bridged systems |
-| `heterocycles_6_fused/` | 128 | Smallest hetero ring has 6 members and is fused to another ring: quinolines, acridines, pteridines |
-| `heterocycles_large/` | 37 | Smallest hetero ring has 7 or more members: azepines, diazepines, crown ethers |
-| `carbonyl_derivatives_aliphatic/` | 75 | Non-aromatic aldehydes, ketones and quinones |
-| `carbonyl_derivatives_aromatic/` | 78 | Aromatic aldehydes and ketones |
-| `carboxylic_acids_aliphatic/` | 354 | Non-aromatic carboxylic acids, their derivatives and carbonic acid derivatives |
-| `carboxylic_acids_aromatic/` | 178 | Aromatic carboxylic acids, their derivatives and carbonic acid derivatives |
-| `nitrogen_compounds_aliphatic/` | 134 | Non-aromatic amines, nitro, nitroso, hydrazine, azo and related compounds |
-| `nitrogen_compounds_aromatic/` | 150 | Aromatic amines, nitro, azo, diazo and related compounds |
-| `sulfur_compounds_aliphatic/` | 88 | Non-aromatic thiols, sulfides, sulfoxides, sulfones, sulfonic acids and sulfates |
-| `sulfur_compounds_aromatic/` | 83 | Aromatic sulfur compounds |
-| `functional_groups_aliphatic/` | 139 | Remaining non-aromatic compounds: alcohols, ethers, halides |
-| `functional_groups_aromatic/` | 118 | Remaining aromatic compounds: phenols, aryl ethers, aryl halides |
+| `hydrocarbons_aliphatic/` | 64 | Non-aromatic C/H compounds, including cycloalkanes, polycycles and the `k33` and `k5` graph-topology inputs |
+| `hydrocarbons_aromatic/` | 14 | Arenes, biaryls, arylalkanes and fused aromatic hydrocarbons |
+| `non_benzenoid_aromatics/` | 20 | Azulenes, annulenes, tropylium, cyclopentadienide and carbon-free aromatic rings |
+| `heterocycles_small/` | 33 | Smallest hetero ring has 3 or 4 members, including β-lactams |
+| `heterocycles_5_membered/` | 87 | Smallest hetero ring has 5 members and is not fused, including lactones and bridged systems |
+| `heterocycles_5_fused/` | 19 | Smallest hetero ring has 5 members and is fused to another ring: indoles, purines, benzodioxoles |
+| `heterocycles_6_membered/` | 58 | Smallest hetero ring has 6 members and is not fused, including bridged systems |
+| `heterocycles_6_fused/` | 17 | Smallest hetero ring has 6 members and is fused to another ring: quinolines, acridines, pteridines |
+| `heterocycles_large/` | 7 | Smallest hetero ring has 7 or more members: azepines, diazepines, crown ethers |
+| `carbonyl_derivatives_aliphatic/` | 26 | Non-aromatic aldehydes, ketones and quinones |
+| `carbonyl_derivatives_aromatic/` | 6 | Aromatic aldehydes and ketones |
+| `carboxylic_acids_aliphatic/` | 66 | Non-aromatic carboxylic acids, their derivatives and carbonic acid derivatives |
+| `carboxylic_acids_aromatic/` | 8 | Aromatic carboxylic acids, their derivatives and carbonic acid derivatives |
+| `nitrogen_compounds_aliphatic/` | 39 | Non-aromatic amines, nitro, nitroso, hydrazine, azo and related compounds |
+| `nitrogen_compounds_aromatic/` | 14 | Aromatic amines, nitro, azo, diazo and related compounds |
+| `sulfur_compounds_aliphatic/` | 25 | Non-aromatic thiols, sulfides, sulfoxides, sulfones, sulfonic acids and sulfates |
+| `sulfur_compounds_aromatic/` | 4 | Aromatic sulfur compounds |
+| `functional_groups_aliphatic/` | 46 | Remaining non-aromatic compounds: alcohols, ethers, halides |
+| `functional_groups_aromatic/` | 14 | Remaining aromatic compounds: phenols, aryl ethers, aryl halides |
 | `isotopes/` | 35 | Explicit isotopes in atoms, ions and small molecules: 2H, 3H, 13C, 14C, 15N, 22Na |
-| `stereo_tetrahedral/` | 110 | Tetrahedral stereoisomer sets and mechanisms |
-| `stereo_cis_trans/` | 73 | Cis/trans stereoisomer sets |
-| `carbohydrates/` | 199 | Sugars and their derivatives, alditols, inositols, glycosides |
-| `amino_acids/` | 127 | Amino acids, their derivatives and peptides |
-| `nucleic_acids/` | 99 | Nucleobases, nucleosides, nucleotides, oligonucleotides and purine catabolites |
-| `lipids/` | 50 | Fatty acids, glycerides, phospholipids, sphingolipids and prostanoids |
-| `vitamins_cofactors/` | 81 | Vitamins, coenzymes, acyl-CoA esters and tetrapyrroles |
-| `metabolites/` | 92 | Other metabolites: hydroxy and keto acids, biogenic amines, pathway intermediates, drug metabolites |
-| `terpenes/` | 115 | Terpenes, terpenoids and carotenoids |
-| `steroids/` | 76 | Steroids, cardiac glycosides and steroid drugs |
-| `alkaloids/` | 102 | Alkaloids and their skeletons |
-| `natural_products/` | 99 | Other natural products: flavonoids, phenylpropanoids, quinones, antibiotics, pheromones |
-| `cation_intermediates/` | 176 | Carbocations, onium and diazonium ions, sigma complexes; net positive main species |
-| `anion_intermediates/` | 157 | Carbanions, enolates, alkoxides, other anions; net negative main species |
-| `radical_intermediates/` | 70 | Radicals, diradicals and radical ions |
-| `sextet_intermediates/` | 23 | Carbenes, nitrenes and tetrylenes, including N-heterocyclic carbenes |
-| `zwitterion_intermediates/` | 25 | Neutral species with separated charges: ylides, betaines, tetrahedral zwitterions |
-| `reactive_intermediates/` | 49 | Neutral closed-shell intermediates: arynes, enols, quinone methides, adducts |
-| **Total** | **7846** | |
+| `stereo_tetrahedral/` | 27 | Tetrahedral stereoisomer sets and mechanisms |
+| `stereo_cis_trans/` | 21 | Cis/trans stereoisomer sets |
+| `carbohydrates/` | 9 | Sugars and their derivatives, alditols, inositols, glycosides |
+| `amino_acids/` | 10 | Amino acids, their derivatives and peptides |
+| `nucleic_acids/` | 12 | Nucleobases, nucleosides, nucleotides, oligonucleotides and purine catabolites |
+| `lipids/` | 5 | Fatty acids, glycerides, phospholipids, sphingolipids and prostanoids |
+| `vitamins_cofactors/` | 7 | Vitamins, coenzymes, acyl-CoA esters and tetrapyrroles |
+| `metabolites/` | 4 | Other metabolites: hydroxy and keto acids, biogenic amines, pathway intermediates, drug metabolites |
+| `terpenes/` | 4 | Terpenes, terpenoids and carotenoids |
+| `steroids/` | 3 | Steroids, cardiac glycosides and steroid drugs |
+| `alkaloids/` | 3 | Alkaloids and their skeletons |
+| `natural_products/` | 4 | Other natural products: flavonoids, phenylpropanoids, quinones, antibiotics, pheromones |
+| `cation_intermediates/` | 28 | Carbocations, onium and diazonium ions, sigma complexes; net positive main species |
+| `anion_intermediates/` | 24 | Carbanions, enolates, alkoxides, other anions; net negative main species |
+| `radical_intermediates/` | 22 | Radicals, diradicals and radical ions |
+| `sextet_intermediates/` | 10 | Carbenes, nitrenes and tetrylenes, including N-heterocyclic carbenes |
+| `zwitterion_intermediates/` | 9 | Neutral species with separated charges: ylides, betaines, tetrahedral zwitterions |
+| `reactive_intermediates/` | 7 | Neutral closed-shell intermediates: arynes, enols, quinone methides, adducts |
+| **Total** | **4219** | |
 
 ### Registry lookup (2026-11-02)
 
@@ -189,10 +196,10 @@ single-atom cases were effectively unchanged.
 
 - Run the conformance suite with its feature flag enabled:
   - `cargo test -p umol-graph --features conformance --test resolution`
-- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. Of the 7,846
-  inputs, 7,842 succeed under AtomTyping and Counts MostSaturated; the four methano[10]annulene
-  inputs fail under both.
-  3,376 succeed under AtomTyping Strict and 3,384 under Counts Strict; the rest are mostly
+- Each snapshot records AtomTyping and Counts under Strict and MostSaturated. Of the 4,219
+  inputs, 4,218 succeed under AtomTyping and Counts MostSaturated; the retained
+  methano[10]annulene aromatic input fails under both.
+  3,346 succeed under AtomTyping Strict and 3,354 under Counts Strict; the rest are mostly
   organic inputs whose hydrogen counts are left to resolution.
 - `rstest` lists the input files at compile time. After adding, moving or removing inputs,
   touch `umol-graph/tests/resolution/resolution_suite.rs` so that the list is rebuilt.
