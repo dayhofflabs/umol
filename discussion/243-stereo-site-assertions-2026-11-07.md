@@ -18,8 +18,8 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0a's independent
-stereo reference cases are complete; the remaining implementation is pending. The
+This records the selected design direction and its consequences. S0's independent
+stereo references and baseline measurements are complete; S1–S4 remain pending. The
 semantics, value interface, operation interfaces, and names below are the agreed
 working design. The staged implementation plan follows the change inventory.
 
@@ -646,6 +646,7 @@ those callers.
 - **S0b — Measure the existing operations** — additive (green).
   Modules: umol-graph-ir/benches/parsing.rs,
   umol-graph-ir/benches/rendering.rs,
+  umol-graph-ir/benches/fixtures/stereo.rs,
   umol-graph-ir/benches/canonicalize.rs,
   umol-graph-ir/benches/constraint_readings.rs,
   umol-graph/benches/resolve.rs,
@@ -659,8 +660,48 @@ those callers.
   explicit-entity workloads separate from import/parser workloads whose stored
   representation will change. Preserve the existing iterator lifetime controls.
 
+  **Completed — 2026-11-08.** Added tetrahedral and cis/trans parsing/rendering
+  inputs in explicit-record and old attribute forms, fixed explicit projection
+  and removal inputs, and stereo SMILES ingest cases. Reused the existing
+  canonicalization, readings, addition, and enumeration loops. All 55 selected
+  paths passed benchmark test mode: ten parsing, five rendering, six
+  canonicalization, nine readings, ten import/resolution/projection, and fifteen
+  transformer paths. No production behavior or timing-loop boundaries changed.
+
+  The [AC baseline record](../scratch/stereo-site-baseline-ac-2026-11-08/README.md)
+  retains the input manifest, source snapshots and hashes, exact commands,
+  raw Criterion samples, and two saved runs on verified AC power. All 78 power
+  checks passed with Low Power Mode off and no discharging status. The
+  [earlier battery measurements](../scratch/stereo-site-baseline-2026-11-08/README.md)
+  remain archived; the AC results are the comparison baseline. Measurements use
+  production revision eefd1daa64b8a597abd822b0f6ee0a04330d497a, rustc 1.99.1, macOS arm64
+  with ten logical CPUs, the optimized bench profile with debug information,
+  and default package features. Each run uses 50 samples, 300 ms warm-up,
+  one-second measurement, and 10,000 bootstrap resamples. The manifest separates
+  fixed explicit inputs, old attribute inputs, format-dependent pipelines,
+  graph-only addition inputs, and non-stereo controls. Both SmallInput and
+  PerIteration enumeration controls are retained.
+
+  [All medians and 95% confidence intervals](../scratch/stereo-site-baseline-ac-2026-11-08/estimates.tsv)
+  are saved for both AC runs. Second-to-first median ratios range from 0.9729
+  to 1.1227, with a median ratio of 1.0023 across the 55 paths. Of these, 54
+  agree within 2.71%; the SmallInput iter_first control differs by 12.27%.
+  A [longer repeat of that pair](../scratch/stereo-site-baseline-ac-2026-11-08/controls.tsv)
+  uses 100 samples, one-second warm-up, and three-second measurement:
+  SmallInput differs by 3.20%, and PerIteration by 0.86%. The original runs
+  remain intact. All 110 primary result sets contain 50 samples; the four
+  longer control sets contain 100. Source hashes match the battery runs and
+  were unchanged after measurement. The baseline record includes a per-case
+  comparison with the battery measurements.
+
+  Validation passed: 15,370 graph-IR/graph library tests (three ignored), 131
+  stereo-filtered graph-IR property tests, all six benchmark targets under
+  Clippy with warnings denied, formatting, and `git diff --check`. Commands and
+  verification logs are in the baseline record.
+
 **S0 gate:** the explicit-entity reference tests pass and the benchmark results
 are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
+**Passed — 2026-11-08.**
 
 ### S1 — Add generic virtual ligands and configuration conversions
 
@@ -967,4 +1008,4 @@ The critical sequence is S0 → S1 → S2 → S3 → S4. Within S3, value reduct
 feeds the shared DSL grammar, chemistry operations, and projection/export
 consumers. Their complete caller and fixture migration restores the passing build.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S0a is complete; S0b and S1–S4 remain pending.
+unchanged. S0 is complete; S1–S4 remain pending.

@@ -608,6 +608,32 @@ fn bench_stereo_remover(c: &mut Criterion) {
     );
     let mut cases = vec![
         (
+            "tetrahedral_explicit",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+            ),
+            RemoveStereoConfig::default(),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+            ),
+        ),
+        (
+            "cis_trans_explicit",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+                :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#
+            ),
+            RemoveStereoConfig::default(),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#
+            ),
+        ),
+        (
             "mixed_all",
             mixed.clone(),
             RemoveStereoConfig::default(),

@@ -39,7 +39,7 @@ use umol_graph_ir::ir::{
     AtomId, BondForm, ElementForm, Molecule, MoleculeEntries, NumForm, Reframe, RollbackMethod,
     TryIntoIr, UnpairedElectronsForm,
 };
-use umol_graph_ir::{atom_dsl, mol_dsl};
+use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
@@ -54,6 +54,8 @@ fn bench_ingest_smiles(c: &mut Criterion) {
         ("naphthalene", "c1ccc2ccccc2c1"),
         ("quinoline", "c1ccc2ccccc2n1"),
         ("purine", "c1ncc2ncnc2n1"),
+        ("tetrahedral", "[C@](F)(Cl)(Br)I"),
+        ("cis_trans", "F/C(Cl)=C(/Br)I"),
     ] {
         g.bench_function(name, |b| {
             b.iter(|| ingest_smiles(black_box(smiles)).unwrap())
@@ -566,6 +568,53 @@ fn bench_stereo_project(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_stereo_project_explicit(c: &mut Criterion) {
+    let model = ChemistryModel::default();
+    let resolver = Resolver::new(&model);
+    let mut group = c.benchmark_group("stereo_project_explicit");
+    for (name, source, expected) in [
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+            ),
+        ),
+        (
+            "cis_trans",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+                :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "2#C0"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#
+            ),
+        ),
+    ] {
+        let mut checked = source.clone();
+        assert_eq!(
+            resolver.stereo.project_into(&mut checked),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(checked, expected, "{name}");
+        group.bench_function(name, |b| {
+            b.iter_batched_ref(
+                || source.clone(),
+                |molecule| resolver.stereo.project_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 fn bench_project(c: &mut Criterion) {
     let mut group = c.benchmark_group("smiles_roundtrip/project");
     for (source_name, valence) in [
@@ -739,6 +788,7 @@ criterion_group!(
     bench_aromatic_selection_duplicates,
     bench_aromaticity_resolve,
     bench_stereo_project,
+    bench_stereo_project_explicit,
     bench_project,
     bench_resolve_project_ownership
 );
