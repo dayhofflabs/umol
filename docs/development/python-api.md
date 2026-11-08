@@ -328,6 +328,16 @@ per input format. It introduces no additional interpretation in the binding.
 
 ### Resolution
 
+StereoResolveConfig exposes the Rust fields stereo_atom_failure and stereo_bond_failure
+as keyword-only constructor arguments and immutable properties. Both default to
+StereoFailurePolicy.Error. stereo_atom_failure covers unrealizable tetrahedral
+constraints and stored stereo atoms; stereo_bond_failure covers unrealizable cis/trans
+constraints and stored stereo bonds. Error rejects, Keep retains the failed description,
+and Remove clears the failed constraint or removes the failed entity. Ambiguity remains
+Underdetermined under every policy; mismatches are always Contradictory. The repr lists
+these two fields. Supplying tetrahedral_stereo_failure or cis_trans_stereo_failure
+raises TypeError.
+
 Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
 molecule; Underdetermined is payload-free and Contradictory contains its diagnostic. Planning errors
 raise RuntimeError. Every outcome preserves the source and its existing views.

@@ -18,7 +18,7 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0, S1, and S2a–S2d
+This records the selected design direction and its consequences. S0, S1, and S2a–S2e
 are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
 interfaces, and names below are the working design. S2 records the revised
 perception/resolution proposal; it is provisional, not final design approval.
@@ -785,7 +785,7 @@ pass together. Configuration-bearing site forms still exist at this point.
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
 **Working proposal — 2026-11-08.** Recorded for continuation, not final design
-approval. S2a–S2d are complete; implementation of the remaining subitems awaits
+approval. S2a–S2e are complete; implementation of the remaining subitems awaits
 explicit instruction. Record completion and verification under each subitem.
 
 Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
@@ -1027,6 +1027,25 @@ until S3; ring suppression remains until S2g.
   repr together. Test the merged fields against both finding variants, reject
   obsolete Python keywords, remove redundant default updates from native config
   fixtures, and verify ambiguity is independent of policy.
+
+  **Completed — 2026-11-08.** The two-field surface was already present in Rust
+  and Python. Audited defaults, native callers, Python construction, getters,
+  from_rust/to_rust, and repr against the merged contract. Both fields default
+  to Error and govern constraint and entity failures at their own site kind.
+  Documented that ambiguity stays underdetermined and mismatches always reject.
+
+  Native constraint cases now distinguish atom and bond policies; unresolved
+  resolution is checked under all nine policy combinations. Added 72 Python
+  operation cases covering the four failure variants, all nine combinations,
+  and both resolve and resolve_into, with exact diagnostics and molecules.
+  Added rejection cases for both obsolete constructor keywords. Existing
+  signature, getter, conversion, repr, and workflow coverage passed.
+
+  Verification passed: graph library (3,717), property (223), and resolution
+  conformance (4,219) tests; 1,773 Rust binding tests with two ignored; and
+  all-target graph/binding Clippy with warnings denied. After rebuilding on
+  Python 3.13.16, all 3,212 Python tests passed with two skipped. Formatting
+  and `git diff --check` passed.
 
 - **S2f — Raise SMILES and MOL stereo into explicit entities** — breaking (red→green).
   Modules: umol-io/src/table_ir/raise.rs,

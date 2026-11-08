@@ -192,6 +192,7 @@ impl AromaticityResolveConfig {
 }
 
 /// Policies for unrealizable stereo constraints and stored entities, by site kind.
+/// Ambiguity remains underdetermined under every policy; mismatches always contradict.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig(GraphStereoResolveConfig);

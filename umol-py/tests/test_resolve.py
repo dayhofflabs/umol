@@ -273,9 +273,27 @@ def test_stereo_resolve_config_new(stereo_atom_failure, stereo_bond_failure):
     assert config.stereo_bond_failure == stereo_bond_failure
 
 
-def test_stereo_resolve_config_new_error():
-    with pytest.raises(TypeError):
-        StereoResolveConfig(True)
+@pytest.mark.parametrize(
+    ("args", "kwargs", "message"),
+    [
+        pytest.param((True,), {}, "positional arguments", id="positional"),
+        pytest.param(
+            (),
+            {"tetrahedral_stereo_failure": StereoFailurePolicy.Keep},
+            "unexpected keyword argument 'tetrahedral_stereo_failure'",
+            id="tetrahedral_stereo_failure",
+        ),
+        pytest.param(
+            (),
+            {"cis_trans_stereo_failure": StereoFailurePolicy.Remove},
+            "unexpected keyword argument 'cis_trans_stereo_failure'",
+            id="cis_trans_stereo_failure",
+        ),
+    ],
+)
+def test_stereo_resolve_config_new_error(args, kwargs, message):
+    with pytest.raises(TypeError, match=message):
+        StereoResolveConfig(*args, **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -457,6 +475,88 @@ def test_molecule_from_smiles_underdetermined(source, valence):
 
     assert str(excinfo.value) == "resolution underdetermined"
     assert not hasattr(excinfo.value, "report")
+
+
+@pytest.mark.parametrize(
+    ("source", "removed", "site_kind", "diagnostic"),
+    [
+        pytest.param(
+            '{:atoms ["C#h3" "S#n2#T1" "C#h3"] '
+            ':bonds [[0 1 "1"] [1 2 "1"]]}',
+            '{:atoms ["C#h3" "S#n2" "C#h3"] '
+            ':bonds [[0 1 "1"] [1 2 "1"]]}',
+            "atom",
+            "stereo inconsistency: tetrahedral stereo constraint at atom AtomId(1) "
+            "cannot be realized",
+            id="atom_constraint",
+        ),
+        pytest.param(
+            '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2#C1"]]}',
+            '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2"]]}',
+            "bond",
+            "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
+            "cannot be realized",
+            id="bond_constraint",
+        ),
+        pytest.param(
+            '{:atoms ["C#h1" "F#n3" "Cl#n3" "Br#n3"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Sp0"}]}',
+            '{:atoms ["C#h1" "F#n3" "Cl#n3" "Br#n3"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}',
+            "atom",
+            "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized",
+            id="atom_entity",
+        ),
+        pytest.param(
+            '{:atoms ["C#h1" "C#h1" "F#n3" "Cl#n3"] '
+            ':bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]] '
+            ':stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Th0"}]}',
+            '{:atoms ["C#h1" "C#h1" "F#n3" "Cl#n3"] '
+            ':bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]}',
+            "bond",
+            "stereo inconsistency: stereo bond StereoBondId(0) cannot be realized",
+            id="bond_entity",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "atom_failure",
+    [StereoFailurePolicy.Error, StereoFailurePolicy.Keep, StereoFailurePolicy.Remove],
+)
+@pytest.mark.parametrize(
+    "bond_failure",
+    [StereoFailurePolicy.Error, StereoFailurePolicy.Keep, StereoFailurePolicy.Remove],
+)
+@pytest.mark.parametrize("method", ["resolve", "resolve_into"])
+def test_molecule_resolve_stereo_failure(
+    source, removed, site_kind, diagnostic, atom_failure, bond_failure, method
+):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    result = getattr(molecule, method)(
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(
+                stereo_atom_failure=atom_failure,
+                stereo_bond_failure=bond_failure,
+            ),
+        ),
+    )
+    failure = atom_failure if site_kind == "atom" else bond_failure
+    if failure == StereoFailurePolicy.Error:
+        assert isinstance(result, Solution.Contradictory)
+        assert str(result.contradiction) == diagnostic
+        assert molecule == original
+    else:
+        expected = (
+            original
+            if failure == StereoFailurePolicy.Keep
+            else Molecule.parse(removed, defaults=MoleculeDefaults.concrete())
+        )
+        assert isinstance(result, Solution.Determined)
+        assert result.molecule == (expected if method == "resolve" else None)
+        assert molecule == (original if method == "resolve" else expected)
 
 
 @pytest.mark.parametrize(

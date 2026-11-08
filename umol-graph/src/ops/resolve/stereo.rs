@@ -16,7 +16,7 @@ use umol_utils::solution::Solution;
 use crate::ops::model::StereoModel;
 use crate::ops::stereo::{StereoContradiction, StereoInconsistency, StereoPerceiver};
 
-/// How stereo resolution handles an independently invalid constraint or entity.
+/// How stereo resolution handles an unrealizable constraint or entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StereoFailurePolicy {
     Error,
@@ -24,6 +24,9 @@ pub enum StereoFailurePolicy {
     Remove,
 }
 
+/// Recovery policies for unrealizable stereo descriptions, grouped by site kind.
+///
+/// Ambiguity remains underdetermined under every policy. Mismatches are always contradictory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig {
     /// Policy for unrealizable tetrahedral constraints and stored stereo atoms.
@@ -920,14 +923,20 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral_keep(
-        StereoFailurePolicy::Keep,
+        StereoResolveConfig {
+            stereo_atom_failure: StereoFailurePolicy::Keep,
+            stereo_bond_failure: StereoFailurePolicy::Error,
+        },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
         Solution::Determined(Edits::new())
     )]
     #[case::tetrahedral_remove(
-        StereoFailurePolicy::Remove,
+        StereoResolveConfig {
+            stereo_atom_failure: StereoFailurePolicy::Remove,
+            stereo_bond_failure: StereoFailurePolicy::Error,
+        },
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraints {
             key: AtomConstraintKey::TetrahedralStereo,
@@ -941,7 +950,10 @@ mod tests {
         }])),
     )]
     #[case::tetrahedral_error(
-        StereoFailurePolicy::Error,
+        StereoResolveConfig {
+            stereo_atom_failure: StereoFailurePolicy::Error,
+            stereo_bond_failure: StereoFailurePolicy::Keep,
+        },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
@@ -950,14 +962,20 @@ mod tests {
         ))
     )]
     #[case::cis_trans_keep(
-        StereoFailurePolicy::Keep,
+        StereoResolveConfig {
+            stereo_atom_failure: StereoFailurePolicy::Error,
+            stereo_bond_failure: StereoFailurePolicy::Keep,
+        },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
         ),
         Solution::Determined(Edits::new())
     )]
     #[case::cis_trans_remove(
-        StereoFailurePolicy::Remove,
+        StereoResolveConfig {
+            stereo_atom_failure: StereoFailurePolicy::Error,
+            stereo_bond_failure: StereoFailurePolicy::Remove,
+        },
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraints {
             key: BondConstraintKey::CisTransStereo,
@@ -971,7 +989,10 @@ mod tests {
         }])),
     )]
     #[case::cis_trans_error(
-        StereoFailurePolicy::Error,
+        StereoResolveConfig {
+            stereo_atom_failure: StereoFailurePolicy::Keep,
+            stereo_bond_failure: StereoFailurePolicy::Error,
+        },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
         ),
@@ -981,19 +1002,12 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_resolve_constraint_failure(
         stereo_model: StereoModel,
-        #[case] policy: StereoFailurePolicy,
+        #[case] config: StereoResolveConfig,
         #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
         assert_eq!(
-            StereoResolver::with_config(
-                &stereo_model,
-                StereoResolveConfig {
-                    stereo_atom_failure: policy,
-                    stereo_bond_failure: policy,
-                },
-            )
-            .plan_resolve(&molecule),
+            StereoResolver::with_config(&stereo_model, config).plan_resolve(&molecule),
             expected
         );
     }
@@ -1494,14 +1508,20 @@ mod tests {
             StereoFailurePolicy::Keep,
             StereoFailurePolicy::Remove
         )]
-        policy: StereoFailurePolicy,
+        stereo_atom_failure: StereoFailurePolicy,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        stereo_bond_failure: StereoFailurePolicy,
     ) {
         let original = underdetermined_molecule.clone();
         let resolver = StereoResolver::with_config(
             &stereo_model,
             StereoResolveConfig {
-                stereo_atom_failure: policy,
-                stereo_bond_failure: policy,
+                stereo_atom_failure,
+                stereo_bond_failure,
             },
         );
         assert_eq!(
