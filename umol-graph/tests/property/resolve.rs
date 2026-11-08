@@ -201,10 +201,10 @@ proptest! {
         let mut molecule = Molecule::from_entries(source);
         let expected = Molecule::from_entries(expected);
         let resolver = StereoResolver::new(&StereoModel::default());
-        prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
-        prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.resolve(molecule.clone()), Solution::Determined(expected.clone()));
+        prop_assert_eq!(resolver.resolve_into(&mut molecule), Solution::Determined(()));
         prop_assert_eq!(&molecule, &expected);
-        prop_assert_eq!(resolver.resolve(molecule), Ok(Solution::Determined(expected)));
+        prop_assert_eq!(resolver.resolve(molecule), Solution::Determined(expected));
     }
 
     #[test]
@@ -316,7 +316,7 @@ proptest! {
         if let Ok(Solution::Determined(output)) = resolver.aromaticity.resolve(input.clone()) {
             results.push((true, false, false, output));
         }
-        if let Ok(Solution::Determined(output)) = resolver.stereo.resolve(input.clone()) {
+        if let Solution::Determined(output) = resolver.stereo.resolve(input.clone()) {
             results.push((false, true, false, output));
         }
         if let Ok(Solution::Determined(output)) = resolver.resolve(input.clone()) {

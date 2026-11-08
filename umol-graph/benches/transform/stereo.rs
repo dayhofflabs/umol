@@ -358,7 +358,10 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 Some(size)
             );
         }
-        let derivation = perception.derive(&molecule);
+        let derivation = perception
+            .derive(&molecule)
+            .into_determined()
+            .expect("stereo benchmark fixture has a determined derivation");
         if name == "fixture_evidenced_stereo" {
             assert_eq!(
                 derivation.stereo_atoms,
@@ -367,7 +370,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                     (1..=4)
                         .map(|ligand| { StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom) })
                         .collect(),
-                    StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)
                 )]
             );
             assert_eq!(
@@ -380,7 +383,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                         StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
                     ],
-                    StereoBondForm::new(StereoKind::CisTrans, 0u32)
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined)
                 )]
             );
             assert_eq!(derivation.inconsistencies, vec![]);

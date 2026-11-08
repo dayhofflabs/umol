@@ -27,7 +27,7 @@ pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
 use stereo::StereoProjectError;
-pub use stereo::{StereoFailurePolicy, StereoResolveConfig, StereoResolveError, StereoResolver};
+pub use stereo::{StereoFailurePolicy, StereoResolveConfig, StereoResolver};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Molecule,
@@ -143,8 +143,6 @@ pub enum ResolveError {
     Valence(#[from] ValenceError),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),
-    #[error(transparent)]
-    Stereo(#[from] StereoResolveError),
     #[error(transparent)]
     Bonds(#[from] BondsError),
     #[error(transparent)]
@@ -307,10 +305,7 @@ impl<'a> Resolver<'a> {
             .probe()
             .expect("resolver phase plans preserve molecule integrity");
 
-        let outcome = self
-            .stereo
-            .plan_resolve(working)
-            .map_err(ResolveError::Stereo)?;
+        let outcome = self.stereo.plan_resolve(working);
         let edits = match outcome {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => {
@@ -431,10 +426,7 @@ impl<'a> Resolver<'a> {
             .probe()
             .expect("resolver phase plans preserve molecule integrity");
 
-        let outcome = self
-            .stereo
-            .plan_resolve(working)
-            .map_err(ResolveError::Stereo)?;
+        let outcome = self.stereo.plan_resolve(working);
         let edits = match outcome {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => {
@@ -561,10 +553,7 @@ impl<'a> Resolver<'a> {
                     .probe()
                     .expect("resolver phase plans preserve molecule integrity");
 
-                let outcome = self
-                    .stereo
-                    .plan_resolve(working)
-                    .map_err(ResolveError::Stereo)?;
+                let outcome = self.stereo.plan_resolve(working);
                 let edits = match outcome {
                     Solution::Determined(edits) => edits,
                     Solution::Underdetermined(_) => {
@@ -691,10 +680,7 @@ impl<'a> Resolver<'a> {
                     .probe()
                     .expect("resolver phase plans preserve molecule integrity");
 
-                let outcome = self
-                    .stereo
-                    .plan_resolve(working)
-                    .map_err(ResolveError::Stereo)?;
+                let outcome = self.stereo.plan_resolve(working);
                 let edits = match outcome {
                     Solution::Determined(edits) => edits,
                     Solution::Underdetermined(_) => {
@@ -2159,6 +2145,11 @@ mod tests {
         :atoms ["C#h" "C#h" "F#n3" "Cl#n3"]
         :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]
+    }"#))]
+    #[case::stored_virtual_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "F#n3" "Cl#n3"]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:virt 1]] :attrs "Ct*"}]
     }"#))]
     fn test_resolver_resolve_later_underdetermined(
         chemistry_model: ChemistryModel,

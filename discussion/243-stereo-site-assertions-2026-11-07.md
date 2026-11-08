@@ -18,7 +18,7 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0, S1, and S2a–S2c
+This records the selected design direction and its consequences. S0, S1, and S2a–S2d
 are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
 interfaces, and names below are the working design. S2 records the revised
 perception/resolution proposal; it is provisional, not final design approval.
@@ -785,7 +785,7 @@ pass together. Configuration-bearing site forms still exist at this point.
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
 **Working proposal — 2026-11-08.** Recorded for continuation, not final design
-approval. S2a–S2c are complete; implementation of the remaining subitems awaits
+approval. S2a–S2d are complete; implementation of the remaining subitems awaits
 explicit instruction. Record completion and verification under each subitem.
 
 Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
@@ -970,11 +970,9 @@ until S3; ring suppression remains until S2g.
   warnings denied passed in that copy, including removal of the earlier
   type_complexity lint. Formatting and `git diff --check` passed.
 
-  The checkout intentionally remains red until S2d: `cargo check -p umol-graph
-  --lib` reports exactly eight field-access errors in the unchanged stereo
-  resolver and validator. No temporary bridge was added to the checkout.
-  Test-target Clippy additionally finds an existing needless_update in a
-  StereoResolveConfig fixture; the configuration work in S2e owns that cleanup.
+  At S2c completion the checkout intentionally remained red: `cargo check -p
+  umol-graph --lib` reported eight field-access errors in the unchanged stereo
+  resolver and validator. S2d restores those consumers without a temporary bridge.
 
 - **S2d — Consume derivation outcomes in resolution and validation** — breaking (red→green).
   Modules: umol-graph/src/ops/resolve/stereo.rs, umol-graph/src/ops/resolve.rs,
@@ -995,6 +993,26 @@ until S3; ring suppression remains until S2g.
   underdetermined plans, no partial publication, consuming/in-place agreement,
   idempotence, and composite-resolver rollback after earlier phases. Keep
   existing stereogenicity/topicity checks and transformer preservation laws.
+
+  **Completed — 2026-11-08.** Resolution and validation consume the explicit
+  derivation outcome. Established rejections take precedence over ambiguity;
+  failure policies apply only to impossible descriptions. An underdetermined
+  plan is empty and publishes no partial replacements or removals. Removed
+  StereoResolveError, its re-export, ResolveError::Stereo, and the resolution
+  methods' outer Result. Migrated aggregate resolution and property callers.
+  The existing Python exception adapter required no change. Benchmark preflight
+  now checks the direct outcome and preservation of stored open cosets.
+
+  Added 23 regression cases covering unresolved typed and Virtual frames,
+  mixed failures/mismatches under all policies, unchanged rejected/unresolved
+  inputs, and composite rollback after ligand replacement. Existing
+  stereogenicity/topicity, idempotence, and transformer properties passed.
+  Verification passed: graph library (3,711), property (223), and resolution
+  conformance (4,219) tests; graph all-target Clippy with proptest/conformance
+  and warnings denied; and 28 perception benchmark cases in test mode.
+  On Python 3.13.16, 1,773 Rust binding tests passed with two ignored; after
+  rebuilding the extension, 3,138 Python tests passed with two skipped.
+  Formatting and `git diff --check` passed.
 
 - **S2e — Merge constraint and entity failure configuration** — breaking (red→green).
   Modules: umol-graph/src/ops/resolve/stereo.rs, umol-graph/src/ops/resolve.rs,

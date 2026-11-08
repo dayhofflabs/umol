@@ -9,7 +9,7 @@ use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondConstraintForm,
     BondConstraintKey, BondHandle, BondId, CisTransStereoForm, Edit, Edits, Lattice, Molecule,
     Normalize, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset,
-    StereoKind, StereoLigandKind, TetrahedralStereoForm,
+    StereoKind, TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -53,9 +53,6 @@ pub struct StereoResolver {
     config: StereoResolveConfig,
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum StereoResolveError {}
-
 /// Failures to express stereo entities as fixed-frame atom and bond assertions.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StereoProjectError {
@@ -92,11 +89,16 @@ impl StereoResolver {
     /// Identified virtual ligand kinds replace stored kinds in place, preserving frame order
     /// and all entity attributes. Keep retains a failed value; Remove clears its assertion or entity.
     /// Mismatched evidence is contradictory regardless of the failure policies.
-    pub fn plan_resolve(
-        &self,
-        molecule: &Molecule,
-    ) -> Result<Solution<Edits, StereoContradiction>, StereoResolveError> {
-        let derivation = self.perception.derive(molecule);
+    /// Established findings are checked before underdetermination. An underdetermined
+    /// derivation produces an empty plan and publishes no partial changes.
+    pub fn plan_resolve(&self, molecule: &Molecule) -> Solution<Edits, StereoContradiction> {
+        let (derivation, underdetermined) = match self.perception.derive(molecule) {
+            Solution::Determined(derivation) => (derivation, false),
+            Solution::Underdetermined(derivation) => (derivation, true),
+            Solution::Contradictory(contradiction) => {
+                return Solution::Contradictory(contradiction);
+            }
+        };
         for &inconsistency in &derivation.inconsistencies {
             let error = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. } => {
@@ -115,20 +117,12 @@ impl StereoResolver {
                 | StereoInconsistency::CisTransStereoMismatch { .. } => true,
             };
             if error {
-                return Ok(Solution::Contradictory(inconsistency.into()));
+                return Solution::Contradictory(inconsistency.into());
             }
         }
 
-        if derivation.stereo_atoms.iter().any(|(_, ligands, _)| {
-            ligands
-                .iter()
-                .any(|ligand| ligand.kind == StereoLigandKind::Virtual)
-        }) || derivation.stereo_bonds.iter().any(|(_, ligands, _)| {
-            ligands
-                .iter()
-                .any(|ligand| ligand.kind == StereoLigandKind::Virtual)
-        }) {
-            return Ok(Solution::Underdetermined(Edits::new()));
+        if underdetermined {
+            return Solution::Underdetermined(Edits::new());
         }
 
         let stereo_atoms: BTreeMap<_, _> = derivation
@@ -341,22 +335,20 @@ impl StereoResolver {
         if !bond_constraints.is_empty() {
             edits.modify_bond_constraints(BondConstraintKey::CisTransStereo, bond_constraints);
         }
-        Ok(Solution::Determined(edits))
+        Solution::Determined(edits)
     }
 
     /// Resolves the molecule, consuming its storage without a recovery journal.
     ///
     /// Uses the same plan as [StereoResolver::resolve_into]. A determined result has checked
-    /// molecule integrity; its stereo configurations may remain open. Rejection drops the input.
-    pub fn resolve(
-        &self,
-        molecule: Molecule,
-    ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoResolveError> {
-        let edits = match self.plan_resolve(&molecule)? {
+    /// molecule integrity; its stereo configurations may remain open.
+    /// Underdetermined and Contradictory drop the input.
+    pub fn resolve(&self, molecule: Molecule) -> Solution<Molecule, StereoContradiction, ()> {
+        let edits = match self.plan_resolve(&molecule) {
             Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Underdetermined(_) => return Solution::Underdetermined(()),
             Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction));
+                return Solution::Contradictory(contradiction);
             }
         };
         let mut editor = molecule.edit();
@@ -366,7 +358,7 @@ impl StereoResolver {
         let molecule = editor
             .finish()
             .expect("stereo resolve plan preserves molecule integrity");
-        Ok(Solution::Determined(molecule))
+        Solution::Determined(molecule)
     }
 
     /// Plans and applies structural stereo resolution without a recovery journal.
@@ -377,21 +369,18 @@ impl StereoResolver {
     /// every other outcome leaves it unchanged.
     /// With consistent, realizable stereo evidence, resolution is idempotent under `==`.
     /// Stereo configurations may remain open in a determined result.
-    pub fn resolve_into(
-        &self,
-        molecule: &mut Molecule,
-    ) -> Result<Solution<(), StereoContradiction>, StereoResolveError> {
-        let edits = match self.plan_resolve(molecule)? {
+    pub fn resolve_into(&self, molecule: &mut Molecule) -> Solution<(), StereoContradiction> {
+        let edits = match self.plan_resolve(molecule) {
             Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Underdetermined(_) => return Solution::Underdetermined(()),
             Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction));
+                return Solution::Contradictory(contradiction);
             }
         };
         if !edits.is_empty() {
             molecule.mutate(edits);
         }
-        Ok(Solution::Determined(()))
+        Solution::Determined(())
     }
 
     /// Projects the molecule, consuming its storage without a recovery journal.
@@ -637,6 +626,24 @@ mod tests {
         )
     }
 
+    #[fixture]
+    fn underdetermined_molecule() -> Molecule {
+        let mut molecule = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C" "F" "Cl" "Br" "I" "C#h1" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+                    [5 6 "1"] [5 7 "1"] [5 8 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}
+                           {:site 5 :ligands [[:virt 5] 8 7 6] :attrs "Th0"}]
+        }"#
+        );
+        molecule
+            .atom_mut(AtomId(0))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::var("hydrogens");
+        molecule
+    }
+
     #[rstest]
     fn test_stereo_resolve_config_default() {
         assert_eq!(
@@ -787,7 +794,7 @@ mod tests {
     ) {
         assert_eq!(
             StereoResolver::new(&stereo_model).plan_resolve(&molecule),
-            Ok(Solution::Determined(expected))
+            Solution::Determined(expected)
         );
     }
 
@@ -855,7 +862,7 @@ mod tests {
         };
         assert_eq!(
             StereoResolver::new(&model).plan_resolve(&molecule),
-            Ok(Solution::Determined(expected))
+            Solution::Determined(expected)
         );
     }
 
@@ -907,7 +914,7 @@ mod tests {
     ) {
         assert_eq!(
             StereoResolver::new(&stereo_model).plan_resolve(&molecule),
-            Ok(Solution::Determined(Edits::new()))
+            Solution::Determined(Edits::new())
         );
     }
 
@@ -984,11 +991,10 @@ mod tests {
                 StereoResolveConfig {
                     stereo_atom_failure: policy,
                     stereo_bond_failure: policy,
-                    ..StereoResolveConfig::default()
                 },
             )
             .plan_resolve(&molecule),
-            Ok(expected)
+            expected
         );
     }
 
@@ -1036,7 +1042,7 @@ mod tests {
                 },
             )
             .plan_resolve(&tetrahedral_entity_failure_molecule),
-            Ok(expected)
+            expected
         );
     }
 
@@ -1087,7 +1093,7 @@ mod tests {
                 },
             )
             .plan_resolve(&cis_trans_entity_failure_molecule),
-            Ok(expected)
+            expected
         );
     }
 
@@ -1117,15 +1123,15 @@ mod tests {
             });
         assert_eq!(
             resolver.plan_resolve(&tetrahedral_mismatch_molecule),
-            Ok(Solution::Contradictory(expected.clone()))
+            Solution::Contradictory(expected.clone())
         );
         assert_eq!(
             resolver.resolve(tetrahedral_mismatch_molecule.clone()),
-            Ok(Solution::Contradictory(expected.clone()))
+            Solution::Contradictory(expected.clone())
         );
         assert_eq!(
             resolver.resolve_into(&mut tetrahedral_mismatch_molecule),
-            Ok(Solution::Contradictory(expected))
+            Solution::Contradictory(expected)
         );
         assert_eq!(tetrahedral_mismatch_molecule, original);
     }
@@ -1156,15 +1162,15 @@ mod tests {
             });
         assert_eq!(
             resolver.plan_resolve(&cis_trans_mismatch_molecule),
-            Ok(Solution::Contradictory(expected.clone()))
+            Solution::Contradictory(expected.clone())
         );
         assert_eq!(
             resolver.resolve(cis_trans_mismatch_molecule.clone()),
-            Ok(Solution::Contradictory(expected.clone()))
+            Solution::Contradictory(expected.clone())
         );
         assert_eq!(
             resolver.resolve_into(&mut cis_trans_mismatch_molecule),
-            Ok(Solution::Contradictory(expected))
+            Solution::Contradictory(expected)
         );
         assert_eq!(cis_trans_mismatch_molecule, original);
     }
@@ -1207,11 +1213,11 @@ mod tests {
         );
         assert_eq!(
             resolver.plan_resolve(&molecule),
-            Ok(Solution::Contradictory(expected.into()))
+            Solution::Contradictory(expected.into())
         );
         assert_eq!(
             resolver.resolve_into(&mut molecule),
-            Ok(Solution::Contradictory(expected.into()))
+            Solution::Contradictory(expected.into())
         );
         assert_eq!(molecule, original);
     }
@@ -1381,17 +1387,14 @@ mod tests {
         let resolver = StereoResolver::new(&stereo_model);
         assert_eq!(
             resolver.resolve(molecule.clone()),
-            Ok(Solution::Determined(expected.clone()))
+            Solution::Determined(expected.clone())
         );
         assert_eq!(
             resolver.resolve_into(&mut molecule),
-            Ok(Solution::Determined(()))
+            Solution::Determined(())
         );
         assert_eq!(molecule, expected);
-        assert_eq!(
-            resolver.resolve(molecule),
-            Ok(Solution::Determined(expected))
-        );
+        assert_eq!(resolver.resolve(molecule), Solution::Determined(expected));
     }
 
     #[rstest]
@@ -1477,9 +1480,137 @@ mod tests {
                 Solution::Determined(()),
             )
         };
-        assert_eq!(resolver.resolve(original), Ok(consuming));
-        assert_eq!(resolver.resolve_into(&mut molecule), Ok(in_place));
+        assert_eq!(resolver.resolve(original), consuming);
+        assert_eq!(resolver.resolve_into(&mut molecule), in_place);
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    fn test_stereo_resolver_resolve_underdetermined(
+        stereo_model: StereoModel,
+        mut underdetermined_molecule: Molecule,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        policy: StereoFailurePolicy,
+    ) {
+        let original = underdetermined_molecule.clone();
+        let resolver = StereoResolver::with_config(
+            &stereo_model,
+            StereoResolveConfig {
+                stereo_atom_failure: policy,
+                stereo_bond_failure: policy,
+            },
+        );
+        assert_eq!(
+            resolver.plan_resolve(&underdetermined_molecule),
+            Solution::Underdetermined(Edits::new())
+        );
+        assert_eq!(
+            resolver.resolve(underdetermined_molecule.clone()),
+            Solution::Underdetermined(())
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut underdetermined_molecule),
+            Solution::Underdetermined(())
+        );
+        assert_eq!(underdetermined_molecule, original);
+    }
+
+    #[rstest]
+    #[case::atom_failure(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "Th1"}]
+        }"#),
+        StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(2) },
+        true,
+    )]
+    #[case::bond_failure(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C#h1" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:virt 1]] :attrs "Ct1"}]
+        }"#),
+        StereoInconsistency::StereoBondFailure { stereo_bond: StereoBondId(0) },
+        true,
+    )]
+    #[case::tetrahedral_mismatch(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h1#T!" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "Th1"}]
+        }"#),
+        StereoInconsistency::TetrahedralStereoMismatch {
+            atom: AtomId(9), stereo_atom: StereoAtomId(2),
+        },
+        false,
+    )]
+    #[case::cis_trans_mismatch(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h1" "C#h1" "F" "Cl"]
+            :bonds [[0 1 "2#C!"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:virt 1]] :attrs "Ct1"}]
+        }"#),
+        StereoInconsistency::CisTransStereoMismatch {
+            bond: BondId(7), stereo_bond: StereoBondId(0),
+        },
+        false,
+    )]
+    fn test_stereo_resolver_resolve_partial(
+        stereo_model: StereoModel,
+        underdetermined_molecule: Molecule,
+        #[case] known: Molecule,
+        #[case] inconsistency: StereoInconsistency,
+        #[case] recoverable: bool,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        policy: StereoFailurePolicy,
+    ) {
+        let mut molecule = underdetermined_molecule.combine(&known);
+        let original = molecule.clone();
+        let resolver = StereoResolver::with_config(
+            &stereo_model,
+            StereoResolveConfig {
+                stereo_atom_failure: policy,
+                stereo_bond_failure: policy,
+            },
+        );
+        if recoverable && policy != StereoFailurePolicy::Error {
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Underdetermined(Edits::new())
+            );
+            assert_eq!(
+                resolver.resolve(molecule.clone()),
+                Solution::Underdetermined(())
+            );
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Solution::Underdetermined(())
+            );
+        } else {
+            let expected = StereoContradiction::Inconsistency(inconsistency);
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Contradictory(expected.clone())
+            );
+            assert_eq!(
+                resolver.resolve(molecule.clone()),
+                Solution::Contradictory(expected.clone())
+            );
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Solution::Contradictory(expected)
+            );
+        }
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -1575,19 +1706,16 @@ mod tests {
                 }
             },
         };
-        assert_eq!(resolver.resolve(molecule.clone()), Ok(expected.clone()));
+        assert_eq!(resolver.resolve(molecule.clone()), expected.clone());
         let in_place = match &expected {
             Solution::Determined(_) => Solution::Determined(()),
             Solution::Underdetermined(()) => Solution::Underdetermined(()),
             Solution::Contradictory(cause) => Solution::Contradictory(cause.clone()),
         };
-        assert_eq!(resolver.resolve_into(&mut molecule), Ok(in_place));
+        assert_eq!(resolver.resolve_into(&mut molecule), in_place);
         if let Solution::Determined(expected) = expected {
             assert_eq!(molecule, expected);
-            assert_eq!(
-                resolver.resolve(molecule),
-                Ok(Solution::Determined(expected))
-            );
+            assert_eq!(resolver.resolve(molecule), Solution::Determined(expected));
         } else {
             assert_eq!(molecule, original);
         }
@@ -1630,11 +1758,11 @@ mod tests {
         let original = molecule.clone();
         assert_eq!(
             StereoResolver::new(&stereo_model).resolve(molecule.clone()),
-            Ok(Solution::Contradictory(expected.clone()))
+            Solution::Contradictory(expected.clone())
         );
         assert_eq!(
             StereoResolver::new(&stereo_model).resolve_into(&mut molecule),
-            Ok(Solution::Contradictory(expected))
+            Solution::Contradictory(expected)
         );
         assert_eq!(molecule, original);
     }

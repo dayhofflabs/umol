@@ -11,7 +11,7 @@ use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
-use crate::ops::stereo::{StereoInconsistency, StereoPerceiver};
+use crate::ops::stereo::{StereoContradiction, StereoInconsistency, StereoPerceiver};
 
 /// Operational configuration for stereo-conformance validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,13 +98,22 @@ impl StereoConformanceValidator {
     /// Validate every stereo element against the molecule's graph symmetry.
     /// First `Contradictory` wins; a ground assertion the derived value leaves
     /// open contributes `Underdetermined`.
+    /// Unresolved ligand identification contributes `Underdetermined` after
+    /// established contradictions are checked.
     /// Asserted topicity positions must lie within the ligand frame, and ligand-symmetry
     /// permutations must have its degree; disagreements produce `Contradictory`.
     pub fn validate(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<(), StereoConformanceContradiction>, StereoConformanceError> {
-        let derivation = StereoPerceiver::new(&self.model).derive(molecule);
+        let (derivation, mut any_undetermined) =
+            match StereoPerceiver::new(&self.model).derive(molecule) {
+                Solution::Determined(derivation) => (derivation, false),
+                Solution::Underdetermined(derivation) => (derivation, true),
+                Solution::Contradictory(StereoContradiction::Inconsistency(inconsistency)) => {
+                    return Ok(Solution::Contradictory(inconsistency.into()));
+                }
+            };
         for &inconsistency in &derivation.inconsistencies {
             let asserted = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. }
@@ -136,8 +145,6 @@ impl StereoConformanceValidator {
         }
 
         let symmetry = molecule.graph_symmetry(&self.config.graph_symmetry_config(&self.model));
-        let mut any_undetermined = false;
-
         for id in molecule.stereo_atoms().ids() {
             match self.validate_stereo_atom(molecule, id, &symmetry) {
                 Solution::Determined(()) => {}
@@ -296,9 +303,9 @@ mod tests {
 
     use rstest::rstest;
     use umol_graph_ir::ir::{
-        AtomId, BondId, LigandPermutation, OrientedLigandPermutation, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereoConfigurationForm, StereoCoset, StereoKind,
-        StereoLigandPosition, StereogenicityForm,
+        AtomId, BondId, LigandPermutation, NumForm, OrientedLigandPermutation,
+        StereoAtomConstraintForm, StereoBondConstraintForm, StereoConfigurationForm, StereoCoset,
+        StereoKind, StereoLigandPosition, StereogenicityForm,
     };
     use umol_graph_ir::mol_dsl_concrete;
     use umol_perm::{Orientation, Permutation};
@@ -537,6 +544,42 @@ mod tests {
                 StereoConfigurationForm::Undetermined;
         }) as fn(&mut Molecule)
     )]
+    #[case::typed_atom_frame(
+        CFCLBRI,
+        (|molecule: &mut Molecule| {
+            molecule.atom_mut(AtomId(0)).attributes_mut().implicit_hydrogens =
+                NumForm::var("hydrogens");
+        }) as fn(&mut Molecule)
+    )]
+    #[case::typed_bond_frame(
+        BUTENE,
+        (|molecule: &mut Molecule| {
+            molecule.atom_mut(AtomId(0)).attributes_mut().implicit_hydrogens =
+                NumForm::var("hydrogens");
+        }) as fn(&mut Molecule)
+    )]
+    #[case::virtual_atom_frame(
+        r#"{:atoms ["C" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "Th1"}]}"#,
+        (|molecule: &mut Molecule| {
+            let mut atom = molecule.atom_mut(AtomId(0));
+            atom.attributes_mut().implicit_hydrogens = NumForm::Undetermined;
+            atom.attributes_mut().lone_pairs = NumForm::Undetermined;
+        }) as fn(&mut Molecule)
+    )]
+    #[case::virtual_bond_frame(
+        r#"{:atoms ["C" "C" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:virt 1]] :attrs "Ct1"}]}"#,
+        (|molecule: &mut Molecule| {
+            for id in [AtomId(0), AtomId(1)] {
+                let mut atom = molecule.atom_mut(id);
+                atom.attributes_mut().implicit_hydrogens = NumForm::Undetermined;
+                atom.attributes_mut().lone_pairs = NumForm::Undetermined;
+            }
+        }) as fn(&mut Molecule)
+    )]
     #[case::atom_undetermined_coset(
         CFCLBRI,
         (|molecule: &mut Molecule| {
@@ -718,6 +761,50 @@ mod tests {
             .validate(&molecule)
             .unwrap();
         assert_eq!(solution, Solution::Contradictory(expected));
+    }
+
+    #[rstest]
+    #[case::configuration_mismatch(
+        r#"{:atoms ["C#T!" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
+        (|_: &mut Molecule| {}) as fn(&mut Molecule),
+        StereoConformanceContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoMismatch {
+                atom: AtomId(5), stereo_atom: StereoAtomId(1),
+            },
+        ),
+    )]
+    #[case::stereogenicity_mismatch(
+        CFCLBRI,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(1)).attributes_mut().constraints.set(
+                StereoAtomConstraintForm::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Symmetric),
+                ),
+            );
+        }) as fn(&mut Molecule),
+        StereoConformanceContradiction::StereogenicityMismatch {
+            asserted: StereogenicityForm::Lit(Stereogenicity::Symmetric),
+            derived: Stereogenicity::Stereogenic,
+        },
+    )]
+    fn test_stereo_conformance_validator_validate_partial(
+        #[case] known: &str,
+        #[case] mutate: fn(&mut Molecule),
+        #[case] expected: StereoConformanceContradiction,
+    ) {
+        let mut molecule = mol_dsl_concrete!(CFCLBRI);
+        molecule
+            .atom_mut(AtomId(0))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::var("hydrogens");
+        molecule.combine_from(&mol_dsl_concrete!(known));
+        mutate(&mut molecule);
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
+            Ok(Solution::Contradictory(expected))
+        );
     }
 
     #[rstest]
