@@ -486,6 +486,38 @@ def test_stereoatom_form_new():
 
 
 @pytest.mark.parametrize(
+    "form_type,configuration,expected",
+    [
+        (
+            StereoAtomForm,
+            TetrahedralConfiguration.Ccw,
+            StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)),
+        ),
+        (
+            StereoAtomForm,
+            TetrahedralConfiguration.Cw,
+            StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)),
+        ),
+        (
+            StereoBondForm,
+            CisTransConfiguration.Z,
+            StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0)),
+        ),
+        (
+            StereoBondForm,
+            CisTransConfiguration.E,
+            StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1)),
+        ),
+    ],
+)
+def test_stereo_form_new_named_configuration(form_type, configuration, expected):
+    assert form_type(configuration).asdict() == {
+        "configuration": expected,
+        "constraints": [],
+    }
+
+
+@pytest.mark.parametrize(
     "form_type,container_type,constraint_type,kind",
     [
         (StereoAtomForm, StereoAtomConstraintsForm, StereoAtomConstraintForm, StereoKind.Tetrahedral),

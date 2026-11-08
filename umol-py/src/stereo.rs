@@ -1010,26 +1010,8 @@ pub(crate) enum StereoConfigurationLike {
 impl StereoConfigurationLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoConfigurationForm {
         match self {
-            StereoConfigurationLike::Tetrahedral(t) => {
-                let coset = match t.to_rust() {
-                    GraphIrTetrahedralConfiguration::Ccw => 0,
-                    GraphIrTetrahedralConfiguration::Cw => 1,
-                };
-                GraphIrStereoConfigurationForm::Kinded(
-                    GraphIrStereoKind::Tetrahedral,
-                    GraphIrStereoCoset::Lit(coset),
-                )
-            }
-            StereoConfigurationLike::CisTrans(c) => {
-                let coset = match c.to_rust() {
-                    GraphIrCisTransConfiguration::Z => 0,
-                    GraphIrCisTransConfiguration::E => 1,
-                };
-                GraphIrStereoConfigurationForm::Kinded(
-                    GraphIrStereoKind::CisTrans,
-                    GraphIrStereoCoset::Lit(coset),
-                )
-            }
+            StereoConfigurationLike::Tetrahedral(t) => t.to_rust().into(),
+            StereoConfigurationLike::CisTrans(c) => c.to_rust().into(),
             StereoConfigurationLike::Form(a) => a.bind(py).borrow().to_rust(py),
         }
     }
@@ -1237,7 +1219,7 @@ macro_rules! stereo_value {
 
         #[pymethods]
         impl $value {
-            /// Construct from a stereo configuration — a `TetrahedralStereo` / `CisTransStereo`
+            /// Construct from a stereo configuration — a `TetrahedralConfiguration` / `CisTransConfiguration`
             /// per-kind shorthand or a `StereoConfigurationForm` — optionally setting constraints.
             #[new]
             #[pyo3(signature = (configuration, *, constraints=None))]
@@ -2036,30 +2018,55 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_configuration_like_to_rust() {
+    #[case::ccw(
+        StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
+        GraphIrStereoConfigurationForm::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(0)
+        )
+    )]
+    #[case::cw(
+        StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
+        GraphIrStereoConfigurationForm::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(1)
+        )
+    )]
+    #[case::z(
+        StereoConfigurationLike::CisTrans(CisTransConfiguration::Z),
+        GraphIrStereoConfigurationForm::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Lit(0)
+        )
+    )]
+    #[case::e(
+        StereoConfigurationLike::CisTrans(CisTransConfiguration::E),
+        GraphIrStereoConfigurationForm::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Lit(1)
+        )
+    )]
+    fn test_stereo_configuration_like_to_rust(
+        #[case] configuration: StereoConfigurationLike,
+        #[case] expected: GraphIrStereoConfigurationForm,
+    ) {
         Python::attach(|py| {
-            // the Th shorthand → Kinded(Tetrahedral, coset)
-            assert_eq!(
-                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw).to_rust(py),
-                GraphIrStereoConfigurationForm::kinded(
-                    GraphIrStereoKind::Tetrahedral,
-                    GraphIrStereoCoset::Lit(1)
-                )
-            );
-            // the Ct shorthand → Kinded(CisTrans, coset)
-            assert_eq!(
-                StereoConfigurationLike::CisTrans(CisTransConfiguration::E).to_rust(py),
-                GraphIrStereoConfigurationForm::kinded(
-                    GraphIrStereoKind::CisTrans,
-                    GraphIrStereoCoset::Lit(1)
-                )
-            );
-            // a StereoConfigurationForm passes through
-            let config = Py::new(py, StereoConfigurationForm::Undetermined()).unwrap();
-            assert_eq!(
-                StereoConfigurationLike::Form(config).to_rust(py),
-                GraphIrStereoConfigurationForm::Undetermined
-            );
+            assert_eq!(configuration.to_rust(py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::undetermined(
+        StereoConfigurationForm::Undetermined(),
+        GraphIrStereoConfigurationForm::Undetermined
+    )]
+    fn test_stereo_configuration_like_to_rust_form(
+        #[case] configuration: StereoConfigurationForm,
+        #[case] expected: GraphIrStereoConfigurationForm,
+    ) {
+        Python::attach(|py| {
+            let config = Py::new(py, configuration).unwrap();
+            assert_eq!(StereoConfigurationLike::Form(config).to_rust(py), expected,);
         });
     }
 

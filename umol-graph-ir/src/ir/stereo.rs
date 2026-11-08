@@ -1910,6 +1910,28 @@ impl From<(StereoKind, u32)> for StereoConfigurationForm {
     }
 }
 
+/// Encodes Ccw/Cw as tetrahedral cosets 0/1.
+impl From<TetrahedralConfiguration> for StereoConfigurationForm {
+    fn from(configuration: TetrahedralConfiguration) -> Self {
+        let coset = match configuration {
+            TetrahedralConfiguration::Ccw => 0,
+            TetrahedralConfiguration::Cw => 1,
+        };
+        Self::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(coset))
+    }
+}
+
+/// Encodes Z/E as cis/trans cosets 0/1.
+impl From<CisTransConfiguration> for StereoConfigurationForm {
+    fn from(configuration: CisTransConfiguration) -> Self {
+        let coset = match configuration {
+            CisTransConfiguration::Z => 0,
+            CisTransConfiguration::E => 1,
+        };
+        Self::Kinded(StereoKind::CisTrans, StereoCoset::Lit(coset))
+    }
+}
+
 impl Normalize for StereoConfigurationForm {
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -4739,6 +4761,38 @@ mod tests {
     #[case::octahedral((StereoKind::Octahedral, 5), StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::Lit(5)))]
     fn test_stereo_configuration_form_from(#[case] input: (StereoKind, u32), #[case] expected: StereoConfigurationForm) {
         assert_eq!(StereoConfigurationForm::from(input), expected);
+    }
+
+    #[rstest]
+    #[case::ccw(
+        TetrahedralConfiguration::Ccw,
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+    )]
+    #[case::cw(
+        TetrahedralConfiguration::Cw,
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+    )]
+    fn test_stereo_configuration_form_from_tetrahedral_configuration(
+        #[case] configuration: TetrahedralConfiguration,
+        #[case] expected: StereoConfigurationForm,
+    ) {
+        assert_eq!(StereoConfigurationForm::from(configuration), expected);
+    }
+
+    #[rstest]
+    #[case::z(
+        CisTransConfiguration::Z,
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+    )]
+    #[case::e(
+        CisTransConfiguration::E,
+        StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1))
+    )]
+    fn test_stereo_configuration_form_from_cis_trans_configuration(
+        #[case] configuration: CisTransConfiguration,
+        #[case] expected: StereoConfigurationForm,
+    ) {
+        assert_eq!(StereoConfigurationForm::from(configuration), expected);
     }
 
     #[rustfmt::skip]

@@ -18,10 +18,10 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0's independent
-stereo references and baseline measurements are complete; S1–S4 remain pending. The
-semantics, value interface, operation interfaces, and names below are the agreed
-working design. The staged implementation plan follows the change inventory.
+This records the selected design direction and its consequences. S0 and S1a are
+complete; S1b and S2–S4 remain pending. The semantics, value interface, operation
+interfaces, and names below are the agreed working design. The staged
+implementation plan follows the change inventory.
 
 Molecule-level constraints and RelationalConstraint are outside scope. Reaction-span
 canonicalization is separate work. This change does not remove kindless stereo
@@ -707,13 +707,29 @@ are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
 
 - **S1a — Give named configurations an explicit-entity conversion** — additive (green).
   Modules: umol-graph-ir/src/ir/stereo.rs,
-  umol-py/src/stereo.rs. [dep: S0b]
+  umol-py/src/stereo.rs,
+  umol-py/tests/test_stereo.py. [dep: S0b]
 
   Add From conversions from TetrahedralConfiguration and CisTransConfiguration
   into StereoConfigurationForm. Preserve the current Ccw/Cw and Z/E mappings to
   their kind and coset index. Replace Python's duplicate mapping with these Rust
   conversions. Test all four named values through Rust and Python construction.
   Removal of their old constraint conversions belongs to S3a.
+
+  **Completed — 2026-11-08.** Added both From implementations into
+  StereoConfigurationForm. Ccw and Z map to coset 0; Cw and E map to coset 1,
+  with the corresponding stereo kind. StereoConfigurationLike::to_rust now
+  delegates to those Rust conversions. The constructor documentation names the
+  accepted configuration enums. The two From implementations are the only public
+  API additions.
+
+  Exact tables cover all four Rust conversions, binding coercions, and Python
+  StereoAtomForm/StereoBondForm construction. The existing full-form passthrough
+  assertion is retained. Validation passed: 153 graph-IR configuration tests,
+  12 Rust binding configuration tests, and 131 Python stereo
+  tests after rebuilding the extension with maturin develop under Python 3.13.16.
+  Clippy passed for both crates' libraries/tests with warnings denied; formatting
+  and `git diff --check` passed.
 
 - **S1b — Make Virtual a supported stored ligand kind** — breaking (red→green).
   Modules: umol-graph-ir/src/ir/ligand.rs,
@@ -1008,4 +1024,4 @@ The critical sequence is S0 → S1 → S2 → S3 → S4. Within S3, value reduct
 feeds the shared DSL grammar, chemistry operations, and projection/export
 consumers. Their complete caller and fixture migration restores the passing build.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S0 is complete; S1–S4 remain pending.
+unchanged. S0 and S1a are complete; S1b and S2–S4 remain pending.
