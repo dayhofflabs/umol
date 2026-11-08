@@ -8,6 +8,7 @@ Relates: [166](166-molecule-ops-2026-07-27.md),
 [236](236-operation-ownership-copy-costs-2026-10-09.md),
 [237](237-release-0-10-scope-2026-10-15.md),
 [242](242-stereo-transformers-2026-10-29.md),
+[243](243-stereo-site-assertions-2026-11-07.md),
 [056](056-default-registry-2026-03-07.md)
 
 ## Scope

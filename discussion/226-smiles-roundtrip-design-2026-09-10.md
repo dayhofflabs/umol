@@ -8,6 +8,7 @@ Relates: [155](155-smiles-io-and-resolve-configuration-2026-07-19.md),
 [166](166-molecule-ops-2026-07-27.md),
 [170](170-reaction-smiles-python-2026-07-28.md),
 [224](224-smiles-ring-closure-frame-2026-09-08.md),
+[243](243-stereo-site-assertions-2026-11-07.md),
 [data type contracts](../docs/development/data-types.md)
 
 Correction (2026-09-11): the projection contract and S4 plan below replace the runtime

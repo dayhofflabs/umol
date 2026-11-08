@@ -4,6 +4,7 @@ Status: Completed
 Date: 2026-10-29
 Relates: [166](166-molecule-ops-2026-07-27.md),
 [240](240-validation-constraint-ops-2026-10-18.md),
+[243](243-stereo-site-assertions-2026-11-07.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md),
 [Python API guide](../docs/development/python-api.md)

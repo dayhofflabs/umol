@@ -16,6 +16,7 @@ Relates: [103](103-stereochemistry-overlay-and-ports-2026-05-28.md),
 [212](212-remapping-layer-2026-08-26.md),
 [213](213-editor-overlay-storage-2026-08-27.md),
 [215](215-integrity-minimization-2026-08-28.md),
+[243](243-stereo-site-assertions-2026-11-07.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
