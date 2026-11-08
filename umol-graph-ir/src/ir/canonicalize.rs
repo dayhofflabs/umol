@@ -969,6 +969,7 @@ fn stereo_ligand_kind_key(kind: StereoLigandKind) -> CanonicalKeyValue {
             StereoLigandKind::Atom => 0,
             StereoLigandKind::ImplicitHydrogen => 1,
             StereoLigandKind::LonePair => 2,
+            StereoLigandKind::Virtual => 3,
         },
         [],
     )

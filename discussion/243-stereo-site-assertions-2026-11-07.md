@@ -18,8 +18,8 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0 and S1a are
-complete; S1b and S2–S4 remain pending. The semantics, value interface, operation
+This records the selected design direction and its consequences. S0 and S1 are
+complete; S2–S4 remain pending. The semantics, value interface, operation
 interfaces, and names below are the agreed working design. The staged
 implementation plan follows the change inventory.
 
@@ -185,7 +185,7 @@ with lone-pair ligands resolves. Raise has no chemistry model and does no chemic
 interpretation.
 
 StereoLigandKind gains a Virtual variant alongside Atom, ImplicitHydrogen, and
-LonePair. Its DSL spelling is :virtual. It denotes a generic virtual substituent
+LonePair. Its DSL spelling is :virt. It denotes a generic virtual substituent
 whose specific kind has not yet been identified. Undetermined remains reserved for
 lattice states; StereoLigandKind has no Lattice implementation.
 
@@ -445,7 +445,7 @@ the other projection stages and the I/O ring policy still require them.
 | Surface | Implication |
 | --- | --- |
 | Rust stereo site forms | Keep the named three-state forms, use bool literals and construction, and remove the ground enums and coset-specific methods/conversions. Keep configuration types for explicit stereo entities. |
-| Stereo ligands | Add the Virtual variant and :virtual spelling. Update exhaustive kind dispatch, canonical keys, and Python enum conversion. Keep ligand identity and matching exact. |
+| Stereo ligands | Add the Virtual variant and :virt spelling. Update exhaustive kind dispatch, canonical keys, and Python enum conversion. Keep ligand identity and matching exact. |
 | Atom/bond constraint readings | Report presence/kind without reconstructing a neighbor-relative coset. A known stereo kind can give a positive stereo constraint even when its coset is undetermined. Existing open/complete reading distinctions still apply. A caller that needs a coset uses coset_for with a stated frame. |
 | Validation | Check stereo constraint realizability and agreement with entity presence/kind. Configuration and ligand-frame validation continue on explicit entities. |
 | Hydrogen folding/unfolding | Remove special transport of inline #T/#C cosets. Continue maintaining actual/virtual ligands on explicit stereo entities. Hydrogen folding currently has separate code for both representations. |
@@ -518,13 +518,13 @@ implementation, documentation, fixtures, or exhaustive matches.
 | umol-graph-ir/src/dsl/stereo.rs | Reduce the internal TetrahedralStereoDsl / CisTransStereoDsl wrappers and their parsers/formatters. Retain the full StereoAtomDsl / StereoBondDsl and configuration-expression grammar. The two site wrappers are not re-exported from dsl.rs. |
 | umol-graph-ir/src/dsl/constraint.rs | AtomConstraintDsl / BondConstraintDsl and general constraint readers use reduced stereo values. Configuration expressions remain on explicit stereo entities. Molecule-level constraint semantics remain outside this work. |
 | umol-graph-ir/src/dsl/molecule.rs | Retain the existing atom/bond input entry types, entity registration, and explicit stereo-record rendering. The shared atom/bond grammar rejects configuration-bearing #T/#C here as it does elsewhere. |
-| umol-graph-ir/src/dsl/refs.rs and namespace.rs | Read and render :virtual in tree and streaming paths. Preserve its bearer and kind in existing structural references and participant indexes, without new stereo id allocation rules. |
+| umol-graph-ir/src/dsl/refs.rs and namespace.rs | Read and render :virt in tree and streaming paths. Preserve its bearer and kind in existing structural references and participant indexes, without new stereo id allocation rules. |
 | umol-graph-ir/src/dsl/reaction.rs | LHS maps use the same reduced attribute grammar as molecule inputs. Delta values reject configuration-bearing #T/#C. Existing explicit stereo records and their reference handling remain. |
 | umol-graph-ir/src/dsl/reaction_span.rs and edit.rs | Atom/bond sides and edit values reject configuration-bearing #T/#C. Explicit stereo records, participant references, and ligand-replacement payloads accept Virtual. |
 | umol-graph-ir/src/dsl/config.rs; MoleculeDsl FromIr / IntoIr | Retain StereoDefault, AtomDefaults, BondDefaults, overrides, and aggregate defaults. There is no additional stereo-sugar configuration or graph-aware atom/bond attribute conversion. |
 | umol-graph-ir/src/ir/molecule/spec.rs | Standalone atom/bond specs reject configuration syntax; explicit stereo spec terms remain available, including the new virtual argument. |
 | umol-graph-ir/src/macros.rs | Existing DSL macros inherit molecule acceptance or standalone rejection through their owning parsers. |
-| umol-graph-ir/spec/umol-dsl-spec.md | Specify the three presence values and :virtual; remove configuration-bearing #T/#C from every context. Keep full configuration syntax on explicit stereo records and preserve tree/streaming parity. |
+| umol-graph-ir/spec/umol-dsl-spec.md | Specify the three presence values and :virt; remove configuration-bearing #T/#C from every context. Keep full configuration syntax on explicit stereo records and preserve tree/streaming parity. |
 
 The same attribute grammar applies in every context. Full stereo configurations
 roundtrip through the existing explicit entity representation; no molecule-only
@@ -589,7 +589,7 @@ in the value interface gives it a Rust-owned implementation.
 | umol-graph-ir/benches/canonicalize.rs, constraint_readings.rs, editor.rs, integrity.rs; IO parsing/layout/SVG benchmarks | Add or adapt representative Virtual and explicit stereo fixtures where those operations are measured. Preserve the measured operation; parser or entity-only fixtures are not interchangeable workloads. |
 | umol-graph-ir/fuzz/fuzz_targets/fuzz_entity_strings.rs, fuzz_molecule.rs, fuzz_reaction.rs, fuzz_reaction_span.rs and fuzz_edits.rs | Preserve parser and tree/streaming parity laws. Configuration-bearing #T/#C inputs become rejection cases in every context; add valid explicit stereo-record and Virtual seeds. Keep generated corpora as historical inputs, not bulk migration targets. |
 | umol-graph-ir/spec/umol-dsl-spec.md; docs/chemistry/representation.md; docs/development/data-types.md and python-api.md; relevant nomenclature entries | Synchronize carrier, conversion, frame, and binding descriptions. Remove wording that equates a stereo entity or NotStereo with stereogenicity. |
-| .agents/skills/mol-notation/SKILL.md and its .claude redirect | Update canonical notation guidance to reject configuration-bearing #T/#C and document explicit stereo records and :virtual. Preserve shared-skill ownership; update other examples only where their actual claims become false. |
+| .agents/skills/mol-notation/SKILL.md and its .claude redirect | Update canonical notation guidance to reject configuration-bearing #T/#C and document explicit stereo records and :virt. Preserve shared-skill ownership; update other examples only where their actual claims become false. |
 
 The gated suites are graph-ir's property target with proptest; graph's property
 target with proptest and resolution target with conformance; and IO's
@@ -635,10 +635,9 @@ those callers.
   and opposite configurations. It checks exact atom mappings in both directions
   under both matching strategies and all six graph algorithms.
 
-  The original inline-canonicalization reproduction remains in
-  scratch/canonical-inline-stereo/src/main.rs. Production code and APIs are
-  unchanged. Validation passed: all 72 new parameterized cases and the existing
-  stereo-filtered library/property tests, using
+  The inline-canonicalization defect is recorded in Motivation above. Production
+  code and APIs are unchanged. Validation passed: all 72 new parameterized cases
+  and the existing stereo-filtered library/property tests, using
   `cargo test -p umol-graph-ir --features proptest --lib --test property stereo`;
   `cargo clippy -p umol-graph-ir --features proptest --lib --tests -- -D warnings`;
   `cargo +nightly fmt --all`; and `git diff --check`.
@@ -655,49 +654,28 @@ those callers.
   Select existing cases covering molecule parsing, rendering, canonicalization,
   constraint readings, import, projection, and stereo transformation. Use explicit
   stereo records for comparable baseline inputs and record old attribute-based
-  workloads separately. Run correctness checks and save the measurements, feature
-  selection, chemistry models, algorithms, and timing settings under scratch. Keep fixed
-  explicit-entity workloads separate from import/parser workloads whose stored
+  workloads separately. Run correctness checks and record the comparison baseline
+  and relevant measurement conditions here. Keep fixed explicit-entity workloads
+  separate from import/parser workloads whose stored
   representation will change. Preserve the existing iterator lifetime controls.
 
-  **Completed — 2026-11-08.** Added tetrahedral and cis/trans parsing/rendering
-  inputs in explicit-record and old attribute forms, fixed explicit projection
-  and removal inputs, and stereo SMILES ingest cases. Reused the existing
+  **Completed — 2026-11-08.** Added tetrahedral and cis/trans parsing/rendering,
+  explicit projection/removal, and SMILES ingest cases; reused the existing
   canonicalization, readings, addition, and enumeration loops. All 55 selected
-  paths passed benchmark test mode: ten parsing, five rendering, six
-  canonicalization, nine readings, ten import/resolution/projection, and fifteen
-  transformer paths. No production behavior or timing-loop boundaries changed.
+  paths passed benchmark test mode. Timing-loop boundaries are unchanged.
 
-  The [AC baseline record](../scratch/stereo-site-baseline-ac-2026-11-08/README.md)
-  retains the input manifest, source snapshots and hashes, exact commands,
-  raw Criterion samples, and two saved runs on verified AC power. All 78 power
-  checks passed with Low Power Mode off and no discharging status. The
-  [earlier battery measurements](../scratch/stereo-site-baseline-2026-11-08/README.md)
-  remain archived; the AC results are the comparison baseline. Measurements use
-  production revision eefd1daa64b8a597abd822b0f6ee0a04330d497a, rustc 1.99.1, macOS arm64
-  with ten logical CPUs, the optimized bench profile with debug information,
-  and default package features. Each run uses 50 samples, 300 ms warm-up,
-  one-second measurement, and 10,000 bootstrap resamples. The manifest separates
-  fixed explicit inputs, old attribute inputs, format-dependent pipelines,
-  graph-only addition inputs, and non-stereo controls. Both SmallInput and
-  PerIteration enumeration controls are retained.
+  Two runs on verified AC power replace the battery measurements. They use
+  production revision eefd1daa64b8a597abd822b0f6ee0a04330d497a, rustc 1.99.1,
+  macOS arm64, default features, and Low Power Mode off: 50 samples, 300 ms
+  warm-up, and one-second measurement. Of the 55 paths, 54 agree within 2.71%.
+  SmallInput iter_first varies by 12.27%; a longer repeat reduces this to 3.20%,
+  versus 0.86% for PerIteration. Retain both controls when assessing enumeration
+  changes; their setup and destruction lifetimes differ.
 
-  [All medians and 95% confidence intervals](../scratch/stereo-site-baseline-ac-2026-11-08/estimates.tsv)
-  are saved for both AC runs. Second-to-first median ratios range from 0.9729
-  to 1.1227, with a median ratio of 1.0023 across the 55 paths. Of these, 54
-  agree within 2.71%; the SmallInput iter_first control differs by 12.27%.
-  A [longer repeat of that pair](../scratch/stereo-site-baseline-ac-2026-11-08/controls.tsv)
-  uses 100 samples, one-second warm-up, and three-second measurement:
-  SmallInput differs by 3.20%, and PerIteration by 0.86%. The original runs
-  remain intact. All 110 primary result sets contain 50 samples; the four
-  longer control sets contain 100. Source hashes match the battery runs and
-  were unchanged after measurement. The baseline record includes a per-case
-  comparison with the battery measurements.
-
-  Validation passed: 15,370 graph-IR/graph library tests (three ignored), 131
-  stereo-filtered graph-IR property tests, all six benchmark targets under
-  Clippy with warnings denied, formatting, and `git diff --check`. Commands and
-  verification logs are in the baseline record.
+  Compare unchanged explicit-entity workloads directly. Treat old #T/#C inputs
+  as historical once rejected, and report changed import/projection semantics
+  alongside their timings. Library tests, stereo properties, benchmark Clippy,
+  formatting, and diff checks passed.
 
 **S0 gate:** the explicit-entity reference tests pass and the benchmark results
 are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
@@ -736,6 +714,8 @@ are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
   umol-graph-ir/src/ir/molecule/spec.rs,
   umol-graph-ir/src/ir/molecule/integrity.rs,
   umol-graph-ir/src/ir/canonicalize.rs,
+  umol-graph-ir/src/ir/reaction.rs,
+  umol-graph-ir/src/ir/symmetry.rs,
   umol-graph-ir/src/dsl/refs.rs,
   umol-graph-ir/src/dsl/molecule.rs,
   umol-graph-ir/src/dsl/edit.rs,
@@ -743,7 +723,7 @@ are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
   umol-io/src/depict/molecule.rs,
   umol-py/src/stereo.rs. [dep: S0b]
 
-  Add StereoLigandKind::Virtual, StereoLigandArg::Virtual, and the :virtual
+  Add StereoLigandKind::Virtual, StereoLigandArg::Virtual, and the :virt
   spelling in explicit stereo records and edit values. Fill the bearer through
   the existing construction paths. Update exhaustive enum conversions and the
   canonical key, integrity, layout, and depiction consumers together.
@@ -755,9 +735,26 @@ are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
   the layout and depiction feature paths. Existing graph-derived ligand actions
   keep virtual ligands fixed; they do not identify their chemical kind.
 
+  **Completed — 2026-11-08.** Virtual is supported in Rust/Python construction,
+  molecule/edit DSL values (`[:virt bearer]`), integrity, canonicalization,
+  layout, and depiction. Equality and matching retain exact ligand kinds.
+  The DSL specification and development guides are updated.
+
+  Tests cover invalid bearers and duplicates, frame transport and canonical
+  relabeling, exact matching, tree/streaming serialization, native layout,
+  depiction, and bindings. Property generators include Virtual with their
+  existing laws unchanged.
+
+  Validation passed: graph-IR and IO library tests, graph-IR properties,
+  native layout tests, Rust binding tests, and the full Python suite after
+  rebuilding with Python 3.13.16. Workspace Clippy passed for all targets with
+  proptest/depiction enabled and warnings denied; formatting and diff checks
+  passed. Identifying Virtual as hydrogen or a lone pair remains S2a.
+
 **S1 gate:** the new kind can be constructed, serialized, transported, and depicted
 through the supported interfaces. The affected Rust and Python tests
 pass together. Configuration-bearing site forms still exist at this point.
+**Passed — 2026-11-08.**
 
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
@@ -1024,4 +1021,4 @@ The critical sequence is S0 → S1 → S2 → S3 → S4. Within S3, value reduct
 feeds the shared DSL grammar, chemistry operations, and projection/export
 consumers. Their complete caller and fixture migration restores the passing build.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S0 and S1a are complete; S1b and S2–S4 remain pending.
+unchanged. S0 and S1 are complete; S2–S4 remain pending.

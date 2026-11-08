@@ -353,7 +353,9 @@ fn wedge_coset(
                 point3(position(layout, ligand.atom_id), wedge_z)
             }
             StereoLigandKind::Atom => point3(position(layout, ligand.atom_id), 0.0),
-            StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => virtual_position,
+            StereoLigandKind::ImplicitHydrogen
+            | StereoLigandKind::LonePair
+            | StereoLigandKind::Virtual => virtual_position,
         })
         .collect::<Vec<_>>();
     let [first, second, third, fourth] = points.as_slice() else {
@@ -1306,6 +1308,7 @@ mod tests {
     #[rstest]
     #[case::implicit_hydrogen("[:h 0]")]
     #[case::lone_pair("[:lp 0]")]
+    #[case::generic_virtual("[:virt 0]")]
     fn test_depict_tetrahedral_virtual_ligand(#[case] virtual_ligand: &str) {
         let molecule = mol_dsl!(&format!(
             r#"{{:atoms ["C" "F" "Cl" "Br"]
@@ -1773,12 +1776,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_depict_cis_trans_stereo() {
-        let molecule = mol_dsl!(
-            r#"{:atoms ["C" "C" "C" "C"]
+    #[case::hydrogen("h")]
+    #[case::virtual_ligand("virt")]
+    fn test_depict_cis_trans_stereo(#[case] kind: &str) {
+        let molecule = mol_dsl!(&format!(
+            r#"{{:atoms ["C" "C" "C" "C"]
                 :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
-        );
+                :stereo-bonds [{{:site 1 :ligands [0 [:{kind} 1] 3 [:{kind} 2]] :attrs "Ct1"}}]}}"#
+        ));
         let layout = layout(&[[0.0, 1.0], [1.0, 0.0], [2.0, 0.0], [3.0, -1.0]]);
 
         let depiction = depict(&molecule, &layout).unwrap();

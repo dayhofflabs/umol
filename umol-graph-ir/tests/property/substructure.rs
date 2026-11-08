@@ -161,6 +161,62 @@ fn test_molecule_substructure_matches_stereo(
     }
 }
 
+#[rstest]
+#[case::atom(StereoLigand::new(AtomId(4), StereoLigandKind::Atom), false)]
+#[case::hydrogen(
+    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+    false
+)]
+#[case::lone_pair(StereoLigand::new(AtomId(0), StereoLigandKind::LonePair), false)]
+#[case::virtual_ligand(StereoLigand::new(AtomId(0), StereoLigandKind::Virtual), true)]
+fn test_molecule_substructure_matches_virtual_ligand(
+    #[case] ligand: StereoLigand,
+    #[case] matches: bool,
+) {
+    let mut entries = MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .into_iter()
+            .map(AtomForm::from_element)
+            .collect(),
+        bonds: (1..=4)
+            .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        )],
+        ..Default::default()
+    };
+    let pattern = Molecule::from_entries(entries.clone());
+    entries.stereo_atoms[0].1[3] = ligand;
+    let host = Molecule::from_entries(entries);
+    let expected = if matches {
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)]]
+    } else {
+        vec![]
+    };
+    for strategy in STRATEGIES {
+        for subiso in SUBISO {
+            assert_eq!(
+                sorted_matches(&pattern, &host, strategy, subiso),
+                expected,
+                "{strategy:?}/{subiso:?}"
+            );
+            assert_eq!(
+                sorted_matches(&host, &pattern, strategy, subiso),
+                expected,
+                "{strategy:?}/{subiso:?}"
+            );
+        }
+    }
+}
+
 proptest! {
     #[test]
     fn test_substructure_cross_validation(

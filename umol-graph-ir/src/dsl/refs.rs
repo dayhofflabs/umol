@@ -572,7 +572,7 @@ fn resolve_stereo_bond_structural<N: Namespace>(
 
 /// One ligand of a stereo element: an atom ref tagged with its kind
 /// (`Atom` for a plain `<atom-ref>`, `ImplicitHydrogen` for `[:h <ref>]`,
-/// `LonePair` for `[:lp <ref>]`).
+/// `LonePair` for `[:lp <ref>]`, `Virtual` for `[:virt <ref>]`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StereoLigandRef {
     pub kind: StereoLigandKind,
@@ -583,6 +583,7 @@ fn stereo_ligand_kind(tag: &str) -> Result<StereoLigandKind, DeError> {
     match tag {
         "h" => Ok(StereoLigandKind::ImplicitHydrogen),
         "lp" => Ok(StereoLigandKind::LonePair),
+        "virt" => Ok(StereoLigandKind::Virtual),
         other => Err(DeError::Custom(format!(
             "unknown stereo ligand tag :{other}"
         ))),

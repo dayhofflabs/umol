@@ -554,14 +554,15 @@ impl StereoKind {
     }
 }
 
-/// The kind of a stereo ligand: a real atom, or a virtual ligand (implicit hydrogen or
-/// lone pair). A fieldless, hashable value enum corresponding to the Rust `StereoLigandKind`.
+/// The kind of a stereo ligand: an atom, implicit hydrogen, lone pair, or generic
+/// virtual ligand. A fieldless, hashable value enum corresponding to Rust `StereoLigandKind`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StereoLigandKind {
     Atom,
     ImplicitHydrogen,
     LonePair,
+    Virtual,
 }
 
 impl StereoLigandKind {
@@ -570,6 +571,7 @@ impl StereoLigandKind {
             GraphIrStereoLigandKind::Atom => Self::Atom,
             GraphIrStereoLigandKind::ImplicitHydrogen => Self::ImplicitHydrogen,
             GraphIrStereoLigandKind::LonePair => Self::LonePair,
+            GraphIrStereoLigandKind::Virtual => Self::Virtual,
         }
     }
 
@@ -578,6 +580,7 @@ impl StereoLigandKind {
             Self::Atom => GraphIrStereoLigandKind::Atom,
             Self::ImplicitHydrogen => GraphIrStereoLigandKind::ImplicitHydrogen,
             Self::LonePair => GraphIrStereoLigandKind::LonePair,
+            Self::Virtual => GraphIrStereoLigandKind::Virtual,
         }
     }
 }
@@ -1911,6 +1914,7 @@ mod tests {
     #[case(GraphIrStereoLigandKind::Atom)]
     #[case(GraphIrStereoLigandKind::ImplicitHydrogen)]
     #[case(GraphIrStereoLigandKind::LonePair)]
+    #[case(GraphIrStereoLigandKind::Virtual)]
     fn test_stereo_ligand_kind_roundtrip(#[case] ir_value: GraphIrStereoLigandKind) {
         assert_eq!(StereoLigandKind::from_rust(ir_value).to_rust(), ir_value);
     }

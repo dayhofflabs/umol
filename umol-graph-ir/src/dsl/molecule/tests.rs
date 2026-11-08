@@ -18,7 +18,7 @@ use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::molecule::MoleculeIntegrityError;
 use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
-use crate::ir::stereo::{StereoConfigurationForm, Stereogenicity};
+use crate::ir::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
 use crate::mol_dsl;
 
 #[fixture]
@@ -130,6 +130,51 @@ fn test_molecule_dsl_from_edn_empty() {
     let edn = read_string("{:atoms [] :bonds []}").unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
     assert_eq!(*dsl.molecule(), Molecule::default());
+}
+
+#[rstest]
+#[case::atom(
+    r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 :single] [0 2 :single] [0 3 :single]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs :ccw}]}"#,
+    MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1)), (AtomId(0), AtomId(2), BondForm::from_order(1)), (AtomId(0), AtomId(3), BondForm::from_order(1))],
+        stereo_atoms: vec![(AtomId(0), vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+        ], StereoAtomForm { configuration: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), constraints: Default::default() })],
+        ..Default::default()
+    },
+)]
+#[case::bond(
+    r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 :double] [0 2 :single] [1 3 :single]] :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:virt 1]] :attrs :z}]}"#,
+    MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2)), (AtomId(0), AtomId(2), BondForm::from_order(1)), (AtomId(1), AtomId(3), BondForm::from_order(1))],
+        stereo_bonds: vec![(BondId(0), vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+        ], StereoBondForm { configuration: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)), constraints: Default::default() })],
+        ..Default::default()
+    },
+)]
+fn test_molecule_dsl_from_edn_virtual_ligand(
+    #[case] source: &str,
+    #[case] entries: MoleculeEntries,
+) {
+    let expected = Molecule::from_entries(entries);
+    let tree = read_string(source).unwrap();
+    let parsed = MoleculeDsl::from_edn(&tree).unwrap();
+    assert_eq!(parsed.molecule(), &expected);
+    assert_eq!(MoleculeDsl::from_edn_str(source).unwrap(), parsed);
+    assert_eq!(parsed.to_edn(), tree);
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&parsed.to_string()).unwrap(),
+        parsed
+    );
 }
 
 #[rstest]

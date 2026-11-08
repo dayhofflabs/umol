@@ -655,6 +655,46 @@ def test_molecule_stereo_atoms_from_entries():
     )
 
 
+@pytest.mark.parametrize(
+    "kind",
+    [StereoLigandKind.ImplicitHydrogen, StereoLigandKind.LonePair, StereoLigandKind.Virtual],
+)
+def test_molecule_stereo_atom_virtual_ligand(kind):
+    ligands = (
+        StereoLigand(1, StereoLigandKind.Atom),
+        StereoLigand(2, StereoLigandKind.Atom),
+        StereoLigand(3, StereoLigandKind.Atom),
+        StereoLigand(0, kind),
+    )
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(4)],
+        bonds=[(0, i, BondForm(1)) for i in range(1, 4)],
+        stereo_atoms=[(0, ligands, StereoAtomForm(TetrahedralConfiguration.Ccw))],
+    )
+    assert molecule.stereo_atoms[0].ligands == ligands
+    assert molecule.stereo_atoms[0].ligands[3].kind == kind
+    assert Molecule.parse(molecule.render()) == molecule
+    assert (StereoLigand(0, StereoLigandKind.Virtual) == StereoLigand(0, kind)) == (
+        kind == StereoLigandKind.Virtual
+    )
+
+
+def test_molecule_stereo_bond_virtual_ligand():
+    ligands = (
+        StereoLigand(2, StereoLigandKind.Atom),
+        StereoLigand(0, StereoLigandKind.Virtual),
+        StereoLigand(3, StereoLigandKind.Atom),
+        StereoLigand(1, StereoLigandKind.Virtual),
+    )
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(4)],
+        bonds=[(0, 1, BondForm(2)), (0, 2, BondForm(1)), (1, 3, BondForm(1))],
+        stereo_bonds=[(0, ligands, StereoBondForm(CisTransConfiguration.E))],
+    )
+    assert molecule.stereo_bonds[0].ligands == ligands
+    assert Molecule.parse(molecule.render()) == molecule
+
+
 def test_stereoatomview_configuration_write_through():
     mol = stereo_atom_molecule()
     mol.stereo_atoms[0].configuration = TetrahedralConfiguration.Cw

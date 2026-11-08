@@ -107,7 +107,7 @@ impl From<String> for BondArg {
 }
 
 /// A ligand argument to a stereo term: an atom (referenced like any [`AtomArg`]) or a virtual ligand
-/// (implicit hydrogen / lone pair). A virtual ligand's bearing atom is filled at build — the site atom
+/// (implicit hydrogen, lone pair, or generic virtual ligand). Its bearing atom is filled at build — the site atom
 /// for a stereo atom, or the bond atom its position selects for a stereo bond.
 // The `Atom(AtomArg)` variant dwarfs the unit ones, but this is a transient construction-time enum;
 // boxing it would only clutter every ligand literal.
@@ -117,6 +117,7 @@ pub enum StereoLigandArg {
     Atom(AtomArg),
     ImplicitHydrogen,
     LonePair,
+    Virtual,
 }
 
 impl From<AtomArg> for StereoLigandArg {
@@ -547,6 +548,9 @@ impl BuildContext {
                     StereoLigandArg::LonePair => {
                         StereoLigand::new(bearing, StereoLigandKind::LonePair)
                     }
+                    StereoLigandArg::Virtual => {
+                        StereoLigand::new(bearing, StereoLigandKind::Virtual)
+                    }
                 }
             })
             .collect()
@@ -747,8 +751,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_spec_stereo_atom() {
-        // a tetrahedral center: three atom ligands plus an implicit hydrogen borne by the site
+    #[case::hydrogen(StereoLigandArg::ImplicitHydrogen, StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandArg::LonePair, StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandArg::Virtual, StereoLigandKind::Virtual)]
+    fn test_molecule_spec_stereo_atom(
+        #[case] argument: StereoLigandArg,
+        #[case] kind: StereoLigandKind,
+    ) {
         let spec = atoms([Element::C, Element::F, Element::Cl, Element::Br])
             + bond(0_u32, 1_u32, BondForm::from_order(1))
             + bond(0_u32, 2_u32, BondForm::from_order(1))
@@ -759,14 +768,22 @@ mod tests {
                     StereoLigandArg::Atom(1_u32.into()),
                     StereoLigandArg::Atom(2_u32.into()),
                     StereoLigandArg::Atom(3_u32.into()),
-                    StereoLigandArg::ImplicitHydrogen,
+                    argument,
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             );
         let mol = spec.build();
 
         assert_eq!(mol.stereo_atom(StereoAtomId(0)).site_id(), AtomId(0));
-        // the implicit-H bears on the site (atom 0), so atom incidence is site + 3 substituents
+        assert_eq!(
+            mol.stereo_atom(StereoAtomId(0)).ligand_ids(),
+            [
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), kind),
+            ]
+        );
         assert_eq!(
             mol.stereo_atom(StereoAtomId(0))
                 .atom_ids()
@@ -780,9 +797,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_spec_stereo_bond() {
-        // stereo bond referencing the named double bond by name; virtual Hs bear on the two bond
-        // atoms by ligand position (0–1 → first atom, 2–3 → second)
+    #[case::hydrogen(StereoLigandArg::ImplicitHydrogen, StereoLigandKind::ImplicitHydrogen, vec![AtomId(0), AtomId(1)])]
+    #[case::lone_pair(StereoLigandArg::LonePair, StereoLigandKind::LonePair, vec![])]
+    #[case::virtual_ligand(StereoLigandArg::Virtual, StereoLigandKind::Virtual, vec![])]
+    fn test_molecule_spec_stereo_bond(
+        #[case] argument: StereoLigandArg,
+        #[case] kind: StereoLigandKind,
+        #[case] expected_hydrogens: Vec<AtomId>,
+    ) {
         let spec = atoms([Element::C, Element::C, Element::F, Element::Cl])
             + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2))
             + bond(0_u32, 2_u32, BondForm::from_order(1))
@@ -791,9 +813,9 @@ mod tests {
                 "db",
                 [
                     StereoLigandArg::Atom(2_u32.into()),
-                    StereoLigandArg::ImplicitHydrogen,
+                    argument.clone(),
                     StereoLigandArg::Atom(3_u32.into()),
-                    StereoLigandArg::ImplicitHydrogen,
+                    argument,
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             );
@@ -801,10 +823,19 @@ mod tests {
 
         assert_eq!(mol.stereo_bond(StereoBondId(0)).site_id(), BondId(0));
         assert_eq!(
+            mol.stereo_bond(StereoBondId(0)).ligand_ids(),
+            [
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), kind),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), kind),
+            ]
+        );
+        assert_eq!(
             mol.stereo_bond(StereoBondId(0))
                 .implicit_hydrogen_atom_ids()
                 .collect::<Vec<_>>(),
-            vec![AtomId(0), AtomId(1)]
+            expected_hydrogens
         );
         assert_eq!(
             mol.stereo_bond(StereoBondId(0)).attributes(),

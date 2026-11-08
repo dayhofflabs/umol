@@ -118,7 +118,7 @@ stereo-bond-list ::= [ stereo-bond-entry* ]
 stereo-atom-entry ::= { [:id keyword] :site atom-ref :ligands [ ligand-ref+ ] :attrs stereo-spec }
 stereo-bond-entry ::= { [:id keyword] :site bond-ref :ligands [ ligand-ref+ ] :attrs stereo-spec }
 
-ligand-ref  ::= atom-ref | [ :h atom-ref ] | [ :lp atom-ref ]
+ligand-ref  ::= atom-ref | [ :h atom-ref ] | [ :lp atom-ref ] | [ :virt atom-ref ]
 stereo-spec ::= "stereo-string" | stereo-keyword
 stereo-keyword ::= :ccw | :cw | :z | :e
 ```
@@ -142,7 +142,7 @@ An empty string in an **`:attrs`** field, or as the **`bond-spec`** of a vector 
 **Stereo atom / stereo bond entry.** A **`stereo-atom-entry`** overlays a tetrahedral configuration on an atom site; a **`stereo-bond-entry`** overlays a cis/trans configuration on a bond site.
 
 - **`:site`** names the bearing entity — an **`atom-ref`** for a **`stereo-atom-entry`**, a **`bond-ref`** for a **`stereo-bond-entry`**. A site **MUST** carry at most one stereo element (**§4.1**).
-- **`:ligands`** is the **ordered** local reference frame against which the **`:attrs`** **`coset`** index is numbered; **order is significant**. Each **`ligand-ref`** is either a plain **`atom-ref`** (a neighbor atom) or a **virtual ligand** — **`[:h atom-ref]`** for an implicit hydrogen borne by the named atom, or **`[:lp atom-ref]`** for a lone pair on the named atom. For a **`stereo-atom-entry`** the bearing atom of every virtual ligand is the site atom; for a **`stereo-bond-entry`** it is the relevant double-bond terminus.
+- **`:ligands`** is the **ordered** local reference frame against which the **`:attrs`** **`coset`** index is numbered; **order is significant**. Each **`ligand-ref`** is either a plain **`atom-ref`** (a neighbor atom) or a **virtual ligand** — **`[:h atom-ref]`** for an implicit hydrogen, **`[:lp atom-ref]`** for a lone pair, or **`[:virt atom-ref]`** for a generic virtual substituent whose chemical identity has not been specified. For a **`stereo-atom-entry`** the bearing atom of every virtual ligand is the site atom; for a **`stereo-bond-entry`** it is the relevant double-bond terminus. The three virtual kinds are distinct in equality and matching. A frame **MUST NOT** repeat an equal ligand with the same bearing atom and kind.
 - **`:attrs`** carries a **`stereo-string`** (**§7.11**) — the **`class`** (**`Th`** / **`Ct`**) plus the **`coset`** index — or a **`stereo-keyword`** shorthand (**§7.11**). The coset index is a dense per-class arrangement number relative to the **`:ligands`** order, not a permutation rank.
 
 **`:id`**. Each structural entry **MAY** include **`:id`** with an EDN **keyword** value. When present, **`:id`** values **MUST** be **pairwise distinct** across **all** entries in the **same** **molecule map** (every list combined).
@@ -1084,7 +1084,7 @@ noncovalent-bond-removal  ::= { :id noncovalent-bond-handle
 checked-noncovalent-update ::= { :expect partial-noncovalent-string
                                  :update partial-noncovalent-string }
 
-edit-ligand ::= atom-handle | [ :h atom-handle ] | [ :lp atom-handle ]
+edit-ligand ::= atom-handle | [ :h atom-handle ] | [ :lp atom-handle ] | [ :virt atom-handle ]
 
 stereo-atom-edit ::=
     { :add    stereo-atom-addition }

@@ -620,7 +620,7 @@ normalized incidence values. Entity-node and incidence colors occupy disjoint ke
 
 Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
 donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand
-kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, and `LonePair = 2`. Unpaired electrons
+kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, `LonePair = 2`, and `Virtual = 3`. Unpaired electrons
 are the product `(count = 0, multiplicity = 1)`. A stereo configuration is the product of its kind
 and coset after the complete participant-frame action described above.
 

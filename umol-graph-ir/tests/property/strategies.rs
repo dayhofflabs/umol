@@ -1096,6 +1096,7 @@ pub(crate) fn stereo_ligand_kind_strategy() -> impl Strategy<Value = StereoLigan
         Just(StereoLigandKind::Atom),
         Just(StereoLigandKind::ImplicitHydrogen),
         Just(StereoLigandKind::LonePair),
+        Just(StereoLigandKind::Virtual),
     ]
 }
 
@@ -1648,6 +1649,7 @@ pub(crate) fn stereo_atom_entries_strategy(
                         .chain([
                             StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen),
                             StereoLigand::new(site, StereoLigandKind::LonePair),
+                            StereoLigand::new(site, StereoLigandKind::Virtual),
                         ])
                         .collect();
                     if pool.len() < ligand_specs.len() {
@@ -1737,6 +1739,7 @@ pub(crate) fn stereo_bond_entries_strategy(
                                 .chain([
                                     StereoLigand::new(endpoint, StereoLigandKind::ImplicitHydrogen),
                                     StereoLigand::new(endpoint, StereoLigandKind::LonePair),
+                                    StereoLigand::new(endpoint, StereoLigandKind::Virtual),
                                 ])
                                 .collect();
                             specs

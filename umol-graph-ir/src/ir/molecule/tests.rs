@@ -1018,6 +1018,20 @@ fn test_molecule_try_from_entries_error(
         entity: Entity::StereoAtom(StereoAtomId(0)),
     },
 )]
+#[case::stereo_atom_generic_virtual_ligand_incidence(
+    |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[2] =
+        StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+    MoleculeIntegrityError::StereoLigandIncidenceMismatch {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+    },
+)]
+#[case::stereo_bond_generic_virtual_ligand_incidence(
+    |entries: &mut MoleculeEntries| entries.stereo_bonds[0].1[1] =
+        StereoLigand::new(AtomId(2), StereoLigandKind::Virtual),
+    MoleculeIntegrityError::StereoLigandIncidenceMismatch {
+        entity: Entity::StereoBond(StereoBondId(0)),
+    },
+)]
 #[case::stereo_bond_ligand_block_incidence(
     |entries: &mut MoleculeEntries| entries.stereo_bonds[0].1.swap(1, 3),
     MoleculeIntegrityError::StereoLigandIncidenceMismatch {
@@ -1193,6 +1207,12 @@ fn test_molecule_try_from_entries_stereo_term(
     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
     StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
 ])]
+#[case::distinct_virtual_kinds(vec![
+    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+    StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+])]
 fn test_molecule_try_from_entries_stereo_atom(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ligands: Vec<StereoLigand>,
@@ -1221,6 +1241,18 @@ fn test_molecule_try_from_entries_stereo_atom(
     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
     StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+])]
+#[case::generic_virtual_ligands(vec![
+    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(2), StereoLigandKind::Virtual),
+])]
+#[case::exchanged_generic_virtual_blocks(vec![
+    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(2), StereoLigandKind::Virtual),
+    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
 ])]
 fn test_molecule_try_from_entries_stereo_bond(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
@@ -1262,6 +1294,24 @@ fn test_molecule_try_from_entries_stereo_bond(
     },
     Entity::StereoBond(StereoBondId(0)),
     StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+)]
+#[case::atom_generic_virtual(
+    |entries: &mut MoleculeEntries| {
+        let ligand = StereoLigand::new(AtomId(1), StereoLigandKind::Virtual);
+        entries.stereo_atoms[0].1[2] = ligand;
+        entries.stereo_atoms[0].1[3] = ligand;
+    },
+    Entity::StereoAtom(StereoAtomId(0)),
+    StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+)]
+#[case::bond_generic_virtual(
+    |entries: &mut MoleculeEntries| {
+        let ligand = StereoLigand::new(AtomId(1), StereoLigandKind::Virtual);
+        entries.stereo_bonds[0].1[0] = ligand;
+        entries.stereo_bonds[0].1[1] = ligand;
+    },
+    Entity::StereoBond(StereoBondId(0)),
+    StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
 )]
 fn test_molecule_try_from_entries_duplicate_stereo_ligand(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
@@ -5099,9 +5149,17 @@ fn test_molecule_restore_stereo_atoms_history(
 
 #[rstest]
 fn test_molecule_restore_stereo_atom_topology_ids(
-    restoration_entries: MoleculeEntries,
+    mut restoration_entries: MoleculeEntries,
     #[values(false, true)] shared: bool,
+    #[values(StereoLigandKind::ImplicitHydrogen, StereoLigandKind::Virtual)] kind: StereoLigandKind,
 ) {
+    for (_, ligands, _) in &mut restoration_entries.stereo_atoms {
+        for ligand in ligands {
+            if ligand.kind == StereoLigandKind::ImplicitHydrogen {
+                ligand.kind = kind;
+            }
+        }
+    }
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
@@ -5172,9 +5230,17 @@ fn test_molecule_restore_stereo_bonds_history(
 
 #[rstest]
 fn test_molecule_restore_stereo_bond_topology_ids(
-    restoration_entries: MoleculeEntries,
+    mut restoration_entries: MoleculeEntries,
     #[values(false, true)] shared: bool,
+    #[values(StereoLigandKind::ImplicitHydrogen, StereoLigandKind::Virtual)] kind: StereoLigandKind,
 ) {
+    for (_, ligands, _) in &mut restoration_entries.stereo_bonds {
+        for ligand in ligands {
+            if ligand.kind == StereoLigandKind::ImplicitHydrogen {
+                ligand.kind = kind;
+            }
+        }
+    }
     let mut expected = Molecule::from_entries(restoration_entries.clone());
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);

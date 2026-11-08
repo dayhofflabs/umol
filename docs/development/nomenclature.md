@@ -1129,9 +1129,11 @@ A stereo entity has two role-distinguished participant groups.
   significant: the coset is meaningless without it.
 
 A ligand need not be an atom of the graph. A **virtual ligand** occupies a coordination position
-without a corresponding node — an implicit hydrogen or a lone pair, each borne by a named atom. This
-is how a sulfoxide or a pyramidal amine is expressed without materializing the hydrogen or inventing
-an atom for the lone pair.
+without a corresponding node. ImplicitHydrogen and LonePair identify specific virtual kinds;
+Virtual denotes a generic virtual substituent whose chemical identity has not been specified.
+Each is borne by a named atom. These are distinct kinds under exact ligand equality and matching.
+This expresses a sulfoxide or pyramidal amine without materializing a hydrogen or lone-pair atom,
+and permits a complete frame to carry a generic virtual ligand before chemical identification.
 
 Stereo views expose the ordered compound ligand identifiers through `ligand_ids()` as a borrowed
 `&[StereoLigand]`. Each value identifies a ligand by its atom id and kind. `atom_ligand_ids()`
@@ -1139,12 +1141,12 @@ selects actual-atom ligands and yields their `AtomId` values.
 
 A published stereo frame contains pairwise-distinct complete ligand values and at most
 `MAX_DEGREE` ligands. Two equal virtual ligands with the same anchor and kind are therefore
-prohibited; an implicit hydrogen and a lone pair on the same anchor remain distinct. Explicit
+prohibited; different virtual kinds on the same anchor remain distinct. Explicit
 hydrogens are atoms and remain distinct by atom id.
 
 **Not:** *participant* used flatly. Site and ligands are both participants, but they are not
 interchangeable, and diagnostics should say which.
-**In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair}`; `:site` and
+**In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair, Virtual}`; `:site` and
 `:ligands` in the notation.
 
 ### Localized bond
