@@ -1012,9 +1012,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             chemistry_model=chemistry_model,
             resolve_config=ResolveConfig(
                 aromaticity=AromaticityResolveConfig(),
-                stereo=StereoResolveConfig(
-                    tetrahedral_stereo_failure=StereoFailurePolicy.Remove
-                ),
+                stereo=StereoResolveConfig(),
             ),
         )
 

@@ -424,7 +424,7 @@ Both methods in a pair use the same exceptions and retain the complete Rust diag
 Charge delocalization has no operation error. Ordinary Python argument-extraction errors retain
 their existing behavior.
 
-### Stereo values and perception
+### Stereo values and operation configurations
 
 StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
 IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
@@ -477,36 +477,8 @@ silently modify a disconnected copy. Construction extracts iterable members into
 passing a selection to a configuration and reading it back copy its owned sets.
 The supplied values remain reusable, including the immutable getter results.
 
-StereoPerception(model) captures the model as Rust's constructor does. All queries delegate
-to Rust while borrowing the source molecule and preserve it and its existing views:
-
-| Query | Arguments after self | Result |
-| --- | --- | --- |
-| recognize | molecule, selection, automorphism_algorithm, ring_config | StereoDerivation |
-| classify | molecule, sites, automorphism_algorithm | dict[StereoSite, Stereogenicity] |
-| derive | molecule | StereoDerivation |
-| skipped_stereo_bonds | molecule | frozenset[int] |
-| derive_stereo_atom | molecule, atom, coset | ligand tuple and StereoAtomForm, or None |
-| derive_stereo_bond | molecule, bond, coset | ligand tuple and StereoBondForm, or None |
-
-recognize and classify require explicit algorithm arguments, matching Rust. classify accepts
-an iterable of typed sites and collects it into the native set; duplicates collapse. Its returned
-dict is independently mutable because Rust returns an owned map, not a borrowed observation.
-The frame builders require the coset explicitly and return None under the same exclusion
-or incompatibility conditions as Rust. Their successful results contain a ligand tuple
-and an ordinary, independently mutable entity form. Their ID bounds checks translate
-Rust's asserted indexing prerequisite into IndexError before calling the query.
-
-StereoDerivation preserves the four public Rust fields and supports their independent
-construction, with empty sequences by default. It does not validate the supplied rows
-against a molecule. Its immutable properties expose tuples, retaining sequence order and
-duplicates. Each stereo row remains a (site ID, ligand tuple, entity form) triple.
-Construction copies supplied forms to isolate them from later caller mutation. A Rust query's
-derivation moves into the wrapper; reading a row collection copies its forms into the existing
-read-only owned form wrappers, so nested observations reject mutation. The returned form's
-copy() supplies an explicitly mutable value.
-
-StereoPerceptionError uses the existing exception classes and retains its Rust message:
+Stereo addition and removal map Rust's StereoPerceptionError into the existing exception
+classes while retaining the Rust message:
 
 | Rust failure | Python exception | Additional attributes |
 | --- | --- | --- |
@@ -518,10 +490,8 @@ StereoPerceptionError uses the existing exception classes and retains its Rust m
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
 | Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
 
-Addition and removal use this same mapping. Addition's separate inconsistency variant also
-produces ContradictionError with the typed inconsistency attribute. recognize retains evidence
-inconsistencies in its StereoDerivation result, matching Rust; the binding does not turn those
-result fields into exceptions.
+Addition's separate inconsistency variant also produces ContradictionError with the typed
+inconsistency attribute.
 
 ### Stereo enumeration
 

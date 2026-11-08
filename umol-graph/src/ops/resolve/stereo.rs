@@ -1,15 +1,15 @@
 //! Structural stereo resolver. Planning reads complete `#T` / `#C` evidence from the
-//! materialized aromaticity state and emits stereo-element additions plus
-//! the discharge of their source assertions without mutating the molecule.
+//! materialized aromaticity state and emits stereo-element additions, virtual-ligand
+//! identification, and the discharge of source assertions without mutating the molecule.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondConstraintForm,
-    BondConstraintKey, BondHandle, BondId, CisTransStereoForm, Edits, Lattice, Molecule, Normalize,
-    StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset, StereoKind,
-    TetrahedralStereoForm,
+    BondConstraintKey, BondHandle, BondId, CisTransStereoForm, Edit, Edits, Lattice, Molecule,
+    Normalize, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset,
+    StereoKind, StereoLigandKind, TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -26,18 +26,16 @@ pub enum StereoFailurePolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig {
-    pub tetrahedral_stereo_failure: StereoFailurePolicy,
+    /// Policy for unrealizable tetrahedral constraints and stored stereo atoms.
     pub stereo_atom_failure: StereoFailurePolicy,
-    pub cis_trans_stereo_failure: StereoFailurePolicy,
+    /// Policy for unrealizable cis/trans constraints and stored stereo bonds.
     pub stereo_bond_failure: StereoFailurePolicy,
 }
 
 impl Default for StereoResolveConfig {
     fn default() -> Self {
         Self {
-            tetrahedral_stereo_failure: StereoFailurePolicy::Error,
             stereo_atom_failure: StereoFailurePolicy::Error,
-            cis_trans_stereo_failure: StereoFailurePolicy::Error,
             stereo_bond_failure: StereoFailurePolicy::Error,
         }
     }
@@ -97,6 +95,8 @@ impl StereoResolver {
     /// Newly added entities discharge their site's tetrahedral or cis-trans assertion.
     /// Open configurations are carried into the added entities without selecting a coset.
     /// Retained entities do not discharge assertions. Discharge preserves other constraint keys.
+    /// Identified virtual ligand kinds replace stored kinds in place, preserving frame order
+    /// and all entity attributes. Keep retains a failed value; Remove clears its assertion or entity.
     /// Mismatched evidence is contradictory regardless of the failure policies.
     pub fn plan_resolve(
         &self,
@@ -106,13 +106,13 @@ impl StereoResolver {
         for &inconsistency in &derivation.inconsistencies {
             let error = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. } => {
-                    self.config.tetrahedral_stereo_failure == StereoFailurePolicy::Error
+                    self.config.stereo_atom_failure == StereoFailurePolicy::Error
                 }
                 StereoInconsistency::StereoAtomFailure { .. } => {
                     self.config.stereo_atom_failure == StereoFailurePolicy::Error
                 }
                 StereoInconsistency::CisTransStereoFailure { .. } => {
-                    self.config.cis_trans_stereo_failure == StereoFailurePolicy::Error
+                    self.config.stereo_bond_failure == StereoFailurePolicy::Error
                 }
                 StereoInconsistency::StereoBondFailure { .. } => {
                     self.config.stereo_bond_failure == StereoFailurePolicy::Error
@@ -123,6 +123,18 @@ impl StereoResolver {
             if error {
                 return Ok(Solution::Contradictory(inconsistency.into()));
             }
+        }
+
+        if derivation.stereo_atoms.iter().any(|(_, ligands, _)| {
+            ligands
+                .iter()
+                .any(|ligand| ligand.kind == StereoLigandKind::Virtual)
+        }) || derivation.stereo_bonds.iter().any(|(_, ligands, _)| {
+            ligands
+                .iter()
+                .any(|ligand| ligand.kind == StereoLigandKind::Virtual)
+        }) {
+            return Ok(Solution::Underdetermined(Edits::new()));
         }
 
         let stereo_atoms: BTreeMap<_, _> = derivation
@@ -147,7 +159,7 @@ impl StereoResolver {
         for inconsistency in derivation.inconsistencies {
             match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { atom } => {
-                    match self.config.tetrahedral_stereo_failure {
+                    match self.config.stereo_atom_failure {
                         StereoFailurePolicy::Error => unreachable!(),
                         StereoFailurePolicy::Keep => {}
                         StereoFailurePolicy::Remove => {
@@ -168,7 +180,7 @@ impl StereoResolver {
                     }
                 }
                 StereoInconsistency::CisTransStereoFailure { bond } => {
-                    match self.config.cis_trans_stereo_failure {
+                    match self.config.stereo_bond_failure {
                         StereoFailurePolicy::Error => unreachable!(),
                         StereoFailurePolicy::Keep => {}
                         StereoFailurePolicy::Remove => {
@@ -236,21 +248,29 @@ impl StereoResolver {
             );
         }
 
-        let retained_atom_sites: BTreeSet<_> = molecule
-            .stereo_atoms()
-            .iter()
-            .filter(|view| !remove_stereo_atoms.contains(&view.id()))
-            .map(|view| view.site_id())
-            .collect();
-        let retained_bond_sites: BTreeSet<_> = molecule
-            .stereo_bonds()
-            .iter()
-            .filter(|view| !remove_stereo_bonds.contains(&view.id()))
-            .map(|view| view.site_id())
-            .collect();
-
         for (id, (ligands, stereo)) in stereo_atoms {
-            if suppressed_atoms.contains(&id) || retained_atom_sites.contains(&id) {
+            if suppressed_atoms.contains(&id) {
+                continue;
+            }
+            if let Some(existing) = molecule
+                .stereo_atoms()
+                .at(id)
+                .filter(|view| !remove_stereo_atoms.contains(&view.id()))
+            {
+                if existing.ligand_ids() != ligands {
+                    edits.push(Edit::ReplaceStereoAtomLigands {
+                        id: StereoAtomHandle::Id(existing.id()),
+                        old: existing
+                            .ligand_ids()
+                            .iter()
+                            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                            .collect(),
+                        new: ligands
+                            .into_iter()
+                            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                            .collect(),
+                    });
+                }
                 continue;
             }
             edits.add_stereo_atom(
@@ -264,7 +284,28 @@ impl StereoResolver {
             remove_atom_constraints.insert(id);
         }
         for (id, (ligands, stereo)) in stereo_bonds {
-            if suppressed_bonds.contains(&id) || retained_bond_sites.contains(&id) {
+            if suppressed_bonds.contains(&id) {
+                continue;
+            }
+            if let Some(existing) = molecule
+                .stereo_bonds()
+                .at(id)
+                .filter(|view| !remove_stereo_bonds.contains(&view.id()))
+            {
+                if existing.ligand_ids() != ligands {
+                    edits.push(Edit::ReplaceStereoBondLigands {
+                        id: StereoBondHandle::Id(existing.id()),
+                        old: existing
+                            .ligand_ids()
+                            .iter()
+                            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                            .collect(),
+                        new: ligands
+                            .into_iter()
+                            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                            .collect(),
+                    });
+                }
                 continue;
             }
             edits.add_stereo_bond(
@@ -539,9 +580,11 @@ impl StereoResolver {
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
+    use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AddStereoAtom, AddStereoBond, AtomId, BondId, Edit, Edits, StereoAtomForm, StereoAtomId,
-        StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigandKind,
+        AddStereoAtom, AddStereoBond, AtomForm, AtomId, BondForm, BondId, Edit, Edits,
+        MoleculeEntries, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+        StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     };
     use umol_graph_ir::mol_dsl_concrete;
     use umol_io::smiles::SmilesIoConfig;
@@ -605,9 +648,7 @@ mod tests {
         assert_eq!(
             StereoResolveConfig::default(),
             StereoResolveConfig {
-                tetrahedral_stereo_failure: StereoFailurePolicy::Error,
                 stereo_atom_failure: StereoFailurePolicy::Error,
-                cis_trans_stereo_failure: StereoFailurePolicy::Error,
                 stereo_bond_failure: StereoFailurePolicy::Error,
             }
         );
@@ -947,8 +988,8 @@ mod tests {
             StereoResolver::with_config(
                 &stereo_model,
                 StereoResolveConfig {
-                    tetrahedral_stereo_failure: policy,
-                    cis_trans_stereo_failure: policy,
+                    stereo_atom_failure: policy,
+                    stereo_bond_failure: policy,
                     ..StereoResolveConfig::default()
                 },
             )
@@ -1071,9 +1112,7 @@ mod tests {
         let resolver = StereoResolver::with_config(
             &stereo_model,
             StereoResolveConfig {
-                tetrahedral_stereo_failure: failure,
                 stereo_atom_failure: failure,
-                cis_trans_stereo_failure: failure,
                 stereo_bond_failure: failure,
             },
         );
@@ -1113,9 +1152,7 @@ mod tests {
         let resolver = StereoResolver::with_config(
             &stereo_model,
             StereoResolveConfig {
-                tetrahedral_stereo_failure: failure,
                 stereo_atom_failure: failure,
-                cis_trans_stereo_failure: failure,
                 stereo_bond_failure: failure,
             },
         );
@@ -1172,9 +1209,7 @@ mod tests {
         let resolver = StereoResolver::with_config(
             &stereo_model,
             StereoResolveConfig {
-                tetrahedral_stereo_failure: failure,
                 stereo_atom_failure: failure,
-                cis_trans_stereo_failure: failure,
                 stereo_bond_failure: failure,
             },
         );
@@ -1274,6 +1309,78 @@ mod tests {
                            {:site 6 :ligands [10 [:h 8] 11 [:h 9]] :attrs "Ct0"}]
         }"#)
     )]
+    #[case::virtual_tetrahedral_hydrogen(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [[:virt 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+        }"#),
+    )]
+    #[case::virtual_tetrahedral_lone_pair(
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#n" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [2 [:virt 0] 1 3] :attrs "Th*"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#n" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [2 [:lp 0] 1 3] :attrs "Th*"}]
+        }"#),
+    )]
+    #[case::virtual_with_fixed_lone_pair(
+        mol_dsl_concrete!(r#"{
+            :atoms ["P#h#n#T1" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:virt 0]] :attrs "Th0"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["P#h#n#T1" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:h 0]] :attrs "Th0"}]
+        }"#),
+    )]
+    #[case::virtual_cis_trans_hydrogens(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:virt 0] [:virt 1] 3] :attrs "Ct0#g/#o(0,2)/"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:h 0] [:h 1] 3] :attrs "Ct0#g/#o(0,2)/"}]
+        }"#),
+    )]
+    #[case::virtual_cis_trans_lone_pairs(
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#n" "N#n" "C#h3" "C#h3"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [3 [:virt 1] [:virt 0] 2] :attrs "Ct1"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#n" "N#n" "C#h3" "C#h3"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [3 [:lp 1] [:lp 0] 2] :attrs "Ct1"}]
+        }"#),
+    )]
+    #[case::virtual_cis_trans_mixed_kinds(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "N#n" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:virt 1] 3 2 [:virt 0]] :attrs "Ct*"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "N#n" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:lp 1] 3 2 [:h 0]] :attrs "Ct*"}]
+        }"#),
+    )]
     fn test_stereo_resolver_resolve(
         stereo_model: StereoModel,
         #[case] mut molecule: Molecule,
@@ -1358,9 +1465,7 @@ mod tests {
         let resolver = StereoResolver::with_config(
             &stereo_model,
             StereoResolveConfig {
-                tetrahedral_stereo_failure: policy,
                 stereo_atom_failure: policy,
-                cis_trans_stereo_failure: policy,
                 stereo_bond_failure: policy,
             },
         );
@@ -1383,6 +1488,119 @@ mod tests {
         assert_eq!(resolver.resolve(original), Ok(consuming));
         assert_eq!(resolver.resolve_into(&mut molecule), Ok(in_place));
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::hydrogen(
+        NumForm::Lit(1),
+        NumForm::Lit(0),
+        Solution::Determined(StereoLigandKind::ImplicitHydrogen)
+    )]
+    #[case::lone_pair(
+        NumForm::Lit(0),
+        NumForm::Lit(1),
+        Solution::Determined(StereoLigandKind::LonePair)
+    )]
+    #[case::absent(NumForm::Lit(0), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::both_present(NumForm::Lit(1), NumForm::Lit(1), Solution::Contradictory(()))]
+    #[case::two_hydrogens(NumForm::Lit(2), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::two_lone_pairs(NumForm::Lit(0), NumForm::Lit(2), Solution::Contradictory(()))]
+    #[case::open_counts(NumForm::Undetermined, NumForm::Undetermined, Solution::Underdetermined(()))]
+    #[case::finite_counts(NumForm::lit_set([0, 1]), NumForm::lit_set([0, 1]), Solution::Underdetermined(()))]
+    #[case::excluded_lone_pair(
+        NumForm::Undetermined,
+        NumForm::Lit(0),
+        Solution::Determined(StereoLigandKind::ImplicitHydrogen)
+    )]
+    #[case::excluded_hydrogen(
+        NumForm::Lit(0),
+        NumForm::Undetermined,
+        Solution::Determined(StereoLigandKind::LonePair)
+    )]
+    #[case::finite_hydrogen(NumForm::lit_set([0, 1]), NumForm::Lit(0), Solution::Determined(StereoLigandKind::ImplicitHydrogen))]
+    #[case::no_supported_count(NumForm::range_from(2), NumForm::Lit(0), Solution::Contradictory(()))]
+    fn test_stereo_resolver_resolve_virtual_ligands(
+        stereo_model: StereoModel,
+        #[case] hydrogens: NumForm,
+        #[case] lone_pairs: NumForm,
+        #[case] outcome: Solution<StereoLigandKind, (), ()>,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        policy: StereoFailurePolicy,
+    ) {
+        let mut entries = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(hydrogens)
+                    .with_lone_pairs(lone_pairs),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+            ],
+            bonds: (1..=3)
+                .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        };
+        let mut molecule = Molecule::from_entries(entries.clone());
+        let original = molecule.clone();
+        let resolver = StereoResolver::with_config(
+            &stereo_model,
+            StereoResolveConfig {
+                stereo_atom_failure: policy,
+                stereo_bond_failure: policy,
+            },
+        );
+        let expected = match outcome {
+            Solution::Determined(kind) => {
+                entries.stereo_atoms[0].1[0].kind = kind;
+                Solution::Determined(Molecule::from_entries(entries))
+            }
+            Solution::Underdetermined(()) => Solution::Underdetermined(()),
+            Solution::Contradictory(()) => match policy {
+                StereoFailurePolicy::Error => {
+                    Solution::Contradictory(StereoResolveContradiction::Inconsistency(
+                        StereoInconsistency::StereoAtomFailure {
+                            stereo_atom: StereoAtomId(0),
+                        },
+                    ))
+                }
+                StereoFailurePolicy::Keep => Solution::Determined(original.clone()),
+                StereoFailurePolicy::Remove => {
+                    entries.stereo_atoms.clear();
+                    Solution::Determined(Molecule::from_entries(entries))
+                }
+            },
+        };
+        assert_eq!(resolver.resolve(molecule.clone()), Ok(expected.clone()));
+        let in_place = match &expected {
+            Solution::Determined(_) => Solution::Determined(()),
+            Solution::Underdetermined(()) => Solution::Underdetermined(()),
+            Solution::Contradictory(cause) => Solution::Contradictory(cause.clone()),
+        };
+        assert_eq!(resolver.resolve_into(&mut molecule), Ok(in_place));
+        if let Solution::Determined(expected) = expected {
+            assert_eq!(molecule, expected);
+            assert_eq!(
+                resolver.resolve(molecule),
+                Ok(Solution::Determined(expected))
+            );
+        } else {
+            assert_eq!(molecule, original);
+        }
     }
 
     #[rstest]
@@ -1484,9 +1702,7 @@ mod tests {
     ) {
         let config = if permissive {
             StereoResolveConfig {
-                tetrahedral_stereo_failure: StereoFailurePolicy::Remove,
                 stereo_atom_failure: StereoFailurePolicy::Remove,
-                cis_trans_stereo_failure: StereoFailurePolicy::Remove,
                 stereo_bond_failure: StereoFailurePolicy::Remove,
             }
         } else {
@@ -1581,9 +1797,7 @@ mod tests {
         let resolver = StereoResolver::with_config(
             &stereo_model,
             StereoResolveConfig {
-                tetrahedral_stereo_failure: policy,
                 stereo_atom_failure: policy,
-                cis_trans_stereo_failure: policy,
                 stereo_bond_failure: policy,
             },
         );

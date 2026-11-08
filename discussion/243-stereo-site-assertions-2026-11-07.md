@@ -18,10 +18,12 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0 and S1 are
-complete; S2–S4 remain pending. The semantics, value interface, operation
-interfaces, and names below are the agreed working design. The staged
-implementation plan follows the change inventory.
+This records the selected design direction and its consequences. S0, S1, and S2a
+are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
+interfaces, and names below are the working design. S2 records the revised
+perception/resolution proposal; it is provisional, not final design approval.
+Implementation is paused pending explicit instruction. The staged implementation
+plan follows the change inventory.
 
 Molecule-level constraints and RelationalConstraint are outside scope. Reaction-span
 canonicalization is separate work. This change does not remove kindless stereo
@@ -198,11 +200,19 @@ virtual ligands. Frames remain complete, bounded, and pairwise-distinct, so a si
 endpoint holds at most one Virtual ligand. Remapping and frame reordering preserve the ligand kind.
 Integrity accepts the new kind where it accepts virtual ligands.
 
-StereoPerception::derive uses the resolved atom state to identify the kind of
-each stored Virtual ligand. StereoResolver writes the existing stereo-ligand
-replacement edit. The position does not change, so the coset does not change.
-When no single kind fits the resolved atom state, the existing entity failure
-path applies. This is a model-dependent transformation, not a matching relation.
+StereoPerceiver::derive considers H/LP replacements compatible with the atom's
+counts, fixed ligands, and the supported frame. One admissible completion identifies
+the kinds; several leave Virtual in an explicitly Underdetermined derivation;
+none produces the existing entity-failure diagnostic. Insufficient evidence also
+returns Underdetermined. StereoResolver propagates that outcome independently of
+the failure policy and leaves an in-place input unchanged.
+Only impossible completion uses Error/Keep/Remove. Partial counts alone establish
+neither ambiguity nor impossibility.
+
+For a unique completion, StereoResolver writes the existing stereo-ligand replacement
+edit. Positions, configurations, and entity constraints are preserved. Identification
+does not change the atom's counts. This is a model-dependent transformation, not a
+matching relation.
 
 A pattern containing Virtual must be resolved before it can match a host whose
 corresponding ligand has a specific virtual kind. Structural operations do not
@@ -365,7 +375,7 @@ intermediate is the part this proposal replaces.
 
 stereo_bond_minimum_ring_size applies at external-format I/O only. Its purpose is
 output: without it, every ring double bond would be written with stereo notation.
-StereoResolver and StereoPerception no longer apply it.
+StereoResolver and StereoPerceiver no longer apply it.
 
 Resolved external-format ingest applies the rule after raise and before resolution, where the
 chemistry model is available. Stereo bonds and positive #C constraints in rings below the
@@ -388,28 +398,41 @@ framed-operations trait, a frame wrapper, or a second family of stereo engines.
 StereoLigand retains its existing public operations. Matching compares complete
 ligands by equality after id mapping and uses the existing frame transport for
 stereo attributes. No StereoLigand::matches method or Python equivalent is added.
-Identification of Virtual belongs to StereoPerception and StereoResolver, using
+Identification of Virtual belongs to StereoPerceiver and StereoResolver, using
 resolved atom-state evidence and the existing ligand-replacement edits.
 
 ### Perception and resolution
 
-Keep StereoPerception::derive and StereoDerivation. The existing stereo_atoms and
-stereo_bonds rows can carry both entities requested by positive constraints and
-completed versions of supported stored entities. For a stored entity, completion
-preserves its ligand positions, configuration, and entity-local constraints; it
+Rename StereoPerception to StereoPerceiver and retain StereoDerivation. The
+existing stereo_atoms and stereo_bonds rows can carry both entities requested by
+positive constraints and completed versions of supported stored entities. For a
+stored entity, completion preserves its ligand positions, configuration, and
+entity-local constraints; it
 replaces only the Virtual ligand kinds. StereoResolver compares those rows with
 the input and emits the existing ReplaceStereoAtomLigands or
 ReplaceStereoBondLigands edits. No public completion-result type is needed.
 
-StereoPerception::recognize continues to return missing entities only, so
+derive returns Solution<StereoDerivation, StereoContradiction> directly. The
+non-contradictory outcomes carry the derivation, including established findings;
+an unresolved stored row retains Virtual. The resolver checks those findings
+before propagating underdetermination. Retain StereoInconsistency and rename its
+existing contradiction wrapper to StereoContradiction. Remove the empty
+StereoResolveError and the outer Result from stereo derivation and resolution;
+this design introduces no operational failure for them. S2 records the complete
+working contract and dependent changes.
+
+StereoPerceiver::recognize continues to return missing entities only, so
 StereoAdder retains its existing-entity preservation contract. The public
 derive_stereo_atom and derive_stereo_bond methods still accept a coset for
 construction in their documented frames. They remain useful independently of
-stereo constraints. The coset_for readings retain exact frame transport.
+stereo constraints. Recognition and classification retain their existing Rust
+query contracts and StereoPerceptionError. The coset_for readings retain exact
+frame transport. Remove the Python perception class and StereoDerivation;
+supported Python operations retain their configuration and diagnostic values.
 
-Remove StereoPerception::skipped_stereo_bonds and
-StereoDerivation::skipped_stereo_bonds, including their Python surfaces. They
-describe the ring-size suppression that now belongs exclusively to I/O. Other
+Remove StereoPerceiver::skipped_stereo_bonds and
+StereoDerivation::skipped_stereo_bonds in S2g. They describe the ring-size
+suppression that now belongs exclusively to I/O. Other
 ring-dependent recognition rules and their RingConfig argument remain.
 
 ### Projection
@@ -493,14 +516,14 @@ implementation, documentation, fixtures, or exhaustive matches.
 | Owner | Symbol or family | Disposition |
 | --- | --- | --- |
 | umol-graph/src/ops/resolve/stereo.rs | StereoResolveConfig | Remove tetrahedral_stereo_failure and cis_trans_stereo_failure; retain stereo_atom_failure and stereo_bond_failure with the merged meanings. Keep Default = Error. |
-| Same | StereoFailurePolicy; StereoResolveContradiction; StereoResolveError | Retain. The separate StereoInconsistency variants remain available through the contradiction. |
-| Same | StereoResolver::new, with_config, plan_resolve, resolve, resolve_into | Retain signatures. Resolution adds missing requested entities and replaces Virtual kinds on retained entities. |
+| Same | StereoFailurePolicy; StereoResolveContradiction; StereoResolveError | Retain the policy. Rename the contradiction wrapper to shared StereoContradiction in ops/stereo.rs; retain its StereoInconsistency payload. Remove the empty error type. |
+| Same | StereoResolver::new, with_config, plan_resolve, resolve, resolve_into | Retain construction; resolution returns Solution directly, without the outer Result. Add missing requested entities and replace Virtual kinds on retained entities. |
 | Same | StereoResolver::plan_project, project, project_into | Keep names; remove the receiver and return the direct Result shapes recorded above. |
 | Same | StereoProjectError | Retain UnsupportedStereoAtom, UnsupportedStereoBond, AtomAssertion and BondAssertion; remove StereoAtomFrame and StereoBondFrame. |
-| umol-graph/src/ops/resolve.rs | ProjectFlags, ProjectError, ProjectContradiction | Remove STEREO, Stereo and Stereo respectively. Retain non-stereo flags and variants; aggregate projection preserves stereo entities. ResolveError::Stereo and ResolveContradiction::Stereo remain necessary for resolution. |
-| umol-graph/src/ops/stereo.rs | StereoPerception::derive; StereoDerivation::stereo_atoms / stereo_bonds | Retain signatures and row types; rows can describe completed stored frames as well as requested additions. |
-| Same | StereoPerception::skipped_stereo_bonds; StereoDerivation::skipped_stereo_bonds | Remove both surfaces. |
-| Same and ops/stereo/recognize.rs | StereoPerception::new, derive_stereo_atom, derive_stereo_bond, recognize, classify; StereoPerceptionError and StereoInconsistency | Retain signatures and existing support boundaries. New recognized entities have undetermined cosets; classify still reads stored arrangements. |
+| umol-graph/src/ops/resolve.rs | ProjectFlags, ProjectError, ProjectContradiction | Remove STEREO, Stereo and Stereo respectively. Retain non-stereo flags and variants; aggregate projection preserves stereo entities. Remove the uninhabited ResolveError::Stereo; retain ResolveContradiction::Stereo with the renamed payload. |
+| umol-graph/src/ops/stereo.rs | StereoPerception; derive; StereoDerivation::stereo_atoms / stereo_bonds | Rename the actor to StereoPerceiver. derive returns Solution explicitly; retain row types for completed stored frames and requested additions. |
+| Same | StereoPerceiver::skipped_stereo_bonds; StereoDerivation::skipped_stereo_bonds | Remove both surfaces in S2g. |
+| Same and ops/stereo/recognize.rs | StereoPerceiver::new, derive_stereo_atom, derive_stereo_bond, recognize, classify; StereoPerceptionError and StereoInconsistency | Retain signatures and existing support boundaries. New recognized entities have undetermined cosets; classify still reads stored arrangements. |
 | umol-graph/src/ops/transform/stereo.rs and ops/transform.rs | StereoAdder, StereoRemover, StereoEnumerator, their configs/errors/iterator; Transform convenience methods | Retain public interfaces and shared StereoSelection. Remove source-constraint coset handling from the consumers. |
 | umol-graph/src/ops/transform/hydrogens.rs | HydrogenFolder, HydrogenUnfolder and their errors/configs | Retain interfaces; remove inline-constraint coset transport and maintain explicit frames through existing edits. Virtual is not implicitly an H ligand. |
 | umol-graph/src/ops/validate/stereo.rs | StereoConformanceValidator and result/error surface | Retain signatures; consume the revised derivation and presence constraints. |
@@ -558,16 +581,17 @@ and end-to-end cases change. Generic EDN parsing does not interpret #T/#C string
 | umol-py/src/stereo.rs | Make the two site forms payload-free; return bool or None from as_lit; remove ground enum classes and conversions. Add Virtual. Retain named configuration enums and explicit-entity inputs; update repr, hashing, equality, lattice methods, and variant construction consistently. |
 | umol-py/src/constraint/atom.rs and constraint/bond.rs; atom.rs and bond.rs | TetrahedralStereoLike / CisTransStereoLike accept bool or the corresponding form. Accept True as positive; remove named-configuration coercions. Migrate container/view setters and constraint constructors together. |
 | umol-py/src/resolve.rs | Constructor keywords, getters, Rust conversion, and repr expose only stereo_atom_failure / stereo_bond_failure. |
-| umol-py/src/stereo/perception.rs | Remove the skipped_stereo_bonds constructor argument/property and perception method; mirror revised derivation rows. Other perception signatures remain. |
-| umol-py/src/lib.rs and python/umol/__init__.py | Remove both ground enums from registration, imports, and __all__. Keep configuration enums and existing operation bindings. |
+| umol-py/src/stereo/perception.rs | Remove StereoPerception and StereoDerivation with their constructors and queries. Retain StereoSite, StereoSelection, and StereoInconsistency used by supported operations. |
+| umol-py/src/lib.rs and python/umol/__init__.py | Remove the perception and derivation classes in S2a and both ground enums in S3 from registration, imports, and __all__. Keep configuration enums and existing operation bindings. |
 | umol-py/src/molecule.rs and reaction.rs | Existing from_smiles / to_smiles and stereo transformer methods inherit the revised Rust behavior; keep signatures, ownership, copying, and defaults. Molecule DSL parsing enforces the same reduced attribute grammar as other contexts. |
 | umol-py/src/edit.rs, delta.rs, reaction_span.rs; stereo.rs participant extraction | Existing enum conversion carries Virtual through additions, replacement edits, deltas, and span construction. Do not add Python-only stereo interpretation. |
 | umol-py/src/error.rs | Reuse existing exception mappings for conversion, perception, and contradiction errors. Check removed variants and new conversion failures against the existing vocabulary. |
 
 StereoResolver, ProjectFlags, and standalone projection currently have no Python
-binding. This change migrates the existing supported surface; it does not add an
-engine binding to expose those operations. Named-configuration shorthand on
-explicit entities is already present in Python; the conversion clarification
+binding. Remove the existing Python perception/query surface without replacing it;
+Python exposes the supported molecular operations and their required values.
+Named-configuration shorthand on explicit entities is already present in Python;
+the conversion clarification
 in the value interface gives it a Rust-owned implementation.
 
 ### Verification, fixtures, and documentation
@@ -583,7 +607,7 @@ in the value interface gives it a Rust-owned implementation.
 | ops/transform/stereo/tests, stereo/enumeration/tests.rs, hydrogens/tests; tests/property/transform/stereo and hydrogens.rs | Preserve selection, enumeration, reconstruction, and existing-entity laws. Move configuration descriptions to explicit entities. Isolated atom examples that only test presence use #T+. |
 | umol-io/src/table_ir/raise.rs; CTfile and SMILES parser/render tests; umol-graph/src/ingest.rs and export.rs; tests/property/project.rs and resolve.rs | Update expected imported carriers. Cover alkene H, azo LP, mixed imine ligands, Either/unspecified stereo, output rejection, ring-policy placement, explicit frame transport, and molecule/reaction roundtrips. Aggregate projection assertions must now retain entities. |
 | umol-graph/tests/resolution/data and tests/kekulization/data | Migrate the 59 fixture files using the old syntax: 21 in stereo_tetrahedral, 19 in stereo_cis_trans, 17 elsewhere in resolution data, and 2 in kekulization data. Preserve their intended chemistry and update carrier and ring-policy expectations. |
-| umol-py/tests/test_stereo.py, test_stereo_perception.py, test_constraint.py, test_constraint_readings.py, test_structural_pattern_matching.py, test_class_constructor_signatures.py | Cover unit variants, bool input/output, removed imports and coercions, Virtual, merged keyword signatures, readings, and exact exception/roundtrip behavior. |
+| umol-py/tests/test_stereo.py, test_stereo_perception.py, test_constraint.py, test_constraint_readings.py, test_structural_pattern_matching.py, test_class_constructor_signatures.py | Remove perception/derivation query and construction cases; preserve operation-required value coverage. Cover unit variants, bool input/output, removed imports and coercions, Virtual, merged keyword signatures, readings, and exact exception/roundtrip behavior. |
 | umol-py/tests/test_molecule_stereo.py, test_molecule_stereo_enumeration.py, test_import.py, test_smiles.py, test_smiles_export.py, test_resolve.py, test_workflow.py; edit/delta/transaction tests | Exercise the existing high-level entry points and participant carriers after rebuilding the extension. Other Atom/Bond/Molecule view and constructor fixtures that construct old forms migrate with them. |
 | umol-graph/benches/resolve.rs, transform.rs and transform/stereo.rs | Update instance projection calls, Solution assumptions, aggregate output checks, and configuration-bearing input strings. Use explicit stereo records while preserving the measured operation and iterator lifetime controls. |
 | umol-graph-ir/benches/canonicalize.rs, constraint_readings.rs, editor.rs, integrity.rs; IO parsing/layout/SVG benchmarks | Add or adapt representative Virtual and explicit stereo fixtures where those operations are measured. Preserve the measured operation; parser or entity-only fixtures are not interchangeable workloads. |
@@ -749,7 +773,7 @@ are reproducible. Rejection tests for the obsolete attribute syntax land in S3.
   native layout tests, Rust binding tests, and the full Python suite after
   rebuilding with Python 3.13.16. Workspace Clippy passed for all targets with
   proptest/depiction enabled and warnings denied; formatting and diff checks
-  passed. Identifying Virtual as hydrogen or a lone pair remains S2a.
+  passed. Identifying Virtual as hydrogen or a lone pair remains S2c–S2d.
 
 **S1 gate:** the new kind can be constructed, serialized, transported, and depicted
 through the supported interfaces. The affected Rust and Python tests
@@ -758,34 +782,181 @@ pass together. Configuration-bearing site forms still exist at this point.
 
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
-- **S2a — Resolve generic virtual ligands on stored entities** — breaking (red→green).
+**Working proposal — 2026-11-08.** Recorded for continuation, not final design
+approval. S2a is complete; implementation of the remaining subitems awaits
+explicit instruction. Record completion and verification under each subitem.
+
+Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
+checks supported stored frames and requests missing entities from positive
+constraints. Recognize continues to return missing entities only; classify
+continues to assess existing arrangements. Their Rust query contracts and
+StereoPerceptionError remain separate from the changed derive interface.
+
+The shared derivation/resolution interfaces are:
+
+```rust
+StereoPerceiver::derive(&Molecule)
+    -> Solution<StereoDerivation, StereoContradiction>
+StereoResolver::plan_resolve(&Molecule)
+    -> Solution<Edits, StereoContradiction>
+StereoResolver::resolve(Molecule)
+    -> Solution<Molecule, StereoContradiction, ()>
+StereoResolver::resolve_into(&mut Molecule)
+    -> Solution<(), StereoContradiction>
+```
+
+StereoContradiction retains the existing Inconsistency(StereoInconsistency)
+wrapper. Remove the empty StereoResolveError and the outer Result; no
+StereoError replaces it. Remove the resulting uninhabited ResolveError::Stereo
+branch from the aggregate resolver and its adapters.
+
+StereoDerivation keeps its existing fields and row types:
+
+```rust
+stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>
+stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>
+inconsistencies: Vec<StereoInconsistency>
+skipped_stereo_bonds: Vec<BondId> // retained until S2g
+```
+
+Retain all six StereoInconsistency variants: TetrahedralStereoFailure { atom },
+StereoAtomFailure { stereo_atom }, TetrahedralStereoMismatch { atom, stereo_atom },
+CisTransStereoFailure { bond }, StereoBondFailure { stereo_bond }, and
+CisTransStereoMismatch { bond, stereo_bond }. Derivation collects findings;
+resolver policy decides recovery or rejection.
+
+Identify Virtual only by H/LP replacements consistent with available counts,
+fixed ligands, topology, and the supported complete frame. One established
+completion identifies the kinds. Several completions, or insufficient evidence
+to establish the answer, produce Underdetermined. Ruling out every completion
+produces the existing entity-failure finding. Partial counts alone imply
+neither ambiguity nor impossibility. No ligand lattice or compatibility API
+is added.
+
+Both non-contradictory outcomes carry StereoDerivation. An underdetermined
+derivation retains established rows, unresolved stored rows with Virtual, and
+established inconsistencies; it does not enumerate alternative molecules.
+Stored rows preserve ligand order, configuration, and all entity constraints.
+Identification changes only ligand kinds, never atom counts or cosets. An
+undetermined coset is a valid stored state, not by itself an underdetermined
+identification result. Stereo descriptions do not imply stereogenicity.
+
+Resolver policy applies only to impossible completion. Error rejects, Keep
+retains the failed description, and Remove clears the failed constraint or
+removes the failed entity. Mismatches remain contradictory under every policy.
+Check established findings before propagating underdetermination, so unrelated
+ambiguity cannot conceal a known rejection. Otherwise return an empty
+underdetermined edit plan, without publishing partial changes. A consuming
+unresolved outcome returns unit; an in-place unresolved outcome leaves the
+input unchanged. Planning establishes applicability and integrity preservation;
+application makes no additional chemical decisions.
+
+Remove the Python perception class, its query methods, and StereoDerivation.
+Keep supported molecular operations and their required models, configurations,
+selectors, and diagnostics. Do not add a replacement perceiver binding or a
+Python derivation-result tuple. Existing constraint payload handling remains
+until S3; ring suppression remains until S2g.
+
+- **S2a — Remove the Python perception and derivation interface** — breaking (red→green).
+  Modules: umol-py/src/stereo/perception.rs, umol-py/src/stereo.rs,
+  umol-py/src/lib.rs, umol-py/python/umol/__init__.py,
+  umol-py/tests/test_stereo_perception.py, umol-py/tests/test_import.py,
+  and docs/development/python-api.md. [dep: S1b]
+
+  Remove StereoPerception and StereoDerivation construction, queries,
+  registration, and exports. Retain StereoSite, StereoSelection, and
+  StereoInconsistency, including their operation-facing conversions and error
+  payloads. Update the Python API inventory without introducing another query
+  surface. Preserve tests of retained values; remove cases whose sole subject
+  is a deleted query or result carrier. Check imports and the existing
+  addition, removal, enumeration, and resolution bindings.
+
+  **Completed — 2026-11-08.** Removed the Python StereoPerception and
+  StereoDerivation wrappers, registration, exports, and query/construction tests.
+  Retained StereoSite, StereoSelection, StereoInconsistency, their value tests,
+  and the error adapters used by operations. The export inventory verifies that
+  both retired classes are absent from the package and native module. Updated
+  the Python API guide. The Rust perception/resolution implementation is unchanged
+  by this subitem.
+
+  On Python 3.13.16, `cargo test -p umol-py --lib --quiet` passed 1,773 cases
+  with two ignored. After `maturin develop --locked --manifest-path
+  umol-py/Cargo.toml`, `pytest -q umol-py/tests` passed 3,138 cases with two
+  skipped. `cargo clippy -p umol-py --all-targets --no-deps -- -D warnings`,
+  formatting, and `git diff --check` passed. Dependency-inclusive Clippy still
+  fails on type_complexity in the unfinished virtual-ligand identification code
+  in umol-graph/src/ops/stereo.rs; that code is outside this subitem and unchanged.
+
+- **S2b — Rename the Rust actor and share the contradiction type** — breaking (red→green).
   Modules: umol-graph/src/ops/stereo.rs,
-  umol-graph/src/ops/resolve/stereo.rs,
-  umol-graph/src/ops/validate/stereo.rs,
-  umol-py/src/resolve.rs,
-  umol-py/src/stereo/perception.rs. [dep: S1b]
+  umol-graph/src/ops/stereo/recognize.rs, umol-graph/src/ops/resolve/stereo.rs,
+  umol-graph/src/ops/resolve.rs, umol-graph/src/ops/validate/stereo.rs,
+  umol-graph/src/ops/transform/stereo.rs, umol-graph/src/ingest.rs,
+  umol-graph/benches/transform/stereo.rs, and their tests.
+  [dep: S2a]
 
-  Extend StereoPerception::derive to return completed versions of supported
-  stored frames. Identify each Virtual ligand from the resolved atom state and
-  replace it in its existing position. Preserve the configuration and every
-  entity-local constraint. Make StereoResolver apply the existing ligand
-  replacement edits, and keep recognition restricted to missing entities.
+  Rename StereoPerception to StereoPerceiver throughout Rust callers and
+  rustdoc. Rename StereoResolveContradiction to StereoContradiction and own it
+  in ops/stereo.rs alongside StereoInconsistency. Retain the wrapper and all
+  six finding variants. Preserve recognition/classification contracts and
+  diagnostics; add no selectors, query methods, or compatibility aliases.
+  Run the affected perception, transformer, and resolver cases with the
+  renamed symbols.
 
-  Merge StereoResolveConfig's four failure fields into stereo_atom_failure and
-  stereo_bond_failure, including their Python construction and conversion. Keep
-  the existing separate diagnostics and unconditional mismatch contradictions.
+- **S2c — Derive identified frames and explicit underdetermination** — breaking (red until S2d).
+  Modules: umol-graph/src/ops/stereo.rs and its tests. [dep: S2b]
 
-  Test successful hydrogen/lone-pair identification, ambiguous or impossible
-  identification, all failure policies, unchanged cosets and entity attributes,
-  resolver idempotence, and consuming/in-place agreement. Existing constraint
-  payload handling is removed with the site forms in S3.
+  Implement H/LP identification and the direct Solution return from derive.
+  Use the existing row types for requested additions and supported stored
+  frames. Preserve stored positions, configurations, constraints, and atom
+  counts. Retain unresolved rows and known findings in the underdetermined
+  payload; do not infer the operation outcome from the presence of Virtual.
 
-- **S2b — Raise SMILES and MOL stereo into explicit entities** — breaking (red→green).
+  Cover hydrogen, lone pair, mixed cis/trans endpoints, fixed ligands that
+  force a completion, compatible partial counts, ambiguous evidence, and
+  impossible completion. Check exact frames and payloads, attribute
+  preservation, and that an open coset alone does not imply ambiguity.
+  Migrate direct consumers in S2d before requiring a green tree; introduce
+  no temporary public interface to bridge the signature change.
+
+- **S2d — Consume derivation outcomes in resolution and validation** — breaking (red→green).
+  Modules: umol-graph/src/ops/resolve/stereo.rs, umol-graph/src/ops/resolve.rs,
+  umol-graph/src/ops/validate/stereo.rs, umol-graph/src/ingest.rs,
+  umol-graph/benches/resolve.rs, umol-graph/benches/transform.rs,
+  umol-py/src/error.rs, and the owning tests. [dep: S2c]
+
+  Apply the existing ligand-replacement edits only from a determined plan.
+  Check findings before propagating underdetermination, retain unconditional
+  mismatch rejection, and use failure policy only for impossible descriptions.
+  Remove StereoResolveError and the outer Result from the stereo resolver
+  methods; migrate the aggregate resolver, direct callers, and exception
+  adapters. Validation reports unresolved identification as Underdetermined,
+  rather than as an unrealizable frame, without mutating the molecule.
+
+  Test all recovery policies, mixed failed and unresolved sites, empty
+  underdetermined plans, no partial publication, consuming/in-place agreement,
+  idempotence, and composite-resolver rollback after earlier phases. Keep
+  existing stereogenicity/topicity checks and transformer preservation laws.
+
+- **S2e — Merge constraint and entity failure configuration** — breaking (red→green).
+  Modules: umol-graph/src/ops/resolve/stereo.rs, umol-graph/src/ops/resolve.rs,
+  umol-py/src/resolve.rs, umol-py/tests/test_class_constructor_signatures.py,
+  umol-py/tests/test_resolve.py, umol-py/tests/test_molecule.py,
+  umol-py/tests/test_workflow.py,
+  and docs/development/python-api.md. [dep: S2d]
+
+  Leave only stereo_atom_failure and stereo_bond_failure, both defaulting to
+  Error. Each covers constraint and entity realizability at its site kind.
+  Migrate native callers and Python construction, getters, conversion, and
+  repr together. Test the merged fields against both finding variants, reject
+  obsolete Python keywords, and verify ambiguity is independent of policy.
+
+- **S2f — Raise SMILES and MOL stereo into explicit entities** — breaking (red→green).
   Modules: umol-io/src/table_ir/raise.rs,
   umol-io/src/table_ir/raise/utils.rs,
   umol-io/src/ctfile/parser.rs,
   umol-graph/src/ingest.rs,
-  umol-py/tests/test_import.py. [dep: S2a]
+  umol-py/tests/test_import.py. [dep: S2e]
 
   Replace the wedge-derived tetrahedral and cis/trans constraint outputs with
   complete stereo entities. Transport source order and reference choices into
@@ -798,20 +969,20 @@ pass together. Configuration-bearing site forms still exist at this point.
   Update import expectations in the owning tests, preserving the distinction
   between absent stereo and an entity with an unspecified configuration.
 
-- **S2c — Move small-ring suppression to external-format I/O** — breaking (red→green).
+- **S2g — Move small-ring suppression to external-format I/O** — breaking (red→green).
   Modules: umol-graph/src/ops/stereo.rs,
   umol-graph/src/ops/stereo/recognize.rs,
   umol-graph/src/ingest.rs,
   umol-graph/src/export.rs,
-  umol-graph/src/ops/model.rs,
-  umol-py/src/stereo/perception.rs. [dep: S2a, S2b]
+  umol-graph/src/ops/model.rs. [dep: S2e, S2f]
 
   Remove ring-size suppression from general perception and resolution. Remove
-  StereoPerception::skipped_stereo_bonds and the corresponding StereoDerivation
-  field and Python surface. Retain the model setting and apply its policy after
-  raise on resolved import. On export, filter the operation's private input
-  before Resolver::project: that projection still removes stereo entities until
-  S3d replaces the export path. This filter remains in place after S3d. The
+  StereoPerceiver::skipped_stereo_bonds and the corresponding StereoDerivation
+  field. The Python perception surface is removed in S2a. Retain the model
+  setting and apply its policy after raise on resolved import. On export, filter
+  the operation's private input before Resolver::project: that projection still
+  removes stereo entities until S3d replaces the export path. This filter remains
+  in place after S3d. The
   borrowed export input is preserved.
 
   Test resolved and unresolved molecule/reaction imports, later general
@@ -822,8 +993,9 @@ pass together. Configuration-bearing site forms still exist at this point.
 
 **S2 gate:** external imports now carry their configurations on explicit entities,
 virtual kinds resolve without changing configuration, and ring suppression has
-only its agreed I/O scope. The Rust and Python consumers of the changed policies
-and derivation results pass their tests. The site-value type change is still S3.
+only its agreed I/O scope. Rust consumers of the derivation outcomes and Rust/Python
+operation consumers of the changed policies pass their tests. The site-value type
+change is still S3.
 
 ### S3 — Remove configuration-bearing site constraints
 
@@ -846,7 +1018,7 @@ and explicit-record rendering retain their existing design.
   umol-py/src/constraint/atom.rs,
   umol-py/src/constraint/bond.rs,
   umol-py/src/lib.rs,
-  umol-py/python/umol/__init__.py. [dep: S1a, S2c]
+  umol-py/python/umol/__init__.py. [dep: S1a, S2g]
 
   Make Stereo a unit variant in the two site forms, use bool as their literal
   type, add From<bool>, and remove the ground enums, configuration conversions,
@@ -892,7 +1064,7 @@ and explicit-record rendering retain their existing design.
   umol-graph/src/ops/validate/stereo.rs,
   umol-graph/src/ops/transform/stereo.rs,
   umol-graph/src/ops/transform/stereo/enumeration.rs,
-  umol-graph/src/ops/transform/hydrogens.rs. [dep: S3a, S2a]
+  umol-graph/src/ops/transform/hydrogens.rs. [dep: S3a, S2d]
 
   Remove every remaining source of configuration data from site constraints.
   Resolve positive markers into missing entities with undetermined cosets.
@@ -912,7 +1084,7 @@ and explicit-record rendering retain their existing design.
   umol-graph/src/ops/resolve.rs,
   umol-graph/src/export.rs,
   umol-graph/tests/property/project.rs,
-  umol-graph/benches/resolve.rs. [dep: S3a, S2c]
+  umol-graph/benches/resolve.rs. [dep: S3a, S2g]
 
   Make standalone stereo projection model-free, using the agreed associated
   functions and direct Result returns. Replace supported entities with positive
@@ -922,7 +1094,7 @@ and explicit-record rendering retain their existing design.
   Make Convey encode those entities directly, transporting cis/trans reference
   choices and reading their frames for hydrogen omission. Reject Virtual kinds,
   unsupported cosets, unpreservable entity constraints, and remaining site
-  constraints that cannot be encoded. Preserve the I/O ring policy from S2c.
+  constraints that cannot be encoded. Preserve the I/O ring policy from S2g.
 
   Test standalone projection's deliberate loss and idempotence, negative-marker
   conflicts, aggregate projection's retention of entities, and exact molecule

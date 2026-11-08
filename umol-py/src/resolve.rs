@@ -191,7 +191,7 @@ impl AromaticityResolveConfig {
     }
 }
 
-/// Operational policy for stereo resolution.
+/// Policies for unrealizable stereo constraints and stored entities, by site kind.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig(GraphStereoResolveConfig);
@@ -199,34 +199,20 @@ pub struct StereoResolveConfig(GraphStereoResolveConfig);
 #[pymethods]
 impl StereoResolveConfig {
     #[new]
-    #[pyo3(signature = (*, tetrahedral_stereo_failure=StereoFailurePolicy::Error, stereo_atom_failure=StereoFailurePolicy::Error, cis_trans_stereo_failure=StereoFailurePolicy::Error, stereo_bond_failure=StereoFailurePolicy::Error))]
+    #[pyo3(signature = (*, stereo_atom_failure=StereoFailurePolicy::Error, stereo_bond_failure=StereoFailurePolicy::Error))]
     fn new(
-        tetrahedral_stereo_failure: StereoFailurePolicy,
         stereo_atom_failure: StereoFailurePolicy,
-        cis_trans_stereo_failure: StereoFailurePolicy,
         stereo_bond_failure: StereoFailurePolicy,
     ) -> Self {
         Self(GraphStereoResolveConfig {
-            tetrahedral_stereo_failure: tetrahedral_stereo_failure.to_rust(),
             stereo_atom_failure: stereo_atom_failure.to_rust(),
-            cis_trans_stereo_failure: cis_trans_stereo_failure.to_rust(),
             stereo_bond_failure: stereo_bond_failure.to_rust(),
         })
     }
 
     #[getter]
-    fn tetrahedral_stereo_failure(&self) -> StereoFailurePolicy {
-        StereoFailurePolicy::from_rust(self.0.tetrahedral_stereo_failure)
-    }
-
-    #[getter]
     fn stereo_atom_failure(&self) -> StereoFailurePolicy {
         StereoFailurePolicy::from_rust(self.0.stereo_atom_failure)
-    }
-
-    #[getter]
-    fn cis_trans_stereo_failure(&self) -> StereoFailurePolicy {
-        StereoFailurePolicy::from_rust(self.0.cis_trans_stereo_failure)
     }
 
     #[getter]
@@ -236,10 +222,8 @@ impl StereoResolveConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.{:?}, stereo_atom_failure=StereoFailurePolicy.{:?}, cis_trans_stereo_failure=StereoFailurePolicy.{:?}, stereo_bond_failure=StereoFailurePolicy.{:?})",
-            self.tetrahedral_stereo_failure(),
+            "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.{:?}, stereo_bond_failure=StereoFailurePolicy.{:?})",
             self.stereo_atom_failure(),
-            self.cis_trans_stereo_failure(),
             self.stereo_bond_failure(),
         )
     }
@@ -494,20 +478,13 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        StereoResolveConfig::new(
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Error
-        ),
+        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error),
         GraphStereoResolveConfig::default()
     )]
     #[case::configured(
-        StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
+        StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
         GraphStereoResolveConfig {
-            tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
             stereo_atom_failure: GraphStereoFailurePolicy::Remove,
-            cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
             stereo_bond_failure: GraphStereoFailurePolicy::Keep,
         }
     )]
@@ -520,12 +497,12 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error),
-        "StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Error, stereo_atom_failure=StereoFailurePolicy.Error, cis_trans_stereo_failure=StereoFailurePolicy.Error, stereo_bond_failure=StereoFailurePolicy.Error)"
+        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error),
+        "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Error, stereo_bond_failure=StereoFailurePolicy.Error)"
     )]
     #[case::configured(
-        StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
-        "StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep)"
+        StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
+        "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep)"
     )]
     fn test_stereo_resolve_config_repr(
         #[case] config: StereoResolveConfig,
@@ -537,9 +514,7 @@ mod tests {
     #[rstest]
     #[case::default(GraphStereoResolveConfig::default())]
     #[case::configured(GraphStereoResolveConfig {
-        tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
         stereo_atom_failure: GraphStereoFailurePolicy::Remove,
-        cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
         stereo_bond_failure: GraphStereoFailurePolicy::Keep,
     })]
     fn test_stereo_resolve_config_from_rust(#[case] config: GraphStereoResolveConfig) {
@@ -549,13 +524,9 @@ mod tests {
     #[rstest]
     #[case::default(StereoResolveConfig::new(
         StereoFailurePolicy::Error,
-        StereoFailurePolicy::Error,
-        StereoFailurePolicy::Error,
         StereoFailurePolicy::Error
     ))]
     #[case::configured(StereoResolveConfig::new(
-        StereoFailurePolicy::Keep,
-        StereoFailurePolicy::Remove,
         StereoFailurePolicy::Remove,
         StereoFailurePolicy::Keep
     ))]
@@ -571,17 +542,12 @@ mod tests {
             AromaticityFailurePolicy::Error,
             AromaticityFailurePolicy::Error
         ),
-        StereoResolveConfig::new(
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Error
-        ),
+        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error),
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
-        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error),
+        StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig {
@@ -595,14 +561,12 @@ mod tests {
     )]
     #[case::stereo(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
-        StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
+        StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig::default(),
             stereo: GraphStereoResolveConfig {
-                tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
                 stereo_atom_failure: GraphStereoFailurePolicy::Remove,
-                cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
                 stereo_bond_failure: GraphStereoFailurePolicy::Keep,
             },
         },
@@ -635,10 +599,10 @@ mod tests {
     #[case::configured(
         ResolveConfig::new(
             AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
-            StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
+            StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
             IsotopePolicy::Strict,
         ),
-        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep))",
+        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -655,9 +619,7 @@ mod tests {
             aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
         },
         stereo: GraphStereoResolveConfig {
-            tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
             stereo_atom_failure: GraphStereoFailurePolicy::Remove,
-            cis_trans_stereo_failure: GraphStereoFailurePolicy::Remove,
             stereo_bond_failure: GraphStereoFailurePolicy::Keep,
         },
     })]
@@ -674,12 +636,7 @@ mod tests {
             AromaticityFailurePolicy::Keep,
             AromaticityFailurePolicy::Keep
         ),
-        StereoResolveConfig::new(
-            StereoFailurePolicy::Keep,
-            StereoFailurePolicy::Remove,
-            StereoFailurePolicy::Remove,
-            StereoFailurePolicy::Keep
-        ),
+        StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep),
         IsotopePolicy::Strict
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {

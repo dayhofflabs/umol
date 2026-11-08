@@ -130,10 +130,10 @@ use crate::{
         CisTransConfiguration, CisTransStereo, CisTransStereoForm, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomForm, StereoAtomUpdate, StereoAtomView,
         StereoAtomViews, StereoBondForm, StereoBondUpdate, StereoBondView, StereoBondViews,
-        StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoDerivation,
-        StereoInconsistency, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
-        StereoPerception, StereoSelection, StereoSite, StereoTerm, Stereogenicity,
-        TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
+        StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoInconsistency,
+        StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoSelection, StereoSite,
+        StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereo,
+        TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, RollbackMethod},
@@ -309,8 +309,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoSite>()?;
         module.add_class::<StereoSelection>()?;
         module.add_class::<StereoInconsistency>()?;
-        module.add_class::<StereoDerivation>()?;
-        module.add_class::<StereoPerception>()?;
         module.add_class::<ConnectivityModel>()?;
         module.add_class::<ChemistryModel>()?;
         module.add_class::<AtomSelectionAlgorithm>()?;

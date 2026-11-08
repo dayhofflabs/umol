@@ -215,7 +215,6 @@ PUBLIC_EXPORTS = frozenset(
     StereoConfigurationForm
     StereoConfigurationUpdate
     StereoCoset
-    StereoDerivation
     StereoFailurePolicy
     StereoInconsistency
     StereoKind
@@ -224,7 +223,6 @@ PUBLIC_EXPORTS = frozenset(
     StereoLigandKind
     StereoLigandPair
     StereoModel
-    StereoPerception
     StereoResolveConfig
     StereoTerm
     StereoSelection
@@ -349,6 +347,8 @@ def test_deferred_export(name):
         "GraphRemapping",
         "MoleculePushoutCorrespondence",
         "ReactionDerivation",
+        "StereoDerivation",
+        "StereoPerception",
     ],
 )
 def test_unexposed_internal_or_retired_type(name):

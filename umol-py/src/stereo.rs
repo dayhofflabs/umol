@@ -7,9 +7,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-pub(crate) use perception::{
-    StereoDerivation, StereoInconsistency, StereoPerception, StereoSelection, StereoSite,
-};
+pub(crate) use perception::{StereoInconsistency, StereoSelection, StereoSite};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;

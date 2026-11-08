@@ -250,51 +250,26 @@ def test_aromaticity_resolve_config_mutation(field, value):
 def test_stereo_resolve_config_default():
     config = StereoResolveConfig()
 
-    assert config.tetrahedral_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_atom_failure == StereoFailurePolicy.Error
-    assert config.cis_trans_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_bond_failure == StereoFailurePolicy.Error
     assert config == StereoResolveConfig()
 
 
 @pytest.mark.parametrize(
-    (
-        "tetrahedral_stereo_failure",
-        "stereo_atom_failure",
-        "cis_trans_stereo_failure",
-        "stereo_bond_failure",
-    ),
+    ("stereo_atom_failure", "stereo_bond_failure"),
     [
-        (
-            StereoFailurePolicy.Error,
-            StereoFailurePolicy.Error,
-            StereoFailurePolicy.Error,
-            StereoFailurePolicy.Error,
-        ),
-        (
-            StereoFailurePolicy.Keep,
-            StereoFailurePolicy.Remove,
-            StereoFailurePolicy.Remove,
-            StereoFailurePolicy.Keep,
-        ),
+        (StereoFailurePolicy.Error, StereoFailurePolicy.Error),
+        (StereoFailurePolicy.Keep, StereoFailurePolicy.Remove),
+        (StereoFailurePolicy.Remove, StereoFailurePolicy.Keep),
     ],
 )
-def test_stereo_resolve_config_new(
-    tetrahedral_stereo_failure,
-    stereo_atom_failure,
-    cis_trans_stereo_failure,
-    stereo_bond_failure,
-):
+def test_stereo_resolve_config_new(stereo_atom_failure, stereo_bond_failure):
     config = StereoResolveConfig(
-        tetrahedral_stereo_failure=tetrahedral_stereo_failure,
         stereo_atom_failure=stereo_atom_failure,
-        cis_trans_stereo_failure=cis_trans_stereo_failure,
         stereo_bond_failure=stereo_bond_failure,
     )
 
-    assert config.tetrahedral_stereo_failure == tetrahedral_stereo_failure
     assert config.stereo_atom_failure == stereo_atom_failure
-    assert config.cis_trans_stereo_failure == cis_trans_stereo_failure
     assert config.stereo_bond_failure == stereo_bond_failure
 
 
@@ -308,24 +283,16 @@ def test_stereo_resolve_config_new_error():
     [
         (
             StereoResolveConfig(),
-            "StereoResolveConfig(tetrahedral_stereo_failure="
-            "StereoFailurePolicy.Error, stereo_atom_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
-            "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error)",
+            "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Error, "
+            "stereo_bond_failure=StereoFailurePolicy.Error)",
         ),
         (
             StereoResolveConfig(
-                tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 stereo_atom_failure=StereoFailurePolicy.Remove,
-                cis_trans_stereo_failure=StereoFailurePolicy.Remove,
                 stereo_bond_failure=StereoFailurePolicy.Keep,
             ),
-            "StereoResolveConfig(tetrahedral_stereo_failure="
-            "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Remove, cis_trans_stereo_failure="
-            "StereoFailurePolicy.Remove, stereo_bond_failure="
-            "StereoFailurePolicy.Keep)",
+            "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, "
+            "stereo_bond_failure=StereoFailurePolicy.Keep)",
         ),
     ],
 )
@@ -336,9 +303,7 @@ def test_stereo_resolve_config_repr(config, expected):
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("tetrahedral_stereo_failure", StereoFailurePolicy.Keep),
         ("stereo_atom_failure", StereoFailurePolicy.Remove),
-        ("cis_trans_stereo_failure", StereoFailurePolicy.Remove),
         ("stereo_bond_failure", StereoFailurePolicy.Keep),
     ],
 )
@@ -383,7 +348,7 @@ def test_resolve_config_default():
         ),
         (
             AromaticityResolveConfig(),
-            StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep),
+            StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Keep),
         ),
     ],
 )
@@ -413,7 +378,7 @@ def test_resolve_config_new_error():
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
+                stereo_atom_failure=StereoFailurePolicy.Keep,
             ),
         ),
     ],
@@ -433,7 +398,7 @@ def test_resolve_config_equality(other):
                     aromatic_system_failure=AromaticityFailurePolicy.Keep,
                 ),
                 stereo=StereoResolveConfig(
-                    tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
+                    stereo_atom_failure=StereoFailurePolicy.Keep,
                 ),
             ),
             "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception="
@@ -447,10 +412,8 @@ def test_resolve_config_equality(other):
             "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
             "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
-            "stereo=StereoResolveConfig(tetrahedral_stereo_failure="
-            "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
-            "StereoFailurePolicy.Error, stereo_bond_failure="
+            "stereo=StereoResolveConfig(stereo_atom_failure="
+            "StereoFailurePolicy.Keep, stereo_bond_failure="
             "StereoFailurePolicy.Error))",
         ),
     ],
@@ -525,9 +488,7 @@ def test_molecule_resolve_into_stereo_mismatch(source, expected, failure):
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                tetrahedral_stereo_failure=failure,
                 stereo_atom_failure=failure,
-                cis_trans_stereo_failure=failure,
                 stereo_bond_failure=failure,
             ),
         ),

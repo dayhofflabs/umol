@@ -101,7 +101,7 @@ def test_resolved_smiles_workflow():
         == AromaticityFailurePolicy.Error
     )
     assert (
-        resolve_config.stereo.tetrahedral_stereo_failure
+        resolve_config.stereo.stereo_atom_failure
         == StereoFailurePolicy.Error
     )
 

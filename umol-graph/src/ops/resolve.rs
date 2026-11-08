@@ -1267,7 +1267,7 @@ mod tests {
             isotope: IsotopePolicy::Strict,
             aromaticity: AromaticityResolveConfig::default(),
             stereo: StereoResolveConfig {
-                tetrahedral_stereo_failure: StereoFailurePolicy::Keep,
+                stereo_atom_failure: StereoFailurePolicy::Keep,
                 ..StereoResolveConfig::default()
             },
         },
@@ -1676,9 +1676,7 @@ mod tests {
             &chemistry_model,
             ResolveConfig {
                 stereo: StereoResolveConfig {
-                    tetrahedral_stereo_failure: failure,
                     stereo_atom_failure: failure,
-                    cis_trans_stereo_failure: failure,
                     stereo_bond_failure: failure,
                 },
                 ..ResolveConfig::default()
