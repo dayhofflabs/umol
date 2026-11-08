@@ -18,7 +18,7 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0, S1, and S2a–S2b
+This records the selected design direction and its consequences. S0, S1, and S2a–S2c
 are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
 interfaces, and names below are the working design. S2 records the revised
 perception/resolution proposal; it is provisional, not final design approval.
@@ -414,7 +414,8 @@ ReplaceStereoBondLigands edits. No public completion-result type is needed.
 
 derive returns Solution<StereoDerivation, StereoContradiction> directly. The
 non-contradictory outcomes carry the derivation, including established findings;
-an unresolved stored row retains Virtual. The resolver checks those findings
+an unresolved stored row preserves its original ligand kinds and attributes.
+The resolver checks those findings
 before propagating underdetermination. Retain StereoInconsistency and rename its
 existing contradiction wrapper to StereoContradiction. Remove the empty
 StereoResolveError and the outer Result from stereo derivation and resolution;
@@ -784,7 +785,7 @@ pass together. Configuration-bearing site forms still exist at this point.
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
 **Working proposal — 2026-11-08.** Recorded for continuation, not final design
-approval. S2a–S2b are complete; implementation of the remaining subitems awaits
+approval. S2a–S2c are complete; implementation of the remaining subitems awaits
 explicit instruction. Record completion and verification under each subitem.
 
 Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
@@ -835,7 +836,8 @@ neither ambiguity nor impossibility. No ligand lattice or compatibility API
 is added.
 
 Both non-contradictory outcomes carry StereoDerivation. An underdetermined
-derivation retains established rows, unresolved stored rows with Virtual, and
+derivation retains established rows, unresolved stored frames in their original
+form (including Virtual where present), and
 established inconsistencies; it does not enumerate alternative molecules.
 Stored rows preserve ligand order, configuration, and all entity constraints.
 Identification changes only ligand kinds, never atom counts or cosets. An
@@ -951,10 +953,34 @@ until S3; ring suppression remains until S2g.
   Migrate direct consumers in S2d before requiring a green tree; introduce
   no temporary public interface to bridge the signature change.
 
+  **Completed — 2026-11-08.** derive now returns the direct Solution, with explicit
+  determinacy from H/LP identification. Unique completions identify the kinds;
+  ambiguity or missing evidence retains the original row in Underdetermined;
+  impossible completions produce the existing finding. The partial payload
+  retains completed rows and independently established failures/mismatches.
+  Unresolved frames do not supply configuration-mismatch findings. Stored frame
+  order, cosets, entity constraints, and atom counts are preserved. No public
+  completion type, error channel, or compatibility interface was added.
+
+  Added 49 parameterized cases for finite/ranged/symbolic counts, fixed ligands,
+  mixed cis/trans endpoints, open cosets, unresolved typed frames without Virtual,
+  and partial payloads containing established findings. The 269 perceiver tests
+  passed in an isolated copy with temporary consumer adaptations solely for
+  compilation; the checkout's consumers remain unchanged. Library Clippy with
+  warnings denied passed in that copy, including removal of the earlier
+  type_complexity lint. Formatting and `git diff --check` passed.
+
+  The checkout intentionally remains red until S2d: `cargo check -p umol-graph
+  --lib` reports exactly eight field-access errors in the unchanged stereo
+  resolver and validator. No temporary bridge was added to the checkout.
+  Test-target Clippy additionally finds an existing needless_update in a
+  StereoResolveConfig fixture; the configuration work in S2e owns that cleanup.
+
 - **S2d — Consume derivation outcomes in resolution and validation** — breaking (red→green).
   Modules: umol-graph/src/ops/resolve/stereo.rs, umol-graph/src/ops/resolve.rs,
   umol-graph/src/ops/validate/stereo.rs, umol-graph/src/ingest.rs,
   umol-graph/benches/resolve.rs, umol-graph/benches/transform.rs,
+  umol-graph/benches/transform/stereo.rs,
   umol-py/src/error.rs, and the owning tests. [dep: S2c]
 
   Apply the existing ligand-replacement edits only from a determined plan.
@@ -981,7 +1007,8 @@ until S3; ring suppression remains until S2g.
   Error. Each covers constraint and entity realizability at its site kind.
   Migrate native callers and Python construction, getters, conversion, and
   repr together. Test the merged fields against both finding variants, reject
-  obsolete Python keywords, and verify ambiguity is independent of policy.
+  obsolete Python keywords, remove redundant default updates from native config
+  fixtures, and verify ambiguity is independent of policy.
 
 - **S2f — Raise SMILES and MOL stereo into explicit entities** — breaking (red→green).
   Modules: umol-io/src/table_ir/raise.rs,

@@ -18,6 +18,7 @@ use umol_graph_ir::ir::{
     StereoLigand, StereoLigandKind, Stereogenicity, TetrahedralStereoForm,
 };
 use umol_perm::Permutation;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
 
@@ -80,16 +81,18 @@ impl StereoSelection {
 
 /// Derived stereo entities and evidence inconsistencies.
 ///
-/// Rows describe requested additions or realizable stored entities. Stored rows
-/// retain their ligand order and attributes. Unique completions identify generic virtual
-/// kinds; ambiguous rows retain Virtual without an inconsistency.
+/// Rows describe requested additions and supported stored frames, including
+/// unresolved frames. Stored rows retain their ligand order and attributes.
+/// Unique completions identify generic virtual kinds; unresolved rows retain
+/// Virtual without an inconsistency. The derive
+/// outcome reports determinacy explicitly, including unresolved typed frames.
 /// Recognition returns only additions. This is an open carrier; independently
 /// assembled rows are not checked against a molecule at construction.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StereoDerivation {
-    /// Realizable tetrahedral stereo atoms.
+    /// Requested or retained tetrahedral stereo atoms.
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
-    /// Realizable cis-trans stereo bonds.
+    /// Requested or retained cis-trans stereo bonds.
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
     /// Sites of cis-trans assertions on double bonds whose smallest ring is below the model's
     /// `stereo_bond_minimum_ring_size`: no stereo bond is realized, and nothing is inconsistent.
@@ -187,7 +190,9 @@ impl StereoPerceiver {
     /// Derive requested stereo relations and identify stored virtual ligand kinds.
     /// Positive evidence supplies new configurations; negative evidence supplies none.
     /// Stored rows preserve their configuration, ligand order, and entity constraints.
-    /// Ambiguous rows retain Virtual; impossible completions produce entity failures.
+    /// Ambiguous identification or insufficient evidence yields Underdetermined,
+    /// retaining unresolved rows and established findings. Impossible completions
+    /// produce entity failures. An undetermined coset does not imply ambiguity.
     /// Contradictory evidence between realizable sources is a mismatch. Independent
     /// constraint and entity realizability failures retain their separate diagnostics.
     ///
@@ -195,10 +200,11 @@ impl StereoPerceiver {
     ///
     /// The molecule is unchanged. Stored rows differ only at Virtual ligand kinds
     /// uniquely identified from compatible frames; fixed ligand kinds remain exact.
-    pub fn derive(&self, molecule: &Molecule) -> StereoDerivation {
+    pub fn derive(&self, molecule: &Molecule) -> Solution<StereoDerivation, StereoContradiction> {
         let mut stereo_atoms = Vec::new();
         let mut stereo_bonds = Vec::new();
         let mut inconsistencies = BTreeSet::new();
+        let mut underdetermined = false;
         let skipped = self.skipped_stereo_bonds(molecule);
 
         for view in molecule.atoms().iter() {
@@ -225,11 +231,15 @@ impl StereoPerceiver {
                 if relation.attributes().configuration.kind() != Some(StereoKind::Tetrahedral) {
                     return None;
                 }
-                let ligands = self.identify_virtual_ligands(
+                let (ligands, unresolved) = match self.identify_virtual_ligands(
                     molecule,
                     StereoSite::Atom(atom),
                     relation.ligand_ids(),
-                )?;
+                ) {
+                    Solution::Determined(ligands) => (ligands, false),
+                    Solution::Underdetermined(ligands) => (ligands, true),
+                    Solution::Contradictory(()) => return None,
+                };
                 let mut image = [0, 1, 2, 3];
                 image.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
                 let configuration = relation
@@ -238,9 +248,13 @@ impl StereoPerceiver {
                     .clone()
                     .reframe_by(&Permutation::from_image(&image))?;
                 let derived = AtomConstraintForm::tetrahedral_stereo(
-                    TetrahedralStereoForm::stereo(configuration.coset()?.clone()),
+                    TetrahedralStereoForm::stereo(if unresolved {
+                        StereoCoset::Undetermined
+                    } else {
+                        configuration.coset()?.clone()
+                    }),
                 );
-                Some((ligands, derived))
+                Some((ligands, derived, unresolved))
             });
             if candidate.is_none()
                 && completed.is_none()
@@ -250,12 +264,17 @@ impl StereoPerceiver {
                 inconsistencies.insert(StereoInconsistency::TetrahedralStereoFailure { atom });
             }
             if let Some(relation) = relation {
-                let Some((ligands, derived)) = completed else {
+                let Some((ligands, derived, unresolved)) = completed else {
                     inconsistencies.insert(StereoInconsistency::StereoAtomFailure {
                         stereo_atom: relation.id(),
                     });
                     continue;
                 };
+                underdetermined |= unresolved;
+                if unresolved {
+                    stereo_atoms.push((atom, ligands, relation.attributes().clone()));
+                    continue;
+                }
                 if constraints
                     .asserted(AtomConstraintKey::TetrahedralStereo)
                     .and_then(|asserted| asserted.meet(&derived))
@@ -301,11 +320,15 @@ impl StereoPerceiver {
                 if relation.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
                     return None;
                 }
-                let ligands = self.identify_virtual_ligands(
+                let (ligands, unresolved) = match self.identify_virtual_ligands(
                     molecule,
                     StereoSite::Bond(bond),
                     relation.ligand_ids(),
-                )?;
+                ) {
+                    Solution::Determined(ligands) => (ligands, false),
+                    Solution::Underdetermined(ligands) => (ligands, true),
+                    Solution::Contradictory(()) => return None,
+                };
                 let mut image = [0, 1, 2, 3];
                 for side in image.chunks_exact_mut(2) {
                     side.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
@@ -316,9 +339,13 @@ impl StereoPerceiver {
                     .clone()
                     .reframe_by(&Permutation::from_image(&image))?;
                 let derived = BondConstraintForm::cis_trans_stereo(CisTransStereoForm::stereo(
-                    configuration.coset()?.clone(),
+                    if unresolved {
+                        StereoCoset::Undetermined
+                    } else {
+                        configuration.coset()?.clone()
+                    },
                 ));
-                Some((ligands, derived))
+                Some((ligands, derived, unresolved))
             });
             if candidate.is_none()
                 && completed.is_none()
@@ -329,12 +356,17 @@ impl StereoPerceiver {
                 inconsistencies.insert(StereoInconsistency::CisTransStereoFailure { bond });
             }
             if let Some(relation) = relation {
-                let Some((ligands, derived)) = completed else {
+                let Some((ligands, derived, unresolved)) = completed else {
                     inconsistencies.insert(StereoInconsistency::StereoBondFailure {
                         stereo_bond: relation.id(),
                     });
                     continue;
                 };
+                underdetermined |= unresolved;
+                if unresolved {
+                    stereo_bonds.push((bond, ligands, relation.attributes().clone()));
+                    continue;
+                }
                 if constraints
                     .asserted(BondConstraintKey::CisTransStereo)
                     .and_then(|asserted| asserted.meet(&derived))
@@ -356,11 +388,16 @@ impl StereoPerceiver {
             }
         }
 
-        StereoDerivation {
+        let derivation = StereoDerivation {
             stereo_atoms,
             stereo_bonds,
             skipped_stereo_bonds: skipped.into_iter().collect(),
             inconsistencies: inconsistencies.into_iter().collect(),
+        };
+        if underdetermined {
+            Solution::Underdetermined(derivation)
+        } else {
+            Solution::Determined(derivation)
         }
     }
 
@@ -449,31 +486,35 @@ impl StereoPerceiver {
         molecule: &Molecule,
         site: StereoSite,
         stored: &[StereoLigand],
-    ) -> Option<Vec<StereoLigand>> {
-        let (kind, sites): (_, SmallVec<[(AtomId, Option<AtomId>); 2]>) = match site {
+    ) -> Solution<Vec<StereoLigand>, ()> {
+        let mut sites = SmallVec::<[(AtomId, Option<AtomId>); 2]>::new();
+        let kind = match site {
             StereoSite::Atom(atom) => {
                 if molecule.atom(atom).is_in_aromatic_system() {
-                    return None;
+                    return Solution::Contradictory(());
                 }
-                (
-                    StereoKind::Tetrahedral,
-                    SmallVec::from_slice(&[(atom, None)]),
-                )
+                sites.push((atom, None));
+                StereoKind::Tetrahedral
             }
             StereoSite::Bond(bond) => {
                 let [first, second] = molecule.bond(bond).atom_ids();
-                (
-                    StereoKind::CisTrans,
-                    SmallVec::from_slice(&[(first, Some(second)), (second, Some(first))]),
-                )
+                sites.extend([(first, Some(second)), (second, Some(first))]);
+                StereoKind::CisTrans
             }
         };
-        let model = self.model.kind_model(kind)?;
+        let Some(model) = self.model.kind_model(kind) else {
+            return Solution::Contradictory(());
+        };
+        let mut unresolved_scope = false;
         let mut frames = SmallVec::<[(AtomId, Vec<StereoLigand>); 2]>::new();
         for (atom, partner) in sites {
             let view = molecule.atom(atom);
-            if !model.scope.contains(view.element().as_lit()?) {
-                return None;
+            match view.element().as_lit() {
+                Some(element) if !model.scope.contains(element) => {
+                    return Solution::Contradictory(());
+                }
+                Some(_) => {}
+                None => unresolved_scope = true,
             }
             let actual = view
                 .neighbors()
@@ -491,6 +532,7 @@ impl StereoPerceiver {
             })
             .collect();
         let mut completion = None;
+        let mut underdetermined = false;
         'assignments: for assignment in 0..(1 << positions.len()) {
             let mut ligands = stored.to_vec();
             for (bit, &position) in positions.iter().enumerate() {
@@ -520,7 +562,9 @@ impl StereoPerceiver {
                     if required > 1 {
                         continue 'assignments;
                     }
-                    let count = count.clone().normalize().ok()?;
+                    let Ok(count) = count.clone().normalize() else {
+                        continue 'assignments;
+                    };
                     if matches!(count, NumForm::ArithExpr(_) | NumForm::PredExpr(_)) {
                         unresolved_count = true;
                     } else if !count.is_compatible(&NumForm::Lit(required as i64)) {
@@ -543,12 +587,21 @@ impl StereoPerceiver {
             if !kind.class_key().space().allows(action) {
                 continue;
             }
-            if completion.is_some() || unresolved_count {
-                return Some(stored.to_vec());
+            if unresolved_count || unresolved_scope {
+                underdetermined = true;
+            } else if completion.is_some() {
+                return Solution::Underdetermined(stored.to_vec());
+            } else {
+                completion = Some(ligands);
             }
-            completion = Some(ligands);
         }
-        completion
+        if underdetermined {
+            Solution::Underdetermined(stored.to_vec())
+        } else if let Some(ligands) = completion {
+            Solution::Determined(ligands)
+        } else {
+            Solution::Contradictory(())
+        }
     }
 
     fn bond_side_ligands(
@@ -587,7 +640,8 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::dsl::StereoAtomDsl;
     use umol_graph_ir::ir::{
-        AtomForm, BondForm, MoleculeEntries, NumForm, StereoAtomId, StereoBondId,
+        ArithExpr, AtomForm, BondForm, ElementForm, MoleculeEntries, NumForm, StereoAtomId,
+        StereoBondId,
     };
     use umol_graph_ir::mol_dsl_concrete;
 
@@ -1012,7 +1066,7 @@ mod tests {
     ) {
         assert_eq!(
             StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
-            expected
+            Solution::Determined(expected)
         );
     }
 
@@ -1111,7 +1165,336 @@ mod tests {
     ) {
         assert_eq!(
             StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
-            expected,
+            Solution::Determined(expected),
+        );
+    }
+
+    #[rstest]
+    #[case::hydrogen(
+        NumForm::Lit(1),
+        NumForm::Lit(0),
+        Solution::Determined(StereoLigandKind::ImplicitHydrogen)
+    )]
+    #[case::lone_pair(
+        NumForm::Lit(0),
+        NumForm::Lit(1),
+        Solution::Determined(StereoLigandKind::LonePair)
+    )]
+    #[case::open_counts(NumForm::Undetermined, NumForm::Undetermined, Solution::Underdetermined(()))]
+    #[case::finite_counts(NumForm::lit_set([0, 1]), NumForm::lit_set([0, 1]), Solution::Underdetermined(()))]
+    #[case::excluded_lone_pair(
+        NumForm::Undetermined,
+        NumForm::Lit(0),
+        Solution::Determined(StereoLigandKind::ImplicitHydrogen)
+    )]
+    #[case::excluded_hydrogen(
+        NumForm::Lit(0),
+        NumForm::Undetermined,
+        Solution::Determined(StereoLigandKind::LonePair)
+    )]
+    #[case::finite_hydrogen(NumForm::lit_set([0, 1]), NumForm::Lit(0), Solution::Determined(StereoLigandKind::ImplicitHydrogen))]
+    #[case::ranged_hydrogen(
+        NumForm::range_from(1),
+        NumForm::Lit(0),
+        Solution::Determined(StereoLigandKind::ImplicitHydrogen)
+    )]
+    #[case::ground_expression(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(0), ArithExpr::Lit(1)])), NumForm::Lit(0), Solution::Determined(StereoLigandKind::ImplicitHydrogen))]
+    #[case::symbolic_count(NumForm::var("hydrogens"), NumForm::Lit(0), Solution::Underdetermined(()))]
+    #[case::absent(NumForm::Lit(0), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::both_present(NumForm::Lit(1), NumForm::Lit(1), Solution::Contradictory(()))]
+    #[case::two_hydrogens(NumForm::Lit(2), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::excluded_counts(NumForm::range_from(2), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::bottom_count(NumForm::lit_set([]), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::symbolic_with_impossible_count(NumForm::var("hydrogens"), NumForm::Lit(2), Solution::Contradictory(()))]
+    fn test_stereo_perceiver_derive_virtual_ligands(
+        #[case] hydrogens: NumForm,
+        #[case] lone_pairs: NumForm,
+        #[case] outcome: Solution<StereoLigandKind, (), ()>,
+        #[values(StereoCoset::Lit(1), StereoCoset::Undetermined)] coset: StereoCoset,
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(hydrogens)
+                    .with_lone_pairs(lone_pairs),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+            ],
+            bonds: (1..=3)
+                .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
+            )],
+            ..Default::default()
+        };
+        let molecule = Molecule::from_entries(entries.clone());
+        let original = molecule.clone();
+        let mut stereo_atoms = entries.stereo_atoms;
+        let expected = match outcome {
+            Solution::Determined(kind) => {
+                stereo_atoms[0].1[0].kind = kind;
+                Solution::Determined(StereoDerivation {
+                    stereo_atoms,
+                    ..Default::default()
+                })
+            }
+            Solution::Underdetermined(()) => Solution::Underdetermined(StereoDerivation {
+                stereo_atoms,
+                ..Default::default()
+            }),
+            Solution::Contradictory(()) => Solution::Determined(StereoDerivation {
+                inconsistencies: vec![StereoInconsistency::StereoAtomFailure {
+                    stereo_atom: StereoAtomId(0),
+                }],
+                ..Default::default()
+            }),
+        };
+        assert_eq!(
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
+            expected
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::fixed_hydrogen(StereoLigandKind::ImplicitHydrogen, StereoLigandKind::LonePair)]
+    #[case::fixed_lone_pair(StereoLigandKind::LonePair, StereoLigandKind::ImplicitHydrogen)]
+    fn test_stereo_perceiver_derive_virtual_ligands_fixed(
+        #[case] fixed: StereoLigandKind,
+        #[case] identified: StereoLigandKind,
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::P),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+                    StereoLigand::new(AtomId(0), fixed),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        };
+        let molecule = Molecule::from_entries(entries.clone());
+        let mut stereo_atoms = entries.stereo_atoms;
+        stereo_atoms[0].1[1].kind = identified;
+        assert_eq!(
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
+            Solution::Determined(StereoDerivation {
+                stereo_atoms,
+                ..Default::default()
+            }),
+        );
+    }
+
+    #[rstest]
+    #[case::mixed(NumForm::Lit(1), NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(1), Solution::Determined((StereoLigandKind::ImplicitHydrogen, StereoLigandKind::LonePair)))]
+    #[case::partial(NumForm::Lit(1), NumForm::Lit(0), NumForm::Undetermined, NumForm::Undetermined, Solution::Underdetermined(()))]
+    #[case::finite(NumForm::lit_set([0, 1]), NumForm::Lit(0), NumForm::Lit(0), NumForm::lit_set([0, 1]), Solution::Determined((StereoLigandKind::ImplicitHydrogen, StereoLigandKind::LonePair)))]
+    #[case::impossible_endpoint(NumForm::Undetermined, NumForm::Undetermined, NumForm::Lit(0), NumForm::Lit(0), Solution::Contradictory(()))]
+    #[case::symbolic_with_impossible_endpoint(NumForm::var("hydrogens"), NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(0), Solution::Contradictory(()))]
+    fn test_stereo_perceiver_derive_virtual_bond_ligands(
+        #[case] first_hydrogens: NumForm,
+        #[case] first_lone_pairs: NumForm,
+        #[case] second_hydrogens: NumForm,
+        #[case] second_lone_pairs: NumForm,
+        #[case] outcome: Solution<(StereoLigandKind, StereoLigandKind), (), ()>,
+        #[values(StereoCoset::Lit(1), StereoCoset::Undetermined)] coset: StereoCoset,
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(first_hydrogens)
+                    .with_lone_pairs(first_lone_pairs),
+                AtomForm::from_element(Element::N)
+                    .with_implicit_hydrogens(second_hydrogens)
+                    .with_lone_pairs(second_lone_pairs),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(1), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, coset),
+            )],
+            ..Default::default()
+        };
+        let molecule = Molecule::from_entries(entries.clone());
+        let mut stereo_bonds = entries.stereo_bonds;
+        let expected = match outcome {
+            Solution::Determined((first, second)) => {
+                stereo_bonds[0].1[0].kind = second;
+                stereo_bonds[0].1[3].kind = first;
+                Solution::Determined(StereoDerivation {
+                    stereo_bonds,
+                    ..Default::default()
+                })
+            }
+            Solution::Underdetermined(()) => Solution::Underdetermined(StereoDerivation {
+                stereo_bonds,
+                ..Default::default()
+            }),
+            Solution::Contradictory(()) => Solution::Determined(StereoDerivation {
+                inconsistencies: vec![StereoInconsistency::StereoBondFailure {
+                    stereo_bond: StereoBondId(0),
+                }],
+                ..Default::default()
+            }),
+        };
+        assert_eq!(
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::symbolic_count(ElementForm::Lit(Element::C), NumForm::var("hydrogens"))]
+    #[case::unknown_scope(ElementForm::Undetermined, NumForm::Lit(0))]
+    fn test_stereo_perceiver_derive_partial(
+        #[case] element: ElementForm,
+        #[case] hydrogens: NumForm,
+        #[values(false, true)] negative_assertion: bool,
+    ) {
+        let mut entries = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(hydrogens)
+                    .with_lone_pairs(0),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+                AtomForm::from_element(Element::I),
+            ],
+            bonds: (1..=4)
+                .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        };
+        entries.atoms[0].element = element;
+        if negative_assertion {
+            entries.atoms[0]
+                .constraints
+                .set(AtomConstraintForm::tetrahedral_stereo(
+                    TetrahedralStereoForm::NotStereo,
+                ));
+        }
+        let molecule = Molecule::from_entries(entries.clone());
+        assert_eq!(
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
+            Solution::Underdetermined(StereoDerivation {
+                stereo_atoms: entries.stereo_atoms,
+                ..Default::default()
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_perceiver_derive_partial_evidence() {
+        let mut entries = MoleculeEntries {
+            atoms: [
+                (NumForm::Undetermined, NumForm::Undetermined),
+                (NumForm::Lit(1), NumForm::Lit(0)),
+                (NumForm::Lit(0), NumForm::Lit(0)),
+                (NumForm::Lit(1), NumForm::Lit(0)),
+            ]
+            .into_iter()
+            .flat_map(|(hydrogens, lone_pairs)| {
+                [
+                    AtomForm::from_element(Element::C)
+                        .with_implicit_hydrogens(hydrogens)
+                        .with_lone_pairs(lone_pairs),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                    AtomForm::from_element(Element::Br),
+                ]
+            })
+            .collect(),
+            bonds: (0..4)
+                .flat_map(|group| {
+                    (1..=3).map(move |offset| {
+                        (
+                            AtomId(4 * group),
+                            AtomId(4 * group + offset),
+                            BondForm::from_order(1),
+                        )
+                    })
+                })
+                .collect(),
+            stereo_atoms: (0..4)
+                .map(|group| {
+                    (
+                        AtomId(4 * group),
+                        vec![
+                            StereoLigand::new(AtomId(4 * group), StereoLigandKind::Virtual),
+                            StereoLigand::new(AtomId(4 * group + 3), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(4 * group + 2), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(4 * group + 1), StereoLigandKind::Atom),
+                        ],
+                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        };
+        entries.atoms[12]
+            .constraints
+            .set(AtomConstraintForm::tetrahedral_stereo(
+                TetrahedralStereoForm::NotStereo,
+            ));
+        let molecule = Molecule::from_entries(entries.clone());
+        let mut stereo_atoms = entries.stereo_atoms[..2].to_vec();
+        stereo_atoms[1].1[0].kind = StereoLigandKind::ImplicitHydrogen;
+        assert_eq!(
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
+            Solution::Underdetermined(StereoDerivation {
+                stereo_atoms,
+                inconsistencies: vec![
+                    StereoInconsistency::StereoAtomFailure {
+                        stereo_atom: StereoAtomId(2)
+                    },
+                    StereoInconsistency::TetrahedralStereoMismatch {
+                        atom: AtomId(12),
+                        stereo_atom: StereoAtomId(3)
+                    },
+                ],
+                ..Default::default()
+            }),
         );
     }
 
