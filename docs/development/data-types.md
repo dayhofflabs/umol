@@ -233,7 +233,7 @@ virtual ligands; distinguishable hydrogen positions require explicit atoms. Cons
 ordinary conversion preserve supplied stereo information without implicitly running the stereo
 transformations below.
 
-StereoPerception supplies read-only evidence, recognition, and classification queries.
+StereoPerceiver supplies read-only evidence, recognition, and classification queries.
 StereoAdder explicitly adds missing selected tetrahedral/cis-trans entities; StereoRemover removes
 selected entities and their corresponding #T/#C assertions. Their configurations intersect site,
 kind, and stereogenicity selectors. StereoEnumerator determines existing selected absolute cosets

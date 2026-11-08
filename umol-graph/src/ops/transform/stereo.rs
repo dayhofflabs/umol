@@ -3,7 +3,7 @@
 //! StereoAdder creates missing selected tetrahedral/cis-trans entities; StereoRemover
 //! removes selected entities and their source assertions. StereoEnumerator determines
 //! existing selected absolute configurations in the supplied sequence of sites.
-//! All three use StereoPerception and intersect site, kind, and stereogenicity filters.
+//! All three use StereoPerceiver and intersect site, kind, and stereogenicity filters.
 //! A stored stereo entity may be symmetric or prochiral; its presence does not assert
 //! stereogenicity. Enumeration retains symmetry-equivalent assignments.
 //!
@@ -52,7 +52,7 @@ use umol_graph_ir::ir::{
 use self::enumeration::{AbsoluteStereoAssignments, StereoAssignmentChecks};
 use crate::ops::model::StereoModel;
 use crate::ops::stereo::{
-    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection, StereoSite,
+    StereoInconsistency, StereoPerceiver, StereoPerceptionError, StereoSelection, StereoSite,
 };
 use crate::ops::transform::Transformer;
 use crate::ops::validate::constraint::ConstraintInvariantsError;
@@ -99,7 +99,7 @@ pub enum AddStereoError {
 
 /// Add selected missing tetrahedral atoms and cis/trans bonds.
 ///
-/// Uses StereoPerception's recognition and classification with the supplied
+/// Uses StereoPerceiver's recognition and classification with the supplied
 /// model and configuration. New cosets remain undetermined unless source
 /// evidence supplies them. Existing entities, their frames and configurations,
 /// source assertions, and molecular topology are preserved.
@@ -121,7 +121,7 @@ pub enum AddStereoError {
 /// entity correspondence.
 #[derive(Clone, Debug)]
 pub struct StereoAdder {
-    perception: StereoPerception,
+    perception: StereoPerceiver,
     config: AddStereoConfig,
 }
 
@@ -136,7 +136,7 @@ impl StereoAdder {
     /// Site ids are checked against each input molecule during transformation.
     pub fn with_config(model: &StereoModel, config: AddStereoConfig) -> Self {
         Self {
-            perception: StereoPerception::new(model),
+            perception: StereoPerceiver::new(model),
             config,
         }
     }
@@ -263,7 +263,7 @@ pub enum RemoveStereoError {
 /// Remove selected stereo entities and their corresponding #T/#C assertions.
 ///
 /// The mode and site/kind selectors apply before stereogenicity is calculated.
-/// Classification uses StereoPerception with the unchanged molecular context
+/// Classification uses StereoPerceiver with the unchanged molecular context
 /// and is omitted when the class selector is unrestricted. Such removal accepts
 /// kindless, symbolic, and other-geometry records without interpreting them.
 /// All accepts every configuration and is the default. Undetermined tests only
@@ -287,7 +287,7 @@ pub enum RemoveStereoError {
 /// represented result under framed_eq.
 #[derive(Clone, Debug)]
 pub struct StereoRemover {
-    perception: StereoPerception,
+    perception: StereoPerceiver,
     config: RemoveStereoConfig,
 }
 
@@ -302,7 +302,7 @@ impl StereoRemover {
     /// Site ids are checked against each input molecule during transformation.
     pub fn with_config(model: &StereoModel, config: RemoveStereoConfig) -> Self {
         Self {
-            perception: StereoPerception::new(model),
+            perception: StereoPerceiver::new(model),
             config,
         }
     }
@@ -517,7 +517,7 @@ pub enum EnumerateStereoError {
 /// and other geometries are unsupported when selected for processing.
 ///
 /// Site, kind, and stereogenicity selectors intersect. Classification uses
-/// StereoPerception in the whole molecular context when requested. Automatic
+/// StereoPerceiver in the whole molecular context when requested. Automatic
 /// recognition rules do not reject existing arrangements. Selected sites must
 /// occur exactly once in the order; entries outside that set are ignored.
 /// Source assertions, topology, retained configurations, and ligand frames are
@@ -662,7 +662,7 @@ impl StereoEnumerator {
                     }
                 }
                 let sites = configurations.keys().copied().collect();
-                let classifications = StereoPerception::new(&self.model).classify(
+                let classifications = StereoPerceiver::new(&self.model).classify(
                     &normalized,
                     &sites,
                     self.config.automorphism_algorithm,

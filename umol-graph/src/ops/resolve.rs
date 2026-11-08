@@ -27,10 +27,7 @@ pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
 use stereo::StereoProjectError;
-pub use stereo::{
-    StereoFailurePolicy, StereoResolveConfig, StereoResolveContradiction, StereoResolveError,
-    StereoResolver,
-};
+pub use stereo::{StereoFailurePolicy, StereoResolveConfig, StereoResolveError, StereoResolver};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Molecule,
@@ -39,12 +36,13 @@ use umol_graph_ir::ir::{
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 use valence::ValenceProjectError;
-pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
+pub use valence::{ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::model::{ChemistryModel, ValenceTieBreak};
+use crate::ops::stereo::StereoContradiction;
 use crate::ops::valence::compare::compare_by_key;
-use crate::ops::valence::{AtomCompletions, ResolveReport};
+use crate::ops::valence::{AtomCompletions, ResolveReport, ValenceContradiction};
 
 /// Operational policies for resolution; unspecified isotope composition remains unresolved by default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -132,7 +130,7 @@ pub enum ResolveContradiction {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
     #[error(transparent)]
-    Stereo(#[from] StereoResolveContradiction),
+    Stereo(#[from] StereoContradiction),
     #[error(transparent)]
     Bonds(#[from] BondsContradiction),
     #[error(transparent)]
@@ -171,7 +169,7 @@ pub enum ProjectContradiction {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
     #[error(transparent)]
-    Stereo(#[from] StereoResolveContradiction),
+    Stereo(#[from] StereoContradiction),
     #[error(transparent)]
     Valence(#[from] ValenceContradiction),
 }
@@ -1181,7 +1179,7 @@ mod tests {
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
         RingLimits, StereoModel, ValenceModel,
     };
-    use crate::ops::stereo::{StereoInconsistency, StereoPerception};
+    use crate::ops::stereo::{StereoInconsistency, StereoPerceiver};
     use crate::ops::valence::{AtomTypeRegistry, CountsError, ValenceTable};
     use crate::ops::validate::{ConnectivityModel, IncidenceConstraintInvariantsContradiction};
 
@@ -1683,7 +1681,7 @@ mod tests {
             },
         );
         let expected =
-            ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(inconsistency));
+            ResolveContradiction::Stereo(StereoContradiction::Inconsistency(inconsistency));
         assert_eq!(
             resolver.resolve(molecule.clone()),
             Ok(Solution::Contradictory(expected.clone()))
@@ -1890,9 +1888,9 @@ mod tests {
             )
             .resolve_into(&mut molecule, rollback_method),
             Ok(Solution::Contradictory(ResolveContradiction::Stereo(
-                StereoResolveContradiction::Inconsistency(
-                    StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }
-                )
+                StereoContradiction::Inconsistency(StereoInconsistency::TetrahedralStereoFailure {
+                    atom: AtomId(0)
+                })
             )))
         );
         assert_eq!(molecule, original);
@@ -2385,7 +2383,7 @@ mod tests {
                     [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]
                     [4 5 "1#c0#u0#s"] [5 0 "1#c0#u0#s"]]
         }"#),
-        ResolveContradiction::Stereo(StereoResolveContradiction::Inconsistency(
+        ResolveContradiction::Stereo(StereoContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }
         ))
     )]
@@ -2599,7 +2597,7 @@ mod tests {
             &TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
         );
         assert_eq!(
-            StereoPerception::new(&model.stereo)
+            StereoPerceiver::new(&model.stereo)
                 .derive_stereo_atom(&molecule, AtomId(1), &StereoCoset::Lit(0))
                 .map(|(ligands, _)| ligands),
             Some(ligands)

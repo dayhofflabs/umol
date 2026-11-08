@@ -14,3 +14,17 @@ pub use completion::{AtomCompletions, ResolveReport};
 pub use counts::{CountsError, CountsMismatch, CountsValence};
 pub use registry::AtomTypeRegistry;
 pub use table::{ValenceEntry, ValenceTable};
+use thiserror::Error;
+
+use crate::ops::validate::IncidenceConstraintInvariantsContradiction;
+
+/// A contradiction encountered during valence admission.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ValenceContradiction {
+    #[error(transparent)]
+    Constraint(#[from] IncidenceConstraintInvariantsContradiction),
+    #[error(transparent)]
+    AtomTyping(#[from] AtomTypingError),
+    #[error(transparent)]
+    Counts(#[from] CountsError),
+}

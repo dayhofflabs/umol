@@ -7,25 +7,13 @@ use umol_utils::solution::Solution;
 
 use crate::ops::model::{ValenceCandidateSource, ValenceModel, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
-use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
-use crate::ops::validate::{
-    DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
-};
+use crate::ops::valence::{AtomTypingValence, CountsValence, ValenceContradiction};
+use crate::ops::validate::{DerivedKind, IncidenceConstraintInvariantsValidator};
 
 #[derive(Clone, Debug)]
 pub enum ValenceResolver<'a> {
     AtomTyping(AtomTypingValence<'a>),
     Counts(CountsValence<'a>),
-}
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ValenceContradiction {
-    #[error(transparent)]
-    Constraint(#[from] IncidenceConstraintInvariantsContradiction),
-    #[error(transparent)]
-    AtomTyping(#[from] AtomTypingError),
-    #[error(transparent)]
-    Counts(#[from] CountsError),
 }
 
 /// Operational failures of valence admission; currently uninhabited —
@@ -139,7 +127,10 @@ mod tests {
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
-    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, ValenceTable};
+    use crate::ops::valence::{
+        AtomCompletions, AtomTypeRegistry, AtomTypingError, CountsError, ValenceTable,
+    };
+    use crate::ops::validate::IncidenceConstraintInvariantsContradiction;
 
     #[rstest]
     fn test_valence_resolver_new() {

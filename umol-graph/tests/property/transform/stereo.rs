@@ -21,7 +21,7 @@ use proptest::test_runner::{Config, TestRunner};
 use rstest::rstest;
 use umol_graph::ops::model::StereoModel;
 use umol_graph::ops::stereo::{
-    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection, StereoSite,
+    StereoInconsistency, StereoPerceiver, StereoPerceptionError, StereoSelection, StereoSite,
 };
 use umol_graph::ops::transform::{
     AddStereoConfig, AddStereoError, EnumerateStereoConfig, EnumerateStereoError,
@@ -54,7 +54,7 @@ enum ConfigurationCase {
 }
 
 #[rstest]
-fn test_stereo_perception_classify_transport() {
+fn test_stereo_perceiver_classify_transport() {
     TestRunner::new(Config {
         failure_persistence: None,
         ..Config::default()
@@ -66,7 +66,7 @@ fn test_stereo_perception_classify_transport() {
             .iter()
             .map(|info| (info.site, info.class))
             .collect();
-        let perception = StereoPerception::new(&StereoModel::default());
+        let perception = StereoPerceiver::new(&StereoModel::default());
         prop_assert_eq!(
             perception.classify(&case.source, &sites, AutomorphismAlgorithm::Nauty),
             Ok(expected.clone())
@@ -1154,7 +1154,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
         };
         let error = EnumerateStereoError::Perception(cause.clone());
         prop_assert_eq!(
-            StereoPerception::new(&StereoModel::default()).classify(
+            StereoPerceiver::new(&StereoModel::default()).classify(
                 &source,
                 &BTreeSet::from([info.site]),
                 AutomorphismAlgorithm::Nauty

@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
     StereoKind, Stereogenicity, TetrahedralStereoForm,
 };
 
-use super::{StereoDerivation, StereoInconsistency, StereoPerception, StereoSelection, StereoSite};
+use super::{StereoDerivation, StereoInconsistency, StereoPerceiver, StereoSelection, StereoSite};
 
 /// A stereo query cannot interpret the selected input or requested processing.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -35,7 +35,7 @@ pub enum StereoPerceptionError {
     Inconsistency(#[from] StereoInconsistency),
 }
 
-impl StereoPerception {
+impl StereoPerceiver {
     /// Recognize selected missing tetrahedral atoms and cis/trans bonds.
     ///
     /// Positive source evidence supplies the configuration; otherwise the coset
@@ -587,10 +587,7 @@ fn check_site(molecule: &Molecule, site: StereoSite) -> Result<(), StereoPercept
     }
 }
 
-fn check_kind(
-    perception: &StereoPerception,
-    kind: StereoKind,
-) -> Result<(), StereoPerceptionError> {
+fn check_kind(perception: &StereoPerceiver, kind: StereoKind) -> Result<(), StereoPerceptionError> {
     if !matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans) {
         return Err(StereoPerceptionError::UnsupportedKind { kind });
     }

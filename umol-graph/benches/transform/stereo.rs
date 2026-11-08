@@ -9,7 +9,7 @@ use std::hint::black_box;
 use criterion::{BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ops::model::StereoModel;
-use umol_graph::ops::stereo::{StereoDerivation, StereoPerception, StereoSelection, StereoSite};
+use umol_graph::ops::stereo::{StereoDerivation, StereoPerceiver, StereoSelection, StereoSite};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
@@ -247,7 +247,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
     }
 
     let model = StereoModel::default();
-    let perception = StereoPerception::new(&model);
+    let perception = StereoPerceiver::new(&model);
     let config = GraphSymmetryConfig {
         coloring: ConstitutionColoring::full(),
         iterate_to_fixpoint: model.para_stereo,

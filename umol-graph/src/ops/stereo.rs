@@ -1,6 +1,6 @@
 //! Stereo sites, selection, and structural perception.
 //!
-//! [`StereoPerception`] realizes `#T`/`#C` evidence, recognizes missing
+//! [`StereoPerceiver`] realizes `#T`/`#C` evidence, recognizes missing
 //! tetrahedral and cis/trans entities, and classifies existing arrangements.
 //! Resolver inconsistency policy and edit construction remain separate.
 
@@ -125,6 +125,13 @@ pub enum StereoInconsistency {
     },
 }
 
+/// A stereo inconsistency rejected by an operation.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum StereoContradiction {
+    #[error("stereo inconsistency: {0}")]
+    Inconsistency(#[from] StereoInconsistency),
+}
+
 /// Stereo evidence, recognition, and classification under a selected chemistry model.
 ///
 /// derive realizes #T/#C evidence and checks stored arrangements; recognize
@@ -134,11 +141,11 @@ pub enum StereoInconsistency {
 /// separate from these read-only results. A stored arrangement may be symmetric
 /// or prochiral, independently of its configuration being determined.
 #[derive(Clone, Debug)]
-pub struct StereoPerception {
+pub struct StereoPerceiver {
     model: StereoModel,
 }
 
-impl StereoPerception {
+impl StereoPerceiver {
     /// Capture a snapshot of the supplied stereo model.
     pub fn new(model: &StereoModel) -> Self {
         Self {
@@ -999,12 +1006,12 @@ mod tests {
             inconsistencies: vec![],
         },
     )]
-    fn test_stereo_perception_derive(
+    fn test_stereo_perceiver_derive(
         #[case] molecule: Molecule,
         #[case] expected: StereoDerivation,
     ) {
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive(&molecule),
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
             expected
         );
     }
@@ -1098,12 +1105,12 @@ mod tests {
             ..StereoDerivation::default()
         },
     )]
-    fn test_stereo_perception_derive_evidence(
+    fn test_stereo_perceiver_derive_evidence(
         #[case] molecule: Molecule,
         #[case] expected: StereoDerivation,
     ) {
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive(&molecule),
+            StereoPerceiver::new(&StereoModel::default()).derive(&molecule),
             expected,
         );
     }
@@ -1169,13 +1176,13 @@ mod tests {
         }"#),
         None,
     )]
-    fn test_stereo_perception_derive_stereo_atom(
+    fn test_stereo_perceiver_derive_stereo_atom(
         #[case] model: StereoModel,
         #[case] molecule: Molecule,
         #[case] expected: Option<(Vec<StereoLigand>, StereoAtomForm)>,
     ) {
         assert_eq!(
-            StereoPerception::new(&model).derive_stereo_atom(
+            StereoPerceiver::new(&model).derive_stereo_atom(
                 &molecule,
                 AtomId(1),
                 &StereoCoset::Lit(1),
@@ -1226,7 +1233,7 @@ mod tests {
     #[case::extra_hydrogen(4, 1, 0, None)]
     #[case::extra_lone_pair(4, 0, 1, None)]
     #[case::extra_virtual_ligand(3, 1, 1, None)]
-    fn test_stereo_perception_derive_stereo_atom_ligands(
+    fn test_stereo_perceiver_derive_stereo_atom_ligands(
         #[case] neighbors: u32,
         #[case] hydrogens: i64,
         #[case] lone_pairs: i64,
@@ -1251,7 +1258,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive_stereo_atom(
+            StereoPerceiver::new(&StereoModel::default()).derive_stereo_atom(
                 &molecule,
                 AtomId(0),
                 &coset
@@ -1263,7 +1270,7 @@ mod tests {
     #[rstest]
     #[case::hydrogens(true)]
     #[case::lone_pairs(false)]
-    fn test_stereo_perception_derive_stereo_atom_count(
+    fn test_stereo_perceiver_derive_stereo_atom_count(
         #[case] hydrogen_count: bool,
         #[values(3u32, 4)] neighbors: u32,
         #[values(NumForm::Lit(-1), NumForm::Lit(2), NumForm::Undetermined, NumForm::RangeFrom(0))]
@@ -1291,7 +1298,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive_stereo_atom(
+            StereoPerceiver::new(&StereoModel::default()).derive_stereo_atom(
                 &molecule,
                 AtomId(0),
                 &StereoCoset::Undetermined
@@ -1352,13 +1359,13 @@ mod tests {
         }"#),
         None,
     )]
-    fn test_stereo_perception_derive_stereo_bond(
+    fn test_stereo_perceiver_derive_stereo_bond(
         #[case] model: StereoModel,
         #[case] molecule: Molecule,
         #[case] expected: Option<(Vec<StereoLigand>, StereoBondForm)>,
     ) {
         assert_eq!(
-            StereoPerception::new(&model).derive_stereo_bond(
+            StereoPerceiver::new(&model).derive_stereo_bond(
                 &molecule,
                 BondId(1),
                 &StereoCoset::Lit(1),
@@ -1425,13 +1432,13 @@ mod tests {
         }"#),
         None,
     )]
-    fn test_stereo_perception_derive_stereo_bond_ligands(
+    fn test_stereo_perceiver_derive_stereo_bond_ligands(
         #[case] molecule: Molecule,
         #[case] expected: Option<Vec<StereoLigand>>,
         #[values(StereoCoset::Undetermined, StereoCoset::Lit(1))] coset: StereoCoset,
     ) {
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive_stereo_bond(
+            StereoPerceiver::new(&StereoModel::default()).derive_stereo_bond(
                 &molecule,
                 BondId(0),
                 &coset
@@ -1443,7 +1450,7 @@ mod tests {
     #[rstest]
     #[case::hydrogens(true)]
     #[case::lone_pairs(false)]
-    fn test_stereo_perception_derive_stereo_bond_count(
+    fn test_stereo_perceiver_derive_stereo_bond_count(
         #[case] hydrogen_count: bool,
         #[values(AtomId(0), AtomId(1))] endpoint: AtomId,
         #[values(1u32, 2)] neighbors: u32,
@@ -1469,7 +1476,7 @@ mod tests {
             atom.attributes_mut().lone_pairs = count;
         }
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive_stereo_bond(
+            StereoPerceiver::new(&StereoModel::default()).derive_stereo_bond(
                 &molecule,
                 BondId(0),
                 &StereoCoset::Undetermined

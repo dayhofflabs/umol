@@ -18,7 +18,7 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0, S1, and S2a
+This records the selected design direction and its consequences. S0, S1, and S2a–S2b
 are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
 interfaces, and names below are the working design. S2 records the revised
 perception/resolution proposal; it is provisional, not final design approval.
@@ -520,6 +520,7 @@ implementation, documentation, fixtures, or exhaustive matches.
 | Same | StereoResolver::new, with_config, plan_resolve, resolve, resolve_into | Retain construction; resolution returns Solution directly, without the outer Result. Add missing requested entities and replace Virtual kinds on retained entities. |
 | Same | StereoResolver::plan_project, project, project_into | Keep names; remove the receiver and return the direct Result shapes recorded above. |
 | Same | StereoProjectError | Retain UnsupportedStereoAtom, UnsupportedStereoBond, AtomAssertion and BondAssertion; remove StereoAtomFrame and StereoBondFrame. |
+| umol-graph/src/ops/valence.rs and ops/resolve/valence.rs | ValenceContradiction | Move the definition to ops::valence, matching AromaticityContradiction and StereoContradiction in their domain modules. Preserve variants, conversions, and messages; migrate imports and remove the former resolver re-export. |
 | umol-graph/src/ops/resolve.rs | ProjectFlags, ProjectError, ProjectContradiction | Remove STEREO, Stereo and Stereo respectively. Retain non-stereo flags and variants; aggregate projection preserves stereo entities. Remove the uninhabited ResolveError::Stereo; retain ResolveContradiction::Stereo with the renamed payload. |
 | umol-graph/src/ops/stereo.rs | StereoPerception; derive; StereoDerivation::stereo_atoms / stereo_bonds | Rename the actor to StereoPerceiver. derive returns Solution explicitly; retain row types for completed stored frames and requested additions. |
 | Same | StereoPerceiver::skipped_stereo_bonds; StereoDerivation::skipped_stereo_bonds | Remove both surfaces in S2g. |
@@ -783,7 +784,7 @@ pass together. Configuration-bearing site forms still exist at this point.
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
 **Working proposal — 2026-11-08.** Recorded for continuation, not final design
-approval. S2a is complete; implementation of the remaining subitems awaits
+approval. S2a–S2b are complete; implementation of the remaining subitems awaits
 explicit instruction. Record completion and verification under each subitem.
 
 Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
@@ -887,12 +888,17 @@ until S3; ring suppression remains until S2g.
   fails on type_complexity in the unfinished virtual-ligand identification code
   in umol-graph/src/ops/stereo.rs; that code is outside this subitem and unchanged.
 
-- **S2b — Rename the Rust actor and share the contradiction type** — breaking (red→green).
+- **S2b — Rename the Rust actor and align domain contradiction types** — breaking (red→green).
   Modules: umol-graph/src/ops/stereo.rs,
   umol-graph/src/ops/stereo/recognize.rs, umol-graph/src/ops/resolve/stereo.rs,
+  umol-graph/src/ops/valence.rs, umol-graph/src/ops/resolve/valence.rs,
   umol-graph/src/ops/resolve.rs, umol-graph/src/ops/validate/stereo.rs,
   umol-graph/src/ops/transform/stereo.rs, umol-graph/src/ingest.rs,
-  umol-graph/benches/transform/stereo.rs, and their tests.
+  umol-graph/benches/transform/stereo.rs,
+  umol-graph/tests/property/stereo.rs,
+  umol-graph/tests/property/transform/stereo.rs,
+  docs/development/data-types.md, docs/development/nomenclature.md,
+  and the owning unit tests.
   [dep: S2a]
 
   Rename StereoPerception to StereoPerceiver throughout Rust callers and
@@ -902,6 +908,32 @@ until S3; ring suppression remains until S2g.
   diagnostics; add no selectors, query methods, or compatibility aliases.
   Run the affected perception, transformer, and resolver cases with the
   renamed symbols.
+
+  Use one placement convention for the parallel domain contradiction types:
+  ValenceContradiction in ops::valence, AromaticityContradiction in
+  ops::aromaticity, and StereoContradiction in ops::stereo. Move
+  ValenceContradiction from the resolver and migrate its consumers, preserving
+  its variants and conversions. Remove its former resolver re-export.
+
+  **Completed — 2026-11-08.** Renamed the actor to StereoPerceiver throughout
+  Rust code, rustdoc, tests, properties, and the benchmark caller. Moved the
+  renamed StereoContradiction to ops/stereo.rs and ValenceContradiction to
+  ops/valence.rs, matching AromaticityContradiction's existing placement.
+  Migrated resolver and ingest imports and documented the convention in the
+  nomenclature guide. Retained the wrappers, their messages and variants, and
+  the existing query/operation result shapes. StereoPerceptionError is
+  unchanged; no compatibility aliases or re-exports were added.
+
+  Validation passed: graph library, property, and resolution suites with
+  `cargo test -p umol-graph --features proptest,conformance --lib --test property
+  --test resolution --quiet`; all targets, including benchmarks, with
+  `cargo check -p umol-graph --all-targets --features proptest,conformance`;
+  and 1,773 Rust binding tests with two ignored on Python 3.13.16. Formatting
+  and `git diff --check` passed. Review against the pre-subitem source confirmed
+  that changes are limited to the two renames, type relocations, imports,
+  documentation, and formatting; method bodies and test assertions are preserved.
+  The type_complexity lint recorded under S2a remains in the unchanged
+  virtual-ligand identification implementation.
 
 - **S2c — Derive identified frames and explicit underdetermination** — breaking (red until S2d).
   Modules: umol-graph/src/ops/stereo.rs and its tests. [dep: S2b]

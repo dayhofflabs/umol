@@ -523,6 +523,10 @@ it is a receiver, never an argument.
 A **contradiction** is a semantic rejection represented by `Solution::Contradictory`. Validators have
 no recovery policy: every determined failure or mismatch in their scope becomes a contradiction.
 
+ValenceContradiction, AromaticityContradiction, and StereoContradiction live in their corresponding
+ops domain modules: ops::valence, ops::aromaticity, and ops::stereo. ResolveContradiction aggregates
+them in ops::resolve. Keep the placement consistent across these parallel APIs.
+
 **Not:** error (operational, outside `Solution`), failure or inconsistency (policy-free
 classifications that a resolver may still act on).
 **In code:** `Solution::Contradictory`, `*Contradiction`.

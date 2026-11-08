@@ -11,7 +11,7 @@ use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
-use crate::ops::stereo::{StereoInconsistency, StereoPerception};
+use crate::ops::stereo::{StereoInconsistency, StereoPerceiver};
 
 /// Operational configuration for stereo-conformance validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,7 +104,7 @@ impl StereoConformanceValidator {
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<(), StereoConformanceContradiction>, StereoConformanceError> {
-        let derivation = StereoPerception::new(&self.model).derive(molecule);
+        let derivation = StereoPerceiver::new(&self.model).derive(molecule);
         for &inconsistency in &derivation.inconsistencies {
             let asserted = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. }
