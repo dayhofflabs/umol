@@ -37,7 +37,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [9 10 :single]
         [10 11 :double]
         [10 12 :single]
-        [12 13 :double]
+        [12 13 "2#C0"]
         [13 14 :single]
         [14 15 :double]
         [14 16 :single]]}
@@ -127,7 +127,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [9 10 :single]
         [10 11 :double]
         [10 12 :single]
-        [12 13 :double]
+        [12 13 "2#C0"]
         [13 14 :single]
         [14 15 :double]
         [14 16 :single]]}

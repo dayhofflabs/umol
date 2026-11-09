@@ -328,15 +328,17 @@ per input format. It introduces no additional interpretation in the binding.
 
 ### Resolution
 
-StereoResolveConfig exposes the Rust fields stereo_atom_failure and stereo_bond_failure
-as keyword-only constructor arguments and immutable properties. Both default to
-StereoFailurePolicy.Error. stereo_atom_failure covers unrealizable tetrahedral
-constraints and stored stereo atoms; stereo_bond_failure covers unrealizable cis/trans
-constraints and stored stereo bonds. Error rejects, Keep retains the failed description,
-and Remove clears the failed constraint or removes the failed entity. Ambiguity remains
-Underdetermined under every policy; mismatches are always Contradictory. The repr lists
-these two fields. Supplying tetrahedral_stereo_failure or cis_trans_stereo_failure
-raises TypeError.
+StereoResolveConfig exposes stereo_atom_failure, stereo_bond_failure, and
+ring_config as keyword-only constructor arguments and immutable properties.
+Both failure policies default to StereoFailurePolicy.Error; RingConfig uses
+its Rust default. stereo_atom_failure covers unrealizable tetrahedral constraints
+and stored stereo atoms; stereo_bond_failure covers unrealizable cis/trans
+constraints and stored stereo bonds. Error rejects, Keep retains the failed
+description, and Remove clears the failed constraint or removes the failed entity.
+Ambiguity remains Underdetermined under every policy; mismatches are always
+Contradictory. Ring-size admissibility comes from StereoModel. The repr includes
+all three fields. Former failure-policy and operation-level ring-size keywords
+raise TypeError.
 
 Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
 molecule; Underdetermined is payload-free and Contradictory contains its diagnostic. Planning errors
@@ -452,8 +454,17 @@ information they have without calculating missing values in the binding.
 AddStereoConfig, RemoveStereoConfig, and EnumerateStereoConfig expose the corresponding
 Rust fields through immutable properties. Keyword-only construction supplies Rust defaults
 for omitted configuration fields. selection=None selects the operation's default selection;
-an explicit StereoSelection() supplies unrestricted filters. AddStereoConfig also exposes
-ring_config, and RemoveStereoConfig exposes mode. All three expose automorphism_algorithm.
+an explicit StereoSelection() supplies unrestricted filters. All three expose
+automorphism_algorithm and para_stereo_max_iterations. The iteration limit defaults
+to 16, accepts the u32 range, and is forwarded to every symmetry path, including
+both enumeration classification and assignment checks. AddStereoConfig also
+exposes ring_config; RemoveStereoConfig exposes mode.
+
+StereoModel owns stereo_bond_min_ring_size, defaulting to 8; zero imposes no
+ring-size restriction. Model construction, getters, conversion, equality, and repr
+preserve it. Addition and resolution use the selected model when creating missing
+stereo and retain existing descriptions and filtered assertions.
+
 RemoveStereoMode.All and RemoveStereoMode.Undetermined preserve the Rust matching predicate:
 Undetermined accepts only an explicitly undetermined coset of a known kind, including kinds
 that perception does not process. Its matches method accepts StereoConfigurationForm.

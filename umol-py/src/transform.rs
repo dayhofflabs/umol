@@ -90,11 +90,12 @@ pub struct AddStereoConfig(GraphAddStereoConfig);
 #[pymethods]
 impl AddStereoConfig {
     #[new]
-    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), ring_config=None))]
+    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), ring_config=None, para_stereo_max_iterations=16))]
     fn new(
         selection: Option<&StereoSelection>,
         automorphism_algorithm: AutomorphismAlgorithm,
         ring_config: Option<RingConfig>,
+        para_stereo_max_iterations: u32,
     ) -> Self {
         Self::from_rust(GraphAddStereoConfig {
             selection: selection.map_or_else(
@@ -103,6 +104,7 @@ impl AddStereoConfig {
             ),
             automorphism_algorithm: automorphism_algorithm.to_rust(),
             ring_config: ring_config.unwrap_or_default().to_rust(),
+            para_stereo_max_iterations,
         })
     }
 
@@ -120,12 +122,18 @@ impl AddStereoConfig {
         RingConfig::from_rust(self.to_rust().ring_config)
     }
 
+    #[getter]
+    fn para_stereo_max_iterations(&self) -> u32 {
+        self.to_rust().para_stereo_max_iterations
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "AddStereoConfig(selection={}, automorphism_algorithm={}, ring_config={})",
+            "AddStereoConfig(selection={}, automorphism_algorithm={}, ring_config={}, para_stereo_max_iterations={})",
             self.selection().__repr__(py)?,
             self.automorphism_algorithm().repr(),
-            self.ring_config().__repr__()
+            self.ring_config().__repr__(),
+            self.para_stereo_max_iterations(),
         ))
     }
 }
@@ -147,11 +155,12 @@ pub struct RemoveStereoConfig(GraphRemoveStereoConfig);
 #[pymethods]
 impl RemoveStereoConfig {
     #[new]
-    #[pyo3(signature = (*, selection=None, mode=RemoveStereoMode::All, automorphism_algorithm=AutomorphismAlgorithm::Nauty()))]
+    #[pyo3(signature = (*, selection=None, mode=RemoveStereoMode::All, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), para_stereo_max_iterations=16))]
     fn new(
         selection: Option<&StereoSelection>,
         mode: RemoveStereoMode,
         automorphism_algorithm: AutomorphismAlgorithm,
+        para_stereo_max_iterations: u32,
     ) -> Self {
         Self::from_rust(GraphRemoveStereoConfig {
             selection: selection.map_or_else(
@@ -160,6 +169,7 @@ impl RemoveStereoConfig {
             ),
             mode: mode.to_rust(),
             automorphism_algorithm: automorphism_algorithm.to_rust(),
+            para_stereo_max_iterations,
         })
     }
 
@@ -177,8 +187,13 @@ impl RemoveStereoConfig {
         RemoveStereoMode::from_rust(self.to_rust().mode)
     }
 
+    #[getter]
+    fn para_stereo_max_iterations(&self) -> u32 {
+        self.to_rust().para_stereo_max_iterations
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(format!("RemoveStereoConfig(selection={}, mode=RemoveStereoMode.{:?}, automorphism_algorithm={})", self.selection().__repr__(py)?, self.mode(), self.automorphism_algorithm().repr()))
+        Ok(format!("RemoveStereoConfig(selection={}, mode=RemoveStereoMode.{:?}, automorphism_algorithm={}, para_stereo_max_iterations={})", self.selection().__repr__(py)?, self.mode(), self.automorphism_algorithm().repr(), self.para_stereo_max_iterations()))
     }
 }
 
@@ -199,10 +214,11 @@ pub struct EnumerateStereoConfig(GraphEnumerateStereoConfig);
 #[pymethods]
 impl EnumerateStereoConfig {
     #[new]
-    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::Nauty()))]
+    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), para_stereo_max_iterations=16))]
     fn new(
         selection: Option<&StereoSelection>,
         automorphism_algorithm: AutomorphismAlgorithm,
+        para_stereo_max_iterations: u32,
     ) -> Self {
         Self::from_rust(GraphEnumerateStereoConfig {
             selection: selection.map_or_else(
@@ -210,6 +226,7 @@ impl EnumerateStereoConfig {
                 |value| value.to_rust().clone(),
             ),
             automorphism_algorithm: automorphism_algorithm.to_rust(),
+            para_stereo_max_iterations,
         })
     }
 
@@ -222,11 +239,17 @@ impl EnumerateStereoConfig {
         AutomorphismAlgorithm::from_rust(self.to_rust().automorphism_algorithm)
     }
 
+    #[getter]
+    fn para_stereo_max_iterations(&self) -> u32 {
+        self.to_rust().para_stereo_max_iterations
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "EnumerateStereoConfig(selection={}, automorphism_algorithm={})",
+            "EnumerateStereoConfig(selection={}, automorphism_algorithm={}, para_stereo_max_iterations={})",
             self.selection().__repr__(py)?,
-            self.automorphism_algorithm().repr()
+            self.automorphism_algorithm().repr(),
+            self.para_stereo_max_iterations(),
         ))
     }
 }
@@ -300,9 +323,13 @@ mod tests {
         kinds: Some(BTreeSet::from([GraphIrStereoKind::SquarePlanar])),
         stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prochiral])),
     })]
-    fn test_add_stereo_config_from_rust(#[case] selection: GraphStereoSelection) {
+    fn test_add_stereo_config_from_rust(
+        #[case] selection: GraphStereoSelection,
+        #[values(1, 8, 25)] para_stereo_max_iterations: u32,
+    ) {
         let config = GraphAddStereoConfig {
             selection: selection.clone(),
+            para_stereo_max_iterations,
             ..Default::default()
         };
         let bound = AddStereoConfig::from_rust(config.clone());
@@ -313,6 +340,10 @@ mod tests {
             config.automorphism_algorithm
         );
         assert_eq!(bound.ring_config().to_rust(), config.ring_config);
+        assert_eq!(
+            bound.para_stereo_max_iterations(),
+            para_stereo_max_iterations
+        );
     }
 
     #[rstest]
@@ -323,10 +354,14 @@ mod tests {
         kinds: Some(BTreeSet::from([GraphIrStereoKind::SquarePlanar])),
         stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prochiral])),
     })]
-    fn test_remove_stereo_config_from_rust(#[case] selection: GraphStereoSelection) {
+    fn test_remove_stereo_config_from_rust(
+        #[case] selection: GraphStereoSelection,
+        #[values(1, 8, 25)] para_stereo_max_iterations: u32,
+    ) {
         let config = GraphRemoveStereoConfig {
             selection: selection.clone(),
             mode: GraphRemoveStereoMode::Undetermined,
+            para_stereo_max_iterations,
             ..Default::default()
         };
         let bound = RemoveStereoConfig::from_rust(config.clone());
@@ -337,6 +372,10 @@ mod tests {
             config.automorphism_algorithm
         );
         assert_eq!(bound.mode().to_rust(), config.mode);
+        assert_eq!(
+            bound.para_stereo_max_iterations(),
+            para_stereo_max_iterations
+        );
     }
 
     #[rstest]
@@ -347,13 +386,21 @@ mod tests {
         kinds: Some(BTreeSet::from([GraphIrStereoKind::SquarePlanar])),
         stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prochiral])),
     })]
-    fn test_enumerate_stereo_config_from_rust(#[case] selection: GraphStereoSelection) {
+    fn test_enumerate_stereo_config_from_rust(
+        #[case] selection: GraphStereoSelection,
+        #[values(1, 8, 25)] para_stereo_max_iterations: u32,
+    ) {
         let config = GraphEnumerateStereoConfig {
             selection: selection.clone(),
+            para_stereo_max_iterations,
             ..Default::default()
         };
         let bound = EnumerateStereoConfig::from_rust(config.clone());
         assert_eq!(bound.to_rust(), &config);
+        assert_eq!(
+            bound.para_stereo_max_iterations(),
+            para_stereo_max_iterations
+        );
         assert_eq!(bound.selection().to_rust(), &selection);
         assert_eq!(
             bound.automorphism_algorithm().to_rust(),

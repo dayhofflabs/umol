@@ -68,7 +68,7 @@ fn test_stereo_perceiver_classify_transport() {
             .collect();
         let perception = StereoPerceiver::new(&StereoModel::default());
         prop_assert_eq!(
-            perception.classify(&case.source, &sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&case.source, &sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(expected.clone())
         );
         let reframed = case
@@ -77,7 +77,7 @@ fn test_stereo_perceiver_classify_transport() {
             .reframe_by(&case.source.representative_action())
             .unwrap();
         prop_assert_eq!(
-            perception.classify(&reframed, &sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&reframed, &sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(expected)
         );
         let renamed = renumber(case.source.clone(), &case);
@@ -96,7 +96,7 @@ fn test_stereo_perceiver_classify_transport() {
             .collect();
         let renamed_sites = renamed_expected.keys().copied().collect();
         prop_assert_eq!(
-            perception.classify(&renamed, &renamed_sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&renamed, &renamed_sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(renamed_expected)
         );
         Ok(())
@@ -424,6 +424,7 @@ fn test_stereo_remover_transform(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
                     mode,
+                    para_stereo_max_iterations: 16,
                 },
             );
             let original = case.source.clone();
@@ -569,6 +570,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
                     mode,
+                    para_stereo_max_iterations: 16,
                 },
             )
             .transform(case.source.clone())
@@ -580,6 +582,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection: mapped_selection,
                     mode,
+                    para_stereo_max_iterations: 16,
                 },
             )
             .transform(mapped_source)
@@ -749,6 +752,7 @@ fn test_stereo_enumerator_transform() {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
+                    para_stereo_max_iterations: 16,
                 },
                 case.order.iter().map(|&i| case.sites[i].site).collect(),
             );
@@ -858,6 +862,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
+                    para_stereo_max_iterations: 16,
                 },
                 order,
             );
@@ -866,6 +871,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection: target_selection,
+                    para_stereo_max_iterations: 16,
                 },
                 target_order,
             );
@@ -1028,6 +1034,7 @@ fn test_transformer_transform_selection(#[case] atom: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
+                    para_stereo_max_iterations: 16,
                 },
                 Vec::new(),
             );
@@ -1157,7 +1164,8 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             StereoPerceiver::new(&StereoModel::default()).classify(
                 &source,
                 &BTreeSet::from([info.site]),
-                AutomorphismAlgorithm::Nauty
+                AutomorphismAlgorithm::Nauty,
+                16
             ),
             Err(cause.clone())
         );
@@ -1170,6 +1178,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             EnumerateStereoConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: selection.clone(),
+                para_stereo_max_iterations: 16,
             },
             vec![info.site],
         );
@@ -1211,6 +1220,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: selection.clone(),
                 mode: RemoveStereoMode::Undetermined,
+                para_stereo_max_iterations: 16,
             },
         );
         prop_assert_eq!(undetermined.transform(source.clone()), Ok(source.clone()));

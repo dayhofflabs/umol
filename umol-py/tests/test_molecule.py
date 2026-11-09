@@ -999,7 +999,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         stereo=StereoModel(
             kind_models={},
             para_stereo=False,
-            stereo_bond_minimum_ring_size=8,
+            stereo_bond_min_ring_size=8,
         ),
     )
 
@@ -1341,8 +1341,9 @@ def test_molecule_from_smiles_stereo(first, second, expected):
         ),
     ],
 )
-def test_molecule_from_smiles_stereo_frame(source, site, ligands, coset):
-    molecule = Molecule.from_smiles(source)
+@pytest.mark.parametrize("resolve", [False, True])
+def test_molecule_from_smiles_stereo_frame(source, site, ligands, coset, resolve):
+    molecule = Molecule.from_smiles(source, resolve=resolve)
     assert [
         (frame.site_id, frame.ligands, frame.kind, frame.coset)
         for frame in molecule.stereo_atoms
@@ -1366,9 +1367,42 @@ def test_molecule_from_smiles_stereo_frame(source, site, ligands, coset):
         ("C/C=C/C=C/C", [(1, StereoCoset.Lit(1)), (3, StereoCoset.Lit(1))]),
     ],
 )
-def test_molecule_from_smiles_bond_stereo(source, expected):
-    molecule = Molecule.from_smiles(source)
+@pytest.mark.parametrize("resolve", [False, True])
+def test_molecule_from_smiles_bond_stereo(source, expected, resolve):
+    molecule = Molecule.from_smiles(source, resolve=resolve)
     assert [(bond.site_id, bond.coset) for bond in molecule.stereo_bonds] == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "first", "second"),
+    [
+        ("F/C=C/F", StereoLigandKind.ImplicitHydrogen, StereoLigandKind.ImplicitHydrogen),
+        ("C/N=N/C", StereoLigandKind.LonePair, StereoLigandKind.LonePair),
+        ("C/C=N/O", StereoLigandKind.ImplicitHydrogen, StereoLigandKind.LonePair),
+        ("O/N=C/C", StereoLigandKind.LonePair, StereoLigandKind.ImplicitHydrogen),
+    ],
+)
+@pytest.mark.parametrize("resolve", [False, True])
+def test_molecule_from_smiles_bond_frame(source, first, second, resolve):
+    molecule = Molecule.from_smiles(source, resolve=resolve)
+    if not resolve:
+        first = second = StereoLigandKind.Virtual
+    assert [
+        (frame.site_id, frame.ligands, frame.kind, frame.coset)
+        for frame in molecule.stereo_bonds
+    ] == [
+        (
+            1,
+            (
+                StereoLigand(0, StereoLigandKind.Atom),
+                StereoLigand(1, first),
+                StereoLigand(3, StereoLigandKind.Atom),
+                StereoLigand(2, second),
+            ),
+            StereoKind.CisTrans,
+            StereoCoset.Lit(1),
+        )
+    ]
 
 
 @pytest.mark.parametrize(

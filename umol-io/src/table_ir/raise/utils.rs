@@ -45,7 +45,7 @@ pub(super) fn neighbor_count(neighbors: &AtomNeighbors, atom_idx: usize) -> usiz
     neighbors.degree(atom_idx as u32)
 }
 
-/// Ligand ordering used in tetrahedral stereo constraints (#T): neighbors ascending as `Atom`,
+/// Tetrahedral frame ordering: neighbors ascending as `Atom`,
 /// then at most one `Virtual`. More than one virtual ligand is disallowed by `validate_tetrahedral_geometry`.
 pub(super) fn tetrahedral_ligand_ordering(
     neighbors: &AtomNeighbors,
@@ -75,14 +75,14 @@ pub(super) fn coset_from_wedge_winding(
     } else {
         -1.0
     };
-    let center_position = positions[atom_idx];
+    let center_position = *positions.get(atom_idx)?;
     let neighbor_positions: Vec<Point3D> = ordering
         .iter()
         .filter_map(|&ligand| match ligand {
-            StereoLigand::Atom(index) => Some(positions[index]),
+            StereoLigand::Atom(index) => Some(positions.get(index).copied()),
             StereoLigand::Virtual(_) => None,
         })
-        .collect();
+        .collect::<Option<_>>()?;
     let virtual_position = complementary_direction(center_position, &neighbor_positions);
     let points: Vec<Point3D> = ordering
         .iter()

@@ -60,7 +60,8 @@ use crate::ops::validate::constraint::ConstraintInvariantsError;
 /// Site selection and algorithms for stereo addition.
 ///
 /// Default selects tetrahedral and cis/trans kinds, stereogenic sites only,
-/// and all topology sites. It uses Nauty and RingConfig::default().
+/// and all topology sites. It uses Nauty, RingConfig::default(), and up to
+/// sixteen symmetry refinement iterations when the model enables para stereo.
 ///
 /// Construction preserves the supplied selection without checking ids against
 /// a molecule. The executing operation checks ids before indexing or mutation.
@@ -69,6 +70,7 @@ pub struct AddStereoConfig {
     pub selection: StereoSelection,
     pub automorphism_algorithm: AutomorphismAlgorithm,
     pub ring_config: RingConfig,
+    pub para_stereo_max_iterations: u32,
 }
 
 impl Default for AddStereoConfig {
@@ -84,6 +86,7 @@ impl Default for AddStereoConfig {
             },
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             ring_config: RingConfig::default(),
+            para_stereo_max_iterations: 16,
         }
     }
 }
@@ -147,6 +150,7 @@ impl StereoAdder {
             &self.config.selection,
             self.config.automorphism_algorithm,
             self.config.ring_config,
+            self.config.para_stereo_max_iterations,
         )?;
         if let Some(&inconsistency) = derivation.inconsistencies.first() {
             return Err(inconsistency.into());
@@ -241,6 +245,7 @@ pub struct RemoveStereoConfig {
     pub selection: StereoSelection,
     pub mode: RemoveStereoMode,
     pub automorphism_algorithm: AutomorphismAlgorithm,
+    pub para_stereo_max_iterations: u32,
 }
 
 impl Default for RemoveStereoConfig {
@@ -249,6 +254,7 @@ impl Default for RemoveStereoConfig {
             selection: StereoSelection::default(),
             mode: RemoveStereoMode::All,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            para_stereo_max_iterations: 16,
         }
     }
 }
@@ -360,9 +366,12 @@ impl StereoRemover {
             .map(|(site, _)| site)
             .collect();
         if let Some(classes) = &selection.stereogenicities {
-            let classifications =
-                self.perception
-                    .classify(molecule, &sites, self.config.automorphism_algorithm)?;
+            let classifications = self.perception.classify(
+                molecule,
+                &sites,
+                self.config.automorphism_algorithm,
+                self.config.para_stereo_max_iterations,
+            )?;
             sites.retain(|site| classes.contains(&classifications[site]));
         }
 
@@ -474,6 +483,7 @@ impl Transformer for StereoRemover {
 pub struct EnumerateStereoConfig {
     pub selection: StereoSelection,
     pub automorphism_algorithm: AutomorphismAlgorithm,
+    pub para_stereo_max_iterations: u32,
 }
 
 impl Default for EnumerateStereoConfig {
@@ -488,6 +498,7 @@ impl Default for EnumerateStereoConfig {
                 stereogenicities: None,
             },
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            para_stereo_max_iterations: 16,
         }
     }
 }
@@ -666,6 +677,7 @@ impl StereoEnumerator {
                     &normalized,
                     &sites,
                     self.config.automorphism_algorithm,
+                    self.config.para_stereo_max_iterations,
                 )?;
                 configurations.retain(|site, _| classes.contains(&classifications[site]));
             }
@@ -714,7 +726,7 @@ impl StereoEnumerator {
             symmetry_config: GraphSymmetryConfig {
                 coloring: ConstitutionColoring::full(),
                 iterate_to_fixpoint: self.model.para_stereo,
-                max_iterations: 16,
+                max_iterations: self.config.para_stereo_max_iterations,
                 automorphism_algorithm: self.config.automorphism_algorithm,
             },
         })
@@ -902,6 +914,7 @@ mod tests {
                 },
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 ring_config: RingConfig::default(),
+                para_stereo_max_iterations: 16,
             },
         );
     }
@@ -1118,6 +1131,7 @@ mod tests {
                 },
                 mode: RemoveStereoMode::All,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                para_stereo_max_iterations: 16,
             },
         );
     }
@@ -1274,6 +1288,7 @@ mod tests {
                     stereogenicities: None,
                 },
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                para_stereo_max_iterations: 16,
             },
         );
     }

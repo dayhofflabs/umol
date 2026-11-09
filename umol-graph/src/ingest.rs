@@ -203,6 +203,7 @@ impl Interpret for ReactionSmiles {
 ///
 /// Applies format-owned defaults and preserves the raised graph-IR representation,
 /// including undetermined fields and constraints, without invoking a resolver.
+/// Stereo configurations are carried by explicit entities; unnamed ligand kinds remain Virtual.
 ///
 /// # Errors
 ///
@@ -371,9 +372,9 @@ mod tests {
     use umol_graph_core::{NodeId, Remapping};
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondId, BooleanForm, Canonicalize,
-        CanonicalizeContext, Deltas, ElectronCountsForm, Entity, MoleculeEntries,
-        MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset, StereoKind,
-        StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+        CanonicalizeContext, CisTransStereoForm, Deltas, ElectronCountsForm, Entity,
+        MoleculeEntries, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm,
+        StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
     use umol_io::table_ir::{AtomPair, BondConfiguration};
@@ -1295,6 +1296,53 @@ mod tests {
                 .map(|(site, coset)| (site, StereoBondForm::new(StereoKind::CisTrans, coset)))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[rstest]
+    #[case::alkene("F/C=C/F", [StereoLigandKind::ImplicitHydrogen, StereoLigandKind::ImplicitHydrogen])]
+    #[case::azo("C/N=N/C", [StereoLigandKind::LonePair, StereoLigandKind::LonePair])]
+    #[case::imine("C/C=N/O", [StereoLigandKind::ImplicitHydrogen, StereoLigandKind::LonePair])]
+    #[case::reverse_imine("O/N=C/C", [StereoLigandKind::LonePair, StereoLigandKind::ImplicitHydrogen])]
+    fn test_ingest_smiles_bond_frames(
+        #[case] input: &str,
+        #[case] virtual_kinds: [StereoLigandKind; 2],
+    ) {
+        let unresolved = ingest_smiles_unresolved(input).unwrap();
+        let resolved = ingest_smiles(input).unwrap();
+        for (molecule, kinds) in [
+            (unresolved, [StereoLigandKind::Virtual; 2]),
+            (resolved, virtual_kinds),
+        ] {
+            assert_eq!(
+                molecule
+                    .stereo_bonds()
+                    .iter()
+                    .map(|view| (
+                        view.site_id(),
+                        view.ligand_ids().to_vec(),
+                        view.attributes().clone(),
+                    ))
+                    .collect::<Vec<_>>(),
+                vec![(
+                    BondId(1),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), kinds[0]),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), kinds[1]),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
+                )]
+            );
+            assert_eq!(
+                molecule
+                    .bond(BondId(1))
+                    .attributes()
+                    .constraints
+                    .cis_trans_stereo(),
+                &CisTransStereoForm::Undetermined,
+            );
+        }
     }
 
     #[rstest]

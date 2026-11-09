@@ -8,8 +8,8 @@ use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondConstraintForm,
     BondConstraintKey, BondHandle, BondId, CisTransStereoForm, Edit, Edits, Lattice, Molecule,
-    Normalize, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset,
-    StereoKind, TetrahedralStereoForm,
+    Normalize, RingConfig, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId,
+    StereoCoset, StereoKind, TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -24,7 +24,7 @@ pub enum StereoFailurePolicy {
     Remove,
 }
 
-/// Recovery policies for unrealizable stereo descriptions, grouped by site kind.
+/// Ring-detection algorithms and recovery policies for structural stereo resolution.
 ///
 /// Ambiguity remains underdetermined under every policy. Mismatches are always contradictory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,6 +33,7 @@ pub struct StereoResolveConfig {
     pub stereo_atom_failure: StereoFailurePolicy,
     /// Policy for unrealizable cis/trans constraints and stored stereo bonds.
     pub stereo_bond_failure: StereoFailurePolicy,
+    pub ring_config: RingConfig,
 }
 
 impl Default for StereoResolveConfig {
@@ -40,6 +41,7 @@ impl Default for StereoResolveConfig {
         Self {
             stereo_atom_failure: StereoFailurePolicy::Error,
             stereo_bond_failure: StereoFailurePolicy::Error,
+            ring_config: RingConfig::default(),
         }
     }
 }
@@ -89,19 +91,21 @@ impl StereoResolver {
     /// Newly added entities discharge their site's tetrahedral or cis-trans assertion.
     /// Open configurations are carried into the added entities without selecting a coset.
     /// Retained entities do not discharge assertions. Discharge preserves other constraint keys.
+    /// Requests below the creation cutoff are retained under every failure policy.
     /// Identified virtual ligand kinds replace stored kinds in place, preserving frame order
     /// and all entity attributes. Keep retains a failed value; Remove clears its assertion or entity.
     /// Mismatched evidence is contradictory regardless of the failure policies.
     /// Established findings are checked before underdetermination. An underdetermined
     /// derivation produces an empty plan and publishes no partial changes.
     pub fn plan_resolve(&self, molecule: &Molecule) -> Solution<Edits, StereoContradiction> {
-        let (derivation, underdetermined) = match self.perception.derive(molecule) {
-            Solution::Determined(derivation) => (derivation, false),
-            Solution::Underdetermined(derivation) => (derivation, true),
-            Solution::Contradictory(contradiction) => {
-                return Solution::Contradictory(contradiction);
-            }
-        };
+        let (derivation, underdetermined) =
+            match self.perception.derive(molecule, self.config.ring_config) {
+                Solution::Determined(derivation) => (derivation, false),
+                Solution::Underdetermined(derivation) => (derivation, true),
+                Solution::Contradictory(contradiction) => {
+                    return Solution::Contradictory(contradiction);
+                }
+            };
         for &inconsistency in &derivation.inconsistencies {
             let error = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. } => {
@@ -196,10 +200,6 @@ impl StereoResolver {
                     unreachable!("mismatches were rejected before planning")
                 }
             }
-        }
-
-        for site in derivation.skipped_stereo_bonds {
-            remove_bond_constraints.insert(site);
         }
 
         if !remove_stereo_atoms.is_empty() {
@@ -654,6 +654,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: StereoFailurePolicy::Error,
                 stereo_bond_failure: StereoFailurePolicy::Error,
+                ring_config: Default::default(),
             }
         );
     }
@@ -763,32 +764,14 @@ mod tests {
             r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
         ),
-        Edits::from_iter([Edit::ModifyBondConstraints {
-            key: BondConstraintKey::CisTransStereo,
-            changes: vec![(
-                BondHandle::Id(BondId(1)),
-                Some(BondConstraintForm::CisTransStereo(
-                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-                )),
-                None,
-            )],
-        }]),
+        Edits::new(),
     )]
     #[case::cyclohexene_asserted_undetermined(
         mol_dsl_concrete!(
             r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
         ),
-        Edits::from_iter([Edit::ModifyBondConstraints {
-            key: BondConstraintKey::CisTransStereo,
-            changes: vec![(
-                BondHandle::Id(BondId(1)),
-                Some(BondConstraintForm::CisTransStereo(
-                    CisTransStereoForm::Stereo(StereoCoset::Undetermined),
-                )),
-                None,
-            )],
-        }]),
+        Edits::new(),
     )]
     fn test_stereo_resolver_plan_resolve(
         stereo_model: StereoModel,
@@ -843,30 +826,203 @@ mod tests {
             r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
         ),
-        Edits::from_iter([Edit::ModifyBondConstraints {
-            key: BondConstraintKey::CisTransStereo,
-            changes: vec![(
-                BondHandle::Id(BondId(2)),
-                Some(BondConstraintForm::CisTransStereo(
-                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
-                )),
-                None,
-            )],
-        }]),
+        Edits::new(),
     )]
-    fn test_stereo_resolver_plan_resolve_stereo_bond_minimum_ring_size(
-        #[case] stereo_bond_minimum_ring_size: u32,
+    fn test_stereo_resolver_plan_resolve_ring(
+        #[case] stereo_bond_min_ring_size: u32,
         #[case] molecule: Molecule,
         #[case] expected: Edits,
     ) {
-        let model = StereoModel {
-            stereo_bond_minimum_ring_size,
-            ..StereoModel::default()
-        };
+        let resolver = StereoResolver::with_config(
+            &StereoModel {
+                stereo_bond_min_ring_size,
+                ..Default::default()
+            },
+            StereoResolveConfig::default(),
+        );
         assert_eq!(
-            StereoResolver::new(&model).plan_resolve(&molecule),
+            resolver.plan_resolve(&molecule),
             Solution::Determined(expected)
         );
+    }
+
+    #[rstest]
+    #[case::boundary(Some(8), 8)]
+    #[case::disabled(Some(6), 0)]
+    #[case::large_boundary(Some(24), 24)]
+    #[case::acyclic(None, 64)]
+    fn test_stereo_resolver_resolve_ring(
+        #[case] ring_size: Option<u32>,
+        #[case] stereo_bond_min_ring_size: u32,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1))]
+        coset: StereoCoset,
+    ) {
+        let size = ring_size.unwrap_or(4);
+        let mut entries = MoleculeEntries {
+            atoms: (0..size)
+                .map(|id| {
+                    AtomForm::from_element(Element::C)
+                        .with_implicit_hydrogens(if id < 2 {
+                            1
+                        } else if ring_size.is_some() {
+                            2
+                        } else {
+                            3
+                        })
+                        .into_concrete()
+                })
+                .collect(),
+            bonds: if ring_size.is_some() {
+                (0..size)
+                    .map(|id| {
+                        (
+                            AtomId(id),
+                            AtomId((id + 1) % size),
+                            BondForm::from_order(if id == 0 { 2 } else { 1 }).into_concrete(),
+                        )
+                    })
+                    .collect()
+            } else {
+                vec![
+                    (
+                        AtomId(0),
+                        AtomId(1),
+                        BondForm::from_order(2).into_concrete(),
+                    ),
+                    (
+                        AtomId(0),
+                        AtomId(2),
+                        BondForm::from_order(1).into_concrete(),
+                    ),
+                    (
+                        AtomId(1),
+                        AtomId(3),
+                        BondForm::from_order(1).into_concrete(),
+                    ),
+                ]
+            },
+            ..Default::default()
+        };
+        let unasserted_bond = entries.bonds[0].2.clone();
+        entries.bonds[0].2 =
+            unasserted_bond
+                .clone()
+                .with_constraint(BondConstraintForm::cis_trans_stereo(
+                    CisTransStereoForm::Stereo(coset.clone()),
+                ));
+        let molecule = Molecule::from_entries(entries.clone());
+        entries.bonds[0].2 = unasserted_bond;
+        entries.stereo_bonds = vec![(
+            BondId(0),
+            vec![
+                StereoLigand::new(
+                    AtomId(if ring_size.is_some() { size - 1 } else { 2 }),
+                    StereoLigandKind::Atom,
+                ),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(
+                    AtomId(if ring_size.is_some() { 2 } else { 3 }),
+                    StereoLigandKind::Atom,
+                ),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, coset),
+        )];
+        let expected = Molecule::from_entries(entries);
+        let resolver = StereoResolver::with_config(
+            &StereoModel {
+                stereo_bond_min_ring_size,
+                ..Default::default()
+            },
+            StereoResolveConfig {
+                stereo_atom_failure: failure,
+                stereo_bond_failure: failure,
+                ring_config: RingConfig::default(),
+            },
+        );
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Solution::Determined(expected.clone())
+        );
+        let mut in_place = molecule;
+        assert_eq!(
+            resolver.resolve_into(&mut in_place),
+            Solution::Determined(())
+        );
+        assert_eq!(in_place, expected);
+    }
+
+    #[rstest]
+    #[case::small(6, 8)]
+    #[case::above(8, 9)]
+    #[case::large(24, 25)]
+    fn test_stereo_resolver_resolve_ring_identity(
+        #[case] size: u32,
+        #[case] stereo_bond_min_ring_size: u32,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1))]
+        coset: StereoCoset,
+    ) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: (0..size)
+                .map(|id| {
+                    AtomForm::from_element(Element::C)
+                        .with_implicit_hydrogens(if id < 2 { 1 } else { 2 })
+                        .into_concrete()
+                })
+                .collect(),
+            bonds: (0..size)
+                .map(|id| {
+                    let form = if id == 0 {
+                        BondForm::from_order(2).with_constraint(
+                            BondConstraintForm::cis_trans_stereo(CisTransStereoForm::Stereo(
+                                coset.clone(),
+                            )),
+                        )
+                    } else {
+                        BondForm::from_order(1)
+                    };
+                    (AtomId(id), AtomId((id + 1) % size), form.into_concrete())
+                })
+                .collect(),
+            ..Default::default()
+        });
+        let resolver = StereoResolver::with_config(
+            &StereoModel {
+                stereo_bond_min_ring_size,
+                ..Default::default()
+            },
+            StereoResolveConfig {
+                stereo_atom_failure: failure,
+                stereo_bond_failure: failure,
+                ring_config: RingConfig::default(),
+            },
+        );
+        assert_eq!(
+            resolver.plan_resolve(&molecule),
+            Solution::Determined(Edits::new())
+        );
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Solution::Determined(molecule.clone())
+        );
+        let mut in_place = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into(&mut in_place),
+            Solution::Determined(())
+        );
+        assert_eq!(in_place, molecule);
     }
 
     #[rstest]
@@ -911,14 +1067,100 @@ mod tests {
         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct*"}]
     }"#))]
+    #[case::small_ring_bond(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+        :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+    }"#))]
     fn test_stereo_resolver_plan_resolve_identity(
         stereo_model: StereoModel,
         #[case] molecule: Molecule,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+        #[values(0, 8, 64)] stereo_bond_min_ring_size: u32,
     ) {
+        let resolver = StereoResolver::with_config(
+            &StereoModel {
+                stereo_bond_min_ring_size,
+                ..stereo_model
+            },
+            StereoResolveConfig {
+                stereo_atom_failure: failure,
+                stereo_bond_failure: failure,
+                ring_config: RingConfig::default(),
+            },
+        );
         assert_eq!(
-            StereoResolver::new(&stereo_model).plan_resolve(&molecule),
+            resolver.plan_resolve(&molecule),
             Solution::Determined(Edits::new())
         );
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Solution::Determined(molecule)
+        );
+    }
+
+    #[rstest]
+    #[case::hydrogen(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:virt 1] 2 5 [:virt 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+        }"#),
+    )]
+    #[case::lone_pair(
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#n" "N#n" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:virt 1] 2 5 [:virt 0]] :attrs "Ct0"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#n" "N#n" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:lp 1] 2 5 [:lp 0]] :attrs "Ct0"}]
+        }"#),
+    )]
+    fn test_stereo_resolver_resolve_ring_virtual(
+        #[case] molecule: Molecule,
+        #[case] expected: Molecule,
+        #[values(0, 8, 64)] stereo_bond_min_ring_size: u32,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+    ) {
+        let resolver = StereoResolver::with_config(
+            &StereoModel {
+                stereo_bond_min_ring_size,
+                ..Default::default()
+            },
+            StereoResolveConfig {
+                stereo_atom_failure: failure,
+                stereo_bond_failure: failure,
+                ring_config: RingConfig::default(),
+            },
+        );
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Solution::Determined(expected.clone())
+        );
+        let mut in_place = molecule;
+        assert_eq!(
+            resolver.resolve_into(&mut in_place),
+            Solution::Determined(())
+        );
+        assert_eq!(in_place, expected);
     }
 
     #[rstest]
@@ -926,6 +1168,7 @@ mod tests {
         StereoResolveConfig {
             stereo_atom_failure: StereoFailurePolicy::Keep,
             stereo_bond_failure: StereoFailurePolicy::Error,
+            ring_config: Default::default(),
         },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
@@ -936,6 +1179,7 @@ mod tests {
         StereoResolveConfig {
             stereo_atom_failure: StereoFailurePolicy::Remove,
             stereo_bond_failure: StereoFailurePolicy::Error,
+            ring_config: Default::default(),
         },
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraints {
@@ -953,6 +1197,7 @@ mod tests {
         StereoResolveConfig {
             stereo_atom_failure: StereoFailurePolicy::Error,
             stereo_bond_failure: StereoFailurePolicy::Keep,
+            ring_config: Default::default(),
         },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
@@ -965,6 +1210,7 @@ mod tests {
         StereoResolveConfig {
             stereo_atom_failure: StereoFailurePolicy::Error,
             stereo_bond_failure: StereoFailurePolicy::Keep,
+            ring_config: Default::default(),
         },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
@@ -975,6 +1221,7 @@ mod tests {
         StereoResolveConfig {
             stereo_atom_failure: StereoFailurePolicy::Error,
             stereo_bond_failure: StereoFailurePolicy::Remove,
+            ring_config: Default::default(),
         },
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraints {
@@ -992,6 +1239,7 @@ mod tests {
         StereoResolveConfig {
             stereo_atom_failure: StereoFailurePolicy::Keep,
             stereo_bond_failure: StereoFailurePolicy::Error,
+            ring_config: Default::default(),
         },
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
@@ -1128,6 +1376,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: failure,
                 stereo_bond_failure: failure,
+                ring_config: Default::default(),
             },
         );
         let expected =
@@ -1167,6 +1416,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: failure,
                 stereo_bond_failure: failure,
+                ring_config: Default::default(),
             },
         );
         let expected =
@@ -1223,6 +1473,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: failure,
                 stereo_bond_failure: failure,
+                ring_config: Default::default(),
             },
         );
         assert_eq!(
@@ -1476,6 +1727,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: policy,
                 stereo_bond_failure: policy,
+                ring_config: Default::default(),
             },
         );
         let expected = if policy == StereoFailurePolicy::Remove {
@@ -1522,6 +1774,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure,
                 stereo_bond_failure,
+                ring_config: Default::default(),
             },
         );
         assert_eq!(
@@ -1600,6 +1853,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: policy,
                 stereo_bond_failure: policy,
+                ring_config: Default::default(),
             },
         );
         if recoverable && policy != StereoFailurePolicy::Error {
@@ -1705,6 +1959,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: policy,
                 stereo_bond_failure: policy,
+                ring_config: Default::default(),
             },
         );
         let expected = match outcome {
@@ -1842,6 +2097,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: StereoFailurePolicy::Remove,
                 stereo_bond_failure: StereoFailurePolicy::Remove,
+                ring_config: Default::default(),
             }
         } else {
             StereoResolveConfig::default()
@@ -1937,6 +2193,7 @@ mod tests {
             StereoResolveConfig {
                 stereo_atom_failure: policy,
                 stereo_bond_failure: policy,
+                ring_config: Default::default(),
             },
         );
         let original = molecule.clone();

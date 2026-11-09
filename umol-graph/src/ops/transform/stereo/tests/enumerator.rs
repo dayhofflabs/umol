@@ -103,11 +103,13 @@ fn test_stereo_enumerator_with_config(
     mixed_stereo: Molecule,
     #[case] selection: StereoSelection,
     #[case] values: Vec<(Option<u32>, Option<u32>)>,
+    #[values(1, 7, 16)] para_stereo_max_iterations: u32,
 ) {
     let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection,
+            para_stereo_max_iterations,
             ..Default::default()
         },
         vec![
@@ -116,6 +118,14 @@ fn test_stereo_enumerator_with_config(
             StereoSite::Atom(AtomId(99)),
             StereoSite::Bond(BondId(4)),
         ],
+    );
+    assert_eq!(
+        transformer
+            .prepare(&mixed_stereo)
+            .unwrap()
+            .symmetry_config
+            .max_iterations,
+        para_stereo_max_iterations,
     );
     let expected: Vec<_> = values
         .into_iter()
@@ -157,7 +167,6 @@ fn test_stereo_enumerator_with_config(
 fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
     let mut model = StereoModel {
         kind_models: [None, None, None, None, None, None],
-        stereo_bond_minimum_ring_size: 64,
         ..Default::default()
     };
     let transformer = StereoEnumerator::with_config(

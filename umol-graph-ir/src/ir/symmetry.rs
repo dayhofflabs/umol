@@ -23,7 +23,7 @@ use super::traits::AsLit;
 pub struct GraphSymmetryConfig<C: MoleculeColoring> {
     pub coloring: C,
     pub iterate_to_fixpoint: bool,
-    pub max_iterations: usize,
+    pub max_iterations: u32,
     pub automorphism_algorithm: AutomorphismAlgorithm,
 }
 
@@ -57,7 +57,7 @@ impl Molecule {
             .graph()
             .automorphisms(|node| base[node.index()], cfg.automorphism_algorithm);
         let mut orbits = orbit_vec(&auto, node_count);
-        let mut iterations = 0;
+        let mut iterations: u32 = 0;
         loop {
             iterations += 1;
             let colors: Vec<u64> = (0..node_count)

@@ -4,8 +4,9 @@ use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AsLit, BooleanForm, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig, Lattice,
-    LigandSymmetryForm, Molecule, StereoAtomId, StereoBondId, StereoLigandPair, StereoSymmetry,
-    Stereogenicity, StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
+    LigandSymmetryForm, Molecule, RingConfig, StereoAtomId, StereoBondId, StereoLigandPair,
+    StereoSymmetry, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
+    TopicityRelationForm,
 };
 use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
@@ -18,16 +19,16 @@ use crate::ops::stereo::{StereoContradiction, StereoInconsistency, StereoPerceiv
 pub struct StereoValidateConfig {
     /// Backend used for molecule graph-automorphism calculations.
     pub automorphism_algorithm: AutomorphismAlgorithm,
-    /// Maximum number of graph-symmetry refinement passes when the stereo
-    /// model enables para-stereo perception.
-    pub max_iterations: usize,
+    pub para_stereo_max_iterations: u32,
+    pub ring_config: RingConfig,
 }
 
 impl Default for StereoValidateConfig {
     fn default() -> Self {
         Self {
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            max_iterations: 16,
+            para_stereo_max_iterations: 16,
+            ring_config: RingConfig::default(),
         }
     }
 }
@@ -40,7 +41,7 @@ impl StereoValidateConfig {
         GraphSymmetryConfig {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: model.para_stereo,
-            max_iterations: self.max_iterations,
+            max_iterations: self.para_stereo_max_iterations,
             automorphism_algorithm: self.automorphism_algorithm,
         }
     }
@@ -107,7 +108,7 @@ impl StereoConformanceValidator {
         molecule: &Molecule,
     ) -> Result<Solution<(), StereoConformanceContradiction>, StereoConformanceError> {
         let (derivation, mut any_undetermined) =
-            match StereoPerceiver::new(&self.model).derive(molecule) {
+            match StereoPerceiver::new(&self.model).derive(molecule, self.config.ring_config) {
                 Solution::Determined(derivation) => (derivation, false),
                 Solution::Underdetermined(derivation) => (derivation, true),
                 Solution::Contradictory(StereoContradiction::Inconsistency(inconsistency)) => {
@@ -329,7 +330,8 @@ mod tests {
             StereoValidateConfig::default(),
             StereoValidateConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                max_iterations: 16,
+                para_stereo_max_iterations: 16,
+                ring_config: Default::default(),
             }
         );
     }
@@ -347,7 +349,8 @@ mod tests {
         };
         let config = StereoValidateConfig {
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            max_iterations: 8,
+            para_stereo_max_iterations: 8,
+            ring_config: Default::default(),
         }
         .graph_symmetry_config(&model);
 

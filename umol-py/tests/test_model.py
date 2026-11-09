@@ -1149,7 +1149,7 @@ def test_stereo_model_default():
         ),
     }
     assert model.para_stereo is False
-    assert model.stereo_bond_minimum_ring_size == 8
+    assert model.stereo_bond_min_ring_size == 8
     assert model == StereoModel.default()
 
 
@@ -1178,13 +1178,13 @@ def test_stereo_model_new():
     model = StereoModel(
         kind_models=kind_models,
         para_stereo=True,
-        stereo_bond_minimum_ring_size=10,
+        stereo_bond_min_ring_size=10,
     )
     kind_models.clear()
 
     assert model.kind_models == expected
     assert model.para_stereo is True
-    assert model.stereo_bond_minimum_ring_size == 10
+    assert model.stereo_bond_min_ring_size == 10
     for kind, kind_model in expected.items():
         assert model.kind_models[kind] is not kind_model
 
@@ -1196,7 +1196,7 @@ def test_stereo_model_kind_models():
     assert StereoModel(
         kind_models=kind_models,
         para_stereo=model.para_stereo,
-        stereo_bond_minimum_ring_size=model.stereo_bond_minimum_ring_size,
+        stereo_bond_min_ring_size=8,
     ) == model
     with pytest.raises(TypeError):
         kind_models[StereoKind.Tetrahedral] = kind_models[StereoKind.CisTrans]
@@ -1215,20 +1215,24 @@ def test_stereo_model_kind_models():
 
 def test_stereo_model_new_error():
     with pytest.raises(TypeError):
-        StereoModel({}, False)
+        StereoModel({}, False, stereo_bond_min_ring_size=8)
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("max_iterations", 8), ("inconsistency", "strip")],
+    [
+        ("max_iterations", 8),
+        ("inconsistency", "strip"),
+        ("stereo_bond_minimum_ring_size", 8),
+    ],
 )
 def test_stereo_model_new_field_error(field, value):
     with pytest.raises(TypeError):
         StereoModel(
             kind_models={},
             para_stereo=False,
-            stereo_bond_minimum_ring_size=8,
             **{field: value},
+            stereo_bond_min_ring_size=8,
         )
 
 
@@ -1238,7 +1242,7 @@ def test_stereo_model_new_field_error(field, value):
         StereoModel(
             kind_models={},
             para_stereo=False,
-            stereo_bond_minimum_ring_size=8,
+            stereo_bond_min_ring_size=8,
         ),
         StereoModel(
             kind_models={
@@ -1250,19 +1254,7 @@ def test_stereo_model_new_field_error(field, value):
                 ),
             },
             para_stereo=True,
-            stereo_bond_minimum_ring_size=8,
-        ),
-        StereoModel(
-            kind_models={
-                StereoKind.Tetrahedral: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
-                ),
-                StereoKind.CisTrans: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
-                ),
-            },
-            para_stereo=False,
-            stereo_bond_minimum_ring_size=0,
+            stereo_bond_min_ring_size=8,
         ),
     ],
 )
@@ -1286,13 +1278,13 @@ def test_stereo_model_equality(other):
                     ),
                 },
                 para_stereo=True,
-                stereo_bond_minimum_ring_size=8,
+                stereo_bond_min_ring_size=8,
             ),
             "StereoModel(kind_models={StereoKind.Tetrahedral: "
             "StereoKindModel(scope=ElementScope.Any(), fluxionality=False), "
             "StereoKind.Octahedral: StereoKindModel(scope="
             "ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, "
-            "para_stereo=True, stereo_bond_minimum_ring_size=8)",
+            "para_stereo=True, stereo_bond_min_ring_size=8)",
         ),
     ],
 )
@@ -1387,7 +1379,7 @@ def test_chemistry_model_new(valence):
     stereo = StereoModel(
         kind_models=StereoModel.default().kind_models,
         para_stereo=True,
-        stereo_bond_minimum_ring_size=8,
+        stereo_bond_min_ring_size=8,
     )
     connectivity = ConnectivityModel.default()
     model = ChemistryModel(
@@ -1463,7 +1455,7 @@ def test_chemistry_model_new_error():
             stereo=StereoModel(
                 kind_models={},
                 para_stereo=False,
-                stereo_bond_minimum_ring_size=8,
+                stereo_bond_min_ring_size=8,
             ),
         ),
     ],
@@ -1493,7 +1485,7 @@ def test_chemistry_model_equality(other):
                 stereo=StereoModel(
                     kind_models=StereoModel.default().kind_models,
                     para_stereo=True,
-                    stereo_bond_minimum_ring_size=8,
+                    stereo_bond_min_ring_size=8,
                 ),
             ),
             "ChemistryModel(connectivity=ConnectivityModel.default(), "
@@ -1508,7 +1500,7 @@ def test_chemistry_model_equality(other):
             "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
             "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="
             "ElementScope.Any(), fluxionality=False)}, para_stereo=True, "
-            "stereo_bond_minimum_ring_size=8))",
+            "stereo_bond_min_ring_size=8))",
         ),
     ],
 )
@@ -1542,7 +1534,7 @@ def test_chemistry_model_repr(model, expected):
             StereoModel(
                 kind_models={},
                 para_stereo=False,
-                stereo_bond_minimum_ring_size=8,
+                stereo_bond_min_ring_size=8,
             ),
         ),
     ],

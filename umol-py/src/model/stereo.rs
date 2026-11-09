@@ -85,17 +85,17 @@ const STEREO_KINDS: &[StereoKind] = &[
 pub struct StereoModel {
     kind_models: BTreeMap<StereoKind, StereoKindModel>,
     para_stereo: bool,
-    stereo_bond_minimum_ring_size: u32,
+    stereo_bond_min_ring_size: u32,
 }
 
 #[pymethods]
 impl StereoModel {
     #[new]
-    #[pyo3(signature = (*, kind_models, para_stereo, stereo_bond_minimum_ring_size))]
+    #[pyo3(signature = (*, kind_models, para_stereo, stereo_bond_min_ring_size))]
     fn new(
         kind_models: &Bound<'_, PyMapping>,
         para_stereo: bool,
-        stereo_bond_minimum_ring_size: u32,
+        stereo_bond_min_ring_size: u32,
     ) -> PyResult<Self> {
         Ok(Self {
             kind_models: kind_models
@@ -107,7 +107,7 @@ impl StereoModel {
                 })
                 .collect::<PyResult<_>>()?,
             para_stereo,
-            stereo_bond_minimum_ring_size,
+            stereo_bond_min_ring_size,
         })
     }
 
@@ -131,8 +131,8 @@ impl StereoModel {
     }
 
     #[getter]
-    fn stereo_bond_minimum_ring_size(&self) -> u32 {
-        self.stereo_bond_minimum_ring_size
+    fn stereo_bond_min_ring_size(&self) -> u32 {
+        self.stereo_bond_min_ring_size
     }
 
     pub(crate) fn __repr__(&self) -> String {
@@ -147,9 +147,9 @@ impl StereoModel {
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "StereoModel(kind_models={{{kind_models}}}, para_stereo={}, stereo_bond_minimum_ring_size={})",
+            "StereoModel(kind_models={{{kind_models}}}, para_stereo={}, stereo_bond_min_ring_size={})",
             if self.para_stereo { "True" } else { "False" },
-            self.stereo_bond_minimum_ring_size,
+            self.stereo_bond_min_ring_size,
         )
     }
 }
@@ -168,7 +168,7 @@ impl StereoModel {
         Self {
             kind_models,
             para_stereo: model.para_stereo,
-            stereo_bond_minimum_ring_size: model.stereo_bond_minimum_ring_size,
+            stereo_bond_min_ring_size: model.stereo_bond_min_ring_size,
         }
     }
 
@@ -184,7 +184,7 @@ impl StereoModel {
         GraphStereoModel {
             kind_models,
             para_stereo: self.para_stereo,
-            stereo_bond_minimum_ring_size: self.stereo_bond_minimum_ring_size,
+            stereo_bond_min_ring_size: self.stereo_bond_min_ring_size,
         }
     }
 }
@@ -315,7 +315,7 @@ mod tests {
                     ),
                 ]),
                 para_stereo: false,
-                stereo_bond_minimum_ring_size: 8,
+                stereo_bond_min_ring_size: 8,
             }
         );
     }
@@ -337,8 +337,8 @@ mod tests {
                         true,
                     ),
                 ),
-            ]), para_stereo: true, stereo_bond_minimum_ring_size: 8 },
-        "StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.Octahedral: StereoKindModel(scope=ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, para_stereo=True, stereo_bond_minimum_ring_size=8)"
+            ]), para_stereo: true, stereo_bond_min_ring_size: 8 },
+        "StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.Octahedral: StereoKindModel(scope=ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, para_stereo=True, stereo_bond_min_ring_size=8)"
     )]
     fn test_stereo_model_repr(#[case] model: StereoModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -374,7 +374,7 @@ mod tests {
                 }),
             ],
             para_stereo: true,
-            stereo_bond_minimum_ring_size: 10,
+            stereo_bond_min_ring_size: 10,
         };
 
         assert_eq!(
@@ -432,7 +432,7 @@ mod tests {
                     ),
                 ]),
                 para_stereo: true,
-                stereo_bond_minimum_ring_size: 10,
+                stereo_bond_min_ring_size: 10,
             }
         );
     }
@@ -492,7 +492,7 @@ mod tests {
                 ),
             ]),
             para_stereo: true,
-            stereo_bond_minimum_ring_size: 10,
+            stereo_bond_min_ring_size: 10,
         };
 
         assert_eq!(
@@ -525,7 +525,7 @@ mod tests {
                     }),
                 ],
                 para_stereo: true,
-                stereo_bond_minimum_ring_size: 10,
+                stereo_bond_min_ring_size: 10,
             }
         );
     }

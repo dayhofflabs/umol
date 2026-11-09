@@ -53,7 +53,7 @@ proptest! {
         prop_assert_eq!(perception.recognize(&molecule, &StereoSelection {
             sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
             kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), stereogenicities: Some(selected),
-        }, AutomorphismAlgorithm::Nauty, RingConfig::default()), Ok(expected));
+        }, AutomorphismAlgorithm::Nauty, RingConfig::default(), 16), Ok(expected));
         prop_assert_eq!(&molecule, &original);
 
         let mut editor = molecule.edit();
@@ -61,7 +61,7 @@ proptest! {
         let stored = editor.finish().unwrap();
         let original = stored.clone();
         prop_assert_eq!(perception.classify(&stored, &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty), Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), class)])));
+            AutomorphismAlgorithm::Nauty, 16), Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), class)])));
         prop_assert_eq!(stored, original);
     }
 
@@ -98,7 +98,7 @@ proptest! {
         prop_assert_eq!(perception.recognize(&molecule, &StereoSelection {
             sites: Some(BTreeSet::from([StereoSite::Bond(BondId(0))])),
             kinds: Some(BTreeSet::from([StereoKind::CisTrans])), stereogenicities: Some(selected),
-        }, AutomorphismAlgorithm::Nauty, RingConfig::default()), Ok(expected));
+        }, AutomorphismAlgorithm::Nauty, RingConfig::default(), 16), Ok(expected));
         prop_assert_eq!(&molecule, &original);
 
         let mut editor = molecule.edit();
@@ -106,7 +106,7 @@ proptest! {
         let stored = editor.finish().unwrap();
         let original = stored.clone();
         prop_assert_eq!(perception.classify(&stored, &BTreeSet::from([StereoSite::Bond(BondId(0))]),
-            AutomorphismAlgorithm::Nauty), Ok(BTreeMap::from([(StereoSite::Bond(BondId(0)), class)])));
+            AutomorphismAlgorithm::Nauty, 16), Ok(BTreeMap::from([(StereoSite::Bond(BondId(0)), class)])));
         prop_assert_eq!(stored, original);
     }
 }

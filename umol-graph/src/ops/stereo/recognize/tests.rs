@@ -231,7 +231,8 @@ fn test_stereo_perceiver_recognize(
             &molecule,
             &selection,
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(expected)
     );
@@ -283,7 +284,8 @@ fn test_stereo_perceiver_recognize_selection(
             &mixed_sites,
             &selection,
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(expected)
     );
@@ -340,7 +342,8 @@ fn test_stereo_perceiver_recognize_evidence(
                 ..Default::default()
             },
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(expected)
     );
@@ -363,7 +366,8 @@ fn test_stereo_perceiver_recognize_assertion(#[case] coset: StereoCoset) {
             &molecule,
             &StereoSelection::default(),
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(StereoDerivation {
             stereo_atoms: vec![(
@@ -400,7 +404,8 @@ fn test_stereo_perceiver_recognize_identity(#[case] molecule: Molecule) {
             &molecule,
             &StereoSelection::default(),
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(StereoDerivation::default())
     );
@@ -434,7 +439,8 @@ fn test_stereo_perceiver_recognize_inconsistency(
             &molecule,
             &StereoSelection::default(),
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(StereoDerivation {
             inconsistencies: vec![inconsistency],
@@ -448,9 +454,12 @@ fn test_stereo_perceiver_recognize_inconsistency(
 #[case::four(4, 8, false)]
 #[case::six(6, 8, false)]
 #[case::eight(8, 8, true)]
+#[case::eight_below(8, 7, true)]
+#[case::eight_above(8, 9, false)]
 #[case::twelve(12, 8, true)]
 #[case::unrestricted(6, 0, true)]
 #[case::long_ring(24, 25, false)]
+#[case::long_ring_boundary(24, 24, true)]
 fn test_stereo_perceiver_recognize_ring(
     #[case] size: u32,
     #[case] minimum: u32,
@@ -488,7 +497,7 @@ fn test_stereo_perceiver_recognize_ring(
         ..Default::default()
     });
     let model = StereoModel {
-        stereo_bond_minimum_ring_size: minimum,
+        stereo_bond_min_ring_size: minimum,
         ..Default::default()
     };
     let expected = StereoDerivation {
@@ -506,11 +515,6 @@ fn test_stereo_perceiver_recognize_ring(
         } else {
             vec![]
         },
-        skipped_stereo_bonds: if asserted && !eligible {
-            vec![BondId(0)]
-        } else {
-            vec![]
-        },
         ..Default::default()
     };
     let original = molecule.clone();
@@ -522,11 +526,84 @@ fn test_stereo_perceiver_recognize_ring(
                 ..Default::default()
             },
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(expected)
     );
     assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::small([2, 2, 2], Some([2, 3, 4]))]
+#[case::large([11, 12, 13], None)]
+fn test_stereo_perceiver_recognize_nitrogen(
+    #[case] lengths: [u32; 3],
+    #[case] ligands: Option<[u32; 3]>,
+    #[values(0, 8, 25)] stereo_bond_min_ring_size: u32,
+) {
+    let mut entries = MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::N)
+                .with_lone_pairs(1)
+                .into_concrete(),
+            AtomForm::from_element(Element::C)
+                .with_implicit_hydrogens(1)
+                .into_concrete(),
+        ],
+        ..Default::default()
+    };
+    for length in lengths {
+        let mut previous = AtomId(0);
+        for _ in 1..length {
+            let next = AtomId(entries.atoms.len() as u32);
+            entries.atoms.push(
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(2)
+                    .into_concrete(),
+            );
+            entries
+                .bonds
+                .push((previous, next, BondForm::from_order(1).into_concrete()));
+            previous = next;
+        }
+        entries
+            .bonds
+            .push((previous, AtomId(1), BondForm::from_order(1).into_concrete()));
+    }
+    let molecule = Molecule::from_entries(entries);
+    let expected = StereoDerivation {
+        stereo_atoms: ligands.map_or_else(Vec::new, |ligands| {
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(ligands[0]), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(ligands[1]), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(ligands[2]), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+            )]
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        StereoPerceiver::new(&StereoModel {
+            stereo_bond_min_ring_size,
+            ..Default::default()
+        })
+        .recognize(
+            &molecule,
+            &StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+                ..Default::default()
+            },
+            AutomorphismAlgorithm::Nauty,
+            RingConfig::default(),
+            16,
+        ),
+        Ok(expected),
+    );
 }
 
 #[rstest]
@@ -548,7 +625,8 @@ fn test_stereo_perceiver_recognize_model(
             &mixed_sites,
             &selection,
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(StereoDerivation::default())
     );
@@ -580,7 +658,8 @@ fn test_stereo_perceiver_recognize_error(
             &mixed_sites,
             &selection,
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Err(error)
     );
@@ -615,7 +694,8 @@ fn test_stereo_perceiver_recognize_partial(
                 ..Default::default()
             },
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Err(StereoPerceptionError::UnderdeterminedAtomField {
             atom: AtomId(0),
@@ -630,7 +710,8 @@ fn test_stereo_perceiver_recognize_partial(
                 ..Default::default()
             },
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(StereoDerivation {
             stereo_bonds: vec![(
@@ -667,7 +748,8 @@ fn test_stereo_perceiver_recognize_bond_order(
                 ..Default::default()
             },
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Err(StereoPerceptionError::UnderdeterminedBondOrder { bond: BondId(bond) })
     );
@@ -694,7 +776,8 @@ fn test_stereo_perceiver_recognize_unsupported(mixed_sites: Molecule, #[case] ki
             &mixed_sites,
             &StereoSelection::default(),
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Err(expected)
     );
@@ -749,7 +832,8 @@ fn test_stereo_perceiver_recognize_conjugation(
                 ..Default::default()
             },
             AutomorphismAlgorithm::Nauty,
-            RingConfig::default()
+            RingConfig::default(),
+            16
         ),
         Ok(expected)
     );
@@ -792,7 +876,8 @@ fn test_stereo_perceiver_classify(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &molecule,
             &BTreeSet::from([site]),
-            AutomorphismAlgorithm::Nauty
+            AutomorphismAlgorithm::Nauty,
+            16
         ),
         Ok(BTreeMap::from([(site, expected)]))
     );
@@ -822,7 +907,8 @@ fn test_stereo_perceiver_classify_error(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &molecule,
             &BTreeSet::from([site]),
-            AutomorphismAlgorithm::Nauty
+            AutomorphismAlgorithm::Nauty,
+            16
         ),
         Err(expected)
     );
@@ -846,7 +932,8 @@ fn test_stereo_perceiver_classify_frame(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &molecule,
             &BTreeSet::from([site]),
-            AutomorphismAlgorithm::Nauty
+            AutomorphismAlgorithm::Nauty,
+            16
         ),
         Err(StereoPerceptionError::Inconsistency(inconsistency))
     );
@@ -881,7 +968,8 @@ fn test_stereo_perceiver_classify_model(
         StereoPerceiver::new(&model).classify(
             &molecule,
             &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty
+            AutomorphismAlgorithm::Nauty,
+            16
         ),
         Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), expected)]))
     );
@@ -922,7 +1010,8 @@ fn test_stereo_perceiver_classify_configuration(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &mixed_sites,
             &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty
+            AutomorphismAlgorithm::Nauty,
+            16
         ),
         Err(expected)
     );
@@ -935,7 +1024,8 @@ fn test_stereo_perceiver_classify_empty(mixed_sites: Molecule) {
         StereoPerceiver::new(&StereoModel::default()).classify(
             &mixed_sites,
             &BTreeSet::new(),
-            AutomorphismAlgorithm::Nauty
+            AutomorphismAlgorithm::Nauty,
+            16
         ),
         Ok(BTreeMap::new())
     );

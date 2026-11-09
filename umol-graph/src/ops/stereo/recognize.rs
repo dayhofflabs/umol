@@ -43,6 +43,8 @@ impl StereoPerceiver {
     /// chemistry rules apply to unasserted sites; explicit arrangements retain
     /// the structural rules used by derive_stereo_atom and derive_stereo_bond.
     /// Existing entities are retained and checked for conflicting site evidence.
+    /// Missing stereo bonds on double bonds follow the model's minimum ring size.
+    /// Existing entities and source assertions are preserved.
     ///
     /// Stereogenicity filtering uses molecular symmetry with prospective entities
     /// present in a temporary molecule. It is omitted when that filter is None.
@@ -67,6 +69,7 @@ impl StereoPerceiver {
         selection: &StereoSelection,
         automorphism_algorithm: AutomorphismAlgorithm,
         ring_config: RingConfig,
+        para_stereo_max_iterations: u32,
     ) -> Result<StereoDerivation, StereoPerceptionError> {
         if let Some(sites) = &selection.sites {
             for &site in sites {
@@ -100,7 +103,8 @@ impl StereoPerceiver {
         }
 
         let mut result = StereoDerivation::default();
-        let mut rings = None;
+        let mut atom_rings = None;
+        let mut bond_rings = None;
         if self.model.kind_model(StereoKind::Tetrahedral).is_some()
             && selection
                 .kinds
@@ -146,7 +150,12 @@ impl StereoPerceiver {
                     }
                 };
                 let eligible = asserted
-                    || self.tetrahedral_eligible(molecule, atom.id(), ring_config, &mut rings)?;
+                    || self.tetrahedral_eligible(
+                        molecule,
+                        atom.id(),
+                        ring_config,
+                        &mut atom_rings,
+                    )?;
                 if eligible {
                     require_frame_fields(molecule, atom.id())?;
                     let candidate = self
@@ -218,19 +227,13 @@ impl StereoPerceiver {
                 if !asserted && !double {
                     continue;
                 }
-                if double && self.model.stereo_bond_minimum_ring_size > 0 {
-                    let ring_set = self.recognition_rings(molecule, ring_config, &mut rings);
-                    if ring_set
-                        .bond_smallest_ring_size(bond.id())
-                        .is_some_and(|size| {
-                            size < self.model.stereo_bond_minimum_ring_size as usize
-                        })
-                    {
-                        if asserted {
-                            result.skipped_stereo_bonds.push(bond.id());
-                        }
-                        continue;
-                    }
+                if !self.stereo_bond_ring_eligible(
+                    molecule,
+                    bond.id(),
+                    ring_config,
+                    &mut bond_rings,
+                ) {
+                    continue;
                 }
                 let [first, second] = bond.atom_ids();
                 let model = self
@@ -292,8 +295,12 @@ impl StereoPerceiver {
                 let prospective = editor
                     .finish()
                     .expect("recognized stereo additions preserve molecule integrity");
-                let classifications =
-                    self.classify(&prospective, &sites, automorphism_algorithm)?;
+                let classifications = self.classify(
+                    &prospective,
+                    &sites,
+                    automorphism_algorithm,
+                    para_stereo_max_iterations,
+                )?;
                 result.stereo_atoms.retain(|(site, _, _)| {
                     classes.contains(&classifications[&StereoSite::Atom(*site)])
                 });
@@ -333,6 +340,7 @@ impl StereoPerceiver {
         molecule: &Molecule,
         sites: &BTreeSet<StereoSite>,
         automorphism_algorithm: AutomorphismAlgorithm,
+        para_stereo_max_iterations: u32,
     ) -> Result<BTreeMap<StereoSite, Stereogenicity>, StereoPerceptionError> {
         for &site in sites {
             check_site(molecule, site)?;
@@ -396,7 +404,7 @@ impl StereoPerceiver {
         let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: self.model.para_stereo,
-            max_iterations: 16,
+            max_iterations: para_stereo_max_iterations,
             automorphism_algorithm,
         });
         Ok(sites
@@ -526,7 +534,11 @@ impl StereoPerceiver {
                 } else if ids.len() < 3 || ids.iter().any(|&id| molecule.neighbors(id).len() < 2) {
                     false
                 } else {
-                    let ring_set = self.recognition_rings(molecule, ring_config, rings);
+                    let ring_set = rings.get_or_insert_with(|| {
+                        molecule
+                            .rings(RingModel::default(), ring_config)
+                            .into_ring_set()
+                    });
                     let incident: Vec<_> = ring_set
                         .iter()
                         .filter(|ring| ring.atoms().contains(&atom))
@@ -555,23 +567,6 @@ impl StereoPerceiver {
             _ => bonding == 4 && lone_pairs == 0 && valence == 4,
         };
         Ok(eligible)
-    }
-
-    fn recognition_rings<'a>(
-        &self,
-        molecule: &Molecule,
-        config: RingConfig,
-        rings: &'a mut Option<RingSet>,
-    ) -> &'a RingSet {
-        rings.get_or_insert_with(|| {
-            let mut model = RingModel::default();
-            if self.model.stereo_bond_minimum_ring_size > 0 {
-                model.max_ring_size = model
-                    .max_ring_size
-                    .max(self.model.stereo_bond_minimum_ring_size as usize - 1);
-            }
-            molecule.rings(model, config).into_ring_set()
-        })
     }
 }
 

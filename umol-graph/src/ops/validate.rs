@@ -270,7 +270,8 @@ mod tests {
                 },
                 stereo: StereoValidateConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                    max_iterations: 16,
+                    para_stereo_max_iterations: 16,
+                    ring_config: Default::default(),
                 },
             }
         );
@@ -304,7 +305,8 @@ mod tests {
             },
             stereo: StereoValidateConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                max_iterations: 8,
+                para_stereo_max_iterations: 8,
+                ring_config: Default::default(),
             },
         };
         let validator = Validator::with_config(&model, config);

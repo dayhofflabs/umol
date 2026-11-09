@@ -1662,6 +1662,7 @@ mod tests {
                 stereo: StereoResolveConfig {
                     stereo_atom_failure: failure,
                     stereo_bond_failure: failure,
+                    ring_config: Default::default(),
                 },
                 ..ResolveConfig::default()
             },

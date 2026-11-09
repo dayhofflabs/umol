@@ -19,6 +19,9 @@ from umol import (
     Molecule,
     MoleculeDefaults,
     ResolveConfig,
+    RingConfig,
+    SimpleCycleEnumerationAlgorithm,
+    RelevantCycleEnumerationAlgorithm,
     ResolveReport,
     RollbackMethod,
     Solution,
@@ -252,6 +255,7 @@ def test_stereo_resolve_config_default():
 
     assert config.stereo_atom_failure == StereoFailurePolicy.Error
     assert config.stereo_bond_failure == StereoFailurePolicy.Error
+    assert config.ring_config == RingConfig()
     assert config == StereoResolveConfig()
 
 
@@ -263,14 +267,19 @@ def test_stereo_resolve_config_default():
         (StereoFailurePolicy.Remove, StereoFailurePolicy.Keep),
     ],
 )
-def test_stereo_resolve_config_new(stereo_atom_failure, stereo_bond_failure):
+@pytest.mark.parametrize("ring_config", [None, RingConfig()])
+def test_stereo_resolve_config_new(
+    stereo_atom_failure, stereo_bond_failure, ring_config
+):
     config = StereoResolveConfig(
         stereo_atom_failure=stereo_atom_failure,
         stereo_bond_failure=stereo_bond_failure,
+        ring_config=ring_config,
     )
 
     assert config.stereo_atom_failure == stereo_atom_failure
     assert config.stereo_bond_failure == stereo_bond_failure
+    assert config.ring_config == (ring_config or RingConfig())
 
 
 @pytest.mark.parametrize(
@@ -302,15 +311,16 @@ def test_stereo_resolve_config_new_error(args, kwargs, message):
         (
             StereoResolveConfig(),
             "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Error, "
-            "stereo_bond_failure=StereoFailurePolicy.Error)",
+            "stereo_bond_failure=StereoFailurePolicy.Error, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
             StereoResolveConfig(
                 stereo_atom_failure=StereoFailurePolicy.Remove,
                 stereo_bond_failure=StereoFailurePolicy.Keep,
+                ring_config=RingConfig(),
             ),
             "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, "
-            "stereo_bond_failure=StereoFailurePolicy.Keep)",
+            "stereo_bond_failure=StereoFailurePolicy.Keep, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
     ],
 )
@@ -323,6 +333,7 @@ def test_stereo_resolve_config_repr(config, expected):
     [
         ("stereo_atom_failure", StereoFailurePolicy.Remove),
         ("stereo_bond_failure", StereoFailurePolicy.Keep),
+        ("ring_config", RingConfig()),
     ],
 )
 def test_stereo_resolve_config_mutation(field, value):
@@ -432,7 +443,7 @@ def test_resolve_config_equality(other):
             "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
             "stereo=StereoResolveConfig(stereo_atom_failure="
             "StereoFailurePolicy.Keep, stereo_bond_failure="
-            "StereoFailurePolicy.Error))",
+            "StereoFailurePolicy.Error, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())))",
         ),
     ],
 )
