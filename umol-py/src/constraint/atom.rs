@@ -23,7 +23,7 @@ use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 use crate::ring::RingSet;
-use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoForm};
+use crate::stereo::TetrahedralStereoForm;
 
 /// Exact ground aromatic-valence state.
 #[pyclass(from_py_object)]
@@ -306,22 +306,15 @@ impl MulticenterValenceLike {
 #[derive(FromPyObject)]
 pub(crate) enum TetrahedralStereoLike {
     Flag(bool),
-    Config(TetrahedralConfiguration),
     Form(Py<TetrahedralStereoForm>),
 }
 
 impl TetrahedralStereoLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrTetrahedralStereoForm> {
-        Ok(match self {
-            Self::Flag(false) => GraphIrTetrahedralStereoForm::NotStereo,
-            Self::Flag(true) => {
-                return Err(PyValueError::new_err(
-                    "tetrahedral_stereo = True is not meaningful; use TetrahedralConfiguration.Ccw/Cw or False",
-                ))
-            }
-            Self::Config(ts) => ts.to_rust().into(),
-            Self::Form(a) => a.bind(py).borrow().to_rust(py),
-        })
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTetrahedralStereoForm {
+        match self {
+            Self::Flag(value) => (*value).into(),
+            Self::Form(form) => form.bind(py).borrow().to_rust(),
+        }
     }
 }
 
@@ -521,9 +514,9 @@ impl AtomConstraintForm {
             GraphIrAtomConstraintForm::RingMembership(m) => {
                 Self::RingMembership(into_py_variant(py, RingMembershipForm::from_rust(py, m)?)?)
             }
-            GraphIrAtomConstraintForm::TetrahedralStereo(c) => Self::TetrahedralStereo(
-                into_py_variant(py, TetrahedralStereoForm::from_rust(py, c)?)?,
-            ),
+            GraphIrAtomConstraintForm::TetrahedralStereo(c) => {
+                Self::TetrahedralStereo(into_py_variant(py, TetrahedralStereoForm::from_rust(c))?)
+            }
         })
     }
 
@@ -562,7 +555,7 @@ impl AtomConstraintForm {
                 GraphIrAtomConstraintForm::RingMembership(m.bind(py).borrow().to_rust(py))
             }
             Self::TetrahedralStereo(c) => {
-                GraphIrAtomConstraintForm::TetrahedralStereo(c.bind(py).borrow().to_rust(py))
+                GraphIrAtomConstraintForm::TetrahedralStereo(c.bind(py).borrow().to_rust())
             }
         }
     }
@@ -875,20 +868,15 @@ impl AtomConstraintsForm {
 
     /// The tetrahedral-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn tetrahedral_stereo(&self, py: Python<'_>) -> PyResult<TetrahedralStereoForm> {
-        TetrahedralStereoForm::from_rust(py, self.0.tetrahedral_stereo())
+    pub(crate) fn tetrahedral_stereo(&self) -> TetrahedralStereoForm {
+        TetrahedralStereoForm::from_rust(self.0.tetrahedral_stereo())
     }
 
     #[setter]
-    pub(crate) fn set_tetrahedral_stereo(
-        &mut self,
-        py: Python<'_>,
-        value: TetrahedralStereoLike,
-    ) -> PyResult<()> {
+    pub(crate) fn set_tetrahedral_stereo(&mut self, py: Python<'_>, value: TetrahedralStereoLike) {
         self.0.set(GraphIrAtomConstraintForm::tetrahedral_stereo(
-            value.to_rust(py)?,
+            value.to_rust(py),
         ));
-        Ok(())
     }
 
     /// The degree value (undetermined if absent).
@@ -1106,10 +1094,9 @@ pub(crate) fn atom_constraints_asdict<'py>(
                 "multicenter_valence",
                 MulticenterValenceForm::from_rust(py, c)?,
             )?,
-            GraphIrAtomConstraintForm::TetrahedralStereo(c) => dict.set_item(
-                "tetrahedral_stereo",
-                TetrahedralStereoForm::from_rust(py, c)?,
-            )?,
+            GraphIrAtomConstraintForm::TetrahedralStereo(c) => {
+                dict.set_item("tetrahedral_stereo", TetrahedralStereoForm::from_rust(c))?
+            }
             GraphIrAtomConstraintForm::Degree(v) => {
                 dict.set_item("degree", NumForm::from_rust(py, v)?)?
             }
@@ -1647,7 +1634,7 @@ impl AtomConstraintsView {
     #[getter]
     pub(crate) fn tetrahedral_stereo(&self, py: Python<'_>) -> PyResult<TetrahedralStereoForm> {
         self.read(py, |cs| {
-            TetrahedralStereoForm::from_rust(py, cs.tetrahedral_stereo())
+            Ok(TetrahedralStereoForm::from_rust(cs.tetrahedral_stereo()))
         })
     }
 
@@ -1659,7 +1646,7 @@ impl AtomConstraintsView {
     ) -> PyResult<()> {
         self.set_form(
             py,
-            GraphIrAtomConstraintForm::tetrahedral_stereo(value.to_rust(py)?),
+            GraphIrAtomConstraintForm::tetrahedral_stereo(value.to_rust(py)),
         )
     }
 

@@ -126,7 +126,7 @@ impl BondConstraintForm {
                 Self::Aromatic(into_py_variant(py, BooleanForm::from_rust(b))?)
             }
             GraphIrBondConstraintForm::CisTransStereo(c) => {
-                Self::CisTransStereo(into_py_variant(py, CisTransStereoForm::from_rust(py, c)?)?)
+                Self::CisTransStereo(into_py_variant(py, CisTransStereoForm::from_rust(c))?)
             }
             GraphIrBondConstraintForm::RingMembership(m) => {
                 Self::RingMembership(into_py_variant(py, RingMembershipForm::from_rust(py, m)?)?)
@@ -138,7 +138,7 @@ impl BondConstraintForm {
         match self {
             Self::Aromatic(b) => GraphIrBondConstraintForm::Aromatic(b.bind(py).borrow().to_rust()),
             Self::CisTransStereo(c) => {
-                GraphIrBondConstraintForm::CisTransStereo(c.bind(py).borrow().to_rust(py))
+                GraphIrBondConstraintForm::CisTransStereo(c.bind(py).borrow().to_rust())
             }
             Self::RingMembership(m) => {
                 GraphIrBondConstraintForm::RingMembership(m.bind(py).borrow().to_rust(py))
@@ -395,20 +395,15 @@ impl BondConstraintsForm {
 
     /// The cis/trans-stereo state (undetermined if absent).
     #[getter]
-    pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<CisTransStereoForm> {
-        CisTransStereoForm::from_rust(py, self.0.cis_trans_stereo())
+    pub(crate) fn cis_trans_stereo(&self) -> CisTransStereoForm {
+        CisTransStereoForm::from_rust(self.0.cis_trans_stereo())
     }
 
     #[setter]
-    pub(crate) fn set_cis_trans_stereo(
-        &mut self,
-        py: Python<'_>,
-        value: CisTransStereoLike,
-    ) -> PyResult<()> {
+    pub(crate) fn set_cis_trans_stereo(&mut self, py: Python<'_>, value: CisTransStereoLike) {
         self.0.set(GraphIrBondConstraintForm::cis_trans_stereo(
-            value.to_rust(py)?,
+            value.to_rust(py),
         ));
-        Ok(())
     }
 
     /// The ring-membership constraints.
@@ -542,7 +537,7 @@ pub(crate) fn bond_constraints_asdict<'py>(
                 dict.set_item("aromatic", BooleanForm::from_rust(b))?
             }
             GraphIrBondConstraintForm::CisTransStereo(c) => {
-                dict.set_item("cis_trans_stereo", CisTransStereoForm::from_rust(py, c)?)?
+                dict.set_item("cis_trans_stereo", CisTransStereoForm::from_rust(c))?
             }
             GraphIrBondConstraintForm::RingMembership(m) => {
                 let key = match m.scope {
@@ -992,7 +987,7 @@ impl BondConstraintsView {
     #[getter]
     pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<CisTransStereoForm> {
         self.read(py, |cs| {
-            CisTransStereoForm::from_rust(py, cs.cis_trans_stereo())
+            Ok(CisTransStereoForm::from_rust(cs.cis_trans_stereo()))
         })
     }
 
@@ -1004,7 +999,7 @@ impl BondConstraintsView {
     ) -> PyResult<()> {
         self.set_form(
             py,
-            GraphIrBondConstraintForm::cis_trans_stereo(value.to_rust(py)?),
+            GraphIrBondConstraintForm::cis_trans_stereo(value.to_rust(py)),
         )
     }
 

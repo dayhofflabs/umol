@@ -645,14 +645,13 @@ mod tests {
         BondConstraintsForm as GraphIrBondConstraintsForm, BooleanForm as GraphIrBooleanForm,
         CisTransStereoForm as GraphIrCisTransStereoForm, MoleculeEntries as GraphIrMoleculeEntries,
         NumForm as GraphIrNumForm, RingScope as GraphIrRingScope,
-        StereoCoset as GraphIrStereoCoset,
     };
 
     use super::*;
     use crate::boolean::BooleanLike;
     use crate::constraint::bond::{BondConstraintForm, BondConstraintKey, BondConstraintsUpdate};
     use crate::convert::into_py_variant;
-    use crate::stereo::{CisTransConfiguration, CisTransStereoForm, CisTransStereoLike};
+    use crate::stereo::CisTransStereoLike;
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<Molecule> {
@@ -726,11 +725,7 @@ mod tests {
     #[rstest]
     #[case(GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)))]
     #[case(GraphIrBondConstraintForm::cis_trans_stereo(GraphIrCisTransStereoForm::NotStereo))]
-    #[case(
-        GraphIrBondConstraintForm::cis_trans_stereo(GraphIrCisTransStereoForm::Stereo(
-            GraphIrStereoCoset::Lit(1)
-        ))
-    )]
+    #[case(GraphIrBondConstraintForm::cis_trans_stereo(GraphIrCisTransStereoForm::Stereo))]
     #[case(GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, 2))]
     #[case(GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::Size(6), 1))]
     fn test_bond_constraint_form_roundtrip(#[case] form: GraphIrBondConstraintForm) {
@@ -890,7 +885,7 @@ mod tests {
             let empty = BondConstraintsForm::new(py, vec![]);
             assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanForm::Undetermined);
             assert_eq!(
-                empty.cis_trans_stereo(py).unwrap().to_rust(py),
+                empty.cis_trans_stereo().to_rust(),
                 GraphIrCisTransStereoForm::Undetermined
             );
             assert_eq!(
@@ -1170,38 +1165,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_form_set_cis_trans_stereo() {
+    #[case::negative(false, GraphIrCisTransStereoForm::NotStereo)]
+    #[case::positive(true, GraphIrCisTransStereoForm::Stereo)]
+    fn test_bond_constraints_form_set_cis_trans_stereo(
+        #[case] value: bool,
+        #[case] expected: GraphIrCisTransStereoForm,
+    ) {
         Python::attach(|py| {
             let mut constraints = BondConstraintsForm::new(py, vec![]);
-            constraints
-                .set_cis_trans_stereo(py, CisTransStereoLike::Config(CisTransConfiguration::E))
-                .unwrap();
-            match constraints.cis_trans_stereo(py).unwrap() {
-                CisTransStereoForm::Stereo(coset) => {
-                    assert_eq!(
-                        coset.bind(py).borrow().to_rust(py),
-                        GraphIrStereoCoset::Lit(1)
-                    )
-                }
-                _ => panic!("expected Stereo"),
-            }
-            constraints
-                .set_cis_trans_stereo(py, CisTransStereoLike::Flag(false))
-                .unwrap();
-            match constraints.cis_trans_stereo(py).unwrap() {
-                CisTransStereoForm::NotStereo() => {}
-                _ => panic!("expected NotStereo"),
-            }
-        });
-    }
-
-    #[rstest]
-    fn test_bond_constraints_form_set_cis_trans_stereo_error() {
-        Python::attach(|py| {
-            let mut constraints = BondConstraintsForm::new(py, vec![]);
-            assert!(constraints
-                .set_cis_trans_stereo(py, CisTransStereoLike::Flag(true))
-                .is_err());
+            constraints.set_cis_trans_stereo(py, CisTransStereoLike::Flag(value));
+            assert_eq!(constraints.cis_trans_stereo().to_rust(), expected);
         });
     }
 

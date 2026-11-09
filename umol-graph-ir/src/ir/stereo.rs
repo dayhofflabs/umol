@@ -1473,8 +1473,7 @@ macro_rules! stereo_element {
                 self
             }
 
-            /// No-op. A stereo element is always stereogenic, so its coset has no
-            /// zero default; it is ground iff its coset is ground.
+            /// Retain the description unchanged; stereo configurations have no concrete default.
             pub fn into_concrete(self) -> Self {
                 self
             }
@@ -2036,22 +2035,6 @@ impl Lattice for StereoConfigurationForm {
     }
 }
 
-/// Generates a constraint-side stereo state for a fixed geometry (`#T`/`#C`):
-/// undetermined, explicitly not-stereo, or a stereo center with a coset. The
-/// geometry is the type's identity (`$kind`), so the coset folds/meets under that
-/// constant kind — no kind field.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TetrahedralStereo {
-    NotStereo,
-    Stereo(u32),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CisTransStereo {
-    NotStereo,
-    Stereo(u32),
-}
-
 /// Named tetrahedral configurations and their canonical coset indices.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TetrahedralConfiguration {
@@ -2067,13 +2050,14 @@ pub enum CisTransConfiguration {
 }
 
 macro_rules! stereo_site {
-    ($name:ident, $lit:ident, $kind:expr) => {
+    ($name:ident) => {
+        /// Presence of a fixed stereo kind, independent of configuration and stereogenicity.
         #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name {
             #[default]
             Undetermined,
             NotStereo,
-            Stereo(StereoCoset),
+            Stereo,
         }
 
         impl $name {
@@ -2085,50 +2069,43 @@ macro_rules! stereo_site {
                 Self::NotStereo
             }
 
-            pub fn stereo(coset: impl Into<StereoCoset>) -> Self {
-                Self::Stereo(coset.into())
+            pub fn stereo() -> Self {
+                Self::Stereo
             }
 
             pub fn is_stereo(&self) -> bool {
-                matches!(self, Self::Stereo(_))
+                matches!(self, Self::Stereo)
             }
+        }
 
-            /// Matches literal coset index `value` under the type's kind.
-            pub fn matches_value(&self, value: u32) -> bool {
-                match self {
-                    Self::Stereo(coset) => coset_matches(coset, &StereoCoset::Lit(value), $kind),
-                    Self::NotStereo => false,
-                    Self::Undetermined => true,
+        impl From<bool> for $name {
+            fn from(stereo: bool) -> Self {
+                if stereo {
+                    Self::Stereo
+                } else {
+                    Self::NotStereo
                 }
             }
         }
 
         impl Normalize for $name {
             fn normalize(self) -> Result<Self, Contradiction> {
-                Ok(match self {
-                    Self::Stereo(coset) => Self::Stereo(canon_coset(coset, $kind)?),
-                    other => other,
-                })
+                Ok(self)
             }
 
-            /// Delegates to the coset comparison; no other variant normalizes into another.
             fn normalized_eq(&self, other: &Self) -> bool {
-                match (self, other) {
-                    (Self::Stereo(a), Self::Stereo(b)) => coset_normalized_eq(a, b, $kind),
-                    _ => self == other,
-                }
+                self == other
             }
         }
 
         impl AsLit for $name {
-            type Lit = $lit;
+            type Lit = bool;
 
-            /// The exact absence or stereo-coset value when ground.
-            fn as_lit(&self) -> Option<$lit> {
+            fn as_lit(&self) -> Option<bool> {
                 match self {
-                    Self::NotStereo => Some($lit::NotStereo),
-                    Self::Stereo(StereoCoset::Lit(coset)) => Some($lit::Stereo(*coset)),
-                    _ => None,
+                    Self::Undetermined => None,
+                    Self::NotStereo => Some(false),
+                    Self::Stereo => Some(true),
                 }
             }
         }
@@ -2139,106 +2116,35 @@ macro_rules! stereo_site {
             }
 
             fn is_ground(&self) -> bool {
-                match self {
-                    Self::NotStereo => true,
-                    Self::Stereo(coset) => matches!(coset, StereoCoset::Lit(_)),
-                    Self::Undetermined => false,
-                }
+                !self.is_undetermined()
             }
 
             fn is_compatible(&self, other: &Self) -> bool {
-                match (self, other) {
-                    (Self::Undetermined, Self::Undetermined | Self::NotStereo)
-                    | (Self::NotStereo, Self::Undetermined) => true,
-                    (Self::Undetermined, Self::Stereo(coset))
-                    | (Self::Stereo(coset), Self::Undetermined) => {
-                        coset_is_compatible(coset, &StereoCoset::Undetermined, $kind)
-                    }
-                    (Self::NotStereo, Self::NotStereo) => true,
-                    (Self::Stereo(a), Self::Stereo(b)) => coset_is_compatible(a, b, $kind),
-                    _ => false,
-                }
+                self.is_undetermined() || other.is_undetermined() || self == other
             }
 
             fn meet(&self, other: &Self) -> Option<Self> {
-                let a = self.clone().normalize().ok()?;
-                let b = other.clone().normalize().ok()?;
-                match (&a, &b) {
-                    (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
-                    (Self::NotStereo, Self::NotStereo) => Some(Self::NotStereo),
-                    (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => None,
-                    (Self::Stereo(ca), Self::Stereo(cb)) => {
-                        Some(Self::Stereo(coset_meet(ca, cb, $kind)?))
+                match (self, other) {
+                    (Self::Undetermined, value) | (value, Self::Undetermined) => {
+                        Some(value.clone())
                     }
+                    _ => (self == other).then(|| self.clone()),
                 }
             }
 
             fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-                let a = self.clone().normalize().unwrap_or(Self::Undetermined);
-                let b = other.clone().normalize().unwrap_or(Self::Undetermined);
-                Ok(match (&a, &b) {
-                    (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-                    (Self::NotStereo, Self::NotStereo) => Self::NotStereo,
-                    (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => {
-                        Self::Undetermined
-                    }
-                    (Self::Stereo(ca), Self::Stereo(cb)) => Self::Stereo(coset_join(ca, cb, $kind)),
+                Ok(if self == other {
+                    self.clone()
+                } else {
+                    Self::Undetermined
                 })
             }
         }
     };
 }
 
-stereo_site! { TetrahedralStereoForm, TetrahedralStereo, StereoKind::Tetrahedral }
-stereo_site! { CisTransStereoForm, CisTransStereo, StereoKind::CisTrans }
-
-impl From<TetrahedralStereo> for TetrahedralStereoForm {
-    fn from(stereo: TetrahedralStereo) -> Self {
-        match stereo {
-            TetrahedralStereo::NotStereo => Self::NotStereo,
-            TetrahedralStereo::Stereo(coset) => Self::Stereo(StereoCoset::Lit(coset)),
-        }
-    }
-}
-
-impl From<CisTransStereo> for CisTransStereoForm {
-    fn from(stereo: CisTransStereo) -> Self {
-        match stereo {
-            CisTransStereo::NotStereo => Self::NotStereo,
-            CisTransStereo::Stereo(coset) => Self::Stereo(StereoCoset::Lit(coset)),
-        }
-    }
-}
-
-impl From<TetrahedralConfiguration> for TetrahedralStereo {
-    fn from(configuration: TetrahedralConfiguration) -> Self {
-        match configuration {
-            TetrahedralConfiguration::Ccw => Self::Stereo(0),
-            TetrahedralConfiguration::Cw => Self::Stereo(1),
-        }
-    }
-}
-
-impl From<CisTransConfiguration> for CisTransStereo {
-    fn from(configuration: CisTransConfiguration) -> Self {
-        match configuration {
-            CisTransConfiguration::Z => Self::Stereo(0),
-            CisTransConfiguration::E => Self::Stereo(1),
-        }
-    }
-}
-
-impl From<TetrahedralConfiguration> for TetrahedralStereoForm {
-    fn from(configuration: TetrahedralConfiguration) -> Self {
-        TetrahedralStereo::from(configuration).into()
-    }
-}
-
-impl From<CisTransConfiguration> for CisTransStereoForm {
-    fn from(configuration: CisTransConfiguration) -> Self {
-        CisTransStereo::from(configuration).into()
-    }
-}
+stereo_site! { TetrahedralStereoForm }
+stereo_site! { CisTransStereoForm }
 
 /// Operator-expression term: a `Var` (with optional finite domain), a literal
 /// `Lit`/`LitSet` base, or one of these under the permutation-action operators
@@ -2291,8 +2197,8 @@ impl StereoTerm {
 
 /// Dense coset-index expression (0-indexed per stereo kind): undetermined, a
 /// single index, a finite set, or an operator `Term` over a variable.
-/// Kind-relative — no `Lattice` or `Normalize`; the owning configuration or
-/// site normalizes it under its kind.
+/// Kind-relative — no `Lattice` or `Normalize`; the owning configuration
+/// normalizes it under its kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoCoset {
     #[default]
@@ -4944,200 +4850,114 @@ mod tests {
     }
 
     #[rstest]
-    #[case::not_stereo(TetrahedralStereo::NotStereo, TetrahedralStereoForm::NotStereo)]
-    #[case::stereo(
-        TetrahedralStereo::Stereo(1),
-        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))
-    )]
+    #[case::negative(false, TetrahedralStereoForm::NotStereo)]
+    #[case::positive(true, TetrahedralStereoForm::Stereo)]
     fn test_tetrahedral_stereo_form_from(
-        #[case] stereo: TetrahedralStereo,
+        #[case] value: bool,
         #[case] expected: TetrahedralStereoForm,
     ) {
-        assert_eq!(TetrahedralStereoForm::from(stereo), expected);
-    }
-
-    #[rstest]
-    #[case::ccw(
-        TetrahedralConfiguration::Ccw,
-        TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
-    )]
-    #[case::cw(
-        TetrahedralConfiguration::Cw,
-        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))
-    )]
-    fn test_tetrahedral_stereo_form_from_configuration(
-        #[case] configuration: TetrahedralConfiguration,
-        #[case] expected: TetrahedralStereoForm,
-    ) {
-        assert_eq!(TetrahedralStereoForm::from(configuration), expected);
-    }
-
-    #[rstest]
-    #[case::not_stereo(CisTransStereo::NotStereo, CisTransStereoForm::NotStereo)]
-    #[case::stereo(
-        CisTransStereo::Stereo(1),
-        CisTransStereoForm::Stereo(StereoCoset::Lit(1))
-    )]
-    fn test_cis_trans_stereo_form_from(
-        #[case] stereo: CisTransStereo,
-        #[case] expected: CisTransStereoForm,
-    ) {
-        assert_eq!(CisTransStereoForm::from(stereo), expected);
-    }
-
-    #[rstest]
-    #[case::z(
-        CisTransConfiguration::Z,
-        CisTransStereoForm::Stereo(StereoCoset::Lit(0))
-    )]
-    #[case::e(
-        CisTransConfiguration::E,
-        CisTransStereoForm::Stereo(StereoCoset::Lit(1))
-    )]
-    fn test_cis_trans_stereo_form_from_configuration(
-        #[case] configuration: CisTransConfiguration,
-        #[case] expected: CisTransStereoForm,
-    ) {
-        assert_eq!(CisTransStereoForm::from(configuration), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::term_swap_folds(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_form_normalize(#[case] input: TetrahedralStereoForm, #[case] expected: TetrahedralStereoForm) {
-        assert_eq!(input.normalize(), Ok(expected));
+        assert_eq!(TetrahedralStereoForm::from(value), expected);
     }
 
     #[rstest]
     #[case::undetermined(TetrahedralStereoForm::Undetermined)]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
-    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))]
-    #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined))]
-    fn test_tetrahedral_stereo_form_normalize_identity(#[case] input: TetrahedralStereoForm) {
-        assert_eq!(input.clone().normalize(), Ok(input));
+    #[case::negative(TetrahedralStereoForm::NotStereo)]
+    #[case::positive(TetrahedralStereoForm::Stereo)]
+    fn test_tetrahedral_stereo_form_normalize_identity(#[case] value: TetrahedralStereoForm) {
+        assert_eq!(value.clone().normalize(), Ok(value));
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    fn test_tetrahedral_stereo_form_normalized_eq_default(
-        #[values(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] left: TetrahedralStereoForm,
-        #[values(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] right: TetrahedralStereoForm,
-    ) {
-        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), Some(TetrahedralStereo::Stereo(1)))]
-    #[case::stereo_zero(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereo::Stereo(0)))]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo, Some(TetrahedralStereo::NotStereo))]
     #[case::undetermined(TetrahedralStereoForm::Undetermined, None)]
-    #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), None)]
-    fn test_tetrahedral_stereo_form_as_lit(#[case] site: TetrahedralStereoForm, #[case] expected: Option<TetrahedralStereo>) {
-        assert_eq!(site.as_lit(), expected);
-        assert_eq!(site.is_ground(), expected.is_some());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(TetrahedralStereoForm::Undetermined, true)]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo, false)]
-    #[case::stereo(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), false)]
-    fn test_tetrahedral_stereo_form_is_undetermined(#[case] site: TetrahedralStereoForm, #[case] expected: bool) {
-        assert_eq!(site.is_undetermined(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo, true)]
-    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::undetermined(TetrahedralStereoForm::Undetermined, false)]
-    #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), false)]
-    fn test_tetrahedral_stereo_form_is_ground(#[case] site: TetrahedralStereoForm, #[case] expected: bool) {
-        assert_eq!(site.is_ground(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::wildcard(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))))]
-    #[case::not_stereo_same(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, Some(TetrahedralStereoForm::NotStereo))]
-    #[case::not_stereo_vs_stereo(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), None)]
-    #[case::stereo_same(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))))]
-    #[case::stereo_disjoint(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), None)]
-    #[case::open_narrows(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))))]
-    fn test_tetrahedral_stereo_form_meet(#[case] a: TetrahedralStereoForm, #[case] b: TetrahedralStereoForm, #[case] expected: Option<TetrahedralStereoForm>) {
-        assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::wildcard(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Undetermined)]
-    #[case::not_stereo_same(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo)]
-    #[case::not_stereo_vs_stereo(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Undetermined)]
-    #[case::stereo_same(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))]
-    #[case::stereo_widens(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), TetrahedralStereoForm::Stereo(StereoCoset::lit_set([0, 1])))]
-    fn test_tetrahedral_stereo_form_join(#[case] a: TetrahedralStereoForm, #[case] b: TetrahedralStereoForm, #[case] expected: TetrahedralStereoForm) {
-        assert_eq!(a.join(&b), Ok(expected));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::wildcard(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::open_matches_lit(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::specific_vs_undetermined(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Undetermined, false)]
-    #[case::lit_match(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), true)]
-    #[case::lit_mismatch(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), false)]
-    #[case::not_stereo_match(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, true)]
-    #[case::not_stereo_vs_stereo(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), false)]
-    fn test_tetrahedral_stereo_form_matches(#[case] pattern: TetrahedralStereoForm, #[case] target: TetrahedralStereoForm, #[case] expected: bool) {
-        assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::wildcard(TetrahedralStereoForm::Undetermined, 0, true)]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo, 0, false)]
-    #[case::stereo_match(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), 0, true)]
-    #[case::stereo_miss(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), 1, false)]
-    fn test_tetrahedral_stereo_form_matches_value(#[case] site: TetrahedralStereoForm, #[case] value: u32, #[case] expected: bool) {
-        assert_eq!(site.matches_value(value), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::term_swap_folds(CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_cis_trans_stereo_form_normalize(#[case] input: CisTransStereoForm, #[case] expected: CisTransStereoForm) {
-        assert_eq!(input.normalize(), Ok(expected));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    fn test_cis_trans_stereo_form_normalized_eq_default(
-        #[values(CisTransStereoForm::Undetermined, CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo(StereoCoset::Undetermined), CisTransStereoForm::Stereo(StereoCoset::Lit(0)), CisTransStereoForm::Stereo(StereoCoset::Lit(1)), CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] left: CisTransStereoForm,
-        #[values(CisTransStereoForm::Undetermined, CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo(StereoCoset::Undetermined), CisTransStereoForm::Stereo(StereoCoset::Lit(0)), CisTransStereoForm::Stereo(StereoCoset::Lit(1)), CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] right: CisTransStereoForm,
+    #[case::negative(TetrahedralStereoForm::NotStereo, Some(false))]
+    #[case::positive(TetrahedralStereoForm::Stereo, Some(true))]
+    fn test_tetrahedral_stereo_form_as_lit(
+        #[case] value: TetrahedralStereoForm,
+        #[case] expected: Option<bool>,
     ) {
-        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+        assert_eq!(value.as_lit(), expected);
+        assert_eq!(value.is_ground(), expected.is_some());
+        assert_eq!(value.is_undetermined(), expected.is_none());
+        assert_eq!(value.is_stereo(), expected == Some(true));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::stereo_zero(CisTransStereoForm::Stereo(StereoCoset::Lit(0)), Some(CisTransStereo::Stereo(0)))]
-    #[case::stereo_lit(CisTransStereoForm::Stereo(StereoCoset::Lit(1)), Some(CisTransStereo::Stereo(1)))]
-    #[case::not_stereo(CisTransStereoForm::NotStereo, Some(CisTransStereo::NotStereo))]
+    #[case::open_open(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Undetermined, Some(TetrahedralStereoForm::Undetermined), TetrahedralStereoForm::Undetermined, true)]
+    #[case::open_negative(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::NotStereo, Some(TetrahedralStereoForm::NotStereo), TetrahedralStereoForm::Undetermined, true)]
+    #[case::open_positive(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::Stereo, Some(TetrahedralStereoForm::Stereo), TetrahedralStereoForm::Undetermined, true)]
+    #[case::negative_open(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Undetermined, Some(TetrahedralStereoForm::NotStereo), TetrahedralStereoForm::Undetermined, false)]
+    #[case::negative_negative(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::NotStereo, Some(TetrahedralStereoForm::NotStereo), TetrahedralStereoForm::NotStereo, true)]
+    #[case::negative_positive(TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo, None, TetrahedralStereoForm::Undetermined, false)]
+    #[case::positive_open(TetrahedralStereoForm::Stereo, TetrahedralStereoForm::Undetermined, Some(TetrahedralStereoForm::Stereo), TetrahedralStereoForm::Undetermined, false)]
+    #[case::positive_negative(TetrahedralStereoForm::Stereo, TetrahedralStereoForm::NotStereo, None, TetrahedralStereoForm::Undetermined, false)]
+    #[case::positive_positive(TetrahedralStereoForm::Stereo, TetrahedralStereoForm::Stereo, Some(TetrahedralStereoForm::Stereo), TetrahedralStereoForm::Stereo, true)]
+    fn test_tetrahedral_stereo_form_lattice(
+        #[case] left: TetrahedralStereoForm,
+        #[case] right: TetrahedralStereoForm,
+        #[case] expected_meet: Option<TetrahedralStereoForm>,
+        #[case] expected_join: TetrahedralStereoForm,
+        #[case] expected_matches: bool,
+    ) {
+        assert_eq!(left.is_compatible(&right), expected_meet.is_some());
+        assert_eq!(left.meet(&right), expected_meet);
+        assert_eq!(left.join(&right), Ok(expected_join));
+        assert_eq!(left.matches(&right), expected_matches);
+        assert_eq!(left.normalized_eq(&right), left == right);
+    }
+
+    #[rstest]
+    #[case::negative(false, CisTransStereoForm::NotStereo)]
+    #[case::positive(true, CisTransStereoForm::Stereo)]
+    fn test_cis_trans_stereo_form_from(#[case] value: bool, #[case] expected: CisTransStereoForm) {
+        assert_eq!(CisTransStereoForm::from(value), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(CisTransStereoForm::Undetermined)]
+    #[case::negative(CisTransStereoForm::NotStereo)]
+    #[case::positive(CisTransStereoForm::Stereo)]
+    fn test_cis_trans_stereo_form_normalize_identity(#[case] value: CisTransStereoForm) {
+        assert_eq!(value.clone().normalize(), Ok(value));
+    }
+
+    #[rstest]
     #[case::undetermined(CisTransStereoForm::Undetermined, None)]
-    #[case::stereo_open(CisTransStereoForm::Stereo(StereoCoset::Undetermined), None)]
-    fn test_cis_trans_stereo_form_as_lit(#[case] site: CisTransStereoForm, #[case] expected: Option<CisTransStereo>) {
-        assert_eq!(site.as_lit(), expected);
-        assert_eq!(site.is_ground(), expected.is_some());
+    #[case::negative(CisTransStereoForm::NotStereo, Some(false))]
+    #[case::positive(CisTransStereoForm::Stereo, Some(true))]
+    fn test_cis_trans_stereo_form_as_lit(
+        #[case] value: CisTransStereoForm,
+        #[case] expected: Option<bool>,
+    ) {
+        assert_eq!(value.as_lit(), expected);
+        assert_eq!(value.is_ground(), expected.is_some());
+        assert_eq!(value.is_undetermined(), expected.is_none());
+        assert_eq!(value.is_stereo(), expected == Some(true));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(CisTransStereoForm::Undetermined, CisTransStereoForm::Stereo(StereoCoset::Lit(0)), Some(CisTransStereoForm::Stereo(StereoCoset::Lit(0))))]
-    #[case::not_stereo_vs_stereo(CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo(StereoCoset::Lit(0)), None)]
-    #[case::stereo_disjoint(CisTransStereoForm::Stereo(StereoCoset::Lit(0)), CisTransStereoForm::Stereo(StereoCoset::Lit(1)), None)]
-    fn test_cis_trans_stereo_form_meet(#[case] a: CisTransStereoForm, #[case] b: CisTransStereoForm, #[case] expected: Option<CisTransStereoForm>) {
-        assert_eq!(a.meet(&b), expected);
+    #[case::open_open(CisTransStereoForm::Undetermined, CisTransStereoForm::Undetermined, Some(CisTransStereoForm::Undetermined), CisTransStereoForm::Undetermined, true)]
+    #[case::open_negative(CisTransStereoForm::Undetermined, CisTransStereoForm::NotStereo, Some(CisTransStereoForm::NotStereo), CisTransStereoForm::Undetermined, true)]
+    #[case::open_positive(CisTransStereoForm::Undetermined, CisTransStereoForm::Stereo, Some(CisTransStereoForm::Stereo), CisTransStereoForm::Undetermined, true)]
+    #[case::negative_open(CisTransStereoForm::NotStereo, CisTransStereoForm::Undetermined, Some(CisTransStereoForm::NotStereo), CisTransStereoForm::Undetermined, false)]
+    #[case::negative_negative(CisTransStereoForm::NotStereo, CisTransStereoForm::NotStereo, Some(CisTransStereoForm::NotStereo), CisTransStereoForm::NotStereo, true)]
+    #[case::negative_positive(CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo, None, CisTransStereoForm::Undetermined, false)]
+    #[case::positive_open(CisTransStereoForm::Stereo, CisTransStereoForm::Undetermined, Some(CisTransStereoForm::Stereo), CisTransStereoForm::Undetermined, false)]
+    #[case::positive_negative(CisTransStereoForm::Stereo, CisTransStereoForm::NotStereo, None, CisTransStereoForm::Undetermined, false)]
+    #[case::positive_positive(CisTransStereoForm::Stereo, CisTransStereoForm::Stereo, Some(CisTransStereoForm::Stereo), CisTransStereoForm::Stereo, true)]
+    fn test_cis_trans_stereo_form_lattice(
+        #[case] left: CisTransStereoForm,
+        #[case] right: CisTransStereoForm,
+        #[case] expected_meet: Option<CisTransStereoForm>,
+        #[case] expected_join: CisTransStereoForm,
+        #[case] expected_matches: bool,
+    ) {
+        assert_eq!(left.is_compatible(&right), expected_meet.is_some());
+        assert_eq!(left.meet(&right), expected_meet);
+        assert_eq!(left.join(&right), Ok(expected_join));
+        assert_eq!(left.matches(&right), expected_matches);
+        assert_eq!(left.normalized_eq(&right), left == right);
     }
 
     #[rustfmt::skip]

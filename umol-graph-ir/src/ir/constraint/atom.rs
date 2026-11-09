@@ -1145,6 +1145,8 @@ mod tests {
         AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::NotStereo),
         AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
     )]
+    #[case::stereo_bool_false(AtomConstraintForm::tetrahedral_stereo(false), AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo))]
+    #[case::stereo_bool_true(AtomConstraintForm::tetrahedral_stereo(true), AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo))]
     fn test_atom_constraint_form_constructors(
         #[case] actual: AtomConstraintForm,
         #[case] expected: AtomConstraintForm,
@@ -2162,7 +2164,7 @@ mod tests {
         AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
         Some(AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo)])))]
     #[case::tetrahedral_not_stereo_vs_stereo_contradicts(AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
-        AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo(0_u32))]), None)]
+        AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo())]), None)]
     fn test_atom_constraints_form_meet(
         #[case] a: AtomConstraintsForm,
         #[case] b: AtomConstraintsForm,
@@ -2197,7 +2199,7 @@ mod tests {
         AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
         AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]))]
     #[case::tetrahedral_incompatible_drops_to_undetermined(AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo)]),
-        AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo(0_u32))]), AtomConstraintsForm::new())]
+        AtomConstraintsForm::from_iter([AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo())]), AtomConstraintsForm::new())]
     fn test_atom_constraints_form_join(
         #[case] a: AtomConstraintsForm,
         #[case] b: AtomConstraintsForm,

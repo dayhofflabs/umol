@@ -127,13 +127,12 @@ use crate::{
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::{SpinState, UnpairedElectrons, UnpairedElectronsForm, UnpairedElectronsUpdate},
     stereo::{
-        CisTransConfiguration, CisTransStereo, CisTransStereoForm, LigandPermutation, Orientation,
+        CisTransConfiguration, CisTransStereoForm, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomForm, StereoAtomUpdate, StereoAtomView,
         StereoAtomViews, StereoBondForm, StereoBondUpdate, StereoBondView, StereoBondViews,
         StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoInconsistency,
         StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoSelection, StereoSite,
-        StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereo,
-        TetrahedralStereoForm, Topicity,
+        StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, RollbackMethod},
@@ -469,10 +468,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoTerm>()?;
         module.add_class::<StereoCoset>()?;
         module.add_class::<TetrahedralStereoForm>()?;
-        module.add_class::<TetrahedralStereo>()?;
         module.add_class::<TetrahedralConfiguration>()?;
         module.add_class::<CisTransStereoForm>()?;
-        module.add_class::<CisTransStereo>()?;
         module.add_class::<CisTransConfiguration>()?;
         module.add_class::<StereoKind>()?;
         module.add_class::<StereoLigandKind>()?;

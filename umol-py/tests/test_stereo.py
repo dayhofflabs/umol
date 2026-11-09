@@ -1,11 +1,11 @@
 import pytest
+import umol
 
 from umol import (
     AtomForm,
     BondForm,
     BooleanForm,
     CisTransConfiguration,
-    CisTransStereo,
     CisTransStereoForm,
     Element,
     FluxionalityForm,
@@ -35,7 +35,6 @@ from umol import (
     Stereogenicity,
     StereogenicityForm,
     TetrahedralConfiguration,
-    TetrahedralStereo,
     TetrahedralStereoForm,
     Topicity,
     TopicityForm,
@@ -391,22 +390,24 @@ def test_stereo_coset_term():
 
 
 def test_tetrahedral_stereo_form_stereo():
-    assert TetrahedralStereoForm.Stereo(StereoCoset.Lit(1)) == TetrahedralStereoForm.Stereo(
-        StereoCoset.Lit(1)
-    )
+    assert TetrahedralStereoForm.Stereo() == TetrahedralStereoForm.Stereo()
 
 
 def test_tetrahedral_stereo_form_not_stereo():
     assert TetrahedralStereoForm.NotStereo() == TetrahedralStereoForm.NotStereo()
 
 
-def test_tetrahedral_stereo_form_as_lit():
-    assert TetrahedralStereoForm.NotStereo().as_lit() == TetrahedralStereo.NotStereo()
-    assert TetrahedralStereoForm.Stereo(StereoCoset.Lit(1)).as_lit() == (
-        TetrahedralStereo.Stereo(1)
-    )
-    assert TetrahedralStereoForm.Undetermined().as_lit() is None
-    assert TetrahedralStereoForm.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (TetrahedralStereoForm.Undetermined(), None),
+        (TetrahedralStereoForm.NotStereo(), False),
+        (TetrahedralStereoForm.Stereo(), True),
+    ],
+)
+def test_tetrahedral_stereo_form_as_lit(value, expected):
+    assert value.as_lit() is expected
+    assert value.is_ground() == (expected is not None)
 
 
 def test_stereo_coset_eq_hash_repr():
@@ -425,32 +426,72 @@ def test_stereoterm_eq_repr():
 
 
 def test_tetrahedral_stereo_form_stereo_repr():
-    assert repr(TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))) == (
-        "TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))"
-    )
+    assert repr(TetrahedralStereoForm.Stereo()) == "TetrahedralStereoForm.Stereo()"
 
 
 def test_cis_trans_stereo_form_stereo():
-    assert CisTransStereoForm.Stereo(StereoCoset.Lit(1)) == CisTransStereoForm.Stereo(
-        StereoCoset.Lit(1)
-    )
+    assert CisTransStereoForm.Stereo() == CisTransStereoForm.Stereo()
 
 
 def test_cis_trans_stereo_form_not_stereo():
     assert CisTransStereoForm.NotStereo() == CisTransStereoForm.NotStereo()
 
 
-def test_cis_trans_stereo_form_as_lit():
-    assert CisTransStereoForm.NotStereo().as_lit() == CisTransStereo.NotStereo()
-    assert CisTransStereoForm.Stereo(StereoCoset.Lit(0)).as_lit() == CisTransStereo.Stereo(0)
-    assert CisTransStereoForm.Undetermined().as_lit() is None
-    assert CisTransStereoForm.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (CisTransStereoForm.Undetermined(), None),
+        (CisTransStereoForm.NotStereo(), False),
+        (CisTransStereoForm.Stereo(), True),
+    ],
+)
+def test_cis_trans_stereo_form_as_lit(value, expected):
+    assert value.as_lit() is expected
+    assert value.is_ground() == (expected is not None)
 
 
 def test_cis_trans_stereo_form_stereo_repr():
-    assert repr(CisTransStereoForm.Stereo(StereoCoset.Lit(1))) == (
-        "CisTransStereoForm.Stereo(StereoCoset.Lit(1))"
-    )
+    assert repr(CisTransStereoForm.Stereo()) == "CisTransStereoForm.Stereo()"
+
+
+@pytest.mark.parametrize("form_type", [TetrahedralStereoForm, CisTransStereoForm])
+@pytest.mark.parametrize(
+    ("left_name", "right_name", "meet_name", "join_name", "matches"),
+    [
+        ("Undetermined", "Undetermined", "Undetermined", "Undetermined", True),
+        ("Undetermined", "NotStereo", "NotStereo", "Undetermined", True),
+        ("Undetermined", "Stereo", "Stereo", "Undetermined", True),
+        ("NotStereo", "Undetermined", "NotStereo", "Undetermined", False),
+        ("NotStereo", "NotStereo", "NotStereo", "NotStereo", True),
+        ("NotStereo", "Stereo", None, "Undetermined", False),
+        ("Stereo", "Undetermined", "Stereo", "Undetermined", False),
+        ("Stereo", "NotStereo", None, "Undetermined", False),
+        ("Stereo", "Stereo", "Stereo", "Stereo", True),
+    ],
+)
+def test_stereo_form_lattice(form_type, left_name, right_name, meet_name, join_name, matches):
+    left = getattr(form_type, left_name)()
+    right = getattr(form_type, right_name)()
+    expected_meet = None if meet_name is None else getattr(form_type, meet_name)()
+
+    assert left.normalize() == left
+    assert left.normalized_eq(right) == (left_name == right_name)
+    assert left.meet(right) == expected_meet
+    assert left.join(right) == getattr(form_type, join_name)()
+    assert left.matches(right) == matches
+    assert left.is_compatible(right) == (meet_name is not None)
+
+
+@pytest.mark.parametrize("form_type", [TetrahedralStereoForm, CisTransStereoForm])
+def test_stereo_form_stereo_error(form_type):
+    with pytest.raises(TypeError):
+        form_type.Stereo(StereoCoset.Lit(0))
+
+
+@pytest.mark.parametrize("name", ["TetrahedralStereo", "CisTransStereo"])
+def test_stereo_exports(name):
+    assert not hasattr(umol, name)
+    assert name not in umol.__all__
 
 
 def test_cistransconfiguration_enum():

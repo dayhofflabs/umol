@@ -729,6 +729,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::{GraphRemapping, NodeId, Remapping};
     use umol_perm::{Orientation, Permutation};
 
     use crate::ir::aromatic::AromaticSystemForm;
@@ -761,8 +762,9 @@ mod tests {
     use crate::ir::ring::{RingConfig, RingModel};
     use crate::ir::stereo::{
         CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
-        StereoKind, Stereogenicity, TetrahedralStereoForm, Topicity,
+        StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
     };
+    use crate::ir::MoleculeRemapping;
     use crate::mol_dsl;
 
     #[rustfmt::skip]
@@ -834,7 +836,7 @@ mod tests {
         BondId(1),
         BondConstraintKey::CisTransStereo,
         Some(BondConstraintForm::cis_trans_stereo(
-            CisTransStereoForm::stereo(StereoCoset::lit_set([0, 1])),
+            CisTransStereoForm::stereo(),
         )),
     )]
     fn test_bond_constraints_view_derived_complete_determination(
@@ -1050,17 +1052,17 @@ mod tests {
         }),
         AtomConstraintKey::TetrahedralStereo,
         Some(AtomConstraintForm::tetrahedral_stereo(
-            TetrahedralStereoForm::stereo(StereoCoset::Lit(1)),
+            TetrahedralStereoForm::stereo(),
         )),
     )]
-    #[case::tetrahedral_wrong_arity(
+    #[case::tetrahedral_three_ligands(
         mol_dsl!(r#"{
-            :atoms ["C#T1" "F" "Cl" "Br"]
+            :atoms ["C#T+" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3] :attrs "Th1"}]
         }"#),
         AtomConstraintKey::TetrahedralStereo,
-        None,
+        Some(AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo)),
     )]
     #[case::tetrahedral_undetermined_configuration(
         Molecule::from_entries(MoleculeEntries {
@@ -1104,17 +1106,17 @@ mod tests {
 
     #[rstest]
     #[case::actual_swap(mol_dsl!(r#"{
-        :atoms ["C#T1" "F" "Cl" "Br" "I"]
+        :atoms ["C#T+" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]
     }"#))]
     #[case::virtual_last(mol_dsl!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
     }"#))]
     #[case::lone_pair_last(mol_dsl!(r#"{
-        :atoms ["N#T1" "F" "Cl" "Br"]
+        :atoms ["N#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [[:lp 0] 1 2 3] :attrs "Th0"}]
     }"#))]
@@ -1123,8 +1125,68 @@ mod tests {
         let view = molecule.atom(AtomId(0)).constraints();
         let key = AtomConstraintKey::TetrahedralStereo;
         let expected = Some(AtomConstraintForm::tetrahedral_stereo(
-            TetrahedralStereoForm::stereo(StereoCoset::Lit(1)),
+            TetrahedralStereoForm::stereo(),
         ));
+        assert_eq!(view.derived(key), expected);
+        assert_eq!(view.derived_complete(key), expected);
+        assert_eq!(view.evidenced(key), expected);
+        assert_eq!(view.evidenced_complete(key), expected);
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(Some(StereoKind::Tetrahedral), TetrahedralStereoForm::Stereo)]
+    #[case::other_kind(Some(StereoKind::SquarePlanar), TetrahedralStereoForm::NotStereo)]
+    #[case::unknown_kind(None, TetrahedralStereoForm::Undetermined)]
+    fn test_atom_constraints_view_derived_stereo(
+        #[case] kind: Option<StereoKind>,
+        #[case] expected: TetrahedralStereoForm,
+        #[values(StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::Undetermined,
+            StereoCoset::lit_set([0, 1]), StereoCoset::term(StereoTerm::var("configuration")))]
+        coset: StereoCoset,
+        #[values(false, true)] relabel: bool,
+    ) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..5)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                [1, 2, 3, 4]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+                StereoAtomForm {
+                    configuration: kind.map_or(StereoConfigurationForm::Undetermined, |kind| {
+                        StereoConfigurationForm::kinded(kind, coset)
+                    }),
+                    ..Default::default()
+                },
+            )],
+            ..Default::default()
+        });
+        let molecule = if relabel {
+            molecule.remap(&MoleculeRemapping::new(
+                GraphRemapping::new(
+                    Remapping::new((0..5).rev().map(NodeId).collect()).unwrap(),
+                    Remapping::identity(4),
+                ),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(1),
+                Remapping::identity(0),
+            ))
+        } else {
+            molecule
+        };
+        let original = molecule.clone();
+        let view = molecule
+            .atom(AtomId(if relabel { 4 } else { 0 }))
+            .constraints();
+        let key = AtomConstraintKey::TetrahedralStereo;
+        let expected = Some(AtomConstraintForm::tetrahedral_stereo(expected));
         assert_eq!(view.derived(key), expected);
         assert_eq!(view.derived_complete(key), expected);
         assert_eq!(view.evidenced(key), expected);
@@ -1276,7 +1338,7 @@ mod tests {
         }),
         AtomConstraintKey::TetrahedralStereo,
         Some(AtomConstraintForm::tetrahedral_stereo(
-            TetrahedralStereoForm::stereo(StereoCoset::lit_set([0, 1])),
+            TetrahedralStereoForm::stereo(),
         )),
     )]
     fn test_atom_constraints_view_derived_complete_determination(
@@ -1650,7 +1712,7 @@ mod tests {
         BondId(1),
         BondConstraintKey::CisTransStereo,
         Some(BondConstraintForm::cis_trans_stereo(
-            CisTransStereoForm::stereo(StereoCoset::Lit(1)),
+            CisTransStereoForm::stereo(),
         )),
     )]
     #[case::cis_trans_undetermined_configuration(
@@ -1701,17 +1763,17 @@ mod tests {
     #[rstest]
     #[case::side_swap(mol_dsl!(r#"{
         :atoms ["C" "C" "F" "Cl" "Br" "I"]
-        :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [3 2 4 5] :attrs "Ct0"}]
     }"#))]
     #[case::endpoint_swap(mol_dsl!(r#"{
         :atoms ["C" "C" "F" "Cl" "Br" "I"]
-        :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [5 4 2 3] :attrs "Ct0"}]
     }"#))]
     #[case::virtual_last(mol_dsl!(r#"{
         :atoms ["C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]
     }"#))]
     fn test_bond_constraints_view_derived_frame(#[case] molecule: Molecule) {
@@ -1719,8 +1781,70 @@ mod tests {
         let view = molecule.bond(BondId(0)).constraints();
         let key = BondConstraintKey::CisTransStereo;
         let expected = Some(BondConstraintForm::cis_trans_stereo(
-            CisTransStereoForm::stereo(StereoCoset::Lit(1)),
+            CisTransStereoForm::stereo(),
         ));
+        assert_eq!(view.derived(key), expected);
+        assert_eq!(view.derived_complete(key), expected);
+        assert_eq!(view.evidenced(key), expected);
+        assert_eq!(view.evidenced_complete(key), expected);
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::bond_kind(Some(StereoKind::CisTrans), CisTransStereoForm::Stereo)]
+    #[case::other_kind(Some(StereoKind::Axial), CisTransStereoForm::NotStereo)]
+    #[case::unknown_kind(None, CisTransStereoForm::Undetermined)]
+    fn test_bond_constraints_view_derived_stereo(
+        #[case] kind: Option<StereoKind>,
+        #[case] expected: CisTransStereoForm,
+        #[values(StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::Undetermined,
+            StereoCoset::lit_set([0, 1]), StereoCoset::term(StereoTerm::var("configuration")))]
+        coset: StereoCoset,
+        #[values(false, true)] relabel: bool,
+    ) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(0),
+                [2, 3, 4, 5]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+                StereoBondForm {
+                    configuration: kind.map_or(StereoConfigurationForm::Undetermined, |kind| {
+                        StereoConfigurationForm::kinded(kind, coset)
+                    }),
+                    ..Default::default()
+                },
+            )],
+            ..Default::default()
+        });
+        let molecule = if relabel {
+            molecule.remap(&MoleculeRemapping::new(
+                GraphRemapping::new(
+                    Remapping::new((0..6).rev().map(NodeId).collect()).unwrap(),
+                    Remapping::identity(5),
+                ),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(1),
+            ))
+        } else {
+            molecule
+        };
+        let original = molecule.clone();
+        let view = molecule.bond(BondId(0)).constraints();
+        let key = BondConstraintKey::CisTransStereo;
+        let expected = Some(BondConstraintForm::cis_trans_stereo(expected));
         assert_eq!(view.derived(key), expected);
         assert_eq!(view.derived_complete(key), expected);
         assert_eq!(view.evidenced(key), expected);

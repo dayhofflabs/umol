@@ -394,19 +394,19 @@ def test_entity_constraints_view_evidenced_conflict(molecule, namespace, contain
     "source,namespace,expected",
     [
         pytest.param(
-            '{:atoms ["C#h#T1" "F" "Cl" "Br"] '
+            '{:atoms ["C#h#T+" "F" "Cl" "Br"] '
             ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] '
             ':stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}',
             "atoms",
-            AtomConstraintForm.TetrahedralStereo(TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))),
+            AtomConstraintForm.TetrahedralStereo(TetrahedralStereoForm.Stereo()),
             id="tetrahedral",
         ),
         pytest.param(
             '{:atoms ["C#h" "C#h" "F" "Cl"] '
-            ':bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]] '
+            ':bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]] '
             ':stereo-bonds [{:site 0 :ligands [[:h 1] 3 2 [:h 0]] :attrs "Ct0"}]}',
             "bonds",
-            BondConstraintForm.CisTransStereo(CisTransStereoForm.Stereo(StereoCoset.Lit(1))),
+            BondConstraintForm.CisTransStereo(CisTransStereoForm.Stereo()),
             id="cis_trans",
         ),
     ],

@@ -360,22 +360,29 @@ def test_bondconstraints_aromatic_property():
     assert cs.aromatic == BooleanForm.Lit(True)
 
 
-def test_bondconstraints_cis_trans_stereo_config():
-    cs = BondConstraintsForm([])
-    cs.cis_trans_stereo = CisTransConfiguration.E
-    assert cs.cis_trans_stereo == CisTransStereoForm.Stereo(StereoCoset.Lit(1))
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (False, CisTransStereoForm.NotStereo()),
+        (True, CisTransStereoForm.Stereo()),
+        (CisTransStereoForm.Undetermined(), CisTransStereoForm.Undetermined()),
+        (CisTransStereoForm.Stereo(), CisTransStereoForm.Stereo()),
+    ],
+)
+def test_bond_constraints_form_set_cis_trans_stereo(value, expected):
+    constraints = BondConstraintsForm([])
+    constraints.cis_trans_stereo = value
+    assert constraints.cis_trans_stereo == expected
 
 
-def test_bondconstraints_cis_trans_stereo_false():
-    cs = BondConstraintsForm([])
-    cs.cis_trans_stereo = False
-    assert cs.cis_trans_stereo == CisTransStereoForm.NotStereo()
-
-
-def test_bondconstraints_cis_trans_stereo_true_error():
-    cs = BondConstraintsForm([])
-    with pytest.raises(ValueError):
-        cs.cis_trans_stereo = True
+@pytest.mark.parametrize(
+    "value", [CisTransConfiguration.Z, CisTransConfiguration.E, StereoCoset.Lit(0)]
+)
+def test_bond_constraints_form_set_cis_trans_stereo_error(value):
+    constraints = BondConstraintsForm([])
+    with pytest.raises(TypeError):
+        constraints.cis_trans_stereo = value
+    assert list(constraints) == []
 
 
 def test_bondconstraints_ring_count_property():

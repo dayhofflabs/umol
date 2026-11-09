@@ -17,7 +17,7 @@ use pyo3::types::PyDict;
 use umol_graph_ir::ir::BooleanForm as GraphIrBooleanForm;
 use umol_graph_ir::ir::{
     AsLit, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
-    CisTransConfiguration as GraphIrCisTransConfiguration, CisTransStereo as GraphIrCisTransStereo,
+    CisTransConfiguration as GraphIrCisTransConfiguration,
     CisTransStereoForm as GraphIrCisTransStereoForm, LigandPermutation as GraphIrLigandPermutation,
     Molecule as GraphIrMolecule, OrientedLigandPermutation as GraphIrOrientedLigandPermutation,
     StereoAtomForm as GraphIrStereoAtomForm, StereoAtomId as GraphIrStereoAtomId,
@@ -32,7 +32,6 @@ use umol_graph_ir::ir::{
     StereoLigandPosition as GraphIrStereoLigandPosition, StereoTerm as GraphIrStereoTerm,
     Stereogenicity as GraphIrStereogenicity,
     TetrahedralConfiguration as GraphIrTetrahedralConfiguration,
-    TetrahedralStereo as GraphIrTetrahedralStereo,
     TetrahedralStereoForm as GraphIrTetrahedralStereoForm, Topicity as GraphIrTopicity,
 };
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
@@ -227,91 +226,16 @@ impl StereoCoset {
     }
 }
 
-/// Tetrahedral atom stereo: undetermined, explicitly not stereogenic, or a
-/// stereo coset.
+/// Presence of tetrahedral atom stereo, independently of configuration or stereogenicity.
 #[pyclass]
 pub enum TetrahedralStereoForm {
     Undetermined(),
     NotStereo(),
-    Stereo(Py<StereoCoset>),
+    Stereo(),
 }
 
 #[pymethods]
 impl TetrahedralStereoForm {
-    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py) == other.to_rust(py)
-    }
-
-    fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_rust(&self.to_rust(py))
-    }
-
-    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            TetrahedralStereoForm::Undetermined() => ("Undetermined", 0),
-            TetrahedralStereoForm::NotStereo() => ("NotStereo", 0),
-            TetrahedralStereoForm::Stereo(_) => ("Stereo", 1),
-        };
-        variant_repr(
-            slf.bind(py).as_any(),
-            "TetrahedralStereoForm",
-            variant,
-            arity,
-        )
-    }
-
-    /// The exact absence or stereo-coset value, or `None` when this expression is not ground.
-    fn as_lit(&self, py: Python<'_>) -> Option<TetrahedralStereo> {
-        self.to_rust(py).as_lit().map(TetrahedralStereo::from_rust)
-    }
-}
-
-impl_py_lattice!(
-    TetrahedralStereoForm,
-    GraphIrTetrahedralStereoForm,
-    |value: &TetrahedralStereoForm, py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoForm> {
-        Ok(value.to_rust(py))
-    },
-    |py: Python<'_>, value: GraphIrTetrahedralStereoForm| -> PyResult<TetrahedralStereoForm> {
-        TetrahedralStereoForm::from_rust(py, &value)
-    }
-);
-
-impl TetrahedralStereoForm {
-    pub(crate) fn from_rust(
-        py: Python<'_>,
-        ir_value: &GraphIrTetrahedralStereoForm,
-    ) -> PyResult<Self> {
-        Ok(match ir_value {
-            GraphIrTetrahedralStereoForm::Undetermined => Self::Undetermined(),
-            GraphIrTetrahedralStereoForm::NotStereo => Self::NotStereo(),
-            GraphIrTetrahedralStereoForm::Stereo(coset) => {
-                Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
-            }
-        })
-    }
-
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrTetrahedralStereoForm {
-        match self {
-            Self::Undetermined() => GraphIrTetrahedralStereoForm::Undetermined,
-            Self::NotStereo() => GraphIrTetrahedralStereoForm::NotStereo,
-            Self::Stereo(coset) => {
-                GraphIrTetrahedralStereoForm::Stereo(coset.bind(py).borrow().to_rust(py))
-            }
-        }
-    }
-}
-
-/// Exact ground tetrahedral stereo: explicitly not stereogenic, or a literal coset.
-#[pyclass(from_py_object)]
-#[derive(Clone, Copy)]
-pub enum TetrahedralStereo {
-    NotStereo(),
-    Stereo(u32),
-}
-
-#[pymethods]
-impl TetrahedralStereo {
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }
@@ -321,26 +245,45 @@ impl TetrahedralStereo {
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            Self::NotStereo() => ("NotStereo", 0),
-            Self::Stereo(_) => ("Stereo", 1),
+        let variant = match &*slf.bind(py).borrow() {
+            Self::Undetermined() => "Undetermined",
+            Self::NotStereo() => "NotStereo",
+            Self::Stereo() => "Stereo",
         };
-        variant_repr(slf.bind(py).as_any(), "TetrahedralStereo", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "TetrahedralStereoForm", variant, 0)
+    }
+
+    /// The presence assertion, or None when undetermined.
+    fn as_lit(&self) -> Option<bool> {
+        self.to_rust().as_lit()
     }
 }
 
-impl TetrahedralStereo {
-    pub(crate) fn from_rust(stereo: GraphIrTetrahedralStereo) -> Self {
-        match stereo {
-            GraphIrTetrahedralStereo::NotStereo => Self::NotStereo(),
-            GraphIrTetrahedralStereo::Stereo(coset) => Self::Stereo(coset),
+impl_py_lattice!(
+    TetrahedralStereoForm,
+    GraphIrTetrahedralStereoForm,
+    |value: &TetrahedralStereoForm, _py: Python<'_>| -> PyResult<GraphIrTetrahedralStereoForm> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: GraphIrTetrahedralStereoForm| -> PyResult<TetrahedralStereoForm> {
+        Ok(TetrahedralStereoForm::from_rust(&value))
+    }
+);
+
+impl TetrahedralStereoForm {
+    pub(crate) fn from_rust(ir_value: &GraphIrTetrahedralStereoForm) -> Self {
+        match ir_value {
+            GraphIrTetrahedralStereoForm::Undetermined => Self::Undetermined(),
+            GraphIrTetrahedralStereoForm::NotStereo => Self::NotStereo(),
+            GraphIrTetrahedralStereoForm::Stereo => Self::Stereo(),
         }
     }
 
-    pub(crate) fn to_rust(self) -> GraphIrTetrahedralStereo {
+    pub(crate) fn to_rust(&self) -> GraphIrTetrahedralStereoForm {
         match self {
-            Self::NotStereo() => GraphIrTetrahedralStereo::NotStereo,
-            Self::Stereo(coset) => GraphIrTetrahedralStereo::Stereo(coset),
+            Self::Undetermined() => GraphIrTetrahedralStereoForm::Undetermined,
+            Self::NotStereo() => GraphIrTetrahedralStereoForm::NotStereo,
+            Self::Stereo() => GraphIrTetrahedralStereoForm::Stereo,
         }
     }
 }
@@ -363,85 +306,16 @@ impl TetrahedralConfiguration {
     }
 }
 
-/// Cis/trans bond stereo: undetermined, explicitly not stereogenic, or a stereo coset.
+/// Presence of a CisTrans stereo entity, independent of its configuration or stereogenicity.
 #[pyclass]
 pub enum CisTransStereoForm {
     Undetermined(),
     NotStereo(),
-    Stereo(Py<StereoCoset>),
+    Stereo(),
 }
 
 #[pymethods]
 impl CisTransStereoForm {
-    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py) == other.to_rust(py)
-    }
-
-    fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_rust(&self.to_rust(py))
-    }
-
-    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            CisTransStereoForm::Undetermined() => ("Undetermined", 0),
-            CisTransStereoForm::NotStereo() => ("NotStereo", 0),
-            CisTransStereoForm::Stereo(_) => ("Stereo", 1),
-        };
-        variant_repr(slf.bind(py).as_any(), "CisTransStereoForm", variant, arity)
-    }
-
-    /// The exact absence or stereo-coset value, or `None` when this expression is not ground.
-    fn as_lit(&self, py: Python<'_>) -> Option<CisTransStereo> {
-        self.to_rust(py).as_lit().map(CisTransStereo::from_rust)
-    }
-}
-
-impl_py_lattice!(
-    CisTransStereoForm,
-    GraphIrCisTransStereoForm,
-    |value: &CisTransStereoForm, py: Python<'_>| -> PyResult<GraphIrCisTransStereoForm> {
-        Ok(value.to_rust(py))
-    },
-    |py: Python<'_>, value: GraphIrCisTransStereoForm| -> PyResult<CisTransStereoForm> {
-        CisTransStereoForm::from_rust(py, &value)
-    }
-);
-
-impl CisTransStereoForm {
-    pub(crate) fn from_rust(
-        py: Python<'_>,
-        ir_value: &GraphIrCisTransStereoForm,
-    ) -> PyResult<Self> {
-        Ok(match ir_value {
-            GraphIrCisTransStereoForm::Undetermined => Self::Undetermined(),
-            GraphIrCisTransStereoForm::NotStereo => Self::NotStereo(),
-            GraphIrCisTransStereoForm::Stereo(coset) => {
-                Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
-            }
-        })
-    }
-
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrCisTransStereoForm {
-        match self {
-            Self::Undetermined() => GraphIrCisTransStereoForm::Undetermined,
-            Self::NotStereo() => GraphIrCisTransStereoForm::NotStereo,
-            Self::Stereo(coset) => {
-                GraphIrCisTransStereoForm::Stereo(coset.bind(py).borrow().to_rust(py))
-            }
-        }
-    }
-}
-
-/// Exact ground cis/trans stereo: explicitly not stereogenic, or a literal coset.
-#[pyclass(from_py_object)]
-#[derive(Clone, Copy)]
-pub enum CisTransStereo {
-    NotStereo(),
-    Stereo(u32),
-}
-
-#[pymethods]
-impl CisTransStereo {
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }
@@ -451,26 +325,45 @@ impl CisTransStereo {
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            Self::NotStereo() => ("NotStereo", 0),
-            Self::Stereo(_) => ("Stereo", 1),
+        let variant = match &*slf.bind(py).borrow() {
+            Self::Undetermined() => "Undetermined",
+            Self::NotStereo() => "NotStereo",
+            Self::Stereo() => "Stereo",
         };
-        variant_repr(slf.bind(py).as_any(), "CisTransStereo", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "CisTransStereoForm", variant, 0)
+    }
+
+    /// The presence assertion, or None when undetermined.
+    fn as_lit(&self) -> Option<bool> {
+        self.to_rust().as_lit()
     }
 }
 
-impl CisTransStereo {
-    pub(crate) fn from_rust(stereo: GraphIrCisTransStereo) -> Self {
-        match stereo {
-            GraphIrCisTransStereo::NotStereo => Self::NotStereo(),
-            GraphIrCisTransStereo::Stereo(coset) => Self::Stereo(coset),
+impl_py_lattice!(
+    CisTransStereoForm,
+    GraphIrCisTransStereoForm,
+    |value: &CisTransStereoForm, _py: Python<'_>| -> PyResult<GraphIrCisTransStereoForm> {
+        Ok(value.to_rust())
+    },
+    |_py: Python<'_>, value: GraphIrCisTransStereoForm| -> PyResult<CisTransStereoForm> {
+        Ok(CisTransStereoForm::from_rust(&value))
+    }
+);
+
+impl CisTransStereoForm {
+    pub(crate) fn from_rust(ir_value: &GraphIrCisTransStereoForm) -> Self {
+        match ir_value {
+            GraphIrCisTransStereoForm::Undetermined => Self::Undetermined(),
+            GraphIrCisTransStereoForm::NotStereo => Self::NotStereo(),
+            GraphIrCisTransStereoForm::Stereo => Self::Stereo(),
         }
     }
 
-    pub(crate) fn to_rust(self) -> GraphIrCisTransStereo {
+    pub(crate) fn to_rust(&self) -> GraphIrCisTransStereoForm {
         match self {
-            Self::NotStereo() => GraphIrCisTransStereo::NotStereo,
-            Self::Stereo(coset) => GraphIrCisTransStereo::Stereo(coset),
+            Self::Undetermined() => GraphIrCisTransStereoForm::Undetermined,
+            Self::NotStereo() => GraphIrCisTransStereoForm::NotStereo,
+            Self::Stereo() => GraphIrCisTransStereoForm::Stereo,
         }
     }
 }
@@ -493,25 +386,19 @@ impl CisTransConfiguration {
     }
 }
 
-/// Setter coercion for `cis_trans_stereo`: `False` → not stereogenic, a
-/// `CisTransConfiguration` (`Z`/`E`) → that coset, or a `CisTransStereoForm` passthrough.
+/// Boolean or explicit form input for a bond stereo constraint.
 #[derive(FromPyObject)]
 pub(crate) enum CisTransStereoLike {
     Flag(bool),
-    Config(CisTransConfiguration),
     Form(Py<CisTransStereoForm>),
 }
 
 impl CisTransStereoLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrCisTransStereoForm> {
-        Ok(match self {
-            CisTransStereoLike::Flag(false) => GraphIrCisTransStereoForm::NotStereo,
-            CisTransStereoLike::Flag(true) => return Err(PyValueError::new_err(
-                "cis_trans_stereo = True is not meaningful; use CisTransConfiguration.Z/E or False",
-            )),
-            CisTransStereoLike::Config(cts) => cts.to_rust().into(),
-            CisTransStereoLike::Form(a) => a.bind(py).borrow().to_rust(py),
-        })
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrCisTransStereoForm {
+        match self {
+            Self::Flag(value) => (*value).into(),
+            Self::Form(form) => form.bind(py).borrow().to_rust(),
+        }
     }
 }
 
@@ -1788,49 +1675,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrTetrahedralStereoForm::Undetermined)]
-    #[case(GraphIrTetrahedralStereoForm::NotStereo)]
-    #[case(GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::Lit(1)))]
-    #[case(
-        GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::Term(Box::new(
-            GraphIrStereoTerm::Lit(0)
-        )))
-    )]
-    fn test_tetrahedral_stereo_form_roundtrip(#[case] ir_value: GraphIrTetrahedralStereoForm) {
-        Python::attach(|py| {
-            assert_eq!(
-                TetrahedralStereoForm::from_rust(py, &ir_value)
-                    .unwrap()
-                    .to_rust(py),
-                ir_value
-            );
-        });
+    #[case::open(GraphIrTetrahedralStereoForm::Undetermined)]
+    #[case::negative(GraphIrTetrahedralStereoForm::NotStereo)]
+    #[case::positive(GraphIrTetrahedralStereoForm::Stereo)]
+    fn test_tetrahedral_stereo_form_roundtrip(#[case] value: GraphIrTetrahedralStereoForm) {
+        assert_eq!(TetrahedralStereoForm::from_rust(&value).to_rust(), value);
     }
 
     #[rstest]
-    #[case(
-        GraphIrTetrahedralStereoForm::NotStereo,
-        Some(GraphIrTetrahedralStereo::NotStereo)
-    )]
-    #[case(
-        GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::Lit(2)),
-        Some(GraphIrTetrahedralStereo::Stereo(2))
-    )]
-    #[case(GraphIrTetrahedralStereoForm::Undetermined, None)]
-    #[case(GraphIrTetrahedralStereoForm::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
+    #[case::open(GraphIrTetrahedralStereoForm::Undetermined, None)]
+    #[case::negative(GraphIrTetrahedralStereoForm::NotStereo, Some(false))]
+    #[case::positive(GraphIrTetrahedralStereoForm::Stereo, Some(true))]
     fn test_tetrahedral_stereo_form_as_lit(
-        #[case] ir_value: GraphIrTetrahedralStereoForm,
-        #[case] expected: Option<GraphIrTetrahedralStereo>,
+        #[case] value: GraphIrTetrahedralStereoForm,
+        #[case] expected: Option<bool>,
     ) {
-        Python::attach(|py| {
-            assert_eq!(
-                TetrahedralStereoForm::from_rust(py, &ir_value)
-                    .unwrap()
-                    .as_lit(py)
-                    .map(TetrahedralStereo::to_rust),
-                expected
-            );
-        });
+        assert_eq!(TetrahedralStereoForm::from_rust(&value).as_lit(), expected);
     }
 
     #[rstest]
@@ -1844,47 +1704,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrCisTransStereoForm::Undetermined)]
-    #[case(GraphIrCisTransStereoForm::NotStereo)]
-    #[case(GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::Lit(1)))]
-    #[case(GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::Term(Box::new(
-        GraphIrStereoTerm::Lit(0)
-    ))))]
-    fn test_cis_trans_stereo_form_roundtrip(#[case] ir_value: GraphIrCisTransStereoForm) {
-        Python::attach(|py| {
-            assert_eq!(
-                CisTransStereoForm::from_rust(py, &ir_value)
-                    .unwrap()
-                    .to_rust(py),
-                ir_value
-            );
-        });
+    #[case::open(GraphIrCisTransStereoForm::Undetermined)]
+    #[case::negative(GraphIrCisTransStereoForm::NotStereo)]
+    #[case::positive(GraphIrCisTransStereoForm::Stereo)]
+    fn test_cis_trans_stereo_form_roundtrip(#[case] value: GraphIrCisTransStereoForm) {
+        assert_eq!(CisTransStereoForm::from_rust(&value).to_rust(), value);
     }
 
     #[rstest]
-    #[case(
-        GraphIrCisTransStereoForm::NotStereo,
-        Some(GraphIrCisTransStereo::NotStereo)
-    )]
-    #[case(
-        GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::Lit(1)),
-        Some(GraphIrCisTransStereo::Stereo(1))
-    )]
-    #[case(GraphIrCisTransStereoForm::Undetermined, None)]
-    #[case(GraphIrCisTransStereoForm::Stereo(GraphIrStereoCoset::LitSet(BTreeSet::from([0, 1]))), None)]
+    #[case::open(GraphIrCisTransStereoForm::Undetermined, None)]
+    #[case::negative(GraphIrCisTransStereoForm::NotStereo, Some(false))]
+    #[case::positive(GraphIrCisTransStereoForm::Stereo, Some(true))]
     fn test_cis_trans_stereo_form_as_lit(
-        #[case] ir_value: GraphIrCisTransStereoForm,
-        #[case] expected: Option<GraphIrCisTransStereo>,
+        #[case] value: GraphIrCisTransStereoForm,
+        #[case] expected: Option<bool>,
     ) {
-        Python::attach(|py| {
-            assert_eq!(
-                CisTransStereoForm::from_rust(py, &ir_value)
-                    .unwrap()
-                    .as_lit(py)
-                    .map(CisTransStereo::to_rust),
-                expected
-            );
-        });
+        assert_eq!(CisTransStereoForm::from_rust(&value).as_lit(), expected);
     }
 
     #[rstest]

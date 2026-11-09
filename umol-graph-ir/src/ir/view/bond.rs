@@ -1,7 +1,6 @@
 //! Bond views.
 
 use umol_graph_core::{EdgeId, NodeId};
-use umol_perm::Permutation;
 
 use super::super::bond::BondForm;
 use super::super::boolean::BooleanForm;
@@ -11,8 +10,8 @@ use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{coset_apply_permutation, CisTransStereoForm, StereoKind};
-use super::super::traits::{Lattice, Normalize};
+use super::super::stereo::{CisTransStereoForm, StereoKind};
+use super::super::traits::Lattice;
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 use super::constraints::BondConstraintsView;
@@ -401,39 +400,16 @@ pub(crate) fn bond_derived_constraint(
             }
         }
         BondConstraintKey::CisTransStereo => {
-            // Total over staging entities: an undetermined kind or coset is
-            // an open claim, not the absence of one.
-            if let Some(stereo) = molecule.stereo_bonds().at(id) {
-                let form = match (
-                    stereo.attributes().configuration.kind(),
-                    stereo.attributes().configuration.coset(),
-                ) {
-                    (Some(StereoKind::CisTrans), Some(coset)) => {
-                        let ligands = stereo.ligand_ids();
-                        let mut image = [0, 1, 2, 3];
-                        for side in image.chunks_exact_mut(2) {
-                            side.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
-                        }
-                        // Swapping the complete endpoint blocks preserves cis-trans configuration.
-                        CisTransStereoForm::stereo(coset_apply_permutation(
-                            coset,
-                            Permutation::from_image(&image),
-                            StereoKind::CisTrans,
-                        )?)
-                    }
-                    (Some(StereoKind::CisTrans), None) | (None, _) => {
-                        CisTransStereoForm::Undetermined
-                    }
-                    (Some(_), _) => CisTransStereoForm::NotStereo,
-                };
-                BondConstraintForm::cis_trans_stereo(form).normalize().ok()
-            } else if complete {
-                Some(BondConstraintForm::cis_trans_stereo(
-                    CisTransStereoForm::NotStereo,
-                ))
-            } else {
-                Some(BondConstraintForm::undetermined(key))
-            }
+            let value = match molecule.stereo_bonds().at(id) {
+                Some(stereo) => match stereo.attributes().configuration.kind() {
+                    Some(StereoKind::CisTrans) => CisTransStereoForm::Stereo,
+                    Some(_) => CisTransStereoForm::NotStereo,
+                    None => CisTransStereoForm::Undetermined,
+                },
+                None if complete => CisTransStereoForm::NotStereo,
+                None => CisTransStereoForm::Undetermined,
+            };
+            Some(BondConstraintForm::cis_trans_stereo(value))
         }
         BondConstraintKey::RingMembership(scope) => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");

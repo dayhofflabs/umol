@@ -163,10 +163,6 @@ proptest! {
                 let b = StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, b.clone());
                 prop_assert_eq!(a.is_compatible(&b), a.meet(&b).is_some());
             }
-            let tetra = TetrahedralStereoForm::Stereo(a.clone());
-            prop_assert_eq!(tetra.is_compatible(&TetrahedralStereoForm::Undetermined), tetra.meet(&TetrahedralStereoForm::Undetermined).is_some());
-            let cis_trans = CisTransStereoForm::Stereo(a.clone());
-            prop_assert_eq!(cis_trans.is_compatible(&CisTransStereoForm::Undetermined), cis_trans.meet(&CisTransStereoForm::Undetermined).is_some());
         }
     }
 

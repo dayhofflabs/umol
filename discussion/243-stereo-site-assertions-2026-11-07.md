@@ -19,8 +19,9 @@ explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
 This records the selected design direction and its consequences. S0–S2 are
-complete; S3–S4 remain pending. The semantics, value interface, operation
-interfaces, and names below are the working design. S2 records the implemented
+complete; S3 is in progress and S4 remains pending. S3a is implemented, with
+verification pending the coordinated S3 migration. The semantics, value interface,
+operation interfaces, and names below are the working design. S2 records the implemented
 perception/resolution interfaces.
 Remaining subitems require explicit instruction. The staged implementation plan
 follows the change inventory.
@@ -1298,6 +1299,22 @@ and explicit-record rendering retain their existing design.
   Reduce the site-value generators while retaining the full entity-configuration
   generators and their independent references.
 
+  **Implemented — 2026-11-08; verification pending S3.** Both site forms now
+  have unit Undetermined, NotStereo, and Stereo variants, with bool literals and
+  From<bool>. The ground enums and configuration-to-constraint conversions are
+  removed. Structural readings use only the entity's known kind; canonical keys
+  carry no coset. Python variants, coercions, getters/setters, and exports follow
+  the same contract. Explicit-entity configuration types remain unchanged.
+
+  Added finite-state Rust/Python tables and structural-reading cases for known
+  and unknown kinds, open cosets, virtual ligands, and atom relabeling. Site
+  generators use the reduced domain; full entity-configuration generators and
+  reference properties are retained. Formatting, Python syntax checks, and
+  git diff --check pass. Native checks stop at 14 errors in the old DSL grammar
+  owned by S3b; graph-IR test compilation also encounters a removed-enum import
+  in an entity-constraint fixture owned by S3e. Runtime tests and the Python
+  rebuild await the remaining S3 migrations.
+
 - **S3b — Use the same reduced stereo grammar in every DSL context** — breaking (red→green).
   Modules: umol-graph-ir/src/dsl/stereo.rs,
   umol-graph-ir/src/dsl/atom.rs,
@@ -1460,4 +1477,4 @@ The critical sequence is S0 → S1 → S2 → S3 → S4. Within S3, value reduct
 feeds the shared DSL grammar, chemistry operations, and projection/export
 consumers. Their complete caller and fixture migration restores the passing build.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S0–S2 are complete; S3–S4 remain pending.
+unchanged. S0–S2 are complete; S3 is in progress and S4 remains pending.
