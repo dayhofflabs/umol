@@ -224,11 +224,9 @@ chirality-frame interpretation stay in the source-format layer; only the resulti
 representation is checked by the shared integrity gate.
 
 Creating a stereo entity to satisfy a positive assertion requires an integrity-valid frame. An
-assertion does not create distinguishable occurrences of an equal virtual ligand. If perception
-could satisfy `#T+` or `#C+` only by repeating an implicit hydrogen or lone pair, it perceives no such
-stereo entity and follows the operation's existing absence policy. Any boundary that supplies an
-explicit repeated ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it during raise; it
-must not normalize, deduplicate, or choose an arbitrary coset for malformed input.
+assertion does not create distinguishable occurrences of an equal virtual ligand. Any boundary
+that supplies an explicit repeated ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it
+during raise; it must not normalize, deduplicate, or choose an arbitrary coset for malformed input.
 
 An existing stereo atom or bond records an arrangement, without asserting stereogenicity.
 Symmetric and prochiral arrangements remain representable. Graph-derived ligand actions fix
@@ -965,6 +963,9 @@ These correspondences track entity ids. Replacing an entity's atoms, ligands, or
 that entity's pairing; the correspondence does not map positions within those lists.
 
 ### Resolution, projection, and transformations
+
+The shared resolver policy for refinement, conflicts, discharge, and realizability failures is
+defined in [Operation semantics](operations.md#resolution).
 
 Resolver::resolve and project consume a molecule and execute through one editor, without a recovery
 copy or journal. Only a determined result returns a molecule; underdetermination, contradiction,

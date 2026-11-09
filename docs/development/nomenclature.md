@@ -439,8 +439,9 @@ primitive fields.
 An entity is **concrete** when its chemical attributes — the inherent fields — are determined;
 a molecule is concrete when every entity form is. The constraint channel does not bear on
 concreteness: assertions are not attributes, so a concrete molecule may carry non-ground
-or unsatisfied assertions. Resolution discharges assertions according to each phase's contract;
-validation checks the remaining assertions explicitly. Concreteness is the
+or unsatisfied assertions. Resolver discharge follows
+[independent structural entailment](operations.md#discharge); validation checks remaining assertions
+explicitly. Concreteness is the
 chemistry-level determinedness of a structure; lattice groundness is the algebraic notion over
 the full product including the constraint coordinates, and the two decompose per form as
 `is_ground() == is_concrete() && constraints.is_ground()`. The pattern/concrete asymmetry names
@@ -707,17 +708,10 @@ return `Determined` with a payload that is not ground if the operation's own con
 
 ### Discharge
 
-**Discharge** removes stored assertions realized by an operation's own results.
-It belongs to each resolver's plan: valence discharges `#v` on completed atoms;
-aromaticity discharges member aromatic-valence assertions when adding a system and confirmed
-bond-aromaticity assertions outside stored systems; stereo discharges the site assertion when
-adding a stereo entity. Each plan checks the assertions it discharges before applying its edits.
-
-Resolution has no general closing discharge pass. Other assertions and molecule-level logical
-constraints remain unevaluated; explicit validators check them. Failure policies may separately
-request removal of inconsistent assertions or entities, with the usual reference compaction.
-A transform that deletes a relation removes assertions its output no longer satisfies under the
-separate emit-compliance policy.
+**Discharge** removes a stored assertion independently entailed by the resulting structure.
+The [resolver discharge contract](operations.md#discharge) defines the meet test, open reading,
+and treatment of new and retained entities. The [resolver scope](operations.md#resolver-scope)
+identifies which assertions each resolver handles.
 
 **Not:** cache invalidation, constraint placement, normalization, or general constraint validation.
 **In code:** ValenceResolver, AromaticityResolver, StereoResolver, Resolver::plan_constitution.
@@ -858,6 +852,8 @@ failure means that a structurally readable entity is not realizable under them.
 
 **Not:** error (operational, not semantic); contradiction (a failure is not yet one — a resolver may
 be configured to retain or remove the affected input).
+See [realizability failures and recovery](operations.md#realizability-failures-and-recovery) for
+resolver policy semantics.
 **In code:** —
 
 ### Features
@@ -1011,8 +1007,8 @@ An **inconsistency** is the policy-free umbrella classification for a constraint
 failure, or entity/constraint mismatch found during derivation. An inconsistency does not by itself
 select an authority or recovery action.
 
-**Not:** contradiction. A resolver policy may retain the inconsistency, remove one or both inputs
-where sound, replace the entity, or report a contradiction.
+**Not:** contradiction, which is a semantic outcome rather than a derivation classification.
+See [resolution](operations.md#resolution) for conflict handling and failure recovery.
 **In code:** `AromaticityInconsistency`, `StereoInconsistency`, which identify the exact constraint
 site and entity involved.
 
@@ -1203,6 +1199,7 @@ A **mismatch** means that a constraint and entity, or a constraint and its deriv
 independently meaningful but disagree.
 
 **Not:** failure (where one side is not realizable at all).
+See [refinement and conflicts](operations.md#refinement-and-conflicts) for resolver rejection.
 **In code:** concrete names in diagnostic variants and config fields, such as
 `AromaticValenceMismatch`, `CisTransStereoMismatch`.
 
@@ -1425,7 +1422,9 @@ constraint or entity context.
 
 **Not:** model. A model determines chemical acceptance; a policy determines what an operation does
 after acceptance or inconsistency has been established.
-**In code:** `AromaticityInconsistencyPolicy`, `StereoInconsistencyPolicy`.
+The [resolver recovery contract](operations.md#realizability-failures-and-recovery) defines which
+classified failures admit recovery and how conflicts differ.
+**In code:** `AromaticityFailurePolicy`, `StereoFailurePolicy`.
 
 ### Projection
 
@@ -1489,19 +1488,14 @@ order.
 ### Recovery action
 
 A **recovery action** is a policy variant naming what an operation does about a classified
-inconsistency:
-
-- `Keep` retains the affected inputs;
-- `Remove` removes the target identified by the config field;
-- `RemoveConstraint` retains the independently valid entity;
-- `ReplaceEntity` atomically replaces the entity with the valid constraint-derived result;
-- `RemoveBoth` removes both members of the pair identified by the mismatch policy;
-- `Error` converts the classified inconsistency into a contradiction.
+inconsistency. The current resolver actions and their meanings are defined in
+[realizability failures and recovery](operations.md#realizability-failures-and-recovery).
 
 **Not:** separate enums created solely to repeat identical variants with longer target-specific
 spellings. Policy enums may be shared when they admit exactly the same action set; the config field
 supplies the context.
-**In code:** the variants above.
+**In code:** Error and Keep on AromaticityFailurePolicy; Error, Keep, and Remove on
+StereoFailurePolicy.
 
 ### Refinement
 
@@ -1618,12 +1612,14 @@ expresses removal by leaving removed source ids without images.
 
 ### Resolution
 
-**Resolution** applies configured recovery policy, constructs edit plans against private drafts,
-and publishes the result only when it is determined. An underdetermined, contradictory, or failed
-resolution leaves its source unchanged.
+**Resolution** determines molecular data under a selected model and stored constraints, including
+refinement of unresolved attributes and construction of compatible entities. See
+[resolution](operations.md#resolution) for conflict, discharge, and recovery rules, and
+[data type contracts](data-types.md#resolution-projection-and-transformations) for planning,
+ownership, and publication.
 
-**Not:** transformation (which rewrites determined representation), validation (which does not
-mutate), perception (which is policy-free).
+**Not:** validation (which does not mutate), perception (which is policy-free), ordinary conversion
+(which preserves the supplied description).
 **In code:** `Resolver`, `resolve`, `ResolveConfig`.
 
 ### Restoration

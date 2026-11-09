@@ -19,9 +19,9 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0–S3 and S4a
-are complete, including the combined S3f verification gate. S4b resolver-policy
-documentation is next; S4c and S4d remain pending.
+This records the selected design direction and its consequences. S0–S3 and
+S4a–S4b are complete, including the combined S3f verification gate. S4c's operation
+documentation inventory is next; S4d remains pending.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
 The shared resolver conflict/discharge policy and transformer contracts are
@@ -1761,8 +1761,22 @@ site assertions and preserves the tier-2 open/complete reading choice.
   keep guide links synchronized, and check implementation against the recorded
   contracts. Broader operation-documentation work is inventoried in S4c.
 
-  The tier-3 section and guide registration are recorded on 2026-11-09.
-  Resolver-policy documentation and consolidation remain pending.
+  **Completed — 2026-11-09.** The operations guide defines refinement, unconditional
+  conflict rejection, independent structural entailment, open readings for discharge,
+  and realizability-failure recovery across valence, aromaticity, and stereo.
+  It identifies each resolver's owned keys and the current failure-policy actions.
+  Nomenclature retains the definitions and links to those rules, replacing the old
+  creation-dependent discharge descriptions and removed mismatch-recovery actions.
+
+  Data type contracts links to the shared policy and retains construction,
+  ownership, planning, and publication guarantees. The development-guide index is
+  updated; AGENTS.md already registers the operations guide. The existing tier-3
+  conformance section is unchanged, and integrity remains separate. Implementation
+  review found no discrepancy requiring a code change.
+
+  Verification passed: 1,159 resolver unit tests with
+  cargo test -p umol-graph --lib ops::resolve, guide-link checks, formatting, and
+  git diff --check. No executable code or tests changed.
 
 - **S4c — Inventory operations needing explicit semantic documentation** — additive (green).
   Module: discussion/243-stereo-site-assertions-2026-11-07.md. [dep: S4b]
@@ -1826,10 +1840,10 @@ all-targets checks compile benchmark callers. Replay the existing graph-IR entit
 molecule, reaction, span, and edit fuzz targets on their curated seed inputs.
 
 S0–S3 are complete. S3c restored the passing baseline; S3d and S3e passed their
-independent gates, followed by S3f's combined workflow checks. S4a is complete;
-S4b is next.
+independent gates, followed by S3f's combined workflow checks. S4a–S4b are complete;
+S4c is next.
 S4d reuses applicable recorded S3f results while source and test inputs remain
 unchanged, and runs the remaining final checks and
 measurement comparisons.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S4b–S4d remain pending.
+unchanged. S4c–S4d remain pending.
