@@ -191,14 +191,14 @@ fn test_absolute_assignments_stereo_evidence(evidenced_stereo: Molecule) {
             .atom(AtomId(0))
             .constraints()
             .tetrahedral_stereo(),
-        &TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+        &TetrahedralStereoForm::Stereo,
     );
     assert_eq!(
         evidenced_stereo
             .bond(BondId(4))
             .constraints()
             .cis_trans_stereo(),
-        &CisTransStereoForm::Stereo(StereoCoset::Lit(0)),
+        &CisTransStereoForm::Stereo,
     );
     let source = [
         evidenced_stereo

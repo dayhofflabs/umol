@@ -10,11 +10,11 @@ use umol_chem::element::Element;
 use umol_graph::ops::stereo::StereoSite;
 use umol_graph_core::{GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey,
-    BondForm, BondId, CisTransStereoForm, Constraint, IsotopeMassForm, Molecule, MoleculeEntries,
-    MoleculeRemapping, NumForm, RingScope, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId,
-    StereoBondConstraintForm, StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, Stereogenicity, StereogenicityForm, TetrahedralStereoForm,
+    AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
+    Constraint, IsotopeMassForm, Molecule, MoleculeEntries, MoleculeRemapping, NumForm, RingScope,
+    StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    Stereogenicity, StereogenicityForm, TetrahedralStereoForm,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -34,7 +34,6 @@ pub(super) struct Site {
     pub coset: StereoCoset,
     pub admitted: u8,
     pub asserted: u8,
-    pub parity: u32,
     pub record: Option<usize>,
 }
 
@@ -64,7 +63,7 @@ pub(super) fn stereo_cases(
             prop::array::uniform4(any::<u16>()),
             0u8..8,
             0u8..7,
-            0u8..6,
+            0u8..3,
             any::<bool>(),
             any::<bool>(),
             any::<u16>(),
@@ -174,11 +173,6 @@ pub(super) fn stereo_cases(
                     image.rotate_left(2);
                 }
             }
-            let parity = (0..4)
-                .flat_map(|i| (i + 1..4).map(move |j| (i, j)))
-                .filter(|&(i, j)| image[i] > image[j])
-                .count() as u32
-                % 2;
             let (coset, admitted) = if matches!(domain, Domain::Absolute | Domain::AbsoluteNonempty)
             {
                 let index = if matches!(domain, Domain::AbsoluteNonempty) {
@@ -203,36 +197,23 @@ pub(super) fn stereo_cases(
             } else {
                 assertion
             };
-            let (asserted_coset, asserted) = match assertion {
+            let (kind_constraint, asserted) = match assertion {
                 0 => (None, 3),
-                1 => (Some(StereoCoset::Undetermined), 3),
-                2 => (Some(StereoCoset::Lit(0)), 1),
-                3 => (Some(StereoCoset::Lit(1)), 2),
-                4 => (None, 0),
-                _ => (Some(StereoCoset::lit_set([0, 1])), 3),
+                1 => (Some(true), 3),
+                _ => (Some(false), 0),
             };
-            match site {
-                StereoSite::Atom(atom) => {
-                    if let Some(coset) = asserted_coset {
+            if let Some(value) = kind_constraint {
+                match site {
+                    StereoSite::Atom(atom) => {
                         entries.atoms[atom.index()].constraints.set(
-                            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                                coset,
+                            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::from(
+                                value,
                             )),
                         );
-                    } else if asserted == 0 {
-                        entries.atoms[atom.index()].constraints.set(
-                            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
-                        );
                     }
-                }
-                StereoSite::Bond(bond) => {
-                    if let Some(coset) = asserted_coset {
+                    StereoSite::Bond(bond) => {
                         entries.bonds[bond.index()].2.constraints.set(
-                            BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset)),
-                        );
-                    } else if asserted == 0 {
-                        entries.bonds[bond.index()].2.constraints.set(
-                            BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo),
+                            BondConstraintForm::CisTransStereo(CisTransStereoForm::from(value)),
                         );
                     }
                 }
@@ -286,7 +267,6 @@ pub(super) fn stereo_cases(
                 coset,
                 admitted,
                 asserted,
-                parity,
                 record,
             });
             order_keys.push(order_key);
@@ -320,7 +300,7 @@ pub(super) fn stereo_cases(
     })
 }
 
-/// Renumber ids and transport the assertions' implicit, sorted ligand frames.
+/// Renumber ids while preserving stereo frames and scalar constraints.
 pub(super) fn renumber(molecule: Molecule, case: &StereoCase) -> Molecule {
     let mapping = MoleculeRemapping::new(
         GraphRemapping::new(
@@ -334,66 +314,5 @@ pub(super) fn renumber(molecule: Molecule, case: &StereoCase) -> Molecule {
         Remapping::identity(molecule.stereo_atoms().count()),
         Remapping::identity(molecule.stereo_bonds().count()),
     );
-    let mut result = molecule.remap(&mapping);
-    for info in &case.sites {
-        let mapped = info.natural.map(|id| case.images[id.index()]);
-        let parity = match info.site {
-            StereoSite::Atom(_) => {
-                (0..4)
-                    .flat_map(|i| (i + 1..4).map(move |j| (i, j)))
-                    .filter(|&(i, j)| mapped[i] > mapped[j])
-                    .count() as u32
-                    % 2
-            }
-            StereoSite::Bond(_) => {
-                u32::from(mapped[0] > mapped[1]) ^ u32::from(mapped[2] > mapped[3])
-            }
-        };
-        match info.site {
-            StereoSite::Atom(atom) => {
-                let mut view = result.atom_mut(case.images[atom.index()]);
-                let attributes = view.attributes_mut();
-                if let Some(AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                    coset,
-                ))) = attributes
-                    .constraints
-                    .get(AtomConstraintKey::TetrahedralStereo)
-                    .cloned()
-                {
-                    attributes
-                        .constraints
-                        .set(AtomConstraintForm::TetrahedralStereo(
-                            TetrahedralStereoForm::Stereo(flip_coset(coset, parity)),
-                        ));
-                }
-            }
-            StereoSite::Bond(bond) => {
-                let mut view = result.bond_mut(bond);
-                let attributes = view.attributes_mut();
-                if let Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset))) =
-                    attributes
-                        .constraints
-                        .get(BondConstraintKey::CisTransStereo)
-                        .cloned()
-                {
-                    attributes
-                        .constraints
-                        .set(BondConstraintForm::CisTransStereo(
-                            CisTransStereoForm::Stereo(flip_coset(coset, parity)),
-                        ));
-                }
-            }
-        }
-    }
-    result
-}
-
-fn flip_coset(coset: StereoCoset, parity: u32) -> StereoCoset {
-    match coset {
-        StereoCoset::Lit(value) => StereoCoset::Lit(value ^ parity),
-        StereoCoset::LitSet(values) => {
-            StereoCoset::lit_set(values.into_iter().map(|value| value ^ parity))
-        }
-        other => other,
-    }
+    molecule.remap(&mapping)
 }

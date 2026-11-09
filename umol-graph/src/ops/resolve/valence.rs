@@ -318,9 +318,9 @@ mod tests {
     #[case::open_aromatic(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#u0#s#a+"]}"#))]
     #[case::aromatic_carbon(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v2#a1"]}"#))]
     #[case::aromatic_nitrogen(mol_dsl!(r#"{:atoms ["N#i=#c0#h1#n0#u0#s#v2#a2"]}"#))]
-    #[case::tetrahedral_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v3#T0"]}"#))]
-    #[case::tetrahedral_zero_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h0#n0#u0#s#v4#T1"]}"#))]
-    #[case::tetrahedral_lone_pair(mol_dsl!(r#"{:atoms ["S#i=#c0#h0#n1#u0#s#v4#T0"]}"#))]
+    #[case::tetrahedral_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v3#T+"]}"#))]
+    #[case::tetrahedral_zero_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h0#n0#u0#s#v4#T+"]}"#))]
+    #[case::tetrahedral_lone_pair(mol_dsl!(r#"{:atoms ["S#i=#c0#h0#n1#u0#s#v4#T+"]}"#))]
     fn test_valence_resolver_project_identity(
         #[case] mut molecule: Molecule,
         #[values(false, true)] typing: bool,

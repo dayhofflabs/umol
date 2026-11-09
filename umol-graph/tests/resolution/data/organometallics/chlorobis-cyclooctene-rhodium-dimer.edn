@@ -43,7 +43,7 @@
     [4 5 :single]
     [5 6 :single]
     [6 7 :single]
-    [7 8 "2#C0"]
+    [7 8 "2"]
     [8 9 :single]
     [9 10 :single]
     [10 11 :single]
@@ -51,7 +51,7 @@
     [12 13 :single]
     [13 14 :single]
     [14 15 :single]
-    [15 16 "2#C0"]
+    [15 16 "2"]
     [16 17 :single]
     [17 18 :single]
     [18 19 :single]
@@ -59,7 +59,7 @@
     [20 21 :single]
     [21 22 :single]
     [22 23 :single]
-    [23 24 "2#C0"]
+    [23 24 "2"]
     [24 25 :single]
     [25 26 :single]
     [26 27 :single]
@@ -67,8 +67,13 @@
     [28 29 :single]
     [29 30 :single]
     [30 31 :single]
-    [31 32 "2#C0"]
+    [31 32 "2"]
     [32 33 :single]
     [33 34 :single]
     [34 35 :single]]
-  :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"} {:donors [7 8] :acceptor 0 :attrs "1"} {:donors [15 16] :acceptor 0 :attrs "1"} {:donors [23 24] :acceptor 1 :attrs "1"} {:donors [31 32] :acceptor 1 :attrs "1"}]}}
+  :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"} {:donors [3] :acceptor 0 :attrs "1"} {:donors [3] :acceptor 1 :attrs "1"} {:donors [7 8] :acceptor 0 :attrs "1"} {:donors [15 16] :acceptor 0 :attrs "1"} {:donors [23 24] :acceptor 1 :attrs "1"} {:donors [31 32] :acceptor 1 :attrs "1"}]
+  :stereo-bonds [
+        {:attrs :z :ligands [6 [:h 7] 9 [:h 8]] :site 4}
+        {:attrs :z :ligands [14 [:h 15] 17 [:h 16]] :site 12}
+        {:attrs :z :ligands [22 [:h 23] 25 [:h 24]] :site 20}
+        {:attrs :z :ligands [30 [:h 31] 33 [:h 32]] :site 28}]}}

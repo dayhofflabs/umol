@@ -1,2 +1,3 @@
 {:config-overrides {:atom {:charge :zero}}
- :input {:atoms ["C#T0" "F" "Cl" "Br" "I"] :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}}
+ :input {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]
+  :stereo-atoms [{:attrs :ccw :ligands [1 2 3 4] :site 0}]}}

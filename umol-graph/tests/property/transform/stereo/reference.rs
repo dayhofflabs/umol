@@ -1,4 +1,4 @@
-//! Independent binary masks, domain membership, source-frame parity, and joint XOR.
+//! Independent binary masks, domain membership, kind constraints, and Boolean composition.
 //! This reference does not call perception, validation, or a transformer.
 
 use std::collections::BTreeSet;
@@ -38,7 +38,7 @@ pub(super) fn assignments(
     sites: &[Site],
     selected: &BTreeSet<usize>,
     order: &[usize],
-    joint: Option<(usize, usize)>,
+    joint: Option<bool>,
 ) -> Vec<Vec<StereoCoset>> {
     let mut results = Vec::new();
     for bits in 0..(1usize << selected.len()) {
@@ -49,12 +49,11 @@ pub(super) fn assignments(
             let value = ((bits >> bit) & 1) as u32;
             values[site] = value;
             admitted &= sites[site].admitted & (1 << value) != 0;
-            admitted &= sites[site].asserted & (1 << (value ^ sites[site].parity)) != 0;
+            admitted &= sites[site].asserted != 0;
             candidate[site] = StereoCoset::Lit(value);
         }
-        if let Some((left, right)) = joint {
-            admitted &=
-                (values[left] ^ sites[left].parity) != (values[right] ^ sites[right].parity);
+        if let Some(value) = joint {
+            admitted &= value;
         }
         if admitted {
             let key: Vec<_> = order

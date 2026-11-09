@@ -134,14 +134,14 @@ impl StereoPerceiver {
                     }
                     continue;
                 }
-                let (coset, asserted) = match evidence {
-                    Some(AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                        coset,
-                    ))) => (coset, true),
+                let asserted = match evidence {
+                    Some(AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo)) => {
+                        true
+                    }
                     Some(AtomConstraintForm::TetrahedralStereo(
                         TetrahedralStereoForm::NotStereo,
                     )) => continue,
-                    Some(_) => (StereoCoset::Undetermined, false),
+                    Some(_) => false,
                     None => {
                         result.inconsistencies.push(
                             StereoInconsistency::TetrahedralStereoFailure { atom: atom.id() },
@@ -159,7 +159,7 @@ impl StereoPerceiver {
                 if eligible {
                     require_frame_fields(molecule, atom.id())?;
                     let candidate = self
-                        .derive_stereo_atom(molecule, atom.id(), &coset)
+                        .derive_stereo_atom(molecule, atom.id(), &StereoCoset::Undetermined)
                         .filter(|(_, form)| form.configuration.clone().normalize().is_ok());
                     if let Some((ligands, form)) = candidate {
                         result.stereo_atoms.push((atom.id(), ligands, form));
@@ -200,14 +200,12 @@ impl StereoPerceiver {
                     }
                     continue;
                 }
-                let (coset, asserted) = match evidence {
-                    Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset))) => {
-                        (coset, true)
-                    }
+                let asserted = match evidence {
+                    Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo)) => true,
                     Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo)) => {
                         continue
                     }
-                    Some(_) => (StereoCoset::Undetermined, false),
+                    Some(_) => false,
                     None => {
                         result
                             .inconsistencies
@@ -261,7 +259,7 @@ impl StereoPerceiver {
                 require_frame_fields(molecule, first)?;
                 require_frame_fields(molecule, second)?;
                 let candidate = self
-                    .derive_stereo_bond(molecule, bond.id(), &coset)
+                    .derive_stereo_bond(molecule, bond.id(), &StereoCoset::Undetermined)
                     .filter(|(_, form)| form.configuration.clone().normalize().is_ok());
                 if let Some((ligands, form)) = candidate {
                     result.stereo_bonds.push((bond.id(), ligands, form));

@@ -43,9 +43,9 @@ fn aromatic_benzene() -> Molecule {
 fn stereo_input() -> Molecule {
     mol_dsl_concrete!(
         r#"{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+                [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
     }"#
     )
 }
@@ -54,9 +54,9 @@ fn stereo_input() -> Molecule {
 fn stereo_arrangements() -> Molecule {
     mol_dsl_concrete!(
         r#"{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+                [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
     }"#
@@ -254,11 +254,11 @@ fn test_molecule_unfold_hydrogens_error(
 
 #[rstest]
 #[case::default(None, AddStereoConfig::default(), mol_dsl_concrete!(r#"{
-    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+            [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
+    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
 }"#))]
 #[case::selection(None, AddStereoConfig {
     selection: StereoSelection {
@@ -268,16 +268,16 @@ fn test_molecule_unfold_hydrogens_error(
     },
     ..Default::default()
 }, mol_dsl_concrete!(r#"{
-    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
-    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+            [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
+    :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
 }"#))]
 #[case::model(Some(StereoKind::CisTrans), AddStereoConfig::default(), mol_dsl_concrete!(r#"{
-    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+            [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
 }"#))]
 fn test_molecule_add_stereo(
     stereo_input: Molecule,
@@ -314,7 +314,7 @@ fn test_molecule_add_stereo(
     site: StereoSite::Atom(AtomId(9)),
 }))]
 #[case::evidence(mol_dsl_concrete!(r#"{
-    :atoms ["C#T0" "F" "Cl" "Br" "I"]
+    :atoms ["C#T!" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
 }"#), AddStereoConfig::default(), AddStereoError::Inconsistency(
@@ -351,11 +351,11 @@ fn test_molecule_add_stereo_into_sequence(stereo_input: Molecule) {
         molecule,
         mol_dsl_concrete!(
             r#"{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
-        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+                [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
     }"#
         )
     );
@@ -401,7 +401,7 @@ fn test_molecule_add_stereo_into_sequence(stereo_input: Molecule) {
     mode: RemoveStereoMode::Undetermined,
     ..Default::default()
 }, mol_dsl_concrete!(r#"{
-    :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
             [5 6 "2"] [5 7 "1"] [6 8 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
@@ -416,7 +416,7 @@ fn test_molecule_add_stereo_into_sequence(stereo_input: Molecule) {
 }, mol_dsl_concrete!(r#"{
     :atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-            [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+            [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
     :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
 }"#))]
 fn test_molecule_remove_stereo(

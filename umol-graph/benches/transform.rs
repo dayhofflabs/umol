@@ -178,14 +178,14 @@ fn bench_fold_hydrogens(c: &mut Criterion) {
             "tetrahedral",
             mol_dsl_concrete!(
                 r#"{
-                :atoms ["H" "C#T0" "F" "Cl" "Br"]
+                :atoms ["H" "C#T+" "F" "Cl" "Br"]
                 :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
                 :stereo-atoms [{:site 1 :ligands [0 2 3 4] :attrs "Th0"}]
             }"#
             ),
             mol_dsl_concrete!(
                 r#"{
-                :atoms ["C#h#T1" "F" "Cl" "Br"]
+                :atoms ["C#h#T+" "F" "Cl" "Br"]
                 :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
                 :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
             }"#
@@ -266,14 +266,14 @@ fn bench_unfold_hydrogens(c: &mut Criterion) {
             "tetrahedral",
             mol_dsl_concrete!(
                 r#"{
-                :atoms ["C#h#T1" "F" "Cl" "Br"]
+                :atoms ["C#h#T+" "F" "Cl" "Br"]
                 :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
                 :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
             }"#
             ),
             mol_dsl_concrete!(
                 r#"{
-                :atoms ["C#T1" "F" "Cl" "Br" "H"]
+                :atoms ["C#T+" "F" "Cl" "Br" "H"]
                 :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
                 :stereo-atoms [{:site 0 :ligands [4 1 2 3] :attrs "Th0"}]
             }"#
@@ -430,7 +430,7 @@ fn bench_hydrogens_scaling(c: &mut Criterion) {
 fn bench_stereo_adder(c: &mut Criterion) {
     let transformer = StereoAdder::new(&StereoModel::default());
     let retained = mol_dsl_concrete!(
-        r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+        r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]}"#
     );
@@ -462,14 +462,14 @@ fn bench_stereo_adder(c: &mut Criterion) {
         (
             "source_evidence",
             mol_dsl_concrete!(
-                r#"{:atoms ["C#T1" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
-            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]}"#
+                r#"{:atoms ["C#T+" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C+"] [5 6 "1"]]}"#
             ),
             mol_dsl_concrete!(
-                r#"{:atoms ["C#T1" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
-            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-            :stereo-bonds [{:site 4 :ligands [0 [:h 1] 6 [:h 5]] :attrs "Ct0"}]}"#
+                r#"{:atoms ["C#T+" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C+"] [5 6 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
+            :stereo-bonds [{:site 4 :ligands [0 [:h 1] 6 [:h 5]] :attrs "Ct*"}]}"#
             ),
         ),
         ("retained", retained.clone(), retained),
@@ -601,8 +601,8 @@ fn bench_stereo_adder(c: &mut Criterion) {
 
 fn bench_stereo_remover(c: &mut Criterion) {
     let mixed = mol_dsl_concrete!(
-        r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C0#R!"] [5 7 "1"] [6 8 "1"]]
+        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+#R!"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
     );
@@ -650,7 +650,7 @@ fn bench_stereo_remover(c: &mut Criterion) {
                 ..Default::default()
             },
             mol_dsl_concrete!(
-                r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+                r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
                 :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
                 :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#
             ),
@@ -667,7 +667,7 @@ fn bench_stereo_remover(c: &mut Criterion) {
         asserted[0] = asserted[0]
             .clone()
             .with_constraint(AtomConstraintForm::tetrahedral_stereo(
-                TetrahedralStereoForm::Stereo(StereoCoset::Undetermined),
+                TetrahedralStereoForm::Stereo,
             ));
         entries.atoms.extend(asserted.clone());
         without_stereo.atoms.extend(plain.clone());
@@ -853,14 +853,14 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
         })
         .collect();
     let evidenced = mol_dsl_concrete!(
-        r#"{:atoms ["C#D4#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!#C1"] [5 7 "1"] [6 8 "1"]]
-        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th*"}]
-        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
+        r#"{:atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!#C+"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct1"}]}"#
     );
     let evidenced_expected = mol_dsl_concrete!(
-        r#"{:atoms ["C#D4#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!#C1"] [5 7 "1"] [6 8 "1"]]
+        r#"{:atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!#C+"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct1"}]}"#
     );

@@ -1,18 +1,18 @@
 {:input {
   :atoms [
     "C#i=#c0#u0"
-    "C#i=#c0#h#T0"
+    "C#i=#c0#h"
     "O#i=#c0#u0"
     "P#i=#c0#u0"
     "O#i=#c0#u0"
     "O#i=#c0#u0"
     "O#i=#c0#u0"
     "C#i=#c0#u0"
-    "C#i=#c0#h#T1"
+    "C#i=#c0#h"
     "O#i=#c0#u0"
-    "C#i=#c0#h#T1"
+    "C#i=#c0#h"
     "O#i=#c0#u0"
-    "C#i=#c0#h#T1"
+    "C#i=#c0#h"
     "O#i=#c0#u0"
     "C#i=#c0#u0"
     "N#i=#c0#u0#a+"
@@ -35,13 +35,13 @@
     "C#i=#c0#u0"
     "O#i=#c0#u0"
     "N#i=#c0#u0"
-    "C#i=#c0#h#T1"
+    "C#i=#c0#h"
     "C#i=#c0#u0"
     "C#i=#c0#u0"
     "C#i=#c0#u0"
     "O#i=#c0#u0"
     "N#i=#c0#u0"
-    "C#i=#c0#h#T1"
+    "C#i=#c0#h"
     "C#i=#c0#u0"
     "C#i=#c0#u0"
     "C#i=#c0#u0"
@@ -108,4 +108,11 @@
     [47 49 :single]
     [35 50 :single]
     [50 51 :double]
-    [50 52 :single]]}}
+    [50 52 :single]]
+  :stereo-atoms [
+        {:attrs :ccw :ligands [0 2 32 [:h 1]] :site 1}
+        {:attrs :cw :ligands [7 9 10 [:h 8]] :site 8}
+        {:attrs :cw :ligands [8 11 12 [:h 10]] :site 10}
+        {:attrs :cw :ligands [10 13 14 [:h 12]] :site 12}
+        {:attrs :cw :ligands [34 36 50 [:h 35]] :site 35}
+        {:attrs :cw :ligands [40 42 47 [:h 41]] :site 41}]}}

@@ -23,9 +23,9 @@ from umol import (
 def stereo_source():
     return Molecule.parse(
         """{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+                [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
     }""",
         defaults=MoleculeDefaults.concrete(),
     )
@@ -35,9 +35,9 @@ def stereo_source():
 def stereo_determined():
     return Molecule.parse(
         """{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
+                [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
     }""",
@@ -45,9 +45,20 @@ def stereo_determined():
     )
 
 
+@pytest.fixture
+def stereo_added():
+    return Molecule.parse(
+        '{:atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"] '
+        ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]] '
+        ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}] '
+        ':stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}',
+        defaults=MoleculeDefaults.concrete(),
+    )
+
+
 @pytest.mark.parametrize("method", ["add_stereo", "add_stereo_into"])
 @pytest.mark.parametrize("kwargs", [{}, {"config": AddStereoConfig()}])
-def test_molecule_add_stereo(stereo_source, stereo_determined, method, kwargs):
+def test_molecule_add_stereo(stereo_source, stereo_added, method, kwargs):
     original = stereo_source.copy()
     alias = stereo_source
     atom = stereo_source.atoms[0]
@@ -55,7 +66,7 @@ def test_molecule_add_stereo(stereo_source, stereo_determined, method, kwargs):
     iterator = iter(stereo_source.atoms)
     result = getattr(stereo_source, method)(StereoModel.default(), **kwargs)
     if method == "add_stereo":
-        assert result == stereo_determined
+        assert result == stereo_added
         assert stereo_source == original
         assert atom.element == original.atoms[0].element
         assert next(iterator).element == original.atoms[0].element
@@ -64,7 +75,7 @@ def test_molecule_add_stereo(stereo_source, stereo_determined, method, kwargs):
         assert alias == original
     else:
         assert result is None
-        assert alias == stereo_determined
+        assert alias == stereo_added
         with pytest.raises(InvalidatedViewError):
             _ = atom.element
         with pytest.raises(InvalidatedViewError):
@@ -92,10 +103,10 @@ def test_molecule_add_stereo_identity(stereo_determined, method):
 def test_molecule_add_stereo_selection(stereo_source, method):
     expected = Molecule.parse(
         """{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
-                [5 6 "2#C0"] [5 7 "1"] [6 8 "1"]]
-        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct0"}]
+                [5 6 "2#C+"] [5 7 "1"] [6 8 "1"]]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]
     }""",
         defaults=MoleculeDefaults.concrete(),
     )
@@ -160,7 +171,7 @@ def test_molecule_remove_stereo_identity(stereo_determined, method):
 def test_molecule_remove_stereo_selection(stereo_determined, method):
     expected = Molecule.parse(
         """{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
                 [5 6 "2"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
@@ -185,7 +196,7 @@ def test_molecule_remove_stereo_undetermined(stereo_determined, method):
     stereo_determined.stereo_bonds[0] = StereoBondForm.parse("Ct*")
     expected = Molecule.parse(
         """{
-        :atoms ["C#D4#T1" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :atoms ["C#D4#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
                 [5 6 "2"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
@@ -240,7 +251,7 @@ def test_molecule_stereo_error(stereo_determined, method, config):
 
 @pytest.mark.parametrize("method", ["add_stereo", "add_stereo_into"])
 def test_molecule_add_stereo_evidence(stereo_determined, method):
-    stereo_determined.stereo_atoms[0] = StereoAtomForm.parse("Th0")
+    stereo_determined.atoms[0].constraints.tetrahedral_stereo = False
     original = stereo_determined.copy()
     with pytest.raises(ContradictionError) as caught:
         getattr(stereo_determined, method)(StereoModel.default())
@@ -275,9 +286,9 @@ def test_molecule_stereo_argument_error(stereo_source, method):
     assert stereo_source == original
 
 
-def test_molecule_remove_stereo_into_sequence(stereo_source, stereo_determined):
+def test_molecule_remove_stereo_into_sequence(stereo_source, stereo_added):
     assert stereo_source.add_stereo_into(StereoModel.default()) is None
-    assert stereo_source == stereo_determined
+    assert stereo_source == stereo_added
     with pytest.raises(IndexError):
         stereo_source.remove_stereo_into(
             StereoModel.default(),
@@ -285,4 +296,4 @@ def test_molecule_remove_stereo_into_sequence(stereo_source, stereo_determined):
                 selection=StereoSelection(sites={StereoSite.Bond(7)})
             ),
         )
-    assert stereo_source == stereo_determined
+    assert stereo_source == stereo_added

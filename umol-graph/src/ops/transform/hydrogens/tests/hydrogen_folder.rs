@@ -6,7 +6,7 @@ use umol_graph_ir::ir::{
     Constraint, ElementForm, Entity, FluxionalityForm, LigandPermutation, Molecule,
     MoleculeConstraint, MoleculeEntries, NumForm, StereoAtomConstraintForm, StereoAtomId,
     StereoBondConstraintForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
-    StereoTerm, TetrahedralStereoForm,
+    StereoTerm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_perm::Permutation;
@@ -49,44 +49,44 @@ fn methyl() -> Molecule {
 )]
 #[case::tetrahedral_frame(
     mol_dsl_concrete!(r#"{
-        :atoms ["H" "C#T0" "F" "Cl" "Br"]
+        :atoms ["H" "C#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
         :stereo-atoms [{:site 1 :ligands [3 0 4 2] :attrs "Th1"}]
     }"#),
     mol_dsl_concrete!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 [:h 0] 3 1] :attrs "Th1"}]
     }"#),
 )]
 #[case::tetrahedral_assertion_without_overlay(
     mol_dsl_concrete!(r#"{
-        :atoms ["H" "C#T0" "F" "Cl" "Br"]
+        :atoms ["H" "C#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
     }"#),
     mol_dsl_concrete!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
     }"#),
 )]
 #[case::last_actual_ligand(
     mol_dsl_concrete!(r#"{
-        :atoms ["C#T1" "F" "Cl" "Br" "H"]
+        :atoms ["C#T+" "F" "Cl" "Br" "H"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     }"#),
     mol_dsl_concrete!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
     }"#),
 )]
 #[case::lone_pair_frame(
     mol_dsl_concrete!(r#"{
-        :atoms ["H" "N#n#T0" "F" "Cl"]
+        :atoms ["H" "N#n#T+" "F" "Cl"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         :stereo-atoms [{:site 1 :ligands [0 2 3 [:lp 1]] :attrs "Th0"}]
     }"#),
     mol_dsl_concrete!(r#"{
-        :atoms ["N#h#n#T0" "F" "Cl"]
+        :atoms ["N#h#n#T+" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"]]
         :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 [:lp 0]] :attrs "Th0"}]
     }"#),
@@ -94,24 +94,24 @@ fn methyl() -> Molecule {
 #[case::cis_trans_reversed_endpoint_blocks(
     mol_dsl_concrete!(r#"{
         :atoms ["H" "C" "F" "C" "Cl" "H"]
-        :bonds [[1 3 "2#C0"] [0 1 "1"] [1 2 "1"] [3 4 "1"] [3 5 "1"]]
+        :bonds [[1 3 "2#C+"] [0 1 "1"] [1 2 "1"] [3 4 "1"] [3 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [5 4 0 2] :attrs "Ct1"}]
     }"#),
     mol_dsl_concrete!(r#"{
         :atoms ["C#h" "F" "C#h" "Cl"]
-        :bonds [[0 2 "2#C1"] [0 1 "1"] [2 3 "1"]]
+        :bonds [[0 2 "2#C+"] [0 1 "1"] [2 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [[:h 2] 3 [:h 0] 1] :attrs "Ct1"}]
     }"#),
 )]
 #[case::cis_trans_both_endpoint_frames(
     mol_dsl_concrete!(r#"{
         :atoms ["H" "H" "C" "C" "F" "Cl"]
-        :bonds [[2 3 "2#C0"] [0 2 "1"] [1 3 "1"] [2 4 "1"] [3 5 "1"]]
+        :bonds [[2 3 "2#C+"] [0 2 "1"] [1 3 "1"] [2 4 "1"] [3 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [0 4 1 5] :attrs "Ct0"}]
     }"#),
     mol_dsl_concrete!(r#"{
         :atoms ["C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "2#C0"] [0 2 "1"] [1 3 "1"]]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [[:h 0] 2 [:h 1] 3] :attrs "Ct0"}]
     }"#),
 )]
@@ -346,46 +346,13 @@ fn test_hydrogen_folder_transform_constraints(methyl: Molecule) {
 }
 
 #[rstest]
-#[case::literal(StereoCoset::Lit(0), StereoCoset::Lit(1))]
-#[case::set(StereoCoset::lit_set([0]), StereoCoset::lit_set([1]))]
-#[case::term(StereoCoset::term(StereoTerm::Lit(0)), StereoCoset::term(StereoTerm::apply(
-    StereoTerm::Lit(0), Permutation::from_image(&[1, 2, 3, 0]),
-)))]
-#[case::open(StereoCoset::Undetermined, StereoCoset::Undetermined)]
-fn test_hydrogen_folder_transform_coset(#[case] input: StereoCoset, #[case] expected: StereoCoset) {
-    let mut molecule = mol_dsl_concrete!(
-        r#"{
-        :atoms ["H" "C" "F" "Cl" "Br"]
-        :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
-    }"#
-    );
-    molecule
-        .atom_mut(AtomId(1))
-        .attributes_mut()
-        .constraints
-        .set(AtomConstraintForm::tetrahedral_stereo(
-            TetrahedralStereoForm::Stereo(input),
-        ));
-    let mut product = mol_dsl_concrete!(
-        r#"{
-        :atoms ["C#h" "F" "Cl" "Br"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-    }"#
-    );
-    product
-        .atom_mut(AtomId(0))
-        .attributes_mut()
-        .constraints
-        .set(AtomConstraintForm::tetrahedral_stereo(
-            TetrahedralStereoForm::Stereo(expected),
-        ));
-    assert_eq!(HydrogenFolder.transform(molecule), Ok(product));
-}
-
-#[rstest]
 #[case::determined(
     StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+)]
+#[case::finite(
+    StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])),
+    StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var("configuration")))
 )]
 #[case::open_coset(
     StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),

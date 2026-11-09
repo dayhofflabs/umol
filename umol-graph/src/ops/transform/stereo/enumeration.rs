@@ -5,10 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, BondConstraintForm, BondConstraintKey, BooleanForm,
-    CisTransStereoForm, ConstitutionColoring, Constraint, GraphSymmetry, GraphSymmetryConfig,
-    Lattice, Molecule, Normalize, StereoAtomConstraintForm, StereoBondConstraintForm,
-    StereoConfigurationForm, StereoCoset, StereoKind, StereoSymmetry, StereoTerm,
-    StereogenicityForm, TetrahedralStereoForm, TopicityRelationForm,
+    ConstitutionColoring, Constraint, GraphSymmetry, GraphSymmetryConfig, Lattice, Molecule,
+    Normalize, StereoAtomConstraintForm, StereoBondConstraintForm, StereoConfigurationForm,
+    StereoCoset, StereoKind, StereoSymmetry, StereoTerm, StereogenicityForm, TopicityRelationForm,
 };
 use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
@@ -282,60 +281,11 @@ fn check_configuration_assertion(
     constraint: &Constraint,
 ) -> Result<(), StereoPerceptionError> {
     match constraint {
-        Constraint::Atom(atom, AtomConstraintForm::TetrahedralStereo(asserted)) => {
+        Constraint::Atom(atom, AtomConstraintForm::TetrahedralStereo(_)) => {
             check_frame(molecule, StereoSite::Atom(*atom))?;
-            if let Some(stereo) = molecule.stereo_atoms().at(*atom) {
-                let configuration = &stereo.attributes().configuration;
-                if configuration.kind() == Some(StereoKind::Tetrahedral) {
-                    absolute_domain(StereoSite::Atom(*atom), configuration.clone())?;
-                }
-            }
-            if let TetrahedralStereoForm::Stereo(coset) = asserted {
-                absolute_domain(
-                    StereoSite::Atom(*atom),
-                    StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, coset.clone()),
-                )?;
-            }
-            if let Some(AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                coset,
-            ))) = molecule
-                .atom(*atom)
-                .attributes()
-                .constraints
-                .get(AtomConstraintKey::TetrahedralStereo)
-            {
-                absolute_domain(
-                    StereoSite::Atom(*atom),
-                    StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, coset.clone()),
-                )?;
-            }
         }
-        Constraint::Bond(bond, BondConstraintForm::CisTransStereo(asserted)) => {
+        Constraint::Bond(bond, BondConstraintForm::CisTransStereo(_)) => {
             check_frame(molecule, StereoSite::Bond(*bond))?;
-            if let Some(stereo) = molecule.stereo_bonds().at(*bond) {
-                let configuration = &stereo.attributes().configuration;
-                if configuration.kind() == Some(StereoKind::CisTrans) {
-                    absolute_domain(StereoSite::Bond(*bond), configuration.clone())?;
-                }
-            }
-            if let CisTransStereoForm::Stereo(coset) = asserted {
-                absolute_domain(
-                    StereoSite::Bond(*bond),
-                    StereoConfigurationForm::Kinded(StereoKind::CisTrans, coset.clone()),
-                )?;
-            }
-            if let Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset))) =
-                molecule
-                    .bond(*bond)
-                    .attributes()
-                    .constraints
-                    .get(BondConstraintKey::CisTransStereo)
-            {
-                absolute_domain(
-                    StereoSite::Bond(*bond),
-                    StereoConfigurationForm::Kinded(StereoKind::CisTrans, coset.clone()),
-                )?;
-            }
         }
         Constraint::And(children) | Constraint::Or(children) => {
             for child in children {

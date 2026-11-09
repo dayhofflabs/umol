@@ -492,7 +492,7 @@ def test_molecule_from_smiles_underdetermined(source, valence):
     ("source", "removed", "site_kind", "diagnostic"),
     [
         pytest.param(
-            '{:atoms ["C#h3" "S#n2#T1" "C#h3"] '
+            '{:atoms ["C#h3" "S#n2#T+" "C#h3"] '
             ':bonds [[0 1 "1"] [1 2 "1"]]}',
             '{:atoms ["C#h3" "S#n2" "C#h3"] '
             ':bonds [[0 1 "1"] [1 2 "1"]]}',
@@ -502,7 +502,7 @@ def test_molecule_from_smiles_underdetermined(source, valence):
             id="atom_constraint",
         ),
         pytest.param(
-            '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2#C1"]]}',
+            '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2#C+"]]}',
             '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2"]]}',
             "bond",
             "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
@@ -574,7 +574,7 @@ def test_molecule_resolve_stereo_failure(
     "source,expected",
     [
         pytest.param(
-            '{:atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
+            '{:atoms ["C#T!" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
             ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
             ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}',
             "stereo inconsistency: tetrahedral stereo constraint at atom AtomId(0) "
@@ -583,7 +583,7 @@ def test_molecule_resolve_stereo_failure(
         ),
         pytest.param(
             '{:atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
-            ':bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+            ':bonds [[0 1 "2#C!"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
             ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}',
             "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
             "disagrees with stereo bond StereoBondId(0)",

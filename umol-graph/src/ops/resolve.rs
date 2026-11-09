@@ -26,7 +26,6 @@ pub use isotope::{IsotopeContradiction, IsotopeError, IsotopePolicy, IsotopeReso
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
-use stereo::StereoProjectError;
 pub use stereo::{StereoFailurePolicy, StereoResolveConfig, StereoResolver};
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -57,8 +56,6 @@ bitflags! {
     /// Stages selected for [`Resolver::project`], executed in declaration order.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct ProjectFlags: u8 {
-        /// Replace stereo entities with fixed-frame assertions.
-        const STEREO = 1 << 0;
         /// Replace aromatic systems with atom and bond assertions.
         const AROMATICITY = 1 << 1;
         /// Run valence projection, which preserves atom fields.
@@ -167,8 +164,6 @@ pub enum ProjectContradiction {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
     #[error(transparent)]
-    Stereo(#[from] StereoContradiction),
-    #[error(transparent)]
     Valence(#[from] ValenceContradiction),
 }
 
@@ -182,8 +177,6 @@ pub enum ProjectError {
         entity: Entity,
         spin: UnpairedElectronsForm,
     },
-    #[error(transparent)]
-    Stereo(#[from] StereoProjectError),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityProjectError),
     #[error(transparent)]
@@ -746,8 +739,8 @@ impl<'a> Resolver<'a> {
 
     /// Projects selected stages within graph IR, consuming the molecule.
     ///
-    /// Recovers fixed-frame #T/#C assertions, writes member-aligned #a contributions and
-    /// aromatic bond assertions, runs the no-op valence projection, then elides isotope
+    /// Writes member-aligned #a contributions and aromatic bond assertions,
+    /// runs the no-op valence projection, then elides isotope
     /// defaults. Only stages selected by `flags` run, in that order. All H counts are
     /// preserved regardless of stage selection; use all flags for ordinary projection.
     /// Other fields and structures remain for the eventual format conversion. Successful
@@ -759,14 +752,14 @@ impl<'a> Resolver<'a> {
     /// Determined returns the molecule with checked integrity. Rejection drops the input.
     /// Execution uses one editor without copying the molecule or recording undo.
     /// Projection does not invoke resolution or recovery comparisons. Implicit-H counts,
-    /// atom electron fields, and localized charge are preserved.
+    /// atom electron fields, localized charge, and explicit stereo entities are preserved.
     /// For inputs meeting the bond charge/spin requirements, the result agrees with executing
     /// the selected standalone projections in order. Empty flags leave such inputs unchanged.
     ///
     /// # Errors
     ///
     /// Localized and multicenter bonds require concrete zero charge and closed-shell singlet
-    /// spin. Returns the owning phase's error for unprojectable stereo, aromatic-system fields,
+    /// spin. Returns the owning phase's error for unprojectable aromatic-system fields,
     /// or isotopes. No charge/spin localization or unsupported-structure removal is implicit.
     pub fn project(
         &self,
@@ -811,9 +804,7 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let mut first_edits = if flags.contains(ProjectFlags::STEREO) {
-            Some(self.stereo.plan_project(&molecule)?)
-        } else if flags.contains(ProjectFlags::AROMATICITY) {
+        let mut first_edits = if flags.contains(ProjectFlags::AROMATICITY) {
             Some(self.aromaticity.plan_project(&molecule)?)
         } else if flags.contains(ProjectFlags::ISOTOPE) {
             Some(self.isotope.plan_project(&molecule)?)
@@ -822,19 +813,6 @@ impl<'a> Resolver<'a> {
         };
 
         let mut editor = molecule.edit();
-        if flags.contains(ProjectFlags::STEREO) {
-            let edits = match first_edits.take() {
-                Some(edits) => edits,
-                None => self.stereo.plan_project(
-                    editor
-                        .probe()
-                        .expect("resolver phase plans preserve molecule integrity"),
-                )?,
-            };
-            editor
-                .apply(edits)
-                .expect("stereo project plan applies to its input");
-        }
         if flags.contains(ProjectFlags::AROMATICITY) {
             let edits = match first_edits.take() {
                 Some(edits) => edits,
@@ -926,9 +904,7 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let mut first_edits = if flags.contains(ProjectFlags::STEREO) {
-            Some(self.stereo.plan_project(molecule)?)
-        } else if flags.contains(ProjectFlags::AROMATICITY) {
+        let mut first_edits = if flags.contains(ProjectFlags::AROMATICITY) {
             Some(self.aromaticity.plan_project(molecule)?)
         } else if flags.contains(ProjectFlags::ISOTOPE) {
             Some(self.isotope.plan_project(molecule)?)
@@ -938,19 +914,6 @@ impl<'a> Resolver<'a> {
 
         Transaction::run::<_, MoleculeApplyError>(molecule, rollback_method, |mut transaction| {
             Ok((|| {
-                if flags.contains(ProjectFlags::STEREO) {
-                    let edits = match first_edits.take() {
-                        Some(edits) => edits,
-                        None => self.stereo.plan_project(
-                            transaction
-                                .probe()
-                                .expect("resolver phase plans preserve molecule integrity"),
-                        )?,
-                    };
-                    transaction
-                        .apply(edits)
-                        .expect("stereo project plan applies to its input");
-                }
                 if flags.contains(ProjectFlags::AROMATICITY) {
                     let edits = match first_edits.take() {
                         Some(edits) => edits,
@@ -1152,9 +1115,8 @@ mod tests {
         AromaticSystemConstraintForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId,
         BondId, Constraint, Edit, IsotopeMassForm, MoleculeConstraint, MoleculeCorrespondence,
         MoleculeEntries, MulticenterBondId, MulticenterValenceForm, NumForm,
-        StereoAtomConstraintForm, StereoAtomId, StereoBondId, StereoConfigurationForm, StereoCoset,
-        StereoKind, StereoLigand, StereoLigandKind, Stereogenicity, StereogenicityForm,
-        TetrahedralStereoForm,
+        StereoAtomConstraintForm, StereoAtomId, StereoBondId, StereoConfigurationForm, StereoKind,
+        StereoLigand, StereoLigandKind, Stereogenicity, StereogenicityForm,
     };
     use umol_graph_ir::{atom_dsl, bond_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1165,7 +1127,7 @@ mod tests {
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
         RingLimits, StereoModel, ValenceModel,
     };
-    use crate::ops::stereo::{StereoInconsistency, StereoPerceiver};
+    use crate::ops::stereo::StereoInconsistency;
     use crate::ops::valence::{AtomTypeRegistry, CountsError, ValenceTable};
     use crate::ops::validate::{ConnectivityModel, IncidenceConstraintInvariantsContradiction};
 
@@ -1196,7 +1158,7 @@ mod tests {
     #[fixture]
     fn stereo_molecule() -> Molecule {
         mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+            r#"{:atoms ["C #h3" "C #h1 #T+" "N #h2" "O #h1"]
                 :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
         )
     }
@@ -1255,7 +1217,7 @@ mod tests {
                 ..StereoResolveConfig::default()
             },
         },
-        mol_dsl_concrete!(r#"{:atoms ["C#h4#T1"]}"#)
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#T+"]}"#)
     )]
     fn test_resolver_with_config(
         chemistry_model: ChemistryModel,
@@ -1625,7 +1587,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(
         mol_dsl_concrete!(r#"{
-            :atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
+            :atoms ["C#T!" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]
         }"#),
@@ -1636,7 +1598,7 @@ mod tests {
     #[case::cis_trans(
         mol_dsl_concrete!(r#"{
             :atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
-            :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :bonds [[0 1 "2#C!"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
             :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]
         }"#),
         StereoInconsistency::CisTransStereoMismatch {
@@ -1731,9 +1693,10 @@ mod tests {
     )]
     #[case::stereo(
         mol_dsl!(r#"{
-            :atoms ["C#i*#c0#h*#n0#u0#s#T1" "F#i=#c0#h0#n0#u0#s"
+            :atoms ["C#i*#c0#h*#n0#u0#s#T+" "F#i=#c0#h0#n0#u0#s"
                     "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"]
             :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "Th1"}]
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "F" "Cl" "Br"]
@@ -1852,8 +1815,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::undetermined(mol_dsl!(r#"{:atoms ["C#c0#h4#T1"]}"#))]
-    #[case::variable(mol_dsl!(r#"{:atoms ["C#i?mass#c0#h4#T1"]}"#))]
+    #[case::undetermined(mol_dsl!(r#"{:atoms ["C#c0#h4#T+"]}"#))]
+    #[case::variable(mol_dsl!(r#"{:atoms ["C#i?mass#c0#h4#T+"]}"#))]
     fn test_resolver_resolve_into_isotope_stereo(
         #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
@@ -1917,13 +1880,13 @@ mod tests {
         :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
     }"#))]
     #[case::stored_tetrahedral(mol_dsl_concrete!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]
     }"#))]
     #[case::stored_cis_trans(mol_dsl_concrete!(r#"{
         :atoms ["C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]
+        :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]
     }"#))]
     fn test_resolver_resolve_constraints_identity(
@@ -2368,7 +2331,7 @@ mod tests {
     #[case::stereo(
         AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
         mol_dsl!(r#"{
-            :atoms ["C#i*#c0#h#n0#u0#s#a#T1" "C#i=#c0#h#n0#u0#s#a"
+            :atoms ["C#i*#c0#h#n0#u0#s#a#T+" "C#i=#c0#h#n0#u0#s#a"
                     "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
                     "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"]
             :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]
@@ -2439,11 +2402,12 @@ mod tests {
             :atoms ["C#i13#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
                     "C#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
                     "C#c0#h#n0#u0#s#a1" "C#c0#h#n0#u0#s#a1"
-                    "C#c0#h#n0#u0#s#T0" "F#c0#h0#n0#u0#s"
+                    "C#c0#h#n0#u0#s" "F#c0#h0#n0#u0#s"
                     "Cl#c0#h0#n0#u0#s" "Br#c0#h0#n0#u0#s"]
             :bonds [[0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"]
                     [3 4 "1#c0#u0#s#a"] [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]
-                    [6 7 "1#c0#u0#s"] [6 8 "1#c0#u0#s"] [6 9 "1#c0#u0#s"]]}"#),
+                    [6 7 "1#c0#u0#s"] [6 8 "1#c0#u0#s"] [6 9 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 6 :ligands [7 8 9 [:h 6]] :attrs "Th0"}]}"#),
     )]
     fn test_resolver_project(
         #[case] mut molecule: Molecule,
@@ -2534,9 +2498,9 @@ mod tests {
     #[rstest]
     #[case::hydrogen("F[C@H](Cl)Br", 1, vec![
         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
     ])]
     #[case::atoms("F[C@](Cl)(Br)I", 0, vec![
         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -2546,9 +2510,9 @@ mod tests {
     ])]
     #[case::lone_pair("C[S@](=O)CC", 0, vec![
         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
     ])]
     fn test_resolver_project_into_stereo(
         #[case] input: &str,
@@ -2572,6 +2536,17 @@ mod tests {
             ..Default::default()
         };
         let mut molecule = ingest_smiles(input).unwrap();
+        let stereo_atoms = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| {
+                (
+                    stereo.site_id(),
+                    stereo.ligand_ids().to_vec(),
+                    stereo.attributes().clone(),
+                )
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
             Resolver::with_config(&model, config).project_into(
                 &mut molecule,
@@ -2585,15 +2560,18 @@ mod tests {
             &NumForm::Lit(hydrogens)
         );
         assert_eq!(
-            molecule.atom(AtomId(1)).constraints().tetrahedral_stereo(),
-            &TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
+            molecule
+                .stereo_atoms()
+                .iter()
+                .map(|stereo| (
+                    stereo.site_id(),
+                    stereo.ligand_ids().to_vec(),
+                    stereo.attributes().clone()
+                ))
+                .collect::<Vec<_>>(),
+            stereo_atoms
         );
-        assert_eq!(
-            StereoPerceiver::new(&model.stereo)
-                .derive_stereo_atom(&molecule, AtomId(1), &StereoCoset::Lit(0))
-                .map(|(ligands, _)| ligands),
-            Some(ligands)
-        );
+        assert_eq!(molecule.stereo_atom(StereoAtomId(0)).ligand_ids(), ligands);
     }
 
     #[rstest]
@@ -2665,8 +2643,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::stereo(StereoConfigurationForm::Undetermined, NumForm::Lit(0), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Natural,
-        ProjectError::Stereo(StereoProjectError::UnsupportedStereoAtom { stereo_atom: StereoAtomId(0) }))]
     #[case::aromatic_charge(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(1), UnpairedElectronsForm::closed_shell(), IsotopeMassForm::Natural,
         ProjectError::Aromaticity(AromaticityProjectError::ChargedAromaticSystem { aromatic_system: AromaticSystemId(0) }))]
     #[case::aromatic_spin(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0), NumForm::Lit(0), UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, IsotopeMassForm::Natural,

@@ -12,10 +12,15 @@
     "C"]
   :bonds [
     [0 7 :single]
-    [0 1 "2#C0"]
+    [0 1 "2"]
     [1 2 :single]
-    [2 3 "2#C0"]
+    [2 3 "2"]
     [3 4 :single]
-    [4 5 "2#C0"]
+    [4 5 "2"]
     [5 6 :single]
-    [6 7 "2#C0"]]}}
+    [6 7 "2"]]
+  :stereo-bonds [
+        {:attrs :z :ligands [7 [:h 0] 2 [:h 1]] :site 1}
+        {:attrs :z :ligands [1 [:h 2] 4 [:h 3]] :site 3}
+        {:attrs :z :ligands [3 [:h 4] 6 [:h 5]] :site 5}
+        {:attrs :z :ligands [5 [:h 6] 0 [:h 7]] :site 7}]}}

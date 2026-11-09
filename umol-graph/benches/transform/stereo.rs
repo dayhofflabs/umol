@@ -214,7 +214,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 .map(|bond| {
                     let form = if bond == 0 {
                         BondForm::from_order(2).with_constraint(BondConstraintForm::CisTransStereo(
-                            CisTransStereoForm::Stereo(StereoCoset::Undetermined),
+                            CisTransStereoForm::Stereo,
                         ))
                     } else {
                         BondForm::from_order(1)

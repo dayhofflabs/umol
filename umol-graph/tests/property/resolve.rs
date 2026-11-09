@@ -158,34 +158,32 @@ proptest! {
             } else {
                 vec![(a, b, bond_dsl!("1#R!")), (a, c, bond_dsl!("1")), (a, d, bond_dsl!("1"))]
             };
-            let mut expected_atoms = atoms.clone();
-            let mut expected_bonds = bonds.clone();
+            let expected_atoms = atoms.clone();
+            let expected_bonds = bonds.clone();
             if cis_trans {
                 let assertion = BondConstraintForm::CisTransStereo(
-                    CisTransStereoForm::Stereo(coset.clone()));
+                    CisTransStereoForm::Stereo);
                 bonds[0].2.constraints.set(assertion.clone());
-                if stored { expected_bonds[0].2.constraints.set(assertion); }
                 let entity = (BondId::from(source.bonds.len()), vec![
                     StereoLigand::new(c, StereoLigandKind::Atom),
                     StereoLigand::new(a, StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(d, StereoLigandKind::Atom),
                     StereoLigand::new(b, StereoLigandKind::ImplicitHydrogen),
-                ], StereoBondForm::new(StereoKind::CisTrans, coset.clone()));
+                ], StereoBondForm::new(StereoKind::CisTrans, if stored { coset.clone() } else { StereoCoset::Undetermined }));
                 if stored {
                     source.stereo_bonds.push(entity.clone());
                     expected.stereo_bonds.push(entity);
                 } else { added_bonds.push(entity); }
             } else {
                 let assertion = AtomConstraintForm::TetrahedralStereo(
-                    TetrahedralStereoForm::Stereo(coset.clone()));
+                    TetrahedralStereoForm::Stereo);
                 atoms[0].constraints.set(assertion.clone());
-                if stored { expected_atoms[0].constraints.set(assertion); }
                 let entity = (a, vec![
                     StereoLigand::new(b, StereoLigandKind::Atom),
                     StereoLigand::new(c, StereoLigandKind::Atom),
                     StereoLigand::new(d, StereoLigandKind::Atom),
                     StereoLigand::new(a, StereoLigandKind::ImplicitHydrogen),
-                ], StereoAtomForm::new(StereoKind::Tetrahedral, coset.clone()));
+                ], StereoAtomForm::new(StereoKind::Tetrahedral, if stored { coset.clone() } else { StereoCoset::Undetermined }));
                 if stored {
                     source.stereo_atoms.push(entity.clone());
                     expected.stereo_atoms.push(entity);
@@ -326,16 +324,16 @@ proptest! {
             prop_assert_eq!(output.constraints(), input.constraints());
             let added_members: BTreeSet<_> = output.aromatic_systems().iter()
                 .skip(input.aromatic_systems().count()).flat_map(|aromatic_system| aromatic_system.atom_ids()).collect();
-            let added_atoms: BTreeSet<_> = output.stereo_atoms().iter()
-                .skip(input.stereo_atoms().count()).map(|site| site.site_id()).collect();
-            let added_bonds: BTreeSet<_> = output.stereo_bonds().iter()
-                .skip(input.stereo_bonds().count()).map(|site| site.site_id()).collect();
+            let stereo_atoms: BTreeSet<_> = output.stereo_atoms().iter()
+                .map(|site| site.site_id()).collect();
+            let stereo_bonds: BTreeSet<_> = output.stereo_bonds().iter()
+                .map(|site| site.site_id()).collect();
             for atom in input.atoms().iter() {
                 let mut expected = atom.attributes().constraints.clone();
                 if aromatic && added_members.contains(&atom.id()) {
                     expected.remove(AtomConstraintKey::AromaticValence);
                 }
-                if stereo && added_atoms.contains(&atom.id()) {
+                if stereo && stereo_atoms.contains(&atom.id()) {
                     expected.remove(AtomConstraintKey::TetrahedralStereo);
                 }
                 if completes_atoms {
@@ -353,7 +351,7 @@ proptest! {
                         }
                     }
                 }
-                if stereo && added_bonds.contains(&bond.id()) {
+                if stereo && stereo_bonds.contains(&bond.id()) {
                     expected.remove(BondConstraintKey::CisTransStereo);
                 }
                 prop_assert_eq!(&output.bond(bond.id()).attributes().constraints, &expected);
@@ -409,7 +407,7 @@ proptest! {
         for input in [skeleton.molecule(), smiles, molfile] {
             let Ok(Solution::Determined(source)) = resolver.resolve(input) else { continue; };
             let Solution::Determined(projected) = resolver.project(source.clone(),
-                ProjectFlags::AROMATICITY | ProjectFlags::STEREO).unwrap() else {
+                ProjectFlags::AROMATICITY).unwrap() else {
                 return Err(TestCaseError::fail("projection of a resolved skeleton was not determined"));
             };
             let mut expected = source.clone().edit();

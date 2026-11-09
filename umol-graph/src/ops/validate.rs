@@ -550,7 +550,7 @@ mod tests {
     )]
     #[case::stereo(
         mol_dsl_concrete!(r#"{
-            :atoms ["C#h0#T1" "C#h3" "C#h3" "C#h3" "C#h3"]
+            :atoms ["C#h0#T+" "C#h3" "C#h3" "C#h3" "C#h3"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         }"#),
         Solution::Determined(()),

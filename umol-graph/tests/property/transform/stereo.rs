@@ -4,8 +4,8 @@
 //! specified independently by terminal element equality. Raw removal and enumeration
 //! use mixed fixed/undetermined/finite domains. Exact expected entries check preservation and
 //! reference transport; binary-mask enumeration checks soundness, completeness, order,
-//! and multiplicity independently of production traversal. Renumbering also transports
-//! implicit #T/#C assertion frames. Issued representative actions transport stored frames.
+//! and multiplicity independently of production traversal. Renumbering preserves
+//! #T/#C kind constraints. Issued representative actions transport stored frames.
 //! Collection comparisons preserve multiplicity and do not require a frame-invariant first item.
 //! Frame transport uses nonempty absolute domains; the enumeration reference also covers empty
 //! domains. Unsupported attribute states are explicit cases on generated valid frames.
@@ -314,7 +314,6 @@ fn test_stereo_adder_transform_evidence() {
         |(case, value)| {
             let value = u32::from(value);
             let info = &case.sites[0];
-            let asserted = value ^ info.parity ^ 1;
             let mut source = case.source.clone();
             let inconsistency = match info.site {
                 StereoSite::Atom(atom) => {
@@ -323,9 +322,7 @@ fn test_stereo_adder_transform_evidence() {
                         .attributes_mut()
                         .configuration = (info.kind, value).into();
                     source.atom_mut(atom).attributes_mut().constraints.set(
-                        AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                            asserted.into(),
-                        )),
+                        AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
                     );
                     StereoInconsistency::TetrahedralStereoMismatch {
                         atom,
@@ -338,9 +335,7 @@ fn test_stereo_adder_transform_evidence() {
                         .attributes_mut()
                         .configuration = (info.kind, value).into();
                     source.bond_mut(bond).attributes_mut().constraints.set(
-                        BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(
-                            asserted.into(),
-                        )),
+                        BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo),
                     );
                     StereoInconsistency::CisTransStereoMismatch {
                         bond,
@@ -707,13 +702,13 @@ fn test_stereo_enumerator_transform() {
                                     StereoSite::Atom(atom) => Constraint::Atom(
                                         atom,
                                         AtomConstraintForm::TetrahedralStereo(
-                                            TetrahedralStereoForm::Stereo(value.into()),
+                                            TetrahedralStereoForm::from(value == 0),
                                         ),
                                     ),
                                     StereoSite::Bond(bond) => Constraint::Bond(
                                         bond,
                                         BondConstraintForm::CisTransStereo(
-                                            CisTransStereoForm::Stereo(value.into()),
+                                            CisTransStereoForm::from(value == 0),
                                         ),
                                     ),
                                 })
@@ -723,7 +718,7 @@ fn test_stereo_enumerator_transform() {
                     .collect();
                 case.entries.constraints.push(Constraint::Or(alternatives));
                 case.source = Molecule::from_entries(case.entries.clone());
-                Some(pair)
+                Some(false)
             } else {
                 None
             };

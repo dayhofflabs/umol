@@ -33,7 +33,8 @@
     [9 10 :single]
     [10 11 :double]
     [10 12 :single]
-    [12 13 "2#C0"]
+    [12 13 "2"]
     [13 14 :single]
     [14 15 :double]
-    [14 16 :single]]}}
+    [14 16 :single]]
+  :stereo-bonds [{:site 13 :ligands [10 [:virt 12] 14 [:virt 13]] :attrs "Ct0"}]}}

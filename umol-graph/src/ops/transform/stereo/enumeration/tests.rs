@@ -182,39 +182,6 @@ fn test_absolute_stereo_assignments_next_prefix() {
 }
 
 #[rstest]
-#[case::variable(StereoCoset::term(StereoTerm::var("configuration")))]
-#[case::bounded_variable(StereoCoset::term(StereoTerm::var_in("configuration", [0, 1])))]
-#[case::empty_variable(StereoCoset::term(StereoTerm::var_in("configuration", [])))]
-#[case::relative(StereoCoset::term(StereoTerm::swap(StereoTerm::var("configuration"))))]
-#[case::invalid(StereoCoset::Lit(2))]
-fn test_stereo_assignment_checks_new_error(
-    mut mixed_stereo: Molecule,
-    #[case] coset: StereoCoset,
-    #[values(StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4)))] site: StereoSite,
-) {
-    match site {
-        StereoSite::Atom(atom) => mixed_stereo
-            .atom_mut(atom)
-            .attributes_mut()
-            .constraints
-            .set(AtomConstraintForm::TetrahedralStereo(
-                TetrahedralStereoForm::Stereo(coset),
-            )),
-        StereoSite::Bond(bond) => mixed_stereo
-            .bond_mut(bond)
-            .attributes_mut()
-            .constraints
-            .set(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(coset),
-            )),
-    }
-    assert_eq!(
-        StereoAssignmentChecks::new(&mixed_stereo, &BTreeSet::from([site])).err(),
-        Some(StereoPerceptionError::UnsupportedConfiguration { site })
-    );
-}
-
-#[rstest]
 #[case::invalid_atom(mol_dsl_concrete!(r#"{:atoms ["C"]}"#), StereoSite::Atom(AtomId(1)),
     StereoPerceptionError::InvalidSite { site: StereoSite::Atom(AtomId(1)) })]
 #[case::invalid_bond(mol_dsl_concrete!(r#"{:atoms ["C"]}"#), StereoSite::Bond(BondId(0)),
@@ -252,33 +219,43 @@ fn test_stereo_assignment_checks_new_expression(
     editor.constraints_mut().push(Constraint::Or(vec![
         Constraint::Atom(
             AtomId(0),
-            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(0.into())),
+            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo),
         ),
         Constraint::Bond(
             BondId(4),
-            BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(1.into())),
+            BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo),
         ),
     ]));
     let molecule = editor.finish().unwrap();
-    assert_eq!(
+    let checks =
         StereoAssignmentChecks::new(&molecule, &BTreeSet::from([StereoSite::Atom(AtomId(0))]))
-            .err(),
-        Some(StereoPerceptionError::UnsupportedConfiguration {
-            site: StereoSite::Bond(BondId(4))
-        })
+            .unwrap();
+    assert_eq!(
+        checks.is_consistent(
+            &molecule,
+            &GraphSymmetryConfig {
+                coloring: ConstitutionColoring::full(),
+                iterate_to_fixpoint: false,
+                max_iterations: 16,
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            }
+        ),
+        Ok(true)
     );
 }
 
 #[rstest]
-#[case::unrestricted(None, None, |_: &[StereoCoset]| true)]
-#[case::atom(Some(0), None, |values: &[StereoCoset]| values[0] == StereoCoset::Lit(0))]
-#[case::bond(None, Some(1), |values: &[StereoCoset]| values[1] == StereoCoset::Lit(1))]
-#[case::both(Some(1), Some(0), |values: &[StereoCoset]| values == [StereoCoset::Lit(1), StereoCoset::Lit(0)])]
+#[case::unrestricted(None, None, true)]
+#[case::atom(Some(true), None, true)]
+#[case::bond(None, Some(true), true)]
+#[case::both(Some(true), Some(true), true)]
+#[case::negative_atom(Some(false), None, false)]
+#[case::negative_bond(None, Some(false), false)]
 fn test_stereo_assignment_checks_is_consistent(
     mut mixed_stereo: Molecule,
-    #[case] atom_assertion: Option<u32>,
-    #[case] bond_assertion: Option<u32>,
-    #[case] admissible: fn(&[StereoCoset]) -> bool,
+    #[case] atom_assertion: Option<bool>,
+    #[case] bond_assertion: Option<bool>,
+    #[case] admissible: bool,
     #[values(false, true)] reverse: bool,
     #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::lit_set([1]), StereoCoset::lit_set([]))]
     atom_domain: StereoCoset,
@@ -301,7 +278,7 @@ fn test_stereo_assignment_checks_is_consistent(
             .attributes_mut()
             .constraints
             .set(AtomConstraintForm::TetrahedralStereo(
-                TetrahedralStereoForm::Stereo(value.into()),
+                TetrahedralStereoForm::from(value),
             ));
     }
     if let Some(value) = bond_assertion {
@@ -310,7 +287,7 @@ fn test_stereo_assignment_checks_is_consistent(
             .attributes_mut()
             .constraints
             .set(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(value.into()),
+                CisTransStereoForm::from(value),
             ));
     }
     let original = mixed_stereo.clone();
@@ -372,7 +349,7 @@ fn test_stereo_assignment_checks_is_consistent(
     }
     assert_eq!(
         actual,
-        absolute_assignments(&source, &BTreeSet::from([0, 1]), &order, admissible).unwrap()
+        absolute_assignments(&source, &BTreeSet::from([0, 1]), &order, |_| admissible).unwrap()
     );
     assert_eq!(mixed_stereo, original);
 }
@@ -384,21 +361,21 @@ fn test_stereo_assignment_checks_is_consistent_logical(mut mixed_stereo: Molecul
         Constraint::And(vec![
             Constraint::Atom(
                 AtomId(0),
-                AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(0.into())),
+                AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo),
             ),
             Constraint::Bond(
                 BondId(4),
-                BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(1.into())),
+                BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo),
             ),
         ]),
         Constraint::And(vec![
             Constraint::Atom(
                 AtomId(0),
-                AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(1.into())),
+                AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo),
             ),
             Constraint::Not(Box::new(Constraint::Bond(
                 BondId(4),
-                BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(1.into())),
+                BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo),
             ))),
         ]),
     ]));
@@ -437,7 +414,7 @@ fn test_stereo_assignment_checks_is_consistent_logical(mut mixed_stereo: Molecul
             &[StereoCoset::Undetermined, StereoCoset::Undetermined],
             &BTreeSet::from([0, 1]),
             &[0, 1],
-            |values| values[0] != values[1]
+            |_| true
         )
         .unwrap()
     );
@@ -525,12 +502,12 @@ fn test_stereo_assignment_checks_is_consistent_partial(mut mixed_stereo: Molecul
 }
 
 #[rstest]
-#[case::atom(mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "I"]
+#[case::atom(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#),
     StereoSite::Atom(AtomId(0)))]
 #[case::bond(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
-    :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]
+    :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
     :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]}"#),
     StereoSite::Bond(BondId(0)))]
 fn test_stereo_assignment_checks_is_consistent_frame(
@@ -560,7 +537,7 @@ fn test_stereo_assignment_checks_is_consistent_frame(
                 .configuration = (StereoKind::CisTrans, 1).into()
         }
     }
-    assert_eq!(checks.is_consistent(&opposite, &config), Ok(false));
+    assert_eq!(checks.is_consistent(&opposite, &config), Ok(true));
 }
 
 #[rstest]
@@ -716,10 +693,10 @@ fn test_stereo_assignment_checks_is_consistent_context(
 
 #[rstest]
 #[case::open(None, vec![true, true])]
-#[case::fixed(Some(0), vec![true, false])]
+#[case::negative(Some(false), vec![false, false])]
 fn test_stereo_assignment_checks_is_consistent_evidence(
     mut mixed_stereo: Molecule,
-    #[case] retained_assertion: Option<u32>,
+    #[case] retained_assertion: Option<bool>,
     #[case] expected: Vec<bool>,
 ) {
     if let Some(value) = retained_assertion {
@@ -728,18 +705,18 @@ fn test_stereo_assignment_checks_is_consistent_evidence(
             .attributes_mut()
             .constraints
             .set(BondConstraintForm::CisTransStereo(
-                CisTransStereoForm::Stereo(value.into()),
+                CisTransStereoForm::from(value),
             ));
     }
     let mut editor = mixed_stereo.edit();
-    editor.constraints_mut().push(Constraint::Or(vec![
+    editor.constraints_mut().push(Constraint::And(vec![
         Constraint::Atom(
             AtomId(0),
-            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(0.into())),
+            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo),
         ),
         Constraint::Bond(
             BondId(4),
-            BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(1.into())),
+            BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo),
         ),
     ]));
     let molecule = editor.finish().unwrap();
@@ -824,7 +801,7 @@ fn test_stereo_assignment_checks_is_consistent_assignments(
 fn test_stereo_assignment_checks_is_consistent_error(
     #[case] is_and: bool,
     #[values(false, true)] reverse: bool,
-    #[values(None, Some(1u32))] source_assertion: Option<u32>,
+    #[values(None, Some(true))] source_assertion: Option<bool>,
 ) {
     let mut molecule = mol_dsl_concrete!(
         r#"{:atoms ["C" "F" "Cl" "Br" "I" "N" "B"]
@@ -838,15 +815,13 @@ fn test_stereo_assignment_checks_is_consistent_error(
             .attributes_mut()
             .constraints
             .set(AtomConstraintForm::TetrahedralStereo(
-                TetrahedralStereoForm::Stereo(value.into()),
+                TetrahedralStereoForm::from(value),
             ));
     }
     let mut children = vec![
         Constraint::Atom(
             AtomId(0),
-            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                u32::from(is_and).into(),
-            )),
+            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo),
         ),
         Constraint::DativeBond(
             DativeBondId(0),

@@ -132,8 +132,8 @@ pub(super) fn square_planar() -> Molecule {
 pub(super) fn evidenced_stereo() -> Molecule {
     mol_dsl_concrete!(
         r#"{
-        :atoms ["C#T1" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]
+        :atoms ["C#T+" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C+"] [5 6 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
         :stereo-bonds [{:site 4 :ligands [0 [:h 1] 6 [:h 5]] :attrs "Ct*"}]
     }"#

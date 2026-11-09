@@ -5,13 +5,11 @@ use std::iter;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AddBond, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle, AtomId,
-    BondConstraintForm, BondConstraintKey, BondForm, BondHandle, BondId, CisTransStereoForm,
-    Constraint, Edit, Edits, ElementForm, Entity, Lattice, Molecule, MoleculeConstraint, NumForm,
-    RelationalConstraint, StereoAtomHandle, StereoBondHandle, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+    AddBond, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle, AtomId, BondForm,
+    BondHandle, BondId, Constraint, Edit, Edits, ElementForm, Entity, Lattice, Molecule,
+    MoleculeConstraint, NumForm, RelationalConstraint, StereoAtomHandle, StereoBondHandle,
+    StereoLigand, StereoLigandKind,
 };
-use umol_perm::Permutation;
 
 use crate::ops::transform::Transformer;
 
@@ -35,8 +33,8 @@ pub enum FoldHydrogensError {
 /// Localized valence and degree assertions decrease with the removed bonds, using
 /// the existing numeric-form arithmetic. Total and ring assertions are unchanged.
 /// Actual stereo ligands become virtual hydrogens in their stored positions;
-/// configurations and stereo constraints are preserved. Tetrahedral and cis/trans
-/// assertions are transported to the changed implicit neighbor frame.
+/// configurations and stereo constraints are preserved. Scalar stereo assertions
+/// are unchanged.
 /// Molecule-level predicates receive reference compaction only.
 ///
 /// # Errors
@@ -79,7 +77,6 @@ impl HydrogenFolder {
         let mut counts = Vec::new();
         let mut valences = Vec::new();
         let mut degrees = Vec::new();
-        let mut tetrahedral = Vec::new();
         for atom in molecule.atoms().iter() {
             match atom.element() {
                 ElementForm::Undetermined | ElementForm::Lit(Element::H) => continue,
@@ -164,25 +161,6 @@ impl HydrogenFolder {
                     Some(AtomConstraintForm::degree(value - added)),
                 ));
             }
-            if let Some(
-                old @ AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(coset)),
-            ) = constraints.get(AtomConstraintKey::TetrahedralStereo)
-            {
-                let mut image = [0, 1, 2, 3];
-                fold_neighbor_frame(molecule, atom.id(), None, &atoms[start..], &mut image);
-                if image != [0, 1, 2, 3] {
-                    let new = AtomConstraintForm::tetrahedral_stereo(
-                        TetrahedralStereoForm::Stereo(transport_coset(
-                            coset,
-                            StereoKind::Tetrahedral,
-                            Permutation::from_image(&image),
-                        )),
-                    );
-                    if &new != old {
-                        tetrahedral.push((AtomHandle::Id(atom.id()), Some(old.clone()), Some(new)));
-                    }
-                }
-            }
         }
         let mut edits = Edits::new();
         if atoms.is_empty() {
@@ -193,36 +171,10 @@ impl HydrogenFolder {
         for (key, changes) in [
             (AtomConstraintKey::Valence, valences),
             (AtomConstraintKey::Degree, degrees),
-            (AtomConstraintKey::TetrahedralStereo, tetrahedral),
         ] {
             if !changes.is_empty() {
                 edits.modify_atom_constraints(key, changes);
             }
-        }
-        let mut cis_trans = Vec::new();
-        for bond in molecule.bonds().iter() {
-            let Some(old @ BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset))) =
-                bond.attributes()
-                    .constraints
-                    .get(BondConstraintKey::CisTransStereo)
-            else {
-                continue;
-            };
-            let [a, b] = bond.atom_ids();
-            let mut image = [0, 1, 2, 3];
-            fold_neighbor_frame(molecule, a, Some(b), &atoms, &mut image[..2]);
-            fold_neighbor_frame(molecule, b, Some(a), &atoms, &mut image[2..]);
-            if image != [0, 1, 2, 3] {
-                let new = BondConstraintForm::cis_trans_stereo(CisTransStereoForm::Stereo(
-                    transport_coset(coset, StereoKind::CisTrans, Permutation::from_image(&image)),
-                ));
-                if &new != old {
-                    cis_trans.push((BondHandle::Id(bond.id()), Some(old.clone()), Some(new)));
-                }
-            }
-        }
-        if !cis_trans.is_empty() {
-            edits.modify_bond_constraints(BondConstraintKey::CisTransStereo, cis_trans);
         }
         for stereo in molecule.stereo_atoms().iter() {
             if let Some(new) = fold_ligands(
@@ -331,39 +283,6 @@ fn fold_ligands(
         new.push(replacement);
     }
     Ok(Some(new))
-}
-
-fn fold_neighbor_frame(
-    molecule: &Molecule,
-    atom: AtomId,
-    opposite: Option<AtomId>,
-    removed: &[AtomId],
-    image: &mut [usize],
-) {
-    let mut folded = [false; 4];
-    let mut count = 0;
-    for neighbor in molecule
-        .atom(atom)
-        .neighbors()
-        .filter(|n| Some(n.atom_id()) != opposite)
-    {
-        if count == image.len() {
-            return;
-        }
-        folded[count] = removed.binary_search(&neighbor.atom_id()).is_ok();
-        count += 1;
-    }
-    let offset = image[0];
-    image[..count].sort_unstable_by_key(|&i| (folded[i - offset], i));
-}
-
-fn transport_coset(coset: &StereoCoset, kind: StereoKind, permutation: Permutation) -> StereoCoset {
-    let configuration = StereoConfigurationForm::kinded(kind, coset.clone());
-    match configuration.apply(permutation) {
-        Some(StereoConfigurationForm::Kinded(_, transported)) => transported,
-        // An already contradictory coset stays contradictory in the new frame.
-        _ => coset.clone(),
-    }
 }
 
 fn collect_topology_references(

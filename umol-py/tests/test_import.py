@@ -58,7 +58,6 @@ PUBLIC_EXPORTS = frozenset(
     CanonicalizeConfig
     ChemistryModel
     CisTransConfiguration
-    CisTransStereo
     CisTransStereoForm
     CommonSubgraphEnumerationAlgorithm
     ConnectedComponentsAlgorithm
@@ -236,7 +235,6 @@ PUBLIC_EXPORTS = frozenset(
     SubstructureMatchAlgorithm
     SubstructureSearchConfig
     TetrahedralConfiguration
-    TetrahedralStereo
     TetrahedralStereoForm
     Topicity
     TopicityForm

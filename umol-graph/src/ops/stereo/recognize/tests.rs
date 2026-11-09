@@ -295,32 +295,23 @@ fn test_stereo_perceiver_recognize_selection(
 #[rstest]
 #[case::tetrahedral(StereoSite::Atom(AtomId(0)))]
 #[case::cis_trans(StereoSite::Bond(BondId(4)))]
-fn test_stereo_perceiver_recognize_evidence(
-    mut mixed_sites: Molecule,
-    #[case] site: StereoSite,
-    #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
-    coset: StereoCoset,
-) {
+fn test_stereo_perceiver_recognize_evidence(mut mixed_sites: Molecule, #[case] site: StereoSite) {
     let mut expected = StereoDerivation::default();
     match site {
         StereoSite::Atom(atom) => {
             mixed_sites.atom_mut(atom).attributes_mut().constraints =
-                AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo(
-                    coset.clone(),
-                ))
-                .into();
+                AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo).into();
             expected.stereo_atoms.push((
                 atom,
                 (1..=4)
                     .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
                     .collect(),
-                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
             ));
         }
         StereoSite::Bond(bond) => {
             mixed_sites.bond_mut(bond).attributes_mut().constraints =
-                BondConstraintForm::cis_trans_stereo(CisTransStereoForm::Stereo(coset.clone()))
-                    .into();
+                BondConstraintForm::cis_trans_stereo(CisTransStereoForm::Stereo).into();
             expected.stereo_bonds.push((
                 bond,
                 vec![
@@ -329,7 +320,7 @@ fn test_stereo_perceiver_recognize_evidence(
                     StereoLigand::new(AtomId(8), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondForm::new(StereoKind::CisTrans, coset),
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
             ));
         }
     }
@@ -351,15 +342,13 @@ fn test_stereo_perceiver_recognize_evidence(
 }
 
 #[rstest]
-#[case::literal(StereoCoset::Lit(1))]
-#[case::symbolic(StereoCoset::term(StereoTerm::var("configuration")))]
-fn test_stereo_perceiver_recognize_assertion(#[case] coset: StereoCoset) {
+fn test_stereo_perceiver_recognize_assertion() {
     let mut molecule = mol_dsl_concrete!(
         r#"{:atoms ["N#n" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#
     );
     molecule.atom_mut(AtomId(0)).attributes_mut().constraints =
-        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo(coset.clone())).into();
+        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo).into();
     let original = molecule.clone();
     assert_eq!(
         StereoPerceiver::new(&StereoModel::default()).recognize(
@@ -378,7 +367,7 @@ fn test_stereo_perceiver_recognize_assertion(#[case] coset: StereoCoset) {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, coset)
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)
             )],
             ..Default::default()
         })
@@ -413,21 +402,21 @@ fn test_stereo_perceiver_recognize_identity(#[case] molecule: Molecule) {
 }
 
 #[rstest]
-#[case::atom(mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+#[case::atom(mol_dsl_concrete!(r#"{:atoms ["C#T!" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#),
     StereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(0), stereo_atom: StereoAtomId(0) })]
-#[case::competing_kind(mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+#[case::competing_kind(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}"#),
     StereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(0), stereo_atom: StereoAtomId(0) })]
 #[case::bond(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
-    :bonds [[0 1 "2#C0"] [0 2 "1"] [1 3 "1"]]
+    :bonds [[0 1 "2#C!"] [0 2 "1"] [1 3 "1"]]
     :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]}"#),
     StereoInconsistency::CisTransStereoMismatch { bond: BondId(0), stereo_bond: StereoBondId(0) })]
-#[case::atom_frame(mol_dsl_concrete!(r#"{:atoms ["C#h2#T1" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+#[case::atom_frame(mol_dsl_concrete!(r#"{:atoms ["C#h2#T+" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
     StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) })]
-#[case::bond_frame(mol_dsl_concrete!(r#"{:atoms ["C#h2" "C#h" "Cl"] :bonds [[0 1 "2#C1"] [1 2 "1"]]}"#),
+#[case::bond_frame(mol_dsl_concrete!(r#"{:atoms ["C#h2" "C#h" "Cl"] :bonds [[0 1 "2#C+"] [1 2 "1"]]}"#),
     StereoInconsistency::CisTransStereoFailure { bond: BondId(0) })]
 fn test_stereo_perceiver_recognize_inconsistency(
     #[case] molecule: Molecule,
@@ -483,7 +472,7 @@ fn test_stereo_perceiver_recognize_ring(
                         let form = BondForm::from_order(2).into_concrete();
                         if asserted {
                             form.with_constraint(BondConstraintForm::cis_trans_stereo(
-                                CisTransStereoForm::Stereo(StereoCoset::Undetermined),
+                                CisTransStereoForm::Stereo,
                             ))
                         } else {
                             form

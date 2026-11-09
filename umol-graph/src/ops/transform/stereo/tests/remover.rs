@@ -18,8 +18,8 @@ use crate::ops::transform::{
 #[fixture]
 fn mixed_sites() -> Molecule {
     mol_dsl_concrete!(
-        r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C0#R!"] [5 7 "1"] [6 8 "1"]]
+        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+#R!"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
     )
@@ -59,11 +59,11 @@ fn test_stereo_remover_with_config(
         ),
         (true, false) => mol_dsl_concrete!(
             r#"{:atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C0#R!"] [5 7 "1"] [6 8 "1"]]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+#R!"] [5 7 "1"] [6 8 "1"]]
             :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
         ),
         (false, true) => mol_dsl_concrete!(
-            r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+            r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
             :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#
         ),
@@ -92,7 +92,7 @@ fn test_stereo_remover_with_config(
 
 #[rstest]
 #[case::tetrahedral(
-    mol_dsl_concrete!(r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I"]
+    mol_dsl_concrete!(r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C#D4" "F" "Cl" "Br" "I"]
@@ -100,7 +100,7 @@ fn test_stereo_remover_with_config(
 )]
 #[case::cis_trans(
     mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "2#C0#R!"] [0 2 "1"] [1 3 "1"]]
+        :bonds [[0 1 "2#C+#R!"] [0 2 "1"] [1 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct1"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "2#R!"] [0 2 "1"] [1 3 "1"]]}"#),
@@ -113,7 +113,7 @@ fn test_stereo_remover_with_config(
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
 )]
 #[case::symbolic(
-    mol_dsl_concrete!(r#"{:atoms ["C#T?configuration" "F" "Cl" "Br" "I"]
+    mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th?configuration"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
@@ -127,7 +127,7 @@ fn test_stereo_remover_with_config(
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
 )]
 #[case::conflicting_evidence(
-    mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+    mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
@@ -154,7 +154,7 @@ fn test_stereo_remover_transform(#[case] molecule: Molecule, #[case] expected: M
 
 #[rstest]
 #[case::empty(Molecule::default())]
-#[case::no_entities(mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "I"]
+#[case::no_entities(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
 fn test_stereo_remover_transform_identity(#[case] molecule: Molecule) {
     let transformer = StereoRemover::new(&StereoModel::default());
@@ -192,7 +192,7 @@ fn test_stereo_remover_transform_configuration(
             });
             mol_dsl_concrete!(
                 r#"{:atoms ["C#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C0#R!"] [5 7 "1"] [6 8 "1"]]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+#R!"] [5 7 "1"] [6 8 "1"]]
                 :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
             )
         }
@@ -204,7 +204,7 @@ fn test_stereo_remover_transform_configuration(
                 StereoConfigurationForm::Kinded(StereoKind::CisTrans, coset)
             });
             mol_dsl_concrete!(
-                r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+                r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
                 :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
                 :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#
             )
@@ -285,7 +285,7 @@ fn test_stereo_remover_transform_configuration_identity(
 
 #[rstest]
 #[case::open_atom(
-    mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "I"]
+    mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
@@ -464,16 +464,16 @@ fn test_stereo_remover_transform_context() {
 #[rstest]
 fn test_stereo_remover_transform_constraints() {
     let source = mol_dsl_concrete!(
-        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
+        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [5 9 "1"]
-            [10 11 "2#C+"] [10 12 "1"] [11 13 "1"] [14 15 "2#C0"] [14 16 "1"] [15 17 "1"]]
+            [10 11 "2#C+"] [10 12 "1"] [11 13 "1"] [14 15 "2#C+"] [14 16 "1"] [15 17 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"} {:site 5 :ligands [7 6 8 9] :attrs "Th1"}]
         :stereo-bonds [{:site 8 :ligands [12 [:h 10] 13 [:h 11]] :attrs "Ct*"} {:site 11 :ligands [[:h 14] 16 17 [:h 15]] :attrs "Ct1"}]}"#
     );
     let expected = mol_dsl_concrete!(
-        r#"{:atoms ["C#D4" "F" "Cl" "Br" "I" "C#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
+        r#"{:atoms ["C#D4" "F" "Cl" "Br" "I" "C#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [5 9 "1"]
-            [10 11 "2"] [10 12 "1"] [11 13 "1"] [14 15 "2#C0"] [14 16 "1"] [15 17 "1"]]
+            [10 11 "2"] [10 12 "1"] [11 13 "1"] [14 15 "2#C+"] [14 16 "1"] [15 17 "1"]]
         :stereo-atoms [{:site 5 :ligands [7 6 8 9] :attrs "Th1"}]
         :stereo-bonds [{:site 11 :ligands [[:h 14] 16 17 [:h 15]] :attrs "Ct1"}]}"#
     );
@@ -688,8 +688,8 @@ fn test_stereo_remover_transform_model(#[case] selection: StereoSelection) {
     :stereo-atoms [{:site 0 :ligands [1 2 3] :attrs "Th0"}]}"#),
     StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() },
     StereoPerceptionError::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) }))]
-#[case::later_bond(mol_dsl_concrete!(r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C0#R!"] [5 7 "1"] [6 8 "1"]]
+#[case::later_bond(mol_dsl_concrete!(r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+#R!"] [5 7 "1"] [6 8 "1"]]
     :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]
     :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct?configuration"}]}"#),
     StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])), ..Default::default() },
@@ -734,7 +734,7 @@ fn test_stereo_remover_transform_scope(
         .attributes_mut()
         .configuration = StereoConfigurationForm::Undetermined;
     let expected = mol_dsl_concrete!(
-        r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "*"}]}"#
     );
@@ -774,7 +774,7 @@ fn test_stereo_remover_transform_mode_scope(
         .attributes_mut()
         .configuration = configuration.clone();
     let mut expected = mol_dsl_concrete!(
-        r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#
     );
@@ -819,7 +819,7 @@ fn test_stereo_remover_transform_iter(mixed_sites: Molecule) {
     );
     let original = mixed_sites.clone();
     let expected = mol_dsl_concrete!(
-        r#"{:atoms ["C#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#
     );
@@ -832,7 +832,7 @@ fn test_stereo_remover_transform_iter(mixed_sites: Molecule) {
         .configuration =
         StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined);
     let changed = mol_dsl_concrete!(
-        r#"{:atoms ["C#c+#T1#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+        r#"{:atoms ["C#c+#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#R!"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th*"}]}"#
     );

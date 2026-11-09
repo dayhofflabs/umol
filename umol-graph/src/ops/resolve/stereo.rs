@@ -9,7 +9,7 @@ use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondConstraintForm,
     BondConstraintKey, BondHandle, BondId, CisTransStereoForm, Edit, Edits, Lattice, Molecule,
     Normalize, RingConfig, StereoAtomHandle, StereoAtomId, StereoBondHandle, StereoBondId,
-    StereoCoset, StereoKind, TetrahedralStereoForm,
+    StereoKind, TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -58,20 +58,16 @@ pub struct StereoResolver {
     config: StereoResolveConfig,
 }
 
-/// Failures to express stereo entities as fixed-frame atom and bond assertions.
+/// Failures to express stereo entities as atom and bond kind constraints.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StereoProjectError {
     #[error("stereo atom {stereo_atom:?} does not have tetrahedral kind")]
     UnsupportedStereoAtom { stereo_atom: StereoAtomId },
     #[error("stereo bond {stereo_bond:?} does not have cis-trans kind")]
     UnsupportedStereoBond { stereo_bond: StereoBondId },
-    #[error("stereo atom {stereo_atom:?} cannot be expressed in the tetrahedral assertion frame")]
-    StereoAtomFrame { stereo_atom: StereoAtomId },
-    #[error("stereo bond {stereo_bond:?} cannot be expressed in the cis-trans assertion frame")]
-    StereoBondFrame { stereo_bond: StereoBondId },
-    #[error("atom {atom:?} has an assertion incompatible with its stereo configuration")]
+    #[error("atom {atom:?} has an assertion incompatible with its stereo kind")]
     AtomAssertion { atom: AtomId },
-    #[error("bond {bond:?} has an assertion incompatible with its stereo configuration")]
+    #[error("bond {bond:?} has an assertion incompatible with its stereo kind")]
     BondAssertion { bond: BondId },
 }
 
@@ -88,9 +84,9 @@ impl StereoResolver {
     }
 
     /// Construct the complete stereo edit plan without mutating `molecule`.
-    /// Newly added entities discharge their site's tetrahedral or cis-trans assertion.
-    /// Open configurations are carried into the added entities without selecting a coset.
-    /// Retained entities do not discharge assertions. Discharge preserves other constraint keys.
+    /// New and retained entities discharge independently entailed stereo constraints.
+    /// New entities have undetermined cosets; retained configurations are preserved.
+    /// Discharge preserves other constraint keys.
     /// Requests below the creation cutoff are retained under every failure policy.
     /// Identified virtual ligand kinds replace stored kinds in place, preserving frame order
     /// and all entity attributes. Keep retains a failed value; Remove clears its assertion or entity.
@@ -310,6 +306,43 @@ impl StereoResolver {
             remove_bond_constraints.insert(id);
         }
 
+        for atom in molecule.atoms().iter() {
+            if molecule
+                .stereo_atoms()
+                .at(atom.id())
+                .is_some_and(|stereo| !remove_stereo_atoms.contains(&stereo.id()))
+                && atom
+                    .attributes()
+                    .constraints
+                    .get(AtomConstraintKey::TetrahedralStereo)
+                    .is_some_and(|asserted| {
+                        atom.constraints()
+                            .derived(AtomConstraintKey::TetrahedralStereo)
+                            .is_some_and(|derived| asserted.matches(&derived))
+                    })
+            {
+                remove_atom_constraints.insert(atom.id());
+            }
+        }
+        for bond in molecule.bonds().iter() {
+            if molecule
+                .stereo_bonds()
+                .at(bond.id())
+                .is_some_and(|stereo| !remove_stereo_bonds.contains(&stereo.id()))
+                && bond
+                    .attributes()
+                    .constraints
+                    .get(BondConstraintKey::CisTransStereo)
+                    .is_some_and(|asserted| {
+                        bond.constraints()
+                            .derived(BondConstraintKey::CisTransStereo)
+                            .is_some_and(|derived| asserted.matches(&derived))
+                    })
+            {
+                remove_bond_constraints.insert(bond.id());
+            }
+        }
+
         let mut atom_constraints = Vec::new();
         for atom in remove_atom_constraints {
             if let Some(asserted) = molecule
@@ -386,96 +419,66 @@ impl StereoResolver {
         Solution::Determined(())
     }
 
-    /// Projects the molecule, consuming its storage without a recovery journal.
-    ///
-    /// Uses the same plan as [StereoResolver::project_into]. A determined result has checked
-    /// molecule integrity. Rejection drops the input.
+    /// Replaces supported stereo entities with kind constraints, discarding their configurations.
     ///
     /// # Errors
     ///
-    /// Returns the planning error described by [StereoResolver::plan_project].
-    pub fn project(
-        &self,
-        molecule: Molecule,
-    ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoProjectError> {
-        let edits = self.plan_project(&molecule)?;
+    /// Rejects unsupported kinds and conflicting scalar constraints before mutation.
+    pub fn project(molecule: Molecule) -> Result<Molecule, StereoProjectError> {
+        let edits = Self::plan_project(&molecule)?;
         let mut editor = molecule.edit();
         editor
             .apply(edits)
             .expect("stereo project plan applies to its input");
-        let molecule = editor
+        Ok(editor
             .finish()
-            .expect("stereo project plan preserves molecule integrity");
-        Ok(Solution::Determined(molecule))
+            .expect("stereo project plan preserves molecule integrity"))
     }
 
-    /// Replaces tetrahedral and cis-trans entities with their fixed-frame #T and #C assertions.
+    /// Replaces supported stereo entities with positive scalar constraints in place.
     ///
-    /// Uses the model's per-site reference frames and transports each stored configuration
-    /// into that frame. Actual ligands, implicit hydrogens, and lone pairs remain distinct.
-    /// Transports open configurations without choosing a configuration, combining them with
-    /// existing assertions by meet. It does not invoke whole-molecule perception.
-    /// Resolver failure and constraint-reset policies
-    /// do not discard information during projection. Entity removal compacts
-    /// constraints that refer to the removed entities.
+    /// Ligand frames, configurations, and entity-local constraints are discarded.
+    /// Other atom and bond data are preserved, with ordinary reference compaction.
     ///
     /// # Semantic properties
     ///
-    /// Projection is idempotent. Transporting an entity's configuration together with its
-    /// ligand frame preserves the resulting assertion. Other atom and bond fields are unchanged.
-    /// Success publishes all edits together without a recovery journal;
-    /// every error leaves the input unchanged.
+    /// Projection is idempotent and independent of ligand order and configuration.
+    /// Every rejection leaves the molecule unchanged.
     ///
     /// # Errors
     ///
-    /// Rejects unsupported or undetermined kinds, unavailable model reference frames, ligand
-    /// frames that cannot transport to those references, and conflicting existing assertions.
-    pub fn project_into(
-        &self,
-        molecule: &mut Molecule,
-    ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
-        let edits = self.plan_project(molecule)?;
+    /// Rejects unsupported or undetermined kinds and conflicting scalar constraints.
+    pub fn project_into(molecule: &mut Molecule) -> Result<(), StereoProjectError> {
+        let edits = Self::plan_project(molecule)?;
         if !edits.is_empty() {
             molecule.mutate(edits);
         }
-        Ok(Solution::Determined(()))
+        Ok(())
     }
 
-    /// Plans fixed-frame stereo assertions and removal of the stereo entities.
+    /// Plans replacement of supported stereo entities with positive scalar constraints.
     ///
-    /// Applying the returned edits to the same molecule produces the result of
-    /// [StereoResolver::project]. The molecule remains unchanged while planning.
+    /// The plan discards frames, configurations, and entity-local constraints without
+    /// interpreting them. Applying it to the unchanged input preserves integrity.
     ///
     /// # Errors
     ///
-    /// Rejects unsupported kinds, unavailable reference frames, incompatible ligand frames,
-    /// and conflicting assertions.
-    pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, StereoProjectError> {
-        if !molecule.has_stereo_atoms() && !molecule.has_stereo_bonds() {
-            return Ok(Edits::new());
-        }
+    /// Rejects unsupported or undetermined kinds and conflicting scalar constraints.
+    pub fn plan_project(molecule: &Molecule) -> Result<Edits, StereoProjectError> {
         let mut atom_constraints = Vec::new();
         for stereo in molecule.stereo_atoms().iter() {
-            let stereo_atom = stereo.id();
             if stereo.attributes().configuration.kind() != Some(StereoKind::Tetrahedral) {
-                return Err(StereoProjectError::UnsupportedStereoAtom { stereo_atom });
+                return Err(StereoProjectError::UnsupportedStereoAtom {
+                    stereo_atom: stereo.id(),
+                });
             }
             let atom = stereo.site_id();
-            let (ligands, _) = self
-                .perception
-                .derive_stereo_atom(molecule, atom, &StereoCoset::Undetermined)
-                .ok_or(StereoProjectError::StereoAtomFrame { stereo_atom })?;
-            let coset = stereo
-                .coset_for(ligands)
-                .ok_or(StereoProjectError::StereoAtomFrame { stereo_atom })?;
-            let projected = TetrahedralStereoForm::Stereo(coset);
             let attributes = molecule.atom(atom).attributes();
-            let assertion = match attributes.constraints.tetrahedral_stereo() {
-                TetrahedralStereoForm::Undetermined => projected,
-                existing => existing
-                    .meet(&projected)
-                    .ok_or(StereoProjectError::AtomAssertion { atom })?,
-            };
+            let assertion = attributes
+                .constraints
+                .tetrahedral_stereo()
+                .meet(&TetrahedralStereoForm::Stereo)
+                .ok_or(StereoProjectError::AtomAssertion { atom })?;
             let new = AtomConstraintForm::TetrahedralStereo(assertion);
             let old = attributes
                 .constraints
@@ -486,26 +489,18 @@ impl StereoResolver {
         }
         let mut bond_constraints = Vec::new();
         for stereo in molecule.stereo_bonds().iter() {
-            let stereo_bond = stereo.id();
             if stereo.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
-                return Err(StereoProjectError::UnsupportedStereoBond { stereo_bond });
+                return Err(StereoProjectError::UnsupportedStereoBond {
+                    stereo_bond: stereo.id(),
+                });
             }
             let bond = stereo.site_id();
-            let (ligands, _) = self
-                .perception
-                .derive_stereo_bond(molecule, bond, &StereoCoset::Undetermined)
-                .ok_or(StereoProjectError::StereoBondFrame { stereo_bond })?;
-            let coset = stereo
-                .coset_for(ligands)
-                .ok_or(StereoProjectError::StereoBondFrame { stereo_bond })?;
-            let projected = CisTransStereoForm::Stereo(coset);
             let attributes = molecule.bond(bond).attributes();
-            let assertion = match attributes.constraints.cis_trans_stereo() {
-                CisTransStereoForm::Undetermined => projected,
-                existing => existing
-                    .meet(&projected)
-                    .ok_or(StereoProjectError::BondAssertion { bond })?,
-            };
+            let assertion = attributes
+                .constraints
+                .cis_trans_stereo()
+                .meet(&CisTransStereoForm::Stereo)
+                .ok_or(StereoProjectError::BondAssertion { bond })?;
             let new = BondConstraintForm::CisTransStereo(assertion);
             let old = attributes
                 .constraints
@@ -611,7 +606,7 @@ mod tests {
     fn tetrahedral_mismatch_molecule() -> Molecule {
         mol_dsl_concrete!(
             r#"{
-            :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
+            :atoms ["C#h3" "C#h#T!" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
             :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th0"}]
         }"#
@@ -623,7 +618,7 @@ mod tests {
         mol_dsl_concrete!(
             r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
-            :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
+            :bonds [[0 1 "1"] [1 2 "2#C!"] [2 3 "1"]]
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]
         }"#
         )
@@ -662,7 +657,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(
         mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+            r#"{:atoms ["C #h3" "C #h1 #T+" "N #h2" "O #h1"]
                              :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
         ),
         Edits::from_iter([
@@ -677,14 +672,14 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
             })),
             Edit::ModifyAtomConstraints {
                 key: AtomConstraintKey::TetrahedralStereo,
                 changes: vec![(
                     AtomHandle::Id(AtomId(1)),
                     Some(AtomConstraintForm::TetrahedralStereo(
-                        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+                        TetrahedralStereoForm::Stereo,
                     )),
                     None,
                 )],
@@ -694,7 +689,7 @@ mod tests {
     #[case::cis_trans(
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
-                             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#
+                             :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]}"#
         ),
         Edits::from_iter([
             Edit::AddStereoBond(Box::new(AddStereoBond {
@@ -711,14 +706,14 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
             })),
             Edit::ModifyBondConstraints {
                 key: BondConstraintKey::CisTransStereo,
                 changes: vec![(
                     BondHandle::Id(BondId(1)),
                     Some(BondConstraintForm::CisTransStereo(
-                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                        CisTransStereoForm::Stereo,
                     )),
                     None,
                 )],
@@ -728,7 +723,7 @@ mod tests {
     #[case::cyclooctene_asserted(
         mol_dsl_concrete!(
             r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
+                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C+"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
         ),
         Edits::from_iter([
             Edit::AddStereoBond(Box::new(AddStereoBond {
@@ -745,14 +740,14 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
             })),
             Edit::ModifyBondConstraints {
                 key: BondConstraintKey::CisTransStereo,
                 changes: vec![(
                     BondHandle::Id(BondId(2)),
                     Some(BondConstraintForm::CisTransStereo(
-                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                        CisTransStereoForm::Stereo,
                     )),
                     None,
                 )],
@@ -762,7 +757,7 @@ mod tests {
     #[case::cyclohexene_asserted(
         mol_dsl_concrete!(
             r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
+                             :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
         ),
         Edits::new(),
     )]
@@ -789,7 +784,7 @@ mod tests {
         0,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
+                             :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
         ),
         Edits::from_iter([
             Edit::AddStereoBond(Box::new(AddStereoBond {
@@ -806,14 +801,14 @@ mod tests {
                         StereoLigandKind::ImplicitHydrogen,
                     ),
                 ],
-                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
             })),
             Edit::ModifyBondConstraints {
                 key: BondConstraintKey::CisTransStereo,
                 changes: vec![(
                     BondHandle::Id(BondId(1)),
                     Some(BondConstraintForm::CisTransStereo(
-                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                        CisTransStereoForm::Stereo,
                     )),
                     None,
                 )],
@@ -824,7 +819,7 @@ mod tests {
         9,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
-                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
+                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C+"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
         ),
         Edits::new(),
     )]
@@ -860,8 +855,6 @@ mod tests {
             StereoFailurePolicy::Remove
         )]
         failure: StereoFailurePolicy,
-        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1))]
-        coset: StereoCoset,
     ) {
         let size = ring_size.unwrap_or(4);
         let mut entries = MoleculeEntries {
@@ -914,7 +907,7 @@ mod tests {
             unasserted_bond
                 .clone()
                 .with_constraint(BondConstraintForm::cis_trans_stereo(
-                    CisTransStereoForm::Stereo(coset.clone()),
+                    CisTransStereoForm::Stereo,
                 ));
         let molecule = Molecule::from_entries(entries.clone());
         entries.bonds[0].2 = unasserted_bond;
@@ -932,7 +925,7 @@ mod tests {
                 ),
                 StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
             ],
-            StereoBondForm::new(StereoKind::CisTrans, coset),
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
         )];
         let expected = Molecule::from_entries(entries);
         let resolver = StereoResolver::with_config(
@@ -971,8 +964,6 @@ mod tests {
             StereoFailurePolicy::Remove
         )]
         failure: StereoFailurePolicy,
-        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1))]
-        coset: StereoCoset,
     ) {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: (0..size)
@@ -986,9 +977,7 @@ mod tests {
                 .map(|id| {
                     let form = if id == 0 {
                         BondForm::from_order(2).with_constraint(
-                            BondConstraintForm::cis_trans_stereo(CisTransStereoForm::Stereo(
-                                coset.clone(),
-                            )),
+                            BondConstraintForm::cis_trans_stereo(CisTransStereoForm::Stereo),
                         )
                     } else {
                         BondForm::from_order(1)
@@ -1033,28 +1022,28 @@ mod tests {
         :bonds [[0 1 "2#C*"] [0 2 "1"] [1 3 "1"]]
     }"#))]
     #[case::existing_atom(mol_dsl_concrete!(r#"{
-        :atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+        :atoms ["C #h3" "C #h1 " "N #h2" "O #h1"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
     }"#))]
     #[case::refined_atom(mol_dsl_concrete!(r#"{
-        :atoms ["C#T+" "F" "Cl" "Br" "I"]
+        :atoms ["C" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
     }"#))]
     #[case::refined_bond(mol_dsl_concrete!(r#"{
         :atoms ["C" "C" "F" "Cl" "Br" "I"]
-        :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"}]
     }"#))]
     #[case::reframed_atom(mol_dsl_concrete!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
     }"#))]
     #[case::reframed_bond(mol_dsl_concrete!(r#"{
         :atoms ["C#h" "C#h" "F" "Cl"]
-        :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]
+        :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
         :stereo-bonds [{:site 0 :ligands [[:h 1] 3 2 [:h 0]] :attrs "Ct0"}]
     }"#))]
     #[case::open_atom(mol_dsl_concrete!(r#"{
@@ -1069,7 +1058,7 @@ mod tests {
     }"#))]
     #[case::small_ring_bond(mol_dsl_concrete!(r#"{
         :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
-        :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
         :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
     }"#))]
     fn test_stereo_resolver_plan_resolve_identity(
@@ -1113,7 +1102,7 @@ mod tests {
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
-            :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
         }"#),
     )]
@@ -1125,7 +1114,7 @@ mod tests {
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["N#n" "N#n" "C#h2" "C#h2" "C#h2" "C#h2"]
-            :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :stereo-bonds [{:site 0 :ligands [[:lp 1] 2 5 [:lp 0]] :attrs "Ct0"}]
         }"#),
     )]
@@ -1171,7 +1160,7 @@ mod tests {
             ring_config: Default::default(),
         },
         mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+            r#"{:atoms ["C #h3" "S #h0 #T+" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
         Solution::Determined(Edits::new())
     )]
@@ -1181,13 +1170,13 @@ mod tests {
             stereo_bond_failure: StereoFailurePolicy::Error,
             ring_config: Default::default(),
         },
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T+" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraints {
             key: AtomConstraintKey::TetrahedralStereo,
             changes: vec![(
                 AtomHandle::Id(AtomId(1)),
                 Some(AtomConstraintForm::TetrahedralStereo(
-                    TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+                    TetrahedralStereoForm::Stereo,
                 )),
                 None,
             )],
@@ -1200,7 +1189,7 @@ mod tests {
             ring_config: Default::default(),
         },
         mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+            r#"{:atoms ["C #h3" "S #h0 #T+" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
         Solution::Contradictory(StereoContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) }
@@ -1213,7 +1202,7 @@ mod tests {
             ring_config: Default::default(),
         },
         mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
+            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C+"]]}"#
         ),
         Solution::Determined(Edits::new())
     )]
@@ -1223,13 +1212,13 @@ mod tests {
             stereo_bond_failure: StereoFailurePolicy::Remove,
             ring_config: Default::default(),
         },
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C+"]]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraints {
             key: BondConstraintKey::CisTransStereo,
             changes: vec![(
                 BondHandle::Id(BondId(1)),
                 Some(BondConstraintForm::CisTransStereo(
-                    CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                    CisTransStereoForm::Stereo,
                 )),
                 None,
             )],
@@ -1242,7 +1231,7 @@ mod tests {
             ring_config: Default::default(),
         },
         mol_dsl_concrete!(
-            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
+            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C+"]]}"#
         ),
         Solution::Contradictory(StereoContradiction::Inconsistency(
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }
@@ -1488,24 +1477,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::tetrahedral(
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
-                             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
-        mol_dsl_concrete!(r#"{
-            :atoms ["C #h3" "C #h1" "N #h2" "O #h1"]
-            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
-        }"#)
-    )]
-    #[case::cis_trans(
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
-                             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
-        mol_dsl_concrete!(r#"{
-            :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
-            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
-        }"#)
-    )]
     #[case::tetrahedral_open(
         mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T+" "N#h2" "O#h"]
@@ -1530,46 +1501,46 @@ mod tests {
     )]
     #[case::tetrahedral_hydrogen_and_lone_pair(
         mol_dsl_concrete!(r#"{
-            :atoms ["P#h#n#T1" "F" "Cl"]
+            :atoms ["P#h#n#T+" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"]]
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["P#h#n" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:lp 0]] :attrs "Th1"}]
+            :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:lp 0]] :attrs "Th*"}]
         }"#)
     )]
     #[case::cis_trans_hydrogen_and_lone_pair(
         mol_dsl_concrete!(r#"{
-            :atoms ["N#h#n" "N#h#n"] :bonds [[0 1 "2#C1"]]
+            :atoms ["N#h#n" "N#h#n"] :bonds [[0 1 "2#C+"]]
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["N#h#n" "N#h#n"] :bonds [[0 1 "2"]]
-            :stereo-bonds [{:site 0 :ligands [[:h 0] [:lp 0] [:h 1] [:lp 1]] :attrs "Ct1"}]
+            :stereo-bonds [{:site 0 :ligands [[:h 0] [:lp 0] [:h 1] [:lp 1]] :attrs "Ct*"}]
         }"#)
     )]
     #[case::mixed_stored_and_added(
         mol_dsl_concrete!(r#"{
-            :atoms ["C#h#T0#v3" "F" "Cl" "Br" "C#h#T1" "F" "Cl" "Br"
+            :atoms ["C#h#T+#v3" "F" "Cl" "Br" "C#h#T+" "F" "Cl" "Br"
                     "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]
                     [4 5 "1"] [4 6 "1"] [4 7 "1"]
-                    [8 9 "2#C0#R!"] [8 10 "1"] [9 11 "1"]
-                    [12 13 "2#C1"] [12 14 "1"] [13 15 "1"]]
+                    [8 9 "2#C+#R!"] [8 10 "1"] [9 11 "1"]
+                    [12 13 "2#C+"] [12 14 "1"] [13 15 "1"]]
             :stereo-atoms [{:site 4 :ligands [5 6 7 [:h 4]] :attrs "Th1"}]
             :stereo-bonds [{:site 9 :ligands [14 [:h 12] 15 [:h 13]] :attrs "Ct1"}]
         }"#),
         mol_dsl_concrete!(r#"{
-            :atoms ["C#h#v3" "F" "Cl" "Br" "C#h#T1" "F" "Cl" "Br"
+            :atoms ["C#h#v3" "F" "Cl" "Br" "C#h" "F" "Cl" "Br"
                     "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]
                     [4 5 "1"] [4 6 "1"] [4 7 "1"]
                     [8 9 "2#R!"] [8 10 "1"] [9 11 "1"]
-                    [12 13 "2#C1"] [12 14 "1"] [13 15 "1"]]
+                    [12 13 "2"] [12 14 "1"] [13 15 "1"]]
             :stereo-atoms [{:site 4 :ligands [5 6 7 [:h 4]] :attrs "Th1"}
-                           {:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]
+                           {:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]
             :stereo-bonds [{:site 9 :ligands [14 [:h 12] 15 [:h 13]] :attrs "Ct1"}
-                           {:site 6 :ligands [10 [:h 8] 11 [:h 9]] :attrs "Ct0"}]
+                           {:site 6 :ligands [10 [:h 8] 11 [:h 9]] :attrs "Ct*"}]
         }"#)
     )]
     #[case::virtual_tetrahedral_hydrogen(
@@ -1598,12 +1569,12 @@ mod tests {
     )]
     #[case::virtual_with_fixed_lone_pair(
         mol_dsl_concrete!(r#"{
-            :atoms ["P#h#n#T1" "F" "Cl"]
+            :atoms ["P#h#n#T+" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:virt 0]] :attrs "Th0"}]
         }"#),
         mol_dsl_concrete!(r#"{
-            :atoms ["P#h#n#T1" "F" "Cl"]
+            :atoms ["P#h#n" "F" "Cl"]
             :bonds [[0 1 "1"] [0 2 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:h 0]] :attrs "Th0"}]
         }"#),
@@ -1665,7 +1636,7 @@ mod tests {
     #[rstest]
     #[case::atom_assertion(
         mol_dsl_concrete!(r#"{
-            :atoms ["C#h#T1" "F" "Cl" "Br" "I"]
+            :atoms ["C#h#T+" "F" "Cl" "Br" "I"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         }"#),
         mol_dsl_concrete!(r#"{
@@ -1689,7 +1660,7 @@ mod tests {
     #[case::bond_assertion(
         mol_dsl_concrete!(r#"{
             :atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
-            :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
+            :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"]]
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["C" "C" "F" "Cl" "Br" "I" "H"]
@@ -1998,7 +1969,7 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T+" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         StereoContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) }
@@ -2006,7 +1977,7 @@ mod tests {
     )]
     #[case::bond(
         mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"]
-                             :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
+                             :bonds [[0 1 "1"] [1 2 "2#C+"]]}"#),
         StereoContradiction::Inconsistency(
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }
         )
@@ -2046,95 +2017,88 @@ mod tests {
     #[case::actual_ligands(
         mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
     #[case::implicit_hydrogen(
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C#h1#T1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
     #[case::explicit_hydrogen(
         mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [4 1 2 3] :attrs "Th0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
     #[case::lone_pair(
         mol_dsl_concrete!(r#"{:atoms ["N#n1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:lp 0] 1 2 3] :attrs "Th0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["N#n1#T1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["N#n1#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
     #[case::tetrahedral_open(
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th*"}]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
     #[case::existing_assertion(
-        mol_dsl_concrete!(r#"{:atoms ["C#h1#T0" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th*"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C#h1#T0" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
     #[case::bond_side_swap(
         mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
             :stereo-bonds [{:site 0 :ligands [3 2 4 5] :attrs "Ct0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
     #[case::bond_endpoint_swap(
         mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[1 0 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
             :stereo-bonds [{:site 0 :ligands [4 5 2 3] :attrs "Ct0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2#C0"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
     #[case::bond_hydrogens(
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
             :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#))]
     #[case::bond_lone_pair(
         mol_dsl_concrete!(r#"{:atoms ["N#n1" "C#h1" "C#h3" "F"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
             :stereo-bonds [{:site 0 :ligands [[:lp 0] 2 3 [:h 1]] :attrs "Ct0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["N#n1" "C#h1" "C#h3" "F"] :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]}"#))]
+        mol_dsl_concrete!(r#"{:atoms ["N#n1" "C#h1" "C#h3" "F"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#))]
     #[case::bond_either(
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
             :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct*"}]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#))]
-    fn test_stereo_resolver_project(
-        stereo_model: StereoModel,
-        #[values(false, true)] permissive: bool,
-        #[case] mut molecule: Molecule,
-        #[case] expected: Molecule,
-    ) {
-        let config = if permissive {
-            StereoResolveConfig {
-                stereo_atom_failure: StereoFailurePolicy::Remove,
-                stereo_bond_failure: StereoFailurePolicy::Remove,
-                ring_config: Default::default(),
-            }
-        } else {
-            StereoResolveConfig::default()
-        };
-        let resolver = StereoResolver::with_config(&stereo_model, config);
+    #[case::virtual_ligand(
+        mol_dsl_concrete!(r#"{:atoms ["N" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "Th?configuration"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["N#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
+    #[case::unrealizable_hydrogen(
+        mol_dsl_concrete!(r#"{:atoms ["C#h0#n0" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h0#n0#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
+    #[case::configuration_set(
+        mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct{0,1}"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
+    #[case::invalid_coset(
+        mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th2"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+    #[case::entity_constraints(
+        mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/#o(0,1)/#p(0,1)!#f(0,1)"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+    fn test_stereo_resolver_project(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         assert_eq!(
-            resolver.project(molecule.clone()),
-            Ok(Solution::Determined(expected.clone()))
+            StereoResolver::project(molecule.clone()),
+            Ok(expected.clone())
         );
-        assert_eq!(
-            resolver.project_into(&mut molecule),
-            Ok(Solution::Determined(()))
-        );
+        assert_eq!(StereoResolver::project_into(&mut molecule), Ok(()));
         assert_eq!(molecule, expected);
-        assert_eq!(
-            resolver.project_into(&mut molecule),
-            Ok(Solution::Determined(()))
-        );
+        assert_eq!(StereoResolver::project_into(&mut molecule), Ok(()));
         assert_eq!(molecule, expected);
     }
 
     #[rstest]
     #[case::empty(Molecule::new())]
     #[case::assertions(mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "C#h1#T!"] :bonds [[0 1 "2#C+"]]}"#))]
-    fn test_stereo_resolver_project_identity(
-        stereo_model: StereoModel,
-        #[case] mut molecule: Molecule,
-    ) {
+    fn test_stereo_resolver_project_identity(#[case] mut molecule: Molecule) {
         let original = molecule.clone();
         assert_eq!(
-            StereoResolver::new(&stereo_model).project(molecule.clone()),
-            Ok(Solution::Determined(original.clone()))
+            StereoResolver::project(molecule.clone()),
+            Ok(original.clone())
         );
-        assert_eq!(
-            StereoResolver::new(&stereo_model).project_into(&mut molecule),
-            Ok(Solution::Determined(()))
-        );
+        assert_eq!(StereoResolver::project_into(&mut molecule), Ok(()));
         assert_eq!(molecule, original);
     }
 
@@ -2155,97 +2119,45 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
             :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "*"}]}"#),
         StereoProjectError::UnsupportedStereoBond { stereo_bond: StereoBondId(0) })]
-    #[case::atom_frame(
-        mol_dsl_concrete!(r#"{:atoms ["C#h0#n0" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#),
-        StereoProjectError::StereoAtomFrame { stereo_atom: StereoAtomId(0) })]
-    #[case::virtual_kind_mismatch(
-        mol_dsl_concrete!(r#"{:atoms ["N#h1#n1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th0"}]}"#),
-        StereoProjectError::StereoAtomFrame { stereo_atom: StereoAtomId(0) })]
-    #[case::bond_frame(
-        mol_dsl_concrete!(r#"{:atoms ["C#h0#n0" "C#h1" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
-            :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct0"}]}"#),
-        StereoProjectError::StereoBondFrame { stereo_bond: StereoBondId(0) })]
     #[case::atom_assertion(
-        mol_dsl_concrete!(r#"{:atoms ["C#h1#T1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T!" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#),
         StereoProjectError::AtomAssertion { atom: AtomId(0) })]
     #[case::late_bond_assertion(
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br" "C#h1" "C#h1" "F" "Cl"]
-            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2#C0"] [4 6 "1"] [5 7 "1"]]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2#C!"] [4 6 "1"] [5 7 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]
             :stereo-bonds [{:site 3 :ligands [6 [:h 4] 7 [:h 5]] :attrs "Ct1"}]}"#),
         StereoProjectError::BondAssertion { bond: BondId(3) })]
     fn test_stereo_resolver_project_error(
-        stereo_model: StereoModel,
-        #[values(
-            StereoFailurePolicy::Error,
-            StereoFailurePolicy::Keep,
-            StereoFailurePolicy::Remove
-        )]
-        policy: StereoFailurePolicy,
         #[case] mut molecule: Molecule,
         #[case] expected: StereoProjectError,
     ) {
-        let resolver = StereoResolver::with_config(
-            &stereo_model,
-            StereoResolveConfig {
-                stereo_atom_failure: policy,
-                stereo_bond_failure: policy,
-                ring_config: Default::default(),
-            },
-        );
-        let original = molecule.clone();
-        assert_eq!(resolver.project(molecule.clone()), Err(expected.clone()));
-        assert_eq!(resolver.project_into(&mut molecule), Err(expected));
-        assert_eq!(molecule, original);
-    }
-
-    #[rstest]
-    #[case::atom(
-        mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#), StereoKind::Tetrahedral,
-        StereoProjectError::StereoAtomFrame { stereo_atom: StereoAtomId(0) })]
-    #[case::bond(
-        mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
-            :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct0"}]}"#), StereoKind::CisTrans,
-        StereoProjectError::StereoBondFrame { stereo_bond: StereoBondId(0) })]
-    fn test_stereo_resolver_project_model(
-        #[case] mut molecule: Molecule,
-        #[case] kind: StereoKind,
-        #[case] expected: StereoProjectError,
-    ) {
-        let mut model = StereoModel::default();
-        model.kind_models[kind as usize] = None;
         let original = molecule.clone();
         assert_eq!(
-            StereoResolver::new(&model).project(molecule.clone()),
+            StereoResolver::project(molecule.clone()),
             Err(expected.clone())
         );
-        assert_eq!(
-            StereoResolver::new(&model).project_into(&mut molecule),
-            Err(expected)
-        );
+        assert_eq!(StereoResolver::project_into(&mut molecule), Err(expected));
         assert_eq!(molecule, original);
     }
 
     #[rstest]
     #[case::tetrahedral("[NH2][C@H](F)Cl",
-        mol_dsl_concrete!(r#"{:atoms ["N#h2#n1" "C#h1#T0" "F#n3" "Cl#n3"]
+        mol_dsl_concrete!(r#"{:atoms ["N#h2#n1" "C#h1#T+" "F#n3" "Cl#n3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#))]
     #[case::root_hydrogen("[C@H](F)(Cl)Br",
-        mol_dsl_concrete!(r#"{:atoms ["C#h1#T1" "F#n3" "Cl#n3" "Br#n3"]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "F#n3" "Cl#n3" "Br#n3"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#))]
     #[case::explicit_hydrogen("[H][C@](F)(Cl)Br",
-        mol_dsl_concrete!(r#"{:atoms ["H" "C#T0" "F#n3" "Cl#n3" "Br#n3"]
+        mol_dsl_concrete!(r#"{:atoms ["H" "C#T+" "F#n3" "Cl#n3" "Br#n3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]}"#))]
     #[case::lone_pair("[CH3][S@](=[O])[CH2][CH3]",
-        mol_dsl_concrete!(r#"{:atoms ["C#h3" "S#n1#T0" "O#n2" "C#h2" "C#h3"]
+        mol_dsl_concrete!(r#"{:atoms ["C#h3" "S#n1#T+" "O#n2" "C#h2" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"] [3 4 "1"]]}"#))]
     #[case::cis_trans("[CH3]/[CH]=[CH]/[CH3]",
         mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h1" "C#h1" "C#h3"]
-            :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#))]
+            :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]}"#))]
     fn test_stereo_resolver_project_input(
         #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
         #[case] input: &str,
@@ -2263,13 +2175,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            StereoResolver::new(&model.stereo).project(molecule.clone()),
-            Ok(Solution::Determined(expected.clone()))
+            StereoResolver::project(molecule.clone()),
+            Ok(expected.clone())
         );
-        assert_eq!(
-            StereoResolver::new(&model.stereo).project_into(&mut molecule),
-            Ok(Solution::Determined(()))
-        );
+        assert_eq!(StereoResolver::project_into(&mut molecule), Ok(()));
         assert_eq!(molecule, expected);
     }
 
@@ -2278,7 +2187,7 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}"#),
-        mol_dsl_concrete!(r#"{:atoms ["C#h1#T1" "F" "Cl" "Br"]
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T+" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
         Edits::from_iter([
             Edit::ModifyAtomConstraints {
@@ -2287,7 +2196,7 @@ mod tests {
                     AtomHandle::Id(AtomId(0)),
                     None,
                     Some(AtomConstraintForm::TetrahedralStereo(
-                        TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+                        TetrahedralStereoForm::Stereo,
                     )),
                 )],
             },
@@ -2311,7 +2220,7 @@ mod tests {
             :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
             :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"]
-            :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]}"#),
+            :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#),
         Edits::from_iter([
             Edit::ModifyBondConstraints {
                 key: BondConstraintKey::CisTransStereo,
@@ -2319,7 +2228,7 @@ mod tests {
                     BondHandle::Id(BondId(0)),
                     None,
                     Some(BondConstraintForm::CisTransStereo(
-                        CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+                        CisTransStereoForm::Stereo,
                     )),
                 )],
             },
@@ -2339,28 +2248,25 @@ mod tests {
         ]),
     )]
     fn test_stereo_resolver_plan_project(
-        stereo_model: StereoModel,
         #[case] molecule: Molecule,
         #[case] expected: Molecule,
         #[case] expected_edits: Edits,
     ) {
-        let edits = StereoResolver::new(&stereo_model)
-            .plan_project(&molecule)
-            .unwrap();
+        let edits = StereoResolver::plan_project(&molecule).unwrap();
         assert_eq!(edits, expected_edits);
         let molecule = molecule.apply(edits).unwrap();
         assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    fn test_stereo_resolver_plan_project_error(stereo_model: StereoModel) {
+    fn test_stereo_resolver_plan_project_error() {
         let molecule = mol_dsl_concrete!(
-            r#"{:atoms ["C#h1#T0" "F" "Cl" "Br"]
+            r#"{:atoms ["C#h1#T!" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}"#
         );
         assert_eq!(
-            StereoResolver::new(&stereo_model).plan_project(&molecule),
+            StereoResolver::plan_project(&molecule),
             Err(StereoProjectError::AtomAssertion { atom: AtomId(0) }),
         );
     }

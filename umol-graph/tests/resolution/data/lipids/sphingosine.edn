@@ -37,7 +37,7 @@
     [10 11 :single]
     [11 12 :single]
     [12 13 :single]
-    [13 14 "2#C1"]
+    [13 14 "2"]
     [14 15 :single]
     [15 16 :single]
     [15 17 :single]
@@ -46,4 +46,5 @@
     [17 20 :single]]
   :stereo-atoms [
     {:attrs :cw :ligands [14 [:h 15] 16 17] :site 15}
-    {:attrs :ccw :ligands [15 [:h 17] 18 20] :site 17}]}}
+    {:attrs :ccw :ligands [15 [:h 17] 18 20] :site 17}]
+  :stereo-bonds [{:attrs :e :ligands [12 [:h 13] 15 [:h 14]] :site 13}]}}

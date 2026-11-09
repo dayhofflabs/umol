@@ -47,7 +47,7 @@
     [14 15 :single]
     [15 16 :single]
     [15 17 :single]
-    [17 18 "2#C1"]
+    [17 18 "2"]
     [18 19 :single]
     [19 23 :single]
     [19 20 :single]
@@ -56,4 +56,5 @@
     [22 23 :single]
     [22 24 :single]
     [24 25 :double]]
-  :dative-bonds [{:donors [0 1 2 3 4] :acceptor 25 :attrs "3"} {:donors [5 6 7 8 9] :acceptor 25 :attrs "3"}]}}
+  :dative-bonds [{:donors [0 1 2 3 4] :acceptor 25 :attrs "3"} {:donors [5 6 7 8 9] :acceptor 25 :attrs "3"}]
+  :stereo-bonds [{:attrs :e :ligands [15 [:h 17] 19 [:h 18]] :site 18}]}}
