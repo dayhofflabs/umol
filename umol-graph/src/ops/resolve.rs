@@ -29,7 +29,7 @@ pub use multicenter::{
 pub use stereo::{StereoFailurePolicy, StereoResolveConfig, StereoResolver};
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Molecule,
+    AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Lattice, Molecule,
     MoleculeApplyError, Normalize, NumForm, RollbackMethod, Transaction, UnpairedElectronsForm,
 };
 use umol_utils::error::UmolError;
@@ -98,6 +98,8 @@ impl ResolveState {
 /// resolve and project consume the input and return a molecule only on Determined.
 /// resolve_into and project_into retain changes only on Determined; other outcomes
 /// restore the receiver under Molecule::normalized_eq, preserving participant order.
+/// Resolution discharges valence, donated-pair, and accepted-pair assertions when
+/// they match their independent derived readings, including on already concrete atoms.
 /// Every phase plan applies to its input and preserves molecule integrity. Both routes
 /// check that invariant before publishing and agree on chemistry outcomes and determined
 /// molecules for the same input and configuration.
@@ -994,7 +996,6 @@ impl<'a> Resolver<'a> {
         let mut implicit_hydrogens = Vec::new();
         let mut lone_pairs = Vec::new();
         let mut unpaired_electrons = Vec::new();
-        let mut valences = Vec::new();
         for (atom, disjuncts) in state.completions.iter() {
             let current = molecule.atom(atom).attributes();
             let selected = &disjuncts[0];
@@ -1051,9 +1052,6 @@ impl<'a> Resolver<'a> {
                     selected_unpaired_electrons,
                 ));
             }
-            if let Some(asserted) = current.constraints.get(AtomConstraintKey::Valence) {
-                valences.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
-            }
         }
         if !elements.is_empty() {
             edits.modify_atom_elements(elements);
@@ -1073,8 +1071,27 @@ impl<'a> Resolver<'a> {
         if !unpaired_electrons.is_empty() {
             edits.modify_atom_unpaired_electrons(unpaired_electrons);
         }
-        if !valences.is_empty() {
-            edits.modify_atom_constraints(AtomConstraintKey::Valence, valences);
+        for key in [
+            AtomConstraintKey::Valence,
+            AtomConstraintKey::DonatedPairs,
+            AtomConstraintKey::AcceptedPairs,
+        ] {
+            let mut changes = Vec::new();
+            for atom in molecule.atoms().iter() {
+                let Some(asserted) = atom.attributes().constraints.get(key) else {
+                    continue;
+                };
+                if atom
+                    .constraints()
+                    .derived(key)
+                    .is_some_and(|derived| asserted.matches(&derived))
+                {
+                    changes.push((AtomHandle::Id(atom.id()), Some(asserted.clone()), None));
+                }
+            }
+            if !changes.is_empty() {
+                edits.modify_atom_constraints(key, changes);
+            }
         }
         let existing: BTreeSet<Vec<AtomId>> = molecule
             .aromatic_systems()
@@ -1868,9 +1885,121 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom_completion(
+        mol_dsl!(r#"{:atoms ["C#i=#c0#h4#v0"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    #[case::concrete_atom(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#v0"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    #[case::valence_set(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#v{0,1}"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    #[case::localized_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h3#v1" "C#h3#v1"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "1"]]}"#))]
+    #[case::dative_completion(
+        mol_dsl!(r#"{:atoms ["N#i=#c0#h3#v0#d1#t0" "B#i=#c0#h3#v0#d0#t1"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#))]
+    #[case::concrete_dative(
+        mol_dsl_concrete!(r#"{:atoms ["N#h3#v0#d1#t0" "B#h3#v0#d0#t1"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#))]
+    #[case::dative_sets(
+        mol_dsl_concrete!(r#"{:atoms ["N#h3#v{0,1}#d{0,1}#t{0,1}" "B#h3#v{0,1}#d{0,1}#t{0,1}"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#))]
+    #[case::dative_absent(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#v0#d0#t0#D0"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#d0#t0#D0"]}"#))]
+    fn test_resolver_resolve_valence(
+        #[case] molecule: Molecule,
+        #[case] expected: Molecule,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Ok(Solution::Determined((
+                expected.clone(),
+                ResolveReport::default()
+            )))
+        );
+        let mut actual = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into(&mut actual, rollback_method),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(actual, expected);
+        let mut actual = molecule;
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut actual, rollback_method),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(actual, expected);
+        assert_eq!(resolver.resolve(actual), Ok(Solution::Determined(expected)));
+    }
+
+    #[rstest]
+    #[case::valence(
+        mol_dsl_concrete!(r#"{:atoms ["C#h3#v2" "C#h3"] :bonds [[0 1 "1"]]}"#),
+        AtomId(0), AtomConstraintForm::valence(2))]
+    #[case::donated_pairs(
+        mol_dsl_concrete!(r#"{:atoms ["N#h3#d0" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        AtomId(0), AtomConstraintForm::donated_pairs(0))]
+    #[case::accepted_pairs(
+        mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3#t0"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        AtomId(1), AtomConstraintForm::accepted_pairs(0))]
+    fn test_resolver_resolve_valence_error(
+        #[case] molecule: Molecule,
+        #[case] atom: AtomId,
+        #[case] constraint: AtomConstraintForm,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        let contradiction = ResolveContradiction::Valence(ValenceContradiction::Constraint(
+            IncidenceConstraintInvariantsContradiction::Atom { atom, constraint },
+        ));
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Contradictory(contradiction.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Ok(Solution::Contradictory(contradiction.clone()))
+        );
+        let original = molecule.clone();
+        let mut actual = molecule;
+        assert_eq!(
+            resolver.resolve_into(&mut actual, rollback_method),
+            Ok(Solution::Contradictory(contradiction.clone()))
+        );
+        assert_eq!(actual, original);
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut actual, rollback_method),
+            Ok(Solution::Contradictory(contradiction))
+        );
+        assert_eq!(actual, original);
+    }
+
+    #[rstest]
     #[case::matching_degree(mol_dsl_concrete!(r#"{:atoms ["C#h4#D0"]}"#))]
     #[case::conflicting_degree(mol_dsl_concrete!(r#"{:atoms ["C#h4#D1"]}"#))]
-    #[case::uncompleted_valence(mol_dsl_concrete!(r#"{:atoms ["C#h4#v0"]}"#))]
+    #[case::dative_absent(mol_dsl_concrete!(r#"{:atoms ["C#h4#d0#t0"]}"#))]
     #[case::bond_ring(mol_dsl_concrete!(r#"{
         :atoms ["C#h3" "C#h3"] :bonds [[0 1 "1#R!"]]
     }"#))]
@@ -1952,7 +2081,7 @@ mod tests {
         #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0")],
+            atoms: vec![atom_dsl!("C#i=#c0#h4#n0#u0#s")],
             constraints: vec![constraint].into(),
             ..MoleculeEntries::default()
         });
@@ -2754,7 +2883,7 @@ mod tests {
         editor.apply(edits).unwrap();
         assert_eq!(
             editor.finish().unwrap(),
-            mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!#T*" "C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
+            mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!#T*" "C#i=#c0#h4#n0#u0#s#a!"]}"#)
         );
     }
 
@@ -2897,9 +3026,30 @@ mod tests {
     }
 
     #[rstest]
+    #[case::concrete(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#v0"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    #[case::undetermined_fields(
+        mol_dsl!(r#"{:atoms ["C#i=#v0#a!"]}"#),
+        mol_dsl!(r#"{:atoms ["C#i=#a!"]}"#))]
+    #[case::dative_absent(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#v0#d0#t0"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#d0#t0"]}"#))]
+    fn test_resolver_plan_constitution_constraints(
+        chemistry_model: ChemistryModel,
+        #[case] molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        let edits =
+            Resolver::new(&chemistry_model).plan_constitution(&molecule, &ResolveState::default());
+        assert_eq!(molecule.apply(edits), Ok(expected));
+    }
+
+    #[rstest]
     #[case::empty(Molecule::new())]
-    #[case::complete(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#))]
-    #[case::uncompleted(mol_dsl!(r#"{:atoms ["C#i=#v0#a!"]}"#))]
+    #[case::complete(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}"#))]
+    #[case::uncompleted(mol_dsl!(r#"{:atoms ["C#i=#a!"]}"#))]
+    #[case::informative(mol_dsl!(r#"{:atoms ["C#v1" "C"] :bonds [[0 1 "{1,2}"]]}"#))]
     fn test_resolver_plan_constitution_identity(
         chemistry_model: ChemistryModel,
         #[case] molecule: Molecule,

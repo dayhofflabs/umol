@@ -20,8 +20,8 @@ explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
 This records the selected design direction and its consequences. S0–S2 are
-complete; S3 is in progress and S4 remains pending. S3a–S3c are implemented,
-with passing Rust/Python suites. S3d and S3e align valence and aromaticity discharge.
+complete; S3 is in progress and S4 remains pending. S3a–S3d are implemented,
+with passing Rust/Python suites. S3e aligns aromaticity discharge.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
 The shared resolver conflict/discharge policy and transformer contracts are
@@ -318,8 +318,8 @@ policy offers Keep or Remove, it may retain or explicitly remove the failed
 source. It must not choose a winner between independently conflicting
 descriptions. Ambiguity is underdetermination, not a realizability failure.
 
-This is the agreed target policy. S3c aligns stereo discharge with it; valence
-and aromaticity alignment remain S3d and S3e. Earlier S2 completion notes record
+This is the agreed target policy. S3c and S3d align stereo and valence discharge
+with it; aromaticity alignment remains S3e. Earlier S2 completion notes record
 the behavior implemented at that stage.
 
 ## Resolution and stereo transformers
@@ -1577,6 +1577,25 @@ rendering retain their existing design.
   properties/conformance cases before closing this subitem; rebuild the extension
   before any affected Python checks. These checks run against the passing S3c
   baseline and do not wait for S3f.
+
+  **Completed — 2026-11-09.** Resolver::plan_constitution uses the independent
+  open derived reading to discharge #v, #d, and #t on all atoms, including
+  already concrete atoms without a completion. Compatible constraints that
+  still add information remain; #d0/#t0 are retained without dative incidence.
+  ValenceResolver::admit and completion selection are unchanged.
+
+  Exact Rust/Python outputs cover both valence sources, field completion and
+  concrete inputs, literal and set-valued assertions, dative donor/acceptor
+  readings, idempotence, and unchanged in-place inputs on conflicts. The
+  aromaticity property retains its standalone #v expectation and separately
+  checks aggregate discharge. Conformance snapshots and benchmark expectations
+  required no changes.
+
+  Verification passed: 26,262 workspace tests (nine ignored), 224 graph
+  properties, 4,219 resolution conformance cases, and 126 resolve benchmark
+  correctness checks. The rebuilt Python 3.13 extension passed 3,387 tests
+  (two skipped). Workspace and feature-enabled graph Clippy passed with warnings
+  denied; formatting and git diff --check passed.
 
 - **S3e — Discharge aromaticity constraints beside new and retained systems** — behavior change (green).
   Modules: umol-graph/src/ops/resolve/aromaticity.rs,

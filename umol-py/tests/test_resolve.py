@@ -705,6 +705,82 @@ def test_molecule_from_smiles_isotope_default():
 
 
 @pytest.mark.parametrize(
+    ("source", "concrete", "expected"),
+    [
+        pytest.param(
+            '{:atoms ["C#h4#v0"]}', True, '{:atoms ["C#h4"]}',
+            id="concrete_atom",
+        ),
+        pytest.param(
+            '{:atoms ["C#h4#v{0,1}"]}', True, '{:atoms ["C#h4"]}',
+            id="valence_set",
+        ),
+        pytest.param(
+            '{:atoms ["N#i=#c0#h3#v0#d1#t0" "B#i=#c0#h3#v0#d0#t1"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            False,
+            '{:atoms ["N#h3" "B#h3"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            id="dative_completion",
+        ),
+        pytest.param(
+            '{:atoms ["N#h3#v0#d1#t0" "B#h3#v0#d0#t1"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            True,
+            '{:atoms ["N#h3" "B#h3"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            id="concrete_dative",
+        ),
+        pytest.param(
+            '{:atoms ["C#h4#v0#d0#t0#D0"]}', True,
+            '{:atoms ["C#h4#d0#t0#D0"]}',
+            id="dative_absent",
+        ),
+    ],
+)
+@pytest.mark.parametrize("valence", [ValenceModel.smiles(), ChemistryModel.default().valence])
+@pytest.mark.parametrize("rollback_method", [RollbackMethod.Clone, RollbackMethod.Journal])
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report"),
+    [
+        ("resolve", True, False),
+        ("resolve_with_report", True, True),
+        ("resolve_into", False, False),
+        ("resolve_into_with_report", False, True),
+    ],
+)
+def test_molecule_resolve_valence(
+    source, concrete, expected, valence, rollback_method, method, copying, with_report
+):
+    molecule = (
+        Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+        if concrete else Molecule.parse(source)
+    )
+    original = molecule.copy()
+    expected = Molecule.parse(expected, defaults=MoleculeDefaults.concrete())
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=valence,
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
+    kwargs = {} if copying else {"rollback_method": rollback_method}
+    result = getattr(molecule, method)(chemistry_model=model, **kwargs)
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ()
+    if copying:
+        assert result == Solution.Determined(molecule=expected)
+        assert molecule == original
+    else:
+        assert result == Solution.Determined()
+        assert molecule == expected
+    assert expected.resolve(chemistry_model=model) == Solution.Determined(molecule=expected)
+
+
+@pytest.mark.parametrize(
     ("method", "copying", "with_report", "rollback_method"),
     [
         ("resolve", True, False, None),

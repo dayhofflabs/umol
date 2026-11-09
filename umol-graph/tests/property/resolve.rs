@@ -5,10 +5,16 @@
 //! input leaves electron fields undetermined; both valence sources and tie-breaks must
 //! produce the expected complete molecule.
 //!
+//! Valence discharge compares complete outputs for independent NH3/BH3 pairs,
+//! with or without a dative bond, literal or set-valued assertions, and complete
+//! or undetermined electron fields. Both valence sources remove entailed assertions,
+//! retain zero-pair assertions without dative incidence, and are idempotent.
+//!
 //! Aromatic discharge is checked against independently assembled results for
 //! separate or linked benzene rings with mixed stored and newly added systems.
 //! Stored-system assertions and unrelated keys survive; newly realized assertions
 //! and negative linking-bond assertions are removed. Resolution is idempotent.
+//! Standalone aromaticity preserves #v; aggregate resolution discharges it.
 //!
 //! Added aromatic systems agree with the input atom evidence and contain no bond
 //! asserting non-aromaticity. The skeleton domain retains open, contradictory,
@@ -58,10 +64,10 @@ use umol_graph::ops::resolve::{
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
     AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
-    BooleanForm, CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm,
-    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, RollbackMethod,
-    StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
+    BooleanForm, CisTransStereoForm, Constraint, DativeBondForm, ElectronCountsForm, ElementForm,
+    IsotopeMassForm, Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe,
+    RollbackMethod, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_io::ctfile::parser::parse_mol_to_ir;
@@ -132,6 +138,64 @@ proptest! {
 }
 
 proptest! {
+    #[test]
+    fn test_resolver_resolve_valence(
+        pairs in prop::collection::vec((any::<bool>(), any::<bool>(), any::<bool>()), 1..5),
+    ) {
+        let mut source = MoleculeEntries::default();
+        let mut expected = MoleculeEntries::default();
+        for (dative, concrete, set) in pairs {
+            let donor = AtomId::from(source.atoms.len());
+            let acceptor = AtomId::from(source.atoms.len() + 1);
+            let mut atoms = vec![
+                atom_dsl!("N#i=#c0#h3#n0#u0#s"),
+                atom_dsl!("B#i=#c0#h3#n0#u0#s"),
+            ];
+            if !dative {
+                atoms[0].lone_pairs = NumForm::Lit(1);
+                for atom in &mut atoms {
+                    atom.constraints.set(AtomConstraintForm::DonatedPairs(NumForm::Lit(0)));
+                    atom.constraints.set(AtomConstraintForm::AcceptedPairs(NumForm::Lit(0)));
+                }
+            }
+            let mut asserted = atoms.clone();
+            for (position, atom) in asserted.iter_mut().enumerate() {
+                atom.constraints.set(AtomConstraintForm::Valence(
+                    if set { NumForm::lit_set([0, 1]) } else { NumForm::Lit(0) }));
+                if dative {
+                    atom.constraints.set(AtomConstraintForm::DonatedPairs(
+                        if set { NumForm::lit_set([0, 1]) } else { NumForm::Lit(i64::from(position == 0)) }));
+                    atom.constraints.set(AtomConstraintForm::AcceptedPairs(
+                        if set { NumForm::lit_set([0, 1]) } else { NumForm::Lit(i64::from(position == 1)) }));
+                }
+                if !concrete {
+                    atom.lone_pairs = NumForm::Undetermined;
+                    atom.unpaired_electrons = UnpairedElectronsForm::default();
+                }
+            }
+            source.atoms.extend(asserted);
+            expected.atoms.extend(atoms);
+            if dative {
+                let bond = (vec![donor], acceptor, DativeBondForm::from_order(1));
+                source.dative.push(bond.clone());
+                expected.dative.push(bond);
+            }
+        }
+        let source = Molecule::from_entries(source);
+        let expected = Molecule::from_entries(expected);
+        for valence in [ValenceModel::smiles(), ValenceModel::default()] {
+            let model = ChemistryModel { valence, ..Default::default() };
+            let resolver = Resolver::new(&model);
+            prop_assert_eq!(resolver.resolve(source.clone()), Ok(Solution::Determined(expected.clone())));
+            for rollback in [RollbackMethod::Clone, RollbackMethod::Journal] {
+                let mut actual = source.clone();
+                prop_assert_eq!(resolver.resolve_into(&mut actual, rollback), Ok(Solution::Determined(())));
+                prop_assert_eq!(&actual, &expected);
+            }
+            prop_assert_eq!(resolver.resolve(expected.clone()), Ok(Solution::Determined(expected.clone())));
+        }
+    }
+
     #[test]
     fn test_stereo_resolver_resolve_discharge(
         sites in prop::collection::vec((any::<bool>(), any::<bool>(), 0u32..3), 1..5),
@@ -270,14 +334,19 @@ proptest! {
         source.constraints.push(constraint.clone());
         expected.constraints.push(constraint);
         let mut molecule = Molecule::from_entries(source);
+        let mut composite_expected = expected.clone();
+        for atom in &mut composite_expected.atoms {
+            atom.constraints.remove(AtomConstraintKey::Valence);
+        }
+        let composite_expected = Molecule::from_entries(composite_expected);
         let expected = Molecule::from_entries(expected);
         let resolver = AromaticityResolver::new(&AromaticityModel::daylight());
         let model = ChemistryModel::default();
         let composite = Resolver::new(&model);
-        prop_assert_eq!(composite.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
+        prop_assert_eq!(composite.resolve(molecule.clone()), Ok(Solution::Determined(composite_expected.clone())));
         let mut borrowed = molecule.clone();
         prop_assert_eq!(composite.resolve_into(&mut borrowed, RollbackMethod::Journal), Ok(Solution::Determined(())));
-        prop_assert_eq!(borrowed, expected.clone());
+        prop_assert_eq!(borrowed, composite_expected);
         prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
