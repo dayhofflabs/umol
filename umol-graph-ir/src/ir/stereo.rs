@@ -1243,6 +1243,9 @@ macro_rules! stereo_element {
     ) => {
         $(#[doc = $doc])+
         ///
+        /// A stored arrangement does not assert stereogenicity; symmetric and
+        /// prochiral arrangements remain representable.
+        ///
         /// Constraints derive their meaning from the configuration's kind. With an
         /// undetermined configuration they remain in raw storage but are semantically
         /// vacuous. A known kind with an undetermined coset retains its constraints.
@@ -1821,8 +1824,8 @@ pub enum Stereogenicity {
 /// known, so no coset) or `Kinded` — a concrete geometry bound to a coset that
 /// may still be open. `*` (`Undetermined`) and `Th*` (`Kinded(Tetrahedral,
 /// Undetermined)`) are distinct. `normalize` folds the coset under the kind.
-/// Aggregate integrity checks concrete coset ranges at publication. Normalizing
-/// this standalone form does not check them.
+/// Consumers check the configuration prerequisites their operations require.
+/// Neither aggregate construction nor normalization validates coset ranges.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoConfigurationForm {
     #[default]

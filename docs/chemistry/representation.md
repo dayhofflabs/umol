@@ -29,7 +29,7 @@ edge cannot express are overlays:
 | Multicenter bond | `:multicenter-bonds` | Bridges of B2H6 |
 | Aromatic system | `:aromatic-systems` | Furan, tropylium |
 | Noncovalent bond | `:noncovalent-bonds` | Hydrogen bond of the water dimer |
-| Stereo configuration | `:stereo-atoms`, `:stereo-bonds`, or inline `#T` and `#C` | L-alanine, E-2-butene |
+| Stereo configuration | `:stereo-atoms`, `:stereo-bonds` | L-alanine, E-2-butene |
 
 The molecule-map examples use neutral atom-charge defaults and leave other omitted atom fields
 undetermined; see [Full and partial specification](#full-and-partial-specification).
@@ -86,6 +86,37 @@ localized bonds for the σ skeleton and the aromatic system for the π electrons
 description uses localized single and double bonds, without aromatic marks or an aromatic overlay.
 Combining the Kekulé double bonds with an aromatic overlay for the same π electrons counts them
 twice and fails the electron-count invariants.
+
+## Stereo descriptions
+
+Stereo atoms and stereo bonds store a configuration together with its ordered ligand frame.
+For example, this tetrahedral description uses three actual ligands and an implicit hydrogen:
+
+```clojure
+{:atoms ["C#h" "F" "Cl" "Br"]
+ :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs :cw}]}
+```
+
+The configuration is relative to that frame. `:cw` abbreviates `"Th1"`; `"Th*"` fixes the
+tetrahedral kind while leaving the coset undetermined. A stereo description does not assert
+stereogenicity: symmetric and prochiral arrangements can also be stored.
+
+Atom `#T` and bond `#C` constraints describe kind only. `#T+` requests tetrahedral stereo;
+`#T!` excludes that kind, and `#T*` adds no constraint. `#C+`, `#C!`, and `#C*` have the
+corresponding meanings for CisTrans. These scalar constraints carry neither a ligand frame nor
+a configuration. Configuration-bearing spellings such as `#T0` and `#C1` are rejected in every
+DSL context; use explicit stereo records for configuration data.
+
+Virtual ligands are written `[:h atom]`, `[:lp atom]`, or `[:virt atom]`. The atom is the bearer;
+the three kinds are distinct under equality and matching. `:virt` is a generic virtual substituent
+whose chemical identity has not been specified. It occupies a frame position and must remain
+distinct from every other ligand in that frame. Resolution may identify it as an implicit hydrogen
+or lone pair without changing its position or the stored configuration.
+
+SMILES and MOL raising construct explicit stereo entities. When a source does not identify a
+virtual ligand's kind, raising preserves it as `:virt`. Export conveys explicit frames and
+configurations; an unresolved generic virtual ligand is rejected by the current format conversion.
 
 ## Full and partial specification
 

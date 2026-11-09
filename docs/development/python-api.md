@@ -438,6 +438,21 @@ their existing behavior.
 
 ### Stereo values and operation configurations
 
+TetrahedralStereoForm and CisTransStereoForm expose Undetermined(), NotStereo(), and Stereo()
+unit variants. Their as_lit() methods return None, False, and True respectively. Atom/bond
+constraint constructors, containers, and views accept bool or the corresponding form. A positive
+value asserts the stereo kind, independently of configuration and stereogenicity.
+
+TetrahedralConfiguration and CisTransConfiguration are inputs to explicit entity configuration
+fields, alongside StereoConfigurationForm. They do not coerce to atom/bond constraints.
+StereoLigandKind.Virtual is a distinct kind accepted by StereoLigand; equality and matching
+remain exact. Its atom_id names the bearer, as for ImplicitHydrogen and LonePair. Construction
+checks the ligand's incidence when the owning molecule is assembled.
+
+Perception and derivation remain Rust operations through StereoPerceiver and StereoDerivation.
+Python exposes the supported molecular operations and the values they require; it has no
+perceiver, derivation, StereoResolver, or standalone stereo-projection class.
+
 StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
 IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
 the executing operation performs contextual checks. StereoSite, StereoInconsistency,
@@ -466,7 +481,7 @@ keyword-only model fields; getters, Rust conversion, equality, and repr preserve
 their values. Addition and resolution apply stereo_bond_min_ring_size when
 creating missing stereo and retain existing descriptions and filtered assertions.
 Ring-size exclusion does not invoke a failure policy. A positive assertion survives
-addition; resolution discharges it when it creates a new entity.
+addition; resolution discharges it when an explicit entity independently entails it.
 Enumeration and removal act on supplied entities independently of the creation
 cutoff. Import wrappers pass the ordinary resolver config, and supported small-ring
 configurations survive resolution and export.
@@ -489,8 +504,8 @@ All three default to AutomorphismAlgorithm.Nauty(); addition also uses RingConfi
 Rust default.
 
 Addition creates missing selected entities and preserves existing arrangements and source
-assertions. Positive #T/#C evidence supplies the coset; otherwise the added coset remains
-undetermined. Symmetric and prochiral arrangements are permitted when selected explicitly.
+assertions. New cosets are undetermined. Symmetric and prochiral arrangements are permitted when
+selected explicitly; an entity does not itself assert stereogenicity.
 Removal clears the corresponding #T/#C assertion at each removed entity's site, preserving
 other assertions and topology. Undetermined mode excludes finite coset sets, symbolic
 configurations, and kindless forms. A stereogenicity filter requests classification;

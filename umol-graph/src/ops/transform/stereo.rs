@@ -103,8 +103,8 @@ pub enum AddStereoError {
 /// Add selected missing tetrahedral atoms and cis/trans bonds.
 ///
 /// Uses StereoPerceiver's recognition and classification with the supplied
-/// model and configuration. New cosets remain undetermined unless source
-/// evidence supplies them. Existing entities, their frames and configurations,
+/// model and configuration. New cosets are undetermined.
+/// Existing entities, their frames and configurations,
 /// source assertions, and molecular topology are preserved.
 /// Use the selection's stereogenicities to admit prochiral or symmetric sites;
 /// the default admits only stereogenic sites.
@@ -119,7 +119,7 @@ pub enum AddStereoError {
 /// Addition is idempotent for the same model and configuration. Consuming and
 /// in-place results agree under structural equality. An in-place rejection
 /// leaves the molecule unchanged, and every result preserves its integrity.
-/// Atom relabeling, with corresponding selectors and transported #T/#C frames,
+/// Atom relabeling, with corresponding selectors and transported stereo frames,
 /// preserves the represented result under framed_eq_under with the induced
 /// entity correspondence.
 #[derive(Clone, Debug)]
@@ -288,7 +288,7 @@ pub enum RemoveStereoError {
 /// rejection preserves the input under structural equality. Successful results
 /// preserve molecule integrity. Without a class filter, removal is idempotent
 /// for the same config.
-/// Relabeling sites and #T/#C frames transports the result under structural
+/// Relabeling sites and stereo frames transports the result under structural
 /// equality after id transport. Compatible stored-frame actions preserve the
 /// represented result under framed_eq.
 #[derive(Clone, Debug)]
@@ -545,7 +545,7 @@ pub enum EnumerateStereoError {
 /// Every emitted selected value belongs to its source domain and satisfies the
 /// checked constraints; every admitted assignment appears once in its stored
 /// frame, including symmetry-equivalent assignments. Relabeling ids, selectors,
-/// order, and #T/#C frames, or applying compatible stored-frame actions,
+/// order, and stereo frames, or applying compatible stored-frame actions,
 /// transports full result collections including multiplicity. The first chosen
 /// representation remains frame dependent.
 #[derive(Clone, Debug)]

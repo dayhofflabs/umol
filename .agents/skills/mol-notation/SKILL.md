@@ -1,6 +1,6 @@
 ---
 name: mol-notation
-description: How to denote molecules, atoms, and bonds in the umol DSL — the EDN molecule map (`{:atoms [...] :bonds [...]}`), the atom-string and bond-string `#`-predicate grammars (`#h #c #a #R …`), element/value wildcards and query patterns (`*`, `#R+`, sets, bool-exprs), and the construction macros (`mol!`, `mol_ground!`, `dsl!`, `atom!`, `bond!`, `atom_ground!`, `bond_ground!`). Use whenever writing a molecule/atom/bond from a string — test fixtures, examples, inline data, or substructure query patterns — or when unsure which macro or token to use. Normative grammar: `umol-graph-ir/spec/umol-dsl-spec.md`.
+description: How to denote molecules, atoms, and bonds in the umol DSL — the EDN molecule map (`{:atoms [...] :bonds [...]}`), the atom-string and bond-string `#`-predicate grammars (`#h #c #a #R …`), element/value wildcards and query patterns (`*`, `#R+`, sets, bool-exprs), and the construction macros (`mol_dsl!`, `mol_dsl_concrete!`, `atom_dsl!`, `atom_dsl_concrete!`, `bond_dsl!`, `bond_dsl_concrete!`). Use whenever writing a molecule/atom/bond from a string — test fixtures, examples, inline data, or substructure query patterns — or when unsure which macro or token to use. Normative grammar: `umol-graph-ir/spec/umol-dsl-spec.md`.
 ---
 
 # umol molecule notation
@@ -15,17 +15,17 @@ new structures.
 
 ## Construction macros (umol-graph-ir)
 
-| Macro | Input | Produces | Use for |
+| Construction | Input | Produces | Use for |
 |---|---|---|---|
-| `mol!("{...}")` | molecule EDN | `Molecule`, **un-grounded** (wildcards preserved, metadata dropped) | **query/substructure patterns**; molecules with wildcards |
-| `mol_ground!("{...}")` | molecule EDN | `Molecule` with `MoleculeDefaults::ground()` applied | **concrete test molecules** |
-| `dsl!("{...}")` | molecule EDN | `MoleculeDsl` (keeps metadata: ids, aliases) | when ids/aliases matter |
-| `atom!("C#h3")` | atom-string | `AtomForm`, un-grounded | a single pattern/atom |
-| `atom_ground!("C#h3")` | atom-string | grounded `AtomForm` | a single concrete atom |
-| `bond!("2")` / `bond_ground!("2")` | bond-string | `BondForm` | a single bond |
+| `mol_dsl!("{...}")` | molecule EDN | `Molecule` with ordinary DSL defaults; metadata dropped | **query/substructure patterns**; molecules with wildcards |
+| `mol_dsl_concrete!("{...}")` | molecule EDN | `Molecule` with `MoleculeDefaults::concrete()` applied | **concrete test molecules** |
+| `source.parse::<MoleculeDsl>()` | molecule EDN | `MoleculeDsl` (keeps metadata: ids, aliases) | when ids/aliases matter |
+| `atom_dsl!("C#h3")` | atom-string | `AtomForm` with ordinary DSL defaults | a single pattern/atom |
+| `atom_dsl_concrete!("C#h3")` | atom-string | `AtomForm` with concrete defaults | a single concrete atom |
+| `bond_dsl!("2")` / `bond_dsl_concrete!("2")` | bond-string | `BondForm` | a single bond |
 
-`mol!` vs `mol_ground!` is the key choice: **patterns → `mol!`** (Undetermined stays
-a match wildcard), **concrete molecules → `mol_ground!`** (defaults fill the slots).
+Use `mol_dsl!` for patterns and partial descriptions; use `mol_dsl_concrete!` when concrete defaults
+are intended. The latter applies MoleculeDefaults::concrete(); it does not validate chemistry.
 
 ## Molecule EDN map
 
@@ -51,7 +51,8 @@ a match wildcard), **concrete molecules → `mol_ground!`** (defaults fill the s
 ## Atom-string: `element` then `#tag payload`
 
 Element first, then zero+ predicates in any order (canonical order is `#i #c #h #n #u
-#s #v #d #t #a #m #D #X #x #H #R #T`). At most one predicate per tag.
+#s #v #d #t #a #m #T #D #X #V #x #y #H #R`). At most one predicate per tag, except
+`#R`, which allows one per ring scope.
 
 **Element**: `C`, `Cl` (IUPAC casing) · `*` any · `{C,N,O}` set · `!H` not · `?e ::
 {C,N}` bind · `?e` ref. (`*`, sets, binds, refs are query/rule only — invalid in ground.)
@@ -66,12 +67,17 @@ Element first, then zero+ predicates in any order (canonical order is `#i #c #h 
 | `#n` | lone pairs | bare=1 |
 | `#u` | unpaired electrons | bare=1 |
 | `#s` | spin multiplicity (2S+1) | bare=1 |
+
+**Atom constraints** (stored assertions, compared with the target's derived information):
+
+| Tag | Meaning | Notes |
+|---|---|---|
 | `#a` | aromatic π contribution | `#a`/`#a1`=1 · `#a0` (in system, 0 π) · `#a2` · `#a+` member, π unspecified · `#a*` no constraint · `#a!` **not** in any aromatic system |
 | `#m` | multicenter valence | same shape as `#a` (`#m+ #m* #m!`) |
 | `#v` | localized valence (sum of incident localized bond orders, including explicit H) | excludes implicit H and contributions from other bond kinds |
 | `#d` / `#t` | dative donated / accepted pairs | |
 
-**Derived predicates** (topology queries against the target; never affect grounding):
+**Other atom constraints** (topology and stereo-kind queries against the target):
 
 | Tag | SMARTS | Meaning |
 |---|---|---|
@@ -80,7 +86,7 @@ Element first, then zero+ predicates in any order (canonical order is `#i #c #h 
 | `#x` | x | ring connectivity (ring-bond count) |
 | `#H` | H | total H (implicit + explicit) |
 | `#R` | R | ring membership — `#Rn` total count n · `#R(6)n` rings of size 6 · bare `#R`/`#R(6)`=1 · `#R+` ≥1 ring · `#R!` acyclic · `#R*` no constraint |
-| `#T` | — | tetrahedral stereo — `#Tn` coset · `#T+` stereocenter, coset unspecified · `#T!` not a stereocenter · `#T*` no constraint |
+| `#T` | — | tetrahedral kind — `#T+` requires the kind · `#T!` excludes it · `#T*` no constraint |
 
 ## Bond-string: `order` then `#tag payload`
 
@@ -92,7 +98,7 @@ Element first, then zero+ predicates in any order (canonical order is `#i #c #h 
 
 Bond predicates (own namespace): `#c` charge (sign rules as atoms), `#u`/`#s` spin,
 `#a` aromatic membership (no payload), `#R` ring membership (as atoms), `#C` cis/trans
-stereo (`#Cn`/`#C+`/`#C!`/`#C*`). Keyword shorthands `:single :double :triple
+kind (`#C+`/`#C!`/`#C*`). Keyword shorthands `:single :double :triple
 :quadruple` stand in for `"1".."4"`.
 
 ## Value-payload conventions (atom + bond)
@@ -106,24 +112,48 @@ stereo (`#Cn`/`#C+`/`#C!`/`#C*`). Keyword shorthands `:single :double :triple
 | `{a,b,c}` | finite set (matches if target is one of) |
 | `!x`, `!{…}` | negation / negative set (query) |
 | `?id`, `?id :: {…}`, `?h+1`, `?h>=1` | bind / arithmetic / bool-expr (query/rule) |
-| special `+` `!` `*` on `#a` `#m` `#R` `#T` | symbolic states (see tables) — not arithmetic |
+| special `+` `!` `*` on `#a` `#m` `#R` `#T` `#C` | symbolic states (see tables) — not arithmetic |
 
-## Ground vs query (matching)
+## Stereo records and constraints
 
-- **Ground** (`mol_ground!`, `*_ground!`): every inherent slot concrete; no `*`, sets,
-  `?id`, bool-exprs, `element-bind/ref`.
-- **Query/pattern** (`mol!`, `atom!`, `bond!`): wildcards, sets, `#R+`, bool-exprs
-  allowed. A pattern matches a target iff, per slot, the pattern's solution-set ⊇ the
-  target's (the pattern admits everything the target does). `*` matches anything; an
-  empty/`default()` atom matches any atom (`AtomForm::default()` ≡ `"*"`).
+Configuration data belongs to explicit `:stereo-atoms` / `:stereo-bonds` records:
+
+```clojure
+{:atoms ["C#h" "F" "Cl" "Br"]
+ :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs :cw}]}
+```
+
+`:cw` / `:ccw` abbreviate `Th1` / `Th0`; `:e` / `:z` abbreviate `Ct1` / `Ct0` on
+explicit entities. `Th*` and `Ct*` specify a kind with an undetermined coset. A full
+configuration can also be a finite set, variable, or operator expression in the explicit
+entity's string. Every configuration is relative to its stored ligand frame.
+
+Virtual ligands are `[:h bearer]`, `[:lp bearer]`, and `[:virt bearer]`. The bearer is
+the stereo-atom site or the relevant stereo-bond endpoint. `:virt` is a generic virtual
+substituent; these three kinds remain distinct in equality and matching. Complete ligand
+values must be pairwise distinct. Neither an entity nor a positive #T/#C constraint asserts
+stereogenicity.
+
+#T/#C accept only `+`, `!`, and `*`; there is no implicit ligand frame or coset payload.
+`#T0`, `#C1`, sets, variables, and operators on those tags are rejected in every DSL context.
+Structured constraint values are `:stereo`, `:not-stereo`, and `:undetermined`.
+
+## Concrete defaults and query matching
+
+- `mol_dsl_concrete!`, `atom_dsl_concrete!`, and `bond_dsl_concrete!` apply concrete defaults.
+  Concreteness concerns inherent fields; a concrete atom or bond can still carry constraints.
+- `mol_dsl!`, `atom_dsl!`, and `bond_dsl!` retain partial input under ordinary defaults.
+  A pattern's lattice value matches when it admits the target's value. `*` is unconstrained;
+  AtomForm::default() is the corresponding wholly undetermined atom form.
 
 ## Common patterns
 
 ```rust
-mol_ground!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "1"]]}"#)        // ethane (concrete)
-mol!(r#"{:atoms ["*" "*"] :bonds [[0 1 "*"]]}"#)                      // [*]~[*] (any 2 atoms, any bond)
-mol!(r#"{:atoms ["*#R+" "*#R+" "*#R+"] :bonds [[0 1 "*"] [1 2 "*"] [2 0 "*"]]}"#)  // 3-ring of ring atoms
-atom_ground!("N#c+#h4")                                               // ammonium N
+mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "1"]]}"#)        // ethane (concrete)
+mol_dsl!(r#"{:atoms ["*" "*"] :bonds [[0 1 "*"]]}"#)                      // [*]~[*] (any 2 atoms, any bond)
+mol_dsl!(r#"{:atoms ["*#R+" "*#R+" "*#R+"] :bonds [[0 1 "*"] [1 2 "*"] [2 0 "*"]]}"#)  // 3-ring of ring atoms
+atom_dsl_concrete!("N#c+#h4")                                               // ammonium N
 ```
 
 ## Gotchas
@@ -133,6 +163,6 @@ atom_ground!("N#c+#h4")                                               // ammoniu
 - Keep aromatic and Kekulé descriptions in separate inputs; do not combine their
   π-electron assignments in one structure.
 - Wildcard bond order is `"*"` (e.g. `[0 1 "*"]`), wildcard atom is `"*"`.
-- `#R`/`#D`/`#X`/`#x`/`#H`/`#T` are **derived** — they filter matches against the
-  target graph and never change whether an atom is "ground".
-- Use `mol!` for anything with wildcards; `mol_ground!` will try to fill them.
+- Atom/bond constraints are stored assertions; matching reads their derived information
+  from the target. They do not carry an implicit stereo configuration.
+- Use `mol_dsl!` when omitted fields should remain undetermined.

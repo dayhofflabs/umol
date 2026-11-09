@@ -19,9 +19,9 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0–S3 are
-complete, including the combined S3f verification gate. S4 documentation and
-final verification remain pending, starting with S4a.
+This records the selected design direction and its consequences. S0–S3 and S4a
+are complete, including the combined S3f verification gate. S4b resolver-policy
+documentation is next; S4c and S4d remain pending.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
 The shared resolver conflict/discharge policy and transformer contracts are
@@ -1723,6 +1723,22 @@ site assertions and preserves the tier-2 open/complete reading choice.
   diff against the inventory. Source comments and rustdoc describe the implemented
   contract without referring to discussion records.
 
+  **Completed — 2026-11-09.** The DSL specification, representation and development
+  guides, and canonical notation skill now distinguish scalar kind constraints
+  from explicit framed configurations. They document :virt, exact ligand identity,
+  construction and conversion boundaries, bool literals and Python inputs, and
+  stereo descriptions independently of stereogenicity. The notation skill uses
+  the current DSL macros; its .claude redirect retains matching metadata.
+
+  Corrected stale rustdoc in graph-ir's stereo value and DSL modules and graph's
+  stereo transformers, including claims that #T/#C carried frames or cosets.
+  The inventory review found no implementation discrepancy requiring an S3 change.
+  No executable code or tests changed.
+
+  Verification passed: cargo doc for umol-graph-ir and umol-graph, Python 3.13
+  checks of both new examples and the documented syntax/input distinctions,
+  notation-skill validation and relative links, formatting, and git diff --check.
+
 - **S4b — Document resolver conflict and discharge semantics** — additive (green).
   Modules: docs/development/operations.md,
   docs/development/README.md, docs/development/data-types.md,
@@ -1810,9 +1826,10 @@ all-targets checks compile benchmark callers. Replay the existing graph-IR entit
 molecule, reaction, span, and edit fuzz targets on their curated seed inputs.
 
 S0–S3 are complete. S3c restored the passing baseline; S3d and S3e passed their
-independent gates, followed by S3f's combined workflow checks. S4 starts with S4a.
+independent gates, followed by S3f's combined workflow checks. S4a is complete;
+S4b is next.
 S4d reuses applicable recorded S3f results while source and test inputs remain
 unchanged, and runs the remaining final checks and
 measurement comparisons.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S4 remains pending.
+unchanged. S4b–S4d remain pending.

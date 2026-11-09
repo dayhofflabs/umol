@@ -472,6 +472,11 @@ when a proper rotation relates them, so the observable descriptor is the coset r
 which umol does not represent.
 **In code:** `StereoConfigurationForm`; the `configuration` attribute of stereo atoms and bonds.
 
+An explicit stereo description does not assert stereogenicity. Symmetric and prochiral
+arrangements remain representable. TetrahedralStereoForm and CisTransStereoForm instead express
+frame-independent kind constraints: Undetermined, NotStereo, or Stereo, with bool literals for
+the two determined values. They carry neither a configuration nor a coset.
+
 ### Conformance
 
 **Conformance** asks whether a structure is accepted by a selected chemistry model. Conformance
@@ -569,13 +574,14 @@ where substituents are bonded to fixed sp² carbons. A *decomposition* numbers t
 `CanonicalRank` is the generic Lehmer-minimum ordering, which reduces to the parity bit for a
 two-coset space; the geometry decompositions reproduce the OpenSMILES arrangement numbers.
 
-This is the standard group-theoretic term used in its ordinary sense; the entry exists because the
-coset, not the configuration, is what the notation stores and what `#T` and `#C` carry.
+This is the standard group-theoretic term used in its ordinary sense. The configuration attribute
+of an explicit stereo atom or bond stores a kind and coset relative to that entity's ligand frame.
+The scalar #T and #C constraints carry only kind information.
 
 **Not:** *configuration*, which is one representative map. Not *orbit* — the ligand permutation group
 acts, but the stored descriptor is a coset of the rotation subgroup.
 **In code:** `CosetSpace`, `coset_rep`, `observable_coset`, `orbit_reps`; the coset index in
-`#T<n>` / `#C<n>`.
+StereoConfigurationForm and the Th/Ct explicit stereo strings.
 
 **Notation slip to fix:** `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`, and the
 `CosetSpace` doc comment on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so `R\P` is
@@ -1151,7 +1157,7 @@ hydrogens are atoms and remain distinct by atom id.
 **Not:** *participant* used flatly. Site and ligands are both participants, but they are not
 interchangeable, and diagnostics should say which.
 **In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair, Virtual}`; `:site` and
-`:ligands` in the notation.
+`:ligands` in the notation. Virtual kinds are written `[:h atom]`, `[:lp atom]`, and `[:virt atom]`.
 
 ### Localized bond
 

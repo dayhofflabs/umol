@@ -129,7 +129,7 @@ An empty string in an **`:attrs`** field, or as the **`bond-spec`** of a vector 
 
 - **`aromatic-string`** (**§7.8**) and **`multicenter-string`** (**§7.9**) lead with an **electron counts** specification — **`*`** (undetermined) or a **`[n,n,…]`** vector (the counterpart of the bond-string's order or the atom-string's element). Empty is invalid; use **`"*"`** for undetermined counts.
 - **`bond-string`** (**§7.4**), **`dative-string`** (**§7.7**), and **`noncovalent-string`** (**§7.10**) **MUST** begin with a leading inherent-field token (bond order, dative order, noncovalent kind). Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
-- **`stereo-string`** (**§7.11**) **MUST** begin with a leading **`class`** token (**`Th`** / **`Ct`**) followed by a **`coset`**. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
+- **`stereo-string`** (**§7.11**) **MUST** begin with **`*`** for an undetermined kind, or a **`class`** token followed by a **`coset`**. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
 
 **Dative bond entry.** A dative bond entry directs one donor to one acceptor: **`:donors`** is a one-element vector naming the atom that donates the electron pair, and **`:acceptor`** names the atom that accepts it. The two atoms **MUST** be distinct. The mandatory **`:attrs`** field carries a **`dative-string`** (**§7.7**) — order plus optional aromatic constraint (**`#a`**) and ring-membership assertion (**`#R`**). The dative-string has no direction token; direction is expressed by the **`:donors`** / **`:acceptor`** assignment.
 
@@ -139,11 +139,11 @@ An empty string in an **`:attrs`** field, or as the **`bond-spec`** of a vector 
 
 **Noncovalent kind.** A **`noncovalent-bond-entry`** **MUST** carry **`:attrs`**. The value is a **`noncovalent-string`** (**§7.10**) carrying the interaction kind (e.g. **`"Hbd"`**).
 
-**Stereo atom / stereo bond entry.** A **`stereo-atom-entry`** overlays a tetrahedral configuration on an atom site; a **`stereo-bond-entry`** overlays a cis/trans configuration on a bond site.
+**Stereo atom / stereo bond entry.** A **`stereo-atom-entry`** stores a stereo description on an atom site; a **`stereo-bond-entry`** stores one on a bond site. The description does not assert stereogenicity.
 
 - **`:site`** names the bearing entity — an **`atom-ref`** for a **`stereo-atom-entry`**, a **`bond-ref`** for a **`stereo-bond-entry`**. A site **MUST** carry at most one stereo element (**§4.1**).
 - **`:ligands`** is the **ordered** local reference frame against which the **`:attrs`** **`coset`** index is numbered; **order is significant**. Each **`ligand-ref`** is either a plain **`atom-ref`** (a neighbor atom) or a **virtual ligand** — **`[:h atom-ref]`** for an implicit hydrogen, **`[:lp atom-ref]`** for a lone pair, or **`[:virt atom-ref]`** for a generic virtual substituent whose chemical identity has not been specified. For a **`stereo-atom-entry`** the bearing atom of every virtual ligand is the site atom; for a **`stereo-bond-entry`** it is the relevant double-bond terminus. The three virtual kinds are distinct in equality and matching. A frame **MUST NOT** repeat an equal ligand with the same bearing atom and kind.
-- **`:attrs`** carries a **`stereo-string`** (**§7.11**) — the **`class`** (**`Th`** / **`Ct`**) plus the **`coset`** index — or a **`stereo-keyword`** shorthand (**§7.11**). The coset index is a dense per-class arrangement number relative to the **`:ligands`** order, not a permutation rank.
+- **`:attrs`** carries a **`stereo-string`** (**§7.11**) — the **`class`** plus its **`coset`**, or **`*`** for an undetermined kind — or a **`stereo-keyword`** shorthand (**§7.11**). The coset index is a dense per-class arrangement number relative to the **`:ligands`** order, not a permutation rank.
 
 **`:id`**. Each structural entry **MAY** include **`:id`** with an EDN **keyword** value. When present, **`:id`** values **MUST** be **pairwise distinct** across **all** entries in the **same** **molecule map** (every list combined).
 
@@ -370,23 +370,26 @@ Each **`noncovalent-kind-literal`** is exactly three ASCII characters: one leadi
 
 ### 5.8 Coset
 
-The **`coset`** leaf is the realized configuration index of a stereo element (**§7.11**); extended with two leading sentinels as **`config`**, it is the payload of the atom **`#T`** / bond **`#C`** inline constraints (**§7.3** / **§7.4**) and the source form behind the **`{:stereo coset-form}`** EDN constraint (**§7.12**).
+The **`coset`** leaf carries configuration data on an explicit stereo entity (**§7.11**). Atom **`#T`** and bond **`#C`** instead use a three-state **`stereo-constraint`** leaf, independent of a ligand frame:
 
 ```
-config     ::= '*' | '!' | '+' | nat
-coset      ::= '*' | nat
+stereo-constraint ::= '*' | '!' | '+'
+
+coset         ::= '*' | stereo-expr
+stereo-expr   ::= stereo-prefix ('^' cycles)*
+stereo-prefix ::= '~' stereo-prefix | "'" stereo-prefix | stereo-base
+stereo-base   ::= nat | coset-set | '?' variable-name ('::' coset-set)?
+coset-set     ::= '{' nat (',' nat)* '}'
+variable-name ::= [A-Za-z][A-Za-z0-9_]*
 ```
 
-**Coset.** The **`coset`** is a dense, 0-based per-class arrangement index over the entry's ordered **`:ligands`** frame (**§4**), not a permutation rank. For **`Th`**, **`0`** is anticlockwise and **`1`** clockwise. For **`Ct`**, **`0`** is Z and **`1`** E. **`*`** is an undetermined coset.
+**Coset.** A coset literal is a dense, 0-based per-class arrangement index over the entry's ordered **`:ligands`** frame (**§4**), not a permutation rank. For **`Th`**, **`0`** is anticlockwise and **`1`** clockwise. For **`Ct`**, **`0`** is Z and **`1`** E. **`*`** is an undetermined coset; a finite set admits its listed indices. Numerals must fit **u32**. Index validity under the declared kind is checked by operations that require it, rather than by aggregate construction or normalization.
 
-**`config`** (atom **`#T`** / bond **`#C`** / **`{:stereo …}`**).** The constraint payload extends **`coset`** with two leading sentinels: **`*`** = **`Undetermined`**, **`!`** = **`NotStereo`**, and **`+`** = **`Stereo`** with an undetermined coset. A bare **`nat`** is **`Stereo`** with that coset. The EDN equivalents are **`:undetermined`**, **`:not-stereo`**, **`{:stereo :undetermined}`**, and **`{:stereo int}`** (**§7.12**).
+A variable may be free (**`?configuration`**) or restricted to a finite domain (**`?configuration :: {0,1}`**). Prefix **`~`** applies the kind's involution; prefix **`'`** mirrors a configuration. A postfix **`^cycles`** transports it under a ligand permutation, written in the disjoint-cycle notation of **§7.11**. Prefixes bind more tightly than postfixes; repeated postfixes associate left to right. Whitespace is allowed inside sets and around **`::`**. Normalization folds closed expressions under their kind.
 
-**Inline ligand frame (`#T` / `#C` without `:ligands`).** An atom **`#T`** or bond **`#C`** inline coset (and the **`{:atom [i {:tetrahedral-stereo …}]}`** / **`{:bond [i {:cis-trans-stereo …}]}`** EDN forms) carries **no** **`:ligands`** vector, so its index is numbered against an **implicit frame derived from the molecular graph**:
+**Kind constraints.** **`#T+`** requires tetrahedral stereo and **`#T!`** excludes that kind. **`#C+`** and **`#C!`** have the corresponding meanings for CisTrans. **`#T*`** and **`#C*`** add no constraint and are elided on rendering. The structured EDN values are **`:stereo`**, **`:not-stereo`**, and **`:undetermined`** (**§7.12**). A positive constraint carries no configuration and does not assert stereogenicity.
 
-- **`#T`** (tetrahedral, atom site): the atom's neighbor atoms in **ascending atom-index** order, then — when there are **exactly three** explicit neighbors — **one** virtual ligand (an implicit hydrogen or a lone pair) appended **last**. The site **MUST** present **3 or 4** ligands this way (three explicit + one virtual, or four explicit); any other count is invalid.
-- **`#C`** (cis/trans, double-bond site): for **each** double-bond terminus in turn, that terminus's substituents (its neighbors other than the far terminus) in **ascending atom-index** order, then — when a side has a **single** explicit substituent — **one** virtual ligand appended **last within that side's group**. Each side **MUST** present **at least one** explicit substituent.
-
-A **`stereo-atom-entry`** / **`stereo-bond-entry`** **`:ligands`** vector **overrides** this implicit frame; the two coincide when **`:ligands`** lists the same neighbors in the same order.
+Configuration-bearing **`#T`** / **`#C`** payloads — literals, sets, variables, and operator expressions — **MUST** be rejected in atom/bond strings, updates, molecule maps, reaction deltas, reaction spans, and edits. Full configuration data **MUST** use explicit **`:stereo-atoms`** or **`:stereo-bonds`** records with their ordered **`:ligands`**. There is no implicit ligand frame for a scalar stereo constraint.
 
 ### 5.9 Relation
 
@@ -419,7 +422,7 @@ glyph     ::= '=' | '\'' | '/'
 | dative bond | one **`:acceptor`**, one atom in **`:donors`**, and the leading **`order`** token of the dative-string (**§7.7**) |
 | noncovalent bond | interaction kind (**`Hbd`**, **`Xbd`**, **`Ybd`**, **`Ion`**, **`Vdw`**) |
 | stereo atom | coordination **`class`** (geometry) and **`coset`** configuration index (the **`:attrs`** payload, **§7.11**). The bearing **`:site`** atom and ordered **`:ligands`** frame (**§4**) are the relation's participants, not payload fields. |
-| stereo bond | cis/trans **`class`** and **`coset`** configuration (the **`:attrs`** payload, **§7.11**). The bearing **`:site`** bond and ordered **`:ligands`** frame (**§4**) are the relation's participants. |
+| stereo bond | coordination **`class`** (geometry) and **`coset`** configuration (the **`:attrs`** payload, **§7.11**). The bearing **`:site`** bond and ordered **`:ligands`** frame (**§4**) are the relation's participants. |
 
 **Derived predicates.** Matching evaluates the per-atom **`#D`**, **`#X`**, **`#V`**, **`#x`**, **`#y`**, **`#H`**, and **`#R`** predicates and localized-bond **`#R`** against the host graph. These predicates filter matches and do not affect concreteness. Matching semantics for constraints stored on overlay entities are outside this specification.
 
@@ -534,8 +537,8 @@ tag ::= [A-Za-z_]
 | **`!`** | **`#m`** | Not in multicenter bond. |
 | **`+`** | **`#R`** | Atom is in **at least one** ring. With size, **`#R(<size>)+`** means at least one ring of that size (SMARTS **`r<size>`**). |
 | **`!`** | **`#R`** | Atom is in not in a ring (acyclic). With a size, **`#R(<size>)!`** means no ring of that size. |
-| **`!`** | **`#T`** | Atom is **not** a tetrahedral stereocenter (**`NotStereo`**). |
-| **`+`** | **`#T`** | Atom **is** a tetrahedral stereocenter with an **unspecified** coset. |
+| **`!`** | **`#T`** | Excludes tetrahedral stereo (**`NotStereo`**). |
+| **`+`** | **`#T`** | Requires tetrahedral stereo (**`Stereo`**), independently of configuration and stereogenicity. |
 | **`+`** / **`-`** | **`#c`** | **+1** / **−1** formal charge (**§7.3** above). |
 
 Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`num-form`** / **`decimal-tail`** rules (**§5.1**, **§5.1.1**).
@@ -553,7 +556,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`num-form`** / **`
 | **`#t`** | Dative **accepted** pair count (“accepted”; electrons accepted **by** this atom) |
 | **`#a`** | Aromatic π contribution; **special** **`#a*`**, **`#a+`**, **`#a!`** (**§7.3**) |
 | **`#m`** | Multicenter valence; **special** **`#m*`**, **`#m+`**, **`#m!`** (**§7.3**) |
-| **`#T`** | **Tetrahedral stereo** configuration at the atom. Payload is a **`config`** (**§5.8**): **`#T*`**, **`#T!`**, **`#T+`**, or a coset literal **`#T<n>`**. Canonical constraint form **`{:atom [i {:tetrahedral-stereo …}]}`** (**§7.12**). |
+| **`#T`** | **Tetrahedral stereo kind constraint** at the atom. Payload is a **`stereo-constraint`** (**§5.8**): **`#T*`**, **`#T!`**, or **`#T+`**. Canonical constraint form **`{:atom [i {:tetrahedral-stereo …}]}`** (**§7.12**). |
 | **`#D`** | **Degree**: number of neighbors in the molecular graph (SMARTS `D`). Derived predicate evaluated against the target; **not** a concrete atom field. |
 | **`#X`** | **Total degree** (connectivity): degree plus implicit-H count (SMARTS `X`). Derived. |
 | **`#V`** | **Total valence**: localized valence plus implicit hydrogens, aromatic valence, and multicenter valence. Derived. |
@@ -593,7 +596,7 @@ order ::= num-form
 | **`#s`** | Spin multiplicity (2S+1) (bond centered); **`u8`** |
 | **`#a`** | **Aromatic** membership; **`bool`** |
 | **`#R`** | **Ring membership**: **`#R<count>`** gives the **total** ring count, **`#R(<size>)<count>`** the count of rings of that **size**. Omitted-numeral convention (**§5.1.1**); Derived. |
-| **`#C`** | **Cis/trans stereo** configuration at the bond. Payload is a **`config`** (**§5.8**): **`#C*`**, **`#C!`**, **`#C+`**, or a coset literal **`#C<n>`**. Canonical constraint form **`{:bond [i {:cis-trans-stereo …}]}`** (**§7.12**). |
+| **`#C`** | **CisTrans stereo kind constraint** at the bond. Payload is a **`stereo-constraint`** (**§5.8**): **`#C*`**, **`#C!`**, or **`#C+`**. Canonical constraint form **`{:bond [i {:cis-trans-stereo …}]}`** (**§7.12**). |
 
 **Special predicate payloads**:
 
@@ -603,9 +606,9 @@ order ::= num-form
 | **`+`** | **`#a`** | Bond aromatic. Equivalent to **`#a`**. |
 | **`!`** | **`#R`** | Bond **not** in a ring. When used with a ring size specification, **`#R(6)!`**, bond not in a ring of **that** size. |
 | **`+`** | **`#R`** | Bond in **at least one** ring. When used with a ring size specification, **`#R(6)+`**, bond is at least one ring of **that** size. |
-| **`!`** | **`#C`** | Bond **not** cis/trans stereogenic. |
-| **`+`** | **`#C`** | Bond **is** cis/trans stereogenic with an **unspecified** coset. |
-| **`*`** | **`#C`** | Cis/trans coset **undetermined** — no constraint; **elided** on render. |
+| **`!`** | **`#C`** | Excludes CisTrans stereo (**`NotStereo`**). |
+| **`+`** | **`#C`** | Requires CisTrans stereo (**`Stereo`**), independently of configuration and stereogenicity. |
+| **`*`** | **`#C`** | Stereo kind unconstrained (**`Undetermined`**); **elided** on render. |
 
 **Bond order values** in the **bond-string** **MUST NOT** be **fractional** after evaluation (**§7.5**). **Aromatic** bond **order** as a distinct category **MUST NOT** be used in **`order`**; use **§4** instead.
 
@@ -759,12 +762,12 @@ The **`noncovalent-kind-form`** leading field is the **noncovalent-kind** leaf (
 
 ### 7.11 Stereo subgrammar
 
-**Stereo-string** uses a **separate** namespace from the atom / bond / aromatic / multicenter strings (**§7.2**). It is the **`:attrs`** payload of a **`stereo-atom-entry`** / **`stereo-bond-entry`** (**§4**) and names the coordination **`class`** plus the realized **`coset`** index over the entry's ordered **`:ligands`** frame. The **same** **`config`** grammar — **`coset`** preceded by two extra sentinels and **without** the leading **`class`** — is the payload of the atom **`#T`** / bond **`#C`** inline constraints (**§7.3** / **§7.4**) and the source form behind the **`{:stereo coset-form}`** EDN constraint (**§7.12**).
+**Stereo-string** uses a **separate** namespace from the atom / bond / aromatic / multicenter strings (**§7.2**). It is the **`:attrs`** payload of a **`stereo-atom-entry`** / **`stereo-bond-entry`** (**§4**) and stores a coordination **`class`** with its **`coset`** relative to the entry's ordered **`:ligands`** frame. The head **`*`** leaves the kind undetermined; **`Th*`** specifies a tetrahedral kind with an undetermined coset. These are distinct values. Atom/bond **`#T`** / **`#C`** constraints use only the three states in **§5.8** and cannot carry this configuration data.
 
 ```
-stereo-string ::= class coset stereo-predicate*
+stereo-string ::= '*' | class coset stereo-predicate*
 
-class ::= 'Th' | 'Ct'
+class ::= 'Th' | 'Ct' | 'Ax' | 'Sp' | 'Tb' | 'Oh'
 
 stereo-predicate ::=
     '#p' ( '~' | ['\''] cycles ) boolean  (* ligand symmetry: ' improper, ~ kind involution; boolean trailing *)
@@ -776,7 +779,7 @@ cycles      ::= '()' | ( '(' nat (',' nat)* ')' )+   (* disjoint cycles, 0-index
 ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-frame positions          *)
 ```
 
-**Class.** **`Th`** denotes tetrahedral atom stereo and **`Ct`** cis/trans bond stereo. A **`stereo-atom-entry`** carries **`Th`**; a **`stereo-bond-entry`** carries **`Ct`**.
+**Class.** **`Th`** is Tetrahedral, **`Ct`** CisTrans, **`Ax`** Axial, **`Sp`** SquarePlanar, **`Tb`** TrigonalBipyramidal, and **`Oh`** Octahedral. The DSL stores these kinds independently of their support in a selected chemistry model. A kindless **`*`** head carries no inline stereo predicates. A stereo description does not assert stereogenicity; **`#g`** states that separate constraint.
 
 **Inline predicates (`#p` / `#f` / `#o` / `#g`).** After the leading **`class coset`**, a **`stereo-string`** carries **zero or more** stereo predicates — the inline form of the per-element stereo constraints (the molecule-scope structured peers are **§7.12**). Each predicate's permutation degree is the **`class`** degree (number of ligand positions). The four predicates are:
 
@@ -791,7 +794,7 @@ Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**
 
 **`~` rendering.** A **`#p`** / **`#f`** permutation equal to the class involution (and, for **`#p`**, matching the involution's orientation) renders as **`~`**; otherwise as explicit **`cycles`**.
 
-**Chiral-class restriction.** The **`'`** value — **`#p`** improper, **`#o`** enantiotopic, **`#g`** prochiral — is meaningful only on the chiral **`Th`** class; **`Ct`** is achiral. An inconsistent class/value pairing is rejected by validation.
+**Chiral classes.** **`Th`**, **`Ax`**, **`Tb`**, and **`Oh`** are chiral classes; **`Ct`** and **`Sp`** are achiral classes. This describes the coordination geometry's group, independently of the stereogenicity of the actual substituents.
 
 **`stereo-keyword` shorthand (`§4`).** The four **`stereo-keyword`** values expand to canonical **`class`**+**`coset`** literals: **`:ccw`** → **`Th0`**, **`:cw`** → **`Th1`**, **`:z`** → **`Ct0`**, **`:e`** → **`Ct1`**. They are a concrete EDN shorthand on the **`stereo-spec`**'s **`:attrs`** and are semantically identical to the expanded string. On serialization, implementations **MUST** emit the **`stereo-keyword`** for these four canonical shapes **only when the element carries no inline predicates**, falling back to the **`stereo-string`** otherwise.
 
@@ -873,7 +876,7 @@ atom-constraint-form ::=
   | { :accepted-pairs      num-form }
   | { :aromatic-valence    ( num-form | :not-aromatic | :undetermined ) }
   | { :multicenter-valence ( num-form | :not-multicenter | :undetermined ) }
-  | { :tetrahedral-stereo  stereo-config-form }
+  | { :tetrahedral-stereo  stereo-constraint-form }
   | { :degree              num-form }
   | { :total-degree        num-form }
   | { :total-valence       num-form }
@@ -885,7 +888,7 @@ atom-constraint-form ::=
 bond-constraint-form ::=
     { :aromatic boolean }
   | { :ring-membership ring-membership-form }
-  | { :cis-trans-stereo stereo-config-form }
+  | { :cis-trans-stereo stereo-constraint-form }
 
 dative-bond-constraint-form ::=
     { :aromatic boolean }
@@ -917,7 +920,8 @@ stereo-predicate-map ::=
   | { :topicity        topicity-form }
   | { :stereogenicity  stereogenicity-form }
 
-stereo-kind          ::= :tetrahedral | :cis-trans
+stereo-kind          ::= :tetrahedral | :cis-trans | :axial | :square-planar
+                       | :trigonal-bipyramidal | :octahedral
 permutation-form     ::= [ cycle* ]                 (* vector of disjoint cycles; identity [] *)
 cycle                ::= [ nat+ ]                    (* p0→p1→…→p0, 0-indexed positions *)
 bool                 ::= true | false | :undetermined   (* the #p / #f trailing boolean, §7.11 *)
@@ -930,8 +934,7 @@ stereogenicity-form  ::= { :relation stereogenicity-relation }
 topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
 stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
 
-stereo-config-form ::= :undetermined | :not-stereo | { :stereo coset-form }
-coset-form ::= int | :undetermined
+stereo-constraint-form ::= :undetermined | :not-stereo | :stereo
 
 atom-ref             ::= int | keyword
 bond-ref             ::= int | keyword | { :atoms [atom-ref atom-ref] }
@@ -949,7 +952,7 @@ stereo-bond-ref      ::= int | keyword | { :site bond-ref :ligands [ligand-ref+]
 
 **Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves carry only the **`:intramolecular`** value-only variant (**`#I`**, **§7.10**); every other noncovalent predicate is a relational leaf.
 
-**Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) are a positional **2-vector** **`[stereo-kind stereo-predicate-map]`** — the element's stereo subtype first, then a single-key predicate map. The kind is redundant with a referenced element but required at molecule scope, where the constraint is detached and Th and Ct have the same degree. The kind is first so a reader knows the predicate degree before reading its value. These constraints are distinct from atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) configurations and from stereo relational leaves.
+**Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) are a positional **2-vector** **`[stereo-kind stereo-predicate-map]`** — the element's stereo subtype first, then a single-key predicate map. The kind is redundant with a referenced element but required at molecule scope, where the constraint is detached and Th and Ct have the same degree. The kind is first so a reader knows the predicate degree before reading its value. These constraints are distinct from atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) kind constraints and from stereo relational leaves.
 
 **Molecule-scope subset selectors.** `:charge-sum` and `:connected` accept an **optional** `:atoms` vector; `:bond-order-sum` accepts an **optional** `:bonds` vector. When omitted, the predicate ranges over every atom or bond in the resulting molecule, including entities added by earlier deltas. When present, the predicate ranges over the listed entities only. An empty vector `[]` is distinct from omission: it selects no entities.
 
