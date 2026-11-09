@@ -705,6 +705,103 @@ def test_molecule_from_smiles_isotope_default():
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            '{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] '
+            ':bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}',
+            '{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+            id="new_system",
+        ),
+        pytest.param(
+            '{:atoms ["C#h#a{1,2}#D2" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "1#a#R+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+            '{:atoms ["C#h#D2" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "1#R+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+            id="stored_system",
+        ),
+        pytest.param(
+            '{:atoms ["C#h3#v1#a!" "C#h3#a!"] :bonds [[0 1 "1#a!"]]}',
+            '{:atoms ["C#h3#a!" "C#h3#a!"] :bonds [[0 1 "1#a!"]]}',
+            id="negative_assertions",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "failure", [AromaticityFailurePolicy.Error, AromaticityFailurePolicy.Keep]
+)
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report", "rollback"),
+    [
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
+    ],
+)
+def test_molecule_resolve_aromaticity(
+    source, expected, failure, method, copying, with_report, rollback
+):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    expected = Molecule.parse(expected, defaults=MoleculeDefaults.concrete())
+    config = ResolveConfig(
+        aromaticity=AromaticityResolveConfig(
+            aromatic_valence_failure=failure,
+            aromatic_system_failure=failure,
+        ),
+        stereo=StereoResolveConfig(),
+    )
+    kwargs = {} if copying else {"rollback_method": rollback}
+    result = getattr(molecule, method)(resolve_config=config, **kwargs)
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ()
+    if copying:
+        assert result == Solution.Determined(molecule=expected)
+        assert molecule == original
+    else:
+        assert result == Solution.Determined()
+        assert molecule == expected
+    assert expected.resolve(resolve_config=config) == Solution.Determined(molecule=expected)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] '
+        ':bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}',
+    ],
+)
+@pytest.mark.parametrize(
+    "failure", [AromaticityFailurePolicy.Error, AromaticityFailurePolicy.Keep]
+)
+@pytest.mark.parametrize("rollback", [RollbackMethod.Clone, RollbackMethod.Journal])
+def test_molecule_resolve_into_aromaticity_partial(source, failure, rollback):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    config = ResolveConfig(
+        aromaticity=AromaticityResolveConfig(
+            aromatic_valence_failure=failure,
+            aromatic_system_failure=failure,
+        ),
+        stereo=StereoResolveConfig(),
+    )
+    assert molecule.resolve_into(
+        resolve_config=config, rollback_method=rollback
+    ) == Solution.Underdetermined()
+    assert molecule == original
+
+
+@pytest.mark.parametrize(
     ("source", "concrete", "expected"),
     [
         pytest.param(

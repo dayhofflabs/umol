@@ -989,7 +989,7 @@ impl<'a> Resolver<'a> {
     fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> Edits {
         let mut edits = self
             .aromaticity
-            .plan_bond_discharge(molecule, &state.aromatic_systems);
+            .plan_discharge(molecule, &state.aromatic_systems);
         let mut elements = Vec::new();
         let mut isotope_masses = Vec::new();
         let mut charges = Vec::new();
@@ -1721,6 +1721,18 @@ mod tests {
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]
         }"#)
     )]
+    #[case::stored_aromatic(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a1" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
     fn test_resolver_resolve_stages(
         chemistry_model: ChemistryModel,
         #[case] mut molecule: Molecule,
@@ -2002,11 +2014,6 @@ mod tests {
     #[case::dative_absent(mol_dsl_concrete!(r#"{:atoms ["C#h4#d0#t0"]}"#))]
     #[case::bond_ring(mol_dsl_concrete!(r#"{
         :atoms ["C#h3" "C#h3"] :bonds [[0 1 "1#R!"]]
-    }"#))]
-    #[case::stored_aromatic(mol_dsl_concrete!(r#"{
-        :atoms ["C#h#a1" "C#h" "C#h" "C#h" "C#h" "C#h"]
-        :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
     }"#))]
     #[case::stored_tetrahedral(mol_dsl_concrete!(r#"{
         :atoms ["C#h" "F" "Cl" "Br"]

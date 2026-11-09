@@ -12,8 +12,8 @@
 //!
 //! Aromatic discharge is checked against independently assembled results for
 //! separate or linked benzene rings with mixed stored and newly added systems.
-//! Stored-system assertions and unrelated keys survive; newly realized assertions
-//! and negative linking-bond assertions are removed. Resolution is idempotent.
+//! Entailed assertions are removed beside stored and new systems; unrelated keys
+//! and negative linking-bond assertions survive. Resolution is idempotent.
 //! Standalone aromaticity preserves #v; aggregate resolution discharges it.
 //!
 //! Added aromatic systems agree with the input atom evidence and contain no bond
@@ -35,7 +35,8 @@
 //!
 //! Skeleton properties compare each determined standalone or composite result's exact
 //! remaining assertions with those realized by its additions and completions. SMILES and
-//! MOL renderings that resolve under Error policies leave no aromatic or stereo assertion.
+//! MOL renderings that resolve under Error policies discharge positive aromatic and stereo
+//! assertions while retaining negative aromatic assertions without a supporting relation.
 //! Projection followed by resolution reproduces the systems modulo participant frames
 //! and removes the assertions written by projection under the same chemistry model.
 //!
@@ -289,7 +290,7 @@ proptest! {
                 let mut asserted = atom.clone();
                 asserted.constraints.set(AtomConstraintForm::AromaticValence(
                     AromaticValenceForm::Aromatic(NumForm::Lit(1))));
-                expected.atoms.push(if stored { asserted.clone() } else { atom });
+                expected.atoms.push(atom);
                 source.atoms.push(asserted);
 
                 let a = AtomId::from(offset + position);
@@ -302,7 +303,7 @@ proptest! {
                         else { BooleanForm::Lit(true) }
                     ));
                 }
-                expected.bonds.push((a, b, if stored { asserted.clone() } else { bond }));
+                expected.bonds.push((a, b, bond));
                 source.bonds.push((a, b, asserted));
             }
             let aromatic_system = ((offset..offset + 6).map(AtomId::from).collect(), AromaticSystemForm {
@@ -323,8 +324,8 @@ proptest! {
                 let bond = bond_dsl!("1#c0#u0#s");
                 let mut asserted = bond.clone();
                 asserted.constraints.set(BondConstraintForm::Aromatic(BooleanForm::Lit(false)));
-                source.bonds.push((a, b, asserted));
-                expected.bonds.push((a, b, bond));
+                source.bonds.push((a, b, asserted.clone()));
+                expected.bonds.push((a, b, asserted));
             }
         }
         expected.aromatic.extend(additions);
@@ -391,15 +392,15 @@ proptest! {
         }
         for (aromatic, stereo, completes_atoms, output) in results {
             prop_assert_eq!(output.constraints(), input.constraints());
-            let added_members: BTreeSet<_> = output.aromatic_systems().iter()
-                .skip(input.aromatic_systems().count()).flat_map(|aromatic_system| aromatic_system.atom_ids()).collect();
+            let aromatic_members: BTreeSet<_> = output.aromatic_systems().iter()
+                .flat_map(|aromatic_system| aromatic_system.atom_ids()).collect();
             let stereo_atoms: BTreeSet<_> = output.stereo_atoms().iter()
                 .map(|site| site.site_id()).collect();
             let stereo_bonds: BTreeSet<_> = output.stereo_bonds().iter()
                 .map(|site| site.site_id()).collect();
             for atom in input.atoms().iter() {
                 let mut expected = atom.attributes().constraints.clone();
-                if aromatic && added_members.contains(&atom.id()) {
+                if aromatic && aromatic_members.contains(&atom.id()) {
                     expected.remove(AtomConstraintKey::AromaticValence);
                 }
                 if stereo && stereo_atoms.contains(&atom.id()) {
@@ -412,13 +413,8 @@ proptest! {
             }
             for bond in input.bonds().iter() {
                 let mut expected = bond.attributes().constraints.clone();
-                if aromatic && !bond.is_in_aromatic_system() {
-                    if let Some(BondConstraintForm::Aromatic(asserted)) = expected.get(BondConstraintKey::Aromatic) {
-                        let realized = BooleanForm::Lit(output.bond(bond.id()).is_in_aromatic_system());
-                        if asserted.meet(&realized).is_some() {
-                            expected.remove(BondConstraintKey::Aromatic);
-                        }
-                    }
+                if aromatic && output.bond(bond.id()).is_in_aromatic_system() {
+                    expected.remove(BondConstraintKey::Aromatic);
                 }
                 if stereo && stereo_bonds.contains(&bond.id()) {
                     expected.remove(BondConstraintKey::CisTransStereo);
@@ -445,13 +441,19 @@ proptest! {
             .as_table_ir().try_into_ir(&()).unwrap();
         let molfile = parse_mol_to_ir(&skeleton.molfile()).unwrap();
         for input in [smiles, molfile] {
-            let Ok(Solution::Determined(output)) = resolver.resolve(input) else { continue; };
+            let Ok(Solution::Determined(output)) = resolver.resolve(input.clone()) else { continue; };
             for atom in output.atoms().iter() {
-                prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::AromaticValence), None);
+                let expected = input.atom(atom.id()).attributes().constraints
+                    .get(AtomConstraintKey::AromaticValence)
+                    .filter(|constraint| matches!(constraint, AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic)));
+                prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::AromaticValence), expected);
                 prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::TetrahedralStereo), None);
             }
             for bond in output.bonds().iter() {
-                prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::Aromatic), None);
+                let expected = input.bond(bond.id()).attributes().constraints
+                    .get(BondConstraintKey::Aromatic)
+                    .filter(|constraint| matches!(constraint, BondConstraintForm::Aromatic(BooleanForm::Lit(false))));
+                prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::Aromatic), expected);
                 prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::CisTransStereo), None);
             }
         }

@@ -28,7 +28,7 @@ use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorit
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValence, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, BondId, BooleanForm, Edits,
-    ElectronCountsForm, FrameTransport, Lattice, Molecule, RingConfig, RingModel, RingSet,
+    ElectronCountsForm, FrameTransport, Lattice, Molecule, NumForm, RingConfig, RingModel, RingSet,
     RingSetKind,
 };
 use umol_perm::DynPermutation;
@@ -458,7 +458,7 @@ impl AromaticityPerceiver {
         inconsistencies
     }
 
-    /// Plan a perceived system and discharge its members' aromatic-valence assertions.
+    /// Plan a perceived system and discharge entailed member aromatic-valence assertions.
     pub(crate) fn plan_aromatic_system(
         &self,
         molecule: &Molecule,
@@ -466,18 +466,29 @@ impl AromaticityPerceiver {
         form: AromaticSystemForm,
     ) -> Edits {
         let mut edits = Edits::new();
-        edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), form);
         let mut changes = Vec::new();
-        for atom in atoms {
+        for (position, &atom) in atoms.iter().enumerate() {
             if let Some(asserted) = molecule
                 .atom(atom)
                 .attributes()
                 .constraints
                 .get(AtomConstraintKey::AromaticValence)
             {
-                changes.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
+                let contribution = match &form.electrons {
+                    ElectronCountsForm::Lit(counts) => counts
+                        .get(position)
+                        .map_or(NumForm::Undetermined, |&count| NumForm::Lit(count)),
+                    ElectronCountsForm::Undetermined => NumForm::Undetermined,
+                };
+                let derived = AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(
+                    contribution,
+                ));
+                if asserted.matches(&derived) {
+                    changes.push((AtomHandle::Id(atom), Some(asserted.clone()), None));
+                }
             }
         }
+        edits.add_aromatic_system(atoms.into_iter().map(AtomHandle::Id).collect(), form);
         if !changes.is_empty() {
             edits.modify_atom_constraints(AtomConstraintKey::AromaticValence, changes);
         }

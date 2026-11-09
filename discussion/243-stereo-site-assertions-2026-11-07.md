@@ -20,8 +20,8 @@ explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
 This records the selected design direction and its consequences. S0–S2 are
-complete; S3 is in progress and S4 remains pending. S3a–S3d are implemented,
-with passing Rust/Python suites. S3e aligns aromaticity discharge.
+complete; S3 is in progress and S4 remains pending. S3a–S3e are implemented,
+with passing Rust/Python suites. S3f verifies the combined workflows.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
 The shared resolver conflict/discharge policy and transformer contracts are
@@ -318,9 +318,8 @@ policy offers Keep or Remove, it may retain or explicitly remove the failed
 source. It must not choose a winner between independently conflicting
 descriptions. Ambiguity is underdetermination, not a realizability failure.
 
-This is the agreed target policy. S3c and S3d align stereo and valence discharge
-with it; aromaticity alignment remains S3e. Earlier S2 completion notes record
-the behavior implemented at that stage.
+S3c, S3d, and S3e implement this policy for stereo, valence, and aromaticity.
+Earlier S2 completion notes record the behavior implemented at that stage.
 
 ## Resolution and stereo transformers
 
@@ -691,7 +690,7 @@ implementation, documentation, fixtures, or exhaustive matches.
 | Same | StereoProjectError | Retain UnsupportedStereoAtom, UnsupportedStereoBond, AtomAssertion and BondAssertion; remove StereoAtomFrame and StereoBondFrame. |
 | umol-graph/src/ops/valence.rs and ops/resolve/valence.rs | ValenceContradiction | Move the definition to ops::valence, matching AromaticityContradiction and StereoContradiction in their domain modules. Preserve variants, conversions, and messages; migrate imports and remove the former resolver re-export. |
 | umol-graph/src/ops/resolve/valence.rs and ops/resolve.rs | ValenceResolver::admit; Resolver::plan_constitution | Retain candidate admission. Apply independent entailment to discharge of #v, #d, and #t in the aggregate plan. |
-| umol-graph/src/ops/resolve/aromaticity.rs, ops/aromaticity.rs, and ops/resolve.rs | AromaticityResolver::plan_resolve, plan_bond_discharge; AromaticityPerceiver::plan_aromatic_system; Resolver::plan_constitution | Discharge atom and bond aromatic assertions entailed by new or retained systems. Retain negative assertions whose only support is absence. Keep standalone and aggregate resolution aligned. |
+| umol-graph/src/ops/resolve/aromaticity.rs, ops/aromaticity.rs, and ops/resolve.rs | AromaticityResolver::plan_resolve, plan_discharge; AromaticityPerceiver::plan_aromatic_system; Resolver::plan_constitution | Discharge atom and bond aromatic assertions entailed by new or retained systems. Retain negative assertions whose only support is absence. Keep standalone and aggregate resolution aligned. |
 | umol-graph/src/ops/resolve.rs | ProjectFlags, ProjectError, ProjectContradiction | Remove STEREO, Stereo and Stereo respectively. Retain non-stereo flags and variants; aggregate projection preserves stereo entities. Remove the uninhabited ResolveError::Stereo; retain ResolveContradiction::Stereo with the renamed payload. |
 | umol-graph/src/ops/stereo.rs | StereoPerception; derive; StereoDerivation::stereo_atoms / stereo_bonds | Rename the actor to StereoPerceiver. derive returns Solution explicitly; retain row types for completed stored frames and requested additions. |
 | Same | StereoPerceiver::skipped_stereo_bonds; StereoDerivation::skipped_stereo_bonds | Remove both surfaces in S2g. |
@@ -1386,7 +1385,7 @@ remains S3.
 S3a and S3b changed the value types and shared DSL grammar. S3c completed their
 coupled consumer migration and restored a passing Rust/Python test baseline,
 including the required tests, fixtures, generators, and callers.
-S3d and S3e then change valence and aromaticity discharge independently, with
+S3d and S3e completed valence and aromaticity discharge independently, with
 their own passing checks. S3f verifies the combined workflows.
 
 S3c closed the compilation break. Every subsequent subitem starts from a passing
@@ -1626,6 +1625,29 @@ rendering retain their existing design.
   affected resolution properties/conformance cases before closing this subitem;
   rebuild the extension before any affected Python checks. This subitem is
   independently testable after S3c and does not depend on S3d's behavior change.
+
+  **Completed — 2026-11-09.** Standalone and aggregate aromaticity resolution
+  discharge independently entailed atom and bond assertions beside new and
+  retained systems. AromaticityResolver::plan_discharge also covers retained
+  atom assertions; AromaticityPerceiver::plan_aromatic_system checks the new
+  system's contributions before discharging its member assertions. More specific
+  assertions remain when stored contributions are undetermined. Negative
+  assertions outside systems remain. Selection and mismatch rejection under
+  Error and Keep are unchanged, as is Aromatizer's insertion and assertion removal.
+
+  Exact tests cover stored participant order, literal and set-valued assertions,
+  undetermined stored contributions, failed requests under Keep, idempotence,
+  standalone/aggregate agreement, and unchanged rejected inputs. Mixed-system
+  properties retain their generated domains and check the updated discharge
+  contract. Six conformance snapshots now retain #a! on bonds outside systems;
+  the ingestion expectation for explicitly linked biphenyl changes likewise.
+  Benchmark expectations required no changes.
+
+  Verification passed: 26,286 workspace tests (nine ignored), 224 graph
+  properties, 4,219 resolution conformance cases, and 561 resolve/transform
+  benchmark correctness checks. The rebuilt Python 3.13 extension passed 3,427
+  tests (two skipped). Workspace and feature-enabled graph Clippy passed with
+  warnings denied; formatting and git diff --check passed.
 
 - **S3f — Verify combined resolution, stereo transformations, and export** — verification (green).
   Modules: umol-graph/tests/property/resolve.rs,
