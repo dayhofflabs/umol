@@ -305,9 +305,12 @@ mod tests {
     }
 
     #[rstest]
+    #[case("invalid")]
+    #[case(r##"{:atoms ["C#T0"]}"##)]
+    #[case(r##"{:atoms ["C" "C"] :bonds [[0 1 "2#C0"]]}"##)]
     #[should_panic]
-    fn test_mol_macro_error() {
-        let _: Molecule = mol_dsl!("invalid");
+    fn test_mol_macro_error(#[case] input: &str) {
+        let _: Molecule = mol_dsl!(input);
     }
 
     #[rustfmt::skip]
@@ -328,9 +331,14 @@ mod tests {
     }
 
     #[rstest]
+    #[case("invalid")]
+    #[case("C#T0")]
+    #[case("C#T{0,1}")]
+    #[case("C#T?configuration")]
+    #[case("C#T~0")]
     #[should_panic]
-    fn test_atom_macro_error() {
-        let _ = atom_dsl!("invalid");
+    fn test_atom_macro_error(#[case] input: &str) {
+        let _ = atom_dsl!(input);
     }
 
     #[rustfmt::skip]
@@ -361,9 +369,14 @@ mod tests {
     }
 
     #[rstest]
+    #[case("invalid")]
+    #[case("2#C0")]
+    #[case("2#C{0,1}")]
+    #[case("2#C?configuration")]
+    #[case("2#C~0")]
     #[should_panic]
-    fn test_bond_macro_error() {
-        let _ = bond_dsl!("invalid");
+    fn test_bond_macro_error(#[case] input: &str) {
+        let _ = bond_dsl!(input);
     }
 
     #[rustfmt::skip]

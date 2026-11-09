@@ -485,12 +485,6 @@ pub(crate) fn stereo_kind(i: &mut &str) -> PResult<StereoKind> {
     .parse_next(i)
 }
 
-pub(crate) fn parse_stereo_coset(input: &str, degree: usize) -> Result<StereoCoset, ParseError> {
-    (move |i: &mut &str| stereo_coset(i, degree))
-        .parse(input)
-        .map_err(|e| e.into_inner())
-}
-
 /// Parse the `coset` grammar into `StereoCoset` over a `degree`-position
 /// ligand frame (a coset-expression's `^` permutation acts on those positions).
 fn stereo_coset(i: &mut &str, degree: usize) -> PResult<StereoCoset> {
@@ -1868,117 +1862,23 @@ stereo_constraint_dsl! {
     StereoBondConstraintDsl, StereoBondConstraintForm, "stereo-bond-constraint"
 }
 
-pub(crate) fn coset_lit(n: i64) -> Result<u32, DeError> {
-    u32::try_from(n).map_err(|_| DeError::OutOfRange {
-        value: n.to_string(),
-        target: "u32",
-        path: Vec::new(),
-    })
-}
-
-/// Surface DSL wrapper around `StereoCoset` — the coset value under
-/// `:stereo`. EDN form: int (`Lit`), `:undetermined`, a vector of ints
-/// (`Expr(LitSet)`), or a string carrying the operator-expression subgrammar.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StereoCosetDsl(pub StereoCoset);
-
-impl FromIr<StereoCoset> for StereoCosetDsl {
-    type Context = ();
-
-    fn from_ir(coset: &StereoCoset, _context: &Self::Context) -> Self {
-        Self(coset.clone())
-    }
-}
-
-impl IntoIr<StereoCoset> for StereoCosetDsl {
-    type Context = ();
-
-    fn into_ir(self, _context: &Self::Context) -> StereoCoset {
-        self.0
-    }
-}
-
-impl Display for StereoCosetDsl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_stereo_coset(f, &self.0)
-    }
-}
-
-impl<'de> FromEdn<'de> for StereoCosetDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        let coset = match edn {
-            Edn::Int(n) => StereoCoset::Lit(coset_lit(*n)?),
-            Edn::Keyword(k) if k.as_str() == "undetermined" => StereoCoset::Undetermined,
-            Edn::Vector(xs) => {
-                let mut set = BTreeSet::new();
-                for e in xs.iter() {
-                    let Edn::Int(n) = e else {
-                        return Err(DeError::TypeMismatch {
-                            expected: "int (coset-set element)",
-                            got: e.kind(),
-                            path: Vec::new(),
-                        });
-                    };
-                    set.insert(coset_lit(*n)?);
-                }
-                StereoCoset::LitSet(set)
-            }
-            Edn::Str(s) => {
-                // The coset-form is the payload of a `#T` / `#C` config, both degree 4.
-                parse_stereo_coset(s, 4).map_err(|e| DeError::subgrammar("stereo coset", e))?
-            }
-            other => {
-                return Err(DeError::TypeMismatch {
-                    expected: "coset (int, :undetermined, vector, or string)",
-                    got: other.kind(),
-                    path: Vec::new(),
-                });
-            }
-        };
-        Ok(Self(coset))
-    }
-}
-
-impl ToEdn for StereoCosetDsl {
-    fn to_edn(&self) -> Edn<'static> {
-        match &self.0 {
-            StereoCoset::Lit(n) => Edn::Int(*n as i64),
-            StereoCoset::Undetermined => {
-                Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
-            }
-            StereoCoset::LitSet(set) => Edn::Vector(
-                set.iter()
-                    .map(|n| Edn::Int(*n as i64))
-                    .collect::<Vec<_>>()
-                    .into(),
-            ),
-            StereoCoset::Term(_) => Edn::Str(Cow::Owned(self.to_string())),
-        }
-    }
-}
-
-/// Generates the constraint-side DSL for a fixed-kind stereo site (`#T`/`#C`):
-/// the surface config-string parser/formatter and the EDN boundary type
-/// (`:undetermined`, `:not-stereo`, or `{:stereo <coset>}`). `$kind` fixes the
-/// coset degree; the per-kind type's `Stereo` arm carries the coset.
+/// Parsers, formatters, and EDN boundary types for #T and #C constraints.
 macro_rules! stereo_site_dsl {
-    ($dsl:ident, $form:ident, $kind:expr, $parse:ident, $fmt:ident) => {
+    ($dsl:ident, $form:ident, $parse:ident, $fmt:ident, $read:ident) => {
         pub(crate) fn $parse(i: &mut &str) -> PResult<$form> {
             alt((
                 '*'.value($form::Undetermined),
                 '!'.value($form::NotStereo),
-                '+'.value($form::Stereo(StereoCoset::Undetermined)),
-                (|i: &mut &str| stereo_coset(i, $kind.degree())).map($form::Stereo),
+                '+'.value($form::Stereo),
             ))
             .parse_next(i)
         }
 
-        pub(crate) fn $fmt(f: &mut fmt::Formatter<'_>, config: &$form) -> fmt::Result {
-            match config {
+        pub(crate) fn $fmt(f: &mut fmt::Formatter<'_>, value: &$form) -> fmt::Result {
+            match value {
                 $form::Undetermined => write!(f, "*"),
                 $form::NotStereo => write!(f, "!"),
-                $form::Stereo(StereoCoset::Undetermined) => write!(f, "+"),
-                $form::Stereo(coset) => fmt_stereo_coset(f, coset),
+                $form::Stereo => write!(f, "+"),
             }
         }
 
@@ -2008,45 +1908,30 @@ macro_rules! stereo_site_dsl {
                         Ok(Self($form::Undetermined))
                     }
                     Edn::Keyword(k) if k.as_str() == "not-stereo" => Ok(Self($form::NotStereo)),
-                    Edn::Map(m) if m.len() == 1 => {
-                        let (k, v) = m.iter().next().unwrap();
-                        let Edn::Keyword(key) = k else {
-                            return Err(DeError::TypeMismatch {
-                                expected: "keyword key",
-                                got: k.kind(),
-                                path: Vec::new(),
-                            });
-                        };
-                        match key.as_str() {
-                            "stereo" => Ok(Self($form::Stereo(
-                                StereoCosetDsl::from_edn(v)?.into_ir(&()),
-                            ))),
-                            other => Err(DeError::UnknownField {
-                                key: other.to_string(),
-                                path: vec!["stereo-configuration".into()],
-                            }),
-                        }
-                    }
+                    Edn::Keyword(k) if k.as_str() == "stereo" => Ok(Self($form::Stereo)),
                     other => Err(DeError::TypeMismatch {
-                        expected: ":undetermined / :not-stereo / {:stereo <coset>}",
+                        expected: ":undetermined / :not-stereo / :stereo",
                         got: other.kind(),
                         path: Vec::new(),
                     }),
                 }
             }
+
+            fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+                let mut de = EdnStreamDeserializer::new(input);
+                let value = super::constraint::$read(&mut de)?;
+                de.expect_eof()?;
+                Ok(Self(value))
+            }
         }
 
         impl ToEdn for $dsl {
             fn to_edn(&self) -> Edn<'static> {
-                match &self.0 {
-                    $form::Undetermined => {
-                        Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
-                    }
-                    $form::NotStereo => Edn::Keyword(EdnKeyword::owned("not-stereo".to_string())),
-                    $form::Stereo(coset) => {
-                        single_key_map("stereo", StereoCosetDsl::from_ir(coset, &()).to_edn())
-                    }
-                }
+                Edn::keyword(match self.0 {
+                    $form::Undetermined => "undetermined",
+                    $form::NotStereo => "not-stereo",
+                    $form::Stereo => "stereo",
+                })
             }
         }
     };
@@ -2055,16 +1940,16 @@ macro_rules! stereo_site_dsl {
 stereo_site_dsl! {
     TetrahedralStereoDsl,
     TetrahedralStereoForm,
-    StereoKind::Tetrahedral,
     tetrahedral_stereo_config,
-    fmt_tetrahedral_stereo_config
+    fmt_tetrahedral_stereo_config,
+    read_tetrahedral_stereo_dsl
 }
 stereo_site_dsl! {
     CisTransStereoDsl,
     CisTransStereoForm,
-    StereoKind::CisTrans,
     cis_trans_stereo_config,
-    fmt_cis_trans_stereo_config
+    fmt_cis_trans_stereo_config,
+    read_cis_trans_stereo_dsl
 }
 
 #[cfg(test)]
@@ -2163,156 +2048,103 @@ mod tests {
         assert_eq!(stereo_kind.parse(input).unwrap(), expected);
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined("*", TetrahedralStereoForm::Undetermined)]
-    #[case::not_stereo("!", TetrahedralStereoForm::NotStereo)]
-    #[case::stereo_undetermined("+", TetrahedralStereoForm::Stereo(StereoCoset::Undetermined))]
-    #[case::lit("1", TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
-    #[case::var("?o", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var("o"))))]
-    #[case::lit_set("{1,2}", TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2])))]
-    #[case::var_domain("?o :: {1,2}", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))))]
-    #[case::swap("~1", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
-    #[case::mirror("'1", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(1)))))]
-    #[case::apply("1^(0,1)", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))))]
-    #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
-    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
-    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))))]
-    #[case::no_canonicalization("{1}", TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1])))]
-    fn test_tetrahedral_stereo_config(#[case] input: &str, #[case] expected: TetrahedralStereoForm) {
+    #[case::undetermined(":undetermined", TetrahedralStereoForm::Undetermined)]
+    #[case::negative(":not-stereo", TetrahedralStereoForm::NotStereo)]
+    #[case::positive(":stereo", TetrahedralStereoForm::Stereo)]
+    fn test_tetrahedral_stereo_dsl_from_edn(
+        #[case] input: &str,
+        #[case] expected: TetrahedralStereoForm,
+    ) {
+        let edn = read_string(input).unwrap();
+        let expected = TetrahedralStereoDsl(expected);
+        assert_eq!(TetrahedralStereoDsl::from_edn(&edn), Ok(expected.clone()));
         assert_eq!(
-            (|i: &mut &str| tetrahedral_stereo_config(i)).parse(input).unwrap(),
-            expected
+            TetrahedralStereoDsl::from_edn_str(input),
+            Ok(expected.clone())
+        );
+        assert_eq!(expected.to_edn(), edn);
+        assert_eq!(TetrahedralStereoDsl::from_ir(&expected.0, &()), expected);
+        assert_eq!(expected.clone().into_ir(&()), expected.0);
+    }
+
+    #[rstest]
+    #[case::unknown_keyword(":bogus", "keyword", "keyword")]
+    #[case::literal("0", "int", "number")]
+    #[case::set("[0 1]", "vector", "vector")]
+    #[case::variable("\"?configuration\"", "string", "string")]
+    #[case::map("{}", "map", "map")]
+    fn test_tetrahedral_stereo_dsl_from_edn_error(
+        #[case] input: &str,
+        #[case] got: &'static str,
+        #[case] stream_got: &'static str,
+    ) {
+        let expected = DeError::TypeMismatch {
+            expected: ":undetermined / :not-stereo / :stereo",
+            got,
+            path: Vec::new(),
+        };
+        assert_eq!(
+            TetrahedralStereoDsl::from_edn(&read_string(input).unwrap()),
+            Err(expected.clone()),
+        );
+        assert_eq!(
+            TetrahedralStereoDsl::from_edn_str(input),
+            Err(DeError::TypeMismatch {
+                expected: ":undetermined / :not-stereo / :stereo",
+                got: stream_got,
+                path: Vec::new(),
+            }
+            .into()),
         );
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined("*", CisTransStereoForm::Undetermined)]
-    #[case::not_stereo("!", CisTransStereoForm::NotStereo)]
-    #[case::stereo_undetermined("+", CisTransStereoForm::Stereo(StereoCoset::Undetermined))]
-    #[case::lit("1", CisTransStereoForm::Stereo(StereoCoset::Lit(1)))]
-    #[case::no_canonicalization("~1", CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
-    fn test_cis_trans_stereo_config(#[case] input: &str, #[case] expected: CisTransStereoForm) {
+    #[case::undetermined(":undetermined", CisTransStereoForm::Undetermined)]
+    #[case::negative(":not-stereo", CisTransStereoForm::NotStereo)]
+    #[case::positive(":stereo", CisTransStereoForm::Stereo)]
+    fn test_cis_trans_stereo_dsl_from_edn(
+        #[case] input: &str,
+        #[case] expected: CisTransStereoForm,
+    ) {
+        let edn = read_string(input).unwrap();
+        let expected = CisTransStereoDsl(expected);
+        assert_eq!(CisTransStereoDsl::from_edn(&edn), Ok(expected.clone()));
+        assert_eq!(CisTransStereoDsl::from_edn_str(input), Ok(expected.clone()));
+        assert_eq!(expected.to_edn(), edn);
+        assert_eq!(CisTransStereoDsl::from_ir(&expected.0, &()), expected);
+        assert_eq!(expected.clone().into_ir(&()), expected.0);
+    }
+
+    #[rstest]
+    #[case::unknown_keyword(":bogus", "keyword", "keyword")]
+    #[case::literal("0", "int", "number")]
+    #[case::set("[0 1]", "vector", "vector")]
+    #[case::variable("\"?configuration\"", "string", "string")]
+    #[case::map("{}", "map", "map")]
+    fn test_cis_trans_stereo_dsl_from_edn_error(
+        #[case] input: &str,
+        #[case] got: &'static str,
+        #[case] stream_got: &'static str,
+    ) {
+        let expected = DeError::TypeMismatch {
+            expected: ":undetermined / :not-stereo / :stereo",
+            got,
+            path: Vec::new(),
+        };
         assert_eq!(
-            (|i: &mut &str| cis_trans_stereo_config(i)).parse(input).unwrap(),
-            expected
+            CisTransStereoDsl::from_edn(&read_string(input).unwrap()),
+            Err(expected.clone()),
         );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(TetrahedralStereoForm::Undetermined, "*")]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo, "!")]
-    #[case::stereogenic(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), "+")]
-    #[case::lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), "1")]
-    #[case::var(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var("o"))), "?o")]
-    #[case::lit_set(TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2])), "{1,2}")]
-    #[case::var_domain(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::var_in("o", [1, 2]))), "?o :: {1,2}")]
-    #[case::swap(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))), "~1")]
-    #[case::mirror(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(1)))), "'1")]
-    #[case::apply(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))), "1^(0,1)")]
-    fn test_fmt_tetrahedral_stereo_config(#[case] c: TetrahedralStereoForm, #[case] expected: &str) {
-        struct W(TetrahedralStereoForm);
-        impl fmt::Display for W {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt_tetrahedral_stereo_config(f, &self.0)
+        assert_eq!(
+            CisTransStereoDsl::from_edn_str(input),
+            Err(DeError::TypeMismatch {
+                expected: ":undetermined / :not-stereo / :stereo",
+                got: stream_got,
+                path: Vec::new(),
             }
-        }
-        assert_eq!(W(c).to_string(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(StereoCoset::Lit(2))]
-    #[case::undetermined(StereoCoset::Undetermined)]
-    #[case::lit_set(StereoCoset::lit_set([1, 2]))]
-    #[case::term_swap(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))]
-    fn test_stereo_coset_dsl_into_ir(#[case] coset: StereoCoset) {
-        assert_eq!(StereoCosetDsl(coset.clone()).into_ir(&()), coset);
-        assert_eq!(StereoCosetDsl::from_ir(&coset, &()), StereoCosetDsl(coset));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::int("2", StereoCosetDsl(StereoCoset::Lit(2)))]
-    #[case::undetermined(":undetermined", StereoCosetDsl(StereoCoset::Undetermined))]
-    #[case::vector("[1 2]", StereoCosetDsl(StereoCoset::lit_set([1, 2])))]
-    #[case::string_lit("\"3\"", StereoCosetDsl(StereoCoset::Lit(3)))]
-    #[case::string_term("\"~1\"", StereoCosetDsl(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
-    fn test_stereo_coset_dsl_from_edn(#[case] input: &str, #[case] expected: StereoCosetDsl) {
-        assert_eq!(StereoCosetDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::wrong_type("nil", DeError::TypeMismatch { expected: "coset (int, :undetermined, vector, or string)", got: "nil", path: Vec::new() })]
-    #[case::non_int_in_vector("[1 nil]", DeError::TypeMismatch { expected: "int (coset-set element)", got: "nil", path: Vec::new() })]
-    #[case::negative("-1", DeError::OutOfRange { value: "-1".to_string(), target: "u32", path: Vec::new() })]
-    fn test_stereo_coset_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
-        assert_eq!(StereoCosetDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
-    }
-
-    #[rstest]
-    fn test_stereo_coset_dsl_from_edn_rejects_invalid_string() {
-        let err = StereoCosetDsl::from_edn(&read_string("\"???\"").unwrap()).unwrap_err();
-        assert!(matches!(
-            err,
-            DeError::Subgrammar {
-                grammar: "stereo coset",
-                ..
-            }
-        ));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(StereoCosetDsl(StereoCoset::Lit(2)), "2")]
-    #[case::undetermined(StereoCosetDsl(StereoCoset::Undetermined), ":undetermined")]
-    #[case::lit_set(StereoCosetDsl(StereoCoset::lit_set([1, 2])), "[1 2]")]
-    #[case::term_swap(StereoCosetDsl(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1)))), "\"~1\"")]
-    fn test_stereo_coset_dsl_to_edn(#[case] form: StereoCosetDsl, #[case] expected: &str) {
-        assert_eq!(form.to_edn(), read_string(expected).unwrap());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(TetrahedralStereoForm::Undetermined)]
-    #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
-    #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_dsl_into_ir(#[case] form: TetrahedralStereoForm) {
-        assert_eq!(TetrahedralStereoDsl(form.clone()).into_ir(&()), form);
-        assert_eq!(TetrahedralStereoDsl::from_ir(&form, &()), TetrahedralStereoDsl(form));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(":undetermined", TetrahedralStereoDsl(TetrahedralStereoForm::Undetermined))]
-    #[case::not_stereo(":not-stereo", TetrahedralStereoDsl(TetrahedralStereoForm::NotStereo))]
-    #[case::stereo_lit("{:stereo 1}", TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))))]
-    #[case::stereo_undetermined("{:stereo :undetermined}", TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)))]
-    #[case::stereo_set("{:stereo [1 2]}", TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::lit_set([1, 2]))))]
-    fn test_tetrahedral_stereo_dsl_from_edn(#[case] input: &str, #[case] expected: TetrahedralStereoDsl) {
-        assert_eq!(TetrahedralStereoDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::unknown_keyword(":bogus", DeError::TypeMismatch { expected: ":undetermined / :not-stereo / {:stereo <coset>}", got: "keyword", path: Vec::new() })]
-    #[case::unknown_key("{:bogus 1}", DeError::UnknownField { key: "bogus".to_string(), path: vec!["stereo-configuration".into()] })]
-    #[case::wrong_type("1", DeError::TypeMismatch { expected: ":undetermined / :not-stereo / {:stereo <coset>}", got: "int", path: Vec::new() })]
-    fn test_tetrahedral_stereo_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
-        assert_eq!(TetrahedralStereoDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(TetrahedralStereoDsl(TetrahedralStereoForm::Undetermined), ":undetermined")]
-    #[case::not_stereo(TetrahedralStereoDsl(TetrahedralStereoForm::NotStereo), ":not-stereo")]
-    #[case::stereo_lit(TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1))), "{:stereo 1}")]
-    #[case::stereo_undetermined(TetrahedralStereoDsl(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)), "{:stereo :undetermined}")]
-    fn test_tetrahedral_stereo_dsl_to_edn(#[case] form: TetrahedralStereoDsl, #[case] expected: &str) {
-        assert_eq!(form.to_edn(), read_string(expected).unwrap());
+            .into()),
+        );
     }
 
     #[rustfmt::skip]

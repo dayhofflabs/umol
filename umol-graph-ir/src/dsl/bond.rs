@@ -645,7 +645,6 @@ mod tests {
     use crate::bond_dsl;
     use crate::ir::constraint::{BondConstraintsForm, RingScope};
     use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-    use crate::ir::stereo::StereoCoset;
 
     #[rustfmt::skip]
     #[rstest]
@@ -753,6 +752,26 @@ mod tests {
     }
 
     #[rstest]
+    #[case::open("*", CisTransStereoForm::Undetermined)]
+    #[case::negative("!", CisTransStereoForm::NotStereo)]
+    #[case::positive("+", CisTransStereoForm::Stereo)]
+    fn test_bond_update_dsl_from_edn_stereo(
+        #[case] suffix: &str,
+        #[case] value: CisTransStereoForm,
+    ) {
+        let source = format!("#C{suffix}");
+        let expected = BondUpdateDsl(BondUpdate {
+            constraints: BondConstraintsForm::from_iter([BondConstraintForm::CisTransStereo(
+                value,
+            )]),
+            ..Default::default()
+        });
+        let edn = Edn::string(&source);
+        assert_eq!(source.parse::<BondUpdateDsl>(), Ok(expected.clone()));
+        assert_eq!(BondUpdateDsl::from_edn(&edn), Ok(expected));
+    }
+
+    #[rstest]
     #[case::non_string("1")]
     fn test_bond_update_dsl_from_edn_error(#[case] input: &str) {
         assert!(matches!(
@@ -803,9 +822,8 @@ mod tests {
     #[case::ring_membership_size("#R(6)", BondPredicate::Constraint(BondConstraintForm::ring_membership(RingScope::Size(6), 1)))]
     #[case::ring_membership_size_undetermined("#R(6)*", BondPredicate::Constraint(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)))]
     #[case::cis_trans_stereo_undetermined("#C*", BondPredicate::Constraint(BondConstraintForm::CisTransStereo(CisTransStereoForm::Undetermined)))]
-    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Undetermined))))]
+    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo)))]
     #[case::cis_trans_stereo_not_stereo("#C!", BondPredicate::Constraint(BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo)))]
-    #[case::cis_trans_stereo("#C1", BondPredicate::Constraint(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Lit(1)))))]
     fn test_bond_predicate(#[case] input: &str, #[case] expected: BondPredicate) {
         let result = bond_predicate.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -861,10 +879,28 @@ mod tests {
     }
 
     #[rstest]
+    #[case::open("*", CisTransStereoForm::Undetermined)]
+    #[case::negative("!", CisTransStereoForm::NotStereo)]
+    #[case::positive("+", CisTransStereoForm::Stereo)]
+    fn test_bond_dsl_from_edn_stereo(#[case] suffix: &str, #[case] value: CisTransStereoForm) {
+        let source = format!("2#C{suffix}");
+        let expected = BondDsl(BondForm {
+            constraints: BondConstraintsForm::from_iter([BondConstraintForm::CisTransStereo(
+                value,
+            )]),
+            ..BondForm::from_order(2)
+        });
+        let edn = Edn::string(&source);
+        assert_eq!(source.parse::<BondDsl>(), Ok(expected.clone()));
+        assert_eq!(BondDsl::from_edn(&edn), Ok(expected.clone()));
+        assert_eq!(BondDsl::from_edn_str(&edn.to_string()), Ok(expected));
+    }
+
+    #[rstest]
     #[case::single(r##""1""##)]
     #[case::aromatic(r##""1#a""##)]
     #[case::ring_membership_all(r##""2#R+""##)]
-    #[case::with_cis_trans_stereo(r##""2#C1""##)]
+    #[case::with_cis_trans_stereo(r##""2#C+""##)]
     fn test_bond_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = BondDsl::from_edn_str(input).unwrap();
         let tree = read_string(input).unwrap();
@@ -902,9 +938,7 @@ mod tests {
     #[case::ring_membership_size_count_set(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
     #[case::cis_trans_stereo_undetermined(BondConstraintForm::CisTransStereo(CisTransStereoForm::Undetermined), "{:cis-trans-stereo :undetermined}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo), "{:cis-trans-stereo :not-stereo}")]
-    #[case::cis_trans_stereo_lit(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
-    #[case::cis_trans_stereo_coset_undetermined(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::Undetermined)), "{:cis-trans-stereo {:stereo :undetermined}}")]
-    #[case::cis_trans_stereo_set(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(StereoCoset::lit_set([1, 2]))), "{:cis-trans-stereo {:stereo [1 2]}}")]
+    #[case::cis_trans_stereo_positive(BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo), "{:cis-trans-stereo :stereo}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[case] input: BondConstraintForm,
         #[case] edn_source: &str,
@@ -936,7 +970,7 @@ mod tests {
     #[rstest]
     #[case::charge_before_multiplicity("2#s3#c+", "2#c+#s3")]
     #[case::aromatic_before_ring("2#R2#a", "2#a#R2")]
-    #[case::stereo_before_ring("1#R2#C1", "1#C1#R2")]
+    #[case::stereo_before_ring("1#R2#C+", "1#C+#R2")]
     fn test_bond_render_canonical_order(#[case] input: &str, #[case] expected_canonical: &str) {
         let parsed: BondDsl = bond.parse(input).unwrap();
         assert_eq!(parsed.to_string(), expected_canonical);
@@ -956,7 +990,7 @@ mod tests {
     #[case::aromatic("1#a")]
     #[case::ring_membership_all("1#R2")]
     #[case::ring_membership_size("1#R(6)")]
-    #[case::cis_trans_stereo("2#C1")]
+    #[case::cis_trans_stereo("2#C+")]
     fn test_bond_form_from_str_to_string_roundtrip(#[case] s: &str) {
         let form: BondForm = s.parse().unwrap();
         assert_eq!(form.to_string(), s);
@@ -967,10 +1001,8 @@ mod tests {
     #[case::aromatic(bond_dsl!("1#a"))]
     #[case::ring_membership_all(bond_dsl!("1#R+"))]
     #[case::ring_membership_size(bond_dsl!("1#R(6)+"))]
-    #[case::cis_trans_stereo(bond_dsl!("1#C1"))]
-    #[case::cis_trans_stereo_coset_undetermined(bond_dsl!("1#C+"))]
+    #[case::cis_trans_stereo(bond_dsl!("1#C+"))]
     #[case::cis_trans_stereo_not_stereo(bond_dsl!("1#C!"))]
-    #[case::cis_trans_stereo_set(bond_dsl!("1#C{1,2}"))]
     fn test_bond_form_to_edn_from_edn_roundtrip(#[case] input: BondForm) {
         let edn = input.to_edn();
         let parsed = BondForm::from_edn(&edn).unwrap();

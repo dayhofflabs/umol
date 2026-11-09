@@ -19,10 +19,10 @@ explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
 This records the selected design direction and its consequences. S0–S2 are
-complete; S3 is in progress and S4 remains pending. S3a is implemented, with
-verification pending the coordinated S3 migration. The semantics, value interface,
-operation interfaces, and names below are the working design. S2 records the implemented
-perception/resolution interfaces.
+complete; S3 is in progress and S4 remains pending. S3a and S3b are implemented;
+graph-IR checks pass, while binding verification awaits the remaining S3 migrations.
+The semantics, value interface, operation interfaces, and names below are the
+working design. S2 records the implemented perception/resolution interfaces.
 Remaining subitems require explicit instruction. The staged implementation plan
 follows the change inventory.
 
@@ -103,7 +103,7 @@ configuration data.
 
 These stereo constraints do not classify a site as stereogenic, prochiral, or symmetric.
 An explicit stereo entity can describe an arrangement without asserting
-stereogenicity. Presence/kind assertions and derived stereogenicity retain their
+stereogenicity. Stereo constraints and derived stereogenicity retain their
 distinct meanings. Stereo descriptions can be placed on every carbon, including
 CH3 groups, provided their ligand frames satisfy the existing integrity rules.
 Neither a stereo atom nor a positive stereo constraint implies stereogenicity.
@@ -133,13 +133,12 @@ implement AsLit with Lit = bool:
 
 Both forms accept boolean construction through From<bool>: false produces
 NotStereo and true produces Stereo. Coset-specific methods such as
-matches_value(u32) are removed; ordinary lattice matching compares the presence
-assertions.
+matches_value(u32) are removed; ordinary lattice matching compares these constraints.
 
 TetrahedralConfiguration (Ccw/Cw) and CisTransConfiguration (Z/E) remain
 configuration types for explicit stereo entities. Their conversions into the
 atom/bond constraint forms are removed. A configuration is not silently converted
-to a positive presence assertion.
+to a positive stereo constraint.
 
 Both named configuration enums gain From conversions into StereoConfigurationForm,
 carrying their kind and the existing 0/1 coset mapping. Python's existing
@@ -170,7 +169,7 @@ assertable in patterns, and pointwise.
 | Staging imported stereo | Explicit entity, with a Virtual ligand where needed |
 | Reading a coset in a chosen frame | The coset_for reading, computed on read and never stored |
 | Query predicate on configuration | Pattern stereo entity, aligned through the match |
-| Presence or kind | Stereo constraints |
+| Stereo kind at a site | Stereo constraints |
 | Relative stereo through variables and operators | StereoTerm on explicit entities |
 | Local literal in a molecule | Explicit stereo entity with its stated ligand frame |
 | Assertion stored beside an entity and cross-checked against it | None; the entity is the only statement of its configuration |
@@ -221,7 +220,7 @@ perform that identification implicitly.
 
 ## DSL representation
 
-#T and #C accept only the three presence states: unconstrained, negative, and
+#T and #C accept only the three states: unconstrained, negative, and
 positive. Literals such as #T0 and #C1, coset sets, variables, and configuration
 operators are rejected in every context, including molecule maps, reaction LHS
 maps, standalone values, aliases, edits, deltas, and reaction-span sides.
@@ -251,7 +250,8 @@ The source audit found no affected whitepaper listings. Repository tests contain
 59 EDN fixtures and 179 inline or parameterized molecule examples using the old
 spelling, including repeated input/expected values. Some cases already require
 rewriting under the representation change. Migrate configuration descriptions
-to explicit records; use presence markers where presence is what a test asserts.
+to explicit records; use the reduced stereo constraints when a test asserts no
+configuration.
 
 ## Raising SMILES and MOL data
 
@@ -283,8 +283,8 @@ StereoResolver remains useful for evidence-driven resolution of stereo constrain
 stereo constraint can cause it to construct a stereo entity of the asserted kind with an
 undetermined coset. Imported configurations already exist on entities after raise,
 and StereoResolver replaces their Virtual ligands with the identified kinds.
-Shared perception and consistency checks must read stereo constraints as
-presence/kind assertions and cease extracting configurations from them.
+Shared perception and consistency checks must read the reduced stereo constraints
+without extracting configurations from them.
 
 The core contracts of the transformers in doc 242 survive:
 
@@ -311,8 +311,8 @@ contradictory under every failure policy. Keep and Remove apply to realizability
 failures, not to choosing which of two contradictory statements to believe.
 
 Fixtures that convey configurations through #T0/#T1 or #C0/#C1 must be
-rewritten using explicit stereo entities. Presence-only cases use the reduced
-stereo constraints.
+rewritten using explicit stereo entities. Cases without configuration data use
+the reduced stereo constraints.
 
 ## Standalone projection and export
 
@@ -510,7 +510,7 @@ input unchanged on error.
 StereoProjectError retains UnsupportedStereoAtom, UnsupportedStereoBond,
 AtomAssertion, and BondAssertion. StereoAtomFrame and StereoBondFrame disappear
 because this operation no longer derives or transports frames. Conflict with a
-negative presence constraint uses the existing assertion error.
+negative stereo constraint uses the existing assertion error.
 
 Remove ProjectFlags::STEREO and ProjectError::Stereo from aggregate projection.
 ProjectContradiction::Stereo also disappears; no remaining projection stage produces it.
@@ -524,15 +524,15 @@ the other projection stages and boundary conversion still require them.
 | --- | --- |
 | Rust stereo site forms | Keep the named three-state forms, use bool literals and construction, and remove the ground enums and coset-specific methods/conversions. Keep configuration types for explicit stereo entities. |
 | Stereo ligands | Add the Virtual variant and :virt spelling. Update exhaustive kind dispatch, canonical keys, and Python enum conversion. Keep ligand identity and matching exact. |
-| Atom/bond constraint readings | Report presence/kind without reconstructing a neighbor-relative coset. A known stereo kind can give a positive stereo constraint even when its coset is undetermined. Existing open/complete reading distinctions still apply. A caller that needs a coset uses coset_for with a stated frame. |
-| Validation | Check stereo constraint realizability and agreement with entity presence/kind. Configuration and ligand-frame validation continue on explicit entities. |
+| Atom/bond constraint readings | Project the stereo kind without reconstructing a neighbor-relative coset. A known stereo kind can give a positive stereo constraint even when its coset is undetermined. Existing open/complete reading distinctions still apply. A caller that needs a coset uses coset_for with a stated frame. |
+| Validation | Check stereo constraint realizability and agreement with the stereo entities. Configuration and ligand-frame validation continue on explicit entities. |
 | Hydrogen folding/unfolding | Remove special transport of inline #T/#C cosets. Continue maintaining actual/virtual ligands on explicit stereo entities. Hydrogen folding currently has separate code for both representations. |
 | Canonicalization | Remove coset data from atom/bond constraint keys. Those attributes then have their ordinary relabeling semantics; explicit stereo canonicalization still transports its frames and configurations. |
 | Matching and gluing | Ordinary attribute operations compare reduced stereo constraints. Configuration-sensitive comparisons use explicit stereo entities and existing exact frame alignment and transport. |
 | DSL parser | Reject configuration-bearing #T/#C in every context. Retain the current AtomDsl/BondDsl wrappers and molecule input entries; configuration syntax remains available in the explicit stereo-entity DSLs. |
 | DSL renderer | Retain explicit stereo-record rendering. No implicit-frame inference, conditional inline output, or new serialization configuration. |
 | Python bindings | Use bool or the corresponding form for constraint input, and bool or None for literal extraction. Remove ground enum bindings and configuration-valued constraint coercions. Mirror the merged failure policies and uniform DSL rejection. |
-| Fixtures and documentation | Rewrite configuration-bearing atom/bond strings using explicit stereo records. Presence-only cases use the reduced constraints. Update examples, properties, benchmarks, and API descriptions that assumed a stored coset. |
+| Fixtures and documentation | Rewrite configuration-bearing atom/bond strings using explicit stereo records. Cases without configuration data use the reduced constraints. Update examples, properties, benchmarks, and API descriptions that assumed a stored coset. |
 | Depiction | The current depiction code already reads explicit graph-IR stereo entities. It needs no corresponding architectural change. |
 
 Atom/bond constraint edits and deltas, including those carried by reactions, inherit
@@ -553,9 +553,9 @@ implementation, documentation, fixtures, or exhaustive matches.
 | Same | undetermined(), not_stereo(), stereo(...), is_stereo() | Retain the constructors and query; stereo becomes stereo(). |
 | Same | Normalize and Lattice implementations on the two forms | Retain the trait surface with three-state semantics; remove coset-specific normalization and domain operations from these implementations. |
 | Same | AsLit on the two forms | Change Lit to bool; positive and negative are ground. Add `From<bool>`. |
-| Same | matches_value(u32) | Remove from both forms. Do not replace it with another inherent comparison method; ordinary lattice matching handles boolean presence. |
+| Same | matches_value(u32) | Remove from both forms. Do not replace it with another inherent comparison method; ordinary lattice matching compares these boolean constraints. |
 | Same | TetrahedralStereo, CisTransStereo | Remove both ground enums and all conversions to or from them. Remove their re-exports in umol-graph-ir/src/ir.rs. |
-| Same | `From<TetrahedralConfiguration>` for TetrahedralStereoForm; `From<CisTransConfiguration>` for CisTransStereoForm | Remove. Configuration input must not implicitly become a presence constraint. |
+| Same | `From<TetrahedralConfiguration>` for TetrahedralStereoForm; `From<CisTransConfiguration>` for CisTransStereoForm | Remove. Configuration input must not implicitly become a stereo constraint. |
 | Same | TetrahedralConfiguration, CisTransConfiguration | Retain the named configurations; add `From<TetrahedralConfiguration>` and `From<CisTransConfiguration>` for StereoConfigurationForm, preserving kind and the existing 0/1 mappings. |
 | Same | StereoConfigurationForm, StereoConfiguration, StereoCoset, StereoTerm; StereoAtomForm, StereoBondForm and updates | Retain the framed configuration and constraint interfaces. The boolean literal change does not extend to these types. Correct rustdoc that equates an arrangement with stereogenicity. |
 | umol-graph-ir/src/ir/constraint/atom.rs and bond.rs | AtomConstraintForm::TetrahedralStereo, BondConstraintForm::CisTransStereo and corresponding keys | Retain these variants and keys with reduced forms. Their tetrahedral_stereo / cis_trans_stereo constructors keep `impl Into<Form>` and thereby accept bool. |
@@ -594,7 +594,7 @@ implementation, documentation, fixtures, or exhaustive matches.
 
 | Files or public surface | Required migration |
 | --- | --- |
-| umol-graph-ir/src/dsl/atom.rs, bond.rs | AtomDsl / BondDsl, update wrappers, predicate enums, and parse_atom / parse_bond / update entry points remain form-valued. Their standalone grammar accepts only presence states. Public AtomPredicate / BondPredicate need no configuration-payload variant. |
+| umol-graph-ir/src/dsl/atom.rs, bond.rs | AtomDsl / BondDsl, update wrappers, predicate enums, and parse_atom / parse_bond / update entry points remain form-valued. Their standalone grammar accepts only the three stereo constraint states. Public AtomPredicate / BondPredicate need no configuration-payload variant. |
 | umol-graph-ir/src/dsl/stereo.rs | Reduce the internal TetrahedralStereoDsl / CisTransStereoDsl wrappers and their parsers/formatters. Retain the full StereoAtomDsl / StereoBondDsl and configuration-expression grammar. The two site wrappers are not re-exported from dsl.rs. |
 | umol-graph-ir/src/dsl/constraint.rs | AtomConstraintDsl / BondConstraintDsl and general constraint readers use reduced stereo values. Configuration expressions remain on explicit stereo entities. Molecule-level constraint semantics remain outside this work. |
 | umol-graph-ir/src/dsl/molecule.rs | Retain the existing atom/bond input entry types, entity registration, and explicit stereo-record rendering. The shared atom/bond grammar rejects configuration-bearing #T/#C here as it does elsewhere. |
@@ -604,7 +604,7 @@ implementation, documentation, fixtures, or exhaustive matches.
 | umol-graph-ir/src/dsl/config.rs; MoleculeDsl FromIr / IntoIr | Retain StereoDefault, AtomDefaults, BondDefaults, overrides, and aggregate defaults. There is no additional stereo-sugar configuration or graph-aware atom/bond attribute conversion. |
 | umol-graph-ir/src/ir/molecule/spec.rs | Standalone atom/bond specs reject configuration syntax; explicit stereo spec terms remain available, including the new virtual argument. |
 | umol-graph-ir/src/macros.rs | Existing DSL macros inherit molecule acceptance or standalone rejection through their owning parsers. |
-| umol-graph-ir/spec/umol-dsl-spec.md | Specify the three presence values and :virt; remove configuration-bearing #T/#C from every context. Keep full configuration syntax on explicit stereo records and preserve tree/streaming parity. |
+| umol-graph-ir/spec/umol-dsl-spec.md | Specify the three values and :virt; remove configuration-bearing #T/#C from every context. Keep full configuration syntax on explicit stereo records and preserve tree/streaming parity. |
 
 The same attribute grammar applies in every context. Full stereo configurations
 roundtrip through the existing explicit entity representation; no molecule-only
@@ -656,13 +656,13 @@ in the value interface gives it a Rust-owned implementation.
 
 | Existing coverage or artifact | Migration and required coverage |
 | --- | --- |
-| umol-graph-ir/src/ir/stereo.rs tests; tests/property/lattice.rs, strategies.rs | Replace reduced-form coset generators with all three presence states. Preserve equality/lattice/ground-literal laws. Keep full configuration generators and independent coset references on explicit entities. |
+| umol-graph-ir/src/ir/stereo.rs tests; tests/property/lattice.rs, strategies.rs | Replace reduced-form coset generators with all three states. Preserve equality/lattice/ground-literal laws. Keep full configuration generators and independent coset references on explicit entities. |
 | ir/ligand.rs, ir/stereo/tests, ir/view/constraints/tests/stereo_atom.rs and stereo_bond.rs; tests/integrity.rs | Cover Virtual identity, bearer checks, duplicate ligands, exact matching, and known-kind readings with undetermined cosets. |
 | dsl/atom.rs, bond.rs, stereo.rs, molecule/tests.rs, reaction.rs, reaction_span.rs, edit.rs; tests/property/stereo/serialization.rs and molecule/serialization.rs | Reject configuration-bearing #T/#C consistently in every context. Test explicit stereo records with literal, set, variable, and operator configurations, defaults, aliases, and exact tree/streaming/render roundtrips. Preserve unrelated kindless-payload equivalence contracts. |
 | umol-graph-ir/src/macros.rs tests | Check uniform rejection of configuration-bearing #T/#C through the existing DSL macros. |
-| tests/property/molecule/{canonicalize,remap,reframe,meet_pushout}.rs; property/substructure.rs; property/reaction and property/edit families | Retain relabeling, frame-transport, pushout, reaction, edit, and rollback laws. Add same-configuration versus enantiomer regression cases and Virtual cases without weakening exact gluing or old-state checks. |
+| tests/property/molecule/{canonicalize,remap,reframe,meet_pushout}.rs; property/substructure.rs; property/reaction and property/edit families | Retain relabeling, frame-transport, pushout, reaction, edit, and rollback laws. Check same-configuration and enantiomer distinctions, including Virtual ligands, without weakening exact gluing or old-state checks. |
 | umol-graph/src/ops/stereo.rs, recognize/tests.rs, resolve/stereo.rs and resolve.rs; ops/validate/stereo.rs | Cover direct imported entities, virtual-kind replacement with unchanged coset, merged policies, unconditional mismatch contradictions, removal of general ring suppression, and lossy standalone projection. |
-| ops/transform/stereo/tests, stereo/enumeration/tests.rs, hydrogens/tests; tests/property/transform/stereo and hydrogens.rs | Preserve selection, enumeration, reconstruction, and existing-entity laws. Move configuration descriptions to explicit entities. Isolated atom examples that only test presence use #T+. |
+| ops/transform/stereo/tests, stereo/enumeration/tests.rs, hydrogens/tests; tests/property/transform/stereo and hydrogens.rs | Preserve selection, enumeration, reconstruction, and existing-entity laws. Move configuration descriptions to explicit entities. Isolated atom examples that only test the stereo constraint use #T+. |
 | umol-io/src/table_ir/raise.rs; CTfile and SMILES parser/render tests; umol-graph/src/ingest.rs and export.rs; tests/property/project.rs and resolve.rs | Update expected imported carriers. Cover alkene H, azo LP, mixed imine ligands, Either/unspecified stereo, output rejection, ring-policy placement, explicit frame transport, and molecule/reaction roundtrips. Aggregate projection assertions must now retain entities. |
 | umol-graph/tests/resolution/data and tests/kekulization/data | Migrate the 59 fixture files using the old syntax: 21 in stereo_tetrahedral, 19 in stereo_cis_trans, 17 elsewhere in resolution data, and 2 in kekulization data. Preserve their intended chemistry and update carrier and ring-policy expectations. |
 | umol-py/tests/test_stereo.py, test_stereo_perception.py, test_constraint.py, test_constraint_readings.py, test_structural_pattern_matching.py, test_class_constructor_signatures.py | Remove perception/derivation query and construction cases; preserve operation-required value coverage. Cover unit variants, bool input/output, removed imports and coercions, Virtual, merged keyword signatures, readings, and exact exception/roundtrip behavior. |
@@ -704,9 +704,8 @@ those callers.
   Define small tetrahedral and cis/trans examples using explicit stereo entities
   in two different ligand orders. Check that transporting the configuration
   preserves equality and matching, while changing the configuration distinguishes
-  the stereoisomers. Keep the existing failing inline-canonicalization reproduction
-  as historical evidence. S3 verifies that its obsolete input syntax is rejected
-  and that explicit stereo records retain the intended behavior.
+  the stereoisomers. Historical reproduction details belong in Motivation;
+  tests assert the current grammar and explicit-entity equality and matching.
 
   **Completed — 2026-11-08.** Added 40 canonicalization cases covering independent
   ligand orders, an atom-id swap, both para_stereo settings, and opposite
@@ -999,7 +998,7 @@ until S3; model-owned ring-size filtering is implemented in S2g.
   Use the existing row types for requested additions and supported stored
   frames. Preserve stored positions, configurations, constraints, and atom
   counts. Retain unresolved rows and known findings in the underdetermined
-  payload; do not infer the operation outcome from the presence of Virtual.
+  payload; do not infer the operation outcome from a Virtual ligand alone.
 
   Cover hydrogen, lone pair, mixed cis/trans endpoints, fixed ligands that
   force a completion, compatible partial counts, ambiguous evidence, and
@@ -1291,8 +1290,8 @@ and explicit-record rendering retain their existing design.
   type, add From<bool>, and remove the ground enums, configuration conversions,
   and coset-specific comparisons. Update the Python variants, bool coercions,
   literal extraction, setters, registration, and exports in the same change.
-  Derive presence from a known stereo kind without deriving a coset, and remove
-  configuration data from site-constraint canonical keys.
+  Derive the stereo constraint from a known kind without deriving a coset, and
+  remove configuration data from site-constraint canonical keys.
 
   Test all three states and their lattice laws, bool extraction, open/complete
   readings, unknown kinds, undetermined cosets, per-kind negatives, and relabeling.
@@ -1310,10 +1309,9 @@ and explicit-record rendering retain their existing design.
   and unknown kinds, open cosets, virtual ligands, and atom relabeling. Site
   generators use the reduced domain; full entity-configuration generators and
   reference properties are retained. Formatting, Python syntax checks, and
-  git diff --check pass. Native checks stop at 14 errors in the old DSL grammar
-  owned by S3b; graph-IR test compilation also encounters a removed-enum import
-  in an entity-constraint fixture owned by S3e. Runtime tests and the Python
-  rebuild await the remaining S3 migrations.
+  git diff --check pass. Graph-IR runtime and property tests pass with S3b on
+  2026-11-09. Binding verification and the Python rebuild await the remaining
+  S3 migrations.
 
 - **S3b — Use the same reduced stereo grammar in every DSL context** — breaking (red→green).
   Modules: umol-graph-ir/src/dsl/stereo.rs,
@@ -1327,7 +1325,7 @@ and explicit-record rendering retain their existing design.
   umol-graph-ir/src/ir/molecule/spec.rs,
   umol-graph-ir/src/macros.rs. [dep: S3a]
 
-  Restrict #T/#C and their EDN values to the three presence states, including
+  Restrict #T/#C and their EDN values to the three states, including
   :stereo. Reject all configuration-bearing forms, including in molecule maps,
   reaction LHS maps, aliases, edits, deltas, and reaction-span sides. Retain the
   full configuration grammar on explicit stereo entities and the existing
@@ -1336,9 +1334,29 @@ and explicit-record rendering retain their existing design.
   Test uniform rejection of literals, sets, variables, and operators in attribute
   positions. Check exact tree/streaming/render roundtrips of explicit stereo
   records, including symbolic configurations, defaults, aliases, entity keywords,
-  and ids referenced by reaction deltas. The old canonicalization reproduction
-  must reject at its attribute syntax; independently constructed explicit-entity
-  reference cases continue to distinguish the configurations.
+  and ids referenced by reaction deltas. Retain the explicit-entity reference
+  checks that distinguish configurations.
+
+  **Completed — 2026-11-09.** The shared compact grammar accepts only *, !,
+  and +; EDN values are :undetermined, :not-stereo, and :stereo. Tree and streaming
+  readers reject configuration payloads. The attribute-only coset DSL and its
+  readers are removed; explicit stereo entities retain their full grammar.
+
+  Tests cover the current grammar across standalone values, aliases, molecule
+  maps, reaction LHS values and deltas, edits, and both reaction-span sides.
+  Exact roundtrips preserve explicit configurations, symbolic terms, virtual
+  ligands, defaults, keywords, aliases, and stereo ids referenced by deltas.
+  Parser seeds use the current constraint values. The unused coset comparison
+  helper is removed; its configuration-matching cases remain on
+  StereoConfigurationForm. The last removed-ground-enum fixture and unused
+  property imports are updated.
+
+  Validation passed: cargo test -p umol-graph-ir --features proptest, including
+  11,958 library tests and 545 property tests, plus the integration, macro, and
+  documentation tests. Clippy passed for graph-IR with proptest, all targets,
+  and warnings denied; formatting and git diff --check passed. The coordinated
+  workspace and binding gate remains S3e. The umol-graph check stops in the
+  consumers assigned to S3c and S3d.
 
 - **S3c — Remove site-coset handling from chemistry operations** — breaking (red→green).
   Modules: umol-graph/src/ops/stereo.rs,
@@ -1398,17 +1416,17 @@ and explicit-record rendering retain their existing design.
   Reconcile every inventoried consumer with its owning subitem. Preserve the
   intended chemistry while rewriting configuration descriptions as explicit
   stereo records and updating expected stored carriers. Replace isolated-atom
-  configuration syntax with a presence marker only where the test
-  concerns presence. Preserve the laws exercised by the property suites and the
-  behavior exercised by parser seeds. Update remaining benchmark expectations
-  to match the measured operation.
+  configuration syntax with a stereo constraint only where the test
+  asserts no configuration. Preserve the laws exercised by the property suites
+  and the behavior exercised by parser seeds. Update remaining benchmark
+  expectations to match the measured operation.
 
   Rebuild Python and test the existing high-level import, export, transformer,
   edit, delta, and transaction interfaces. Run the Rust suites, including the
   affected feature suites, and compile all benchmark targets. This subitem closes
   only when the coordinated change builds and its tests pass together.
 
-**S3 gate:** site constraints contain only presence/kind information, all DSL
+**S3 gate:** site constraints contain only frame-independent information, all DSL
 contexts reject configuration-bearing #T/#C, and configuration descriptions use
 explicit records. Chemistry operations and export obtain configuration from those
 entities. All affected callers compile and pass their tests; ligand identity and

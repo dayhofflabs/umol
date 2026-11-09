@@ -226,7 +226,7 @@ impl StereoCoset {
     }
 }
 
-/// Presence of tetrahedral atom stereo, independently of configuration or stereogenicity.
+/// A tetrahedral stereo constraint, independent of configuration or stereogenicity.
 #[pyclass]
 pub enum TetrahedralStereoForm {
     Undetermined(),
@@ -253,7 +253,7 @@ impl TetrahedralStereoForm {
         variant_repr(slf.bind(py).as_any(), "TetrahedralStereoForm", variant, 0)
     }
 
-    /// The presence assertion, or None when undetermined.
+    /// The boolean constraint value, or None when undetermined.
     fn as_lit(&self) -> Option<bool> {
         self.to_rust().as_lit()
     }
@@ -306,7 +306,7 @@ impl TetrahedralConfiguration {
     }
 }
 
-/// Presence of a CisTrans stereo entity, independent of its configuration or stereogenicity.
+/// A CisTrans stereo constraint, independent of configuration or stereogenicity.
 #[pyclass]
 pub enum CisTransStereoForm {
     Undetermined(),
@@ -333,7 +333,7 @@ impl CisTransStereoForm {
         variant_repr(slf.bind(py).as_any(), "CisTransStereoForm", variant, 0)
     }
 
-    /// The presence assertion, or None when undetermined.
+    /// The boolean constraint value, or None when undetermined.
     fn as_lit(&self) -> Option<bool> {
         self.to_rust().as_lit()
     }

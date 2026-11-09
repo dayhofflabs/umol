@@ -2389,6 +2389,42 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom_lhs(r##"{:atoms [{:modify ["C#T@" "C#T+"]}]}"##, "atom")]
+    #[case::atom_rhs(r##"{:atoms [{:modify ["C#T+" "C#T@"]}]}"##, "atom")]
+    #[case::bond_lhs(
+        r##"{:atoms ["C" "C"] :bonds [{:modify [0 1 ["2#C@" "2#C+"]]}]}"##,
+        "bond"
+    )]
+    #[case::bond_rhs(
+        r##"{:atoms ["C" "C"] :bonds [{:modify [0 1 ["2#C+" "2#C@"]]}]}"##,
+        "bond"
+    )]
+    #[case::alias(r##"{:atom-aliases [:c "C#T@"] :atoms [:c]}"##, "atom")]
+    fn test_reaction_span_dsl_from_edn_stereo_error(
+        #[case] template: &str,
+        #[case] grammar: &'static str,
+        #[values(
+            "0",
+            "1",
+            "{0,1}",
+            "?configuration",
+            "?configuration :: {0,1}",
+            "~0",
+            "'0",
+            "0^(0,1)"
+        )]
+        payload: &str,
+    ) {
+        let source = template.replace('@', payload);
+        let expected = DeError::subgrammar(grammar, ParseError::Syntax);
+        assert_eq!(
+            ReactionSpanDsl::from_edn(&read_string(&source).unwrap()),
+            Err(expected.clone())
+        );
+        assert_eq!(ReactionSpanDsl::from_edn_str(&source), Err(expected.into()));
+    }
+
+    #[rstest]
     fn test_reaction_span_dsl_from_edn_namespaced_key() {
         let source = "{:other/atoms []}";
         let expected = DeError::Custom("unknown span key :other/atoms".into());

@@ -2,10 +2,9 @@ use proptest::prelude::*;
 use rstest::rstest;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    ArithExpr, AromaticValenceForm, CisTransStereoForm, ElementForm, IsotopeMassForm, Lattice,
-    MulticenterValenceForm, NumForm, PredExpr, RelOp, StereoConfigurationForm, StereoCoset,
-    StereoKind, Stereogenicity, StereogenicityForm, TetrahedralStereoForm, Topicity,
-    TopicityRelationForm,
+    ArithExpr, AromaticValenceForm, ElementForm, IsotopeMassForm, Lattice, MulticenterValenceForm,
+    NumForm, PredExpr, RelOp, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
+    StereogenicityForm, Topicity, TopicityRelationForm,
 };
 
 use crate::strategies::*;

@@ -2051,7 +2051,7 @@ pub enum CisTransConfiguration {
 
 macro_rules! stereo_site {
     ($name:ident) => {
-        /// Presence of a fixed stereo kind, independent of configuration and stereogenicity.
+        /// A frame-independent stereo constraint for a fixed kind.
         #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name {
             #[default]
@@ -2452,17 +2452,6 @@ pub(crate) fn coset_join(a: &StereoCoset, b: &StereoCoset, kind: StereoKind) -> 
             canon_coset(StereoCoset::LitSet(sa.union(&sb).copied().collect()), kind)
                 .unwrap_or(StereoCoset::Undetermined)
         }
-    }
-}
-
-/// `target` refines `pattern` under `kind` (meet-derived).
-pub(crate) fn coset_matches(pattern: &StereoCoset, target: &StereoCoset, kind: StereoKind) -> bool {
-    match (
-        coset_meet(pattern, target, kind),
-        canon_coset(target.clone(), kind),
-    ) {
-        (Some(m), Ok(ct)) => m == ct,
-        _ => false,
     }
 }
 
@@ -4845,6 +4834,9 @@ mod tests {
     #[case::coset_match(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), true)]
     #[case::coset_mismatch(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::Tetrahedral, 1)), false)]
     #[case::kind_mismatch(StereoConfigurationForm::from((StereoKind::Tetrahedral, 0)), StereoConfigurationForm::from((StereoKind::CisTrans, 0)), false)]
+    #[case::set_member(StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::lit_set([1, 3])), StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::Lit(3)), true)]
+    #[case::set_nonmember(StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::lit_set([1, 3])), StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::Lit(2)), false)]
+    #[case::specific_vs_open(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
     fn test_stereo_configuration_form_matches(#[case] pattern: StereoConfigurationForm, #[case] target: StereoConfigurationForm, #[case] expected: bool) {
         assert_eq!(pattern.matches(&target), expected);
     }
@@ -5023,18 +5015,6 @@ mod tests {
     #[case::set_union(StereoCoset::lit_set([1, 3]), StereoCoset::lit_set([3, 5]), StereoKind::Octahedral, StereoCoset::lit_set([1, 3, 5]))]
     fn test_coset_join(#[case] a: StereoCoset, #[case] b: StereoCoset, #[case] kind: StereoKind, #[case] expected: StereoCoset) {
         assert_eq!(coset_join(&a, &b, kind), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::wildcard(StereoCoset::Undetermined, StereoCoset::Lit(1), StereoKind::Tetrahedral, true)]
-    #[case::lit_match(StereoCoset::Lit(1), StereoCoset::Lit(1), StereoKind::Tetrahedral, true)]
-    #[case::lit_miss(StereoCoset::Lit(0), StereoCoset::Lit(1), StereoKind::Tetrahedral, false)]
-    #[case::set_member(StereoCoset::lit_set([1, 3]), StereoCoset::Lit(3), StereoKind::Octahedral, true)]
-    #[case::set_nonmember(StereoCoset::lit_set([1, 3]), StereoCoset::Lit(2), StereoKind::Octahedral, false)]
-    #[case::specific_vs_wildcard(StereoCoset::Lit(0), StereoCoset::Undetermined, StereoKind::Tetrahedral, false)]
-    fn test_coset_matches(#[case] pattern: StereoCoset, #[case] target: StereoCoset, #[case] kind: StereoKind, #[case] expected: bool) {
-        assert_eq!(coset_matches(&pattern, &target, kind), expected);
     }
 
     #[rustfmt::skip]

@@ -18,7 +18,9 @@ use crate::ir::electrons::ElectronCountsForm;
 use crate::ir::molecule::MoleculeIntegrityError;
 use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
-use crate::ir::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
+use crate::ir::stereo::{
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
+};
 use crate::mol_dsl;
 
 #[fixture]
@@ -309,11 +311,8 @@ fn test_molecule_dsl_edn_roundtrip_with_keywords_and_aliases() {
 #[case::constraints_noncovalent_ends(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0 1]]}]}"##)]
 #[case::constraints_noncovalent_ends_satisfy(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 3} {:valence 1}]]}]}"##)]
 #[case::constraints_atom_tetrahedral_stereo_keyword(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo :not-stereo}]}]}"##)]
-#[case::constraints_atom_tetrahedral_stereo_lit(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo 1}}]}]}"##)]
-#[case::constraints_atom_tetrahedral_stereo_coset_undetermined(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo :undetermined}}]}]}"##)]
-#[case::constraints_atom_tetrahedral_stereo_set(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo [1 2]}}]}]}"##)]
-#[case::constraints_atom_tetrahedral_stereo_expr(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo "~1"}}]}]}"##)]
-#[case::constraints_bond_cis_trans_stereo(r##"{:atoms ["C" "C"] :bonds [[0 1 "2"]] :constraints [{:bond [0 {:cis-trans-stereo {:stereo 1}}]}]}"##)]
+#[case::constraints_atom_tetrahedral_stereo_positive(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo :stereo}]}]}"##)]
+#[case::constraints_bond_cis_trans_stereo(r##"{:atoms ["C" "C"] :bonds [[0 1 "2"]] :constraints [{:bond [0 {:cis-trans-stereo :stereo}]}]}"##)]
 #[case::stereo_atom_inline_constraints(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1#f(0,1,2)#g/"}]}"##)]
 #[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}]}"##)]
 #[case::stereo_atom_fluxionality_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1 2]]}}]]}]}"##)]
@@ -1526,5 +1525,234 @@ fn test_render_bond_ref(
     assert_eq!(
         render_bond_ref(id, &metadata),
         read_string(expected).unwrap()
+    );
+}
+
+#[rstest]
+#[case::atom(r##"{:atoms ["C#T@"]}"##, "atom")]
+#[case::named_atom(r##"{:atoms [[:c "C#T@"]]}"##, "atom")]
+#[case::atom_alias(r##"{:atom-aliases [:c "C#T@"] :atoms [:c]}"##, "atom")]
+#[case::bond(r##"{:atoms ["C" "C"] :bonds [[0 1 "2#C@"]]}"##, "bond")]
+#[case::named_bond(
+    r##"{:atoms ["C" "C"] :bonds [{:id :b :atoms [0 1] :attrs "2#C@"}]}"##,
+    "bond"
+)]
+fn test_molecule_dsl_from_edn_stereo_error(
+    #[case] template: &str,
+    #[case] grammar: &'static str,
+    #[values(
+        "0",
+        "1",
+        "{0,1}",
+        "?configuration",
+        "?configuration :: {0,1}",
+        "~0",
+        "'0",
+        "0^(0,1)"
+    )]
+    payload: &str,
+) {
+    let source = template.replace('@', payload);
+    let expected = DeError::subgrammar(grammar, ParseError::Syntax);
+    assert_eq!(
+        MoleculeDsl::from_edn(&read_string(&source).unwrap()),
+        Err(expected.clone())
+    );
+    assert_eq!(MoleculeDsl::from_edn_str(&source), Err(expected.into()));
+}
+
+#[rstest]
+#[case::atom(r##"{:atoms ["C"] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo 0}}]}]}"##)]
+#[case::bond(r##"{:atoms ["C" "C"] :bonds [[0 1 "2"]] :constraints [{:bond [0 {:cis-trans-stereo {:stereo 0}}]}]}"##)]
+fn test_molecule_dsl_from_edn_stereo_constraint_error(#[case] source: &str) {
+    let expected = DeError::TypeMismatch {
+        expected: ":undetermined / :not-stereo / :stereo",
+        got: "map",
+        path: Vec::new(),
+    };
+    assert_eq!(
+        MoleculeDsl::from_edn(&read_string(source).unwrap()),
+        Err(expected.clone())
+    );
+    assert_eq!(MoleculeDsl::from_edn_str(source), Err(expected.into()));
+}
+
+#[rstest]
+#[case::ccw(
+    ":ccw",
+    StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+)]
+#[case::cw(
+    ":cw",
+    StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+)]
+#[case::kindless("\"*\"", StereoConfigurationForm::Undetermined)]
+#[case::open(
+    "\"Th*\"",
+    StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)
+)]
+#[case::set("\"Th{0,1}\"", StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
+#[case::variable(
+    "\"Th?configuration\"",
+    StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::var("configuration"))
+    )
+)]
+#[case::swap(
+    "\"Th~?configuration\"",
+    StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::swap(StereoTerm::var("configuration")))
+    )
+)]
+#[case::mirror(
+    "\"Th'?configuration\"",
+    StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::mirror(StereoTerm::var("configuration")))
+    )
+)]
+fn test_molecule_dsl_from_edn_stereo_atom(
+    #[case] attrs: &str,
+    #[case] configuration: StereoConfigurationForm,
+    #[values(false, true)] concrete: bool,
+) {
+    let source = r##"{
+        :atom-aliases [:carbon "C#T+"]
+        :atoms [[:c :carbon] [:f "F"] [:cl "Cl"] [:br "Br"]]
+        :bonds [[:c :f "1"] [:c :cl "1"] [:c :br "1"]]
+        :stereo-atoms [{:id :s :site :c :ligands [:f :cl :br [:virt :c]] :attrs @}]
+    }"##
+    .replace('@', attrs);
+    let via_tree = MoleculeDsl::from_edn(&read_string(&source).unwrap()).unwrap();
+    assert_eq!(MoleculeDsl::from_edn_str(&source), Ok(via_tree.clone()));
+    assert_eq!(
+        MoleculeDsl::from_edn(&via_tree.to_edn()),
+        Ok(via_tree.clone())
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&via_tree.to_string()),
+        Ok(via_tree.clone())
+    );
+
+    let defaults = if concrete {
+        MoleculeDefaults::concrete()
+    } else {
+        MoleculeDefaults::new()
+    };
+    let molecule = via_tree.into_ir(&defaults);
+    assert_eq!(
+        molecule
+            .stereo_atom(StereoAtomId(0))
+            .attributes()
+            .configuration,
+        configuration
+    );
+    assert_eq!(
+        molecule.stereo_atom(StereoAtomId(0)).ligand_ids(),
+        &[
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+        ],
+    );
+    let rendered = MoleculeDsl::from_ir(&molecule, &defaults).to_edn();
+    assert_eq!(
+        MoleculeDsl::from_edn(&rendered).unwrap().into_ir(&defaults),
+        molecule
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&rendered.to_string())
+            .unwrap()
+            .into_ir(&defaults),
+        molecule
+    );
+}
+
+#[rstest]
+#[case::z(
+    ":z",
+    StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+)]
+#[case::e(
+    ":e",
+    StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1))
+)]
+#[case::kindless("\"*\"", StereoConfigurationForm::Undetermined)]
+#[case::open(
+    "\"Ct*\"",
+    StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined)
+)]
+#[case::set("\"Ct{0,1}\"", StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::lit_set([0, 1])))]
+#[case::variable(
+    "\"Ct?configuration\"",
+    StereoConfigurationForm::Kinded(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::var("configuration"))
+    )
+)]
+#[case::swap(
+    "\"Ct~?configuration\"",
+    StereoConfigurationForm::Kinded(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::swap(StereoTerm::var("configuration")))
+    )
+)]
+fn test_molecule_dsl_from_edn_stereo_bond(
+    #[case] attrs: &str,
+    #[case] configuration: StereoConfigurationForm,
+    #[values(false, true)] concrete: bool,
+) {
+    let source = r##"{
+        :atoms [[:c "C"] [:n "N"] [:f "F"] [:cl "Cl"]]
+        :bonds [{:id :b :atoms [:c :n] :attrs "2#C+"} [:c :f "1"] [:n :cl "1"]]
+        :stereo-bonds [{:id :s :site :b :ligands [[:virt :c] :f [:virt :n] :cl] :attrs @}]
+    }"##
+    .replace('@', attrs);
+    let via_tree = MoleculeDsl::from_edn(&read_string(&source).unwrap()).unwrap();
+    assert_eq!(MoleculeDsl::from_edn_str(&source), Ok(via_tree.clone()));
+    assert_eq!(
+        MoleculeDsl::from_edn(&via_tree.to_edn()),
+        Ok(via_tree.clone())
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&via_tree.to_string()),
+        Ok(via_tree.clone())
+    );
+
+    let defaults = if concrete {
+        MoleculeDefaults::concrete()
+    } else {
+        MoleculeDefaults::new()
+    };
+    let molecule = via_tree.into_ir(&defaults);
+    assert_eq!(
+        molecule
+            .stereo_bond(StereoBondId(0))
+            .attributes()
+            .configuration,
+        configuration
+    );
+    assert_eq!(
+        molecule.stereo_bond(StereoBondId(0)).ligand_ids(),
+        &[
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ],
+    );
+    let rendered = MoleculeDsl::from_ir(&molecule, &defaults).to_edn();
+    assert_eq!(
+        MoleculeDsl::from_edn(&rendered).unwrap().into_ir(&defaults),
+        molecule
+    );
+    assert_eq!(
+        MoleculeDsl::from_edn_str(&rendered.to_string())
+            .unwrap()
+            .into_ir(&defaults),
+        molecule
     );
 }

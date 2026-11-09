@@ -851,4 +851,23 @@ mod tests {
 
         assert_eq!(mol.atom(AtomId(0)).attributes().charge, expected_charge);
     }
+    #[rstest]
+    #[case("C#T0")]
+    #[case("C#T{0,1}")]
+    #[case("C#T?configuration")]
+    #[case("C#T~0")]
+    #[should_panic(expected = "invalid atom string")]
+    fn test_atom_error(#[case] input: &str) {
+        let _ = atom(input);
+    }
+
+    #[rstest]
+    #[case("2#C0")]
+    #[case("2#C{0,1}")]
+    #[case("2#C?configuration")]
+    #[case("2#C~0")]
+    #[should_panic(expected = "invalid bond string")]
+    fn test_bond_error(#[case] input: &str) {
+        let _ = bond(0_u32, 1_u32, input);
+    }
 }

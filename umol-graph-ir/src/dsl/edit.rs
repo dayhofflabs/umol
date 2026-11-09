@@ -9074,4 +9074,47 @@ mod tests {
             expected
         );
     }
+
+    #[rstest]
+    #[case::atom_add(r##"[{:atom {:add "C#T@"}}]"##, "atom")]
+    #[case::bond_add(r##"[{:bond {:add [0 1 "2#C@"]}}]"##, "bond")]
+    #[case::atom_expect(
+        r##"[{:atom {:modify [0 {:expect "#T@" :update "#T+"}]}}]"##,
+        "atom-update"
+    )]
+    #[case::atom_update(
+        r##"[{:atom {:modify [0 {:expect "#T+" :update "#T@"}]}}]"##,
+        "atom-update"
+    )]
+    #[case::bond_expect(
+        r##"[{:bond {:modify [0 {:expect "#C@" :update "#C+"}]}}]"##,
+        "bond-update"
+    )]
+    #[case::bond_update(
+        r##"[{:bond {:modify [0 {:expect "#C+" :update "#C@"}]}}]"##,
+        "bond-update"
+    )]
+    fn test_edits_dsl_from_edn_stereo_error(
+        #[case] template: &str,
+        #[case] grammar: &'static str,
+        #[values(
+            "0",
+            "1",
+            "{0,1}",
+            "?configuration",
+            "?configuration :: {0,1}",
+            "~0",
+            "'0",
+            "0^(0,1)"
+        )]
+        payload: &str,
+    ) {
+        let source = template.replace('@', payload);
+        let expected = DeError::subgrammar(grammar, ParseError::Syntax);
+        assert_eq!(
+            EditsDsl::from_edn(&read_string(&source).unwrap()),
+            Err(expected.clone())
+        );
+        assert_eq!(EditsDsl::from_edn_str(&source), Err(expected.into()));
+    }
 }

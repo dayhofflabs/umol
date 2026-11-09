@@ -26,7 +26,7 @@ use crate::ir::molecule::MoleculeEntries;
 use crate::ir::multicenter::MulticenterBondForm;
 use crate::ir::noncovalent::NoncovalentBondForm;
 use crate::ir::num::NumForm;
-use crate::ir::stereo::{CisTransStereo, StereoKind, Stereogenicity};
+use crate::ir::stereo::{StereoKind, Stereogenicity};
 use crate::ir::traits::Normalize;
 use crate::ir::{
     Molecule, MoleculeApplyError, RingScope, RollbackMethod, Transaction, TransactionError,
