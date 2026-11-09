@@ -15,6 +15,8 @@
 //! on methane components; exact H omission uses a finite table of explicit registries.
 //! Export fixtures compare source orderings by canonical GraphIR equality across valence and
 //! isotope policies; generated cases cover fused/linked aromatic systems and mapped reaction stereo.
+//! The mixed aromatic/stereo SMILES roundtrip also checks composite validation of
+//! resolved inputs and re-imported outputs under the same chemistry model.
 //! MOL export compares coordinate-derived stereo with independently specified SMILES, including
 //! absent coordinates and the resolver's undetermined Either outcome. Initial marker spelling
 //! may normalize.
@@ -36,6 +38,7 @@ use umol_graph::ops::resolve::{
     IsotopePolicy, ProjectError, ProjectFlags, ResolveConfig, Resolver,
 };
 use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
+use umol_graph::ops::validate::Validator;
 use umol_graph::registry;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
@@ -71,12 +74,14 @@ proptest! {
         let io = SmilesIoConfig::opensmiles();
         let source = ingest_smiles_with(&input, &io, &model, &config).unwrap();
         let original = source.clone();
+        prop_assert_eq!(Validator::new(&model).validate(&source), Ok(Solution::Determined(())));
         let boundary = Smiles::convey(&source, &model, &config, &io).unwrap();
         prop_assert_eq!(&source, &original);
         let text = boundary.render_with(&io).unwrap();
         prop_assert_eq!(export_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
         prop_assert_eq!(&source, &original);
         let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
+        prop_assert_eq!(Validator::new(&model).validate(&restored), Ok(Solution::Determined(())));
         let context = CanonicalizeContext {
             para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };

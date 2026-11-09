@@ -19,9 +19,9 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0–S2 are
-complete; S3 is in progress and S4 remains pending. S3a–S3e are implemented,
-with passing Rust/Python suites. S3f verifies the combined workflows.
+This records the selected design direction and its consequences. S0–S3 are
+complete, including the combined S3f verification gate. S4 documentation and
+final verification remain pending, starting with S4a.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
 The shared resolver conflict/discharge policy and transformer contracts are
@@ -1386,7 +1386,7 @@ S3a and S3b changed the value types and shared DSL grammar. S3c completed their
 coupled consumer migration and restored a passing Rust/Python test baseline,
 including the required tests, fixtures, generators, and callers.
 S3d and S3e completed valence and aromaticity discharge independently, with
-their own passing checks. S3f verifies the combined workflows.
+their own passing checks. S3f completed the combined workflow verification.
 
 S3c closed the compilation break. Every subsequent subitem starts from a passing
 baseline and must pass its own checks before completion. Molecule
@@ -1669,6 +1669,33 @@ rendering retain their existing design.
   code, fixture, and consumer migrations belong to their owning implementation
   subitem and are not deferred here.
 
+  **Completed — 2026-11-09.** The combined checks cover resolution, validation,
+  stereo addition/removal/enumeration, hydrogen conversion, standalone and
+  aggregate projection, and molecule/reaction import and export. The existing
+  generated mixed aromatic/stereo SMILES roundtrip now also calls Validator
+  before export and after re-import, using the same chemistry model. Its input
+  domain and roundtrip assertions are unchanged.
+
+  The public-symbol and consumer inventory agrees with the completed migration:
+  scalar stereo forms use bool literals; configurations remain on explicit
+  entities; Virtual retains exact ligand identity; all DSL contexts use the
+  reduced attribute grammar. Standalone stereo projection has its model-free
+  associated functions; aggregate projection and export retain explicit stereo.
+  Model ring thresholds, operation configurations, shared contradictions, and
+  the supported Python exports match the recorded interfaces. No further
+  production migration was needed for this gate.
+
+  Verification passed: 26,286 workspace tests (nine ignored), 545 graph-IR
+  properties (one ignored molecule-scope matching case), 224 graph properties,
+  4,219 resolution conformance cases, and 17,260 feature-enabled I/O tests,
+  including property, conformance, layout, and depiction coverage. Resolve and
+  transform benchmarks passed 561 correctness checks; I/O benchmarks passed
+  247. The rebuilt Python 3.13 extension passed 3,427 tests (two skipped).
+  Workspace and feature-enabled graph/I/O Clippy passed with warnings denied;
+  formatting and git diff --check passed. No snapshots changed in this subitem.
+
+**S3 completed — 2026-11-09.**
+
 **S3 gate:** site constraints contain only frame-independent information, all DSL
 contexts reject configuration-bearing #T/#C, and configuration descriptions use
 explicit records. Chemistry operations and export obtain configuration from those
@@ -1782,11 +1809,10 @@ commands cover IO conformance, property tests, and native layout/depiction; the
 all-targets checks compile benchmark callers. Replay the existing graph-IR entity,
 molecule, reaction, span, and edit fuzz targets on their curated seed inputs.
 
-After S0–S2 and the completed S3a and S3b, S3c restores a passing baseline.
-S3d and S3e each depend on S3c and can be implemented and tested independently
-of one another. S3f checks their combined workflows, followed by S4.
+S0–S3 are complete. S3c restored the passing baseline; S3d and S3e passed their
+independent gates, followed by S3f's combined workflow checks. S4 starts with S4a.
 S4d reuses applicable recorded S3f results while source and test inputs remain
 unchanged, and runs the remaining final checks and
 measurement comparisons.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S0–S2 are complete; S3 is in progress and S4 remains pending.
+unchanged. S4 remains pending.
