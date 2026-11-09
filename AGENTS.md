@@ -66,7 +66,8 @@ models. Do not treat a format boundary type as the one true molecular model.
 - Code states current behavior; discussion documents preserve reasoning and history.
 
 Normative guides are `docs/development/data-types.md` (construction and fallibility),
-`integrity.md` (representation contracts), `nomenclature.md` (terms and public names),
+`integrity.md` (representation contracts), `operations.md` (operation semantics),
+`nomenclature.md` (terms and public names),
 `property-tests.md` (property suites), and `python-api.md` (binding semantics and ownership).
 Discussion documents are non-normative and must not be cited from source comments or public rustdoc.
 

@@ -6,7 +6,8 @@ Relates: [214](214-aggregate-frame-semantics-2026-08-28.md),
 [226](226-smiles-roundtrip-design-2026-09-10.md),
 [240](240-validation-constraint-ops-2026-10-18.md),
 [242](242-stereo-transformers-2026-10-29.md),
-[data-type guide](../docs/development/data-types.md)
+[data-type guide](../docs/development/data-types.md),
+[operations guide](../docs/development/operations.md)
 
 ## Scope
 
@@ -23,6 +24,9 @@ complete; S3 is in progress and S4 remains pending. S3a and S3b are implemented;
 graph-IR checks pass, while binding verification awaits the remaining S3 migrations.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
+The shared resolver conflict/discharge policy and transformer contracts are
+recorded below. The remaining subitems implement those contracts; missing plan
+details do not reopen the semantics or authorize additional public interfaces.
 Remaining subitems require explicit instruction. The staged implementation plan
 follows the change inventory.
 
@@ -277,6 +281,47 @@ stereo with an unspecified configuration must retain that assertion, including t
 distinction represented by TableIR's Either bond configuration. No concrete coset
 is chosen merely to make conversion succeed.
 
+## Shared conflict and discharge policy
+
+Valence, aromaticity, and stereo resolution use the same policy. Constraints
+restrict admissible resolutions: unresolved data may be refined, and candidates
+must satisfy the constraints. Resolution must not overwrite explicit data or
+delete a constraint merely to hide a disagreement. A definite conflict between
+independently meaningful descriptions is contradictory under every failure policy.
+
+Discharge removes a constraint only when the resulting structure independently
+entails it. For a normalized constraint C and its independent structural reading D:
+
+- An incompatible meet is a conflict.
+- If D meets C to D, the constraint adds no information and is discharged.
+- If the readings are compatible but C adds information, retain the constraint.
+
+Use the open derived reading of the planned result for this test. An evidenced
+reading includes the assertion itself and cannot prove its redundancy. Closing
+an absent relation to a negative reading cannot justify discharge either. The
+rule applies equally to newly constructed and pre-existing entities; creation
+history does not determine whether a constraint is retained.
+
+| Constraint | Independent structural information | Result |
+| --- | --- | --- |
+| #v4 | Valence 4 | Discharge |
+| #v4 | Valence 3 | Conflict |
+| Atom #a1 | Aromatic-system contribution 1 | Discharge |
+| Atom #a1 | Aromatic-system contribution 2 | Conflict |
+| #T+ or #C+ | Entity of the asserted kind, with any coset | Discharge |
+| #T! or #C! | Entity of the excluded kind | Conflict |
+| #T+ or #C+ | No entity | Construct a compatible entity or retain the constraint; absence alone is not a conflict |
+| #T! or #C! | No entity | Retain; the open derived reading is undetermined |
+
+Realizability failures are separate from conflicts. Where an existing failure
+policy offers Keep or Remove, it may retain or explicitly remove the failed
+source. It must not choose a winner between independently conflicting
+descriptions. Ambiguity is underdetermination, not a realizability failure.
+
+This is the agreed target policy. The current per-resolver discharge paths are
+not yet aligned with it; S3c–S3e implement that alignment. Earlier S2 completion
+notes record the behavior implemented at that stage.
+
 ## Resolution and stereo transformers
 
 StereoResolver remains useful for evidence-driven resolution of stereo constraints. A positive
@@ -286,18 +331,24 @@ and StereoResolver replaces their Virtual ligands with the identified kinds.
 Shared perception and consistency checks must read the reduced stereo constraints
 without extracting configurations from them.
 
-The core contracts of the transformers in doc 242 survive:
+The stereo transformers operate on explicit stereo entities:
 
 - StereoAdder recognizes missing selected entities. New entities have undetermined
   cosets; existing entities, including imported configurations, remain intact.
   Positive stereo constraints supply kind evidence and negative stereo constraints still exclude sites.
-- StereoRemover removes selected entities and clears corresponding stereo constraints at their
-  sites. Its Undetermined mode continues to inspect the explicit entity's coset,
-  so that mode retains its meaning.
+  Addition retains the input's #T/#C assertions; it does not perform resolver discharge.
+- StereoRemover removes selected entities. Its Undetermined mode continues to
+  inspect the explicit entity's coset. Removing an entity also clears its
+  corresponding #T/#C assertion. Assertions at sites where no entity is removed
+  and unrelated assertions remain.
 - StereoEnumerator obtains its configuration domains from explicit entities.
   Its assignment traversal does not need redesign. Checks of configuration domains
   stored in #T/#C disappear; stereo constraint checks and constraints on explicit stereo
-  entities remain applicable.
+  entities remain applicable. Enumeration preserves the scalar assertions.
+
+These contracts apply before resolution as well. An assertion without an entity
+does not become a removal or enumeration target. S3g migrates the operations to
+the reduced constraints and verifies the recorded behavior on partial inputs.
 
 StereoResolveConfig merges its constraint and entity failure policies, leaving
 stereo_atom_failure and stereo_bond_failure. Each covers both a failed stereo constraint and a
@@ -306,9 +357,8 @@ stereo constraint or removes the entity. StereoInconsistency keeps its separate 
 ingest every entity comes from the import, so a caller distinguishes import failures
 from stored failures by the config passed to each call.
 
-Mismatches between independently realizable constraints and entities remain
-contradictory under every failure policy. Keep and Remove apply to realizability
-failures, not to choosing which of two contradictory statements to believe.
+The shared conflict/discharge policy above governs stereo resolution as well as
+valence and aromaticity resolution.
 
 Fixtures that convey configurations through #T0/#T1 or #C0/#C1 must be
 rewritten using explicit stereo entities. Cases without configuration data use
@@ -525,7 +575,7 @@ the other projection stages and boundary conversion still require them.
 | Rust stereo site forms | Keep the named three-state forms, use bool literals and construction, and remove the ground enums and coset-specific methods/conversions. Keep configuration types for explicit stereo entities. |
 | Stereo ligands | Add the Virtual variant and :virt spelling. Update exhaustive kind dispatch, canonical keys, and Python enum conversion. Keep ligand identity and matching exact. |
 | Atom/bond constraint readings | Project the stereo kind without reconstructing a neighbor-relative coset. A known stereo kind can give a positive stereo constraint even when its coset is undetermined. Existing open/complete reading distinctions still apply. A caller that needs a coset uses coset_for with a stated frame. |
-| Validation | Check stereo constraint realizability and agreement with the stereo entities. Configuration and ligand-frame validation continue on explicit entities. |
+| Validation | Check stereo constraint realizability and kind agreement with explicit entities. Validate those entities independently of accompanying scalar assertions, including the frame/configuration prerequisites needed by model checks. Preserve valence and aromaticity validator semantics. |
 | Hydrogen folding/unfolding | Remove special transport of inline #T/#C cosets. Continue maintaining actual/virtual ligands on explicit stereo entities. Hydrogen folding currently has separate code for both representations. |
 | Canonicalization | Remove coset data from atom/bond constraint keys. Those attributes then have their ordinary relabeling semantics; explicit stereo canonicalization still transports its frames and configurations. |
 | Matching and gluing | Ordinary attribute operations compare reduced stereo constraints. Configuration-sensitive comparisons use explicit stereo entities and existing exact frame alignment and transport. |
@@ -572,17 +622,19 @@ implementation, documentation, fixtures, or exhaustive matches.
 | --- | --- | --- |
 | umol-graph/src/ops/resolve/stereo.rs | StereoResolveConfig | Retain the merged failure fields, both defaulting to Error. Add ring_config; the ring-size threshold comes from StereoModel. |
 | Same | StereoFailurePolicy; StereoResolveContradiction; StereoResolveError | Retain the policy. Rename the contradiction wrapper to shared StereoContradiction in ops/stereo.rs; retain its StereoInconsistency payload. Remove the empty error type. |
-| Same | StereoResolver::new, with_config, plan_resolve, resolve, resolve_into | Retain construction; resolution returns Solution directly, without the outer Result. Add missing requested entities and replace Virtual kinds on retained entities. |
+| Same | StereoResolver::new, with_config, plan_resolve, resolve, resolve_into | Retain construction; resolution returns Solution directly, without the outer Result. Add missing requested entities and replace Virtual kinds on retained entities. Discharge entailed positive constraints beside both new and retained entities. |
 | Same | StereoResolver::plan_project, project, project_into | Keep names; remove the receiver and return the direct Result shapes recorded above. |
 | Same | StereoProjectError | Retain UnsupportedStereoAtom, UnsupportedStereoBond, AtomAssertion and BondAssertion; remove StereoAtomFrame and StereoBondFrame. |
 | umol-graph/src/ops/valence.rs and ops/resolve/valence.rs | ValenceContradiction | Move the definition to ops::valence, matching AromaticityContradiction and StereoContradiction in their domain modules. Preserve variants, conversions, and messages; migrate imports and remove the former resolver re-export. |
+| umol-graph/src/ops/resolve/valence.rs and ops/resolve.rs | ValenceResolver::admit; Resolver::plan_constitution | Retain candidate admission. Apply independent entailment to discharge of #v, #d, and #t in the aggregate plan. |
+| umol-graph/src/ops/resolve/aromaticity.rs, ops/aromaticity.rs, and ops/resolve.rs | AromaticityResolver::plan_resolve, plan_bond_discharge; AromaticityPerceiver::plan_aromatic_system; Resolver::plan_constitution | Discharge atom and bond aromatic assertions entailed by new or retained systems. Retain negative assertions whose only support is absence. Keep standalone and aggregate resolution aligned. |
 | umol-graph/src/ops/resolve.rs | ProjectFlags, ProjectError, ProjectContradiction | Remove STEREO, Stereo and Stereo respectively. Retain non-stereo flags and variants; aggregate projection preserves stereo entities. Remove the uninhabited ResolveError::Stereo; retain ResolveContradiction::Stereo with the renamed payload. |
 | umol-graph/src/ops/stereo.rs | StereoPerception; derive; StereoDerivation::stereo_atoms / stereo_bonds | Rename the actor to StereoPerceiver. derive returns Solution explicitly; retain row types for completed stored frames and requested additions. |
 | Same | StereoPerceiver::skipped_stereo_bonds; StereoDerivation::skipped_stereo_bonds | Remove both surfaces in S2g. |
 | Same and ops/stereo/recognize.rs | StereoPerceiver::derive, recognize, new, derive_stereo_atom, derive_stereo_bond, classify; StereoPerceptionError and StereoInconsistency | Pass ring_config to derive and recognize. Pass para_stereo_max_iterations to recognize and classify. Read chemistry thresholds from the captured model. Preserve structural support boundaries and undetermined cosets on newly recognized entities. |
 | umol-graph/src/ops/transform/stereo.rs and ops/transform.rs | StereoAdder, StereoRemover, StereoEnumerator, their configs/errors/iterator; Transform convenience methods | Expose para_stereo_max_iterations on all three configs and forward it to every symmetry path. Adder uses the model threshold and its RingConfig. Preserve supplied descriptions. Remove source-constraint coset handling in S3. |
 | umol-graph/src/ops/transform/hydrogens.rs | HydrogenFolder, HydrogenUnfolder and their errors/configs | Retain interfaces; remove inline-constraint coset transport and maintain explicit frames through existing edits. Virtual is not implicitly an H ligand. |
-| umol-graph/src/ops/validate/stereo.rs | StereoConformanceValidator, StereoValidateConfig, StereoConformanceContradiction | Use ring_config and para_stereo_max_iterations from StereoValidateConfig. Validate both model ring-size limits through RingTooSmall and RingTooSmallForE; retain the validation entry point and error type. |
+| umol-graph/src/ops/validate/stereo.rs | StereoConformanceValidator, StereoValidateConfig, StereoConformanceContradiction | Use ring_config and para_stereo_max_iterations from StereoValidateConfig. Validate both model ring-size limits through RingTooSmall and RingTooSmallForE. Compare scalar constraints by kind and validate explicit descriptions independently of site assertions, with direct configuration prerequisites. Retain public entry points and diagnostic families. |
 | umol-graph/src/ops/model.rs | StereoModel | Own stereo_bond_min_ring_size and stereo_bond_e_min_ring_size, both defaulting to 8. Preserve the other model fields. |
 | umol-graph-ir/src/ir/symmetry.rs | GraphSymmetryConfig::max_iterations; refinement counter | Use u32 for the limit and counter. Preserve the refinement algorithm. |
 | umol-io/src/table_ir/raise.rs | `TryIntoIr<Molecule>` for &table_ir::Molecule; RaiseError | Retain public conversion shape and existing error vocabulary. Wedge and bond-frame paths produce explicit entities and report unrepresentable frames at this boundary. |
@@ -661,7 +713,9 @@ in the value interface gives it a Rust-owned implementation.
 | dsl/atom.rs, bond.rs, stereo.rs, molecule/tests.rs, reaction.rs, reaction_span.rs, edit.rs; tests/property/stereo/serialization.rs and molecule/serialization.rs | Reject configuration-bearing #T/#C consistently in every context. Test explicit stereo records with literal, set, variable, and operator configurations, defaults, aliases, and exact tree/streaming/render roundtrips. Preserve unrelated kindless-payload equivalence contracts. |
 | umol-graph-ir/src/macros.rs tests | Check uniform rejection of configuration-bearing #T/#C through the existing DSL macros. |
 | tests/property/molecule/{canonicalize,remap,reframe,meet_pushout}.rs; property/substructure.rs; property/reaction and property/edit families | Retain relabeling, frame-transport, pushout, reaction, edit, and rollback laws. Check same-configuration and enantiomer distinctions, including Virtual ligands, without weakening exact gluing or old-state checks. |
+| umol-graph/src/ops/resolve/valence.rs, resolve/aromaticity.rs, resolve.rs; tests/property/resolve.rs | Cover the common conflict/discharge policy: independently entailed constraints, compatible retained information, definite conflicts, new and existing systems, and negative assertions without a supporting relation. Preserve candidate-selection and resolution laws. |
 | umol-graph/src/ops/stereo.rs, recognize/tests.rs, resolve/stereo.rs and resolve.rs; ops/validate/stereo.rs | Cover direct imported entities, virtual-kind replacement with unchanged coset, merged policies, unconditional mismatch contradictions, removal of general ring suppression, and lossy standalone projection. |
+| umol-graph/src/ops/validate/stereo.rs, valence.rs, aromaticity.rs, constraint/incidence.rs, and validate.rs | Cover kind agreement independently of coset uncertainty, explicit entity failures without site assertions, direct coset-range rejection, unchanged inputs, and composite validation. Preserve valence/aromaticity outcomes and the tier-2 open/complete distinction. |
 | ops/transform/stereo/tests, stereo/enumeration/tests.rs, hydrogens/tests; tests/property/transform/stereo and hydrogens.rs | Preserve selection, enumeration, reconstruction, and existing-entity laws. Move configuration descriptions to explicit entities. Isolated atom examples that only test the stereo constraint use #T+. |
 | umol-io/src/table_ir/raise.rs; CTfile and SMILES parser/render tests; umol-graph/src/ingest.rs and export.rs; tests/property/project.rs and resolve.rs | Update expected imported carriers. Cover alkene H, azo LP, mixed imine ligands, Either/unspecified stereo, output rejection, ring-policy placement, explicit frame transport, and molecule/reaction roundtrips. Aggregate projection assertions must now retain entities. |
 | umol-graph/tests/resolution/data and tests/kekulization/data | Migrate the 59 fixture files using the old syntax: 21 in stereo_tetrahedral, 19 in stereo_cis_trans, 17 elsewhere in resolution data, and 2 in kekulization data. Preserve their intended chemistry and update carrier and ring-policy expectations. |
@@ -670,7 +724,7 @@ in the value interface gives it a Rust-owned implementation.
 | umol-graph/benches/resolve.rs, transform.rs and transform/stereo.rs | Update instance projection calls, Solution assumptions, aggregate output checks, and configuration-bearing input strings. Use explicit stereo records while preserving the measured operation and iterator lifetime controls. |
 | umol-graph-ir/benches/canonicalize.rs, constraint_readings.rs, editor.rs, integrity.rs; IO parsing/layout/SVG benchmarks | Add or adapt representative Virtual and explicit stereo fixtures where those operations are measured. Preserve the measured operation; parser or entity-only fixtures are not interchangeable workloads. |
 | umol-graph-ir/fuzz/fuzz_targets/fuzz_entity_strings.rs, fuzz_molecule.rs, fuzz_reaction.rs, fuzz_reaction_span.rs and fuzz_edits.rs | Preserve parser and tree/streaming parity laws. Configuration-bearing #T/#C inputs become rejection cases in every context; add valid explicit stereo-record and Virtual seeds. Keep generated corpora as historical inputs, not bulk migration targets. |
-| umol-graph-ir/spec/umol-dsl-spec.md; docs/chemistry/representation.md; docs/development/data-types.md and python-api.md; relevant nomenclature entries | Synchronize carrier, conversion, frame, and binding descriptions. Remove wording that equates a stereo entity or NotStereo with stereogenicity. |
+| umol-graph-ir/spec/umol-dsl-spec.md; docs/chemistry/representation.md; docs/development/data-types.md, operations.md, and python-api.md; relevant nomenclature entries | Synchronize carrier, conversion, frame, and binding descriptions. Record the shared resolver conflict/discharge policy in the operations guide. Remove wording that equates a stereo entity or NotStereo with stereogenicity. |
 | .agents/skills/mol-notation/SKILL.md and its .claude redirect | Update canonical notation guidance to reject configuration-bearing #T/#C and document explicit stereo records and :virt. Preserve shared-skill ownership; update other examples only where their actual claims become false. |
 
 The gated suites are graph-ir's property target with proptest; graph's property
@@ -1266,10 +1320,12 @@ remains S3.
 ### S3 — Remove configuration-bearing site constraints
 
 This is the coordinated breaking stage. The value types, shared DSL grammar,
-and their Rust/Python consumers must change together. The five subitems divide
+and their Rust/Python consumers must change together. The subitems divide
 that change by responsibility; the stage ends only when their combined build and
 tests pass. Molecule entry storage, frame construction, entity id allocation,
 and explicit-record rendering retain their existing design.
+S3c and S3d introduce no further API break; their executable verification shares
+the S3i gate while the stereo consumer migration remains incomplete.
 
 - **S3a — Reduce site values and their structural readings** — breaking (red→green).
   Modules: umol-graph-ir/src/ir/stereo.rs,
@@ -1355,24 +1411,149 @@ and explicit-record rendering retain their existing design.
   11,958 library tests and 545 property tests, plus the integration, macro, and
   documentation tests. Clippy passed for graph-IR with proptest, all targets,
   and warnings denied; formatting and git diff --check passed. The coordinated
-  workspace and binding gate remains S3e. The umol-graph check stops in the
-  consumers assigned to S3c and S3d.
+  workspace and binding gate remains S3i. The umol-graph check stops in the
+  consumers assigned to S3e–S3h.
 
-- **S3c — Remove site-coset handling from chemistry operations** — breaking (red→green).
+- **S3c — Discharge entailed #v, #d, and #t constraints** — behavior change (green).
+  Modules: umol-graph/src/ops/resolve/valence.rs,
+  umol-graph/src/ops/resolve.rs, and their tests;
+  umol-graph/tests/property/resolve.rs. [dep: S3a]
+
+  Retain candidate admission and completion selection. In
+  Resolver::plan_constitution, discharge #v, #d, and #t only when their
+  independent open derived readings entail them. This extends the existing
+  #v discharge to redundant donated- and accepted-pair constraints, rather
+  than retaining those keys unconditionally. Keep compatible constraints that
+  still add information and preserve rejection of definite conflicts.
+
+  Verify both valence strategies, entailed #v with and without field changes,
+  entailed #d/#t on explicit dative incidence, and retained zero-pair assertions
+  when no dative relation supplies evidence. Assert complete output molecules,
+  exact conflict outcomes, idempotence, and unchanged in-place inputs on
+  rejection. Preserve the existing candidate-selection laws.
+
+- **S3d — Discharge aromaticity constraints beside new and retained systems** — behavior change (green).
+  Modules: umol-graph/src/ops/resolve/aromaticity.rs,
+  umol-graph/src/ops/aromaticity.rs,
+  umol-graph/src/ops/resolve.rs, and their tests;
+  umol-graph/src/ops/transform/aromaticity.rs;
+  umol-graph/tests/property/resolve.rs. [dep: S3a]
+
+  Apply independent entailment to atom aromatic-valence and bond-aromaticity
+  assertions against the planned aromatic systems. Discharge redundant
+  assertions beside retained systems as well as new systems. Stop treating
+  absence of a selected system as sufficient to discharge a negative assertion.
+  Apply the same rule in standalone aromaticity planning and aggregate
+  Resolver::plan_constitution. Preserve selection and mismatch rejection under
+  both failure policies. Preserve Aromatizer's insertion and assertion-removal
+  contract when adjusting the shared AromaticityPerceiver::plan_aromatic_system
+  method.
+
+  Verify atom contributions and bond assertions with new and existing systems,
+  retained negatives outside systems, positive requests retained under Keep
+  when unrealizable, and exact mismatch contradictions under Error and Keep.
+  Check full outputs, idempotence, standalone/aggregate agreement, and unchanged
+  inputs on rejected in-place resolution. Preserve the aromaticity search laws.
+
+- **S3e — Resolve #T/#C constraints and identify virtual ligand kinds** — breaking (red→green).
   Modules: umol-graph/src/ops/stereo.rs,
-  umol-graph/src/ops/stereo/recognize.rs,
   umol-graph/src/ops/resolve/stereo.rs,
-  umol-graph/src/ops/validate/stereo.rs,
+  umol-graph/src/ops/resolve.rs, and their tests;
+  umol-graph/tests/property/resolve.rs. [dep: S3a, S2d]
+
+  Remove configuration extraction and implicit-frame coset transport from
+  StereoPerceiver::derive. Construct missing requested entities with an
+  undetermined coset; identify Virtual ligand kinds on retained entities while
+  preserving frame positions, configurations, and entity-local constraints.
+  Compare scalar constraints by kind independently of coset interpretation or
+  virtual-ligand ambiguity. Coset validation remains with the validator.
+
+  In StereoResolver::plan_resolve, discharge positive constraints entailed by
+  either new or retained entities of the corresponding kind. Retain negatives
+  at sites without an entity. Reject definite kind conflicts under every
+  failure policy; use those policies only for realizability failures. Preserve
+  the existing determined/underdetermined planning and application contracts.
+
+  Verify tetrahedral and bond stereo, new and retained entities, literal,
+  unspecified, and symbolic configurations, virtual-kind identification,
+  retained negatives and unresolved positive requests, and conflicts under all
+  policies. Check established kind conflicts even when the frame identification
+  is underdetermined. Assert complete outputs, exact diagnostics, idempotence,
+  and unchanged inputs on rejected or underdetermined in-place resolution.
+
+- **S3f — Validate explicit stereo entities independently of scalar assertions** — breaking (red→green).
+  Modules: umol-graph/src/ops/validate/stereo.rs,
+  umol-graph/src/ops/validate.rs; owning tests in
+  umol-graph/src/ops/validate/constraint/incidence.rs,
+  umol-graph/src/ops/validate/valence.rs, and
+  umol-graph/src/ops/validate/aromaticity.rs. [dep: S3e]
+
+  Apply the tier-3 contract in the operations guide through
+  StereoConformanceValidator::validate. Consume the kind agreement and
+  realizability findings from StereoPerceiver::derive. For supported known
+  kinds, reject an explicit entity's unrealizability whether or not its site
+  carries a scalar assertion. Report entity failures through the existing
+  StereoInconsistency::StereoAtomFailure and StereoBondFailure variants, wrapped
+  by StereoConformanceContradiction::Inconsistency. Keep the existing scalar
+  constraint failure and mismatch variants for their respective findings.
+
+  In validate, establish each explicit entity's kind/frame/configuration
+  prerequisites before calling validate_rings or the symmetry checks in
+  validate_stereo_atom and validate_stereo_bond. Check admissible coset indices
+  directly and report invalid configurations through the corresponding entity
+  failure diagnostic. These prerequisites remain model-independent; ring and
+  symmetry conformance remain separate checks. Configuration uncertainty leaves
+  dependent checks underdetermined without suppressing a known kind conflict.
+
+  Retain public entry points, configs, diagnostic variants, and the existing
+  ring and symmetry semantics. ValenceConformanceValidator and
+  AromaticityConformanceValidator retain their semantics.
+  IncidenceConstraintInvariantsValidator retains DerivedKind::Derived and
+  DerivedComplete and their distinct absence readings. Established contradictions
+  take precedence over unrelated uncertainty; validation leaves every input unchanged.
+
+  Verify entity failures with and without site assertions, kind agreement with
+  unspecified or symbolic cosets, invalid literal and finite-set coset indices,
+  virtual-ligand ambiguity, and established conflicts on partial inputs. Retain
+  ring-limit, ring-relative E, stereogenicity, topicity, and ligand-symmetry
+  cases. Check exact outcomes through standalone and composite validation,
+  unchanged inputs on every outcome, and open/complete incidence validation
+  of a positive assertion without an entity.
+
+- **S3g — Update stereo and hydrogen transformations for reduced #T/#C constraints** — breaking (red→green).
+  Modules: umol-graph/src/ops/stereo/recognize.rs,
   umol-graph/src/ops/transform/stereo.rs,
   umol-graph/src/ops/transform/stereo/enumeration.rs,
-  umol-graph/src/ops/transform/hydrogens.rs. [dep: S3a, S2d]
+  umol-graph/src/ops/transform/hydrogens.rs. [dep: S3e]
 
-  Remove every remaining source of configuration data from site constraints.
-  Resolve positive markers into missing entities with undetermined cosets.
-  Preserve the addition/removal selectors and existing-entity behavior; obtain
-  enumeration domains only from explicit configurations and retain entity-local
-  constraint checks. Delete hydrogen-folding transport of site-constraint cosets
-  while retaining transport and ligand conversion on explicit entities.
+  In StereoPerceiver::recognize and StereoAdder, read positive and negative
+  #T/#C as kind constraints. Positive assertions supply kind evidence and
+  negatives exclude sites. New entities have undetermined cosets; existing
+  entities and all input assertions remain intact. Preserve rejection of
+  contradictory selected evidence and the existing required-input errors.
+
+  StereoRemover removes only selected entities and clears the corresponding
+  #T/#C assertion only where an entity is removed. Keep assertions at sites
+  without a removed entity and keep unrelated assertions. Preserve All and
+  Undetermined mode semantics and the shared selection rules.
+
+  StereoEnumerator obtains domains only from existing entities' configurations.
+  Remove intersections with configuration domains formerly stored in #T/#C;
+  retain checks of the reduced scalar constraints and entity-local constraints.
+  Preserve scalar assertions, frame positions, kinds, unselected data, assignment
+  order, multiplicity, iterator ownership, and the existing rejection of selected
+  unsupported symbolic configurations. An assertion alone supplies no enumeration
+  target.
+
+  HydrogenFolder and HydrogenUnfolder leave #T/#C unchanged. Delete scalar
+  coset transport. Convert actual hydrogen ligands and ImplicitHydrogen ligands
+  at the corresponding explicit frame positions, preserving configurations and
+  entity-local constraints. Retain explicit frame transport where positions
+  change. Virtual is never identified as hydrogen by these operations.
+
+  Apply these same contracts to inputs before resolution, including assertions
+  without entities and partial entity data. Retain the existing operation
+  interfaces, selectors, configs, and error variants.
 
   Verify each operation's full outputs and failure behavior. Include retained
   imported configurations, unspecified and symbolic cosets, enumeration order
@@ -1380,30 +1561,46 @@ and explicit-record rendering retain their existing design.
   and exact frame/configuration preservation. A Virtual ligand must not be
   treated as an implicit hydrogen during folding or unfolding.
 
-- **S3d — Separate lossy stereo projection from export** — breaking (red→green).
+- **S3h — Project stereo entities to #T+/#C+ and export their framed configurations** — breaking (red→green).
   Modules: umol-graph/src/ops/resolve/stereo.rs,
   umol-graph/src/ops/resolve.rs,
   umol-graph/src/export.rs,
   umol-graph/tests/property/project.rs,
-  umol-graph/benches/resolve.rs. [dep: S3a, S2i]
+  umol-graph/benches/resolve.rs. [dep: S3e, S2i]
 
-  Make standalone stereo projection model-free, using the agreed associated
-  functions and direct Result returns. Replace supported entities with positive
-  markers and remove obsolete frame errors. Remove the stereo stage and variants
-  from aggregate projection so that it retains explicit stereo entities.
+  Make StereoResolver::plan_project, StereoResolver::project, and
+  StereoResolver::project_into associated functions without a model or receiver,
+  using the Result signatures in [Projection](#projection). Replace supported
+  stereo atoms and stereo bonds with #T+ and #C+, respectively, discarding
+  their frames, configurations, and entity-local constraints. Accept Virtual
+  ligands and every coset because those values are discarded. Reject unsupported
+  or undetermined kinds and conflicts with negative scalar constraints.
 
-  Make Convey encode those entities directly, transporting cis/trans reference
-  choices and reading their frames for hydrogen omission. Reject Virtual kinds,
-  unsupported cosets, unpreservable entity constraints, and remaining site
-  constraints that cannot be encoded. Preserve specified small-ring stereo;
-  add no I/O ring filter.
+  Retain StereoProjectError::UnsupportedStereoAtom, UnsupportedStereoBond,
+  AtomAssertion, and BondAssertion. Remove StereoAtomFrame and StereoBondFrame.
+  Remove ProjectFlags::STEREO, ProjectError::Stereo, and
+  ProjectContradiction::Stereo. Resolver::project keeps its other stages and
+  preserves explicit stereo entities.
 
-  Test standalone projection's deliberate loss and idempotence, negative-marker
+  Make Convey read configurations and ligand frames from those entities,
+  transport the stereo bond's reference choices to TableIR's references, and inspect
+  the explicit frames for hydrogen omission. Retain current boundary support:
+  tetrahedral output requires a supported determined winding; undetermined bond
+  configuration uses TableIR's Either. Configurations not reducible to supported
+  boundary values remain rejected.
+
+  Reject Virtual ligands and entity-local constraints that TableIR cannot
+  preserve. A corresponding entity can discharge a positive #T/#C constraint
+  during conversion; a positive constraint without an entity and negative
+  stereo constraints remain unrepresentable. Preserve specified small-ring
+  stereo without an additional output filter. Convey retains its public arguments.
+
+  Test standalone projection's deliberate loss and idempotence, negative-constraint
   conflicts, aggregate projection's retention of entities, and exact molecule
   and reaction export roundtrips. Verify unchanged borrowed inputs on rejection
   and update the affected projection benchmark calls and correctness checks.
 
-- **S3e — Complete the remaining consumer and fixture migration** — breaking (red→green).
+- **S3i — Migrate fixtures, Python consumers, benchmarks, and fuzz inputs** — breaking (red→green).
   Modules: umol-graph-ir/tests/property/strategies.rs,
   umol-graph/tests/property/strategies.rs,
   umol-graph/tests/resolution/data,
@@ -1411,7 +1608,7 @@ and explicit-record rendering retain their existing design.
   umol-py/src/molecule.rs,
   umol-py/src/reaction.rs,
   umol-py/tests, and the remaining test, fuzz, and benchmark files identified in
-  the change inventory. [dep: S3b, S3c, S3d]
+  the change inventory. [dep: S3b, S3c, S3d, S3e, S3f, S3g, S3h]
 
   Reconcile every inventoried consumer with its owning subitem. Preserve the
   intended chemistry while rewriting configuration descriptions as explicit
@@ -1430,29 +1627,77 @@ and explicit-record rendering retain their existing design.
 contexts reject configuration-bearing #T/#C, and configuration descriptions use
 explicit records. Chemistry operations and export obtain configuration from those
 entities. All affected callers compile and pass their tests; ligand identity and
-matching remain exact.
+matching remain exact. Valence, aromaticity, and stereo resolution follow the
+shared conflict/discharge policy.
+Conformance validation checks explicit stereo descriptions independently of
+site assertions and preserves the tier-2 open/complete reading choice.
 
 ### S4 — Documentation and final verification
 
-- **S4a — Update the permanent descriptions and examples** — additive (green).
+- **S4a — Document reduced #T/#C constraints and explicit stereo entities** — additive (green).
   Modules: umol-graph-ir/spec/umol-dsl-spec.md,
   docs/chemistry/representation.md,
   docs/development/data-types.md,
   docs/development/python-api.md,
   docs/development/nomenclature.md,
-  .agents/skills/mol-notation/SKILL.md. [dep: S3e]
+  .agents/skills/mol-notation/SKILL.md. [dep: S3i]
 
-  Update the representation, construction, syntax, conversion, and binding
-  contracts to match the implementation. Correct affected examples and wording
-  that equates a stereo description with stereogenicity. Preserve shared-skill
-  ownership and review the complete source/documentation diff against the
-  inventory. Source comments and rustdoc describe current behavior without
-  referring to discussion records.
+  Document the settled representation, construction, syntax, conversion, and
+  binding contracts and verify implementation compliance. Record an implementation
+  discrepancy under its owning S3 subitem and correct it there. Correct affected
+  examples and wording that equates a stereo description with stereogenicity.
+  Preserve shared-skill ownership and review the complete source/documentation
+  diff against the inventory. Source comments and rustdoc describe the implemented
+  contract without referring to discussion records.
 
-- **S4b — Run final checks and compare measurements** — verification (green).
+- **S4b — Document resolver conflict and discharge semantics** — additive (green).
+  Modules: docs/development/operations.md,
+  docs/development/README.md, docs/development/data-types.md,
+  docs/development/nomenclature.md, and AGENTS.md. [dep: S4a]
+
+  Extend the operations guide with the conflict/discharge policy for valence,
+  aromaticity, and stereo, including refinement, independent structural
+  entailment, open readings, and the separation of conflicts from
+  realizability-failure recovery.
+
+  Consolidate resolver conflict, discharge, and recovery-policy explanations
+  from nomenclature.md's Discharge, Failure, Inconsistency, Mismatch, Policy,
+  Recovery action, and Resolution entries. Retain the term definitions there
+  and link to the operations guide for the rules. Review data-types.md's
+  Validation and Resolution, projection, and transformations sections for
+  overlapping operation-policy prose; replace duplication with links while
+  preserving its construction, ownership, and publication contracts.
+
+  Keep integrity.md separate. Preserve the recorded tier-3 conformance contract,
+  keep guide links synchronized, and check implementation against the recorded
+  contracts. Broader operation-documentation work is inventoried in S4c.
+
+  The tier-3 section and guide registration are recorded on 2026-11-09.
+  Resolver-policy documentation and consolidation remain pending.
+
+- **S4c — Inventory operations needing explicit semantic documentation** — additive (green).
+  Module: discussion/243-stereo-site-assertions-2026-11-07.md. [dep: S4b]
+
+  Review public operation families against data-types.md, nomenclature.md,
+  algorithms.md, and the operations guide. Cover perception and derivation,
+  resolution, projection and boundary conversion, validation, transformers,
+  normalization, canonicalization, frame transport, matching, and rewriting.
+  Enumerate the operations whose intended contracts need explicit documentation
+  or consolidation.
+
+  Record a table here with the owning API, a summary of its intended contract,
+  existing references, missing documentation, and any confirmed implementation
+  discrepancies. Include effects on attributes, entities, and constraints,
+  partial-input behavior, failure outcomes, and preservation obligations where
+  relevant. Identify the documentation or implementation follow-up for each gap.
+  This subitem ends with the inventory; writing the remaining guide sections
+  and implementing fixes are separately tracked work. Existing semantics remain
+  the basis for those follow-ups.
+
+- **S4d — Run final checks and compare measurements** — verification (green).
   Modules: the test and benchmark targets listed below, and
   discussion/243-stereo-site-assertions-2026-11-07.md,
-  discussion/000-status.md. [dep: S4a]
+  discussion/000-status.md. [dep: S4c]
 
   Run the completion commands and replay the curated parser inputs. Repeat the
   selected S0 benchmarks with the same inputs and timing settings. Compare fixed

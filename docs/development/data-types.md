@@ -398,6 +398,9 @@ validation and `*ConformanceValidator` names validation under a selected chemist
 return `Result<Solution<_, _>, _>` because a coherent non-ground representation may leave a semantic
 question underdetermined.
 
+The shared execution and outcome contract for model-dependent validators is defined in
+[Operation semantics](operations.md#tier-3-conformance-validators).
+
 Validation remains separate even when a property is model-independent. Whether reaction deltas can
 materialize a two-sided span is a precondition of operations that require that representation, not
 a DPO condition. DPO dangling and identification conditions depend on a host and match and belong
