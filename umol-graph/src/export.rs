@@ -830,6 +830,8 @@ mod tests {
     #[case::explicit_h("[H][C@](F)(Cl)Br", "[H][C@](F)(Cl)Br")]
     #[case::trans("F/C=C/Cl", "F/C=C/Cl")]
     #[case::cis("F/C=C\\Cl", "F/C=C\\Cl")]
+    #[case::ring_e("C1=C/CCCC/1", "C/1=C\\CCCC1")]
+    #[case::ring_z("C1=C\\CCCC/1", "C/1=C/CCCC1")]
     #[case::branched_stereo("F/C(Cl)=C(/Br)I", "FC(/Cl)=C(Br)\\I")]
     #[case::conjugated("C/C=C/C=C/C", "C/C=C/C=C/C")]
     fn test_smiles_convey_roundtrip(#[case] input: &str, #[case] expected: &str) {
@@ -1134,6 +1136,10 @@ mod tests {
     #[case::alkene(
         "[F:9]/[CH:2]=[CH:7]/[Cl:3]>>[F:9]/[CH:2]=[CH:7]\\[Cl:3]",
         "[F:1]/[CH:2]=[CH:3]/[Cl:4]>>[F:1]/[CH:2]=[CH:3]\\[Cl:4]"
+    )]
+    #[case::ring_e_z(
+        "[CH:1]1=[CH:2]/[CH2:3][CH2:4][CH2:5][CH2:6]/1>>[CH:1]1=[CH:2]\\[CH2:3][CH2:4][CH2:5][CH2:6]/1",
+        "[CH:1]/1=[CH:2]\\[CH2:3][CH2:4][CH2:5][CH2:6]1>>[CH:1]/1=[CH:2]/[CH2:3][CH2:4][CH2:5][CH2:6]1"
     )]
     #[case::aromatic(
         "[cH:19]1[cH][cH][cH][cH][cH]1>>[cH:19]1[cH][cH][cH][cH][cH]1",

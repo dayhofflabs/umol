@@ -61,16 +61,22 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AromaticValenceForm, AtomId, RollbackMethod};
+    use umol_graph_ir::ir::{
+        AromaticValenceForm, AtomId, BondId, RollbackMethod, StereoBondForm, StereoBondId,
+        StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    };
+    use umol_graph_ir::mol_dsl_concrete;
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ir;
 
-    use super::{parse_mol_bytes, parse_mol_bytes_with};
+    use super::{parse_mol_bytes, parse_mol_bytes_with, parse_mol_with};
     use crate::ops::model::{
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
         RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
     };
-    use crate::ops::resolve::{ResolveConfig, ResolveUnderdetermined, Resolver};
+    use crate::ops::resolve::{
+        ResolveConfig, ResolveUnderdetermined, Resolver, StereoFailurePolicy, StereoResolveConfig,
+    };
     use crate::ops::valence::ValenceTable;
     use crate::ops::validate::ConnectivityModel;
 
@@ -128,6 +134,104 @@ mod tests {
             )
             .unwrap()
         );
+    }
+
+    #[rstest]
+    #[case::z(1.0, StereoCoset::Lit(0))]
+    #[case::e(-1.0, StereoCoset::Lit(1))]
+    fn test_parse_mol_bytes_with_stereo(
+        #[case] ligand_y: f64,
+        #[case] coset: StereoCoset,
+        #[values(0, 8, 64)] stereo_bond_min_ring_size: u32,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+    ) {
+        let input = format!(
+            r#"cyclohexene
+  umol           2D
+
+  6  6  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0000    2.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0000    2.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0000{ligand_y:10.4}    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  5  6  1  0  0  0  0
+  6  1  1  0  0  0  0
+M  END
+"#
+        );
+        let original = input.clone();
+        let raised = parse_mol_to_ir(&input).unwrap();
+        let frame = vec![
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+        ];
+        assert_eq!(
+            raised
+                .stereo_bonds()
+                .iter()
+                .map(|view| (
+                    view.site_id(),
+                    view.ligand_ids().to_vec(),
+                    view.attributes().clone(),
+                ))
+                .collect::<Vec<_>>(),
+            vec![(
+                BondId(0),
+                frame,
+                StereoBondForm::new(StereoKind::CisTrans, coset.clone())
+            )]
+        );
+        let mut expected = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#i=#h" "C#i=#h" "C#i=#h2" "C#i=#h2" "C#i=#h2" "C#i=#h2"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [5 [:h 0] 2 [:h 1]] :attrs "Ct0"}]
+        }"#
+        );
+        expected
+            .stereo_bond_mut(StereoBondId(0))
+            .attributes_mut()
+            .configuration = StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
+        let model = ChemistryModel {
+            valence: ValenceModel::mdl(),
+            stereo: StereoModel {
+                stereo_bond_min_ring_size,
+                stereo_bond_e_min_ring_size: 64,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            stereo: StereoResolveConfig {
+                stereo_atom_failure: failure,
+                stereo_bond_failure: failure,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            parse_mol_bytes_with(input.as_bytes(), &CtfileIoConfig::basic(), &model, &config)
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            parse_mol_with(&input, &CtfileIoConfig::basic(), &model, &config).unwrap(),
+            expected
+        );
+        assert_eq!(input, original);
     }
 
     #[rstest]

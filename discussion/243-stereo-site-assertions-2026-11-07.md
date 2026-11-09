@@ -18,10 +18,10 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0, S1, and S2a–S2h
-are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
-interfaces, and names below are the working design. S2 records the revised
-perception/resolution proposal; it is provisional, not final design approval.
+This records the selected design direction and its consequences. S0–S2 are
+complete; S3–S4 remain pending. The semantics, value interface, operation
+interfaces, and names below are the working design. S2 records the implemented
+perception/resolution interfaces.
 Remaining subitems require explicit instruction. The staged implementation plan
 follows the change inventory.
 
@@ -839,9 +839,8 @@ pass together. Configuration-bearing site forms still exist at this point.
 
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
-**Working proposal — 2026-11-08.** Recorded for continuation, not final design
-approval. S2a–S2h are complete; implementation of the remaining subitems awaits
-explicit instruction. Record completion and verification under each subitem.
+**Implemented — 2026-11-08.** S2a–S2i are complete and the stage gate passed.
+Site-value reduction and the projection/export migration remain S3.
 
 Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
 checks supported stored frames and requests missing entities from positive
@@ -1223,7 +1222,8 @@ until S3; model-owned ring-size filtering is implemented in S2g.
   and umol-graph/src/parse.rs; umol-py/tests/test_model.py,
   umol-py/tests/test_resolve.py, umol-py/tests/test_molecule_stereo.py,
   umol-py/tests/test_molecule_stereo_enumeration.py,
-  umol-py/tests/test_molecule.py, umol-py/tests/test_class_constructor_signatures.py;
+  umol-py/tests/test_molecule.py, umol-py/tests/test_smiles_export.py,
+  umol-py/tests/test_class_constructor_signatures.py;
   affected benchmarks and docs/development/python-api.md. [dep: S2g, S2h]
 
   Compare missing stereo, #C+, and explicit stereo under the same operation
@@ -1240,12 +1240,28 @@ until S3; model-owned ring-size filtering is implemented in S2g.
   affected benchmark correctness checks. Update current docs to the implemented
   contracts; record actual outcomes under these subitems.
 
+  **Completed — 2026-11-08.** Added 71 Rust and 12 Python cases. Combined
+  operation checks compare missing stereo, #C+, and supplied configurations under
+  the same model and algorithm settings. SMILES and MOL callers preserve E/Z
+  descriptions through raising and resolution under all failure policies;
+  molecule and mapped-reaction export roundtrips retain small-ring stereo and
+  borrowed inputs. Python covers model thresholds and small-ring enumeration.
+  Existing property laws and generated domains remain intact.
+
+  Verification passed: workspace 26,105; graph-IR properties 545; graph properties
+  223; resolution conformance 4,219; I/O with property, conformance, and depiction
+  features 17,260; Python 3,272 after rebuilding the extension on Python 3.13.16.
+  Existing ignored/skipped cases remain excluded. All 561 resolve/transform
+  benchmark correctness checks, workspace and feature-enabled I/O Clippy with
+  warnings denied, formatting, and `git diff --check` passed.
+
 **S2 gate:** external imports carry configurations on explicit entities, Virtual
 identification preserves those configurations, and the perceiver consistently uses
 model ring-size limits and supplied algorithm configs. Defined stereo is preserved;
 small-ring E validation reports without mutation. Rust/Python config
 surfaces and all affected consumers pass their checks. The site-value type change
 remains S3.
+**Passed — 2026-11-08.**
 
 ### S3 — Remove configuration-bearing site constraints
 
@@ -1444,4 +1460,4 @@ The critical sequence is S0 → S1 → S2 → S3 → S4. Within S3, value reduct
 feeds the shared DSL grammar, chemistry operations, and projection/export
 consumers. Their complete caller and fixture migration restores the passing build.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S0 and S1 are complete; S2–S4 remain pending.
+unchanged. S0–S2 are complete; S3–S4 remain pending.

@@ -374,7 +374,8 @@ mod tests {
         AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondId, BooleanForm, Canonicalize,
         CanonicalizeContext, CisTransStereoForm, Deltas, ElectronCountsForm, Entity,
         MoleculeEntries, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm,
-        StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+        StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+        StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
     use umol_io::table_ir::{AtomPair, BondConfiguration};
@@ -384,11 +385,12 @@ mod tests {
         AromaticityContradiction, AromaticityError, AromaticityInconsistency,
     };
     use crate::ops::model::{
-        AromaticityModel, AromaticityRule, AromaticityTieBreak, ElementScope, ValenceModel,
-        ValenceTieBreak,
+        AromaticityModel, AromaticityRule, AromaticityTieBreak, ElementScope, StereoModel,
+        ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
-        AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
+        AromaticityFailurePolicy, AromaticityResolveConfig, StereoFailurePolicy,
+        StereoResolveConfig,
     };
     use crate::ops::stereo::{StereoContradiction, StereoInconsistency};
     use crate::ops::valence::{
@@ -638,6 +640,86 @@ mod tests {
         let expected = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#);
 
         assert_eq!(smiles.interpret(&model, &resolve_config), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::z("C1=C\\CCCC/1", StereoCoset::Lit(0))]
+    #[case::e("C1=C/CCCC/1", StereoCoset::Lit(1))]
+    fn test_smiles_interpret_ring(
+        #[case] input: &str,
+        #[case] coset: StereoCoset,
+        #[values(0, 8, 64)] stereo_bond_min_ring_size: u32,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+    ) {
+        let boundary = Smiles::parse(input).unwrap();
+        let original = boundary.clone();
+        let raised: Molecule = boundary.as_table_ir().try_into_ir(&()).unwrap();
+        let frame = vec![
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Virtual),
+        ];
+        assert_eq!(
+            raised
+                .stereo_bonds()
+                .iter()
+                .map(|view| (
+                    view.site_id(),
+                    view.ligand_ids().to_vec(),
+                    view.attributes().clone(),
+                ))
+                .collect::<Vec<_>>(),
+            vec![(
+                BondId(1),
+                frame,
+                StereoBondForm::new(StereoKind::CisTrans, coset.clone())
+            )]
+        );
+        assert_eq!(ingest_smiles_unresolved(input), Ok(raised.clone()));
+        let mut expected = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#i=#h" "C#i=#h" "C#i=#h2" "C#i=#h2" "C#i=#h2" "C#i=#h2"]
+            :bonds [[0 5 "1"] [0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]
+            :stereo-bonds [{:site 1 :ligands [5 [:h 0] 2 [:h 1]] :attrs "Ct0"}]
+        }"#
+        );
+        expected
+            .stereo_bond_mut(StereoBondId(0))
+            .attributes_mut()
+            .configuration = StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            stereo: StereoModel {
+                stereo_bond_min_ring_size,
+                stereo_bond_e_min_ring_size: 64,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            stereo: StereoResolveConfig {
+                stereo_atom_failure: failure,
+                stereo_bond_failure: failure,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(boundary.interpret(&model, &config), Ok(expected.clone()));
+        assert_eq!(
+            ingest_smiles_with(input, &SmilesIoConfig::opensmiles(), &model, &config),
+            Ok(expected.clone())
+        );
+        assert_eq!(
+            Resolver::with_config(&model, config).resolve(raised),
+            Ok(Solution::Determined(expected))
+        );
+        assert_eq!(boundary, original);
     }
 
     #[rstest]

@@ -465,6 +465,11 @@ defaulting to 8. Zero disables the corresponding restriction. Both are required
 keyword-only model fields; getters, Rust conversion, equality, and repr preserve
 their values. Addition and resolution apply stereo_bond_min_ring_size when
 creating missing stereo and retain existing descriptions and filtered assertions.
+Ring-size exclusion does not invoke a failure policy. A positive assertion survives
+addition; resolution discharges it when it creates a new entity.
+Enumeration and removal act on supplied entities independently of the creation
+cutoff. Import wrappers pass the ordinary resolver config, and supported small-ring
+configurations survive resolution and export.
 Native conformance validation checks both limits; E is read relative to each
 ring's continuation ligands.
 

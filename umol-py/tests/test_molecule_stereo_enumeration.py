@@ -175,6 +175,33 @@ def test_molecule_enumerate_stereo_multiplicity():
     )
 
 
+@pytest.mark.parametrize("minimum", [0, 8, 64])
+def test_molecule_enumerate_stereo_ring(minimum):
+    source = Molecule.parse(
+        """{:atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+        :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [5 [:h 0] 2 [:h 1]] :attrs "Ct*"}]}""",
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = source.copy()
+    model = StereoModel(
+        kind_models=StereoModel.default().kind_models,
+        para_stereo=False,
+        stereo_bond_min_ring_size=minimum,
+        stereo_bond_e_min_ring_size=64,
+    )
+    expected = []
+    for value in (0, 1):
+        molecule = source.copy()
+        molecule.stereo_bonds[0].configuration = StereoConfigurationForm.Kinded(
+            StereoKind.CisTrans, StereoCoset.Lit(value)
+        )
+        expected.append(molecule)
+
+    assert list(source.enumerate_stereo(model, [StereoSite.Bond(0)])) == expected
+    assert source == original
+
+
 def test_molecule_enumerate_stereo_ownership(stereo_source):
     expected = stereo_source.copy()
     model = StereoModel.default()
