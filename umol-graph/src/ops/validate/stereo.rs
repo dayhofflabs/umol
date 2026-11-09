@@ -3,16 +3,19 @@
 use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AsLit, BooleanForm, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig, Lattice,
-    LigandSymmetryForm, Molecule, RingConfig, StereoAtomId, StereoBondId, StereoLigandPair,
-    StereoSymmetry, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
+    AsLit, BondId, BooleanForm, CisTransStereoForm, ConstitutionColoring, FrameTransport,
+    GraphSymmetry, GraphSymmetryConfig, Lattice, LigandSymmetryForm, Molecule, RingConfig,
+    RingModel, RingSetKind, StereoAtomId, StereoBondId, StereoKind, StereoLigandKind,
+    StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
     TopicityRelationForm,
 };
-use umol_perm::OrientedPermutation;
+use umol_perm::{OrientedPermutation, Permutation};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
-use crate::ops::stereo::{StereoContradiction, StereoInconsistency, StereoPerceiver};
+use crate::ops::stereo::{
+    StereoContradiction, StereoDerivation, StereoInconsistency, StereoPerceiver,
+};
 
 /// Operational configuration for stereo-conformance validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,6 +61,20 @@ pub struct StereoConformanceValidator {
 pub enum StereoConformanceContradiction {
     #[error(transparent)]
     Inconsistency(#[from] StereoInconsistency),
+    #[error(
+        "bond {bond:?} has stereo in a ring of size {ring_size}, below minimum {minimum_ring_size}"
+    )]
+    RingTooSmall {
+        bond: BondId,
+        ring_size: u32,
+        minimum_ring_size: u32,
+    },
+    #[error("bond {bond:?} has ring-relative E stereo in a ring of size {ring_size}, below minimum {minimum_ring_size}")]
+    RingTooSmallForE {
+        bond: BondId,
+        ring_size: u32,
+        minimum_ring_size: u32,
+    },
     #[error("stereogenicity {derived:?} contradicts asserted {asserted:?}")]
     StereogenicityMismatch {
         asserted: StereogenicityForm,
@@ -96,7 +113,7 @@ impl StereoConformanceValidator {
         }
     }
 
-    /// Validate every stereo element against the molecule's graph symmetry.
+    /// Validate stereo descriptions against the model's ring-size limits and graph symmetry.
     /// First `Contradictory` wins; a ground assertion the derived value leaves
     /// open contributes `Underdetermined`.
     /// Unresolved ligand identification contributes `Underdetermined` after
@@ -145,6 +162,12 @@ impl StereoConformanceValidator {
             }
         }
 
+        match self.validate_rings(molecule, &derivation) {
+            Solution::Determined(()) => {}
+            Solution::Underdetermined(()) => any_undetermined = true,
+            Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),
+        }
+
         let symmetry = molecule.graph_symmetry(&self.config.graph_symmetry_config(&self.model));
         for id in molecule.stereo_atoms().ids() {
             match self.validate_stereo_atom(molecule, id, &symmetry) {
@@ -166,6 +189,116 @@ impl StereoConformanceValidator {
         } else {
             Solution::Determined(())
         })
+    }
+
+    fn validate_rings(
+        &self,
+        molecule: &Molecule,
+        derivation: &StereoDerivation,
+    ) -> Solution<(), StereoConformanceContradiction> {
+        let minimum = self.model.stereo_bond_min_ring_size;
+        let e_minimum = self.model.stereo_bond_e_min_ring_size;
+        let maximum = minimum.max(e_minimum);
+        if maximum <= 3 {
+            return Solution::Determined(());
+        }
+        let mut rings = None;
+        let mut any_undetermined = false;
+        for bond in molecule.bonds().iter() {
+            let relation = bond.stereo_bond();
+            if bond.order().as_lit() != Some(2)
+                || !(relation.is_some_and(|view| {
+                    view.attributes().configuration.kind() == Some(StereoKind::CisTrans)
+                }) || matches!(
+                    bond.constraints().cis_trans_stereo(),
+                    CisTransStereoForm::Stereo(_)
+                ))
+            {
+                continue;
+            }
+            let rings = rings.get_or_insert_with(|| {
+                molecule
+                    .rings(
+                        RingModel {
+                            kind: RingSetKind::Simple,
+                            max_ring_size: maximum as usize - 1,
+                        },
+                        self.config.ring_config,
+                    )
+                    .into_ring_set()
+            });
+            if let Some(size) = rings.bond_smallest_ring_size(bond.id()) {
+                if size < minimum as usize {
+                    return Solution::Contradictory(StereoConformanceContradiction::RingTooSmall {
+                        bond: bond.id(),
+                        ring_size: size as u32,
+                        minimum_ring_size: minimum,
+                    });
+                }
+            }
+            let frame = relation
+                .map(|view| (view.ligand_ids(), &view.attributes().configuration))
+                .or_else(|| {
+                    derivation
+                        .stereo_bonds
+                        .iter()
+                        .find(|(site, _, _)| *site == bond.id())
+                        .map(|(_, ligands, attributes)| {
+                            (ligands.as_slice(), &attributes.configuration)
+                        })
+                });
+            for ring in rings
+                .iter()
+                .filter(|ring| ring.bonds().contains(&bond.id()) && ring.len() < e_minimum as usize)
+            {
+                let Some((ligands, configuration)) = frame else {
+                    any_undetermined = true;
+                    continue;
+                };
+                let mut image = [0, 1, 2, 3];
+                let mut complete = true;
+                for side in image.chunks_exact_mut(2) {
+                    let position = side.iter().position(|&index| {
+                        let ligand = ligands[index];
+                        ligand.kind == StereoLigandKind::Atom
+                            && bond.atom_ids().iter().any(|&endpoint| {
+                                molecule
+                                    .bonds()
+                                    .of_id(endpoint, ligand.atom_id)
+                                    .is_some_and(|id| id != bond.id() && ring.bonds().contains(&id))
+                            })
+                    });
+                    if let Some(position) = position {
+                        side.swap(0, position);
+                    } else {
+                        complete = false;
+                    }
+                }
+                if !complete {
+                    any_undetermined = true;
+                    continue;
+                }
+                let coset = configuration
+                    .clone()
+                    .reframe_by(&Permutation::from_image(&image))
+                    .and_then(|configuration| configuration.coset().and_then(AsLit::as_lit));
+                if coset == Some(1) {
+                    return Solution::Contradictory(
+                        StereoConformanceContradiction::RingTooSmallForE {
+                            bond: bond.id(),
+                            ring_size: ring.len() as u32,
+                            minimum_ring_size: e_minimum,
+                        },
+                    );
+                }
+                any_undetermined |= coset.is_none();
+            }
+        }
+        if any_undetermined {
+            Solution::Underdetermined(())
+        } else {
+            Solution::Determined(())
+        }
     }
 
     fn validate_stereo_atom(
@@ -303,10 +436,14 @@ mod tests {
     use std::collections::BTreeSet;
 
     use rstest::rstest;
+    use umol_chem::element::Element;
+    use umol_graph_core::{GraphRemapping, NodeId, Remapping};
     use umol_graph_ir::ir::{
-        AtomId, BondId, LigandPermutation, NumForm, OrientedLigandPermutation,
-        StereoAtomConstraintForm, StereoBondConstraintForm, StereoConfigurationForm, StereoCoset,
-        StereoKind, StereoLigandPosition, StereogenicityForm,
+        AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
+        LigandPermutation, MoleculeEntries, MoleculeRemapping, NumForm, OrientedLigandPermutation,
+        StereoAtomConstraintForm, StereoBondConstraintForm, StereoBondForm,
+        StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+        StereoLigandPosition, StereoTerm, StereogenicityForm,
     };
     use umol_graph_ir::mol_dsl_concrete;
     use umol_perm::{Orientation, Permutation};
@@ -530,6 +667,359 @@ mod tests {
                 .unwrap(),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::below_general(7, 8, 0, StereoCoset::Lit(0), Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmall {
+            bond: BondId(0), ring_size: 7, minimum_ring_size: 8,
+        },
+    ))]
+    #[case::general_boundary(8, 8, 0, StereoCoset::Lit(1), Solution::Determined(()))]
+    #[case::z_below_e(7, 0, 8, StereoCoset::Lit(0), Solution::Determined(()))]
+    #[case::e_below_e(7, 0, 8, StereoCoset::Lit(1), Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmallForE {
+            bond: BondId(0), ring_size: 7, minimum_ring_size: 8,
+        },
+    ))]
+    #[case::e_boundary(8, 0, 8, StereoCoset::Lit(1), Solution::Determined(()))]
+    #[case::both_boundaries(8, 8, 8, StereoCoset::Lit(1), Solution::Determined(()))]
+    #[case::unrestricted(4, 0, 0, StereoCoset::Lit(1), Solution::Determined(()))]
+    #[case::small_thresholds(4, 2, 3, StereoCoset::Lit(1), Solution::Determined(()))]
+    #[case::open_below_general(7, 8, 8, StereoCoset::Undetermined, Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmall {
+            bond: BondId(0), ring_size: 7, minimum_ring_size: 8,
+        },
+    ))]
+    #[case::open_below_e(7, 0, 8, StereoCoset::Undetermined, Solution::Underdetermined(()))]
+    #[case::variable_below_e(7, 0, 8, StereoCoset::term(StereoTerm::var("configuration")), Solution::Underdetermined(()))]
+    #[case::large_below_general(24, 25, 0, StereoCoset::Lit(0), Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmall {
+            bond: BondId(0), ring_size: 24, minimum_ring_size: 25,
+        },
+    ))]
+    #[case::large_below_e(24, 0, 25, StereoCoset::Lit(1), Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmallForE {
+            bond: BondId(0), ring_size: 24, minimum_ring_size: 25,
+        },
+    ))]
+    #[case::large_boundary(24, 24, 24, StereoCoset::Lit(1), Solution::Determined(()))]
+    fn test_stereo_conformance_validator_validate_ring(
+        #[case] size: u32,
+        #[case] stereo_bond_min_ring_size: u32,
+        #[case] stereo_bond_e_min_ring_size: u32,
+        #[case] coset: StereoCoset,
+        #[case] expected: Solution<(), StereoConformanceContradiction>,
+        #[values(false, true)] unresolved_atom: bool,
+    ) {
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: (0..size)
+                .map(|id| {
+                    AtomForm::from_element(Element::C)
+                        .with_implicit_hydrogens(if id < 2 { 1 } else { 2 })
+                        .into_concrete()
+                })
+                .collect(),
+            bonds: (0..size)
+                .map(|id| {
+                    (
+                        AtomId(id),
+                        AtomId((id + 1) % size),
+                        BondForm::from_order(if id == 0 { 2 } else { 1 }).into_concrete(),
+                    )
+                })
+                .collect(),
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(size - 1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, coset),
+            )],
+            ..Default::default()
+        });
+        if unresolved_atom {
+            let mut atom = mol_dsl_concrete!(CFCLBRI);
+            atom.stereo_atom_mut(StereoAtomId(0))
+                .attributes_mut()
+                .configuration = StereoConfigurationForm::Undetermined;
+            molecule.combine_from(&atom);
+        }
+        let expected = if unresolved_atom && expected == Solution::Determined(()) {
+            Solution::Underdetermined(())
+        } else {
+            expected
+        };
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel {
+                stereo_bond_min_ring_size,
+                stereo_bond_e_min_ring_size,
+                ..Default::default()
+            })
+            .validate(&molecule),
+            Ok(expected),
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::unasserted(CisTransStereoForm::Undetermined, 8, 8, Solution::Determined(()))]
+    #[case::negative(CisTransStereoForm::NotStereo, 8, 8, Solution::Determined(()))]
+    #[case::positive_below_general(CisTransStereoForm::Stereo(StereoCoset::Undetermined), 8, 8,
+        Solution::Contradictory(StereoConformanceContradiction::RingTooSmall {
+            bond: BondId(0), ring_size: 6, minimum_ring_size: 8,
+        }))]
+    #[case::positive_below_e(CisTransStereoForm::Stereo(StereoCoset::Undetermined), 6, 8,
+        Solution::Underdetermined(()))]
+    #[case::positive_unrestricted(CisTransStereoForm::Stereo(StereoCoset::Undetermined), 0, 0,
+        Solution::Determined(()))]
+    #[case::z_below_e(CisTransStereoForm::Stereo(StereoCoset::Lit(0)), 6, 8,
+        Solution::Determined(()))]
+    #[case::e_below_e(CisTransStereoForm::Stereo(StereoCoset::Lit(1)), 6, 8,
+        Solution::Contradictory(StereoConformanceContradiction::RingTooSmallForE {
+            bond: BondId(0), ring_size: 6, minimum_ring_size: 8,
+        }))]
+    fn test_stereo_conformance_validator_validate_ring_constraint(
+        #[case] assertion: CisTransStereoForm,
+        #[case] stereo_bond_min_ring_size: u32,
+        #[case] stereo_bond_e_min_ring_size: u32,
+        #[case] expected: Solution<(), StereoConformanceContradiction>,
+    ) {
+        let mut molecule = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#
+        );
+        molecule
+            .bond_mut(BondId(0))
+            .attributes_mut()
+            .constraints
+            .set(BondConstraintForm::CisTransStereo(assertion));
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel {
+                stereo_bond_min_ring_size,
+                stereo_bond_e_min_ring_size,
+                ..Default::default()
+            })
+            .validate(&molecule),
+            Ok(expected),
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_stereo_conformance_validator_validate_ring_transport(
+        #[values(0, 1)] coset: u32,
+        #[values(false, true)] swap_first: bool,
+        #[values(false, true)] swap_second: bool,
+        #[values(false, true)] exchange_sides: bool,
+        #[values(false, true)] reverse_atoms: bool,
+    ) {
+        let mut frame = [
+            StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        ];
+        if swap_first {
+            frame.swap(0, 1);
+        }
+        if swap_second {
+            frame.swap(2, 3);
+        }
+        if exchange_sides {
+            frame.rotate_left(2);
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: (0..7)
+                .map(|id| {
+                    AtomForm::from_element(Element::C)
+                        .with_implicit_hydrogens(if id < 2 { 1 } else { 2 })
+                        .into_concrete()
+                })
+                .collect(),
+            bonds: (0..7)
+                .map(|id| {
+                    (
+                        AtomId(id),
+                        AtomId((id + 1) % 7),
+                        BondForm::from_order(if id == 0 { 2 } else { 1 }).into_concrete(),
+                    )
+                })
+                .collect(),
+            stereo_bonds: vec![(
+                BondId(0),
+                frame.to_vec(),
+                StereoBondForm::new(
+                    StereoKind::CisTrans,
+                    StereoCoset::Lit(coset ^ u32::from(swap_first) ^ u32::from(swap_second)),
+                ),
+            )],
+            ..Default::default()
+        });
+        let molecule = if reverse_atoms {
+            molecule.remap(&MoleculeRemapping::new(
+                GraphRemapping::new(
+                    Remapping::new((0..7).rev().map(NodeId).collect()).unwrap(),
+                    Remapping::identity(7),
+                ),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(0),
+                Remapping::identity(1),
+            ))
+        } else {
+            molecule
+        };
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel {
+                stereo_bond_min_ring_size: 0,
+                stereo_bond_e_min_ring_size: 8,
+                ..Default::default()
+            })
+            .validate(&molecule),
+            Ok(if coset == 0 {
+                Solution::Determined(())
+            } else {
+                Solution::Contradictory(StereoConformanceContradiction::RingTooSmallForE {
+                    bond: BondId(0),
+                    ring_size: 7,
+                    minimum_ring_size: 8,
+                })
+            }),
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::smaller_z_larger_e(0, 6, Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmallForE {
+            bond: BondId(0), ring_size: 5, minimum_ring_size: 6,
+        },
+    ))]
+    #[case::larger_boundary(0, 5, Solution::Determined(()))]
+    #[case::smaller_e_larger_z(1, 5, Solution::Contradictory(
+        StereoConformanceContradiction::RingTooSmallForE {
+            bond: BondId(0), ring_size: 4, minimum_ring_size: 5,
+        },
+    ))]
+    #[case::smaller_boundary(1, 4, Solution::Determined(()))]
+    fn test_stereo_conformance_validator_validate_rings(
+        #[case] coset: u32,
+        #[case] stereo_bond_e_min_ring_size: u32,
+        #[case] expected: Solution<(), StereoConformanceContradiction>,
+    ) {
+        let mut molecule = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C" "C#h" "C#h2" "C#h" "C#h2" "C#h2"]
+            :bonds [[0 1 "2"] [0 2 "1"] [2 3 "1"] [3 1 "1"]
+                    [0 4 "1"] [4 5 "1"] [5 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 4 3 [:h 1]] :attrs "Ct0"}]
+        }"#
+        );
+        molecule
+            .stereo_bond_mut(StereoBondId(0))
+            .attributes_mut()
+            .configuration =
+            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(coset));
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel {
+                stereo_bond_min_ring_size: 0,
+                stereo_bond_e_min_ring_size,
+                ..Default::default()
+            })
+            .validate(&molecule),
+            Ok(expected),
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    fn test_stereo_conformance_validator_validate_ring_partial(
+        #[values(false, true)] known_first: bool,
+    ) {
+        let unknown = mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [5 [:h 0] 2 [:h 1]] :attrs "Ct*"}]
+        }"#
+        );
+        let mut known = unknown.clone();
+        known
+            .stereo_bond_mut(StereoBondId(0))
+            .attributes_mut()
+            .configuration =
+            StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1));
+        let molecule = if known_first {
+            known.combine(&unknown)
+        } else {
+            unknown.combine(&known)
+        };
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel {
+                stereo_bond_min_ring_size: 0,
+                stereo_bond_e_min_ring_size: 8,
+                ..Default::default()
+            })
+            .validate(&molecule),
+            Ok(Solution::Contradictory(
+                StereoConformanceContradiction::RingTooSmallForE {
+                    bond: BondId(if known_first { 0 } else { 6 }),
+                    ring_size: 6,
+                    minimum_ring_size: 8,
+                }
+            )),
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::acyclic(BUTENE, false, Solution::Determined(()))]
+    #[case::unresolved_virtual(
+        r#"{:atoms ["C#h#n" "C#h#n" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :stereo-bonds [{:site 0 :ligands [5 [:virt 0] 2 [:virt 1]] :attrs "Ct1"}]}"#,
+        true,
+        Solution::Contradictory(StereoConformanceContradiction::RingTooSmallForE {
+            bond: BondId(0), ring_size: 6, minimum_ring_size: 64,
+        }),
+    )]
+    fn test_stereo_conformance_validator_validate_ring_frame(
+        #[case] dsl: &str,
+        #[case] unresolved: bool,
+        #[case] expected: Solution<(), StereoConformanceContradiction>,
+    ) {
+        let mut molecule = mol_dsl_concrete!(dsl);
+        if unresolved {
+            for id in [AtomId(0), AtomId(1)] {
+                let mut atom = molecule.atom_mut(id);
+                atom.attributes_mut().implicit_hydrogens = NumForm::Undetermined;
+                atom.attributes_mut().lone_pairs = NumForm::Undetermined;
+            }
+        }
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel {
+                stereo_bond_min_ring_size: 0,
+                stereo_bond_e_min_ring_size: 64,
+                ..Default::default()
+            })
+            .validate(&molecule),
+            Ok(expected),
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

@@ -288,4 +288,4 @@ the statuses recorded here remain authoritative.
 | [239-kindless-stereo-removal-2026-10-17.md](239-kindless-stereo-removal-2026-10-17.md)                           | Proposed      | 2026-10-17   | Assess potential kindless-stereo removal using the recorded experiment; join and interface contracts remain unresolved. |
 | [240-validation-constraint-ops-2026-10-18.md](240-validation-constraint-ops-2026-10-18.md)                       | In Progress   | 2026-11-02   | Settle S13a; implement S13b/S13d and S14/S16. |
 | [242-stereo-transformers-2026-10-29.md](242-stereo-transformers-2026-10-29.md)                                 | Completed     | 2026-10-30   | |
-| [243-stereo-site-assertions-2026-11-07.md](243-stereo-site-assertions-2026-11-07.md)                                 | In Progress   | 2026-11-08   | Settle S2h model conformance defaults and diagnostics. |
+| [243-stereo-site-assertions-2026-11-07.md](243-stereo-site-assertions-2026-11-07.md)                                 | In Progress   | 2026-11-08   | Verify S2i operation and representation alignment through callers. |

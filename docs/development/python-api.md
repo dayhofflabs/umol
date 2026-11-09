@@ -460,10 +460,13 @@ to 16, accepts the u32 range, and is forwarded to every symmetry path, including
 both enumeration classification and assignment checks. AddStereoConfig also
 exposes ring_config; RemoveStereoConfig exposes mode.
 
-StereoModel owns stereo_bond_min_ring_size, defaulting to 8; zero imposes no
-ring-size restriction. Model construction, getters, conversion, equality, and repr
-preserve it. Addition and resolution use the selected model when creating missing
-stereo and retain existing descriptions and filtered assertions.
+StereoModel owns stereo_bond_min_ring_size and stereo_bond_e_min_ring_size, both
+defaulting to 8. Zero disables the corresponding restriction. Both are required
+keyword-only model fields; getters, Rust conversion, equality, and repr preserve
+their values. Addition and resolution apply stereo_bond_min_ring_size when
+creating missing stereo and retain existing descriptions and filtered assertions.
+Native conformance validation checks both limits; E is read relative to each
+ring's continuation ligands.
 
 RemoveStereoMode.All and RemoveStereoMode.Undetermined preserve the Rust matching predicate:
 Undetermined accepts only an explicitly undetermined coset of a known kind, including kinds

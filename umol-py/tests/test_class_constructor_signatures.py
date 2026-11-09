@@ -92,7 +92,11 @@ import umol
             "(*, selection=None, automorphism_algorithm=Ellipsis, "
             "para_stereo_max_iterations=16)",
         ),
-        (umol.StereoModel, "(*, kind_models, para_stereo, stereo_bond_min_ring_size)"),
+        (
+            umol.StereoModel,
+            "(*, kind_models, para_stereo, stereo_bond_min_ring_size, "
+            "stereo_bond_e_min_ring_size)",
+        ),
         (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis)"),
         (
             umol.ConnectivityModel,

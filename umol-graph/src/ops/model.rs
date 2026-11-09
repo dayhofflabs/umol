@@ -262,7 +262,10 @@ impl Default for RingLimits {
 pub struct StereoModel {
     pub kind_models: [Option<StereoKindModel>; StereoKind::COUNT],
     pub para_stereo: bool,
+    /// Minimum ring size admitting double-bond stereo; zero imposes no restriction.
     pub stereo_bond_min_ring_size: u32,
+    /// Minimum ring size admitting E relative to the ring's continuation ligands; zero is unrestricted.
+    pub stereo_bond_e_min_ring_size: u32,
 }
 
 /// Per-kind perception settings: the elements eligible to bear this kind and
@@ -300,6 +303,7 @@ impl Default for StereoModel {
             kind_models,
             para_stereo: false,
             stereo_bond_min_ring_size: 8,
+            stereo_bond_e_min_ring_size: 8,
         }
     }
 }
@@ -617,6 +621,10 @@ mod tests {
         stereo_bond_min_ring_size: 0,
         ..StereoModel::default()
     })]
+    #[case::stereo_bond_e_min_ring_size(StereoModel {
+        stereo_bond_e_min_ring_size: 0,
+        ..StereoModel::default()
+    })]
     fn test_stereo_model_eq_difference(#[case] other: StereoModel) {
         assert_ne!(StereoModel::default(), other);
     }
@@ -639,6 +647,7 @@ mod tests {
                 kind_models,
                 para_stereo: false,
                 stereo_bond_min_ring_size: 8,
+                stereo_bond_e_min_ring_size: 8,
             },
         );
     }

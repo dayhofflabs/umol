@@ -18,7 +18,7 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0, S1, and S2a–S2g
+This records the selected design direction and its consequences. S0, S1, and S2a–S2h
 are complete; the remaining S2–S4 work is pending. The semantics, value interface, operation
 interfaces, and names below are the working design. S2 records the revised
 perception/resolution proposal; it is provisional, not final design approval.
@@ -380,7 +380,7 @@ enables para stereo. These algorithmic settings belong to operation configs.
 | Owner | Field | Default | Scope |
 | --- | --- | --- | --- |
 | StereoModel | stereo_bond_min_ring_size: u32 | 8 | Minimum ring size admitting cis/trans stereo on a double bond; implemented in S2g. |
-| StereoModel | stereo_bond_e_min_ring_size: u32 | Unsettled | Minimum ring size admitting a ring-relative trans configuration; added with conformance validation in S2h. |
+| StereoModel | stereo_bond_e_min_ring_size: u32 | 8 | Minimum ring size admitting a ring-relative E configuration; checked by conformance validation. |
 | AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig, StereoValidateConfig | para_stereo_max_iterations: u32 | 16 | Maximum para-stereo symmetry-refinement iterations. |
 | AddStereoConfig, StereoResolveConfig, StereoValidateConfig | ring_config: RingConfig | RingConfig::default() | Ring-detection algorithms. |
 
@@ -423,14 +423,17 @@ checks. Validation uses its configured limit for graph symmetry. In graph IR,
 GraphSymmetryConfig::max_iterations and the refinement counter are u32. Runtime
 stereo calls take their limits from configs; 16 is the operation default.
 
-S2h adds conformance checks against both model ring-size limits. Validation
-reports violations without altering supplied descriptions. The trans check uses
-the ring's continuation ligands and existing frame transport; a raw coset number
-alone does not identify a ring-relative trans configuration. A required
-unresolved configuration contributes Underdetermined; established contradictions
-take precedence. Retain StereoConformanceContradiction and the existing error
-channel. The E-specific default and the general minimum-ring diagnostic remain
-for S2h to settle.
+Conformance validation checks both model ring-size limits without altering
+supplied descriptions. RingTooSmall and RingTooSmallForE carry the topology
+BondId, ring_size: u32, and minimum_ring_size: u32. The general minimum also
+applies to positive #C evidence whose entity creation was filtered.
+
+The E check considers every simple ring below its threshold, using that ring's
+continuation ligands and existing frame transport. A raw coset number alone does
+not identify a ring-relative E configuration; one bond can be Z relative to one
+ring and E relative to another. A required unresolved configuration contributes
+Underdetermined; established contradictions take precedence. Both findings use
+StereoConformanceContradiction and retain the existing error channel.
 
 Parsing, raising, Interpret, and Convey receive no separate ring filter.
 Wrappers invoking resolution use its ordinary config and the selected chemistry
@@ -578,8 +581,8 @@ implementation, documentation, fixtures, or exhaustive matches.
 | Same and ops/stereo/recognize.rs | StereoPerceiver::derive, recognize, new, derive_stereo_atom, derive_stereo_bond, classify; StereoPerceptionError and StereoInconsistency | Pass ring_config to derive and recognize. Pass para_stereo_max_iterations to recognize and classify. Read chemistry thresholds from the captured model. Preserve structural support boundaries and undetermined cosets on newly recognized entities. |
 | umol-graph/src/ops/transform/stereo.rs and ops/transform.rs | StereoAdder, StereoRemover, StereoEnumerator, their configs/errors/iterator; Transform convenience methods | Expose para_stereo_max_iterations on all three configs and forward it to every symmetry path. Adder uses the model threshold and its RingConfig. Preserve supplied descriptions. Remove source-constraint coset handling in S3. |
 | umol-graph/src/ops/transform/hydrogens.rs | HydrogenFolder, HydrogenUnfolder and their errors/configs | Retain interfaces; remove inline-constraint coset transport and maintain explicit frames through existing edits. Virtual is not implicitly an H ligand. |
-| umol-graph/src/ops/validate/stereo.rs | StereoConformanceValidator, StereoValidateConfig, StereoConformanceContradiction | Use ring_config and para_stereo_max_iterations from StereoValidateConfig. S2h validates both ring-size parameters from StereoModel; retain the validation entry point and error type. |
-| umol-graph/src/ops/model.rs | StereoModel | Retain the ring-size parameter as stereo_bond_min_ring_size. S2h adds stereo_bond_e_min_ring_size. Preserve the other model fields. |
+| umol-graph/src/ops/validate/stereo.rs | StereoConformanceValidator, StereoValidateConfig, StereoConformanceContradiction | Use ring_config and para_stereo_max_iterations from StereoValidateConfig. Validate both model ring-size limits through RingTooSmall and RingTooSmallForE; retain the validation entry point and error type. |
+| umol-graph/src/ops/model.rs | StereoModel | Own stereo_bond_min_ring_size and stereo_bond_e_min_ring_size, both defaulting to 8. Preserve the other model fields. |
 | umol-graph-ir/src/ir/symmetry.rs | GraphSymmetryConfig::max_iterations; refinement counter | Use u32 for the limit and counter. Preserve the refinement algorithm. |
 | umol-io/src/table_ir/raise.rs | `TryIntoIr<Molecule>` for &table_ir::Molecule; RaiseError | Retain public conversion shape and existing error vocabulary. Wedge and bond-frame paths produce explicit entities and report unrepresentable frames at this boundary. |
 | umol-graph/src/ingest.rs | Interpret for Smiles / ReactionSmiles; ingest_smiles and ingest_reaction_smiles families | Retain entry points and errors. Resolved routes use the ordinary resolver config; no import-specific ring filter is added. Unresolved routes retain the raised representation. |
@@ -634,7 +637,7 @@ and end-to-end cases change. Generic EDN parsing does not interpret #T/#C string
 | umol-py/src/stereo.rs | Make the two site forms payload-free; return bool or None from as_lit; remove ground enum classes and conversions. Add Virtual. Retain named configuration enums and explicit-entity inputs; update repr, hashing, equality, lattice methods, and variant construction consistently. |
 | umol-py/src/constraint/atom.rs and constraint/bond.rs; atom.rs and bond.rs | TetrahedralStereoLike / CisTransStereoLike accept bool or the corresponding form. Accept True as positive; remove named-configuration coercions. Migrate container/view setters and constraint constructors together. |
 | umol-py/src/resolve.rs and transform.rs | Expose ring_config on StereoResolveConfig and para_stereo_max_iterations on all three transformer configs. Keep constructors, getters, Rust conversions, repr, and defaults aligned; enforce the u32 range. Retain merged failure-policy fields. |
-| umol-py/src/model/stereo.rs | Expose stereo_bond_min_ring_size on StereoModel construction, getters, conversion, equality, and repr; reject the former stereo_bond_minimum_ring_size keyword. S2h adds the E-specific model parameter. |
+| umol-py/src/model/stereo.rs | Expose stereo_bond_min_ring_size and stereo_bond_e_min_ring_size on StereoModel construction, getters, conversion, equality, and repr; enforce the u32 range and reject the former stereo_bond_minimum_ring_size keyword. |
 | umol-py/src/stereo/perception.rs | Remove StereoPerception and StereoDerivation with their constructors and queries. Retain StereoSite, StereoSelection, and StereoInconsistency used by supported operations. |
 | umol-py/src/lib.rs and python/umol/__init__.py | Remove the perception and derivation classes in S2a and both ground enums in S3 from registration, imports, and __all__. Keep configuration enums and existing operation bindings. |
 | umol-py/src/molecule.rs and reaction.rs | Existing from_smiles / to_smiles and stereo transformer methods inherit the revised Rust behavior; keep signatures, ownership, copying, and defaults. Molecule DSL parsing enforces the same reduced attribute grammar as other contexts. |
@@ -837,7 +840,7 @@ pass together. Configuration-bearing site forms still exist at this point.
 ### S2 — Import stereo directly and resolve virtual ligand kinds
 
 **Working proposal — 2026-11-08.** Recorded for continuation, not final design
-approval. S2a–S2g are complete; implementation of the remaining subitems awaits
+approval. S2a–S2h are complete; implementation of the remaining subitems awaits
 explicit instruction. Record completion and verification under each subitem.
 
 Rename the Rust actor to StereoPerceiver. Its policy-free derive operation
@@ -1186,18 +1189,31 @@ until S3; model-owned ring-size filtering is implemented in S2g.
   Modules: umol-graph/src/ops/model.rs, umol-graph/src/ops/validate/stereo.rs,
   umol-py/src/model/stereo.rs, and their tests. [dep: S2g]
 
-  Add stereo_bond_e_min_ring_size to StereoModel and its Python surface. Settle
-  its default and the diagnostic for a violation of stereo_bond_min_ring_size.
+  Add stereo_bond_e_min_ring_size, defaulting to 8, to StereoModel and its Python
+  surface. Use RingTooSmall and RingTooSmallForE, each carrying the topology
+  BondId, ring_size: u32, and minimum_ring_size: u32.
   Validate supplied descriptions against both model limits using the configured
-  ring algorithms. Determine trans relative to the ring's ligand frame. Retain
+  ring algorithms. Determine E relative to each ring's ligand frame. Retain
   Solution outcomes, StereoConformanceContradiction, and the existing error
   channel; introduce no separate inconsistency type.
 
-  Test boundaries for both model limits, unrestricted checking, cis/trans,
+  Test boundaries for both model limits, unrestricted checking, E/Z,
   positive #C evidence, open cosets, atom/frame permutations, and multiple rings.
   A determinate violation takes precedence over unrelated ambiguity. Assert input
   preservation on every outcome. The validator config remains Rust-only; add no
   Python validator API.
+
+  **Completed — 2026-11-08.** Added the model field, both diagnostics, and Python
+  model parity. Added 75 validation cases, including all endpoint-block frame
+  actions with atom renumbering, a bond that is Z in its smaller ring and E in
+  its larger ring, thresholds beyond the default ring-search bound, and known
+  violations alongside unresolved stereo. Every new case checks input preservation.
+
+  Verification passed: graph library 4,019; graph properties 223; resolution
+  conformance 4,219; Rust bindings 1,791; Python 3,260 on Python 3.13.16.
+  Existing ignored/skipped cases remain excluded. All-target Clippy for graph
+  and bindings with property/conformance features and warnings denied,
+  formatting, and `git diff --check` passed.
 
 - **S2i — Verify operation and representation alignment through callers** — verification (green).
   Modules: umol-graph/src/ops/transform/stereo/tests,
@@ -1227,7 +1243,7 @@ until S3; model-owned ring-size filtering is implemented in S2g.
 **S2 gate:** external imports carry configurations on explicit entities, Virtual
 identification preserves those configurations, and the perceiver consistently uses
 model ring-size limits and supplied algorithm configs. Defined stereo is preserved;
-optional small-ring trans validation reports without mutation. Rust/Python config
+small-ring E validation reports without mutation. Rust/Python config
 surfaces and all affected consumers pass their checks. The site-value type change
 remains S3.
 
