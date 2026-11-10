@@ -1,7 +1,5 @@
 //! Reaction-span and reaction canonicalization.
 
-use std::collections::BTreeSet;
-
 use umol_graph_core::NodeId;
 use umol_perm::Permutation;
 
@@ -11,10 +9,7 @@ use super::super::delta::EntitySpan;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::error::Contradiction;
-use super::super::id::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId,
-};
+use super::super::id::{AtomId, BondId};
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::super::ligand::StereoLigand;
 use super::super::num::NumForm;
@@ -158,122 +153,28 @@ fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorK
     Ok(InitialColorKey::Entity { position, value })
 }
 
-fn lhs_anchored_remapping_from_order(
+fn remapping_from_order(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
 ) -> MoleculeRemapping {
-    let counts = reaction_span_counts(span);
-    let mut lhs = counts.map(|_| Vec::new());
-    let mut added = counts.map(|_| Vec::new());
+    let mut images = reaction_span_counts(span).map(|count| (0..count).collect::<Vec<_>>());
+    let mut next = [0; 8];
     for &node in order {
-        let entity = incidence_graph.entity(node);
-        let (entity_kind, kind_id, lhs_present) = match entity {
-            Entity::Atom(id) => (0, id.index(), span.atoms()[id.index()].lhs().is_some()),
-            Entity::Bond(id) => (1, id.index(), span.bonds()[id.index()].lhs().is_some()),
-            Entity::DativeBond(id) => (
-                2,
-                id.index(),
-                span.dative_bonds().attributes(id).lhs().is_some(),
-            ),
-            Entity::AromaticSystem(id) => (
-                3,
-                id.index(),
-                span.aromatic_systems().attributes(id).lhs().is_some(),
-            ),
-            Entity::MulticenterBond(id) => (
-                4,
-                id.index(),
-                span.multicenter_bonds().attributes(id).lhs().is_some(),
-            ),
-            Entity::NoncovalentBond(id) => (
-                5,
-                id.index(),
-                span.noncovalent_bonds().attributes(id).lhs().is_some(),
-            ),
-            Entity::StereoAtom(id) => (
-                6,
-                id.index(),
-                span.stereo_atoms().attributes(id).lhs().is_some(),
-            ),
-            Entity::StereoBond(id) => (
-                7,
-                id.index(),
-                span.stereo_bonds().attributes(id).lhs().is_some(),
-            ),
+        let (entity_kind, kind_id) = match incidence_graph.entity(node) {
+            Entity::Atom(id) => (0, id.index()),
+            Entity::Bond(id) => (1, id.index()),
+            Entity::DativeBond(id) => (2, id.index()),
+            Entity::AromaticSystem(id) => (3, id.index()),
+            Entity::MulticenterBond(id) => (4, id.index()),
+            Entity::NoncovalentBond(id) => (5, id.index()),
+            Entity::StereoAtom(id) => (6, id.index()),
+            Entity::StereoBond(id) => (7, id.index()),
         };
-        if lhs_present {
-            lhs[entity_kind].push(kind_id);
-        } else {
-            added[entity_kind].push(kind_id);
-        }
-    }
-    for entity_kind in 0..counts.len() {
-        let mut present = lhs[entity_kind]
-            .iter()
-            .chain(added[entity_kind].iter())
-            .copied()
-            .collect::<BTreeSet<_>>();
-        for kind_id in 0..counts[entity_kind] {
-            if present.insert(kind_id) {
-                if lhs_present(span, entity_kind, kind_id) {
-                    lhs[entity_kind].push(kind_id);
-                } else {
-                    added[entity_kind].push(kind_id);
-                }
-            }
-        }
-    }
-    let mut images = counts.map(|count| vec![0; count]);
-    for entity_kind in 0..images.len() {
-        for (image, kind_id) in lhs[entity_kind]
-            .iter()
-            .chain(added[entity_kind].iter())
-            .copied()
-            .enumerate()
-        {
-            images[entity_kind][kind_id] = image;
-        }
+        images[entity_kind][kind_id] = next[entity_kind];
+        next[entity_kind] += 1;
     }
     molecule_remapping(&images)
-}
-
-fn lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: usize) -> bool {
-    match entity_kind {
-        0 => span.atoms()[kind_id].lhs().is_some(),
-        1 => span.bonds()[kind_id].lhs().is_some(),
-        2 => span
-            .dative_bonds()
-            .attributes(DativeBondId(kind_id as u32))
-            .lhs()
-            .is_some(),
-        3 => span
-            .aromatic_systems()
-            .attributes(AromaticSystemId(kind_id as u32))
-            .lhs()
-            .is_some(),
-        4 => span
-            .multicenter_bonds()
-            .attributes(MulticenterBondId(kind_id as u32))
-            .lhs()
-            .is_some(),
-        5 => span
-            .noncovalent_bonds()
-            .attributes(NoncovalentBondId(kind_id as u32))
-            .lhs()
-            .is_some(),
-        6 => span
-            .stereo_atoms()
-            .attributes(StereoAtomId(kind_id as u32))
-            .lhs()
-            .is_some(),
-        7 => span
-            .stereo_bonds()
-            .attributes(StereoBondId(kind_id as u32))
-            .lhs()
-            .is_some(),
-        _ => unreachable!("reaction-span entity-kind index is in range"),
-    }
 }
 
 fn initial_color_keys(
@@ -681,7 +582,7 @@ fn canonical_candidate(
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let leaf_candidate = |order: &[NodeId]| {
-        let remapping = lhs_anchored_remapping_from_order(span, &incidence_graph, order);
+        let remapping = remapping_from_order(span, &incidence_graph, order);
         let remapped = span.clone().remap(&remapping);
         let action = remapped.representative_action();
         let reframed = remapped
@@ -735,11 +636,8 @@ impl ReactionSpan {
             DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
         };
         let incidence_graph = normalized.incidence_graph(incidence_level);
-        let remapping = lhs_anchored_remapping_from_order(
-            &normalized,
-            &incidence_graph,
-            &candidate.entity_order,
-        );
+        let remapping =
+            remapping_from_order(&normalized, &incidence_graph, &candidate.entity_order);
         let canonical = normalized.remap(&remapping).reframe()?;
         Ok((canonical, remapping))
     }

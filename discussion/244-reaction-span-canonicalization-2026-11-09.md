@@ -467,7 +467,7 @@ positions. No other expected value changed: the library tests, the exact cases, 
 properties, and the six Python canonicalization tests pass as they are. The reference comparison
 reports no mismatch.
 
-#### S1b — Remapping from the search order
+#### S1b — Remapping from the search order **Done**
 
 Add `remapping_from_order`, the counterpart of the molecule function of that name.
 `ReactionSpan::tracked_canonicalize_at` and the leaf of `canonical_candidate` use it. Delete
@@ -477,6 +477,11 @@ Add `remapping_from_order`, the counterpart of the molecule function of that nam
 **Tests:** `test_remapping_from_order`, with the rows of the molecule test of that name.
 `test_reaction_span_tracked_canonicalize_at`: spans with added entities of each kind stored before
 lhs-present ones, with the exact lhs-anchored result at each level.
+
+The two tests, 14 cases, were written first and pass both with the reordering step and without it.
+The canonical form and the tracked remapping of all 20,056 spans of the pair file, under both
+`para_stereo` settings, are identical before and after the change. The stage gate passes, including
+the two Python test files.
 
 ### S2 — Orbit pruning at Topology and Constitution
 
