@@ -1,6 +1,6 @@
 //! Reaction-span and reaction canonicalization.
 
-use umol_graph_core::NodeId;
+use umol_graph_core::{NodeId, SubdivisionNodeSource};
 use umol_perm::Permutation;
 
 use super::super::atom::AtomForm;
@@ -34,8 +34,8 @@ use super::{
     topology_initial_partition, unpaired_electrons_form_key, variant, AutomorphismAdapter,
     BranchOrdering, CanonicalCandidate, CanonicalComparisonKey, CanonicalKeyValue,
     CanonicalSearchOptions, CanonicalSearchResult, Canonicalize, CanonicalizeContext,
-    ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition, InitialColorKey, PositionedKey,
-    ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
+    ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition, InitialColorKey,
+    OrderedPartition, PositionedKey, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
 };
 
 fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorKey, Contradiction> {
@@ -264,6 +264,18 @@ fn initial_color_keys(
     Ok((entity_keys, incidence_keys))
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
+fn constitution_entity_classes(span: &ReactionSpan) -> Result<Vec<u32>, Contradiction> {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Constitution);
+    let (entity_keys, incidence_keys) = initial_color_keys(span, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
+    let classes = partition.cell_indices(adapter.graph().node_count());
+    Ok(classes[..adapter.source_node_count].to_vec())
+}
+
 /// The stereo descriptor of a span entity, minimized over the frame permutations of its kind.
 ///
 /// One permutation acts on the ligand classes and on the configuration of each present side.
@@ -318,6 +330,184 @@ fn stereo_refinement_descriptor<T>(
                 .into_iter()
                 .min()
                 .ok_or(Contradiction)
+        }
+    }
+}
+
+#[cfg_attr(not(test), expect(dead_code))]
+fn structure_partition_descriptors(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    adapter: &AutomorphismAdapter,
+    entity_keys: &[InitialColorKey],
+    entity_classes: &[u32],
+) -> Result<Vec<InitialColorKey>, Contradiction> {
+    let entity_class = |entity: Entity| entity_classes[incidence_graph.node_of(entity).index()];
+
+    adapter
+        .node_sources
+        .iter()
+        .map(|source| match *source {
+            SubdivisionNodeSource::Node(node) => {
+                let entity = incidence_graph.entity(node);
+                let InitialColorKey::Entity { position, .. } = entity_keys[node.index()] else {
+                    unreachable!("entity key corresponds to an entity node")
+                };
+                let value = match entity {
+                    Entity::StereoAtom(id) => {
+                        let ligand_classes = span
+                            .stereo_atoms()
+                            .ligands(id)
+                            .iter()
+                            .map(|ligand| (entity_class(Entity::Atom(ligand.atom_id)), ligand.kind))
+                            .collect::<Vec<_>>();
+                        stereo_refinement_descriptor(
+                            entity_class(Entity::Atom(span.stereo_atoms().site(id))),
+                            &ligand_classes,
+                            span.stereo_atoms().attributes(id),
+                            |attributes| &attributes.configuration,
+                        )?
+                    }
+                    Entity::StereoBond(id) => {
+                        let ligand_classes = span
+                            .stereo_bonds()
+                            .ligands(id)
+                            .iter()
+                            .map(|ligand| (entity_class(Entity::Atom(ligand.atom_id)), ligand.kind))
+                            .collect::<Vec<_>>();
+                        stereo_refinement_descriptor(
+                            entity_class(Entity::Bond(span.stereo_bonds().site(id))),
+                            &ligand_classes,
+                            span.stereo_bonds().attributes(id),
+                            |attributes| &attributes.configuration,
+                        )?
+                    }
+                    _ => product([CanonicalKeyValue::Unsigned(entity_class(entity).into())]),
+                };
+                Ok(InitialColorKey::Entity { position, value })
+            }
+            SubdivisionNodeSource::Edge(edge) => {
+                let value = match incidence_graph.incidence(edge) {
+                    Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
+                    incidence => incidence_key(incidence),
+                };
+                Ok(InitialColorKey::Incidence(value))
+            }
+        })
+        .collect()
+}
+
+#[cfg_attr(not(test), expect(dead_code))]
+fn para_stereo_partition_descriptors(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    adapter: &AutomorphismAdapter,
+    partition: &OrderedPartition,
+) -> Result<Vec<(u32, Option<CanonicalKeyValue>)>, Contradiction> {
+    let classes = partition.cell_indices(adapter.graph().node_count());
+    let entity_class = |entity: Entity| classes[incidence_graph.node_of(entity).index()];
+    let ligand_classes = |entity: Entity| {
+        let node = incidence_graph.node_of(entity);
+        let mut edges = incidence_graph
+            .graph()
+            .neighbors(node)
+            .iter()
+            .map(|neighbor| neighbor.edge)
+            .collect::<Vec<_>>();
+        edges.sort_unstable();
+        edges
+            .into_iter()
+            .filter_map(|edge| {
+                let Incidence::StereoLigand(kind) = incidence_graph.incidence(edge) else {
+                    return None;
+                };
+                let occurrence = adapter
+                    .node_of(SubdivisionNodeSource::Edge(edge))
+                    .expect("stereo ligand incidence has an occurrence node");
+                Some((classes[occurrence.index()], *kind))
+            })
+            .collect::<Vec<_>>()
+    };
+
+    adapter
+        .node_sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            let descriptor = match *source {
+                SubdivisionNodeSource::Node(node) => match incidence_graph.entity(node) {
+                    Entity::StereoAtom(id) => Some(stereo_refinement_descriptor(
+                        entity_class(Entity::Atom(span.stereo_atoms().site(id))),
+                        &ligand_classes(Entity::StereoAtom(id)),
+                        span.stereo_atoms().attributes(id),
+                        |attributes| &attributes.configuration,
+                    )?),
+                    Entity::StereoBond(id) => Some(stereo_refinement_descriptor(
+                        entity_class(Entity::Bond(span.stereo_bonds().site(id))),
+                        &ligand_classes(Entity::StereoBond(id)),
+                        span.stereo_bonds().attributes(id),
+                        |attributes| &attributes.configuration,
+                    )?),
+                    _ => None,
+                },
+                SubdivisionNodeSource::Edge(_) => None,
+            };
+            Ok((classes[index], descriptor))
+        })
+        .collect()
+}
+
+/// Refine the structure partition, including para-stereo rounds when requested.
+#[cfg_attr(not(test), expect(dead_code))]
+fn structure_partition(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    adapter: &AutomorphismAdapter,
+    entity_keys: &[InitialColorKey],
+    para_stereo: bool,
+) -> Result<(OrderedPartition, usize), Contradiction> {
+    let constitution_classes = constitution_entity_classes(span)?;
+    let descriptors = structure_partition_descriptors(
+        span,
+        incidence_graph,
+        adapter,
+        entity_keys,
+        &constitution_classes,
+    )?;
+    let mut partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
+    let mut rounds = 1;
+    let has_unresolved_stereo = |partition: &OrderedPartition| {
+        partition.cells.iter().any(|cell| {
+            cell.len() > 1
+                && cell.iter().any(|&node| {
+                    let SubdivisionNodeSource::Node(node) = adapter.node_source(node) else {
+                        return false;
+                    };
+                    matches!(
+                        incidence_graph.entity(node),
+                        Entity::StereoAtom(_) | Entity::StereoBond(_)
+                    )
+                })
+        })
+    };
+
+    if !para_stereo || !has_unresolved_stereo(&partition) {
+        return Ok((partition, rounds));
+    }
+
+    loop {
+        let cell_count = partition.cells.len();
+        let descriptors =
+            para_stereo_partition_descriptors(span, incidence_graph, adapter, &partition)?;
+        let next = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
+        rounds += 1;
+        if next == partition {
+            return Ok((partition, rounds));
+        }
+        debug_assert!(next.cells.len() > cell_count);
+        partition = next;
+        if !has_unresolved_stereo(&partition) {
+            return Ok((partition, rounds));
         }
     }
 }

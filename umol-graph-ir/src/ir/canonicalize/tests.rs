@@ -331,6 +331,106 @@ pub(super) fn stereo_constraint_canonicalization_molecule() -> Molecule {
     })
 }
 
+/// Eight outer stereo atoms in two mirrored groups of four, each site bearing a distinct stereo
+/// descriptor so partition refinement can separate them. Only three stereo kinds are admissible on
+/// an atom at degree 4, so the fourth descriptor is a second `Tetrahedral` coset rather than a
+/// fourth kind.
+#[fixture]
+pub(super) fn para_stereo_canonicalization_molecule() -> Molecule {
+    let outer_ligands = vec![
+        StereoLigand::new(AtomId(10), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(11), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(12), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(13), StereoLigandKind::Atom),
+    ];
+
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::F,
+            Element::Cl,
+            Element::Br,
+            Element::I,
+        ]
+        .into_iter()
+        .map(AtomForm::from_element)
+        .collect(),
+        bonds: (2..=5)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+            .chain((6..=9).map(|ligand| (AtomId(1), AtomId(ligand), BondForm::from_order(1))))
+            .chain((2..=9).flat_map(|site| {
+                (10..=13).map(move |ligand| (AtomId(site), AtomId(ligand), BondForm::from_order(1)))
+            }))
+            .collect(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [2, 3, 4, 5]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .into(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            ),
+            (
+                AtomId(1),
+                [6, 8, 7, 9]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .into(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            ),
+            (
+                AtomId(2),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            ),
+            (
+                AtomId(3),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            ),
+            (
+                AtomId(4),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Axial, 0u32),
+            ),
+            (
+                AtomId(5),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::SquarePlanar, 0u32),
+            ),
+            (
+                AtomId(6),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            ),
+            (
+                AtomId(7),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            ),
+            (
+                AtomId(8),
+                outer_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Axial, 0u32),
+            ),
+            (
+                AtomId(9),
+                outer_ligands,
+                StereoAtomForm::new(StereoKind::SquarePlanar, 0u32),
+            ),
+        ],
+        ..Default::default()
+    })
+}
+
 #[rstest]
 #[case::topology_constitution(DescriptionLevel::Topology, DescriptionLevel::Constitution)]
 #[case::constitution_structure(DescriptionLevel::Constitution, DescriptionLevel::Structure)]

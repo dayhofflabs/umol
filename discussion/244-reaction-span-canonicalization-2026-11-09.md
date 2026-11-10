@@ -557,7 +557,7 @@ sides requires one permutation to act on both sides. The frame-invariance test h
 span shapes for each of the six kinds, and the error test has six. Clippy, the library tests, and
 the two integration tests pass.
 
-#### S3b — Span structure partition
+#### S3b — Span structure partition **Done**
 
 Add `constitution_entity_classes`, `structure_partition_descriptors`,
 `para_stereo_partition_descriptors`, and `structure_partition`, the counterparts of the four
@@ -566,6 +566,24 @@ molecule functions. Additive (green). [dep: S3a]
 **Tests:** `test_structure_partition`: round counts with and without `para_stereo` for the span of
 the molecule para-stereo fixture and for a span whose rhs configuration alone splits a cell; one
 round for a span without stereo entities.
+
+The four functions follow the molecule functions line by line, with the span accessors and the span
+stereo descriptor in place of the molecule ones. They carry the unused-function attribute of S3a
+until S3d. The fixture `para_stereo_canonicalization_molecule` moved unchanged from the molecule
+tests to the shared test support, so that both test modules use it.
+
+`test_structure_partition`, four cases, asserts the round count and the cells of the stereo atoms,
+as a set of cells, without and with `para_stereo`:
+
+| Span | Without `para_stereo` | With `para_stereo` |
+| --- | --- | --- |
+| Identity span of the para-stereo fixture | 1 round; the two inner stereo atoms share a cell, the eight outer ones form four pairs | 2 rounds; ten single cells |
+| Two equal fragments, both stereo atoms modified from coset 0 to coset 1 | 1 round; one cell of two | 2 rounds; one cell of two |
+| The same, with the rhs of the second stereo atom undetermined | 1 round; two single cells | 1 round; two single cells |
+| No stereo entities | 1 round | 1 round |
+
+The fixture rows give the round counts of the molecule test. Clippy, the library tests, and the two
+integration tests pass.
 
 #### S3c — Span stereo generator check
 

@@ -5,7 +5,9 @@ use std::iter;
 use rstest::rstest;
 use umol_chem::element::Element;
 
-use super::super::tests::{canonicalize_context, initial_color_molecule};
+use super::super::tests::{
+    canonicalize_context, initial_color_molecule, para_stereo_canonicalization_molecule,
+};
 use super::super::*;
 use super::*;
 use crate::ir::{
@@ -620,6 +622,135 @@ fn test_stereo_refinement_descriptor_error(
         stereo_refinement_descriptor(0, &ligands, &span, |configuration| configuration),
         Err(Contradiction),
     );
+}
+
+#[rstest]
+#[case::para_stereo_fixture(
+    Reaction::new(para_stereo_canonicalization_molecule(), Deltas::new())
+        .to_reaction_span()
+        .expect("identity reaction materializes"),
+    [
+        (1, vec![vec![0, 1], vec![2, 6], vec![3, 7], vec![4, 8], vec![5, 9]]),
+        (
+            2,
+            vec![
+                vec![0], vec![1], vec![2], vec![3], vec![4],
+                vec![5], vec![6], vec![7], vec![8], vec![9],
+            ],
+        ),
+    ],
+)]
+#[case::equal_configurations(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+        ]
+        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+        .into(),
+        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
+            .map(|(site, ligand)| {
+                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .into(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                },
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    [(1, vec![vec![0, 1]]), (2, vec![vec![0, 1]])],
+)]
+#[case::rhs_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+        ]
+        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+        .into(),
+        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
+            .map(|(site, ligand)| {
+                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .into(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                },
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::default(),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    [(1, vec![vec![0], vec![1]]), (1, vec![vec![0], vec![1]])],
+)]
+#[case::no_stereo(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        ..Default::default()
+    }),
+    [(1, vec![]), (1, vec![])],
+)]
+fn test_structure_partition(
+    #[case] span: ReactionSpan,
+    #[case] expected: [(usize, Vec<Vec<usize>>); 2],
+) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+    let (entity_keys, incidence_keys) =
+        initial_color_keys(&span, &incidence_graph).expect("fixed span has initial colors");
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let actual = [false, true].map(|para_stereo| {
+        let (partition, rounds) =
+            structure_partition(&span, &incidence_graph, &adapter, &entity_keys, para_stereo)
+                .expect("fixed span has a structure partition");
+        let mut stereo_atom_cells = partition
+            .cells
+            .iter()
+            .filter_map(|cell| {
+                cell.iter()
+                    .map(|&node| match adapter.node_source(node) {
+                        SubdivisionNodeSource::Node(node) => match incidence_graph.entity(node) {
+                            Entity::StereoAtom(id) => Some(id.index()),
+                            _ => None,
+                        },
+                        SubdivisionNodeSource::Edge(_) => None,
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })
+            .collect::<Vec<_>>();
+        stereo_atom_cells.sort();
+        (rounds, stereo_atom_cells)
+    });
+
+    assert_eq!(actual, expected);
 }
 
 #[rstest]
