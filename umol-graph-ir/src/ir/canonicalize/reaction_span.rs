@@ -11,13 +11,13 @@ use super::super::entity::Entity;
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, BondId};
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
-use super::super::ligand::StereoLigand;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::num::NumForm;
 use super::super::reaction::Reaction;
 use super::super::reaction_span::ReactionSpan;
 use super::super::remap::MoleculeRemapping;
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
-use super::super::stereo::{StereoAtomForm, StereoBondForm};
+use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm};
 use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::{
     aromatic_system_constraint_form_key, atom_constraint_form_key, atom_inherent_fields,
@@ -30,12 +30,12 @@ use super::{
     positioned_product, product, push_span_block, rank_initial_colors, reaction_canonicalize_level,
     reaction_span_canonicalize_level, reaction_span_counts, relation_span_key, sequence,
     stereo_atom_constraint_form_key, stereo_bond_constraint_form_key,
-    stereo_configuration_form_key, stereo_kind_key, stereo_ligand_key, topology_initial_partition,
-    unpaired_electrons_form_key, variant, AutomorphismAdapter, BranchOrdering, CanonicalCandidate,
-    CanonicalComparisonKey, CanonicalKeyValue, CanonicalSearchOptions, CanonicalSearchResult,
-    Canonicalize, CanonicalizeContext, ConstraintBlockPosition, DescriptionLevel,
-    EntityBlockPosition, InitialColorKey, PositionedKey, ReactionCanonicalizeError,
-    ReactionSpanCanonicalizeError,
+    stereo_configuration_form_key, stereo_frame_permutations, stereo_kind_key, stereo_ligand_key,
+    topology_initial_partition, unpaired_electrons_form_key, variant, AutomorphismAdapter,
+    BranchOrdering, CanonicalCandidate, CanonicalComparisonKey, CanonicalKeyValue,
+    CanonicalSearchOptions, CanonicalSearchResult, Canonicalize, CanonicalizeContext,
+    ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition, InitialColorKey, PositionedKey,
+    ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
 };
 
 fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorKey, Contradiction> {
@@ -262,6 +262,64 @@ fn initial_color_keys(
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;
     Ok((entity_keys, incidence_keys))
+}
+
+/// The stereo descriptor of a span entity, minimized over the frame permutations of its kind.
+///
+/// One permutation acts on the ligand classes and on the configuration of each present side.
+#[cfg_attr(not(test), expect(dead_code))]
+fn stereo_refinement_descriptor<T>(
+    site_class: u32,
+    ligand_classes: &[(u32, StereoLigandKind)],
+    span: &EntitySpan<T>,
+    configuration: impl Fn(&T) -> &StereoConfigurationForm,
+) -> Result<CanonicalKeyValue, Contradiction> {
+    let descriptor = |ligands: &[(u32, StereoLigandKind)],
+                      configuration: StereoConfigurationForm| {
+        product([
+            CanonicalKeyValue::Unsigned(site_class.into()),
+            sequence(
+                ligands
+                    .iter()
+                    .map(|&(class, kind)| stereo_ligand_key(class, kind)),
+            ),
+            stereo_configuration_form_key(&configuration),
+        ])
+    };
+
+    let kind = [span.lhs(), span.rhs()]
+        .into_iter()
+        .flatten()
+        .find_map(|attributes| configuration(attributes).kind());
+    match kind {
+        None => {
+            let mut ligands = ligand_classes.to_vec();
+            ligands.sort_unstable();
+            normalized_entity_span_key(span, |_| {
+                Ok(descriptor(&ligands, StereoConfigurationForm::Undetermined))
+            })
+        }
+        Some(kind) => {
+            if ligand_classes.len() != kind.degree() {
+                return Err(Contradiction);
+            }
+            stereo_frame_permutations(kind)
+                .map(|permutation| {
+                    let ligands = permutation.act(ligand_classes);
+                    normalized_entity_span_key(span, |attributes| {
+                        configuration(attributes)
+                            .apply(permutation)
+                            .ok_or(Contradiction)?
+                            .normalize()
+                            .map(|configuration| descriptor(&ligands, configuration))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .min()
+                .ok_or(Contradiction)
+        }
+    }
 }
 
 fn comparison_key(

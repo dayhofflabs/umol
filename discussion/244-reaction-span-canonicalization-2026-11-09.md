@@ -534,7 +534,7 @@ the molecule's.
 
 ### S3 — Stereo-sensitive search at Structure
 
-#### S3a — Span stereo descriptor
+#### S3a — Span stereo descriptor **Done**
 
 Add `stereo_refinement_descriptor`, the counterpart of the molecule function of that name. It takes
 the site class, the ligand classes, and the entity span of the stereo form, and minimizes over the
@@ -542,7 +542,20 @@ frame permutations of the kind with both configurations transported. Additive (g
 
 **Tests:** `test_stereo_refinement_descriptor_frame_invariant` for every stereo kind and for
 unchanged, added, removed, and modified entities, including one undetermined side;
-`test_stereo_refinement_descriptor_error` for a frame of the wrong degree.
+`test_stereo_refinement_descriptor_error` for a frame of the wrong degree;
+`test_stereo_refinement_descriptor` with exact values.
+
+The function is generic over the stereo form and takes a closure that reads the configuration, so
+stereo atoms and stereo bonds share it. Each side has the row shape of the molecule descriptor, and
+the two sides sit under the normalized span tag. Until S3d calls the function it carries
+`#[cfg_attr(not(test), expect(dead_code))]`, which clippy rejects once the function is used.
+
+`test_stereo_refinement_descriptor`, ten cases, was added to the two planned tests. Frame invariance
+also holds for a descriptor that minimizes each side separately or leaves out the rhs, so it does
+not fix the value. The row with two ligands of one class and exchanged configurations on the two
+sides requires one permutation to act on both sides. The frame-invariance test has 36 cases, six
+span shapes for each of the six kinds, and the error test has six. Clippy, the library tests, and
+the two integration tests pass.
 
 #### S3b — Span structure partition
 

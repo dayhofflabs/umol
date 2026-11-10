@@ -1,5 +1,7 @@
 //! Unit tests for reaction-span and reaction canonicalization.
 
+use std::iter;
+
 use rstest::rstest;
 use umol_chem::element::Element;
 
@@ -383,6 +385,240 @@ fn test_initial_color_keys_incidence(
                 InitialColorKey::Incidence(variant(4, [expected[1].clone()]))
             ),
         ],
+    );
+}
+
+#[rstest]
+#[case::unchanged(
+    EntitySpan::Unchanged(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
+    vec![1, 0, 2, 3],
+    SpanTagPosition::UNCHANGED,
+    vec![0, 1, 2, 3],
+    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
+)]
+#[case::added(
+    EntitySpan::Added(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
+    vec![1, 0, 2, 3],
+    SpanTagPosition::ADDED,
+    vec![0, 1, 2, 3],
+    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
+)]
+#[case::removed(
+    EntitySpan::Removed(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
+    vec![1, 0, 2, 3],
+    SpanTagPosition::REMOVED,
+    vec![0, 1, 2, 3],
+    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
+)]
+#[case::modified(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+    },
+    vec![1, 0, 2, 3],
+    SpanTagPosition::MODIFIED,
+    vec![0, 1, 2, 3],
+    vec![
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+    ],
+)]
+#[case::modified_equal_sides(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+    },
+    vec![1, 0, 2, 3],
+    SpanTagPosition::UNCHANGED,
+    vec![0, 1, 2, 3],
+    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
+)]
+#[case::modified_equal_ligand_classes(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+    },
+    vec![0, 0, 1, 2],
+    SpanTagPosition::MODIFIED,
+    vec![0, 0, 1, 2],
+    vec![
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+    ],
+)]
+#[case::modified_lhs_undetermined(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::Undetermined,
+        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+    },
+    vec![1, 0, 2, 3],
+    SpanTagPosition::MODIFIED,
+    vec![0, 1, 2, 3],
+    vec![
+        StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+    ],
+)]
+#[case::modified_rhs_undetermined(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+        rhs: StereoConfigurationForm::Undetermined,
+    },
+    vec![1, 0, 2, 3],
+    SpanTagPosition::MODIFIED,
+    vec![0, 1, 2, 3],
+    vec![
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+        StereoConfigurationForm::Undetermined,
+    ],
+)]
+#[case::undetermined(
+    EntitySpan::Unchanged(StereoConfigurationForm::Undetermined),
+    vec![2, 0, 1],
+    SpanTagPosition::UNCHANGED,
+    vec![0, 1, 2],
+    vec![StereoConfigurationForm::Undetermined],
+)]
+#[case::modified_undetermined_sides(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::Undetermined,
+        rhs: StereoConfigurationForm::Undetermined,
+    },
+    vec![2, 0, 1],
+    SpanTagPosition::UNCHANGED,
+    vec![0, 1, 2],
+    vec![StereoConfigurationForm::Undetermined],
+)]
+fn test_stereo_refinement_descriptor(
+    #[case] span: EntitySpan<StereoConfigurationForm>,
+    #[case] ligand_classes: Vec<u32>,
+    #[case] expected_position: SpanTagPosition,
+    #[case] expected_ligand_classes: Vec<u32>,
+    #[case] expected_configurations: Vec<StereoConfigurationForm>,
+) {
+    let ligands = ligand_classes
+        .into_iter()
+        .map(|class| (class, StereoLigandKind::Atom))
+        .collect::<Vec<_>>();
+    let expected = CanonicalKeyValue::Span(SpanKey {
+        position: expected_position,
+        values: expected_configurations
+            .iter()
+            .map(|configuration| {
+                product([
+                    CanonicalKeyValue::Unsigned(7),
+                    sequence(
+                        expected_ligand_classes
+                            .iter()
+                            .map(|&class| stereo_ligand_key(class, StereoLigandKind::Atom)),
+                    ),
+                    stereo_configuration_form_key(configuration),
+                ])
+            })
+            .collect(),
+    });
+
+    assert_eq!(
+        stereo_refinement_descriptor(7, &ligands, &span, |configuration| configuration),
+        Ok(expected),
+    );
+}
+
+#[rstest]
+#[case::unchanged(|kind| EntitySpan::Unchanged(StereoConfigurationForm::kinded(kind, 0u32)))]
+#[case::added(|kind| EntitySpan::Added(StereoConfigurationForm::kinded(kind, 0u32)))]
+#[case::removed(|kind| EntitySpan::Removed(StereoConfigurationForm::kinded(kind, 0u32)))]
+#[case::modified(|kind| EntitySpan::Modified {
+    lhs: StereoConfigurationForm::kinded(kind, 0u32),
+    rhs: StereoConfigurationForm::kinded(kind, 1u32),
+})]
+#[case::modified_lhs_undetermined(|kind| EntitySpan::Modified {
+    lhs: StereoConfigurationForm::Undetermined,
+    rhs: StereoConfigurationForm::kinded(kind, 0u32),
+})]
+#[case::modified_rhs_undetermined(|kind| EntitySpan::Modified {
+    lhs: StereoConfigurationForm::kinded(kind, 0u32),
+    rhs: StereoConfigurationForm::Undetermined,
+})]
+fn test_stereo_refinement_descriptor_frame_invariant(
+    #[values(
+        StereoKind::Tetrahedral,
+        StereoKind::CisTrans,
+        StereoKind::Axial,
+        StereoKind::SquarePlanar,
+        StereoKind::TrigonalBipyramidal,
+        StereoKind::Octahedral
+    )]
+    kind: StereoKind,
+    #[case] span: fn(StereoKind) -> EntitySpan<StereoConfigurationForm>,
+) {
+    let degree = kind.degree();
+    let frame = if matches!(kind, StereoKind::CisTrans | StereoKind::Axial) {
+        Permutation::from_image(&[2, 3, 0, 1])
+    } else {
+        Permutation::from_image(&(1..degree).chain(iter::once(0)).collect::<Vec<_>>())
+    };
+    let ligands = (0..degree)
+        .map(|class| (class as u32, StereoLigandKind::Atom))
+        .collect::<Vec<_>>();
+    let span = span(kind);
+    let transported = span
+        .clone()
+        .try_map(|configuration| configuration.apply(frame))
+        .expect("the permutation is a parent-group action of the form's kind");
+
+    assert_eq!(
+        stereo_refinement_descriptor(7, &frame.act(&ligands), &transported, |configuration| {
+            configuration
+        })
+        .expect("the frame has the degree of the kind"),
+        stereo_refinement_descriptor(7, &ligands, &span, |configuration| configuration)
+            .expect("the frame has the degree of the kind"),
+    );
+}
+
+#[rstest]
+#[case::unchanged_short(
+    EntitySpan::Unchanged(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
+    3
+)]
+#[case::unchanged_long(
+    EntitySpan::Unchanged(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
+    5
+)]
+#[case::added_short(
+    EntitySpan::Added(StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32)),
+    3
+)]
+#[case::removed_long(
+    EntitySpan::Removed(StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32)),
+    5
+)]
+#[case::modified_short(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32),
+        rhs: StereoConfigurationForm::kinded(StereoKind::Octahedral, 1u32),
+    },
+    5
+)]
+#[case::modified_lhs_undetermined_long(
+    EntitySpan::Modified {
+        lhs: StereoConfigurationForm::Undetermined,
+        rhs: StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32),
+    },
+    7
+)]
+fn test_stereo_refinement_descriptor_error(
+    #[case] span: EntitySpan<StereoConfigurationForm>,
+    #[case] degree: usize,
+) {
+    let ligands = (0..degree)
+        .map(|class| (class as u32, StereoLigandKind::Atom))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        stereo_refinement_descriptor(0, &ligands, &span, |configuration| configuration),
+        Err(Contradiction),
     );
 }
 
