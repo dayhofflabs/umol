@@ -286,6 +286,269 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
 }
 
 #[rstest]
+#[case::feature_free(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        ..Default::default()
+    }),
+    vec![NodeId(1), NodeId(0), NodeId(2)],
+    true,
+)]
+#[case::distinct_ligands(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+        )],
+        ..Default::default()
+    }),
+    (0..10).map(NodeId::from).collect(),
+    true,
+)]
+#[case::prochiral_explicit_hydrogens(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::H, Element::H, Element::F, Element::Cl]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+        )],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
+        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+    ],
+    false,
+)]
+#[case::stereo_site_exchange(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+        ]
+        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+        .into(),
+        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
+            .map(|(site, ligand)| {
+                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .into(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
+    ],
+    true,
+)]
+#[case::stereo_bond_endpoint_exchange(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::C, Element::F, Element::Cl, Element::F, Element::Cl]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(2))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(5), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_bonds: vec![(
+            BondId(0),
+            [2, 3, 4, 5]
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .into(),
+            EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, 0u32)),
+        )],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
+        NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
+    ],
+    true,
+)]
+#[case::lhs_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::H, Element::H, Element::F, Element::Cl]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::default(),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
+        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+    ],
+    false,
+)]
+#[case::rhs_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::H, Element::H, Element::F, Element::Cl]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::default(),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
+        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+    ],
+    false,
+)]
+#[case::modified_unchanged_exchange(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+        ]
+        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+        .into(),
+        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
+            .map(|(site, ligand)| {
+                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .into(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
+    ],
+    false,
+)]
+#[case::modified_stereo_bond_endpoint_exchange(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::C, Element::F, Element::Cl, Element::F, Element::Cl]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(2))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(5), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_bonds: vec![(
+            BondId(0),
+            [2, 3, 4, 5]
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .into(),
+            EntitySpan::Modified {
+                lhs: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+                rhs: StereoBondForm::new(StereoKind::CisTrans, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
+        NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
+    ],
+    true,
+)]
+fn test_retain_stereo_preserving_generators(
+    #[case] span: ReactionSpan,
+    #[case] generator: Vec<NodeId>,
+    #[case] expected_retained: bool,
+) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+    let mut generators = vec![generator.clone()];
+    let expected = if expected_retained {
+        vec![generator]
+    } else {
+        Vec::new()
+    };
+
+    retain_stereo_preserving_generators(&span, &incidence_graph, &mut generators);
+
+    assert_eq!(generators, expected);
+}
+
+#[rstest]
 #[case::unchanged(
     EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 2])),
     EntitySpan::Unchanged(MulticenterBondForm::from_electrons(vec![1, 2])),

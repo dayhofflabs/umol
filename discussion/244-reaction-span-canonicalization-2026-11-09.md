@@ -585,7 +585,7 @@ as a set of cells, without and with `para_stereo`:
 The fixture rows give the round counts of the molecule test. Clippy, the library tests, and the two
 integration tests pass.
 
-#### S3c — Span stereo generator check
+#### S3c — Span stereo generator check **Done**
 
 Add `generator_preserves_stereo` and `retain_stereo_preserving_generators`, the counterparts of the
 two molecule functions. One frame action must carry the configuration of each present side to that
@@ -594,6 +594,24 @@ of the image. Additive (green). [dep: S0e]
 **Tests:** `test_retain_stereo_preserving_generators`: the rows of the molecule table as unchanged
 spans; a generator that preserves the lhs configuration and not the rhs one; a generator between a
 modified and an unchanged stereo entity; a stereo-bond endpoint exchange.
+
+The two functions follow the molecule functions. The configuration check takes the lhs and the rhs
+of the entity and of its image in turn, with the one frame action derived from the ligands. A side
+present on the entity and absent on the image, or the reverse, fails the check. The functions carry
+the unused-function attribute of S3a until S3d.
+
+`test_retain_stereo_preserving_generators` has nine cases: the five molecule rows as unchanged
+spans, and four span rows.
+
+| Span row | Generator | Retained |
+| --- | --- | --- |
+| Stereocentre with two hydrogens, lhs coset 0, rhs undetermined | Hydrogen exchange | No |
+| The same, lhs undetermined, rhs coset 0 | Hydrogen exchange | No |
+| Two equal fragments, one stereo atom unchanged, the other modified from coset 0 to coset 1 | Fragment exchange | No |
+| Stereo bond modified from coset 0 to coset 1 | Endpoint exchange | Yes |
+
+The first two rows together require both sides to be checked. Clippy, the library tests, and the
+two integration tests pass.
 
 #### S3d — Structure search
 

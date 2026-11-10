@@ -178,6 +178,114 @@ fn remapping_from_order(
     molecule_remapping(&images)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
+fn generator_preserves_stereo(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
+    let frame_action = |source: &[StereoLigand], target: &[StereoLigand]| {
+        let mapped = source
+            .iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, target)
+    };
+    let configuration_preserved = |source: Option<&StereoConfigurationForm>,
+                                   target: Option<&StereoConfigurationForm>,
+                                   action: Permutation| {
+        match (source, target) {
+            (Some(source), Some(target)) => source
+                .clone()
+                .reframe_by(&action)
+                .is_some_and(|mapped| mapped.normalized_eq(target)),
+            (None, None) => true,
+            (Some(_), None) | (None, Some(_)) => false,
+        }
+    };
+
+    for source_id in span.stereo_atoms().ids() {
+        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source_id)) else {
+            return false;
+        };
+        if entity_image(Entity::Atom(span.stereo_atoms().site(source_id)))
+            != Entity::Atom(span.stereo_atoms().site(target_id))
+        {
+            return false;
+        }
+        let Some(action) = frame_action(
+            span.stereo_atoms().ligands(source_id),
+            span.stereo_atoms().ligands(target_id),
+        ) else {
+            return false;
+        };
+        let source = span.stereo_atoms().attributes(source_id);
+        let target = span.stereo_atoms().attributes(target_id);
+        if !configuration_preserved(
+            source.lhs().map(|attributes| &attributes.configuration),
+            target.lhs().map(|attributes| &attributes.configuration),
+            action,
+        ) || !configuration_preserved(
+            source.rhs().map(|attributes| &attributes.configuration),
+            target.rhs().map(|attributes| &attributes.configuration),
+            action,
+        ) {
+            return false;
+        }
+    }
+
+    for source_id in span.stereo_bonds().ids() {
+        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source_id)) else {
+            return false;
+        };
+        if entity_image(Entity::Bond(span.stereo_bonds().site(source_id)))
+            != Entity::Bond(span.stereo_bonds().site(target_id))
+        {
+            return false;
+        }
+        let Some(action) = frame_action(
+            span.stereo_bonds().ligands(source_id),
+            span.stereo_bonds().ligands(target_id),
+        ) else {
+            return false;
+        };
+        let source = span.stereo_bonds().attributes(source_id);
+        let target = span.stereo_bonds().attributes(target_id);
+        if !configuration_preserved(
+            source.lhs().map(|attributes| &attributes.configuration),
+            target.lhs().map(|attributes| &attributes.configuration),
+            action,
+        ) || !configuration_preserved(
+            source.rhs().map(|attributes| &attributes.configuration),
+            target.rhs().map(|attributes| &attributes.configuration),
+            action,
+        ) {
+            return false;
+        }
+    }
+
+    true
+}
+
+#[cfg_attr(not(test), expect(dead_code))]
+fn retain_stereo_preserving_generators(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    if span.stereo_atoms().count() == 0 && span.stereo_bonds().count() == 0 {
+        return;
+    }
+    generators.retain(|generator| generator_preserves_stereo(span, incidence_graph, generator));
+}
+
 fn initial_color_keys(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
