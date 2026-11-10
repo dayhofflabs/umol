@@ -247,9 +247,8 @@ pub(crate) fn raw_tetrahedral_stereo_strategy() -> BoxedStrategy<TetrahedralSter
     prop_oneof![
         Just(TetrahedralStereoForm::Undetermined),
         Just(TetrahedralStereoForm::NotStereo),
-        stereo_coset_strategy().prop_map(TetrahedralStereoForm::Stereo),
+        Just(TetrahedralStereoForm::Stereo)
     ]
-    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -257,9 +256,8 @@ pub(crate) fn raw_cis_trans_stereo_strategy() -> BoxedStrategy<CisTransStereoFor
     prop_oneof![
         Just(CisTransStereoForm::Undetermined),
         Just(CisTransStereoForm::NotStereo),
-        stereo_coset_strategy().prop_map(CisTransStereoForm::Stereo),
+        Just(CisTransStereoForm::Stereo)
     ]
-    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -1096,19 +1094,16 @@ pub(crate) fn stereo_ligand_kind_strategy() -> impl Strategy<Value = StereoLigan
         Just(StereoLigandKind::Atom),
         Just(StereoLigandKind::ImplicitHydrogen),
         Just(StereoLigandKind::LonePair),
+        Just(StereoLigandKind::Virtual),
     ]
 }
 
-/// Per-kind `#T` / `#C` constraint values, excluding the vacuous `Undetermined`
-/// site (it is dropped on render, breaking render → reparse). `Stereo(coset)`
-/// (incl. the `+` form `Stereo(Undetermined)`) and `NotStereo` are kept. The
-/// `_lattice_strategy` variants add `Undetermined` (the lattice top).
+/// Non-vacuous stereo presence values for serialization; lattice strategies include top.
 pub(crate) fn tetrahedral_stereo_strategy() -> impl Strategy<Value = TetrahedralStereoForm> {
     prop_oneof![
         Just(TetrahedralStereoForm::NotStereo),
-        stereo_coset_strategy().prop_map(TetrahedralStereoForm::Stereo),
+        Just(TetrahedralStereoForm::Stereo)
     ]
-    .prop_map(|s| s.normalize().unwrap_or(TetrahedralStereoForm::Undetermined))
 }
 
 pub(crate) fn tetrahedral_stereo_lattice_strategy() -> impl Strategy<Value = TetrahedralStereoForm>
@@ -1122,9 +1117,8 @@ pub(crate) fn tetrahedral_stereo_lattice_strategy() -> impl Strategy<Value = Tet
 pub(crate) fn cis_trans_stereo_strategy() -> impl Strategy<Value = CisTransStereoForm> {
     prop_oneof![
         Just(CisTransStereoForm::NotStereo),
-        stereo_coset_strategy().prop_map(CisTransStereoForm::Stereo),
+        Just(CisTransStereoForm::Stereo)
     ]
-    .prop_map(|s| s.normalize().unwrap_or(CisTransStereoForm::Undetermined))
 }
 
 pub(crate) fn cis_trans_stereo_lattice_strategy() -> impl Strategy<Value = CisTransStereoForm> {
@@ -1648,6 +1642,7 @@ pub(crate) fn stereo_atom_entries_strategy(
                         .chain([
                             StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen),
                             StereoLigand::new(site, StereoLigandKind::LonePair),
+                            StereoLigand::new(site, StereoLigandKind::Virtual),
                         ])
                         .collect();
                     if pool.len() < ligand_specs.len() {
@@ -1737,6 +1732,7 @@ pub(crate) fn stereo_bond_entries_strategy(
                                 .chain([
                                     StereoLigand::new(endpoint, StereoLigandKind::ImplicitHydrogen),
                                     StereoLigand::new(endpoint, StereoLigandKind::LonePair),
+                                    StereoLigand::new(endpoint, StereoLigandKind::Virtual),
                                 ])
                                 .collect();
                             specs

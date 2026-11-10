@@ -328,6 +328,18 @@ per input format. It introduces no additional interpretation in the binding.
 
 ### Resolution
 
+StereoResolveConfig exposes stereo_atom_failure, stereo_bond_failure, and
+ring_config as keyword-only constructor arguments and immutable properties.
+Both failure policies default to StereoFailurePolicy.Error; RingConfig uses
+its Rust default. stereo_atom_failure covers unrealizable tetrahedral constraints
+and stored stereo atoms; stereo_bond_failure covers unrealizable cis/trans
+constraints and stored stereo bonds. Error rejects, Keep retains the failed
+description, and Remove clears the failed constraint or removes the failed entity.
+Ambiguity remains Underdetermined under every policy; mismatches are always
+Contradictory. Ring-size admissibility comes from StereoModel. The repr includes
+all three fields. Former failure-policy and operation-level ring-size keywords
+raise TypeError.
+
 Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
 molecule; Underdetermined is payload-free and Contradictory contains its diagnostic. Planning errors
 raise RuntimeError. Every outcome preserves the source and its existing views.
@@ -424,7 +436,22 @@ Both methods in a pair use the same exceptions and retain the complete Rust diag
 Charge delocalization has no operation error. Ordinary Python argument-extraction errors retain
 their existing behavior.
 
-### Stereo values and perception
+### Stereo values and operation configurations
+
+TetrahedralStereoForm and CisTransStereoForm expose Undetermined(), NotStereo(), and Stereo()
+unit variants. Their as_lit() methods return None, False, and True respectively. Atom/bond
+constraint constructors, containers, and views accept bool or the corresponding form. A positive
+value asserts the stereo kind, independently of configuration and stereogenicity.
+
+TetrahedralConfiguration and CisTransConfiguration are inputs to explicit entity configuration
+fields, alongside StereoConfigurationForm. They do not coerce to atom/bond constraints.
+StereoLigandKind.Virtual is a distinct kind accepted by StereoLigand; equality and matching
+remain exact. Its atom_id names the bearer, as for ImplicitHydrogen and LonePair. Construction
+checks the ligand's incidence when the owning molecule is assembled.
+
+Perception and derivation remain Rust operations through StereoPerceiver and StereoDerivation.
+Python exposes the supported molecular operations and the values they require; it has no
+perceiver, derivation, StereoResolver, or standalone stereo-projection class.
 
 StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
 IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
@@ -442,8 +469,25 @@ information they have without calculating missing values in the binding.
 AddStereoConfig, RemoveStereoConfig, and EnumerateStereoConfig expose the corresponding
 Rust fields through immutable properties. Keyword-only construction supplies Rust defaults
 for omitted configuration fields. selection=None selects the operation's default selection;
-an explicit StereoSelection() supplies unrestricted filters. AddStereoConfig also exposes
-ring_config, and RemoveStereoConfig exposes mode. All three expose automorphism_algorithm.
+an explicit StereoSelection() supplies unrestricted filters. All three expose
+automorphism_algorithm and para_stereo_max_iterations. The iteration limit defaults
+to 16, accepts the u32 range, and is forwarded to every symmetry path, including
+both enumeration classification and assignment checks. AddStereoConfig also
+exposes ring_config; RemoveStereoConfig exposes mode.
+
+StereoModel owns stereo_bond_min_ring_size and stereo_bond_e_min_ring_size, both
+defaulting to 8. Zero disables the corresponding restriction. Both are required
+keyword-only model fields; getters, Rust conversion, equality, and repr preserve
+their values. Addition and resolution apply stereo_bond_min_ring_size when
+creating missing stereo and retain existing descriptions and filtered assertions.
+Ring-size exclusion does not invoke a failure policy. A positive assertion survives
+addition; resolution discharges it when an explicit entity independently entails it.
+Enumeration and removal act on supplied entities independently of the creation
+cutoff. Import wrappers pass the ordinary resolver config, and supported small-ring
+configurations survive resolution and export.
+Native conformance validation checks both limits; E is read relative to each
+ring's continuation ligands.
+
 RemoveStereoMode.All and RemoveStereoMode.Undetermined preserve the Rust matching predicate:
 Undetermined accepts only an explicitly undetermined coset of a known kind, including kinds
 that perception does not process. Its matches method accepts StereoConfigurationForm.
@@ -460,8 +504,8 @@ All three default to AutomorphismAlgorithm.Nauty(); addition also uses RingConfi
 Rust default.
 
 Addition creates missing selected entities and preserves existing arrangements and source
-assertions. Positive #T/#C evidence supplies the coset; otherwise the added coset remains
-undetermined. Symmetric and prochiral arrangements are permitted when selected explicitly.
+assertions. New cosets are undetermined. Symmetric and prochiral arrangements are permitted when
+selected explicitly; an entity does not itself assert stereogenicity.
 Removal clears the corresponding #T/#C assertion at each removed entity's site, preserving
 other assertions and topology. Undetermined mode excludes finite coset sets, symbolic
 configurations, and kindless forms. A stereogenicity filter requests classification;
@@ -477,36 +521,8 @@ silently modify a disconnected copy. Construction extracts iterable members into
 passing a selection to a configuration and reading it back copy its owned sets.
 The supplied values remain reusable, including the immutable getter results.
 
-StereoPerception(model) captures the model as Rust's constructor does. All queries delegate
-to Rust while borrowing the source molecule and preserve it and its existing views:
-
-| Query | Arguments after self | Result |
-| --- | --- | --- |
-| recognize | molecule, selection, automorphism_algorithm, ring_config | StereoDerivation |
-| classify | molecule, sites, automorphism_algorithm | dict[StereoSite, Stereogenicity] |
-| derive | molecule | StereoDerivation |
-| skipped_stereo_bonds | molecule | frozenset[int] |
-| derive_stereo_atom | molecule, atom, coset | ligand tuple and StereoAtomForm, or None |
-| derive_stereo_bond | molecule, bond, coset | ligand tuple and StereoBondForm, or None |
-
-recognize and classify require explicit algorithm arguments, matching Rust. classify accepts
-an iterable of typed sites and collects it into the native set; duplicates collapse. Its returned
-dict is independently mutable because Rust returns an owned map, not a borrowed observation.
-The frame builders require the coset explicitly and return None under the same exclusion
-or incompatibility conditions as Rust. Their successful results contain a ligand tuple
-and an ordinary, independently mutable entity form. Their ID bounds checks translate
-Rust's asserted indexing prerequisite into IndexError before calling the query.
-
-StereoDerivation preserves the four public Rust fields and supports their independent
-construction, with empty sequences by default. It does not validate the supplied rows
-against a molecule. Its immutable properties expose tuples, retaining sequence order and
-duplicates. Each stereo row remains a (site ID, ligand tuple, entity form) triple.
-Construction copies supplied forms to isolate them from later caller mutation. A Rust query's
-derivation moves into the wrapper; reading a row collection copies its forms into the existing
-read-only owned form wrappers, so nested observations reject mutation. The returned form's
-copy() supplies an explicitly mutable value.
-
-StereoPerceptionError uses the existing exception classes and retains its Rust message:
+Stereo addition and removal map Rust's StereoPerceptionError into the existing exception
+classes while retaining the Rust message:
 
 | Rust failure | Python exception | Additional attributes |
 | --- | --- | --- |
@@ -518,10 +534,8 @@ StereoPerceptionError uses the existing exception classes and retains its Rust m
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
 | Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
 
-Addition and removal use this same mapping. Addition's separate inconsistency variant also
-produces ContradictionError with the typed inconsistency attribute. recognize retains evidence
-inconsistencies in its StereoDerivation result, matching Rust; the binding does not turn those
-result fields into exceptions.
+Addition's separate inconsistency variant also produces ContradictionError with the typed
+inconsistency attribute.
 
 ### Stereo enumeration
 

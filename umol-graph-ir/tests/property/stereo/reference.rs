@@ -1,5 +1,6 @@
-//! Binary coset actions from parity/endpoint blocks and one-carrier classifications
-//! from ligand equality. These references use no production symmetry calculation.
+//! Binary coset actions and framed molecule equality from parity/endpoint blocks,
+//! and one-carrier classifications from ligand equality. Reference molecules are
+//! constructed directly, without production frame transport or symmetry calculation.
 
 use std::array;
 
@@ -8,8 +9,8 @@ use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, BondId, ConstitutionColoring, GraphSymmetryConfig, Molecule,
-    MoleculeEntries, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
+    MoleculeEntries, Reframe, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
 };
 use umol_perm::PermutationGroup;
 
@@ -44,6 +45,91 @@ fn test_stereo_kind_act(#[case] kind: StereoKind) {
                 kind.act(coset, permutation),
                 binary_coset_action(kind, coset, &image),
                 "kind {kind:?}, coset {coset}, image {image:?}"
+            );
+        }
+    }
+}
+
+#[rstest]
+#[case::tetrahedral(StereoKind::Tetrahedral)]
+#[case::cis_trans(StereoKind::CisTrans)]
+fn test_molecule_framed_eq(#[case] kind: StereoKind, #[values(0, 1)] coset: u32) {
+    let offset = if kind == StereoKind::Tetrahedral {
+        1
+    } else {
+        2
+    };
+    let mut entries = MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); offset],
+        ..Default::default()
+    };
+    entries.atoms.extend(
+        [Element::F, Element::Cl, Element::Br, Element::I]
+            .into_iter()
+            .map(AtomForm::from_element),
+    );
+    if kind == StereoKind::CisTrans {
+        entries
+            .bonds
+            .push((AtomId(0), AtomId(1), BondForm::from_order(2)));
+    }
+    for position in 0..4 {
+        entries.bonds.push((
+            AtomId::from(if kind == StereoKind::Tetrahedral {
+                0
+            } else {
+                position / 2
+            }),
+            AtomId::from(offset + position),
+            BondForm::from_order(1),
+        ));
+    }
+    let ligands = (offset..offset + 4)
+        .map(|atom| StereoLigand::new(AtomId::from(atom), StereoLigandKind::Atom))
+        .collect();
+    if kind == StereoKind::Tetrahedral {
+        entries
+            .stereo_atoms
+            .push((AtomId(0), ligands, StereoAtomForm::new(kind, coset)));
+    } else {
+        entries
+            .stereo_bonds
+            .push((BondId(0), ligands, StereoBondForm::new(kind, coset)));
+    }
+    let source = Molecule::from_entries(entries.clone());
+
+    for &permutation in PermutationGroup::symmetric(4).elements() {
+        let image = array::from_fn(|position| permutation.apply(position));
+        let Some(transported_coset) = binary_coset_action(kind, coset, &image) else {
+            continue;
+        };
+        for other_coset in 0..2 {
+            let ligands = image
+                .into_iter()
+                .map(|position| {
+                    StereoLigand::new(AtomId::from(offset + position), StereoLigandKind::Atom)
+                })
+                .collect();
+            let mut other_entries = entries.clone();
+            if kind == StereoKind::Tetrahedral {
+                other_entries.stereo_atoms[0] =
+                    (AtomId(0), ligands, StereoAtomForm::new(kind, other_coset));
+            } else {
+                other_entries.stereo_bonds[0] =
+                    (BondId(0), ligands, StereoBondForm::new(kind, other_coset));
+            }
+            let other = Molecule::from_entries(other_entries);
+            let expected = other_coset == transported_coset;
+
+            assert_eq!(
+                source.framed_eq(&other),
+                expected,
+                "kind {kind:?}, coset {coset}, image {image:?}, other coset {other_coset}"
+            );
+            assert_eq!(
+                other.framed_eq(&source),
+                expected,
+                "kind {kind:?}, coset {coset}, image {image:?}, other coset {other_coset}"
             );
         }
     }

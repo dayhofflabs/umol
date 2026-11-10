@@ -7,7 +7,7 @@ use super::*;
 )]
 #[case(
     BondConstraintForm::undetermined(BondConstraintKey::CisTransStereo),
-    BondConstraintForm::cis_trans_stereo(CisTransStereo::Stereo(0))
+    BondConstraintForm::cis_trans_stereo(true)
 )]
 #[case(
     BondConstraintForm::ring_membership(RingScope::All, 1),

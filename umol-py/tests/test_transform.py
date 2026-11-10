@@ -352,6 +352,7 @@ def test_stereo_config_new(constructor, kinds, classes):
     assert config.selection.kinds == kinds
     assert config.selection.stereogenicities == classes
     assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert config.para_stereo_max_iterations == 16
     assert (
         eval(
             repr(config),
@@ -390,6 +391,13 @@ def test_stereo_config_new(constructor, kinds, classes):
             TypeError,
         ),
         (AddStereoConfig, {"ring_config": {}}, TypeError),
+        (AddStereoConfig, {"para_stereo_max_iterations": "8"}, TypeError),
+        (AddStereoConfig, {"para_stereo_max_iterations": -1}, OverflowError),
+        (AddStereoConfig, {"para_stereo_max_iterations": 1 << 32}, OverflowError),
+        (RemoveStereoConfig, {"para_stereo_max_iterations": -1}, OverflowError),
+        (RemoveStereoConfig, {"para_stereo_max_iterations": 1 << 32}, OverflowError),
+        (EnumerateStereoConfig, {"para_stereo_max_iterations": -1}, OverflowError),
+        (EnumerateStereoConfig, {"para_stereo_max_iterations": 1 << 32}, OverflowError),
         (EnumerateStereoConfig, {"kinds": []}, TypeError),
     ],
 )
@@ -402,8 +410,15 @@ def test_stereo_config_new_error(constructor, kwargs, error):
     "constructor,kwargs",
     [
         (AddStereoConfig, {"ring_config": RingConfig()}),
+        (AddStereoConfig, {"para_stereo_max_iterations": 0}),
+        (AddStereoConfig, {"para_stereo_max_iterations": 25}),
+        (AddStereoConfig, {"para_stereo_max_iterations": (1 << 32) - 1}),
         (RemoveStereoConfig, {"mode": RemoveStereoMode.Undetermined}),
+        (RemoveStereoConfig, {"para_stereo_max_iterations": 7}),
+        (RemoveStereoConfig, {"para_stereo_max_iterations": (1 << 32) - 1}),
         (EnumerateStereoConfig, {}),
+        (EnumerateStereoConfig, {"para_stereo_max_iterations": 5}),
+        (EnumerateStereoConfig, {"para_stereo_max_iterations": (1 << 32) - 1}),
     ],
 )
 def test_stereo_config_properties(constructor, kwargs):
@@ -414,6 +429,8 @@ def test_stereo_config_properties(constructor, kwargs):
     )
     config = constructor(selection=selection, **kwargs)
     assert config.selection == selection
+    for name, value in kwargs.items():
+        assert getattr(config, name) == value
     for name in ("selection", "automorphism_algorithm", *kwargs):
         value = getattr(config, name)
         with pytest.raises(AttributeError):

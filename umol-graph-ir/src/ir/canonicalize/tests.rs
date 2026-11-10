@@ -2161,6 +2161,127 @@ fn test_molecule_canonical_eq(
 }
 
 #[rstest]
+#[case::same_frame([4, 2, 1, 3], 0, true)]
+#[case::odd_frame([2, 4, 1, 3], 1, true)]
+#[case::even_frame([2, 1, 4, 3], 0, true)]
+#[case::opposite_odd_frame([2, 4, 1, 3], 0, false)]
+#[case::opposite_even_frame([2, 1, 4, 3], 1, false)]
+fn test_molecule_canonical_eq_stereo_atom(
+    stereo_atom_canonicalization_molecule: Molecule,
+    mut canonicalize_context: CanonicalizeContext,
+    #[case] ligand_ids: [u32; 4],
+    #[case] coset: u32,
+    #[case] expected: bool,
+    #[values(false, true)] relabel: bool,
+    #[values(false, true)] para_stereo: bool,
+) {
+    canonicalize_context.para_stereo = para_stereo;
+    let mut elements = [Element::C, Element::F, Element::Cl, Element::Br, Element::I];
+    if relabel {
+        elements.swap(1, 2);
+    }
+    let other = Molecule::from_entries(MoleculeEntries {
+        atoms: elements.into_iter().map(AtomForm::from_element).collect(),
+        bonds: (1..=4)
+            .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            ligand_ids
+                .into_iter()
+                .map(|atom| {
+                    let atom = match (relabel, atom) {
+                        (true, 1) => 2,
+                        (true, 2) => 1,
+                        _ => atom,
+                    };
+                    StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)
+                })
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, coset),
+        )],
+        ..Default::default()
+    });
+    let source = stereo_atom_canonicalization_molecule;
+    let canonical = source.clone().canonicalize(&canonicalize_context).unwrap();
+    let other_canonical = other.clone().canonicalize(&canonicalize_context).unwrap();
+
+    if expected {
+        assert_eq!(canonical, other_canonical);
+    } else {
+        assert_ne!(canonical, other_canonical);
+    }
+    assert_eq!(source.canonical_eq(&other, &canonicalize_context), expected);
+    assert_eq!(other.canonical_eq(&source, &canonicalize_context), expected);
+}
+
+#[rstest]
+#[case::same_frame([3, 2, 5, 4], 1, true)]
+#[case::one_end([2, 3, 5, 4], 0, true)]
+#[case::both_ends([2, 3, 4, 5], 1, true)]
+#[case::exchanged_ends([5, 4, 3, 2], 1, true)]
+#[case::opposite([2, 3, 5, 4], 1, false)]
+fn test_molecule_canonical_eq_stereo_bond(
+    stereo_bond_canonicalization_molecule: Molecule,
+    mut canonicalize_context: CanonicalizeContext,
+    #[case] ligand_ids: [u32; 4],
+    #[case] coset: u32,
+    #[case] expected: bool,
+    #[values(false, true)] relabel: bool,
+    #[values(false, true)] para_stereo: bool,
+) {
+    canonicalize_context.para_stereo = para_stereo;
+    let mut elements = [
+        Element::C,
+        Element::C,
+        Element::F,
+        Element::Cl,
+        Element::Br,
+        Element::I,
+    ];
+    if relabel {
+        elements.swap(2, 3);
+    }
+    let other = Molecule::from_entries(MoleculeEntries {
+        atoms: elements.into_iter().map(AtomForm::from_element).collect(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
+        ],
+        stereo_bonds: vec![(
+            BondId(0),
+            ligand_ids
+                .into_iter()
+                .map(|atom| {
+                    let atom = match (relabel, atom) {
+                        (true, 2) => 3,
+                        (true, 3) => 2,
+                        _ => atom,
+                    };
+                    StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)
+                })
+                .collect(),
+            StereoBondForm::new(StereoKind::CisTrans, coset),
+        )],
+        ..Default::default()
+    });
+    let source = stereo_bond_canonicalization_molecule;
+    let canonical = source.clone().canonicalize(&canonicalize_context).unwrap();
+    let other_canonical = other.clone().canonicalize(&canonicalize_context).unwrap();
+
+    if expected {
+        assert_eq!(canonical, other_canonical);
+    } else {
+        assert_ne!(canonical, other_canonical);
+    }
+    assert_eq!(source.canonical_eq(&other, &canonicalize_context), expected);
+    assert_eq!(other.canonical_eq(&source, &canonicalize_context), expected);
+}
+
+#[rstest]
 #[case::renumbering(false, true)]
 #[case::atom_form(true, false)]
 fn test_molecule_canonical_eq_remapping_witness(
@@ -2188,6 +2309,66 @@ fn test_molecule_canonical_eq_remapping_witness(
         left.canonical_eq(&right, &canonicalize_context),
         explicitly_dense_equivalent(&left, &right),
     );
+}
+
+#[rstest]
+#[case::hydrogen(StereoLigandKind::ImplicitHydrogen, false)]
+#[case::lone_pair(StereoLigandKind::LonePair, false)]
+#[case::virtual_ligand(StereoLigandKind::Virtual, true)]
+fn test_molecule_canonical_eq_virtual_ligand(
+    mut canonicalize_context: CanonicalizeContext,
+    #[case] kind: StereoLigandKind,
+    #[case] expected: bool,
+    #[values(false, true)] para_stereo: bool,
+) {
+    canonicalize_context.para_stereo = para_stereo;
+    let source = Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br]
+            .into_iter()
+            .map(AtomForm::from_element)
+            .collect(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::Virtual),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        )],
+        ..Default::default()
+    });
+    let other = Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::Br, Element::C, Element::F, Element::Cl]
+            .into_iter()
+            .map(AtomForm::from_element)
+            .collect(),
+        bonds: vec![
+            (AtomId(1), AtomId(0), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![(
+            AtomId(1),
+            vec![
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), kind),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        )],
+        ..Default::default()
+    });
+
+    assert_eq!(source.canonical_eq(&other, &canonicalize_context), expected);
+    assert_eq!(other.canonical_eq(&source, &canonicalize_context), expected);
 }
 
 #[rstest]

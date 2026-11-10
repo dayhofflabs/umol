@@ -71,7 +71,7 @@ impl ClarAromaticity {
     ///
     /// The ring set is contextually valid for the molecule: its atom and bond ids
     /// and ring incidence agree with the molecule.
-    pub(crate) fn find_from_rings<F>(
+    pub(crate) fn recognize_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -81,7 +81,7 @@ impl ClarAromaticity {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
-        self.find_with_exclusions(
+        self.recognize_with_exclusions(
             molecule,
             rings,
             maximum_independent_set_algorithm,
@@ -90,7 +90,7 @@ impl ClarAromaticity {
         )
     }
 
-    pub(super) fn find_with_exclusions<F>(
+    pub(super) fn recognize_with_exclusions<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -385,7 +385,7 @@ mod tests {
     #[case::naphthalene(naphthalene(), 1, Some(6))]
     #[case::phenanthrene(phenanthrene(), 1, Some(12))]
     #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
-    fn test_clar_aromaticity_find_from_rings(
+    fn test_clar_aromaticity_recognize_from_rings(
         #[case] molecule: Molecule,
         #[case] expected_aromatic_systems: usize,
         #[case] expected_atoms: Option<usize>,
@@ -401,7 +401,7 @@ mod tests {
             .into_ring_set();
         let model = ClarAromaticity;
         let aromatic_systems = model
-            .find_from_rings(
+            .recognize_from_rings(
                 &molecule,
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
@@ -454,7 +454,7 @@ mod tests {
         aromatic(Element::C, 1),
         aromatic(Element::C, 1),
     ]))]
-    fn test_clar_aromaticity_find_from_rings_error(#[case] molecule: Molecule) {
+    fn test_clar_aromaticity_recognize_from_rings_error(#[case] molecule: Molecule) {
         let rings = molecule
             .rings(
                 RingModel {
@@ -466,7 +466,7 @@ mod tests {
             .into_ring_set();
         let model = ClarAromaticity;
         assert!(model
-            .find_from_rings(
+            .recognize_from_rings(
                 &molecule,
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,

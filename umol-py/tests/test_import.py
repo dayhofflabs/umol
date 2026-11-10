@@ -58,7 +58,6 @@ PUBLIC_EXPORTS = frozenset(
     CanonicalizeConfig
     ChemistryModel
     CisTransConfiguration
-    CisTransStereo
     CisTransStereoForm
     CommonSubgraphEnumerationAlgorithm
     ConnectedComponentsAlgorithm
@@ -215,7 +214,6 @@ PUBLIC_EXPORTS = frozenset(
     StereoConfigurationForm
     StereoConfigurationUpdate
     StereoCoset
-    StereoDerivation
     StereoFailurePolicy
     StereoInconsistency
     StereoKind
@@ -224,7 +222,6 @@ PUBLIC_EXPORTS = frozenset(
     StereoLigandKind
     StereoLigandPair
     StereoModel
-    StereoPerception
     StereoResolveConfig
     StereoTerm
     StereoSelection
@@ -238,7 +235,6 @@ PUBLIC_EXPORTS = frozenset(
     SubstructureMatchAlgorithm
     SubstructureSearchConfig
     TetrahedralConfiguration
-    TetrahedralStereo
     TetrahedralStereoForm
     Topicity
     TopicityForm
@@ -349,6 +345,8 @@ def test_deferred_export(name):
         "GraphRemapping",
         "MoleculePushoutCorrespondence",
         "ReactionDerivation",
+        "StereoDerivation",
+        "StereoPerception",
     ],
 )
 def test_unexposed_internal_or_retired_type(name):

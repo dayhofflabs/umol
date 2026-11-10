@@ -439,8 +439,9 @@ primitive fields.
 An entity is **concrete** when its chemical attributes — the inherent fields — are determined;
 a molecule is concrete when every entity form is. The constraint channel does not bear on
 concreteness: assertions are not attributes, so a concrete molecule may carry non-ground
-or unsatisfied assertions. Resolution discharges assertions according to each phase's contract;
-validation checks the remaining assertions explicitly. Concreteness is the
+or unsatisfied assertions. Resolver discharge follows
+[independent structural entailment](operations.md#discharge); validation checks remaining assertions
+explicitly. Concreteness is the
 chemistry-level determinedness of a structure; lattice groundness is the algebraic notion over
 the full product including the constraint coordinates, and the two decompose per form as
 `is_ground() == is_concrete() && constraints.is_ground()`. The pattern/concrete asymmetry names
@@ -471,6 +472,11 @@ when a proper rotation relates them, so the observable descriptor is the coset r
 **Not:** *coset*, which is the equivalence class the configuration falls into; not *conformation*,
 which umol does not represent.
 **In code:** `StereoConfigurationForm`; the `configuration` attribute of stereo atoms and bonds.
+
+An explicit stereo description does not assert stereogenicity. Symmetric and prochiral
+arrangements remain representable. TetrahedralStereoForm and CisTransStereoForm instead express
+frame-independent kind constraints: Undetermined, NotStereo, or Stereo, with bool literals for
+the two determined values. They carry neither a configuration nor a coset.
 
 ### Conformance
 
@@ -523,6 +529,10 @@ it is a receiver, never an argument.
 A **contradiction** is a semantic rejection represented by `Solution::Contradictory`. Validators have
 no recovery policy: every determined failure or mismatch in their scope becomes a contradiction.
 
+ValenceContradiction, AromaticityContradiction, and StereoContradiction live in their corresponding
+ops domain modules: ops::valence, ops::aromaticity, and ops::stereo. ResolveContradiction aggregates
+them in ops::resolve. Keep the placement consistent across these parallel APIs.
+
 **Not:** error (operational, outside `Solution`), failure or inconsistency (policy-free
 classifications that a resolver may still act on).
 **In code:** `Solution::Contradictory`, `*Contradiction`.
@@ -565,13 +575,14 @@ where substituents are bonded to fixed sp² carbons. A *decomposition* numbers t
 `CanonicalRank` is the generic Lehmer-minimum ordering, which reduces to the parity bit for a
 two-coset space; the geometry decompositions reproduce the OpenSMILES arrangement numbers.
 
-This is the standard group-theoretic term used in its ordinary sense; the entry exists because the
-coset, not the configuration, is what the notation stores and what `#T` and `#C` carry.
+This is the standard group-theoretic term used in its ordinary sense. The configuration attribute
+of an explicit stereo atom or bond stores a kind and coset relative to that entity's ligand frame.
+The scalar #T and #C constraints carry only kind information.
 
 **Not:** *configuration*, which is one representative map. Not *orbit* — the ligand permutation group
 acts, but the stored descriptor is a coset of the rotation subgroup.
 **In code:** `CosetSpace`, `coset_rep`, `observable_coset`, `orbit_reps`; the coset index in
-`#T<n>` / `#C<n>`.
+StereoConfigurationForm and the Th/Ct explicit stereo strings.
 
 **Notation slip to fix:** `umol-perm/src/coset.rs` line 1 says the coset space is `R\P`, and the
 `CosetSpace` doc comment on line 25 says `P/R`. The prose establishes right cosets `Rσ`, so `R\P` is
@@ -697,17 +708,10 @@ return `Determined` with a payload that is not ground if the operation's own con
 
 ### Discharge
 
-**Discharge** removes stored assertions realized by an operation's own results.
-It belongs to each resolver's plan: valence discharges `#v` on completed atoms;
-aromaticity discharges member aromatic-valence assertions when adding a system and confirmed
-bond-aromaticity assertions outside stored systems; stereo discharges the site assertion when
-adding a stereo entity. Each plan checks the assertions it discharges before applying its edits.
-
-Resolution has no general closing discharge pass. Other assertions and molecule-level logical
-constraints remain unevaluated; explicit validators check them. Failure policies may separately
-request removal of inconsistent assertions or entities, with the usual reference compaction.
-A transform that deletes a relation removes assertions its output no longer satisfies under the
-separate emit-compliance policy.
+**Discharge** removes a stored assertion independently entailed by the resulting structure.
+The [resolver discharge contract](operations.md#discharge) defines the meet test, open reading,
+and treatment of new and retained entities. The [resolver scope](operations.md#resolver-scope)
+identifies which assertions each resolver handles.
 
 **Not:** cache invalidation, constraint placement, normalization, or general constraint validation.
 **In code:** ValenceResolver, AromaticityResolver, StereoResolver, Resolver::plan_constitution.
@@ -848,6 +852,8 @@ failure means that a structurally readable entity is not realizable under them.
 
 **Not:** error (operational, not semantic); contradiction (a failure is not yet one — a resolver may
 be configured to retain or remove the affected input).
+See [realizability failures and recovery](operations.md#realizability-failures-and-recovery) for
+resolver policy semantics.
 **In code:** —
 
 ### Features
@@ -1001,8 +1007,8 @@ An **inconsistency** is the policy-free umbrella classification for a constraint
 failure, or entity/constraint mismatch found during derivation. An inconsistency does not by itself
 select an authority or recovery action.
 
-**Not:** contradiction. A resolver policy may retain the inconsistency, remove one or both inputs
-where sound, replace the entity, or report a contradiction.
+**Not:** contradiction, which is a semantic outcome rather than a derivation classification.
+See [resolution](operations.md#resolution) for conflict handling and failure recovery.
 **In code:** `AromaticityInconsistency`, `StereoInconsistency`, which identify the exact constraint
 site and entity involved.
 
@@ -1129,9 +1135,11 @@ A stereo entity has two role-distinguished participant groups.
   significant: the coset is meaningless without it.
 
 A ligand need not be an atom of the graph. A **virtual ligand** occupies a coordination position
-without a corresponding node — an implicit hydrogen or a lone pair, each borne by a named atom. This
-is how a sulfoxide or a pyramidal amine is expressed without materializing the hydrogen or inventing
-an atom for the lone pair.
+without a corresponding node. ImplicitHydrogen and LonePair identify specific virtual kinds;
+Virtual denotes a generic virtual substituent whose chemical identity has not been specified.
+Each is borne by a named atom. These are distinct kinds under exact ligand equality and matching.
+This expresses a sulfoxide or pyramidal amine without materializing a hydrogen or lone-pair atom,
+and permits a complete frame to carry a generic virtual ligand before chemical identification.
 
 Stereo views expose the ordered compound ligand identifiers through `ligand_ids()` as a borrowed
 `&[StereoLigand]`. Each value identifies a ligand by its atom id and kind. `atom_ligand_ids()`
@@ -1139,13 +1147,13 @@ selects actual-atom ligands and yields their `AtomId` values.
 
 A published stereo frame contains pairwise-distinct complete ligand values and at most
 `MAX_DEGREE` ligands. Two equal virtual ligands with the same anchor and kind are therefore
-prohibited; an implicit hydrogen and a lone pair on the same anchor remain distinct. Explicit
+prohibited; different virtual kinds on the same anchor remain distinct. Explicit
 hydrogens are atoms and remain distinct by atom id.
 
 **Not:** *participant* used flatly. Site and ligands are both participants, but they are not
 interchangeable, and diagnostics should say which.
-**In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair}`; `:site` and
-`:ligands` in the notation.
+**In code:** `StereoLigand`, `StereoLigandKind::{Atom, ImplicitHydrogen, LonePair, Virtual}`; `:site` and
+`:ligands` in the notation. Virtual kinds are written `[:h atom]`, `[:lp atom]`, and `[:virt atom]`.
 
 ### Localized bond
 
@@ -1191,6 +1199,7 @@ A **mismatch** means that a constraint and entity, or a constraint and its deriv
 independently meaningful but disagree.
 
 **Not:** failure (where one side is not realizable at all).
+See [refinement and conflicts](operations.md#refinement-and-conflicts) for resolver rejection.
 **In code:** concrete names in diagnostic variants and config fields, such as
 `AromaticValenceMismatch`, `CisTransStereoMismatch`.
 
@@ -1372,7 +1381,7 @@ is an entity-level morphism; a transaction is a rollback-capable molecule-level 
 entities. It produces a policy-free derivation.
 
 **Not:** resolution (which applies policy and edits), validation.
-**In code:** `AromaticityPerception`.
+**In code:** `AromaticityPerceiver`.
 
 ### Permutation and dynamic permutation
 
@@ -1413,7 +1422,9 @@ constraint or entity context.
 
 **Not:** model. A model determines chemical acceptance; a policy determines what an operation does
 after acceptance or inconsistency has been established.
-**In code:** `AromaticityInconsistencyPolicy`, `StereoInconsistencyPolicy`.
+The [resolver recovery contract](operations.md#realizability-failures-and-recovery) defines which
+classified failures admit recovery and how conflicts differ.
+**In code:** `AromaticityFailurePolicy`, `StereoFailurePolicy`.
 
 ### Projection
 
@@ -1477,19 +1488,14 @@ order.
 ### Recovery action
 
 A **recovery action** is a policy variant naming what an operation does about a classified
-inconsistency:
-
-- `Keep` retains the affected inputs;
-- `Remove` removes the target identified by the config field;
-- `RemoveConstraint` retains the independently valid entity;
-- `ReplaceEntity` atomically replaces the entity with the valid constraint-derived result;
-- `RemoveBoth` removes both members of the pair identified by the mismatch policy;
-- `Error` converts the classified inconsistency into a contradiction.
+inconsistency. The current resolver actions and their meanings are defined in
+[realizability failures and recovery](operations.md#realizability-failures-and-recovery).
 
 **Not:** separate enums created solely to repeat identical variants with longer target-specific
 spellings. Policy enums may be shared when they admit exactly the same action set; the config field
 supplies the context.
-**In code:** the variants above.
+**In code:** Error and Keep on AromaticityFailurePolicy; Error, Keep, and Remove on
+StereoFailurePolicy.
 
 ### Refinement
 
@@ -1606,12 +1612,14 @@ expresses removal by leaving removed source ids without images.
 
 ### Resolution
 
-**Resolution** applies configured recovery policy, constructs edit plans against private drafts,
-and publishes the result only when it is determined. An underdetermined, contradictory, or failed
-resolution leaves its source unchanged.
+**Resolution** determines molecular data under a selected model and stored constraints, including
+refinement of unresolved attributes and construction of compatible entities. See
+[resolution](operations.md#resolution) for conflict, discharge, and recovery rules, and
+[data type contracts](data-types.md#resolution-projection-and-transformations) for planning,
+ownership, and publication.
 
-**Not:** transformation (which rewrites determined representation), validation (which does not
-mutate), perception (which is policy-free).
+**Not:** validation (which does not mutate), perception (which is policy-free), ordinary conversion
+(which preserves the supplied description).
 **In code:** `Resolver`, `resolve`, `ResolveConfig`.
 
 ### Restoration

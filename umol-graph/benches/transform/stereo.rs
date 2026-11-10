@@ -9,7 +9,7 @@ use std::hint::black_box;
 use criterion::{BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ops::model::StereoModel;
-use umol_graph::ops::stereo::{StereoDerivation, StereoPerception, StereoSelection, StereoSite};
+use umol_graph::ops::stereo::{StereoDerivation, StereoPerceiver, StereoSelection, StereoSite};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
@@ -214,7 +214,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 .map(|bond| {
                     let form = if bond == 0 {
                         BondForm::from_order(2).with_constraint(BondConstraintForm::CisTransStereo(
-                            CisTransStereoForm::Stereo(StereoCoset::Undetermined),
+                            CisTransStereoForm::Stereo,
                         ))
                     } else {
                         BondForm::from_order(1)
@@ -247,7 +247,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
     }
 
     let model = StereoModel::default();
-    let perception = StereoPerception::new(&model);
+    let perception = StereoPerceiver::new(&model);
     let config = GraphSymmetryConfig {
         coloring: ConstitutionColoring::full(),
         iterate_to_fixpoint: model.para_stereo,
@@ -255,8 +255,8 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     eprintln!("stereo_config\talgorithm=Nauty\tcoloring=full\tpara_stereo={}\tmax_iterations=16\tminimum_ring_size={}",
-        model.para_stereo, model.stereo_bond_minimum_ring_size);
-    eprintln!("stereo_columns\tcase\tatoms\tbonds\tstereo_atoms\tstereo_bonds\tring_size\tproper_atom_orbits_size_count\tconfigurations\tperceived_atoms\tperceived_bonds\tskipped_bonds\tinconsistencies\tclassifications");
+        model.para_stereo, model.stereo_bond_min_ring_size);
+    eprintln!("stereo_columns\tcase\tatoms\tbonds\tstereo_atoms\tstereo_bonds\tring_size\tproper_atom_orbits_size_count\tconfigurations\tperceived_atoms\tperceived_bonds\tinconsistencies\tclassifications");
     let mut recognition_cases = Vec::new();
     for (name, molecule, ring_size, _) in &cases {
         if matches!(
@@ -315,7 +315,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 })
                 .collect(),
             stereo_bonds: if ring_size
-                .is_some_and(|size| size < model.stereo_bond_minimum_ring_size as usize)
+                .is_some_and(|size| size < model.stereo_bond_min_ring_size as usize)
             {
                 vec![]
             } else {
@@ -338,7 +338,8 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 &source,
                 &selection,
                 AutomorphismAlgorithm::Nauty,
-                RingConfig::default()
+                RingConfig::default(),
+                16
             ),
             Ok(expected.clone()),
             "{name}"
@@ -358,7 +359,10 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 Some(size)
             );
         }
-        let derivation = perception.derive(&molecule);
+        let derivation = perception
+            .derive(&molecule, RingConfig::default())
+            .into_determined()
+            .expect("stereo benchmark fixture has a determined derivation");
         if name == "fixture_evidenced_stereo" {
             assert_eq!(
                 derivation.stereo_atoms,
@@ -367,7 +371,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                     (1..=4)
                         .map(|ligand| { StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom) })
                         .collect(),
-                    StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)
                 )]
             );
             assert_eq!(
@@ -380,7 +384,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                         StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
                     ],
-                    StereoBondForm::new(StereoKind::CisTrans, 0u32)
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined)
                 )]
             );
             assert_eq!(derivation.inconsistencies, vec![]);
@@ -415,9 +419,9 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             .iter()
             .map(|symmetry| format!("{:?}:{:?}", symmetry.kind(), symmetry.coset()))
             .collect();
-        eprintln!("stereo_input\t{name}\t{}\t{}\t{}\t{}\t{ring_size:?}\t{orbit_histogram:?}\t{configurations:?}\t{}\t{}\t{:?}\t{:?}\t{classifications:?}",
+        eprintln!("stereo_input\t{name}\t{}\t{}\t{}\t{}\t{ring_size:?}\t{orbit_histogram:?}\t{configurations:?}\t{}\t{}\t{:?}\t{classifications:?}",
             molecule.atoms().count(), molecule.bonds().count(), molecule.stereo_atoms().count(), molecule.stereo_bonds().count(),
-            derivation.stereo_atoms.len(), derivation.stereo_bonds.len(), derivation.skipped_stereo_bonds, derivation.inconsistencies);
+            derivation.stereo_atoms.len(), derivation.stereo_bonds.len(), derivation.inconsistencies);
         assert_eq!(molecule, original);
         drop(original);
 
@@ -425,7 +429,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             b.iter(|| black_box(black_box(&molecule)));
         });
         group.bench_function(BenchmarkId::new("perception", &name), |b| {
-            b.iter(|| black_box(perception.derive(black_box(&molecule))));
+            b.iter(|| black_box(perception.derive(black_box(&molecule), RingConfig::default())));
         });
         group.bench_function(BenchmarkId::new("graph_symmetry", &name), |b| {
             b.iter(|| black_box(black_box(&molecule).graph_symmetry(black_box(&config))));
@@ -496,7 +500,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             }))
             .collect();
         assert_eq!(
-            perception.classify(&prospective, &sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&prospective, &sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(classifications.clone())
         );
         let mut filtered_selection = selection.clone();
@@ -513,7 +517,8 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                 &source,
                 &filtered_selection,
                 AutomorphismAlgorithm::Nauty,
-                RingConfig::default()
+                RingConfig::default(),
+                16
             ),
             Ok(filtered)
         );
@@ -530,6 +535,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                             black_box(&selection),
                             AutomorphismAlgorithm::Nauty,
                             RingConfig::default(),
+                            16,
                         )
                         .unwrap(),
                 )
@@ -544,6 +550,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                             black_box(&filtered_selection),
                             AutomorphismAlgorithm::Nauty,
                             RingConfig::default(),
+                            16,
                         )
                         .unwrap(),
                 )
@@ -580,6 +587,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                             black_box(&prospective),
                             black_box(&sites),
                             AutomorphismAlgorithm::Nauty,
+                            16,
                         )
                         .unwrap(),
                 )

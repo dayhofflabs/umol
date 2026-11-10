@@ -1141,8 +1141,7 @@ mod tests {
         AtomConstraintKey as GraphIrAtomConstraintKey,
         AtomConstraintsForm as GraphIrAtomConstraintsForm, MemOp as GraphIrMemOp,
         MoleculeEntries as GraphIrMoleculeEntries, NumForm as GraphIrNumForm,
-        RingScope as GraphIrRingScope, StereoCoset as GraphIrStereoCoset,
-        TetrahedralStereoForm as GraphIrTetrahedralStereoForm,
+        RingScope as GraphIrRingScope, TetrahedralStereoForm as GraphIrTetrahedralStereoForm,
         UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
 
@@ -1152,7 +1151,6 @@ mod tests {
         AtomConstraintsUpdate, TetrahedralStereoLike,
     };
     use crate::convert::into_py_variant;
-    use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoForm};
 
     #[rstest]
     #[case(GraphIrElementForm::Undetermined)]
@@ -2085,24 +2083,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_form_set_tetrahedral_stereo() {
+    #[case::negative(false, GraphIrTetrahedralStereoForm::NotStereo)]
+    #[case::positive(true, GraphIrTetrahedralStereoForm::Stereo)]
+    fn test_atom_constraints_form_set_tetrahedral_stereo(
+        #[case] value: bool,
+        #[case] expected: GraphIrTetrahedralStereoForm,
+    ) {
         Python::attach(|py| {
             let mut constraints = AtomConstraintsForm::new(py, vec![]);
-            constraints
-                .set_tetrahedral_stereo(
-                    py,
-                    TetrahedralStereoLike::Config(TetrahedralConfiguration::Cw),
-                )
-                .unwrap();
-            match constraints.tetrahedral_stereo(py).unwrap() {
-                TetrahedralStereoForm::Stereo(coset) => {
-                    assert_eq!(
-                        coset.bind(py).borrow().to_rust(py),
-                        GraphIrStereoCoset::Lit(1)
-                    )
-                }
-                _ => panic!("expected Stereo"),
-            }
+            constraints.set_tetrahedral_stereo(py, TetrahedralStereoLike::Flag(value));
+            assert_eq!(constraints.tetrahedral_stereo().to_rust(), expected);
         });
     }
 

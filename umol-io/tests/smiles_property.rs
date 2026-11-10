@@ -13,7 +13,7 @@ use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
 use umol_geometric_core::Point3D;
 use umol_graph_ir::ir::{
-    BondId, CisTransStereoForm, ElementForm, Molecule, StereoCoset, TryIntoIr,
+    BondId, ElementForm, Molecule, StereoBondForm, StereoCoset, StereoKind, TryIntoIr,
 };
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::{
@@ -263,17 +263,15 @@ proptest! {
         }
         let expected: Vec<_> = markers.windows(2).map(|pair| {
             match (pair[0], pair[1]) {
-                (Some(left), Some(right)) => CisTransStereoForm::stereo(
-                    StereoCoset::Lit(u32::from(left == right)),
-                ),
-                _ => CisTransStereoForm::Undetermined,
+                (Some(left), Some(right)) => Some(StereoCoset::Lit(u32::from(left == right))),
+                _ => None,
             }
         }).collect();
         let table = Smiles::parse(&input).unwrap().into_table_ir();
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let actual: Vec<_> = (0..markers.len() - 1).map(|index| {
-            molecule.bond(BondId::from(2 * index + 1))
-                .attributes().constraints.cis_trans_stereo().clone()
+            molecule.stereo_bonds().at(BondId::from(2 * index + 1))
+                .map(|stereo| stereo.attributes().configuration.coset().unwrap().clone())
         }).collect();
         prop_assert_eq!(actual, expected);
     }
@@ -370,11 +368,10 @@ proptest! {
                 relation: if same { BondRelation::SameSide } else { BondRelation::OppositeSide },
             },
         }];
-        let expected = CisTransStereoForm::stereo(StereoCoset::Lit(
+        let expected = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(
             u32::from(!same ^ first_swap ^ second_swap)));
         let raised: Molecule = (&table).try_into_ir(&()).unwrap();
-        prop_assert_eq!(raised.bond(BondId(2)).attributes().constraints.cis_trans_stereo(),
-            &expected);
+        prop_assert_eq!(raised.stereo_bonds().at(BondId(2)).unwrap().attributes(), &expected);
         table.positions = Some(positions.map(|[x,y,z]| Point3D::new(f64::from(x),f64::from(y),f64::from(z))).to_vec());
         let converted = TableMolecule::try_from(ExtendedMolecule::from(table.clone())).unwrap();
         prop_assert_eq!(&converted, &table);

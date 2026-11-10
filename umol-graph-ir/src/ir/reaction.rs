@@ -1801,9 +1801,9 @@ impl Reaction {
                                             !removed_host_bonds.contains(&BondId::from(id))
                                         })
                             }
-                            StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => {
-                                ligand.atom_id == site
-                            }
+                            StereoLigandKind::ImplicitHydrogen
+                            | StereoLigandKind::LonePair
+                            | StereoLigandKind::Virtual => ligand.atom_id == site,
                         })
                     };
                     if !(survives(&ligands[..2], first, second)

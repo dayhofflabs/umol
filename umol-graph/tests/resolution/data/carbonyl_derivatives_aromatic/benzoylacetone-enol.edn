@@ -23,7 +23,8 @@
     [4 5 "1#a"]
     [5 6 "1#a"]
     [6 7 "1#a"]
-    [1 8 "2#C0"]
+    [1 8 "2"]
     [8 9 :single]
     [9 10 :single]
-    [9 11 :double]]}}
+    [9 11 :double]]
+  :stereo-bonds [{:attrs :z :ligands [0 2 9 [:h 8]] :site 8}]}}

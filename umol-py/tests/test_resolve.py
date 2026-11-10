@@ -19,6 +19,9 @@ from umol import (
     Molecule,
     MoleculeDefaults,
     ResolveConfig,
+    RingConfig,
+    SimpleCycleEnumerationAlgorithm,
+    RelevantCycleEnumerationAlgorithm,
     ResolveReport,
     RollbackMethod,
     Solution,
@@ -250,57 +253,56 @@ def test_aromaticity_resolve_config_mutation(field, value):
 def test_stereo_resolve_config_default():
     config = StereoResolveConfig()
 
-    assert config.tetrahedral_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_atom_failure == StereoFailurePolicy.Error
-    assert config.cis_trans_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_bond_failure == StereoFailurePolicy.Error
+    assert config.ring_config == RingConfig()
     assert config == StereoResolveConfig()
 
 
 @pytest.mark.parametrize(
-    (
-        "tetrahedral_stereo_failure",
-        "stereo_atom_failure",
-        "cis_trans_stereo_failure",
-        "stereo_bond_failure",
-    ),
+    ("stereo_atom_failure", "stereo_bond_failure"),
     [
-        (
-            StereoFailurePolicy.Error,
-            StereoFailurePolicy.Error,
-            StereoFailurePolicy.Error,
-            StereoFailurePolicy.Error,
+        (StereoFailurePolicy.Error, StereoFailurePolicy.Error),
+        (StereoFailurePolicy.Keep, StereoFailurePolicy.Remove),
+        (StereoFailurePolicy.Remove, StereoFailurePolicy.Keep),
+    ],
+)
+@pytest.mark.parametrize("ring_config", [None, RingConfig()])
+def test_stereo_resolve_config_new(
+    stereo_atom_failure, stereo_bond_failure, ring_config
+):
+    config = StereoResolveConfig(
+        stereo_atom_failure=stereo_atom_failure,
+        stereo_bond_failure=stereo_bond_failure,
+        ring_config=ring_config,
+    )
+
+    assert config.stereo_atom_failure == stereo_atom_failure
+    assert config.stereo_bond_failure == stereo_bond_failure
+    assert config.ring_config == (ring_config or RingConfig())
+
+
+@pytest.mark.parametrize(
+    ("args", "kwargs", "message"),
+    [
+        pytest.param((True,), {}, "positional arguments", id="positional"),
+        pytest.param(
+            (),
+            {"tetrahedral_stereo_failure": StereoFailurePolicy.Keep},
+            "unexpected keyword argument 'tetrahedral_stereo_failure'",
+            id="tetrahedral_stereo_failure",
         ),
-        (
-            StereoFailurePolicy.Keep,
-            StereoFailurePolicy.Remove,
-            StereoFailurePolicy.Remove,
-            StereoFailurePolicy.Keep,
+        pytest.param(
+            (),
+            {"cis_trans_stereo_failure": StereoFailurePolicy.Remove},
+            "unexpected keyword argument 'cis_trans_stereo_failure'",
+            id="cis_trans_stereo_failure",
         ),
     ],
 )
-def test_stereo_resolve_config_new(
-    tetrahedral_stereo_failure,
-    stereo_atom_failure,
-    cis_trans_stereo_failure,
-    stereo_bond_failure,
-):
-    config = StereoResolveConfig(
-        tetrahedral_stereo_failure=tetrahedral_stereo_failure,
-        stereo_atom_failure=stereo_atom_failure,
-        cis_trans_stereo_failure=cis_trans_stereo_failure,
-        stereo_bond_failure=stereo_bond_failure,
-    )
-
-    assert config.tetrahedral_stereo_failure == tetrahedral_stereo_failure
-    assert config.stereo_atom_failure == stereo_atom_failure
-    assert config.cis_trans_stereo_failure == cis_trans_stereo_failure
-    assert config.stereo_bond_failure == stereo_bond_failure
-
-
-def test_stereo_resolve_config_new_error():
-    with pytest.raises(TypeError):
-        StereoResolveConfig(True)
+def test_stereo_resolve_config_new_error(args, kwargs, message):
+    with pytest.raises(TypeError, match=message):
+        StereoResolveConfig(*args, **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -308,24 +310,17 @@ def test_stereo_resolve_config_new_error():
     [
         (
             StereoResolveConfig(),
-            "StereoResolveConfig(tetrahedral_stereo_failure="
-            "StereoFailurePolicy.Error, stereo_atom_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
-            "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error)",
+            "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Error, "
+            "stereo_bond_failure=StereoFailurePolicy.Error, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
             StereoResolveConfig(
-                tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 stereo_atom_failure=StereoFailurePolicy.Remove,
-                cis_trans_stereo_failure=StereoFailurePolicy.Remove,
                 stereo_bond_failure=StereoFailurePolicy.Keep,
+                ring_config=RingConfig(),
             ),
-            "StereoResolveConfig(tetrahedral_stereo_failure="
-            "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Remove, cis_trans_stereo_failure="
-            "StereoFailurePolicy.Remove, stereo_bond_failure="
-            "StereoFailurePolicy.Keep)",
+            "StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, "
+            "stereo_bond_failure=StereoFailurePolicy.Keep, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
     ],
 )
@@ -336,10 +331,9 @@ def test_stereo_resolve_config_repr(config, expected):
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("tetrahedral_stereo_failure", StereoFailurePolicy.Keep),
         ("stereo_atom_failure", StereoFailurePolicy.Remove),
-        ("cis_trans_stereo_failure", StereoFailurePolicy.Remove),
         ("stereo_bond_failure", StereoFailurePolicy.Keep),
+        ("ring_config", RingConfig()),
     ],
 )
 def test_stereo_resolve_config_mutation(field, value):
@@ -383,7 +377,7 @@ def test_resolve_config_default():
         ),
         (
             AromaticityResolveConfig(),
-            StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep),
+            StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Keep),
         ),
     ],
 )
@@ -413,7 +407,7 @@ def test_resolve_config_new_error():
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
+                stereo_atom_failure=StereoFailurePolicy.Keep,
             ),
         ),
     ],
@@ -433,7 +427,7 @@ def test_resolve_config_equality(other):
                     aromatic_system_failure=AromaticityFailurePolicy.Keep,
                 ),
                 stereo=StereoResolveConfig(
-                    tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
+                    stereo_atom_failure=StereoFailurePolicy.Keep,
                 ),
             ),
             "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception="
@@ -447,11 +441,9 @@ def test_resolve_config_equality(other):
             "atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
             "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
-            "stereo=StereoResolveConfig(tetrahedral_stereo_failure="
-            "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
-            "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error))",
+            "stereo=StereoResolveConfig(stereo_atom_failure="
+            "StereoFailurePolicy.Keep, stereo_bond_failure="
+            "StereoFailurePolicy.Error, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())))",
         ),
     ],
 )
@@ -497,10 +489,92 @@ def test_molecule_from_smiles_underdetermined(source, valence):
 
 
 @pytest.mark.parametrize(
+    ("source", "removed", "site_kind", "diagnostic"),
+    [
+        pytest.param(
+            '{:atoms ["C#h3" "S#n2#T+" "C#h3"] '
+            ':bonds [[0 1 "1"] [1 2 "1"]]}',
+            '{:atoms ["C#h3" "S#n2" "C#h3"] '
+            ':bonds [[0 1 "1"] [1 2 "1"]]}',
+            "atom",
+            "stereo inconsistency: tetrahedral stereo constraint at atom AtomId(1) "
+            "cannot be realized",
+            id="atom_constraint",
+        ),
+        pytest.param(
+            '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2#C+"]]}',
+            '{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2"]]}',
+            "bond",
+            "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
+            "cannot be realized",
+            id="bond_constraint",
+        ),
+        pytest.param(
+            '{:atoms ["C#h1" "F#n3" "Cl#n3" "Br#n3"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Sp0"}]}',
+            '{:atoms ["C#h1" "F#n3" "Cl#n3" "Br#n3"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}',
+            "atom",
+            "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized",
+            id="atom_entity",
+        ),
+        pytest.param(
+            '{:atoms ["C#h1" "C#h1" "F#n3" "Cl#n3"] '
+            ':bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]] '
+            ':stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Th0"}]}',
+            '{:atoms ["C#h1" "C#h1" "F#n3" "Cl#n3"] '
+            ':bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]}',
+            "bond",
+            "stereo inconsistency: stereo bond StereoBondId(0) cannot be realized",
+            id="bond_entity",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "atom_failure",
+    [StereoFailurePolicy.Error, StereoFailurePolicy.Keep, StereoFailurePolicy.Remove],
+)
+@pytest.mark.parametrize(
+    "bond_failure",
+    [StereoFailurePolicy.Error, StereoFailurePolicy.Keep, StereoFailurePolicy.Remove],
+)
+@pytest.mark.parametrize("method", ["resolve", "resolve_into"])
+def test_molecule_resolve_stereo_failure(
+    source, removed, site_kind, diagnostic, atom_failure, bond_failure, method
+):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    result = getattr(molecule, method)(
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(
+                stereo_atom_failure=atom_failure,
+                stereo_bond_failure=bond_failure,
+            ),
+        ),
+    )
+    failure = atom_failure if site_kind == "atom" else bond_failure
+    if failure == StereoFailurePolicy.Error:
+        assert isinstance(result, Solution.Contradictory)
+        assert str(result.contradiction) == diagnostic
+        assert molecule == original
+    else:
+        expected = (
+            original
+            if failure == StereoFailurePolicy.Keep
+            else Molecule.parse(removed, defaults=MoleculeDefaults.concrete())
+        )
+        assert isinstance(result, Solution.Determined)
+        assert result.molecule == (expected if method == "resolve" else None)
+        assert molecule == (original if method == "resolve" else expected)
+
+
+@pytest.mark.parametrize(
     "source,expected",
     [
         pytest.param(
-            '{:atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
+            '{:atoms ["C#T!" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
             ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
             ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}',
             "stereo inconsistency: tetrahedral stereo constraint at atom AtomId(0) "
@@ -509,7 +583,7 @@ def test_molecule_from_smiles_underdetermined(source, valence):
         ),
         pytest.param(
             '{:atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
-            ':bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+            ':bonds [[0 1 "2#C!"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
             ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}',
             "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
             "disagrees with stereo bond StereoBondId(0)",
@@ -525,9 +599,7 @@ def test_molecule_resolve_into_stereo_mismatch(source, expected, failure):
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                tetrahedral_stereo_failure=failure,
                 stereo_atom_failure=failure,
-                cis_trans_stereo_failure=failure,
                 stereo_bond_failure=failure,
             ),
         ),
@@ -630,6 +702,179 @@ def test_molecule_from_smiles_isotope_default():
     expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
     assert Molecule.from_smiles("C", resolve_config=ResolveConfig.default()) == expected
     assert Molecule.from_smiles("C") == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            '{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] '
+            ':bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}',
+            '{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+            id="new_system",
+        ),
+        pytest.param(
+            '{:atoms ["C#h#a{1,2}#D2" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "1#a#R+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+            '{:atoms ["C#h#D2" "C#h" "C#h" "C#h" "C#h" "C#h"] '
+            ':bonds [[0 1 "1#R+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}',
+            id="stored_system",
+        ),
+        pytest.param(
+            '{:atoms ["C#h3#v1#a!" "C#h3#a!"] :bonds [[0 1 "1#a!"]]}',
+            '{:atoms ["C#h3#a!" "C#h3#a!"] :bonds [[0 1 "1#a!"]]}',
+            id="negative_assertions",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "failure", [AromaticityFailurePolicy.Error, AromaticityFailurePolicy.Keep]
+)
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report", "rollback"),
+    [
+        ("resolve", True, False, None),
+        ("resolve_with_report", True, True, None),
+        ("resolve_into", False, False, RollbackMethod.Clone),
+        ("resolve_into", False, False, RollbackMethod.Journal),
+        ("resolve_into_with_report", False, True, RollbackMethod.Clone),
+        ("resolve_into_with_report", False, True, RollbackMethod.Journal),
+    ],
+)
+def test_molecule_resolve_aromaticity(
+    source, expected, failure, method, copying, with_report, rollback
+):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    expected = Molecule.parse(expected, defaults=MoleculeDefaults.concrete())
+    config = ResolveConfig(
+        aromaticity=AromaticityResolveConfig(
+            aromatic_valence_failure=failure,
+            aromatic_system_failure=failure,
+        ),
+        stereo=StereoResolveConfig(),
+    )
+    kwargs = {} if copying else {"rollback_method": rollback}
+    result = getattr(molecule, method)(resolve_config=config, **kwargs)
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ()
+    if copying:
+        assert result == Solution.Determined(molecule=expected)
+        assert molecule == original
+    else:
+        assert result == Solution.Determined()
+        assert molecule == expected
+    assert expected.resolve(resolve_config=config) == Solution.Determined(molecule=expected)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] '
+        ':bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}',
+    ],
+)
+@pytest.mark.parametrize(
+    "failure", [AromaticityFailurePolicy.Error, AromaticityFailurePolicy.Keep]
+)
+@pytest.mark.parametrize("rollback", [RollbackMethod.Clone, RollbackMethod.Journal])
+def test_molecule_resolve_into_aromaticity_partial(source, failure, rollback):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    config = ResolveConfig(
+        aromaticity=AromaticityResolveConfig(
+            aromatic_valence_failure=failure,
+            aromatic_system_failure=failure,
+        ),
+        stereo=StereoResolveConfig(),
+    )
+    assert molecule.resolve_into(
+        resolve_config=config, rollback_method=rollback
+    ) == Solution.Underdetermined()
+    assert molecule == original
+
+
+@pytest.mark.parametrize(
+    ("source", "concrete", "expected"),
+    [
+        pytest.param(
+            '{:atoms ["C#h4#v0"]}', True, '{:atoms ["C#h4"]}',
+            id="concrete_atom",
+        ),
+        pytest.param(
+            '{:atoms ["C#h4#v{0,1}"]}', True, '{:atoms ["C#h4"]}',
+            id="valence_set",
+        ),
+        pytest.param(
+            '{:atoms ["N#i=#c0#h3#v0#d1#t0" "B#i=#c0#h3#v0#d0#t1"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            False,
+            '{:atoms ["N#h3" "B#h3"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            id="dative_completion",
+        ),
+        pytest.param(
+            '{:atoms ["N#h3#v0#d1#t0" "B#h3#v0#d0#t1"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            True,
+            '{:atoms ["N#h3" "B#h3"] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}',
+            id="concrete_dative",
+        ),
+        pytest.param(
+            '{:atoms ["C#h4#v0#d0#t0#D0"]}', True,
+            '{:atoms ["C#h4#d0#t0#D0"]}',
+            id="dative_absent",
+        ),
+    ],
+)
+@pytest.mark.parametrize("valence", [ValenceModel.smiles(), ChemistryModel.default().valence])
+@pytest.mark.parametrize("rollback_method", [RollbackMethod.Clone, RollbackMethod.Journal])
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report"),
+    [
+        ("resolve", True, False),
+        ("resolve_with_report", True, True),
+        ("resolve_into", False, False),
+        ("resolve_into_with_report", False, True),
+    ],
+)
+def test_molecule_resolve_valence(
+    source, concrete, expected, valence, rollback_method, method, copying, with_report
+):
+    molecule = (
+        Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+        if concrete else Molecule.parse(source)
+    )
+    original = molecule.copy()
+    expected = Molecule.parse(expected, defaults=MoleculeDefaults.concrete())
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=valence,
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
+    kwargs = {} if copying else {"rollback_method": rollback_method}
+    result = getattr(molecule, method)(chemistry_model=model, **kwargs)
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ()
+    if copying:
+        assert result == Solution.Determined(molecule=expected)
+        assert molecule == original
+    else:
+        assert result == Solution.Determined()
+        assert molecule == expected
+    assert expected.resolve(chemistry_model=model) == Solution.Determined(molecule=expected)
 
 
 @pytest.mark.parametrize(

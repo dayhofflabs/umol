@@ -280,13 +280,15 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL to [`Molecule`] without running the solver.
+/// Parse MOL to [Molecule](GraphIrMolecule) without chemistry resolution.
+/// Stereo configurations are stored on explicit entities; unnamed ligand kinds remain Virtual.
 pub fn parse_mol_to_ir(input: &str) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
     parse_mol_bytes_to_ir(input.as_bytes())
 }
 
-/// Parse MOL bytes to [`Molecule`] without running the solver. Spans the parse (`ParseError`)
-/// and raise (`RaiseError`) concerns, so per doc 065 it returns the boxed boundary error.
+/// Parse MOL bytes to [Molecule](GraphIrMolecule) without chemistry resolution.
+/// Spans parsing (`ParseError`) and raising (`RaiseError`), returning the boxed boundary error.
+/// Retains the explicit stereo entities described by [`parse_mol_to_ir`].
 pub fn parse_mol_bytes_to_ir(input: &[u8]) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
     let molecule: GraphIrMolecule = (&table_mol).try_into_ir(&())?;

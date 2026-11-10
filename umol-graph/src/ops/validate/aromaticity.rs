@@ -270,6 +270,36 @@ mod tests {
         }),
         Solution::Determined(()),
     )]
+    #[case::bond_mismatch_unknown_first(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C#a+" "C" "C" "C" "C" "C" "C"]
+            :bonds [[1 2 "1#a!"] [2 3 "1"] [3 4 "1"]
+                    [4 5 "1"] [5 6 "1"] [6 1 "1"]]
+            :aromatic-systems [{:atoms [1 2 3 4 5 6] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticBondConstraintMismatch {
+                bond: BondId(0),
+                aromatic_system: AromaticSystemId(0),
+            },
+        )),
+    )]
+    #[case::bond_mismatch_unknown_last(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C#a+"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticBondConstraintMismatch {
+                bond: BondId(0),
+                aromatic_system: AromaticSystemId(0),
+            },
+        )),
+    )]
     #[case::non_ground(
         AromaticityModel::daylight(),
         mol_dsl!(r#"{
@@ -283,10 +313,12 @@ mod tests {
         #[case] molecule: Molecule,
         #[case] expected: Solution<(), AromaticityConformanceContradiction>,
     ) {
+        let original = molecule.clone();
         assert_eq!(
             AromaticityConformanceValidator::new(&model).validate(&molecule),
             Ok(expected)
         );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

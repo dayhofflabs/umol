@@ -270,7 +270,8 @@ mod tests {
                 },
                 stereo: StereoValidateConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                    max_iterations: 16,
+                    para_stereo_max_iterations: 16,
+                    ring_config: Default::default(),
                 },
             }
         );
@@ -304,7 +305,8 @@ mod tests {
             },
             stereo: StereoValidateConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                max_iterations: 8,
+                para_stereo_max_iterations: 8,
+                ring_config: Default::default(),
             },
         };
         let validator = Validator::with_config(&model, config);
@@ -520,17 +522,39 @@ mod tests {
             },
         )),
     )]
+    #[case::partial_atom(
+        mol_dsl!(r#"{:atoms ["C"]}"#),
+        Solution::Underdetermined(()),
+    )]
+    #[case::unknown_before_mismatch(
+        mol_dsl!(r#"{:atoms ["C" "C#c0#h5#n0#u0#s"]}"#),
+        Solution::Contradictory(ValidateContradiction::ValenceInvariant(
+            ValenceMismatch::OrbitalCount {
+                atom_id: AtomId(1), orbital_count: 10, electron_count: 9,
+            },
+        )),
+    )]
+    #[case::mismatch_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#c0#h5#n0#u0#s" "C"]}"#),
+        Solution::Contradictory(ValidateContradiction::ValenceInvariant(
+            ValenceMismatch::OrbitalCount {
+                atom_id: AtomId(0), orbital_count: 10, electron_count: 9,
+            },
+        )),
+    )]
     fn test_validator_validate_invariants(
         #[case] molecule: Molecule,
         #[case] expected: Solution<(), ValidateContradiction>,
     ) {
         let model = ChemistryModel::default();
+        let original = molecule.clone();
         assert_eq!(
             Validator::new(&model)
                 .validate_invariants(&molecule)
                 .unwrap(),
             expected,
         );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -548,7 +572,7 @@ mod tests {
     )]
     #[case::stereo(
         mol_dsl_concrete!(r#"{
-            :atoms ["C#h0#T1" "C#h3" "C#h3" "C#h3" "C#h3"]
+            :atoms ["C#h0#T+" "C#h3" "C#h3" "C#h3" "C#h3"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         }"#),
         Solution::Determined(()),

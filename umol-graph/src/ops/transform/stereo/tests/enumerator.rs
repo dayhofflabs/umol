@@ -103,11 +103,13 @@ fn test_stereo_enumerator_with_config(
     mixed_stereo: Molecule,
     #[case] selection: StereoSelection,
     #[case] values: Vec<(Option<u32>, Option<u32>)>,
+    #[values(1, 7, 16)] para_stereo_max_iterations: u32,
 ) {
     let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection,
+            para_stereo_max_iterations,
             ..Default::default()
         },
         vec![
@@ -116,6 +118,14 @@ fn test_stereo_enumerator_with_config(
             StereoSite::Atom(AtomId(99)),
             StereoSite::Bond(BondId(4)),
         ],
+    );
+    assert_eq!(
+        transformer
+            .prepare(&mixed_stereo)
+            .unwrap()
+            .symmetry_config
+            .max_iterations,
+        para_stereo_max_iterations,
     );
     let expected: Vec<_> = values
         .into_iter()
@@ -157,7 +167,6 @@ fn test_stereo_enumerator_with_config(
 fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
     let mut model = StereoModel {
         kind_models: [None, None, None, None, None, None],
-        stereo_bond_minimum_ring_size: 64,
         ..Default::default()
     };
     let transformer = StereoEnumerator::with_config(
@@ -334,30 +343,23 @@ fn test_stereo_enumerator_transform_expression(
 }
 
 #[rstest]
-#[case::source_assertions(0, 1, vec![(1, 1)])]
-#[case::first_assertions(1, 0, vec![(0, 0)])]
-fn test_stereo_enumerator_transform_evidence(
-    mut mixed_stereo: Molecule,
-    #[case] asserted_atom: u32,
-    #[case] asserted_bond: u32,
-    #[case] values: Vec<(u32, u32)>,
-) {
+fn test_stereo_enumerator_transform_evidence(mut mixed_stereo: Molecule) {
     mixed_stereo
         .atom_mut(AtomId(0))
         .attributes_mut()
         .constraints
         .set(AtomConstraintForm::TetrahedralStereo(
-            TetrahedralStereoForm::Stereo(asserted_atom.into()),
+            TetrahedralStereoForm::Stereo,
         ));
     mixed_stereo
         .bond_mut(BondId(4))
         .attributes_mut()
         .constraints
         .set(BondConstraintForm::CisTransStereo(
-            CisTransStereoForm::Stereo(asserted_bond.into()),
+            CisTransStereoForm::Stereo,
         ));
     let original = mixed_stereo.clone();
-    let expected: Vec<_> = values
+    let expected: Vec<_> = [(0, 0), (0, 1), (1, 0), (1, 1)]
         .into_iter()
         .map(|(atom, bond)| {
             let mut molecule = mixed_stereo.clone();
@@ -401,15 +403,13 @@ fn test_stereo_enumerator_transform_constraint(
                 Constraint::And(vec![
                     Constraint::Atom(
                         AtomId(0),
-                        AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                            value.into(),
+                        AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::from(
+                            value == 0,
                         )),
                     ),
                     Constraint::Bond(
                         BondId(4),
-                        BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(
-                            value.into(),
-                        )),
+                        BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo),
                     ),
                 ])
             })
@@ -421,7 +421,7 @@ fn test_stereo_enumerator_transform_constraint(
         &[StereoCoset::Undetermined, StereoCoset::Undetermined],
         &BTreeSet::from([0, 1]),
         &order,
-        |values| values[0] != values[1],
+        |_| true,
     )
     .unwrap()
     .into_iter()
@@ -609,13 +609,9 @@ fn test_stereo_enumerator_transform_ring() {
 
 #[rstest]
 #[case::empty_domain(StereoCoset::lit_set([]), TetrahedralStereoForm::Undetermined)]
-#[case::fixed_conflict(
-    StereoCoset::Lit(0),
-    TetrahedralStereoForm::Stereo(StereoCoset::Lit(0))
-)]
-#[case::finite_conflict(StereoCoset::lit_set([0]), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))]
+#[case::fixed_conflict(StereoCoset::Lit(0), TetrahedralStereoForm::NotStereo)]
+#[case::finite_conflict(StereoCoset::lit_set([0]), TetrahedralStereoForm::NotStereo)]
 #[case::negative(StereoCoset::Undetermined, TetrahedralStereoForm::NotStereo)]
-#[case::empty_assertion(StereoCoset::Undetermined, TetrahedralStereoForm::Stereo(StereoCoset::lit_set([])))]
 fn test_stereo_enumerator_transform_rejection(
     mut mixed_stereo: Molecule,
     #[case] coset: StereoCoset,
@@ -695,7 +691,7 @@ fn test_stereo_enumerator_transform_constraint_error() {
     editor.constraints_mut().push(Constraint::Or(vec![
         Constraint::Atom(
             AtomId(0),
-            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(0.into())),
+            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo),
         ),
         Constraint::DativeBond(
             DativeBondId(0),
@@ -727,7 +723,7 @@ fn test_stereo_enumerator_transform_constraint_error() {
 
 #[rstest]
 #[case::empty(Molecule::default(), vec![])]
-#[case::no_stereo(mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), vec![])]
+#[case::no_stereo(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), vec![])]
 #[case::fixed(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]}"#), vec![StereoSite::Atom(AtomId(0))])]
 #[case::excluded_kind(mol_dsl_concrete!(r#"{:atoms ["Pt#c+2" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]

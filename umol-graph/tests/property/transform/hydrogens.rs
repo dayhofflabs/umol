@@ -395,26 +395,11 @@ fn stereo_cases() -> impl Strategy<Value = (Molecule, Molecule, Molecule)> {
                         if endpoints_swap {
                             bond_ligands.rotate_left(2);
                         }
-                        let inversions = (0..4)
-                            .flat_map(|i| (i + 1..4).map(move |j| (i, j)))
-                            .filter(|&(i, j)| {
-                                (atom_ligands[i].kind, atom_ligands[i].atom_id)
-                                    > (atom_ligands[j].kind, atom_ligands[j].atom_id)
-                            })
-                            .count();
-                        let side_inversions = bond_ligands
-                            .chunks_exact(2)
-                            .filter(|side| {
-                                (side[0].kind, side[0].atom_id) > (side[1].kind, side[1].atom_id)
-                            })
-                            .count();
-                        let tetrahedral = atom_coset ^ (inversions % 2) as u32;
-                        let cis_trans = bond_coset ^ (side_inversions % 2) as u32;
                         atoms[images[0]]
                             .1
                             .constraints
                             .set(AtomConstraintForm::TetrahedralStereo(
-                                TetrahedralStereoForm::stereo(tetrahedral),
+                                TetrahedralStereoForm::Stereo,
                             ));
                         let mut bonds = vec![
                             (
@@ -422,7 +407,7 @@ fn stereo_cases() -> impl Strategy<Value = (Molecule, Molecule, Molecule)> {
                                 AtomId::from(images[2]),
                                 BondForm::from_order(2)
                                     .with_constraint(BondConstraintForm::CisTransStereo(
-                                        CisTransStereoForm::stereo(cis_trans),
+                                        CisTransStereoForm::Stereo,
                                     ))
                                     .into_concrete(),
                             ),

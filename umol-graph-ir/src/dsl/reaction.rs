@@ -2511,7 +2511,9 @@ mod tests {
     };
     use crate::ir::num::NumForm;
     use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, Stereogenicity};
+    use crate::ir::stereo::{
+        StereoAtomForm, StereoBondForm, StereoCoset, StereoTerm, Stereogenicity,
+    };
     use crate::ir::{MoleculeEntries, ReactionIntegrityError};
     use crate::mol_dsl;
 
@@ -3789,6 +3791,97 @@ mod tests {
     fn test_reaction_dsl_from_edn(#[case] input: &str, #[case] expected: Reaction) {
         let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
         assert_eq!(dsl.reaction(), &expected);
+    }
+
+    #[rstest]
+    #[case::atom(
+        r##"{
+            :lhs {
+                :atom-aliases [:carbon "C#T+"]
+                :atoms [[:c :carbon] "F" "Cl" "Br"]
+                :bonds [[:c 1 "1"] [:c 2 "1"] [:c 3 "1"]]
+                :stereo-atoms [{:id :s :site :c :ligands [1 2 3 [:virt :c]] :attrs :ccw}]
+            }
+            :deltas [{:stereo-atom {:modify [:s "Th?configuration"]}}]
+        }"##,
+        Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("configuration"))),
+            },
+        }),
+    )]
+    #[case::bond(
+        r##"{
+            :lhs {
+                :atoms [[:c "C"] [:n "N"] "F" "Cl"]
+                :bonds [{:id :b :atoms [:c :n] :attrs "2#C+"} [:c 2 "1"] [:n 3 "1"]]
+                :stereo-bonds [{:id :s :site :b :ligands [[:virt :c] 2 [:virt :n] 3] :attrs :z}]
+            }
+            :deltas [{:stereo-bond {:modify [:s "Ct?configuration"]}}]
+        }"##,
+        Delta::StereoBond(StereoBondDelta::ModifyField {
+            id: StereoBondId(0),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                new: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var("configuration"))),
+            },
+        }),
+    )]
+    fn test_reaction_dsl_from_edn_stereo(#[case] source: &str, #[case] expected: Delta) {
+        let via_tree = ReactionDsl::from_edn(&read_string(source).unwrap()).unwrap();
+        assert_eq!(ReactionDsl::from_edn_str(source), Ok(via_tree.clone()));
+        assert_eq!(via_tree.reaction().deltas(), &Deltas::from_iter([expected]));
+        assert_eq!(
+            ReactionDsl::from_edn(&via_tree.to_edn()),
+            Ok(via_tree.clone())
+        );
+        assert_eq!(
+            ReactionDsl::from_edn_str(&via_tree.to_string()),
+            Ok(via_tree)
+        );
+    }
+
+    #[rstest]
+    #[case::lhs_atom(r##"{:lhs {:atoms ["C#T@"]}}"##, "atom")]
+    #[case::lhs_bond(r##"{:lhs {:atoms ["C" "C"] :bonds [[0 1 "2#C@"]]}}"##, "bond")]
+    #[case::alias(r##"{:atom-aliases [:c "C#T@"] :lhs {:atoms [:c]}}"##, "atom")]
+    #[case::add_atom(r##"{:lhs {} :deltas [{:atom {:add "C#T@"}}]}"##, "atom")]
+    #[case::add_bond(
+        r##"{:lhs {:atoms ["C" "C"]} :deltas [{:bond {:add [0 1 "2#C@"]}}]}"##,
+        "bond"
+    )]
+    #[case::modify_atom(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:modify [0 "#T@"]}}]}"##,
+        "atom-update"
+    )]
+    #[case::modify_bond(
+        r##"{:lhs {:atoms ["C" "C"] :bonds [[0 1 "2"]]} :deltas [{:bond {:modify [0 "#C@"]}}]}"##,
+        "bond-update"
+    )]
+    fn test_reaction_dsl_from_edn_stereo_error(
+        #[case] template: &str,
+        #[case] grammar: &'static str,
+        #[values(
+            "0",
+            "1",
+            "{0,1}",
+            "?configuration",
+            "?configuration :: {0,1}",
+            "~0",
+            "'0",
+            "0^(0,1)"
+        )]
+        payload: &str,
+    ) {
+        let source = template.replace('@', payload);
+        let expected = DeError::subgrammar(grammar, ParseError::Syntax);
+        assert_eq!(
+            ReactionDsl::from_edn(&read_string(&source).unwrap()),
+            Err(expected.clone())
+        );
+        assert_eq!(ReactionDsl::from_edn_str(&source), Err(expected.into()));
     }
 
     #[rstest]

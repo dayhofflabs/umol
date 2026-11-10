@@ -1,1 +1,0 @@
-{:atoms ["C"] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo [1 2]}}]}]}

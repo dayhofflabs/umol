@@ -13,7 +13,7 @@ use std::iter;
 use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph::ops::model::StereoModel;
-use umol_graph::ops::stereo::{StereoDerivation, StereoPerception, StereoSelection, StereoSite};
+use umol_graph::ops::stereo::{StereoDerivation, StereoPerceiver, StereoSelection, StereoSite};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, BondId, Molecule, MoleculeEntries, RingConfig, StereoAtomForm,
@@ -22,7 +22,7 @@ use umol_graph_ir::ir::{
 
 proptest! {
     #[test]
-    fn test_stereo_perception_recognize_tetrahedral(
+    fn test_stereo_perceiver_recognize_tetrahedral(
         labels in prop::array::uniform4(0usize..5), classes in 0u8..8,
         coset in prop_oneof![Just(StereoCoset::Undetermined), Just(StereoCoset::Lit(0)),
             Just(StereoCoset::Lit(1)), Just(StereoCoset::lit_set([0, 1]))],
@@ -44,7 +44,7 @@ proptest! {
         });
         let original = molecule.clone();
         let ligands: Vec<_> = (1..=4).map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect();
-        let perception = StereoPerception::new(&StereoModel::default());
+        let perception = StereoPerceiver::new(&StereoModel::default());
         let expected = StereoDerivation {
             stereo_atoms: if selected.contains(&class) {
                 vec![(AtomId(0), ligands.clone(), StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
@@ -53,7 +53,7 @@ proptest! {
         prop_assert_eq!(perception.recognize(&molecule, &StereoSelection {
             sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
             kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), stereogenicities: Some(selected),
-        }, AutomorphismAlgorithm::Nauty, RingConfig::default()), Ok(expected));
+        }, AutomorphismAlgorithm::Nauty, RingConfig::default(), 16), Ok(expected));
         prop_assert_eq!(&molecule, &original);
 
         let mut editor = molecule.edit();
@@ -61,12 +61,12 @@ proptest! {
         let stored = editor.finish().unwrap();
         let original = stored.clone();
         prop_assert_eq!(perception.classify(&stored, &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty), Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), class)])));
+            AutomorphismAlgorithm::Nauty, 16), Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), class)])));
         prop_assert_eq!(stored, original);
     }
 
     #[test]
-    fn test_stereo_perception_recognize_cis_trans(
+    fn test_stereo_perceiver_recognize_cis_trans(
         labels in prop::array::uniform4(0usize..5), classes in 0u8..8,
         coset in prop_oneof![Just(StereoCoset::Undetermined), Just(StereoCoset::Lit(0)),
             Just(StereoCoset::Lit(1)), Just(StereoCoset::lit_set([0, 1]))],
@@ -89,7 +89,7 @@ proptest! {
         });
         let original = molecule.clone();
         let ligands: Vec<_> = (2..=5).map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect();
-        let perception = StereoPerception::new(&StereoModel::default());
+        let perception = StereoPerceiver::new(&StereoModel::default());
         let expected = StereoDerivation {
             stereo_bonds: if selected.contains(&class) {
                 vec![(BondId(0), ligands.clone(), StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined))]
@@ -98,7 +98,7 @@ proptest! {
         prop_assert_eq!(perception.recognize(&molecule, &StereoSelection {
             sites: Some(BTreeSet::from([StereoSite::Bond(BondId(0))])),
             kinds: Some(BTreeSet::from([StereoKind::CisTrans])), stereogenicities: Some(selected),
-        }, AutomorphismAlgorithm::Nauty, RingConfig::default()), Ok(expected));
+        }, AutomorphismAlgorithm::Nauty, RingConfig::default(), 16), Ok(expected));
         prop_assert_eq!(&molecule, &original);
 
         let mut editor = molecule.edit();
@@ -106,7 +106,7 @@ proptest! {
         let stored = editor.finish().unwrap();
         let original = stored.clone();
         prop_assert_eq!(perception.classify(&stored, &BTreeSet::from([StereoSite::Bond(BondId(0))]),
-            AutomorphismAlgorithm::Nauty), Ok(BTreeMap::from([(StereoSite::Bond(BondId(0)), class)])));
+            AutomorphismAlgorithm::Nauty, 16), Ok(BTreeMap::from([(StereoSite::Bond(BondId(0)), class)])));
         prop_assert_eq!(stored, original);
     }
 }

@@ -26,6 +26,7 @@ use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph::ops::aromaticity::{AromaticityConfig, AromaticityPerceiver};
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::resolve::stereo::StereoResolver;
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
     AtomSelectionAlgorithm, BondsResolver, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver,
@@ -39,7 +40,7 @@ use umol_graph_ir::ir::{
     AtomId, BondForm, ElementForm, Molecule, MoleculeEntries, NumForm, Reframe, RollbackMethod,
     TryIntoIr, UnpairedElectronsForm,
 };
-use umol_graph_ir::{atom_dsl, mol_dsl};
+use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
@@ -54,6 +55,8 @@ fn bench_ingest_smiles(c: &mut Criterion) {
         ("naphthalene", "c1ccc2ccccc2c1"),
         ("quinoline", "c1ccc2ccccc2n1"),
         ("purine", "c1ncc2ncnc2n1"),
+        ("tetrahedral", "[C@](F)(Cl)(Br)I"),
+        ("cis_trans", "F/C(Cl)=C(/Br)I"),
     ] {
         g.bench_function(name, |b| {
             b.iter(|| ingest_smiles(black_box(smiles)).unwrap())
@@ -456,7 +459,7 @@ fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
         );
         for assignment in 0..1 << flexible_atoms {
             assert_eq!(
-                perception.find_aromatic_systems(&molecule, AromaticityConfig::default(), |atom| {
+                perception.recognize(&molecule, AromaticityConfig::default(), |atom| {
                     let contribution = if atom.0 < 6 || atom.0 == 18 {
                         1
                     } else if atom.0 < 6 + flexible_atoms {
@@ -537,8 +540,6 @@ fn bench_aromaticity_resolve(c: &mut Criterion) {
 }
 
 fn bench_stereo_project(c: &mut Criterion) {
-    let model = ChemistryModel::default();
-    let resolver = Resolver::new(&model);
     let mut group = c.benchmark_group("smiles_roundtrip/stereo_project");
     for (name, input) in [
         ("tetrahedral", "N[C@H](F)Cl"),
@@ -550,15 +551,54 @@ fn bench_stereo_project(c: &mut Criterion) {
         let source = ingest_smiles(input).unwrap();
         assert!(source.has_stereo_atoms() || source.has_stereo_bonds());
         let mut checked = source.clone();
-        assert_eq!(
-            resolver.stereo.project_into(&mut checked),
-            Ok(Solution::Determined(()))
-        );
+        assert_eq!(StereoResolver::project_into(&mut checked), Ok(()));
         assert!(!checked.has_stereo_atoms() && !checked.has_stereo_bonds());
         group.bench_function(name, |b| {
             b.iter_batched_ref(
                 || source.clone(),
-                |molecule| resolver.stereo.project_into(black_box(molecule)).unwrap(),
+                |molecule| StereoResolver::project_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+fn bench_stereo_project_explicit(c: &mut Criterion) {
+    let mut group = c.benchmark_group("stereo_project_explicit");
+    for (name, source, expected) in [
+        (
+            "tetrahedral",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+            ),
+        ),
+        (
+            "cis_trans",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+                :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#
+            ),
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "2#C+"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#
+            ),
+        ),
+    ] {
+        let mut checked = source.clone();
+        assert_eq!(StereoResolver::project_into(&mut checked), Ok(()));
+        assert_eq!(checked, expected, "{name}");
+        group.bench_function(name, |b| {
+            b.iter_batched_ref(
+                || source.clone(),
+                |molecule| StereoResolver::project_into(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
@@ -611,10 +651,46 @@ fn bench_project(c: &mut Criterion) {
                     ),
                     Ok(Solution::Determined(()))
                 );
-                assert!(
-                    !checked.has_stereo_atoms()
-                        && !checked.has_stereo_bonds()
-                        && !checked.has_aromatic_systems()
+                assert!(!checked.has_aromatic_systems());
+                assert_eq!(
+                    checked
+                        .stereo_atoms()
+                        .iter()
+                        .map(|stereo| (
+                            stereo.site_id(),
+                            stereo.ligand_ids().to_vec(),
+                            stereo.attributes().clone()
+                        ))
+                        .collect::<Vec<_>>(),
+                    source
+                        .stereo_atoms()
+                        .iter()
+                        .map(|stereo| (
+                            stereo.site_id(),
+                            stereo.ligand_ids().to_vec(),
+                            stereo.attributes().clone()
+                        ))
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    checked
+                        .stereo_bonds()
+                        .iter()
+                        .map(|stereo| (
+                            stereo.site_id(),
+                            stereo.ligand_ids().to_vec(),
+                            stereo.attributes().clone()
+                        ))
+                        .collect::<Vec<_>>(),
+                    source
+                        .stereo_bonds()
+                        .iter()
+                        .map(|stereo| (
+                            stereo.site_id(),
+                            stereo.ligand_ids().to_vec(),
+                            stereo.attributes().clone()
+                        ))
+                        .collect::<Vec<_>>()
                 );
                 for (actual, original) in checked.atoms().iter().zip(source.atoms().iter()) {
                     assert_eq!(actual.implicit_hydrogens(), original.implicit_hydrogens());
@@ -739,6 +815,7 @@ criterion_group!(
     bench_aromatic_selection_duplicates,
     bench_aromaticity_resolve,
     bench_stereo_project,
+    bench_stereo_project_explicit,
     bench_project,
     bench_resolve_project_ownership
 );

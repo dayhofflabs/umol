@@ -334,16 +334,30 @@ def test_atomconstraints_multicenter_valence_int():
     assert cs.multicenter_valence == MulticenterValenceForm.Multicenter(NumForm.Lit(2))
 
 
-def test_atomconstraints_tetrahedral_stereo_config():
-    cs = AtomConstraintsForm([])
-    cs.tetrahedral_stereo = TetrahedralConfiguration.Cw
-    assert cs.tetrahedral_stereo == TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (False, TetrahedralStereoForm.NotStereo()),
+        (True, TetrahedralStereoForm.Stereo()),
+        (TetrahedralStereoForm.Undetermined(), TetrahedralStereoForm.Undetermined()),
+        (TetrahedralStereoForm.Stereo(), TetrahedralStereoForm.Stereo()),
+    ],
+)
+def test_atom_constraints_form_set_tetrahedral_stereo(value, expected):
+    constraints = AtomConstraintsForm([])
+    constraints.tetrahedral_stereo = value
+    assert constraints.tetrahedral_stereo == expected
 
 
-def test_atomconstraints_tetrahedral_stereo_false():
-    cs = AtomConstraintsForm([])
-    cs.tetrahedral_stereo = False
-    assert cs.tetrahedral_stereo == TetrahedralStereoForm.NotStereo()
+@pytest.mark.parametrize(
+    "value",
+    [TetrahedralConfiguration.Ccw, TetrahedralConfiguration.Cw, StereoCoset.Lit(0)],
+)
+def test_atom_constraints_form_set_tetrahedral_stereo_error(value):
+    constraints = AtomConstraintsForm([])
+    with pytest.raises(TypeError):
+        constraints.tetrahedral_stereo = value
+    assert list(constraints) == []
 
 
 def test_atomconstraints_ring_count_property():

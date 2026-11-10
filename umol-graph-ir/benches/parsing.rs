@@ -20,10 +20,13 @@ use umol_graph_ir::dsl::{
 
 #[path = "fixtures.rs"]
 mod fixtures;
+#[path = "fixtures/stereo.rs"]
+mod stereo_fixtures;
 use fixtures::{
     MOL_BENZENE, MOL_DIBORANE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS,
     MOL_LARGE_PARTIAL_IDS, MOL_SMALL, MOL_WITH_CONSTRAINTS,
 };
+use stereo_fixtures::{MOL_CIS_TRANS_EXPLICIT, MOL_TETRAHEDRAL_EXPLICIT};
 
 fn bench_pair<T>(
     group: &mut criterion::BenchmarkGroup<'_, WallTime>,
@@ -139,6 +142,18 @@ fn bench_molecule_dsl(c: &mut Criterion) {
     bench_pair::<MoleculeDsl>(&mut g, "indole", MOL_INDOLE);
     bench_pair::<MoleculeDsl>(&mut g, "diborane", MOL_DIBORANE);
     bench_pair::<MoleculeDsl>(&mut g, "with_constraints", MOL_WITH_CONSTRAINTS);
+    for (name, source) in [
+        ("tetrahedral_explicit", MOL_TETRAHEDRAL_EXPLICIT),
+        ("cis_trans_explicit", MOL_CIS_TRANS_EXPLICIT),
+    ] {
+        let edn = read_string(source).unwrap();
+        assert_eq!(
+            MoleculeDsl::from_edn(&edn).unwrap(),
+            MoleculeDsl::from_edn_str(source).unwrap(),
+            "{name}",
+        );
+        bench_pair::<MoleculeDsl>(&mut g, name, source);
+    }
     bench_pair::<MoleculeDsl>(&mut g, "large_no_ids", MOL_LARGE_NO_IDS.as_str());
     bench_pair::<MoleculeDsl>(&mut g, "large_all_ids", MOL_LARGE_ALL_IDS.as_str());
     bench_pair::<MoleculeDsl>(&mut g, "large_partial_ids", MOL_LARGE_PARTIAL_IDS.as_str());

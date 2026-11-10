@@ -7,25 +7,13 @@ use umol_utils::solution::Solution;
 
 use crate::ops::model::{ValenceCandidateSource, ValenceModel, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
-use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
-use crate::ops::validate::{
-    DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
-};
+use crate::ops::valence::{AtomTypingValence, CountsValence, ValenceContradiction};
+use crate::ops::validate::{DerivedKind, IncidenceConstraintInvariantsValidator};
 
 #[derive(Clone, Debug)]
 pub enum ValenceResolver<'a> {
     AtomTyping(AtomTypingValence<'a>),
     Counts(CountsValence<'a>),
-}
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ValenceContradiction {
-    #[error(transparent)]
-    Constraint(#[from] IncidenceConstraintInvariantsContradiction),
-    #[error(transparent)]
-    AtomTyping(#[from] AtomTypingError),
-    #[error(transparent)]
-    Counts(#[from] CountsError),
 }
 
 /// Operational failures of valence admission; currently uninhabited —
@@ -53,10 +41,12 @@ impl<'a> ValenceResolver<'a> {
     /// the incidence-constraint invariants checked first; no edits are
     /// produced. The chemistry solution rides `Solution`; the operational
     /// channel is currently uninhabited.
+    /// Established constraint contradictions take precedence over underdetermination.
     pub fn admit(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<ResolveState, ValenceContradiction>, ValenceError> {
+        let mut underdetermined = false;
         for atom in molecule.atoms().ids() {
             for key in [
                 AtomConstraintKey::Valence,
@@ -73,14 +63,15 @@ impl<'a> ValenceResolver<'a> {
                     .expect("atom id came from the molecule atom store")
                 {
                     Solution::Determined(()) => {}
-                    Solution::Underdetermined(()) => {
-                        return Ok(Solution::Underdetermined(ResolveState::default()));
-                    }
+                    Solution::Underdetermined(()) => underdetermined = true,
                     Solution::Contradictory(contradiction) => {
                         return Ok(Solution::Contradictory(contradiction.into()));
                     }
                 }
             }
+        }
+        if underdetermined {
+            return Ok(Solution::Underdetermined(ResolveState::default()));
         }
         let completions = match self {
             Self::AtomTyping(resolver) => resolver
@@ -139,7 +130,10 @@ mod tests {
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
-    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, ValenceTable};
+    use crate::ops::valence::{
+        AtomCompletions, AtomTypeRegistry, AtomTypingError, CountsError, ValenceTable,
+    };
+    use crate::ops::validate::IncidenceConstraintInvariantsContradiction;
 
     #[rstest]
     fn test_valence_resolver_new() {
@@ -264,6 +258,48 @@ mod tests {
     }
 
     #[rstest]
+    #[case::unknown_before_contradiction(
+        mol_dsl!(r#"{:atoms ["C#v1" "C" "C#v1"] :bonds [[0 1 "*"]]}"#),
+        AtomId(2), AtomConstraintForm::valence(1),
+    )]
+    #[case::contradiction_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#v1" "C#v1" "C"] :bonds [[1 2 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::valence(1),
+    )]
+    #[case::unknown_valence_donated_pairs(
+        mol_dsl!(r#"{:atoms ["N#v1#d1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::donated_pairs(1),
+    )]
+    #[case::unknown_valence_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["B#v1#t1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::accepted_pairs(1),
+    )]
+    #[case::unknown_donated_pairs_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["N#d1#t1" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        AtomId(0), AtomConstraintForm::accepted_pairs(1),
+    )]
+    fn test_valence_resolver_admit_contradiction(
+        #[case] molecule: Molecule,
+        #[case] atom: AtomId,
+        #[case] constraint: AtomConstraintForm,
+        #[values(
+            ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            ValenceModel::atom_typing(Cow::Borrowed(AtomTypeRegistry::default_registry()))
+        )]
+        model: ValenceModel,
+    ) {
+        let original = molecule.clone();
+        assert_eq!(
+            ValenceResolver::new(&model).admit(&molecule),
+            Ok(Solution::Contradictory(ValenceContradiction::Constraint(
+                IncidenceConstraintInvariantsContradiction::Atom { atom, constraint },
+            )))
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
     #[case::counts(ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())))]
     #[case::atom_typing(ValenceModel::atom_typing(Cow::Borrowed(
         AtomTypeRegistry::default_registry()
@@ -327,9 +363,9 @@ mod tests {
     #[case::open_aromatic(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#u0#s#a+"]}"#))]
     #[case::aromatic_carbon(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v2#a1"]}"#))]
     #[case::aromatic_nitrogen(mol_dsl!(r#"{:atoms ["N#i=#c0#h1#n0#u0#s#v2#a2"]}"#))]
-    #[case::tetrahedral_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v3#T0"]}"#))]
-    #[case::tetrahedral_zero_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h0#n0#u0#s#v4#T1"]}"#))]
-    #[case::tetrahedral_lone_pair(mol_dsl!(r#"{:atoms ["S#i=#c0#h0#n1#u0#s#v4#T0"]}"#))]
+    #[case::tetrahedral_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v3#T+"]}"#))]
+    #[case::tetrahedral_zero_h(mol_dsl!(r#"{:atoms ["C#i=#c0#h0#n0#u0#s#v4#T+"]}"#))]
+    #[case::tetrahedral_lone_pair(mol_dsl!(r#"{:atoms ["S#i=#c0#h0#n1#u0#s#v4#T+"]}"#))]
     fn test_valence_resolver_project_identity(
         #[case] mut molecule: Molecule,
         #[values(false, true)] typing: bool,

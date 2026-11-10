@@ -138,11 +138,12 @@ factors. This excludes localized and noncovalent self-loops, repeated dative par
 the donors and acceptor, repeated aromatic and multicenter participants, repeated actual-atom
 stereo ligands, and a stereo-atom site reused as an actual-atom ligand. Virtual ligands are not
 actual-atom participants, but an identical virtual ligand occurrence may not repeat within one
-stereo frame. An implicit hydrogen and a lone pair anchored at the same atom remain distinct
-ligands.
+stereo frame. ImplicitHydrogen, LonePair, and Virtual anchored at the same atom remain distinct
+ligands. Virtual is a specific participant kind, not an undetermined lattice value or a wildcard
+for another ligand kind.
 
 Stereo ligand frames also carry site-relative incidence. An actual ligand of a stereo atom must be
-a covalent graph neighbor of the site, while an implicit hydrogen or lone pair is borne by the site
+a covalent graph neighbor of the site, while each virtual ligand is borne by the site
 itself. A stereo-bond frame consists of two consecutive two-ligand endpoint blocks. Each block's
 actual ligands must be adjacent to its endpoint and cannot be the opposite site endpoint; its
 virtual ligands must be borne by that endpoint. Exchanging the two complete endpoint blocks is
@@ -213,19 +214,19 @@ it does not grow a reaction-specific copy of molecule integrity. A route that al
 the contract may use the asserted constructor, but the asserted and checked routes must share the
 implementation and the set of accepted values.
 
-Do not run a semantic validator at these boundaries. DSL and external-format raise may preserve an
-atom `#T` or bond `#C` assertion before a stereo entity has been perceived or resolved. Validating
-constraint satisfaction during construction would reject a representable input and silently impose
-an operation order. Source-format checks such as wedge, directional-bond, or chirality-frame
-interpretation likewise stay in the source-format layer; only the resulting graph IR's representation
-is checked by the shared integrity gate.
+Do not run a semantic validator at these boundaries. DSL raise may preserve an atom #T or bond #C
+kind constraint without a stereo entity. External-format raise constructs explicit stereo entities
+from the supplied configuration and frame; a virtual ligand whose kind the source does not identify
+is stored as Virtual. It does not interpret that ligand as an implicit hydrogen or lone pair.
+Validating constraint satisfaction during construction would reject a representable input and
+silently impose an operation order. Source-format checks such as wedge, directional-bond, or
+chirality-frame interpretation stay in the source-format layer; only the resulting graph IR's
+representation is checked by the shared integrity gate.
 
-Those assertions must eventually be realized against an integrity-valid stereo frame. They do not
-create distinguishable occurrences of an equal virtual ligand. If perception could satisfy `#T` or
-`#C` only by repeating an implicit hydrogen or lone pair, it perceives no such stereo entity and
-follows the operation's existing absence policy. Any boundary that supplies an explicit repeated
-ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it during raise; it must not normalize, deduplicate, or choose an
-arbitrary coset for malformed input.
+Creating a stereo entity to satisfy a positive assertion requires an integrity-valid frame. An
+assertion does not create distinguishable occurrences of an equal virtual ligand. Any boundary
+that supplies an explicit repeated ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it
+during raise; it must not normalize, deduplicate, or choose an arbitrary coset for malformed input.
 
 An existing stereo atom or bond records an arrangement, without asserting stereogenicity.
 Symmetric and prochiral arrangements remain representable. Graph-derived ligand actions fix
@@ -233,7 +234,22 @@ virtual ligands; distinguishable hydrogen positions require explicit atoms. Cons
 ordinary conversion preserve supplied stereo information without implicitly running the stereo
 transformations below.
 
-StereoPerception supplies read-only evidence, recognition, and classification queries.
+TetrahedralStereoForm and CisTransStereoForm are frame-independent scalar constraints with
+Undetermined, NotStereo, and Stereo variants. The two determined values have bool literals;
+Stereo has no coset payload. Configuration data belongs to StereoConfigurationForm on an explicit
+stereo atom or bond, whose participants supply its frame. Named TetrahedralConfiguration and
+CisTransConfiguration values convert to StereoConfigurationForm, not to the scalar constraint forms.
+The DSL preserves this distinction: #T/#C accept only *, !, and + in every context; configuration
+literals, sets, variables, and operators are written on explicit stereo entities.
+
+Identifying a Virtual ligand during resolution preserves its frame position and all stored entity
+attributes. It is an explicit operation on participants, not lattice refinement or relaxed ligand
+matching. An unresolved generic virtual ligand is rejected on current SMILES/MOL export.
+Standalone stereo projection deliberately discards entity frames, configurations, and local
+constraints and retains only the corresponding positive kind constraints. Aggregate projection
+preserves explicit stereo entities, so export can convey their configuration data directly.
+
+StereoPerceiver supplies read-only evidence, recognition, and classification queries.
 StereoAdder explicitly adds missing selected tetrahedral/cis-trans entities; StereoRemover removes
 selected entities and their corresponding #T/#C assertions. Their configurations intersect site,
 kind, and stereogenicity selectors. StereoEnumerator determines existing selected absolute cosets
@@ -397,6 +413,9 @@ validator concept belongs in `umol-graph`, where `*InvariantsValidator` names mo
 validation and `*ConformanceValidator` names validation under a selected chemistry model. Both
 return `Result<Solution<_, _>, _>` because a coherent non-ground representation may leave a semantic
 question underdetermined.
+
+The shared execution and outcome contract for model-dependent validators is defined in
+[Operation semantics](operations.md#tier-3-conformance-validators).
 
 Validation remains separate even when a property is model-independent. Whether reaction deltas can
 materialize a two-sided span is a precondition of operations that require that representation, not
@@ -620,7 +639,7 @@ normalized incidence values. Entity-node and incidence colors occupy disjoint ke
 
 Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
 donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand
-kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, and `LonePair = 2`. Unpaired electrons
+kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, `LonePair = 2`, and `Virtual = 3`. Unpaired electrons
 are the product `(count = 0, multiplicity = 1)`. A stereo configuration is the product of its kind
 and coset after the complete participant-frame action described above.
 
@@ -944,6 +963,9 @@ These correspondences track entity ids. Replacing an entity's atoms, ligands, or
 that entity's pairing; the correspondence does not map positions within those lists.
 
 ### Resolution, projection, and transformations
+
+The shared resolver policy for refinement, conflicts, discharge, and realizability failures is
+defined in [Operation semantics](operations.md#resolution).
 
 Resolver::resolve and project consume a molecule and execute through one editor, without a recovery
 copy or journal. Only a determined result returns a molecule; underdetermination, contradiction,

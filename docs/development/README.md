@@ -9,6 +9,8 @@ rule changes and carry neither dates nor implementation status.
 - [Data type contracts](data-types.md) defines construction, conversion, validation tiers,
   transformation, representation ownership and crate layering, provenance, fallibility, and public
   contract review.
+- [Operation semantics](operations.md) defines resolver refinement, conflicts, discharge, and
+  failure recovery, and model-dependent conformance validation of constraints and explicit entities.
 - [Representation integrity](integrity.md) defines the narrow closed-container exception, inventories
   every molecule, reaction, and reaction-span integrity check, and records the concrete failure each
   check prevents.

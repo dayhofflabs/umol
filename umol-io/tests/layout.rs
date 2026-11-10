@@ -161,6 +161,14 @@ fn test_layout_molecule_determinism(#[case] algorithm: MoleculeLayoutAlgorithm) 
     AtomId(3),
     false
 )]
+#[case::z_virtual(
+    r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:virt 1] 3 [:virt 2]] :attrs "Ct0"}]}"#,
+    BondId(1), AtomId(0), AtomId(3), true
+)]
+#[case::e_virtual(
+    r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:virt 1] 3 [:virt 2]] :attrs "Ct1"}]}"#,
+    BondId(1), AtomId(0), AtomId(3), false
+)]
 fn test_layout_molecule_cis_trans(
     #[case] input: &str,
     #[case] site: BondId,

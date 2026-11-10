@@ -1045,6 +1045,7 @@ pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &impl Metadata) -
         StereoLigandKind::Atom => atom,
         StereoLigandKind::ImplicitHydrogen => Edn::Vector(vec![Edn::keyword("h"), atom].into()),
         StereoLigandKind::LonePair => Edn::Vector(vec![Edn::keyword("lp"), atom].into()),
+        StereoLigandKind::Virtual => Edn::Vector(vec![Edn::keyword("virt"), atom].into()),
     }
 }
 

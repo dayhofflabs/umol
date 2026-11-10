@@ -5,10 +5,16 @@
 //! input leaves electron fields undetermined; both valence sources and tie-breaks must
 //! produce the expected complete molecule.
 //!
+//! Valence discharge compares complete outputs for independent NH3/BH3 pairs,
+//! with or without a dative bond, literal or set-valued assertions, and complete
+//! or undetermined electron fields. Both valence sources remove entailed assertions,
+//! retain zero-pair assertions without dative incidence, and are idempotent.
+//!
 //! Aromatic discharge is checked against independently assembled results for
 //! separate or linked benzene rings with mixed stored and newly added systems.
-//! Stored-system assertions and unrelated keys survive; newly realized assertions
-//! and negative linking-bond assertions are removed. Resolution is idempotent.
+//! Entailed assertions are removed beside stored and new systems; unrelated keys
+//! and negative linking-bond assertions survive. Resolution is idempotent.
+//! Standalone aromaticity preserves #v; aggregate resolution discharges it.
 //!
 //! Added aromatic systems agree with the input atom evidence and contain no bond
 //! asserting non-aromaticity. The skeleton domain retains open, contradictory,
@@ -29,7 +35,8 @@
 //!
 //! Skeleton properties compare each determined standalone or composite result's exact
 //! remaining assertions with those realized by its additions and completions. SMILES and
-//! MOL renderings that resolve under Error policies leave no aromatic or stereo assertion.
+//! MOL renderings that resolve under Error policies discharge positive aromatic and stereo
+//! assertions while retaining negative aromatic assertions without a supporting relation.
 //! Projection followed by resolution reproduces the systems modulo participant frames
 //! and removes the assertions written by projection under the same chemistry model.
 //!
@@ -58,10 +65,10 @@ use umol_graph::ops::resolve::{
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
     AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
-    BooleanForm, CisTransStereoForm, Constraint, ElectronCountsForm, ElementForm, IsotopeMassForm,
-    Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe, RollbackMethod,
-    StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
+    BooleanForm, CisTransStereoForm, Constraint, DativeBondForm, ElectronCountsForm, ElementForm,
+    IsotopeMassForm, Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe,
+    RollbackMethod, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_io::ctfile::parser::parse_mol_to_ir;
@@ -133,6 +140,64 @@ proptest! {
 
 proptest! {
     #[test]
+    fn test_resolver_resolve_valence(
+        pairs in prop::collection::vec((any::<bool>(), any::<bool>(), any::<bool>()), 1..5),
+    ) {
+        let mut source = MoleculeEntries::default();
+        let mut expected = MoleculeEntries::default();
+        for (dative, concrete, set) in pairs {
+            let donor = AtomId::from(source.atoms.len());
+            let acceptor = AtomId::from(source.atoms.len() + 1);
+            let mut atoms = vec![
+                atom_dsl!("N#i=#c0#h3#n0#u0#s"),
+                atom_dsl!("B#i=#c0#h3#n0#u0#s"),
+            ];
+            if !dative {
+                atoms[0].lone_pairs = NumForm::Lit(1);
+                for atom in &mut atoms {
+                    atom.constraints.set(AtomConstraintForm::DonatedPairs(NumForm::Lit(0)));
+                    atom.constraints.set(AtomConstraintForm::AcceptedPairs(NumForm::Lit(0)));
+                }
+            }
+            let mut asserted = atoms.clone();
+            for (position, atom) in asserted.iter_mut().enumerate() {
+                atom.constraints.set(AtomConstraintForm::Valence(
+                    if set { NumForm::lit_set([0, 1]) } else { NumForm::Lit(0) }));
+                if dative {
+                    atom.constraints.set(AtomConstraintForm::DonatedPairs(
+                        if set { NumForm::lit_set([0, 1]) } else { NumForm::Lit(i64::from(position == 0)) }));
+                    atom.constraints.set(AtomConstraintForm::AcceptedPairs(
+                        if set { NumForm::lit_set([0, 1]) } else { NumForm::Lit(i64::from(position == 1)) }));
+                }
+                if !concrete {
+                    atom.lone_pairs = NumForm::Undetermined;
+                    atom.unpaired_electrons = UnpairedElectronsForm::default();
+                }
+            }
+            source.atoms.extend(asserted);
+            expected.atoms.extend(atoms);
+            if dative {
+                let bond = (vec![donor], acceptor, DativeBondForm::from_order(1));
+                source.dative.push(bond.clone());
+                expected.dative.push(bond);
+            }
+        }
+        let source = Molecule::from_entries(source);
+        let expected = Molecule::from_entries(expected);
+        for valence in [ValenceModel::smiles(), ValenceModel::default()] {
+            let model = ChemistryModel { valence, ..Default::default() };
+            let resolver = Resolver::new(&model);
+            prop_assert_eq!(resolver.resolve(source.clone()), Ok(Solution::Determined(expected.clone())));
+            for rollback in [RollbackMethod::Clone, RollbackMethod::Journal] {
+                let mut actual = source.clone();
+                prop_assert_eq!(resolver.resolve_into(&mut actual, rollback), Ok(Solution::Determined(())));
+                prop_assert_eq!(&actual, &expected);
+            }
+            prop_assert_eq!(resolver.resolve(expected.clone()), Ok(Solution::Determined(expected.clone())));
+        }
+    }
+
+    #[test]
     fn test_stereo_resolver_resolve_discharge(
         sites in prop::collection::vec((any::<bool>(), any::<bool>(), 0u32..3), 1..5),
     ) {
@@ -158,34 +223,32 @@ proptest! {
             } else {
                 vec![(a, b, bond_dsl!("1#R!")), (a, c, bond_dsl!("1")), (a, d, bond_dsl!("1"))]
             };
-            let mut expected_atoms = atoms.clone();
-            let mut expected_bonds = bonds.clone();
+            let expected_atoms = atoms.clone();
+            let expected_bonds = bonds.clone();
             if cis_trans {
                 let assertion = BondConstraintForm::CisTransStereo(
-                    CisTransStereoForm::Stereo(coset.clone()));
+                    CisTransStereoForm::Stereo);
                 bonds[0].2.constraints.set(assertion.clone());
-                if stored { expected_bonds[0].2.constraints.set(assertion); }
                 let entity = (BondId::from(source.bonds.len()), vec![
                     StereoLigand::new(c, StereoLigandKind::Atom),
                     StereoLigand::new(a, StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(d, StereoLigandKind::Atom),
                     StereoLigand::new(b, StereoLigandKind::ImplicitHydrogen),
-                ], StereoBondForm::new(StereoKind::CisTrans, coset.clone()));
+                ], StereoBondForm::new(StereoKind::CisTrans, if stored { coset.clone() } else { StereoCoset::Undetermined }));
                 if stored {
                     source.stereo_bonds.push(entity.clone());
                     expected.stereo_bonds.push(entity);
                 } else { added_bonds.push(entity); }
             } else {
                 let assertion = AtomConstraintForm::TetrahedralStereo(
-                    TetrahedralStereoForm::Stereo(coset.clone()));
+                    TetrahedralStereoForm::Stereo);
                 atoms[0].constraints.set(assertion.clone());
-                if stored { expected_atoms[0].constraints.set(assertion); }
                 let entity = (a, vec![
                     StereoLigand::new(b, StereoLigandKind::Atom),
                     StereoLigand::new(c, StereoLigandKind::Atom),
                     StereoLigand::new(d, StereoLigandKind::Atom),
                     StereoLigand::new(a, StereoLigandKind::ImplicitHydrogen),
-                ], StereoAtomForm::new(StereoKind::Tetrahedral, coset.clone()));
+                ], StereoAtomForm::new(StereoKind::Tetrahedral, if stored { coset.clone() } else { StereoCoset::Undetermined }));
                 if stored {
                     source.stereo_atoms.push(entity.clone());
                     expected.stereo_atoms.push(entity);
@@ -201,10 +264,10 @@ proptest! {
         let mut molecule = Molecule::from_entries(source);
         let expected = Molecule::from_entries(expected);
         let resolver = StereoResolver::new(&StereoModel::default());
-        prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
-        prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.resolve(molecule.clone()), Solution::Determined(expected.clone()));
+        prop_assert_eq!(resolver.resolve_into(&mut molecule), Solution::Determined(()));
         prop_assert_eq!(&molecule, &expected);
-        prop_assert_eq!(resolver.resolve(molecule), Ok(Solution::Determined(expected)));
+        prop_assert_eq!(resolver.resolve(molecule), Solution::Determined(expected));
     }
 
     #[test]
@@ -227,7 +290,7 @@ proptest! {
                 let mut asserted = atom.clone();
                 asserted.constraints.set(AtomConstraintForm::AromaticValence(
                     AromaticValenceForm::Aromatic(NumForm::Lit(1))));
-                expected.atoms.push(if stored { asserted.clone() } else { atom });
+                expected.atoms.push(atom);
                 source.atoms.push(asserted);
 
                 let a = AtomId::from(offset + position);
@@ -240,7 +303,7 @@ proptest! {
                         else { BooleanForm::Lit(true) }
                     ));
                 }
-                expected.bonds.push((a, b, if stored { asserted.clone() } else { bond }));
+                expected.bonds.push((a, b, bond));
                 source.bonds.push((a, b, asserted));
             }
             let aromatic_system = ((offset..offset + 6).map(AtomId::from).collect(), AromaticSystemForm {
@@ -261,8 +324,8 @@ proptest! {
                 let bond = bond_dsl!("1#c0#u0#s");
                 let mut asserted = bond.clone();
                 asserted.constraints.set(BondConstraintForm::Aromatic(BooleanForm::Lit(false)));
-                source.bonds.push((a, b, asserted));
-                expected.bonds.push((a, b, bond));
+                source.bonds.push((a, b, asserted.clone()));
+                expected.bonds.push((a, b, asserted));
             }
         }
         expected.aromatic.extend(additions);
@@ -272,14 +335,19 @@ proptest! {
         source.constraints.push(constraint.clone());
         expected.constraints.push(constraint);
         let mut molecule = Molecule::from_entries(source);
+        let mut composite_expected = expected.clone();
+        for atom in &mut composite_expected.atoms {
+            atom.constraints.remove(AtomConstraintKey::Valence);
+        }
+        let composite_expected = Molecule::from_entries(composite_expected);
         let expected = Molecule::from_entries(expected);
         let resolver = AromaticityResolver::new(&AromaticityModel::daylight());
         let model = ChemistryModel::default();
         let composite = Resolver::new(&model);
-        prop_assert_eq!(composite.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
+        prop_assert_eq!(composite.resolve(molecule.clone()), Ok(Solution::Determined(composite_expected.clone())));
         let mut borrowed = molecule.clone();
         prop_assert_eq!(composite.resolve_into(&mut borrowed, RollbackMethod::Journal), Ok(Solution::Determined(())));
-        prop_assert_eq!(borrowed, expected.clone());
+        prop_assert_eq!(borrowed, composite_expected);
         prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
@@ -316,7 +384,7 @@ proptest! {
         if let Ok(Solution::Determined(output)) = resolver.aromaticity.resolve(input.clone()) {
             results.push((true, false, false, output));
         }
-        if let Ok(Solution::Determined(output)) = resolver.stereo.resolve(input.clone()) {
+        if let Solution::Determined(output) = resolver.stereo.resolve(input.clone()) {
             results.push((false, true, false, output));
         }
         if let Ok(Solution::Determined(output)) = resolver.resolve(input.clone()) {
@@ -324,18 +392,18 @@ proptest! {
         }
         for (aromatic, stereo, completes_atoms, output) in results {
             prop_assert_eq!(output.constraints(), input.constraints());
-            let added_members: BTreeSet<_> = output.aromatic_systems().iter()
-                .skip(input.aromatic_systems().count()).flat_map(|aromatic_system| aromatic_system.atom_ids()).collect();
-            let added_atoms: BTreeSet<_> = output.stereo_atoms().iter()
-                .skip(input.stereo_atoms().count()).map(|site| site.site_id()).collect();
-            let added_bonds: BTreeSet<_> = output.stereo_bonds().iter()
-                .skip(input.stereo_bonds().count()).map(|site| site.site_id()).collect();
+            let aromatic_members: BTreeSet<_> = output.aromatic_systems().iter()
+                .flat_map(|aromatic_system| aromatic_system.atom_ids()).collect();
+            let stereo_atoms: BTreeSet<_> = output.stereo_atoms().iter()
+                .map(|site| site.site_id()).collect();
+            let stereo_bonds: BTreeSet<_> = output.stereo_bonds().iter()
+                .map(|site| site.site_id()).collect();
             for atom in input.atoms().iter() {
                 let mut expected = atom.attributes().constraints.clone();
-                if aromatic && added_members.contains(&atom.id()) {
+                if aromatic && aromatic_members.contains(&atom.id()) {
                     expected.remove(AtomConstraintKey::AromaticValence);
                 }
-                if stereo && added_atoms.contains(&atom.id()) {
+                if stereo && stereo_atoms.contains(&atom.id()) {
                     expected.remove(AtomConstraintKey::TetrahedralStereo);
                 }
                 if completes_atoms {
@@ -345,15 +413,10 @@ proptest! {
             }
             for bond in input.bonds().iter() {
                 let mut expected = bond.attributes().constraints.clone();
-                if aromatic && !bond.is_in_aromatic_system() {
-                    if let Some(BondConstraintForm::Aromatic(asserted)) = expected.get(BondConstraintKey::Aromatic) {
-                        let realized = BooleanForm::Lit(output.bond(bond.id()).is_in_aromatic_system());
-                        if asserted.meet(&realized).is_some() {
-                            expected.remove(BondConstraintKey::Aromatic);
-                        }
-                    }
+                if aromatic && output.bond(bond.id()).is_in_aromatic_system() {
+                    expected.remove(BondConstraintKey::Aromatic);
                 }
-                if stereo && added_bonds.contains(&bond.id()) {
+                if stereo && stereo_bonds.contains(&bond.id()) {
                     expected.remove(BondConstraintKey::CisTransStereo);
                 }
                 prop_assert_eq!(&output.bond(bond.id()).attributes().constraints, &expected);
@@ -378,13 +441,19 @@ proptest! {
             .as_table_ir().try_into_ir(&()).unwrap();
         let molfile = parse_mol_to_ir(&skeleton.molfile()).unwrap();
         for input in [smiles, molfile] {
-            let Ok(Solution::Determined(output)) = resolver.resolve(input) else { continue; };
+            let Ok(Solution::Determined(output)) = resolver.resolve(input.clone()) else { continue; };
             for atom in output.atoms().iter() {
-                prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::AromaticValence), None);
+                let expected = input.atom(atom.id()).attributes().constraints
+                    .get(AtomConstraintKey::AromaticValence)
+                    .filter(|constraint| matches!(constraint, AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic)));
+                prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::AromaticValence), expected);
                 prop_assert_eq!(atom.attributes().constraints.get(AtomConstraintKey::TetrahedralStereo), None);
             }
             for bond in output.bonds().iter() {
-                prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::Aromatic), None);
+                let expected = input.bond(bond.id()).attributes().constraints
+                    .get(BondConstraintKey::Aromatic)
+                    .filter(|constraint| matches!(constraint, BondConstraintForm::Aromatic(BooleanForm::Lit(false))));
+                prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::Aromatic), expected);
                 prop_assert_eq!(bond.attributes().constraints.get(BondConstraintKey::CisTransStereo), None);
             }
         }
@@ -409,7 +478,7 @@ proptest! {
         for input in [skeleton.molecule(), smiles, molfile] {
             let Ok(Solution::Determined(source)) = resolver.resolve(input) else { continue; };
             let Solution::Determined(projected) = resolver.project(source.clone(),
-                ProjectFlags::AROMATICITY | ProjectFlags::STEREO).unwrap() else {
+                ProjectFlags::AROMATICITY).unwrap() else {
                 return Err(TestCaseError::fail("projection of a resolved skeleton was not determined"));
             };
             let mut expected = source.clone().edit();

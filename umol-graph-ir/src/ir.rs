@@ -124,10 +124,10 @@ pub use ring::{
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
-    CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate,
-    StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration,
-    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
-    Stereogenicity, TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
+    CisTransConfiguration, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate, StereoAtoms,
+    StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration, StereoConfigurationForm,
+    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
+    TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,

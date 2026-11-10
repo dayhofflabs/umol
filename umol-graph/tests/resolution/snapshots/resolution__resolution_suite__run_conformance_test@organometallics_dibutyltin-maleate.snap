@@ -40,7 +40,8 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [12 13 :double]
         [13 14 :single]
         [14 15 :double]
-        [14 16 :single]]}
+        [14 16 :single]]
+      :stereo-bonds [{:attrs :z :ligands [10 [:h 12] 14 [:h 13]] :site 13}]}
     :success true
     :tie-breaks [0 1 2 3 5 6 7 8 12 13]}
   :atom-typing-strict {
@@ -130,7 +131,8 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [12 13 :double]
         [13 14 :single]
         [14 15 :double]
-        [14 16 :single]]}
+        [14 16 :single]]
+      :stereo-bonds [{:attrs :z :ligands [10 [:h 12] 14 [:h 13]] :site 13}]}
     :success true
     :tie-breaks [0 1 2 3 5 6 7 8 12 13]}
   :counts-strict {

@@ -12,7 +12,8 @@
 //! a literal one from 0 to 2; each bond asserts no aromaticity, `#a`, or
 //! `#a!`. Optionally the first ring is a stored concrete closed-shell
 //! aromatic system with literal contributions from 0 to 2. Each atom with
-//! three ring neighbors optionally asserts `#T+`, `#T0`, `#T1`, or `#T!`.
+//! three ring neighbors optionally asserts `#T+` or `#T!` and may carry an explicit
+//! tetrahedral configuration with one virtual ligand.
 //! The domain keeps contradictory and underdetermined skeletons. Each
 //! skeleton also renders as SMILES and as a V2000 molfile, stating what the
 //! format can express.
@@ -29,7 +30,8 @@ use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomId,
     BondConstraintForm, BondForm, BooleanForm, ElementForm, IsotopeMassForm, Lattice, Molecule,
-    MoleculeEntries, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
+    MoleculeEntries, NumForm, StereoAtomForm, StereoConfigurationForm, StereoCoset, StereoKind,
+    StereoLigand, StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::Smiles;
@@ -234,6 +236,7 @@ struct SkeletonAtom {
     implicit_hydrogens: NumForm,
     aromatic_valence: AromaticValenceForm,
     tetrahedral_stereo: TetrahedralStereoForm,
+    configuration: Option<u32>,
 }
 
 /// One skeleton of the `aromatic_skeleton` domain, held as the parameters its molecule and
@@ -313,10 +316,7 @@ pub(crate) fn aromatic_skeleton() -> impl Strategy<Value = AromaticSkeleton> {
                 let tetrahedral_stereo = if degree == 3 {
                     prop_oneof![
                         Just(TetrahedralStereoForm::Undetermined),
-                        Just(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined)),
-                        (0u32..=1).prop_map(|coset| {
-                            TetrahedralStereoForm::Stereo(StereoCoset::Lit(coset))
-                        }),
+                        Just(TetrahedralStereoForm::Stereo),
                         Just(TetrahedralStereoForm::NotStereo),
                     ]
                     .boxed()
@@ -338,14 +338,26 @@ pub(crate) fn aromatic_skeleton() -> impl Strategy<Value = AromaticSkeleton> {
                         Just(AromaticValenceForm::NotAromatic),
                     ],
                     tetrahedral_stereo,
+                    if degree == 3 {
+                        prop::option::of(0u32..=1).boxed()
+                    } else {
+                        Just(None).boxed()
+                    },
                 )
                     .prop_map(
-                        |(element, implicit_hydrogens, aromatic_valence, tetrahedral_stereo)| {
+                        |(
+                            element,
+                            implicit_hydrogens,
+                            aromatic_valence,
+                            tetrahedral_stereo,
+                            configuration,
+                        )| {
                             SkeletonAtom {
                                 element,
                                 implicit_hydrogens,
                                 aromatic_valence,
                                 tetrahedral_stereo,
+                                configuration,
                             }
                         },
                     )
@@ -428,6 +440,41 @@ impl AromaticSkeleton {
                     )
                 })
                 .collect(),
+            stereo_atoms: self
+                .atoms
+                .iter()
+                .enumerate()
+                .filter_map(|(site, atom)| {
+                    atom.configuration.map(|configuration| {
+                        let mut neighbors = bonds
+                            .iter()
+                            .filter_map(|&(a, b)| {
+                                if a == site {
+                                    Some(b)
+                                } else if b == site {
+                                    Some(a)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        neighbors.sort();
+                        let mut ligands = neighbors
+                            .into_iter()
+                            .map(|id| StereoLigand::new(atom_id(id), StereoLigandKind::Atom))
+                            .collect::<Vec<_>>();
+                        ligands.push(StereoLigand::new(atom_id(site), StereoLigandKind::Virtual));
+                        (
+                            atom_id(site),
+                            ligands,
+                            StereoAtomForm::new(
+                                StereoKind::Tetrahedral,
+                                StereoCoset::Lit(configuration),
+                            ),
+                        )
+                    })
+                })
+                .collect(),
             ..MoleculeEntries::default()
         })
     }
@@ -435,7 +482,7 @@ impl AromaticSkeleton {
     /// SMILES text for the skeleton. An atom asserting an aromatic valence is lowercase, an
     /// atom with a literal hydrogen count is a bracket atom with that count, a bond asserting
     /// aromaticity is `:`, and one asserting non-aromaticity is `-`. A bracket atom with at
-    /// most one hydrogen writes coset 0 as `@` and coset 1 as `@@`; the parsed coset follows
+    /// most one hydrogen writes explicit configuration 0 as `@` and 1 as `@@`; the parsed coset follows
     /// SMILES neighbor order. SMILES cannot state a contribution count, a non-aromatic atom,
     /// a stored aromatic system, `#T+`, or `#T!`, and the text omits them.
     pub(crate) fn smiles(&self) -> String {
@@ -461,9 +508,9 @@ impl AromaticSkeleton {
         };
         match skeleton_atom.implicit_hydrogens {
             NumForm::Lit(hydrogens) => {
-                let chirality = match skeleton_atom.tetrahedral_stereo {
-                    TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)) if hydrogens <= 1 => "@",
-                    TetrahedralStereoForm::Stereo(StereoCoset::Lit(_)) if hydrogens <= 1 => "@@",
+                let chirality = match skeleton_atom.configuration {
+                    Some(0) if hydrogens <= 1 => "@",
+                    Some(1) if hydrogens <= 1 => "@@",
                     _ => "",
                 };
                 let hydrogen = match hydrogens {
@@ -514,7 +561,7 @@ impl AromaticSkeleton {
     /// V2000 molfile text for the skeleton, every atom at the origin. A literal hydrogen
     /// count fills the hydrogen-count field, a bond asserting aromaticity has type 4 and every
     /// other bond type 1, and an atom with a literal count of at most one hydrogen writes
-    /// coset 0, coset 1, and `#T+` as parity 1, 2, and 3. The format has no atom aromaticity,
+    /// explicit configuration 0, configuration 1, and `#T+` as parity 1, 2, and 3. The format has no atom aromaticity,
     /// contribution count, stored aromatic system, or `#T!`, and type 1 covers both a bond
     /// asserting non-aromaticity and one without an assertion.
     pub(crate) fn molfile(&self) -> String {
@@ -528,10 +575,10 @@ impl AromaticSkeleton {
             let (hydrogens, parity) = match atom.implicit_hydrogens {
                 NumForm::Lit(count) => (
                     count + 1,
-                    match atom.tetrahedral_stereo {
-                        TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)) if count <= 1 => 1,
-                        TetrahedralStereoForm::Stereo(StereoCoset::Lit(_)) if count <= 1 => 2,
-                        TetrahedralStereoForm::Stereo(StereoCoset::Undetermined) if count <= 1 => 3,
+                    match (atom.configuration, &atom.tetrahedral_stereo) {
+                        (Some(0), _) if count <= 1 => 1,
+                        (Some(1), _) if count <= 1 => 2,
+                        (None, TetrahedralStereoForm::Stereo) if count <= 1 => 3,
                         _ => 0,
                     },
                 ),
@@ -643,10 +690,21 @@ fn test_aromatic_skeleton_coverage() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
             TetrahedralStereoForm::Undetermined,
-            TetrahedralStereoForm::Stereo(StereoCoset::Undetermined),
-            TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)),
-            TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)),
+            TetrahedralStereoForm::Stereo,
             TetrahedralStereoForm::NotStereo,
+        ])
+    );
+    assert_eq!(
+        molecules
+            .iter()
+            .flat_map(|molecule| molecule
+                .stereo_atoms()
+                .iter()
+                .map(|stereo| stereo.attributes().configuration.clone()))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0),
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1),
         ])
     );
     assert_eq!(

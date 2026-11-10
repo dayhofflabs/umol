@@ -1,17 +1,25 @@
 use std::collections::BTreeSet;
 
 use rstest::{fixture, rstest};
+use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomFieldKind, AtomId, BondId, ElementForm, Molecule, NumForm,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoTerm, Stereogenicity,
-    TetrahedralStereoForm,
+    AtomConstraintForm, AtomFieldKind, AtomForm, AtomId, BondConstraintForm, BondForm, BondId,
+    CisTransStereoForm, ElementForm, Molecule, MoleculeEntries, NumForm, StereoAtomForm,
+    StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
+    StereoLigand, StereoLigandKind, StereoTerm, Stereogenicity, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};
-use crate::ops::stereo::{StereoInconsistency, StereoPerceptionError, StereoSelection, StereoSite};
-use crate::ops::transform::{AddStereoConfig, AddStereoError, StereoAdder, Transformer};
+use crate::ops::resolve::{StereoResolveConfig, StereoResolver};
+use crate::ops::stereo::{
+    StereoDerivation, StereoInconsistency, StereoPerceiver, StereoPerceptionError, StereoSelection,
+    StereoSite,
+};
+use crate::ops::transform::{
+    AddStereoConfig, AddStereoError, StereoAdder, StereoEnumerator, StereoRemover, Transformer,
+};
 
 #[fixture]
 fn mixed_sites() -> Molecule {
@@ -156,18 +164,18 @@ fn test_stereo_adder_with_config(
         :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:lp 1]] :attrs "Ct*"}]}"#),
 )]
 #[case::source_evidence(
-    mol_dsl_concrete!(r#"{:atoms ["C#T1#D4" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]}"#),
-    mol_dsl_concrete!(r#"{:atoms ["C#T1#D4" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C0"] [5 6 "1"]]
-        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-        :stereo-bonds [{:site 4 :ligands [0 [:h 1] 6 [:h 5]] :attrs "Ct0"}]}"#),
+    mol_dsl_concrete!(r#"{:atoms ["C#T+#D4" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C+"] [5 6 "1"]]}"#),
+    mol_dsl_concrete!(r#"{:atoms ["C#T+#D4" "C#h" "F" "Cl" "Br" "C#h" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "2#C+"] [5 6 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
+        :stereo-bonds [{:site 4 :ligands [0 [:h 1] 6 [:h 5]] :attrs "Ct*"}]}"#),
 )]
 #[case::retained_frame(
-    mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]}"#),
-    mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+    mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2"] [5 7 "1"] [6 8 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#),
@@ -181,11 +189,11 @@ fn test_stereo_adder_with_config(
         :stereo-atoms [{:site 5 :ligands [6 7 8 9] :attrs "Sp0"} {:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#),
 )]
 #[case::remote_stereo(
-    mol_dsl_concrete!(r#"{:atoms ["C" "C#T0" "C#T1" "F" "H" "Cl" "Br" "H" "Cl" "Br" "H"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"] [2 8 "1"] [2 9 "1"] [2 10 "1"]]}"#),
-    mol_dsl_concrete!(r#"{:atoms ["C" "C#T0" "C#T1" "F" "H" "Cl" "Br" "H" "Cl" "Br" "H"]
+    mol_dsl_concrete!(r#"{:atoms ["C" "C#T+" "C#T+" "F" "H" "Cl" "Br" "H" "Cl" "Br" "H"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"] [2 8 "1"] [2 9 "1"] [2 10 "1"]] :stereo-atoms [{:site 1 :ligands [0 5 6 7] :attrs "Th0"} {:site 2 :ligands [0 8 9 10] :attrs "Th1"}]}"#),
+    mol_dsl_concrete!(r#"{:atoms ["C" "C#T+" "C#T+" "F" "H" "Cl" "Br" "H" "Cl" "Br" "H"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"] [2 8 "1"] [2 9 "1"] [2 10 "1"]]
-        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"} {:site 1 :ligands [0 5 6 7] :attrs "Th0"} {:site 2 :ligands [0 8 9 10] :attrs "Th1"}]}"#),
+        :stereo-atoms [{:site 1 :ligands [0 5 6 7] :attrs "Th0"} {:site 2 :ligands [0 8 9 10] :attrs "Th1"} {:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#),
 )]
 fn test_stereo_adder_transform(#[case] molecule: Molecule, #[case] expected: Molecule) {
     let transformer = StereoAdder::new(&StereoModel::default());
@@ -209,6 +217,292 @@ fn test_stereo_adder_transform(#[case] molecule: Molecule, #[case] expected: Mol
 }
 
 #[rstest]
+#[case::boundary(8, 8)]
+#[case::disabled(6, 0)]
+#[case::large_boundary(24, 24)]
+fn test_stereo_adder_transform_ring(
+    #[case] size: u32,
+    #[case] stereo_bond_min_ring_size: u32,
+    #[values(false, true)] asserted: bool,
+) {
+    let mut entries = MoleculeEntries {
+        atoms: (0..size)
+            .map(|id| {
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(if id < 2 { 1 } else { 2 })
+                    .into_concrete()
+            })
+            .collect(),
+        bonds: (0..size)
+            .map(|id| {
+                (
+                    AtomId(id),
+                    AtomId((id + 1) % size),
+                    BondForm::from_order(if id == 0 { 2 } else { 1 }).into_concrete(),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    };
+    if asserted {
+        entries.bonds[0].2 =
+            entries.bonds[0]
+                .2
+                .clone()
+                .with_constraint(BondConstraintForm::cis_trans_stereo(
+                    CisTransStereoForm::Stereo,
+                ));
+    }
+    let molecule = Molecule::from_entries(entries.clone());
+    entries.stereo_bonds = vec![(
+        BondId(0),
+        vec![
+            StereoLigand::new(AtomId(size - 1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        ],
+        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
+    )];
+    let expected = Molecule::from_entries(entries);
+    let adder = StereoAdder::with_config(
+        &StereoModel {
+            stereo_bond_min_ring_size,
+            ..Default::default()
+        },
+        AddStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Bond(BondId(0))])),
+                ..Default::default()
+            },
+
+            ..Default::default()
+        },
+    );
+    assert_eq!(adder.transform(molecule.clone()), Ok(expected.clone()));
+    let mut in_place = molecule.clone();
+    assert_eq!(adder.transform_into(&mut in_place), Ok(()));
+    assert_eq!(in_place, expected);
+    assert_eq!(
+        adder.transform_iter(&molecule).collect::<Vec<_>>(),
+        vec![expected]
+    );
+}
+
+#[rstest]
+#[case::small(6, 8)]
+#[case::above(8, 9)]
+#[case::large(24, 25)]
+fn test_stereo_adder_transform_ring_identity(
+    #[case] size: u32,
+    #[case] stereo_bond_min_ring_size: u32,
+    #[values(false, true)] asserted: bool,
+) {
+    let molecule = Molecule::from_entries(MoleculeEntries {
+        atoms: (0..size)
+            .map(|id| {
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(if id < 2 { 1 } else { 2 })
+                    .into_concrete()
+            })
+            .collect(),
+        bonds: (0..size)
+            .map(|id| {
+                let form = if id == 0 {
+                    let form = BondForm::from_order(2);
+                    if asserted {
+                        form.with_constraint(BondConstraintForm::cis_trans_stereo(
+                            CisTransStereoForm::Stereo,
+                        ))
+                    } else {
+                        form
+                    }
+                } else {
+                    BondForm::from_order(1)
+                };
+                (AtomId(id), AtomId((id + 1) % size), form.into_concrete())
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let adder = StereoAdder::with_config(
+        &StereoModel {
+            stereo_bond_min_ring_size,
+            ..Default::default()
+        },
+        AddStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Bond(BondId(0))])),
+                ..Default::default()
+            },
+
+            ..Default::default()
+        },
+    );
+    assert_eq!(adder.transform(molecule.clone()), Ok(molecule.clone()));
+    let mut in_place = molecule.clone();
+    assert_eq!(adder.transform_into(&mut in_place), Ok(()));
+    assert_eq!(in_place, molecule);
+    assert_eq!(
+        adder.transform_iter(&molecule).collect::<Vec<_>>(),
+        vec![molecule]
+    );
+}
+
+#[rstest]
+#[case::disabled(6, 0, true)]
+#[case::small(6, 8, false)]
+#[case::boundary(8, 8, true)]
+#[case::large(24, 25, false)]
+fn test_stereo_adder_transform_resolution(
+    #[case] size: u32,
+    #[case] stereo_bond_min_ring_size: u32,
+    #[case] eligible: bool,
+    #[values(false, true)] asserted: bool,
+    #[values(
+        None,
+        Some(StereoCoset::Undetermined),
+        Some(StereoCoset::Lit(0)),
+        Some(StereoCoset::Lit(1))
+    )]
+    coset: Option<StereoCoset>,
+) {
+    let bare = MoleculeEntries {
+        atoms: (0..size)
+            .map(|id| {
+                AtomForm::from_element(Element::C)
+                    .with_implicit_hydrogens(if id < 2 { 1 } else { 2 })
+                    .into_concrete()
+            })
+            .collect(),
+        bonds: (0..size)
+            .map(|id| {
+                (
+                    AtomId(id),
+                    AtomId((id + 1) % size),
+                    BondForm::from_order(if id == 0 { 2 } else { 1 }).into_concrete(),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    };
+    let canonical = (
+        BondId(0),
+        vec![
+            StereoLigand::new(AtomId(size - 1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        ],
+        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
+    );
+    let mut source = bare.clone();
+    if asserted {
+        source.bonds[0]
+            .2
+            .constraints
+            .set(BondConstraintForm::CisTransStereo(
+                CisTransStereoForm::Stereo,
+            ));
+    }
+    if let Some(coset) = &coset {
+        source.stereo_bonds.push((
+            BondId(0),
+            vec![
+                canonical.1[3],
+                canonical.1[2],
+                canonical.1[0],
+                canonical.1[1],
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, coset.clone()),
+        ));
+    }
+    let molecule = Molecule::from_entries(source.clone());
+    let original = molecule.clone();
+    let mut added = source.clone();
+    let mut resolved = source.clone();
+    let mut recognized = StereoDerivation::default();
+    let mut derived = StereoDerivation {
+        stereo_bonds: source.stereo_bonds.clone(),
+        ..Default::default()
+    };
+    if coset.is_some() && asserted {
+        resolved.bonds[0].2 = bare.bonds[0].2.clone();
+    }
+    if coset.is_none() && eligible {
+        added.stereo_bonds.push(canonical.clone());
+        recognized.stereo_bonds.push(canonical.clone());
+        if asserted {
+            resolved.stereo_bonds.push(canonical.clone());
+            resolved.bonds[0].2 = bare.bonds[0].2.clone();
+            derived.stereo_bonds.push(canonical);
+        }
+    }
+    let model = StereoModel {
+        stereo_bond_min_ring_size,
+        stereo_bond_e_min_ring_size: 64,
+        ..Default::default()
+    };
+    let config = AddStereoConfig::default();
+    let perceiver = StereoPerceiver::new(&model);
+    assert_eq!(
+        perceiver.recognize(
+            &molecule,
+            &config.selection,
+            config.automorphism_algorithm,
+            config.ring_config,
+            config.para_stereo_max_iterations
+        ),
+        Ok(recognized)
+    );
+    assert_eq!(
+        perceiver.derive(&molecule, config.ring_config),
+        Solution::Determined(derived)
+    );
+    assert_eq!(
+        StereoAdder::with_config(&model, config.clone()).transform(molecule.clone()),
+        Ok(Molecule::from_entries(added))
+    );
+    assert_eq!(
+        StereoResolver::with_config(
+            &model,
+            StereoResolveConfig {
+                ring_config: config.ring_config,
+                ..Default::default()
+            }
+        )
+        .resolve(molecule.clone()),
+        Solution::Determined(Molecule::from_entries(resolved))
+    );
+    if let Some(coset) = coset {
+        let values = match coset {
+            StereoCoset::Lit(value) => vec![value],
+            StereoCoset::Undetermined => vec![0, 1],
+            _ => unreachable!(),
+        };
+        let expected: Vec<_> = values
+            .into_iter()
+            .map(|value| {
+                let mut entries = source.clone();
+                entries.stereo_bonds[0].2.configuration = (StereoKind::CisTrans, value).into();
+                Molecule::from_entries(entries)
+            })
+            .collect();
+        assert_eq!(
+            StereoEnumerator::new(&model, vec![StereoSite::Bond(BondId(0))])
+                .transform_iter(&molecule)
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            StereoRemover::new(&model).transform(molecule.clone()),
+            Ok(Molecule::from_entries(bare))
+        );
+    }
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
 #[case::empty(Molecule::default())]
 #[case::acyclic(mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
 #[case::explicit_hydrogens(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
@@ -220,16 +514,25 @@ fn test_stereo_adder_transform(#[case] molecule: Molecule, #[case] expected: Mol
     :bonds [[0 1 "2#C!"] [0 2 "1"] [1 3 "1"]]}"#))]
 #[case::symmetric_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
     :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
-#[case::existing_atom(mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+#[case::existing_atom(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]}"#))]
 #[case::existing_kind(mol_dsl_concrete!(r#"{:atoms ["Pt#c+2" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}"#))]
 #[case::existing_bond(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
-    :bonds [[0 1 "2#C0"] [0 2 "1"] [1 3 "1"]]
+    :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
     :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct1"}]}"#))]
-#[case::existing_domain(mol_dsl_concrete!(r#"{:atoms ["C#T1" "F" "Cl" "Br" "I"]
+#[case::small_ring_entity(mol_dsl_concrete!(r#"{
+    :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+    :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+    :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+}"#))]
+#[case::small_ring_assertion(mol_dsl_concrete!(r#"{
+    :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+    :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+}"#))]
+#[case::existing_domain(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th{0,1}"}]}"#))]
 #[case::existing_symbol(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
@@ -310,21 +613,21 @@ fn test_stereo_adder_transform_selection(
 #[case::second(StereoCoset::Lit(1))]
 #[case::finite(StereoCoset::lit_set([0, 1]))]
 #[case::symbolic(StereoCoset::term(StereoTerm::var("configuration")))]
-fn test_stereo_adder_transform_configuration(#[case] coset: StereoCoset) {
+fn test_stereo_adder_transform_configuration_identity(#[case] coset: StereoCoset) {
     let mut molecule = mol_dsl_concrete!(
         r#"{:atoms ["C" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
     );
     molecule.atom_mut(AtomId(0)).attributes_mut().constraints =
-        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo(coset.clone())).into();
-    let original = molecule.clone();
-    let mut editor = molecule.clone().edit();
+        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo).into();
+    let mut editor = molecule.edit();
     editor.add_stereo_atom(
         AtomId(0),
         &[1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)),
         StereoAtomForm::new(StereoKind::Tetrahedral, coset),
     );
-    let expected = editor.finish().unwrap();
+    let molecule = editor.finish().unwrap();
+    let original = molecule.clone();
     let transformer = StereoAdder::with_config(
         &StereoModel::default(),
         AddStereoConfig {
@@ -337,14 +640,14 @@ fn test_stereo_adder_transform_configuration(#[case] coset: StereoCoset) {
     );
     let mut in_place = molecule.clone();
     assert_eq!(transformer.transform_into(&mut in_place), Ok(()));
-    assert_eq!(in_place, expected);
+    assert_eq!(in_place, original);
     assert_eq!(
         transformer.transform_iter(&molecule).collect::<Vec<_>>(),
-        vec![expected.clone()]
+        vec![original.clone()]
     );
     assert_eq!(molecule, original);
-    assert_eq!(transformer.transform(molecule), Ok(expected.clone()));
-    assert_eq!(transformer.transform(expected.clone()), Ok(expected));
+    assert_eq!(transformer.transform(molecule), Ok(original.clone()));
+    assert_eq!(transformer.transform(original.clone()), Ok(original));
 }
 
 #[rstest]
@@ -394,28 +697,24 @@ fn test_stereo_adder_transform_partial() {
     AddStereoConfig::default().selection,
     AddStereoError::Inconsistency(StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(5) }))]
 #[case::bond_evidence(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I" "C#h2" "C#h" "Cl"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C1"] [6 7 "1"]]}"#),
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+"] [6 7 "1"]]}"#),
     AddStereoConfig::default().selection,
     AddStereoError::Inconsistency(StereoInconsistency::CisTransStereoFailure { bond: BondId(4) }))]
-#[case::atom_mismatch(mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+#[case::atom_mismatch(mol_dsl_concrete!(r#"{:atoms ["C#T!" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#),
     AddStereoConfig::default().selection,
     AddStereoError::Inconsistency(StereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(0), stereo_atom: StereoAtomId(0) }))]
-#[case::competing_kind(mol_dsl_concrete!(r#"{:atoms ["C#T0" "F" "Cl" "Br" "I"]
+#[case::competing_kind(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}"#),
     AddStereoConfig::default().selection,
     AddStereoError::Inconsistency(StereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(0), stereo_atom: StereoAtomId(0) }))]
 #[case::bond_mismatch(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
-    :bonds [[0 1 "2#C0"] [0 2 "1"] [1 3 "1"]]
+    :bonds [[0 1 "2#C!"] [0 2 "1"] [1 3 "1"]]
     :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]}"#),
     AddStereoConfig::default().selection,
     AddStereoError::Inconsistency(StereoInconsistency::CisTransStereoMismatch { bond: BondId(0), stereo_bond: StereoBondId(0) }))]
-#[case::symbolic_configuration(mol_dsl_concrete!(r#"{:atoms ["C#T?configuration" "F" "Cl" "Br" "I"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
-    AddStereoConfig::default().selection,
-    AddStereoError::Perception(StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) }))]
 fn test_stereo_adder_transform_error(
     #[case] molecule: Molecule,
     #[case] selection: StereoSelection,

@@ -67,8 +67,8 @@ use umol_chem::spin::SpinMultiplicity;
 use umol_graph_ir::ir::{
     AromaticValenceForm, AsLit, AtomConstraintForm, AtomId, BondConstraintForm, BondId,
     BooleanForm, CisTransStereoForm, Constraint, Contradiction, ElementForm, Entity,
-    IsotopeMassForm, Lattice, Molecule, NoncovalentBondKind, NoncovalentBondKindForm, NumForm,
-    Reaction, StereoCoset, TetrahedralStereoForm,
+    IsotopeMassForm, Lattice, Molecule, NoncovalentBondKind, NoncovalentBondKindForm, Normalize,
+    NumForm, Reaction, StereoCoset, StereoKind, StereoLigandKind, TetrahedralStereoForm,
 };
 use umol_io::smiles::{
     ReactionSmiles, ReactionSmilesRenderError, Smiles, SmilesIoConfig, SmilesRenderError,
@@ -184,7 +184,7 @@ impl Convey for Smiles {
     type Config = SmilesIoConfig;
     type Error = ConveyError;
 
-    /// Convert projected molecular fields and stereo assertions into a SMILES boundary value.
+    /// Convert projected molecular fields and explicit stereo entities into a SMILES boundary value.
     ///
     /// Constructs a resolver from the model and resolve configuration. Projection preserves H;
     /// conversion omits a count only when brackets are unnecessary and inference under the
@@ -434,11 +434,10 @@ fn convey_molecule(
                         AromaticValenceForm::Aromatic(_) => Some(true),
                     }
                 }
-                AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(coset)) => {
-                    table
-                        .stereo_atoms
-                        .push(lower_stereo_atom(molecule, atom.id(), coset)?);
-                }
+                AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo)
+                    if molecule.stereo_atoms().at(atom.id()).is_some_and(|stereo| {
+                        stereo.attributes().configuration.kind() == Some(StereoKind::Tetrahedral)
+                    }) => {}
                 value if value.is_undetermined() => {}
                 value => {
                     return Err(ConveyError::Constraint(Constraint::Atom(
@@ -472,11 +471,10 @@ fn convey_molecule(
                     lowered.order = BondOrder::Aromatic
                 }
                 BondConstraintForm::Aromatic(BooleanForm::Lit(false)) => {}
-                BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset)) => {
-                    table
-                        .stereo_bonds
-                        .push(lower_stereo_bond(molecule, bond.id(), coset)?);
-                }
+                BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo)
+                    if molecule.stereo_bonds().at(bond.id()).is_some_and(|stereo| {
+                        stereo.attributes().configuration.kind() == Some(StereoKind::CisTrans)
+                    }) => {}
                 value if value.is_undetermined() => {}
                 value => {
                     return Err(ConveyError::Constraint(Constraint::Bond(
@@ -487,6 +485,16 @@ fn convey_molecule(
             }
         }
         table.bonds.push(lowered);
+    }
+    for stereo in molecule.stereo_atoms().iter() {
+        table
+            .stereo_atoms
+            .push(lower_stereo_atom(molecule, stereo.site_id())?);
+    }
+    for stereo in molecule.stereo_bonds().iter() {
+        table
+            .stereo_bonds
+            .push(lower_stereo_bond(molecule, stereo.site_id())?);
     }
     for bond in molecule.dative_bonds().iter() {
         let entity = Entity::DativeBond(bond.id());
@@ -560,10 +568,7 @@ fn elide_implicit_hydrogens(
         || lowered.unpaired_electrons != Some(0)
         || (lowered.aromatic == Some(true) && lowered.element != Some(Element::C))
         || lowered.class.is_some()
-        || matches!(
-            atom.constraints().tetrahedral_stereo(),
-            TetrahedralStereoForm::Stereo(_)
-        )
+        || molecule.stereo_atoms().at(atom_id).is_some()
         || !matches!(
             lowered.element,
             Some(
@@ -650,33 +655,49 @@ fn lower_order(form: &NumForm, entity: Entity) -> Result<BondOrder, ConveyError>
     }
 }
 
-fn lower_stereo_atom(
-    molecule: &Molecule,
-    atom: AtomId,
-    coset: &StereoCoset,
-) -> Result<StereoAtom, ConveyError> {
-    let winding = match coset.as_lit() {
+fn lower_stereo_atom(molecule: &Molecule, atom: AtomId) -> Result<StereoAtom, ConveyError> {
+    let stereo = molecule
+        .stereo_atoms()
+        .at(atom)
+        .ok_or(ConveyError::StereoAtom { atom })?;
+    if stereo.attributes().configuration.kind() != Some(StereoKind::Tetrahedral) {
+        return Err(ConveyError::Entity {
+            entity: Entity::StereoAtom(stereo.id()),
+        });
+    }
+    for constraint in stereo.attributes().constraints.iter() {
+        if !constraint.is_undetermined() {
+            return Err(ConveyError::Constraint(Constraint::StereoAtom(
+                stereo.id(),
+                StereoKind::Tetrahedral,
+                constraint.clone(),
+            )));
+        }
+    }
+    let configuration = stereo
+        .attributes()
+        .configuration
+        .clone()
+        .normalize()
+        .map_err(|_| ConveyError::StereoAtom { atom })?;
+    let winding = match configuration.coset().and_then(AsLit::as_lit) {
         Some(0) => Winding::CounterClockwise,
         Some(1) => Winding::Clockwise,
         _ => return Err(ConveyError::StereoAtom { atom }),
     };
-    let view = molecule.atom(atom);
-    let mut ligands: Vec<_> = view
-        .neighbors()
-        .map(|neighbor| StereoLigand::Atom(neighbor.atom_id().0))
-        .collect();
-    if ligands.len() == 3 {
-        ligands.push(match view.implicit_hydrogens().as_lit() {
-            Some(1) => StereoLigand::ImplicitHydrogen,
-            Some(0) if view.lone_pairs().as_lit().is_some_and(|count| count > 0) => {
-                StereoLigand::LonePair
-            }
-            _ => return Err(ConveyError::StereoAtom { atom }),
-        });
-    }
-    if ligands.len() != 4 {
+    if stereo.ligand_ids().len() != 4 {
         return Err(ConveyError::StereoAtom { atom });
     }
+    let ligands = stereo
+        .ligand_ids()
+        .iter()
+        .map(|ligand| match ligand.kind {
+            StereoLigandKind::Atom => Ok(StereoLigand::Atom(ligand.atom_id.0)),
+            StereoLigandKind::ImplicitHydrogen => Ok(StereoLigand::ImplicitHydrogen),
+            StereoLigandKind::LonePair => Ok(StereoLigand::LonePair),
+            StereoLigandKind::Virtual => Err(ConveyError::StereoAtom { atom }),
+        })
+        .collect::<Result<_, _>>()?;
     Ok(StereoAtom {
         atom: atom.0,
         ligands,
@@ -684,30 +705,79 @@ fn lower_stereo_atom(
     })
 }
 
-fn lower_stereo_bond(
-    molecule: &Molecule,
-    bond: BondId,
-    coset: &StereoCoset,
-) -> Result<StereoBond, ConveyError> {
-    let configuration = if matches!(coset, StereoCoset::Undetermined) {
+fn lower_stereo_bond(molecule: &Molecule, bond: BondId) -> Result<StereoBond, ConveyError> {
+    let stereo = molecule
+        .stereo_bonds()
+        .at(bond)
+        .ok_or(ConveyError::StereoBond { bond })?;
+    if stereo.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
+        return Err(ConveyError::Entity {
+            entity: Entity::StereoBond(stereo.id()),
+        });
+    }
+    for constraint in stereo.attributes().constraints.iter() {
+        if !constraint.is_undetermined() {
+            return Err(ConveyError::Constraint(Constraint::StereoBond(
+                stereo.id(),
+                StereoKind::CisTrans,
+                constraint.clone(),
+            )));
+        }
+    }
+    let ligands = stereo.ligand_ids();
+    if ligands.len() != 4
+        || ligands
+            .iter()
+            .any(|ligand| ligand.kind == StereoLigandKind::Virtual)
+    {
+        return Err(ConveyError::StereoBond { bond });
+    }
+    let configuration = stereo
+        .attributes()
+        .configuration
+        .clone()
+        .normalize()
+        .map_err(|_| ConveyError::StereoBond { bond })?;
+    let configuration = if matches!(configuration.coset(), Some(StereoCoset::Undetermined)) {
         BondConfiguration::Either
     } else {
+        let endpoints = molecule.bond(bond).atom_ids();
+        let mut image = [[0, 1, 2, 3], [2, 3, 0, 1]]
+            .into_iter()
+            .find(|image| {
+                endpoints.iter().enumerate().all(|(side, &endpoint)| {
+                    image[side * 2..side * 2 + 2].iter().all(|&index| {
+                        let ligand = ligands[index];
+                        match ligand.kind {
+                            StereoLigandKind::Atom => molecule
+                                .bonds()
+                                .of_id(endpoint, ligand.atom_id)
+                                .is_some_and(|id| id != bond),
+                            _ => ligand.atom_id == endpoint,
+                        }
+                    })
+                })
+            })
+            .ok_or(ConveyError::StereoBond { bond })?;
+        let mut references = [0; 2];
+        for (side, reference) in references.iter_mut().enumerate() {
+            let start = side * 2;
+            let position = image[start..start + 2]
+                .iter()
+                .position(|&index| ligands[index].kind == StereoLigandKind::Atom)
+                .ok_or(ConveyError::StereoBond { bond })?;
+            image.swap(start, start + position);
+            *reference = ligands[image[start]].atom_id.0;
+        }
+        let frame: Vec<_> = image.into_iter().map(|index| ligands[index]).collect();
+        let coset = stereo
+            .coset_for(frame)
+            .ok_or(ConveyError::StereoBond { bond })?;
         let relation = match coset.as_lit() {
             Some(0) => BondRelation::SameSide,
             Some(1) => BondRelation::OppositeSide,
             _ => return Err(ConveyError::StereoBond { bond }),
         };
-        let [first, second] = molecule.bond(bond).atom_ids();
-        let mut references = [0; 2];
-        for (side, (atom, partner)) in [(first, second), (second, first)].into_iter().enumerate() {
-            references[side] = molecule
-                .atom(atom)
-                .neighbors()
-                .map(|neighbor| neighbor.atom_id())
-                .find(|&neighbor| neighbor != partner)
-                .ok_or(ConveyError::StereoBond { bond })?
-                .0;
-        }
         BondConfiguration::Framed {
             references,
             relation,
@@ -830,6 +900,8 @@ mod tests {
     #[case::explicit_h("[H][C@](F)(Cl)Br", "[H][C@](F)(Cl)Br")]
     #[case::trans("F/C=C/Cl", "F/C=C/Cl")]
     #[case::cis("F/C=C\\Cl", "F/C=C\\Cl")]
+    #[case::ring_e("C1=C/CCCC/1", "C/1=C\\CCCC1")]
+    #[case::ring_z("C1=C\\CCCC/1", "C/1=C/CCCC1")]
     #[case::branched_stereo("F/C(Cl)=C(/Br)I", "FC(/Cl)=C(Br)\\I")]
     #[case::conjugated("C/C=C/C=C/C", "C/C=C/C=C/C")]
     fn test_smiles_convey_roundtrip(#[case] input: &str, #[case] expected: &str) {
@@ -1020,17 +1092,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case::either("2#C+", BondConfiguration::Either)]
-    #[case::same("2#C0", BondConfiguration::Framed { references: [0, 3], relation: BondRelation::SameSide })]
-    #[case::opposite("2#C1", BondConfiguration::Framed { references: [0, 3], relation: BondRelation::OppositeSide })]
+    #[case::either("Ct*", BondConfiguration::Either)]
+    #[case::same("Ct0", BondConfiguration::Framed { references: [0, 3], relation: BondRelation::SameSide })]
+    #[case::opposite("Ct1", BondConfiguration::Framed { references: [0, 3], relation: BondRelation::OppositeSide })]
     fn test_smiles_convey_stereo_bond(
         #[case] bond: &str,
         #[case] configuration: BondConfiguration,
+        #[values(false, true)] disabled: bool,
     ) {
         let source = mol_dsl_concrete!(&format!(
-            r#"{{:atoms ["F#n3" "C#h" "C#h" "F#n3"] :bonds [[0 1 "1"] [1 2 "{bond}"] [2 3 "1"]]}}"#
+            r#"{{:atoms ["F#n3" "C#h" "C#h" "F#n3"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "{bond}"}}]}}"#
         ));
-        let model = ChemistryModel::default();
+        let mut model = ChemistryModel::default();
+        if disabled {
+            model.stereo.kind_models[StereoKind::CisTrans as usize] = None;
+        }
         let table = Smiles::convey(
             &source,
             &model,
@@ -1046,6 +1123,43 @@ mod tests {
                 configuration
             }]
         );
+    }
+
+    #[rstest]
+    #[case::atom_assertion(
+        mol_dsl_concrete!(r#"{:atoms ["C#T+" "F#n3" "Cl#n3" "Br#n3" "I#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
+        ConveyError::Constraint(Constraint::Atom(AtomId(0), AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo))))]
+    #[case::bond_assertion(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#),
+        ConveyError::Constraint(Constraint::Bond(BondId(0), BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo))))]
+    #[case::virtual_atom(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "F#n3" "Cl#n3" "Br#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "Th0"}]}"#),
+        ConveyError::StereoAtom { atom: AtomId(0) })]
+    #[case::virtual_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:h 1]] :attrs "Ct0"}]}"#),
+        ConveyError::StereoBond { bond: BondId(0) })]
+    #[case::atom_configuration(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "F#n3" "Cl#n3" "Br#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#),
+        ConveyError::StereoAtom { atom: AtomId(0) })]
+    #[case::bond_configuration(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct?configuration"}]}"#),
+        ConveyError::StereoBond { bond: BondId(0) })]
+    fn test_smiles_convey_stereo_error(#[case] source: Molecule, #[case] expected: ConveyError) {
+        let original = source.clone();
+        assert_eq!(
+            Smiles::convey(
+                &source,
+                &ChemistryModel::default(),
+                &ResolveConfig::default(),
+                &SmilesIoConfig::opensmiles()
+            ),
+            Err(expected)
+        );
+        assert_eq!(source, original);
     }
 
     #[rstest]
@@ -1134,6 +1248,10 @@ mod tests {
     #[case::alkene(
         "[F:9]/[CH:2]=[CH:7]/[Cl:3]>>[F:9]/[CH:2]=[CH:7]\\[Cl:3]",
         "[F:1]/[CH:2]=[CH:3]/[Cl:4]>>[F:1]/[CH:2]=[CH:3]\\[Cl:4]"
+    )]
+    #[case::ring_e_z(
+        "[CH:1]1=[CH:2]/[CH2:3][CH2:4][CH2:5][CH2:6]/1>>[CH:1]1=[CH:2]\\[CH2:3][CH2:4][CH2:5][CH2:6]/1",
+        "[CH:1]/1=[CH:2]\\[CH2:3][CH2:4][CH2:5][CH2:6]1>>[CH:1]/1=[CH:2]/[CH2:3][CH2:4][CH2:5][CH2:6]1"
     )]
     #[case::aromatic(
         "[cH:19]1[cH][cH][cH][cH][cH]1>>[cH:19]1[cH][cH][cH][cH][cH]1",

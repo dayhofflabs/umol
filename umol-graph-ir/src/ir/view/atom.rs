@@ -2,7 +2,6 @@
 
 use umol_chem::element::Element;
 use umol_graph_core::NodeId;
-use umol_perm::Permutation;
 
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::super::constraint::AtomConstraintsForm;
@@ -15,7 +14,7 @@ use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{coset_apply_permutation, StereoKind, TetrahedralStereoForm};
+use super::super::stereo::{StereoKind, TetrahedralStereoForm};
 use super::super::traits::{Lattice, Normalize};
 use super::aromatic::AromaticSystemView;
 use super::constraints::AtomConstraintsView;
@@ -709,41 +708,16 @@ pub(crate) fn atom_derived_constraint(
             }
         }
         AtomConstraintKey::TetrahedralStereo => {
-            // Total over staging entities: an undetermined kind or coset is
-            // an open claim, not the absence of one.
-            if let Some(stereo) = molecule.stereo_atoms().at(id) {
-                let form = match (
-                    stereo.attributes().configuration.kind(),
-                    stereo.attributes().configuration.coset(),
-                ) {
-                    (Some(StereoKind::Tetrahedral), Some(coset)) => {
-                        let ligands = stereo.ligand_ids();
-                        if ligands.len() != StereoKind::Tetrahedral.degree() {
-                            return None;
-                        }
-                        let mut image = [0, 1, 2, 3];
-                        image.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
-                        TetrahedralStereoForm::stereo(coset_apply_permutation(
-                            coset,
-                            Permutation::from_image(&image),
-                            StereoKind::Tetrahedral,
-                        )?)
-                    }
-                    (Some(StereoKind::Tetrahedral), None) | (None, _) => {
-                        TetrahedralStereoForm::Undetermined
-                    }
-                    (Some(_), _) => TetrahedralStereoForm::NotStereo,
-                };
-                AtomConstraintForm::tetrahedral_stereo(form)
-                    .normalize()
-                    .ok()
-            } else if complete {
-                Some(AtomConstraintForm::tetrahedral_stereo(
-                    TetrahedralStereoForm::NotStereo,
-                ))
-            } else {
-                Some(AtomConstraintForm::undetermined(key))
-            }
+            let value = match molecule.stereo_atoms().at(id) {
+                Some(stereo) => match stereo.attributes().configuration.kind() {
+                    Some(StereoKind::Tetrahedral) => TetrahedralStereoForm::Stereo,
+                    Some(_) => TetrahedralStereoForm::NotStereo,
+                    None => TetrahedralStereoForm::Undetermined,
+                },
+                None if complete => TetrahedralStereoForm::NotStereo,
+                None => TetrahedralStereoForm::Undetermined,
+            };
+            Some(AtomConstraintForm::tetrahedral_stereo(value))
         }
         AtomConstraintKey::Degree => Some(AtomConstraintForm::degree(degree(molecule, id))),
         AtomConstraintKey::TotalDegree => Some(AtomConstraintForm::total_degree(total_degree(

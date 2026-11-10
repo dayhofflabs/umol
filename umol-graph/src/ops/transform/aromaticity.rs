@@ -1049,6 +1049,18 @@ impl Kekulizer {
 }
 
 /// Delocalizes atom-localized charge over homogeneous aromatic systems.
+///
+/// Adds each member's atom charge to its stored electron contribution, sets that
+/// atom charge to zero, and accumulates it into the system charge. Other
+/// occupations and topology are preserved.
+///
+/// Requires homogeneous literal elements, literal system and member charges,
+/// and one literal contribution per member. Other systems are unchanged.
+///
+/// # Semantic properties
+///
+/// The sum of member contributions minus system charge is preserved. Electron
+/// balance at each member is preserved when its input occupations are balanced.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ChargeDelocalizer;
 
@@ -1087,24 +1099,12 @@ impl DelocalizationPlan {
 
         let mut electrons = Vec::with_capacity(atom_ids.len());
         let mut atoms = Vec::with_capacity(atom_ids.len());
-        for atom_id in atom_ids {
+        for (atom_id, &old_contribution) in atom_ids.into_iter().zip(old_electrons) {
             let atom = molecule.atom(atom_id);
             let NumForm::Lit(atom_charge) = atom.charge() else {
                 return None;
             };
-            let NumForm::Lit(degree) = atom.degree() else {
-                return None;
-            };
-            let NumForm::Lit(implicit_hydrogens) = atom.implicit_hydrogens() else {
-                return None;
-            };
-            let NumForm::Lit(lone_pairs) = atom.lone_pairs() else {
-                return None;
-            };
-            let contribution = i64::from(element.valence_electrons())
-                - degree
-                - implicit_hydrogens
-                - 2 * lone_pairs;
+            let contribution = old_contribution + atom_charge;
             charge += atom_charge;
             electrons.push(contribution);
             atoms.push((atom_id, contribution));

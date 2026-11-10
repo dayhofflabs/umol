@@ -4,8 +4,8 @@
 //! specified independently by terminal element equality. Raw removal and enumeration
 //! use mixed fixed/undetermined/finite domains. Exact expected entries check preservation and
 //! reference transport; binary-mask enumeration checks soundness, completeness, order,
-//! and multiplicity independently of production traversal. Renumbering also transports
-//! implicit #T/#C assertion frames. Issued representative actions transport stored frames.
+//! and multiplicity independently of production traversal. Renumbering preserves
+//! #T/#C kind constraints. Issued representative actions transport stored frames.
 //! Collection comparisons preserve multiplicity and do not require a frame-invariant first item.
 //! Frame transport uses nonempty absolute domains; the enumeration reference also covers empty
 //! domains. Unsupported attribute states are explicit cases on generated valid frames.
@@ -21,7 +21,7 @@ use proptest::test_runner::{Config, TestRunner};
 use rstest::rstest;
 use umol_graph::ops::model::StereoModel;
 use umol_graph::ops::stereo::{
-    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection, StereoSite,
+    StereoInconsistency, StereoPerceiver, StereoPerceptionError, StereoSelection, StereoSite,
 };
 use umol_graph::ops::transform::{
     AddStereoConfig, AddStereoError, EnumerateStereoConfig, EnumerateStereoError,
@@ -54,7 +54,7 @@ enum ConfigurationCase {
 }
 
 #[rstest]
-fn test_stereo_perception_classify_transport() {
+fn test_stereo_perceiver_classify_transport() {
     TestRunner::new(Config {
         failure_persistence: None,
         ..Config::default()
@@ -66,9 +66,9 @@ fn test_stereo_perception_classify_transport() {
             .iter()
             .map(|info| (info.site, info.class))
             .collect();
-        let perception = StereoPerception::new(&StereoModel::default());
+        let perception = StereoPerceiver::new(&StereoModel::default());
         prop_assert_eq!(
-            perception.classify(&case.source, &sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&case.source, &sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(expected.clone())
         );
         let reframed = case
@@ -77,7 +77,7 @@ fn test_stereo_perception_classify_transport() {
             .reframe_by(&case.source.representative_action())
             .unwrap();
         prop_assert_eq!(
-            perception.classify(&reframed, &sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&reframed, &sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(expected)
         );
         let renamed = renumber(case.source.clone(), &case);
@@ -96,7 +96,7 @@ fn test_stereo_perception_classify_transport() {
             .collect();
         let renamed_sites = renamed_expected.keys().copied().collect();
         prop_assert_eq!(
-            perception.classify(&renamed, &renamed_sites, AutomorphismAlgorithm::Nauty),
+            perception.classify(&renamed, &renamed_sites, AutomorphismAlgorithm::Nauty, 16),
             Ok(renamed_expected)
         );
         Ok(())
@@ -314,7 +314,6 @@ fn test_stereo_adder_transform_evidence() {
         |(case, value)| {
             let value = u32::from(value);
             let info = &case.sites[0];
-            let asserted = value ^ info.parity ^ 1;
             let mut source = case.source.clone();
             let inconsistency = match info.site {
                 StereoSite::Atom(atom) => {
@@ -323,9 +322,7 @@ fn test_stereo_adder_transform_evidence() {
                         .attributes_mut()
                         .configuration = (info.kind, value).into();
                     source.atom_mut(atom).attributes_mut().constraints.set(
-                        AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(
-                            asserted.into(),
-                        )),
+                        AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
                     );
                     StereoInconsistency::TetrahedralStereoMismatch {
                         atom,
@@ -338,9 +335,7 @@ fn test_stereo_adder_transform_evidence() {
                         .attributes_mut()
                         .configuration = (info.kind, value).into();
                     source.bond_mut(bond).attributes_mut().constraints.set(
-                        BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(
-                            asserted.into(),
-                        )),
+                        BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo),
                     );
                     StereoInconsistency::CisTransStereoMismatch {
                         bond,
@@ -424,6 +419,7 @@ fn test_stereo_remover_transform(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
                     mode,
+                    para_stereo_max_iterations: 16,
                 },
             );
             let original = case.source.clone();
@@ -569,6 +565,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
                     mode,
+                    para_stereo_max_iterations: 16,
                 },
             )
             .transform(case.source.clone())
@@ -580,6 +577,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection: mapped_selection,
                     mode,
+                    para_stereo_max_iterations: 16,
                 },
             )
             .transform(mapped_source)
@@ -704,13 +702,13 @@ fn test_stereo_enumerator_transform() {
                                     StereoSite::Atom(atom) => Constraint::Atom(
                                         atom,
                                         AtomConstraintForm::TetrahedralStereo(
-                                            TetrahedralStereoForm::Stereo(value.into()),
+                                            TetrahedralStereoForm::from(value == 0),
                                         ),
                                     ),
                                     StereoSite::Bond(bond) => Constraint::Bond(
                                         bond,
                                         BondConstraintForm::CisTransStereo(
-                                            CisTransStereoForm::Stereo(value.into()),
+                                            CisTransStereoForm::from(value == 0),
                                         ),
                                     ),
                                 })
@@ -720,7 +718,7 @@ fn test_stereo_enumerator_transform() {
                     .collect();
                 case.entries.constraints.push(Constraint::Or(alternatives));
                 case.source = Molecule::from_entries(case.entries.clone());
-                Some(pair)
+                Some(false)
             } else {
                 None
             };
@@ -749,6 +747,7 @@ fn test_stereo_enumerator_transform() {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
+                    para_stereo_max_iterations: 16,
                 },
                 case.order.iter().map(|&i| case.sites[i].site).collect(),
             );
@@ -858,6 +857,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
+                    para_stereo_max_iterations: 16,
                 },
                 order,
             );
@@ -866,6 +866,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection: target_selection,
+                    para_stereo_max_iterations: 16,
                 },
                 target_order,
             );
@@ -1028,6 +1029,7 @@ fn test_transformer_transform_selection(#[case] atom: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
+                    para_stereo_max_iterations: 16,
                 },
                 Vec::new(),
             );
@@ -1154,10 +1156,11 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
         };
         let error = EnumerateStereoError::Perception(cause.clone());
         prop_assert_eq!(
-            StereoPerception::new(&StereoModel::default()).classify(
+            StereoPerceiver::new(&StereoModel::default()).classify(
                 &source,
                 &BTreeSet::from([info.site]),
-                AutomorphismAlgorithm::Nauty
+                AutomorphismAlgorithm::Nauty,
+                16
             ),
             Err(cause.clone())
         );
@@ -1170,6 +1173,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             EnumerateStereoConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: selection.clone(),
+                para_stereo_max_iterations: 16,
             },
             vec![info.site],
         );
@@ -1211,6 +1215,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: selection.clone(),
                 mode: RemoveStereoMode::Undetermined,
+                para_stereo_max_iterations: 16,
             },
         );
         prop_assert_eq!(undetermined.transform(source.clone()), Ok(source.clone()));

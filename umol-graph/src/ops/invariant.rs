@@ -104,18 +104,22 @@ impl ValenceInvariants {
         )
     }
 
-    /// Molecule-wide solution: `Underdetermined` if any atom has a non-`Lit`
-    /// field the check can't fire on, `Contradictory` on the first orbital !=
-    /// electron mismatch, else `Determined`.
+    /// Check electron conservation for every atom.
+    /// Established contradictions take precedence over underdetermination.
     fn check(molecule: &Molecule) -> Solution<(), ValenceMismatch> {
+        let mut underdetermined = false;
         for id in molecule.atoms().ids() {
             match Self::check_molecule_atom(molecule, id) {
                 Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Solution::Underdetermined(()),
+                Solution::Underdetermined(()) => underdetermined = true,
                 Solution::Contradictory(mismatch) => return Solution::Contradictory(mismatch),
             }
         }
-        Solution::Determined(())
+        if underdetermined {
+            Solution::Underdetermined(())
+        } else {
+            Solution::Determined(())
+        }
     }
 
     /// Solution for a bare `AtomForm`. Topology-derived valences default to zero;
@@ -205,21 +209,6 @@ impl ValenceInvariants {
     /// `Underdetermined` when any required field is non-`Lit`.
     fn check_molecule_atom(molecule: &Molecule, atom_id: AtomId) -> Solution<(), ValenceMismatch> {
         let atom = molecule.atom(atom_id);
-        let Some(element) = atom.element().as_lit() else {
-            return Solution::Underdetermined(());
-        };
-        let Some(charge) = atom.charge().as_lit() else {
-            return Solution::Underdetermined(());
-        };
-        let Some(implicit_h) = atom.implicit_hydrogens().as_lit() else {
-            return Solution::Underdetermined(());
-        };
-        let Some(lone_pairs) = atom.lone_pairs().as_lit() else {
-            return Solution::Underdetermined(());
-        };
-        let Some(unpaired_electrons) = atom.unpaired_electrons().count.as_lit() else {
-            return Solution::Underdetermined(());
-        };
         let valence = match atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::Valence)
@@ -232,9 +221,6 @@ impl ValenceInvariants {
                 })
             }
             _ => unreachable!(),
-        };
-        let Some(valence) = valence.filter(|value| *value >= 0) else {
-            return Solution::Underdetermined(());
         };
         let donated = match atom
             .constraints()
@@ -249,9 +235,6 @@ impl ValenceInvariants {
             }
             _ => unreachable!(),
         };
-        let Some(donated) = donated.filter(|value| *value >= 0) else {
-            return Solution::Underdetermined(());
-        };
         let accepted = match atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::AcceptedPairs)
@@ -264,9 +247,6 @@ impl ValenceInvariants {
                 })
             }
             _ => unreachable!(),
-        };
-        let Some(accepted) = accepted.filter(|value| *value >= 0) else {
-            return Solution::Underdetermined(());
         };
         let aromatic_valence = match atom
             .constraints()
@@ -283,9 +263,6 @@ impl ValenceInvariants {
             }
             _ => unreachable!(),
         };
-        let Some(aromatic_valence) = aromatic_valence.filter(|value| *value >= 0) else {
-            return Solution::Underdetermined(());
-        };
         let multicenter_valence = match atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::MulticenterValence)
@@ -301,7 +278,36 @@ impl ValenceInvariants {
             }
             _ => unreachable!(),
         };
-        let Some(multicenter_valence) = multicenter_valence.filter(|value| *value >= 0) else {
+        let (
+            Some(valence),
+            Some(donated),
+            Some(accepted),
+            Some(aromatic_valence),
+            Some(multicenter_valence),
+        ) = (
+            valence.filter(|value| *value >= 0),
+            donated.filter(|value| *value >= 0),
+            accepted.filter(|value| *value >= 0),
+            aromatic_valence.filter(|value| *value >= 0),
+            multicenter_valence.filter(|value| *value >= 0),
+        )
+        else {
+            return Solution::Underdetermined(());
+        };
+        let (
+            Some(element),
+            Some(charge),
+            Some(implicit_h),
+            Some(lone_pairs),
+            Some(unpaired_electrons),
+        ) = (
+            atom.element().as_lit(),
+            atom.charge().as_lit(),
+            atom.implicit_hydrogens().as_lit(),
+            atom.lone_pairs().as_lit(),
+            atom.unpaired_electrons().count.as_lit(),
+        )
+        else {
             return Solution::Underdetermined(());
         };
         let orbital = orbital_count(
@@ -487,6 +493,8 @@ impl ValenceInvariantsValidator {
     ///
     /// Non-literal required values produce [`Solution::Underdetermined`]; a literal orbital/electron
     /// mismatch produces [`Solution::Contradictory`].
+    /// Contradictory contribution readings take precedence over uncertainty in required inputs.
+    /// Established electron-count mismatches take precedence over uncertainty at other atoms.
     pub fn validate(
         &self,
         molecule: &Molecule,
@@ -1062,5 +1070,110 @@ mod tests {
                 .map(|atom| atom_dsl!(atom))
                 .collect::<Vec<_>>(),
         );
+    }
+
+    #[rstest]
+    #[case::methane(
+        mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#),
+        Solution::Determined(()),
+    )]
+    #[case::partial(
+        mol_dsl!(r#"{:atoms ["C"]}"#),
+        Solution::Underdetermined(()),
+    )]
+    #[case::unknown_before_mismatch(
+        mol_dsl!(r#"{:atoms ["C" "C#c0#h5#n0#u0#s"]}"#),
+        Solution::Contradictory(ValenceMismatch::OrbitalCount {
+            atom_id: AtomId(1), orbital_count: 10, electron_count: 9,
+        }),
+    )]
+    #[case::mismatch_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#c0#h5#n0#u0#s" "C"]}"#),
+        Solution::Contradictory(ValenceMismatch::OrbitalCount {
+            atom_id: AtomId(0), orbital_count: 10, electron_count: 9,
+        }),
+    )]
+    #[case::unknown_before_contradictory_reading(
+        mol_dsl!(r#"{:atoms ["C" "C#c0#h4#n0#u0#s#v1"]}"#),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(1), key: AtomConstraintKey::Valence,
+        }),
+    )]
+    #[case::contradictory_reading_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v1" "C"]}"#),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::Valence,
+        }),
+    )]
+    #[case::unknown_hydrogens_contradictory_donated(
+        mol_dsl!(r#"{
+            :atoms ["N#c0#h*#n0#u0#s#d0" "B#c0#h3#n0#u0#s"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]
+        }"#),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::DonatedPairs,
+        }),
+    )]
+    #[case::unknown_hydrogens_contradictory_accepted(
+        mol_dsl!(r#"{
+            :atoms ["B#c0#h*#n0#u0#s#t0" "N#c0#h3#n0#u0#s"]
+            :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]
+        }"#),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::AcceptedPairs,
+        }),
+    )]
+    #[case::unknown_valence_contradictory_aromatic(
+        mol_dsl!(r#"{
+            :atoms ["C#c0#h1#n0#u0#s#a!" "C#c0#h1#n0#u0#s"
+                    "C#c0#h1#n0#u0#s" "C#c0#h1#n0#u0#s"
+                    "C#c0#h1#n0#u0#s" "C#c0#h1#n0#u0#s"]
+            :bonds [[0 1 "*"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]#c0#u0#s"}]
+        }"#),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::AromaticValence,
+        }),
+    )]
+    #[case::unknown_hydrogens_contradictory_multicenter(
+        mol_dsl!(r#"{
+            :atoms ["C#c0#h*#n0#u0#s#m!" "C#c0#h3#n0#u0#s" "C#c0#h3#n0#u0#s"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,1,1]#c0#u1#s2"}]
+        }"#),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+            atom_id: AtomId(0), key: AtomConstraintKey::MulticenterValence,
+        }),
+    )]
+    fn test_valence_invariants_validator_validate(
+        #[case] molecule: Molecule,
+        #[case] expected: Solution<(), ValenceMismatch>,
+    ) {
+        let original = molecule.clone();
+        assert_eq!(ValenceInvariantsValidator.validate(&molecule), Ok(expected));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::element(atom_dsl!("*#c0#h4#n0#u0#s#v1"))]
+    #[case::charge(atom_dsl!("C#c*#h4#n0#u0#s#v1"))]
+    #[case::hydrogens(atom_dsl!("C#c0#h*#n0#u0#s#v1"))]
+    #[case::lone_pairs(atom_dsl!("C#c0#h4#n*#u0#s#v1"))]
+    #[case::unpaired_electrons(atom_dsl!("C#c0#h4#n0#u*#s#v1"))]
+    fn test_valence_invariants_validator_validate_partial(#[case] atom: AtomForm) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom],
+            ..Default::default()
+        });
+        let original = molecule.clone();
+        assert_eq!(
+            ValenceInvariantsValidator.validate(&molecule),
+            Ok(Solution::Contradictory(
+                ValenceMismatch::ContradictoryConstraint {
+                    atom_id: AtomId(0),
+                    key: AtomConstraintKey::Valence,
+                }
+            ))
+        );
+        assert_eq!(molecule, original);
     }
 }

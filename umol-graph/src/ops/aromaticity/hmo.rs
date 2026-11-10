@@ -127,7 +127,7 @@ impl HmoAromaticity {
     ///
     /// The ring set is contextually valid for the molecule: its atom and bond ids
     /// and ring incidence agree with the molecule.
-    pub(crate) fn find_from_rings<F>(
+    pub(crate) fn recognize_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -137,7 +137,7 @@ impl HmoAromaticity {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
-        self.find_with_exclusions(
+        self.recognize_with_exclusions(
             molecule,
             rings,
             connected_components_algorithm,
@@ -146,7 +146,7 @@ impl HmoAromaticity {
         )
     }
 
-    pub(super) fn find_with_exclusions<F>(
+    pub(super) fn recognize_with_exclusions<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -653,7 +653,7 @@ mod tests {
     #[case::benzene(benzene(), 1, Some(6))]
     #[case::naphthalene(naphthalene(), 1, Some(10))]
     #[case::cyclobutadiene(cyclobutadiene(), 0, None)]
-    fn test_hmo_aromaticity_find_from_rings(
+    fn test_hmo_aromaticity_recognize_from_rings(
         hmo_model: HmoAromaticity,
         #[case] molecule: Molecule,
         #[case] expected_aromatic_systems: usize,
@@ -669,7 +669,7 @@ mod tests {
             )
             .into_ring_set();
         let aromatic_systems = hmo_model
-            .find_from_rings(
+            .recognize_from_rings(
                 &molecule,
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,

@@ -74,10 +74,28 @@ import umol
         ),
         (
             umol.StereoResolveConfig,
-            "(*, tetrahedral_stereo_failure=Ellipsis, "
-            "stereo_atom_failure=Ellipsis, "
-            "cis_trans_stereo_failure=Ellipsis, "
-            "stereo_bond_failure=Ellipsis)",
+            "(*, stereo_atom_failure=Ellipsis, "
+            "stereo_bond_failure=Ellipsis, ring_config=None)",
+        ),
+        (
+            umol.AddStereoConfig,
+            "(*, selection=None, automorphism_algorithm=Ellipsis, "
+            "ring_config=None, para_stereo_max_iterations=16)",
+        ),
+        (
+            umol.RemoveStereoConfig,
+            "(*, selection=None, mode=Ellipsis, automorphism_algorithm=Ellipsis, "
+            "para_stereo_max_iterations=16)",
+        ),
+        (
+            umol.EnumerateStereoConfig,
+            "(*, selection=None, automorphism_algorithm=Ellipsis, "
+            "para_stereo_max_iterations=16)",
+        ),
+        (
+            umol.StereoModel,
+            "(*, kind_models, para_stereo, stereo_bond_min_ring_size, "
+            "stereo_bond_e_min_ring_size)",
         ),
         (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis)"),
         (

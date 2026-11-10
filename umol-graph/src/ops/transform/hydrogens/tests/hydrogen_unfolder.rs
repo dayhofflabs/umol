@@ -1,10 +1,10 @@
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomId, BondConstraintForm, BondId, BooleanForm, CisTransStereoForm,
-    Constraint, Entity, FluxionalityForm, LigandPermutation, Molecule, MoleculeConstraint, NumForm,
-    StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId,
-    StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm, TetrahedralStereoForm,
+    AtomConstraintForm, AtomId, BooleanForm, Constraint, Entity, FluxionalityForm,
+    LigandPermutation, Molecule, MoleculeConstraint, NumForm, StereoAtomConstraintForm,
+    StereoAtomId, StereoBondConstraintForm, StereoBondId, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoTerm,
 };
 use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 use umol_perm::Permutation;
@@ -20,8 +20,8 @@ fn methyl() -> Molecule {
 fn stereo() -> Molecule {
     mol_dsl_concrete!(
         r#"{
-        :atoms ["N#h#n#T1" "F" "C#h" "Cl"]
-        :bonds [[0 2 "2#C0"] [0 1 "1"] [2 3 "1"]]
+        :atoms ["N#h#n#T+" "F" "C#h" "Cl"]
+        :bonds [[0 2 "2#C+"] [0 1 "1"] [2 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 [:h 0] 1 [:lp 0]] :attrs "Th1"}]
         :stereo-bonds [{:site 0 :ligands [3 [:h 2] [:h 0] 1] :attrs "Ct0"}]
     }"#
@@ -32,8 +32,8 @@ fn stereo() -> Molecule {
 fn explicit_stereo() -> Molecule {
     mol_dsl_concrete!(
         r#"{
-        :atoms ["N#n#T1" "F" "C" "Cl" "H" "H"]
-        :bonds [[0 2 "2#C0"] [0 1 "1"] [2 3 "1"] [0 4 "1"] [2 5 "1"]]
+        :atoms ["N#n#T+" "F" "C" "Cl" "H" "H"]
+        :bonds [[0 2 "2#C+"] [0 1 "1"] [2 3 "1"] [0 4 "1"] [2 5 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 4 1 [:lp 0]] :attrs "Th1"}]
         :stereo-bonds [{:site 0 :ligands [3 5 4 1] :attrs "Ct0"}]
     }"#
@@ -92,24 +92,24 @@ fn explicit_stereo() -> Molecule {
 )]
 #[case::tetrahedral(
     mol_dsl_concrete!(r#"{
-        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :atoms ["C#h#T+" "F" "Cl" "Br"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 [:h 0] 3 1] :attrs "Th1"}]
     }"#),
     mol_dsl_concrete!(r#"{
-        :atoms ["C#T1" "F" "Cl" "Br" "H"]
+        :atoms ["C#T+" "F" "Cl" "Br" "H"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [2 4 3 1] :attrs "Th1"}]
     }"#),
 )]
 #[case::assertions_without_overlays(
     mol_dsl_concrete!(r#"{
-        :atoms ["N#h#n#T1" "F" "C#h" "Cl"]
-        :bonds [[0 2 "2#C0"] [0 1 "1"] [2 3 "1"]]
+        :atoms ["N#h#n#T+" "F" "C#h" "Cl"]
+        :bonds [[0 2 "2#C+"] [0 1 "1"] [2 3 "1"]]
     }"#),
     mol_dsl_concrete!(r#"{
-        :atoms ["N#n#T1" "F" "C" "Cl" "H" "H"]
-        :bonds [[0 2 "2#C0"] [0 1 "1"] [2 3 "1"] [0 4 "1"] [2 5 "1"]]
+        :atoms ["N#n#T+" "F" "C" "Cl" "H" "H"]
+        :bonds [[0 2 "2#C+"] [0 1 "1"] [2 3 "1"] [0 4 "1"] [2 5 "1"]]
     }"#),
 )]
 #[case::shared_bearer(stereo(), explicit_stereo())]
@@ -256,38 +256,13 @@ fn test_hydrogen_unfolder_transform_constraints(methyl: Molecule) {
 }
 
 #[rstest]
-#[case::literal(StereoCoset::Lit(1))]
-#[case::set(StereoCoset::lit_set([0]))]
-#[case::term(StereoCoset::term(StereoTerm::Lit(0)))]
-#[case::open(StereoCoset::Undetermined)]
-fn test_hydrogen_unfolder_transform_coset(
-    mut stereo: Molecule,
-    mut explicit_stereo: Molecule,
-    #[case] coset: StereoCoset,
-) {
-    for molecule in [&mut stereo, &mut explicit_stereo] {
-        molecule
-            .atom_mut(AtomId(0))
-            .attributes_mut()
-            .constraints
-            .set(AtomConstraintForm::tetrahedral_stereo(
-                TetrahedralStereoForm::Stereo(coset.clone()),
-            ));
-        molecule
-            .bond_mut(BondId(0))
-            .attributes_mut()
-            .constraints
-            .set(BondConstraintForm::cis_trans_stereo(
-                CisTransStereoForm::Stereo(coset.clone()),
-            ));
-    }
-    assert_eq!(HydrogenUnfolder.transform(stereo), Ok(explicit_stereo));
-}
-
-#[rstest]
 #[case::determined(
     StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+)]
+#[case::finite(
+    StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])),
+    StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var("configuration")))
 )]
 #[case::open_coset(
     StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),

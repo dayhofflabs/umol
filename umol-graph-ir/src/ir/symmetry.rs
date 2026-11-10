@@ -23,7 +23,7 @@ use super::traits::AsLit;
 pub struct GraphSymmetryConfig<C: MoleculeColoring> {
     pub coloring: C,
     pub iterate_to_fixpoint: bool,
-    pub max_iterations: usize,
+    pub max_iterations: u32,
     pub automorphism_algorithm: AutomorphismAlgorithm,
 }
 
@@ -57,7 +57,7 @@ impl Molecule {
             .graph()
             .automorphisms(|node| base[node.index()], cfg.automorphism_algorithm);
         let mut orbits = orbit_vec(&auto, node_count);
-        let mut iterations = 0;
+        let mut iterations: u32 = 0;
         loop {
             iterations += 1;
             let colors: Vec<u64> = (0..node_count)
@@ -991,6 +991,23 @@ mod tests {
                 generator,
             ),
             expected,
+        );
+    }
+
+    #[rstest]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
+    fn test_project_onto_ligands_virtual(#[case] kind: StereoLigandKind) {
+        let ligands = [
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), kind),
+        ];
+        assert_eq!(
+            project_onto_ligands(&ligands, &[NodeId(0), NodeId(2), NodeId(1), NodeId(3)]),
+            Some(Permutation::from_image(&[1, 0, 2, 3])),
         );
     }
 }

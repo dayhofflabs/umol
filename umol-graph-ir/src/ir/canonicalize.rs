@@ -894,7 +894,7 @@ fn stereo_site_form_key(value: &TetrahedralStereoForm) -> CanonicalKeyValue {
     match value {
         TetrahedralStereoForm::Undetermined => variant(0, []),
         TetrahedralStereoForm::NotStereo => variant(1, []),
-        TetrahedralStereoForm::Stereo(coset) => variant(2, [stereo_coset_key(coset)]),
+        TetrahedralStereoForm::Stereo => variant(2, []),
     }
 }
 
@@ -902,7 +902,7 @@ fn cis_trans_stereo_form_key(value: &CisTransStereoForm) -> CanonicalKeyValue {
     match value {
         CisTransStereoForm::Undetermined => variant(0, []),
         CisTransStereoForm::NotStereo => variant(1, []),
-        CisTransStereoForm::Stereo(coset) => variant(2, [stereo_coset_key(coset)]),
+        CisTransStereoForm::Stereo => variant(2, []),
     }
 }
 
@@ -969,6 +969,7 @@ fn stereo_ligand_kind_key(kind: StereoLigandKind) -> CanonicalKeyValue {
             StereoLigandKind::Atom => 0,
             StereoLigandKind::ImplicitHydrogen => 1,
             StereoLigandKind::LonePair => 2,
+            StereoLigandKind::Virtual => 3,
         },
         [],
     )

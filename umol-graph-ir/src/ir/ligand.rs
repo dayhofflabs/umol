@@ -7,12 +7,14 @@ use umol_graph_core::{
 
 use super::id::AtomId;
 
-/// Stereo ligand kind: atom, or virtual ligand (implicit hydrogen or lone pair).
+/// Stereo ligand kind: an atom, implicit hydrogen, lone pair, or generic virtual ligand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum StereoLigandKind {
     Atom,
     ImplicitHydrogen,
     LonePair,
+    /// A virtual substituent whose chemical identity has not been specified.
+    Virtual,
 }
 
 /// Stereo ligand occupying a coordination position of a stereo site.
@@ -86,7 +88,7 @@ impl RelationParticipant for StereoLigand {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{Compaction, Correspondence};
+    use umol_graph_core::{Compaction, Correspondence, Remapping};
 
     use super::*;
 
@@ -94,6 +96,7 @@ mod tests {
     #[case::atom(StereoLigandKind::Atom)]
     #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
     #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
     fn test_stereo_ligand_map(#[case] kind: StereoLigandKind) {
         let correspondence = GraphCorrespondence::new(
             Correspondence::new(vec![(NodeId(2), NodeId(5))], 4, 6).unwrap(),
@@ -114,6 +117,7 @@ mod tests {
     #[case::atom(StereoLigandKind::Atom)]
     #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
     #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
     fn test_stereo_ligand_try_map_error(#[case] kind: StereoLigandKind) {
         let correspondence = GraphCorrespondence::new(
             Correspondence::new(vec![], 4, 6).unwrap(),
@@ -133,6 +137,7 @@ mod tests {
     #[case::atom(StereoLigandKind::Atom)]
     #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
     #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
     #[should_panic(expected = "correspondence must cover every participant reference")]
     fn test_stereo_ligand_map_error(#[case] kind: StereoLigandKind) {
         StereoLigand::new(AtomId(2), kind).map(&GraphCorrespondence::new(
@@ -149,6 +154,19 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom(StereoLigandKind::Atom, false)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen, false)]
+    #[case::lone_pair(StereoLigandKind::LonePair, false)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual, true)]
+    fn test_stereo_ligand_eq(#[case] kind: StereoLigandKind, #[case] expected: bool) {
+        assert_eq!(
+            StereoLigand::new(AtomId(0), StereoLigandKind::Virtual)
+                == StereoLigand::new(AtomId(0), kind),
+            expected,
+        );
+    }
+
+    #[rstest]
     fn test_stereo_ligand_refs() {
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::LonePair);
         assert_eq!(
@@ -161,19 +179,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_ligand_compact() {
-        // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
+    fn test_stereo_ligand_compact(#[case] kind: StereoLigandKind) {
         let compaction = GraphCompaction::new(
             Compaction::new(4, vec![NodeId(1)]).unwrap(),
             Compaction::empty(),
         );
-        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
+        let ligand = StereoLigand::new(AtomId(3), kind);
         assert_eq!(
             ligand.compact(&compaction),
-            Some(StereoLigand::new(
-                AtomId(2),
-                StereoLigandKind::ImplicitHydrogen
-            )),
+            Some(StereoLigand::new(AtomId(2), kind)),
         );
     }
 
@@ -188,15 +206,35 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_ligand_uncompact() {
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
+    fn test_stereo_ligand_uncompact(#[case] kind: StereoLigandKind) {
         let compaction = GraphCompaction::new(
             Compaction::new(4, vec![NodeId(1)]).unwrap(),
             Compaction::empty(),
         );
-        let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
+        let ligand = StereoLigand::new(AtomId(2), kind);
         assert_eq!(
             ligand.uncompact(&compaction),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), kind),
+        );
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[case::virtual_ligand(StereoLigandKind::Virtual)]
+    fn test_stereo_ligand_remap(#[case] kind: StereoLigandKind) {
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![NodeId(2), NodeId(0), NodeId(1)]).unwrap(),
+            Remapping::empty(),
+        );
+        assert_eq!(
+            StereoLigand::new(AtomId(1), kind).remap(&remapping),
+            StereoLigand::new(AtomId(0), kind),
         );
     }
 }

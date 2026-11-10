@@ -434,7 +434,9 @@ fn ligand_matches_site(
                     .find_edge(NodeId::from(site), NodeId::from(ligand.atom_id))
                     .is_some()
         }
-        StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => ligand.atom_id == site,
+        StereoLigandKind::ImplicitHydrogen
+        | StereoLigandKind::LonePair
+        | StereoLigandKind::Virtual => ligand.atom_id == site,
     }
 }
 

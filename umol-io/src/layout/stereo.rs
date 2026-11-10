@@ -74,9 +74,9 @@ fn ligand_matches_endpoint(
                     .neighbors(endpoint)
                     .any(|neighbor| neighbor.atom_id() == ligand.atom_id)
         }
-        StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => {
-            ligand.atom_id == endpoint
-        }
+        StereoLigandKind::ImplicitHydrogen
+        | StereoLigandKind::LonePair
+        | StereoLigandKind::Virtual => ligand.atom_id == endpoint,
     }
 }
 
@@ -85,5 +85,33 @@ fn select_actual_ligand(pair: [StereoLigand; 2]) -> Option<(StereoLigand, Stereo
         [first, second] if first.kind == StereoLigandKind::Atom => Some((first, second)),
         [first, second] if second.kind == StereoLigandKind::Atom => Some((second, first)),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use umol_graph_ir::ir::StereoBondId;
+    use umol_graph_ir::mol_dsl;
+
+    use super::*;
+
+    #[rstest]
+    #[case::site_order("[2 [:virt 0] 3 [:virt 1]]", "Ct1")]
+    #[case::exchanged_blocks("[3 [:virt 1] 2 [:virt 0]]", "Ct1")]
+    #[case::swapped_ligands("[[:virt 0] 2 3 [:virt 1]]", "Ct0")]
+    fn test_cis_trans_site_virtual_ligand(#[case] ligands: &str, #[case] attributes: &str) {
+        let molecule = mol_dsl!(&format!(
+            r#"{{:atoms ["C" "C" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]] :stereo-bonds [{{:site 0 :ligands {ligands} :attrs "{attributes}"}}]}}"#
+        ));
+        assert_eq!(
+            cis_trans_site(&molecule, molecule.stereo_bond(StereoBondId(0))),
+            Some(CisTransSite {
+                bond: BondId(0),
+                site: [AtomId(0), AtomId(1)],
+                ligands: [AtomId(2), AtomId(3)],
+                configuration: CisTransConfiguration::E,
+            })
+        );
     }
 }

@@ -4078,6 +4078,7 @@ fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
             let kind = match tag.as_str() {
                 "h" => StereoLigandKind::ImplicitHydrogen,
                 "lp" => StereoLigandKind::LonePair,
+                "virt" => StereoLigandKind::Virtual,
                 other => {
                     return Err(DeError::Custom(format!(
                         "unknown stereo ligand kind :{other}"
@@ -5528,6 +5529,9 @@ fn render_stereo_ligands(ligands: &[StereoLigandInput]) -> Edn<'static> {
                 }
                 StereoLigandKind::LonePair => {
                     Edn::Vector(vec![Edn::keyword("lp"), atom.to_edn()].into())
+                }
+                StereoLigandKind::Virtual => {
+                    Edn::Vector(vec![Edn::keyword("virt"), atom.to_edn()].into())
                 }
             })
             .collect::<Vec<_>>()
@@ -7045,6 +7049,24 @@ mod tests {
             ],
         }]),
     )]
+    #[case::stereo_atom_replace_virtual_ligand(
+        r#"[{:stereo-atom {:replace-ligands [0 {:expect [1 2 3 [:virt 0]] :update [1 2 3 [:h 0]]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceStereoAtomLigands {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            old: vec![(AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(0)), StereoLigandKind::Virtual)],
+            new: vec![(AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen)],
+        }]),
+    )]
+    #[case::stereo_bond_replace_virtual_ligand(
+        r#"[{:stereo-bond {:replace-ligands [0 {:expect [2 [:virt 0] 3 [:virt 1]] :update [2 [:lp 0] 3 [:lp 1]]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceStereoBondLigands {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            old: vec![(AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(0)), StereoLigandKind::Virtual), (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(1)), StereoLigandKind::Virtual)],
+            new: vec![(AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair), (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom), (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair)],
+        }]),
+    )]
     fn test_edits_dsl_roundtrip(
         #[case] input: &str,
         #[case] defaults: MoleculeDefaults,
@@ -7060,6 +7082,10 @@ mod tests {
         assert_eq!(rendered, read_string(input).unwrap());
         assert_eq!(displayed, rendered.to_string());
         assert_eq!(rebuilt.to_edn(), read_string(input).unwrap());
+        assert_eq!(
+            EditsDsl::from_edn_str(input).unwrap().into_ir(&defaults),
+            expected
+        );
     }
 
     #[rstest]
@@ -9047,5 +9073,48 @@ mod tests {
                 .into_ir(&defaults),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::atom_add(r##"[{:atom {:add "C#T@"}}]"##, "atom")]
+    #[case::bond_add(r##"[{:bond {:add [0 1 "2#C@"]}}]"##, "bond")]
+    #[case::atom_expect(
+        r##"[{:atom {:modify [0 {:expect "#T@" :update "#T+"}]}}]"##,
+        "atom-update"
+    )]
+    #[case::atom_update(
+        r##"[{:atom {:modify [0 {:expect "#T+" :update "#T@"}]}}]"##,
+        "atom-update"
+    )]
+    #[case::bond_expect(
+        r##"[{:bond {:modify [0 {:expect "#C@" :update "#C+"}]}}]"##,
+        "bond-update"
+    )]
+    #[case::bond_update(
+        r##"[{:bond {:modify [0 {:expect "#C+" :update "#C@"}]}}]"##,
+        "bond-update"
+    )]
+    fn test_edits_dsl_from_edn_stereo_error(
+        #[case] template: &str,
+        #[case] grammar: &'static str,
+        #[values(
+            "0",
+            "1",
+            "{0,1}",
+            "?configuration",
+            "?configuration :: {0,1}",
+            "~0",
+            "'0",
+            "0^(0,1)"
+        )]
+        payload: &str,
+    ) {
+        let source = template.replace('@', payload);
+        let expected = DeError::subgrammar(grammar, ParseError::Syntax);
+        assert_eq!(
+            EditsDsl::from_edn(&read_string(&source).unwrap()),
+            Err(expected.clone())
+        );
+        assert_eq!(EditsDsl::from_edn_str(&source), Err(expected.into()));
     }
 }

@@ -8,6 +8,7 @@ from umol import (
     ModelConversionError,
     Molecule,
     Reaction,
+    StereoModel,
     ValenceModel,
 )
 
@@ -22,6 +23,8 @@ from umol import (
         ("F[C@H](Cl)Br", "F[C@H](Cl)Br"),
         ("[H][C@](F)(Cl)Br", "[H][C@](F)(Cl)Br"),
         ("F/C=C/C=C/F", "F/C=C/C=C/F"),
+        ("C1=C/CCCC/1", r"C/1=C\CCCC1"),
+        (r"C1=C\CCCC/1", "C/1=C/CCCC1"),
     ],
 )
 def test_molecule_to_smiles(source, expected):
@@ -55,6 +58,34 @@ def test_molecule_to_smiles_chemistry_model(valence, expected):
         assert molecule.to_smiles(chemistry_model=model) == expected
         assert molecule == original
         assert model.valence == valence
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [("C1=C/CCCC/1", r"C/1=C\CCCC1"), (r"C1=C\CCCC/1", "C/1=C/CCCC1")],
+)
+@pytest.mark.parametrize("minimum", [0, 8, 64])
+def test_molecule_to_smiles_ring(source, expected, minimum):
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.smiles(),
+        aromaticity=default.aromaticity,
+        stereo=StereoModel(
+            kind_models=default.stereo.kind_models,
+            para_stereo=False,
+            stereo_bond_min_ring_size=minimum,
+            stereo_bond_e_min_ring_size=64,
+        ),
+    )
+    molecule = Molecule.from_smiles(source, chemistry_model=model)
+    original = molecule.copy()
+
+    text = molecule.to_smiles(chemistry_model=model)
+
+    assert text == expected
+    assert molecule == original
+    assert Molecule.from_smiles(text, chemistry_model=model).canonical_eq(original)
 
 
 @pytest.mark.parametrize(
@@ -95,10 +126,21 @@ def test_molecule_to_smiles_error(source, message):
         ("c1ccccc1>>c1ccccc1", "c1ccccc1>>c1ccccc1"),
         ("F[C@H](Cl)Br>>F[C@@H](Cl)Br", "F[C@H](Cl)Br>>F[C@@H](Cl)Br"),
         ("F/C=C/C=C/F>>F/C=C/C=C\\F", "F/C=C/C=C/F>>F/C=C/C=C\\F"),
+        (
+            r"[CH:1]1=[CH:2]/[CH2:3][CH2:4][CH2:5][CH2:6]/1>>"
+            r"[CH:1]1=[CH:2]\[CH2:3][CH2:4][CH2:5][CH2:6]/1",
+            r"[CH:1]/1=[CH:2]\[CH2:3][CH2:4][CH2:5][CH2:6]1>>"
+            "[CH:1]/1=[CH:2]/[CH2:3][CH2:4][CH2:5][CH2:6]1",
+        ),
     ],
 )
 def test_reaction_to_reaction_smiles(source, expected):
-    assert Reaction.from_reaction_smiles(source).to_reaction_smiles() == expected
+    reaction = Reaction.from_reaction_smiles(source)
+    original = Reaction.parse(reaction.render())
+
+    assert reaction.to_reaction_smiles() == expected
+    assert reaction == original
+    assert Reaction.from_reaction_smiles(expected).canonical_eq(original)
 
 
 @pytest.mark.parametrize(

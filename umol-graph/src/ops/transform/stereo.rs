@@ -3,7 +3,7 @@
 //! StereoAdder creates missing selected tetrahedral/cis-trans entities; StereoRemover
 //! removes selected entities and their source assertions. StereoEnumerator determines
 //! existing selected absolute configurations in the supplied sequence of sites.
-//! All three use StereoPerception and intersect site, kind, and stereogenicity filters.
+//! All three use StereoPerceiver and intersect site, kind, and stereogenicity filters.
 //! A stored stereo entity may be symmetric or prochiral; its presence does not assert
 //! stereogenicity. Enumeration retains symmetry-equivalent assignments.
 //!
@@ -52,7 +52,7 @@ use umol_graph_ir::ir::{
 use self::enumeration::{AbsoluteStereoAssignments, StereoAssignmentChecks};
 use crate::ops::model::StereoModel;
 use crate::ops::stereo::{
-    StereoInconsistency, StereoPerception, StereoPerceptionError, StereoSelection, StereoSite,
+    StereoInconsistency, StereoPerceiver, StereoPerceptionError, StereoSelection, StereoSite,
 };
 use crate::ops::transform::Transformer;
 use crate::ops::validate::constraint::ConstraintInvariantsError;
@@ -60,7 +60,8 @@ use crate::ops::validate::constraint::ConstraintInvariantsError;
 /// Site selection and algorithms for stereo addition.
 ///
 /// Default selects tetrahedral and cis/trans kinds, stereogenic sites only,
-/// and all topology sites. It uses Nauty and RingConfig::default().
+/// and all topology sites. It uses Nauty, RingConfig::default(), and up to
+/// sixteen symmetry refinement iterations when the model enables para stereo.
 ///
 /// Construction preserves the supplied selection without checking ids against
 /// a molecule. The executing operation checks ids before indexing or mutation.
@@ -69,6 +70,7 @@ pub struct AddStereoConfig {
     pub selection: StereoSelection,
     pub automorphism_algorithm: AutomorphismAlgorithm,
     pub ring_config: RingConfig,
+    pub para_stereo_max_iterations: u32,
 }
 
 impl Default for AddStereoConfig {
@@ -84,6 +86,7 @@ impl Default for AddStereoConfig {
             },
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             ring_config: RingConfig::default(),
+            para_stereo_max_iterations: 16,
         }
     }
 }
@@ -99,9 +102,9 @@ pub enum AddStereoError {
 
 /// Add selected missing tetrahedral atoms and cis/trans bonds.
 ///
-/// Uses StereoPerception's recognition and classification with the supplied
-/// model and configuration. New cosets remain undetermined unless source
-/// evidence supplies them. Existing entities, their frames and configurations,
+/// Uses StereoPerceiver's recognition and classification with the supplied
+/// model and configuration. New cosets are undetermined.
+/// Existing entities, their frames and configurations,
 /// source assertions, and molecular topology are preserved.
 /// Use the selection's stereogenicities to admit prochiral or symmetric sites;
 /// the default admits only stereogenic sites.
@@ -116,12 +119,12 @@ pub enum AddStereoError {
 /// Addition is idempotent for the same model and configuration. Consuming and
 /// in-place results agree under structural equality. An in-place rejection
 /// leaves the molecule unchanged, and every result preserves its integrity.
-/// Atom relabeling, with corresponding selectors and transported #T/#C frames,
+/// Atom relabeling, with corresponding selectors and transported stereo frames,
 /// preserves the represented result under framed_eq_under with the induced
 /// entity correspondence.
 #[derive(Clone, Debug)]
 pub struct StereoAdder {
-    perception: StereoPerception,
+    perception: StereoPerceiver,
     config: AddStereoConfig,
 }
 
@@ -136,7 +139,7 @@ impl StereoAdder {
     /// Site ids are checked against each input molecule during transformation.
     pub fn with_config(model: &StereoModel, config: AddStereoConfig) -> Self {
         Self {
-            perception: StereoPerception::new(model),
+            perception: StereoPerceiver::new(model),
             config,
         }
     }
@@ -147,6 +150,7 @@ impl StereoAdder {
             &self.config.selection,
             self.config.automorphism_algorithm,
             self.config.ring_config,
+            self.config.para_stereo_max_iterations,
         )?;
         if let Some(&inconsistency) = derivation.inconsistencies.first() {
             return Err(inconsistency.into());
@@ -241,6 +245,7 @@ pub struct RemoveStereoConfig {
     pub selection: StereoSelection,
     pub mode: RemoveStereoMode,
     pub automorphism_algorithm: AutomorphismAlgorithm,
+    pub para_stereo_max_iterations: u32,
 }
 
 impl Default for RemoveStereoConfig {
@@ -249,6 +254,7 @@ impl Default for RemoveStereoConfig {
             selection: StereoSelection::default(),
             mode: RemoveStereoMode::All,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            para_stereo_max_iterations: 16,
         }
     }
 }
@@ -263,7 +269,7 @@ pub enum RemoveStereoError {
 /// Remove selected stereo entities and their corresponding #T/#C assertions.
 ///
 /// The mode and site/kind selectors apply before stereogenicity is calculated.
-/// Classification uses StereoPerception with the unchanged molecular context
+/// Classification uses StereoPerceiver with the unchanged molecular context
 /// and is omitted when the class selector is unrestricted. Such removal accepts
 /// kindless, symbolic, and other-geometry records without interpreting them.
 /// All accepts every configuration and is the default. Undetermined tests only
@@ -282,12 +288,12 @@ pub enum RemoveStereoError {
 /// rejection preserves the input under structural equality. Successful results
 /// preserve molecule integrity. Without a class filter, removal is idempotent
 /// for the same config.
-/// Relabeling sites and #T/#C frames transports the result under structural
+/// Relabeling sites and stereo frames transports the result under structural
 /// equality after id transport. Compatible stored-frame actions preserve the
 /// represented result under framed_eq.
 #[derive(Clone, Debug)]
 pub struct StereoRemover {
-    perception: StereoPerception,
+    perception: StereoPerceiver,
     config: RemoveStereoConfig,
 }
 
@@ -302,7 +308,7 @@ impl StereoRemover {
     /// Site ids are checked against each input molecule during transformation.
     pub fn with_config(model: &StereoModel, config: RemoveStereoConfig) -> Self {
         Self {
-            perception: StereoPerception::new(model),
+            perception: StereoPerceiver::new(model),
             config,
         }
     }
@@ -360,9 +366,12 @@ impl StereoRemover {
             .map(|(site, _)| site)
             .collect();
         if let Some(classes) = &selection.stereogenicities {
-            let classifications =
-                self.perception
-                    .classify(molecule, &sites, self.config.automorphism_algorithm)?;
+            let classifications = self.perception.classify(
+                molecule,
+                &sites,
+                self.config.automorphism_algorithm,
+                self.config.para_stereo_max_iterations,
+            )?;
             sites.retain(|site| classes.contains(&classifications[site]));
         }
 
@@ -474,6 +483,7 @@ impl Transformer for StereoRemover {
 pub struct EnumerateStereoConfig {
     pub selection: StereoSelection,
     pub automorphism_algorithm: AutomorphismAlgorithm,
+    pub para_stereo_max_iterations: u32,
 }
 
 impl Default for EnumerateStereoConfig {
@@ -488,6 +498,7 @@ impl Default for EnumerateStereoConfig {
                 stereogenicities: None,
             },
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            para_stereo_max_iterations: 16,
         }
     }
 }
@@ -517,7 +528,7 @@ pub enum EnumerateStereoError {
 /// and other geometries are unsupported when selected for processing.
 ///
 /// Site, kind, and stereogenicity selectors intersect. Classification uses
-/// StereoPerception in the whole molecular context when requested. Automatic
+/// StereoPerceiver in the whole molecular context when requested. Automatic
 /// recognition rules do not reject existing arrangements. Selected sites must
 /// occur exactly once in the order; entries outside that set are ignored.
 /// Source assertions, topology, retained configurations, and ligand frames are
@@ -534,7 +545,7 @@ pub enum EnumerateStereoError {
 /// Every emitted selected value belongs to its source domain and satisfies the
 /// checked constraints; every admitted assignment appears once in its stored
 /// frame, including symmetry-equivalent assignments. Relabeling ids, selectors,
-/// order, and #T/#C frames, or applying compatible stored-frame actions,
+/// order, and stereo frames, or applying compatible stored-frame actions,
 /// transports full result collections including multiplicity. The first chosen
 /// representation remains frame dependent.
 #[derive(Clone, Debug)]
@@ -662,10 +673,11 @@ impl StereoEnumerator {
                     }
                 }
                 let sites = configurations.keys().copied().collect();
-                let classifications = StereoPerception::new(&self.model).classify(
+                let classifications = StereoPerceiver::new(&self.model).classify(
                     &normalized,
                     &sites,
                     self.config.automorphism_algorithm,
+                    self.config.para_stereo_max_iterations,
                 )?;
                 configurations.retain(|site, _| classes.contains(&classifications[site]));
             }
@@ -714,7 +726,7 @@ impl StereoEnumerator {
             symmetry_config: GraphSymmetryConfig {
                 coloring: ConstitutionColoring::full(),
                 iterate_to_fixpoint: self.model.para_stereo,
-                max_iterations: 16,
+                max_iterations: self.config.para_stereo_max_iterations,
                 automorphism_algorithm: self.config.automorphism_algorithm,
             },
         })
@@ -902,6 +914,7 @@ mod tests {
                 },
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 ring_config: RingConfig::default(),
+                para_stereo_max_iterations: 16,
             },
         );
     }
@@ -1118,6 +1131,7 @@ mod tests {
                 },
                 mode: RemoveStereoMode::All,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                para_stereo_max_iterations: 16,
             },
         );
     }
@@ -1274,6 +1288,7 @@ mod tests {
                     stereogenicities: None,
                 },
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                para_stereo_max_iterations: 16,
             },
         );
     }
