@@ -2858,3 +2858,19 @@ molecule, reaction, span, and edit fuzz targets on their curated seed inputs.
 measurement comparisons passed; implementation, supported bindings, and guides
 agree with the scoped contracts. There are no deferred stages in this deliverable.
 The exclusions in Scope remain unchanged.
+
+## Addendum — 2026-11-09: stereo fuzz seeds
+
+The S4d replay covered 255 existing seeds, but those lacked the promised :virt
+and configuration-bearing constraint rejection inputs. Added 43 curated seeds:
+12 accepted :virt cases across molecules, reactions, spans, and edits, including
+ligand replacements; and 31 rejected #T/#C configuration inputs across all five
+targets, covering literals, sets, variables, actions, EDN constraint maps,
+aliases, deltas, and both span/edit sides.
+
+Verified the expected acceptance/rejection of every addition independently of
+replay, with tree/streaming agreement for structured inputs. Each rejected input
+is accepted when only its stereo constraint payload is replaced by a valid kind
+state. Rebuilt the five fuzz executables and replayed all 298 curated seeds
+successfully. Formatting and git diff --check passed. The parser implementations
+and fuzz-target laws are unchanged.

@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "C"] :bonds [[0 1 "2"]]} :deltas [{:bond {:modify [0 "#C?configuration"]}}]}
