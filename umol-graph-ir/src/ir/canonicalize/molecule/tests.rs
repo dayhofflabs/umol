@@ -1681,7 +1681,7 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
     ],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
-fn test_compact_topology_carrier_new(
+fn test_topology_search_input(
     #[case] molecule: Molecule,
     #[case] expected_graph: Graph,
     #[case] expected_colors: Vec<AutomorphismColor>,
@@ -1691,17 +1691,17 @@ fn test_compact_topology_carrier_new(
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
     let (entity_keys, _) = initial_color_keys(&molecule, &incidence_graph).unwrap();
     let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
-    let carrier = CompactTopologyCarrier::new(&molecule, &incidence_graph, &entity_colors);
+    let input = topology_search_input(&molecule, &incidence_graph, &entity_colors);
 
-    assert_eq!(carrier.adapter.graph, expected_graph);
-    assert_eq!(carrier.adapter.colors, expected_colors);
-    assert_eq!(carrier.adapter.node_sources, expected_node_sources);
-    assert_eq!(carrier.adapter.incidence_nodes, Vec::new());
+    assert_eq!(input.adapter.graph, expected_graph);
+    assert_eq!(input.adapter.colors, expected_colors);
+    assert_eq!(input.adapter.node_sources, expected_node_sources);
+    assert_eq!(input.adapter.incidence_nodes, Vec::new());
     assert_eq!(
-        carrier.adapter.source_node_count,
+        input.adapter.source_node_count,
         incidence_graph.entity_count(EntityKind::Atom),
     );
-    assert_eq!(carrier.initial_partition.cells, expected_partition);
+    assert_eq!(input.initial_partition.cells, expected_partition);
 }
 
 #[rstest]

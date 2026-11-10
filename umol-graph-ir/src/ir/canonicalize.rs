@@ -2371,13 +2371,13 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     }
 }
 
-/// Topology search carrier with atoms and non-modal bond subdivisions as vertices.
+/// Topology search input with atoms and non-modal bond subdivisions as vertices.
 ///
 /// Bonds in the largest normalized bond-form class are represented directly as edges. Every other
 /// bond remains a colored subdivision vertex. The complete typed leaf key and remapping still
 /// order and map every bond.
 #[derive(Clone, Debug)]
-struct CompactTopologyCarrier {
+struct TopologySearchInput {
     adapter: AutomorphismAdapter,
     initial_partition: OrderedPartition,
 }

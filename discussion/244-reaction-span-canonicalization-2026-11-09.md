@@ -437,13 +437,17 @@ trait only stay in `canonicalize/tests.rs`. The checks of S0d hold: the same 11,
 with one renamed, all passing; the integration tests and canonicalization properties pass; clippy
 is clean; the reference comparison reports no mismatch.
 
-#### S0f — Topology search input
+#### S0f — Topology search input **Done**
 
 Rename `CompactTopologyCarrier` to `TopologySearchInput`. Its constructor becomes the function
 `topology_search_input` in `canonicalize::molecule`, and `test_compact_topology_carrier_new` becomes
 `test_topology_search_input`. Breaking while the rename is in progress (red→green). [dep: S0d]
 
 **Check:** as S0d.
+
+The type, its constructor, its doc comments, one `unreachable!` message, and the test with its local
+variable are renamed. Ignoring whitespace, the constructor body changes only in that message and in
+the type name of the returned value. The checks of S0d hold, with one test renamed.
 
 ### S1 — Span tag order
 

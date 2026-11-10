@@ -29,9 +29,9 @@ use super::{
     stereo_kind_key, stereo_ligand_key, unpaired_electrons_form_key, variant, AutomorphismAdapter,
     AutomorphismColor, BranchOrdering, CanonicalCandidate, CanonicalComparisonKey,
     CanonicalKeyValue, CanonicalSearchOptions, Canonicalize, CanonicalizeContext,
-    CompactTopologyCarrier, ConstraintBlockKey, ConstraintBlockPosition, DescriptionLevel,
-    EntityBlockPosition, FieldKey, InitialColorKey, MoleculeCanonicalizeError, OrderedPartition,
-    PositionedKey,
+    ConstraintBlockKey, ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition, FieldKey,
+    InitialColorKey, MoleculeCanonicalizeError, OrderedPartition, PositionedKey,
+    TopologySearchInput,
 };
 
 /// Construct the ordered constraint blocks used by complete canonicalization.
@@ -343,70 +343,72 @@ fn initial_color_keys(
     Ok((entity_keys, incidence_keys))
 }
 
-impl CompactTopologyCarrier {
-    /// Construct the carrier from the dense normalized colors of topology entities.
-    fn new(molecule: &Molecule, incidence_graph: &IncidenceGraph, entity_colors: &[u32]) -> Self {
-        let mut bond_color_counts = vec![0_usize; entity_colors.len()];
-        for bond in molecule.bonds().iter() {
-            let node = incidence_graph.node_of(Entity::Bond(bond.id()));
-            bond_color_counts[entity_colors[node.index()] as usize] += 1;
+/// Construct the topology search input from the dense normalized colors of topology entities.
+fn topology_search_input(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    entity_colors: &[u32],
+) -> TopologySearchInput {
+    let mut bond_color_counts = vec![0_usize; entity_colors.len()];
+    for bond in molecule.bonds().iter() {
+        let node = incidence_graph.node_of(Entity::Bond(bond.id()));
+        bond_color_counts[entity_colors[node.index()] as usize] += 1;
+    }
+    let direct_bond_color = bond_color_counts
+        .into_iter()
+        .enumerate()
+        .filter(|(_, count)| *count > 0)
+        .max_by(|(lhs_color, lhs_count), (rhs_color, rhs_count)| {
+            lhs_count
+                .cmp(rhs_count)
+                .then_with(|| rhs_color.cmp(lhs_color))
+        })
+        .map(|(color, _)| color as u32);
+
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let mut colors = entity_colors[..atom_count]
+        .iter()
+        .copied()
+        .map(AutomorphismColor::Entity)
+        .collect::<Vec<_>>();
+    let mut node_sources = (0..atom_count)
+        .map(|index| SubdivisionNodeSource::Node(NodeId(index as u32)))
+        .collect::<Vec<_>>();
+    let mut edges = Vec::<[u32; 2]>::with_capacity(molecule.bonds().count() * 2);
+
+    for bond in molecule.bonds().iter() {
+        let node = incidence_graph.node_of(Entity::Bond(bond.id()));
+        let bond_color = entity_colors[node.index()];
+        let [first, second] = bond.atom_ids().map(|atom| atom.index() as u32);
+        if direct_bond_color == Some(bond_color) {
+            edges.push([first, second]);
+        } else {
+            let subdivision = NodeId(node_sources.len() as u32);
+            node_sources.push(SubdivisionNodeSource::Node(subdivision));
+            colors.push(AutomorphismColor::Entity(bond_color));
+            edges.push([first, subdivision.0]);
+            edges.push([subdivision.0, second]);
         }
-        let direct_bond_color = bond_color_counts
-            .into_iter()
-            .enumerate()
-            .filter(|(_, count)| *count > 0)
-            .max_by(|(lhs_color, lhs_count), (rhs_color, rhs_count)| {
-                lhs_count
-                    .cmp(rhs_count)
-                    .then_with(|| rhs_color.cmp(lhs_color))
-            })
-            .map(|(color, _)| color as u32);
+    }
 
-        let atom_count = incidence_graph.entity_count(EntityKind::Atom);
-        let mut colors = entity_colors[..atom_count]
-            .iter()
-            .copied()
-            .map(AutomorphismColor::Entity)
-            .collect::<Vec<_>>();
-        let mut node_sources = (0..atom_count)
-            .map(|index| SubdivisionNodeSource::Node(NodeId(index as u32)))
-            .collect::<Vec<_>>();
-        let mut edges = Vec::<[u32; 2]>::with_capacity(molecule.bonds().count() * 2);
+    let graph = Graph::new(node_sources.len(), &edges);
+    debug_assert!(graph.is_simple());
+    let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
+        let AutomorphismColor::Entity(color) = *color else {
+            unreachable!("the topology search input uses entity colors")
+        };
+        color
+    }));
 
-        for bond in molecule.bonds().iter() {
-            let node = incidence_graph.node_of(Entity::Bond(bond.id()));
-            let bond_color = entity_colors[node.index()];
-            let [first, second] = bond.atom_ids().map(|atom| atom.index() as u32);
-            if direct_bond_color == Some(bond_color) {
-                edges.push([first, second]);
-            } else {
-                let subdivision = NodeId(node_sources.len() as u32);
-                node_sources.push(SubdivisionNodeSource::Node(subdivision));
-                colors.push(AutomorphismColor::Entity(bond_color));
-                edges.push([first, subdivision.0]);
-                edges.push([subdivision.0, second]);
-            }
-        }
-
-        let graph = Graph::new(node_sources.len(), &edges);
-        debug_assert!(graph.is_simple());
-        let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
-            let AutomorphismColor::Entity(color) = *color else {
-                unreachable!("the topology carrier uses entity colors")
-            };
-            color
-        }));
-
-        Self {
-            adapter: AutomorphismAdapter {
-                graph,
-                colors,
-                node_sources,
-                incidence_nodes: Vec::new(),
-                source_node_count: atom_count,
-            },
-            initial_partition,
-        }
+    TopologySearchInput {
+        adapter: AutomorphismAdapter {
+            graph,
+            colors,
+            node_sources,
+            incidence_nodes: Vec::new(),
+            source_node_count: atom_count,
+        },
+        initial_partition,
     }
 }
 
@@ -1263,10 +1265,10 @@ fn canonicalize_topology(
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
     let (entity_keys, _) = initial_color_keys(&molecule, &incidence_graph)?;
     let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
-    let CompactTopologyCarrier {
+    let TopologySearchInput {
         adapter,
         initial_partition,
-    } = CompactTopologyCarrier::new(&molecule, &incidence_graph, &entity_colors);
+    } = topology_search_input(&molecule, &incidence_graph, &entity_colors);
     let leaf_candidate = |order: &[NodeId]| {
         topology_candidate(&molecule, &incidence_graph, order)
             .expect("initial colors established topology normalization")
@@ -1485,10 +1487,10 @@ impl Molecule {
 
         if level == DescriptionLevel::Topology {
             let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
-            let CompactTopologyCarrier {
+            let TopologySearchInput {
                 adapter,
                 initial_partition,
-            } = CompactTopologyCarrier::new(molecule, &incidence_graph, &entity_colors);
+            } = topology_search_input(molecule, &incidence_graph, &entity_colors);
             let leaf_candidate = |order: &[NodeId]| {
                 topology_candidate(molecule, &incidence_graph, order)
                     .expect("initial colors established topology normalization")
