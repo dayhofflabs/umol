@@ -1,5 +1,6 @@
 //! Unit and bounded-exhaustive tests for molecule canonicalization.
 
+use std::collections::BTreeSet;
 use std::iter;
 
 use rstest::{fixture, rstest};

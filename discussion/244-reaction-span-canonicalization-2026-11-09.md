@@ -413,7 +413,7 @@ only in those ten signatures. The crate lists the same 11,967 library tests, 345
 canonicalization, and all pass, as do the integration tests and the canonicalization properties.
 Clippy over all targets and features is clean. The reference comparison reports no mismatch.
 
-#### S0e — Reaction-span submodule
+#### S0e — Reaction-span submodule **Done**
 
 Move every function that takes a `ReactionSpan`, the `impl ReactionSpan` and `impl Reaction` blocks,
 and their `Canonicalize` impls into `canonicalize/reaction_span.rs`.
@@ -427,6 +427,15 @@ in a function body or a test body changes. Breaking while the move is in progres
 [dep: S0d]
 
 **Check:** as S0d.
+
+Six functions and four impl blocks, 815 lines, moved to `canonicalize/reaction_span.rs`. Beyond the
+five renames, four inline paths such as `super::dative::DativeBondForm` gained one `super::`, and
+rustfmt rewrapped two lines whose length changed. Five tests moved to
+`canonicalize/reaction_span/tests.rs`: the incidence-key test, the two description-level tests, and
+the two tests of the span's private methods. Span and reaction tests that go through the public
+trait only stay in `canonicalize/tests.rs`. The checks of S0d hold: the same 11,967 library tests
+with one renamed, all passing; the integration tests and canonicalization properties pass; clippy
+is clean; the reference comparison reports no mismatch.
 
 #### S0f — Topology search input
 
