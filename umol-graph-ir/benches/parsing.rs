@@ -26,10 +26,7 @@ use fixtures::{
     MOL_BENZENE, MOL_DIBORANE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS,
     MOL_LARGE_PARTIAL_IDS, MOL_SMALL, MOL_WITH_CONSTRAINTS,
 };
-use stereo_fixtures::{
-    MOL_CIS_TRANS_ATTRIBUTE, MOL_CIS_TRANS_EXPLICIT, MOL_TETRAHEDRAL_ATTRIBUTE,
-    MOL_TETRAHEDRAL_EXPLICIT,
-};
+use stereo_fixtures::{MOL_CIS_TRANS_EXPLICIT, MOL_TETRAHEDRAL_EXPLICIT};
 
 fn bench_pair<T>(
     group: &mut criterion::BenchmarkGroup<'_, WallTime>,
@@ -148,8 +145,6 @@ fn bench_molecule_dsl(c: &mut Criterion) {
     for (name, source) in [
         ("tetrahedral_explicit", MOL_TETRAHEDRAL_EXPLICIT),
         ("cis_trans_explicit", MOL_CIS_TRANS_EXPLICIT),
-        ("tetrahedral_attribute", MOL_TETRAHEDRAL_ATTRIBUTE),
-        ("cis_trans_attribute", MOL_CIS_TRANS_ATTRIBUTE),
     ] {
         let edn = read_string(source).unwrap();
         assert_eq!(

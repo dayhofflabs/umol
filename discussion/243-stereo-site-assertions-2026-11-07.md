@@ -1,6 +1,6 @@
 # 243 — Frame-independent atom and bond stereo assertions
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-07
 Relates: [214](214-aggregate-frame-semantics-2026-08-28.md),
 [226](226-smiles-roundtrip-design-2026-09-10.md),
@@ -19,19 +19,11 @@ entities; export conveys them directly to the format boundary. The DSL uses
 explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
-This records the selected design direction and its consequences. S0–S3 and
-S4a–S4c are complete, including the combined S3f verification gate and S4c's
-operation documentation inventory. The confirmed implementation discrepancies
-found during the inventory and guide consolidation are corrected. All recorded
-contracts are consolidated in the operations guide; the validator-family review
-is recorded below. S4d remains pending.
-The semantics, value interface, operation interfaces, and names below are the
-working design. S2 records the implemented perception/resolution interfaces.
-The shared resolver conflict/discharge policy and transformer contracts are
-recorded below. The remaining subitems implement those contracts; missing plan
-details do not reopen the semantics or authorize additional public interfaces.
-Remaining subitems require explicit instruction. The staged implementation plan
-follows the change inventory.
+This records the implemented design and its consequences. S0–S4 are complete,
+including the combined workflow checks, operation documentation inventory, final
+verification, and AC-power benchmark comparison. Confirmed implementation
+discrepancies are corrected, and the operation contracts are consolidated in the
+operations guide. Results are recorded beneath the owning subitems.
 
 Molecule-level constraints and RelationalConstraint are outside scope. Reaction-span
 canonicalization is separate work. This change does not remove kindless stereo
@@ -46,15 +38,16 @@ that order can change the index without changing the represented configuration.
 Valence and aromatic-valence assertions do not have this dependence on participant
 ordering.
 
-The current #T/#C configuration payloads use implicit local frames. Consequently,
-atom or bond attributes can change meaning when atom ids are reordered, even
-though their stored values remain identical. This breaks the assumption that
-attributes can be compared or combined independently of the graph identification.
-Hydrogen folding is the only operation that transports these cosets. Remapping,
-pushout, composition, edits, and reaction application treat them as ordinary values.
+Before this change, #T/#C configuration payloads used implicit local frames.
+Consequently, atom or bond attributes could change meaning when atom ids were
+reordered, even though their stored values remained identical. This broke the
+assumption that attributes could be compared or combined independently of the
+graph identification. Hydrogen folding was the only operation that transported
+these cosets. Remapping, pushout, composition, edits, and reaction application
+treated them as ordinary values.
 
-Current behavior on C#T0 with neighbors Cl, F, Br, I, and on the corresponding
-molecule with the first two neighbors exchanged:
+Behavior before this change on C#T0 with neighbors Cl, F, Br, I, and on the
+corresponding molecule with the first two neighbors exchanged:
 
 - Canonicalization relabels the neighbors without changing the stored coset, so its
   result perceives as the enantiomer of its input.
@@ -642,7 +635,7 @@ the other projection stages and boundary conversion still require them.
 | Stereo ligands | Add the Virtual variant and :virt spelling. Update exhaustive kind dispatch, canonical keys, and Python enum conversion. Keep ligand identity and matching exact. |
 | Atom/bond constraint readings | Project the stereo kind without reconstructing a neighbor-relative coset. A known stereo kind can give a positive stereo constraint even when its coset is undetermined. Existing open/complete reading distinctions still apply. A caller that needs a coset uses coset_for with a stated frame. |
 | Validation | Check stereo constraint realizability and kind agreement with explicit entities. Validate those entities independently of accompanying scalar assertions, including the frame/configuration prerequisites needed by model checks. Preserve valence and aromaticity validator semantics. |
-| Hydrogen folding/unfolding | Remove special transport of inline #T/#C cosets. Continue maintaining actual/virtual ligands on explicit stereo entities. Hydrogen folding currently has separate code for both representations. |
+| Hydrogen folding/unfolding | Remove special transport of inline #T/#C cosets. Continue maintaining actual/virtual ligands on explicit stereo entities. |
 | Canonicalization | Remove coset data from atom/bond constraint keys. Those attributes then have their ordinary relabeling semantics; explicit stereo canonicalization still transports its frames and configurations. |
 | Matching and gluing | Ordinary attribute operations compare reduced stereo constraints. Configuration-sensitive comparisons use explicit stereo entities and existing exact frame alignment and transport. |
 | DSL parser | Reject configuration-bearing #T/#C in every context. Retain the current AtomDsl/BondDsl wrappers and molecule input entries; configuration syntax remains available in the explicit stereo-entity DSLs. |
@@ -694,6 +687,7 @@ implementation, documentation, fixtures, or exhaustive matches.
 | umol-graph/src/ops/valence.rs and ops/resolve/valence.rs | ValenceContradiction | Move the definition to ops::valence, matching AromaticityContradiction and StereoContradiction in their domain modules. Preserve variants, conversions, and messages; migrate imports and remove the former resolver re-export. |
 | umol-graph/src/ops/resolve/valence.rs and ops/resolve.rs | ValenceResolver::admit; Resolver::plan_constitution | Retain candidate admission. Apply independent entailment to discharge of #v, #d, and #t in the aggregate plan. |
 | umol-graph/src/ops/resolve/aromaticity.rs, ops/aromaticity.rs, and ops/resolve.rs | AromaticityResolver::plan_resolve, plan_discharge; AromaticityPerceiver::plan_aromatic_system; Resolver::plan_constitution | Discharge atom and bond aromatic assertions entailed by new or retained systems. Retain negative assertions whose only support is absence. Keep standalone and aggregate resolution aligned. |
+| umol-graph/src/ops/resolve/aromaticity.rs | AromaticityProjectError::ElectronCountMismatch | Added during S4c: reject unequal member/contribution counts during planning, before mutation. Aggregate projection and export retain their existing error wrappers. |
 | umol-graph/src/ops/resolve.rs | ProjectFlags, ProjectError, ProjectContradiction | Remove STEREO, Stereo and Stereo respectively. Retain non-stereo flags and variants; aggregate projection preserves stereo entities. Remove the uninhabited ResolveError::Stereo; retain ResolveContradiction::Stereo with the renamed payload. |
 | umol-graph/src/ops/stereo.rs | StereoPerception; derive; StereoDerivation::stereo_atoms / stereo_bonds | Rename the actor to StereoPerceiver. derive returns Solution explicitly; retain row types for completed stored frames and requested additions. |
 | Same | StereoPerceiver::skipped_stereo_bonds; StereoDerivation::skipped_stereo_bonds | Remove both surfaces in S2g. |
@@ -1177,7 +1171,7 @@ until S3; model-owned ring-size filtering is implemented in S2g.
   The existing Python exception adapter required no change. Benchmark preflight
   now checks the direct outcome and preservation of stored open cosets.
 
-  Added 23 regression cases covering unresolved typed and Virtual frames,
+  Added 23 cases covering unresolved typed and Virtual frames,
   mixed failures/mismatches under all policies, unchanged rejected/unresolved
   inputs, and composite rollback after ligand replacement. Existing
   stereogenicity/topicity, idempotence, and transformer properties passed.
@@ -1423,7 +1417,7 @@ rendering retain their existing design.
   Reduce the site-value generators while retaining the full entity-configuration
   generators and their independent references.
 
-  **Implemented — 2026-11-08; verification pending S3.** Both site forms now
+  **Completed — 2026-11-09.** Both site forms now
   have unit Undetermined, NotStereo, and Stereo variants, with bool literals and
   From<bool>. The ground enums and configuration-to-constraint conversions are
   removed. Structural readings use only the entity's known kind; canonical keys
@@ -1435,8 +1429,8 @@ rendering retain their existing design.
   generators use the reduced domain; full entity-configuration generators and
   reference properties are retained. Formatting, Python syntax checks, and
   git diff --check pass. Graph-IR runtime and property tests pass with S3b on
-  2026-11-09. Binding verification and the Python rebuild await the remaining
-  S3 migrations.
+  2026-11-09. Binding verification and the Python rebuild passed under S3c;
+  S3f completed the combined workflow gate.
 
 - **S3b — Use the same reduced stereo grammar in every DSL context** — breaking (red→green).
   Modules: umol-graph-ir/src/dsl/stereo.rs,
@@ -1481,7 +1475,8 @@ rendering retain their existing design.
   documentation tests. Clippy passed for graph-IR with proptest, all targets,
   and warnings denied; formatting and git diff --check passed. The coordinated
   consumer migration and its first passing Rust/Python gate are S3c.
-  The umol-graph check stops in those consumers. S3f is the later combined gate.
+  At S3b completion, the umol-graph check still stopped in those consumers;
+  S3c restored the passing baseline and S3f completed the combined gate.
 
 - **S3c — Finish #T/#C consumer migration and restore passing test suites** — breaking (red→green).
   Modules: umol-graph/src/ops/stereo.rs,
@@ -1569,6 +1564,12 @@ rendering retain their existing design.
   (nine ignored), 224 graph properties, 4,219 resolution conformance cases,
   workspace and feature-enabled graph Clippy with warnings denied, 561 resolve
   and transform benchmark correctness checks, formatting, and git diff --check.
+
+  **Benchmark follow-up — 2026-11-09.** S4d found six obsolete valid-input
+  workloads in umol-graph-ir/benches/parsing.rs and rendering.rs, backed by
+  fixtures/stereo.rs. Removed those configuration-bearing attribute cases;
+  explicit-entity inputs and timing loops are unchanged. All 396 graph-IR
+  benchmark correctness checks passed.
 
 - **S3d — Discharge entailed #v, #d, and #t constraints** — behavior change (green).
   Modules: umol-graph/src/ops/resolve/valence.rs,
@@ -2746,8 +2747,7 @@ site assertions and preserves the tier-2 open/complete reading choice.
   The projection count-mismatch correction is recorded under
   AromaticityResolver::plan_project; the validator-family correction is recorded
   under ValenceInvariantsValidator::validate. No further implementation change
-  was needed for the remaining recorded contracts. Consolidation is complete;
-  S4d remains pending.
+  was needed for the remaining recorded contracts. Consolidation is complete.
 
 - **S4d — Run final checks and compare measurements** — verification (green).
   Modules: the test and benchmark targets listed below, and
@@ -2763,6 +2763,55 @@ site assertions and preserves the tier-2 open/complete reading choice.
   Reconcile the public-symbol inventory, confirm the scoped implementation and
   supported bindings agree, and mark the document complete only after all
   required work and checks are finished.
+
+  **Completed — 2026-11-09.** Reran every final verification command below on
+  production revision 0e05f75b83bf42359e12fdd33e9f22b4e1798e96, with the benchmark
+  cleanup recorded under S3c. Passed: 26,454 workspace tests (nine ignored),
+  545 graph-IR properties (one ignored), 224 graph properties, 4,219 resolution
+  conformance cases, and 17,260 feature-enabled I/O tests. The rebuilt Python
+  3.13.16 extension passed 3,427 tests (two skipped). Workspace and feature-enabled
+  graph/I/O Clippy passed with warnings denied; formatting and diff checks passed.
+  All 1,204 benchmark correctness checks passed: 396 graph IR, 561 graph, and
+  247 I/O. All 255 curated inputs passed the five graph-IR parser fuzz targets.
+
+  The public-symbol and consumer inventory agrees with the scoped Rust/Python
+  interfaces, DSL, raising, resolution, projection, and export. The additional
+  projection count-mismatch error is recorded in the inventory. No further
+  production change was needed.
+
+  Repeated the S0 timings twice on verified AC power with Low Power Mode off,
+  rustc 1.99.1, macOS arm64, and default features: 50 samples, 300 ms warm-up,
+  one-second measurement. Of the 49 remaining paths, 35 are unchanged graph/DSL
+  workloads; 14 cover SMILES pipelines and changed assertion/projection operations.
+  The six removed attribute-input paths have no final timing. Comparing averages
+  of the two median estimates with S0's AC measurements gives:
+
+  | Unchanged workload | Paths | Observed time change across cases |
+  | --- | --- | --- |
+  | Parsing | 6 | −6.0% to −1.8% |
+  | Rendering | 3 | −2.8% to −2.0% |
+  | Canonicalization | 6 | −5.0% to −4.0% |
+  | Constraint readings | 9 | −10.7% to −1.7% |
+  | Stereo transformations | 11 | −11.5% to −2.8% |
+
+  No unchanged path slowed in either run. Repeated the longer enumeration
+  controls with S0's 100 samples, one-second warm-up, and three-second measurement.
+  SmallInput iter_first measured 2.660/2.723 µs; PerIteration measured
+  1.712/1.715 µs. Repeat spreads were 2.37% and 0.16%, respectively; both controls
+  were faster than S0. Timing-loop and output-lifetime boundaries are unchanged.
+
+  Import and changed workloads are reported separately. The SMILES group includes
+  octane as a non-stereo control; the other cases change representation or
+  operation semantics:
+
+  | Import or changed workload | Paths | Final median time | Difference in work |
+  | --- | --- | --- | --- |
+  | SMILES ingestion and stereo resolution | 5 | 4.39–9.19 µs | Imported configurations already occupy explicit entities. |
+  | Standalone stereo projection | 4 | 0.545–0.591 µs | Discards configurations and emits Boolean kind constraints. |
+  | Aggregate projection | 1 | 0.685 µs | Retains explicit stereo instead of projecting it. |
+  | Stereo addition, source_evidence | 1 | 10.77 µs | Constraints request entities with open cosets. |
+  | Stereo removal, mixed_all / stereogenic_16 | 2 | 1.33 µs / 1.62 ms | Stored #T/#C assertions carry kind only. |
+  | Stereo enumeration, evidenced | 1 | 0.268 µs | Configuration domains come only from explicit entities. |
 
 ### Verification commands
 
@@ -2786,15 +2835,26 @@ pytest -q umol-py/tests
 git diff --check
 ```
 
+The gate also builds the benchmark and fuzz executables:
+
+```sh
+cargo bench -p umol-graph-ir -p umol-graph --no-run \
+    --bench parsing --bench rendering --bench canonicalize \
+    --bench constraint_readings --bench resolve --bench transform
+cargo bench -p umol-io --features depiction --no-run
+cargo build --manifest-path umol-graph-ir/fuzz/Cargo.toml --bins
+```
+
+Run each emitted benchmark executable with --test. Timing runs use the selected
+S0 filters and the settings recorded above. Replay each fuzz executable with the
+files in its matching fuzz/seeds directory as arguments.
+
 Confirm that Python is the repository environment's Python 3.13. The feature
 commands cover IO conformance, property tests, and native layout/depiction; the
 all-targets checks compile benchmark callers. Replay the existing graph-IR entity,
 molecule, reaction, span, and edit fuzz targets on their curated seed inputs.
 
-S0–S3 are complete. S3c restored the passing baseline; S3d and S3e passed their
-independent gates, followed by S3f's combined workflow checks. S4a–S4c are complete.
-S4d reuses applicable recorded S3f results while source and test inputs remain
-unchanged, and runs the remaining final checks and
-measurement comparisons.
-There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S4d remains pending.
+**S4 gate: passed — 2026-11-09.** S0–S4 are complete. All required checks and
+measurement comparisons passed; implementation, supported bindings, and guides
+agree with the scoped contracts. There are no deferred stages in this deliverable.
+The exclusions in Scope remain unchanged.

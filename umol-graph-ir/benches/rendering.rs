@@ -19,10 +19,7 @@ use fixtures::{
     MOL_BENZENE, MOL_DIBORANE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS,
     MOL_LARGE_PARTIAL_IDS, MOL_SMALL, MOL_WITH_CONSTRAINTS,
 };
-use stereo_fixtures::{
-    MOL_CIS_TRANS_ATTRIBUTE, MOL_CIS_TRANS_EXPLICIT, MOL_TETRAHEDRAL_ATTRIBUTE,
-    MOL_TETRAHEDRAL_EXPLICIT,
-};
+use stereo_fixtures::{MOL_CIS_TRANS_EXPLICIT, MOL_TETRAHEDRAL_EXPLICIT};
 
 fn bench_case(c: &mut Criterion, label: &str, source: &str) {
     let dsl: MoleculeDsl = MoleculeDsl::from_edn_str(source).unwrap();
@@ -45,8 +42,6 @@ fn bench_molecule_render(c: &mut Criterion) {
     bench_case(c, "with_constraints", MOL_WITH_CONSTRAINTS);
     bench_case(c, "tetrahedral_explicit", MOL_TETRAHEDRAL_EXPLICIT);
     bench_case(c, "cis_trans_explicit", MOL_CIS_TRANS_EXPLICIT);
-    bench_case(c, "tetrahedral_attribute", MOL_TETRAHEDRAL_ATTRIBUTE);
-    bench_case(c, "cis_trans_attribute", MOL_CIS_TRANS_ATTRIBUTE);
     bench_case(c, "large_no_ids", MOL_LARGE_NO_IDS.as_str());
     bench_case(c, "large_all_ids", MOL_LARGE_ALL_IDS.as_str());
     bench_case(c, "large_partial_ids", MOL_LARGE_PARTIAL_IDS.as_str());
