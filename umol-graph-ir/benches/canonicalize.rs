@@ -11,13 +11,15 @@ use umol_edn::FromEdn;
 use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomForm, AtomId,
-    BondForm, BondId, Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId,
-    Delta, Deltas, IncidenceLevel, Molecule, MoleculeConstraint, MoleculeEntries,
+    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
+    AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, Constraint, DativeBondForm,
+    DativeBondId, Delta, Deltas, IncidenceLevel, Molecule, MoleculeConstraint, MoleculeEntries,
     MoleculeRemapping, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm,
     NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, Reframe, StereoAtomConstraintForm,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
+    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondDelta,
+    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity, TopicityForm,
+    TopicityRelationForm,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -600,6 +602,28 @@ fn retained_scaling_corpus() -> Vec<CorpusCase> {
         .into()
 }
 
+fn inline_constraint_corpus() -> Vec<CorpusCase> {
+    SCALING_CASES
+        .map(|(name, source, _)| {
+            let constrained = source.replace("\"H#", "\"H#v1#");
+            let molecule = MoleculeDsl::from_edn_str(&constrained)
+                .unwrap_or_else(|error| panic!("benchmark case {name} must parse: {error}"))
+                .into_parts()
+                .0;
+            assert_eq!(
+                molecule
+                    .atoms()
+                    .iter()
+                    .filter(|atom| !atom.attributes().constraints.is_empty())
+                    .count(),
+                constrained.matches("\"H#v1#").count(),
+                "benchmark case {name} must constrain every hydrogen"
+            );
+            CorpusCase { name, molecule }
+        })
+        .into()
+}
+
 const LEVELS: [IncidenceLevel; 3] = [
     IncidenceLevel::Topology,
     IncidenceLevel::Constitution,
@@ -639,6 +663,53 @@ fn reverse_remapping(molecule: &Molecule) -> MoleculeRemapping {
         reverse::<StereoAtomId>(molecule.stereo_atoms().count()),
         reverse::<StereoBondId>(molecule.stereo_bonds().count()),
     )
+}
+
+fn atom_addition(lhs: Molecule, element: Element) -> Reaction {
+    let id = AtomId(lhs.atoms().count() as u32);
+    Reaction::new(
+        lhs,
+        Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+            id,
+            attributes: AtomForm::from_element(element),
+        })]),
+    )
+}
+
+fn modification(lhs: Molecule) -> Reaction {
+    let changed = |configuration: &StereoConfigurationForm| {
+        let StereoConfigurationForm::Kinded(kind, StereoCoset::Lit(coset)) = configuration else {
+            panic!("benchmark stereo configurations are literal");
+        };
+        StereoConfigurationForm::kinded(*kind, u32::from(*coset == 0))
+    };
+    let mut deltas = vec![Delta::Atom(AtomDelta::ModifyField {
+        id: AtomId(0),
+        change: AtomFieldChange::Charge {
+            old: lhs.atom(AtomId(0)).attributes().charge.clone(),
+            new: NumForm::Lit(1),
+        },
+    })];
+    if let Some(stereo) = lhs.stereo_atoms().iter().next() {
+        let old = stereo.attributes().configuration.clone();
+        deltas.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id: stereo.id(),
+            change: StereoAtomFieldChange::Configuration {
+                new: changed(&old),
+                old,
+            },
+        }));
+    } else if let Some(stereo) = lhs.stereo_bonds().iter().next() {
+        let old = stereo.attributes().configuration.clone();
+        deltas.push(Delta::StereoBond(StereoBondDelta::ModifyField {
+            id: stereo.id(),
+            change: StereoBondFieldChange::Configuration {
+                new: changed(&old),
+                old,
+            },
+        }));
+    }
+    Reaction::new(lhs, Deltas::from_iter(deltas))
 }
 
 fn bench_incidence_construction(c: &mut Criterion) {
@@ -968,6 +1039,197 @@ fn bench_reaction_canonical_eq(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_complete_comparison(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let cases = corpus()
+        .into_iter()
+        .map(|case| {
+            let renumbered = case
+                .molecule
+                .clone()
+                .remap(&reverse_remapping(&case.molecule));
+            assert!(case.molecule.canonical_eq(&renumbered, &context));
+            (case, renumbered)
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("canonicalize/complete/canonical_hash");
+    for (case, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter(|| {
+                black_box(&case.molecule)
+                    .canonical_hash(&context)
+                    .expect("benchmark corpus canonicalizes")
+            })
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/complete/canonical_eq_equal");
+    for (case, renumbered) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).canonical_eq(black_box(renumbered), &context))
+        });
+    }
+    group.finish();
+}
+
+fn bench_reaction_span(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let cases = corpus()
+        .into_iter()
+        .map(|case| {
+            let remapping = reverse_remapping(&case.molecule);
+            let added = atom_addition(case.molecule.clone(), Element::N)
+                .to_reaction_span()
+                .expect("benchmark addition materializes");
+            let modified = modification(case.molecule)
+                .to_reaction_span()
+                .expect("benchmark modification materializes");
+            let renumbered = modified.clone().remap(&remapping);
+            assert!(modified.canonical_eq(&renumbered, &context));
+            (case.name, added, modified, renumbered)
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("canonicalize/reaction_span/canonicalize");
+    for (name, added, _, _) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter_batched(
+                || added.clone(),
+                |span| {
+                    black_box(
+                        span.canonicalize(&context)
+                            .expect("benchmark span canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/reaction_span/canonical_hash");
+    for (name, added, _, _) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(added)
+                    .canonical_hash(&context)
+                    .expect("benchmark span canonicalizes")
+            })
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/reaction_span_modified/canonicalize");
+    for (name, _, modified, _) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter_batched(
+                || modified.clone(),
+                |span| {
+                    black_box(
+                        span.canonicalize(&context)
+                            .expect("benchmark span canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/reaction_span_modified/canonical_eq_equal");
+    for (name, _, modified, renumbered) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter(|| black_box(modified).canonical_eq(black_box(renumbered), &context))
+        });
+    }
+    group.finish();
+}
+
+fn bench_inline_constraint(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let cases = inline_constraint_corpus()
+        .into_iter()
+        .map(|case| {
+            let renumbered = case
+                .molecule
+                .clone()
+                .remap(&reverse_remapping(&case.molecule));
+            let span = atom_addition(case.molecule.clone(), Element::N)
+                .to_reaction_span()
+                .expect("benchmark addition materializes");
+            let renumbered_span = atom_addition(renumbered.clone(), Element::N)
+                .to_reaction_span()
+                .expect("benchmark addition materializes");
+            assert!(case.molecule.canonical_eq(&renumbered, &context));
+            assert!(span.canonical_eq(&renumbered_span, &context));
+            (case, renumbered, span, renumbered_span)
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("canonicalize/inline_constraint/molecule/canonicalize");
+    for (case, _, _, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize(&context)
+                            .expect("benchmark molecule canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/inline_constraint/molecule/canonical_eq_equal");
+    for (case, renumbered, _, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).canonical_eq(black_box(renumbered), &context))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/inline_constraint/reaction_span/canonicalize");
+    for (case, _, span, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || span.clone(),
+                |span| {
+                    black_box(
+                        span.canonicalize(&context)
+                            .expect("benchmark span canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group =
+        c.benchmark_group("canonicalize/inline_constraint/reaction_span/canonical_eq_equal");
+    for (case, _, span, renumbered_span) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(span).canonical_eq(black_box(renumbered_span), &context))
+        });
+    }
+    group.finish();
+}
+
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
     [
         molecule.atoms().count(),
@@ -990,5 +1252,8 @@ criterion_group!(
     bench_topology_path_scaling,
     bench_reframe,
     bench_reaction_canonical_eq,
+    bench_complete_comparison,
+    bench_reaction_span,
+    bench_inline_constraint,
 );
 criterion_main!(canonicalize);
