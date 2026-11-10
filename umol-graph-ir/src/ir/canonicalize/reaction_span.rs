@@ -32,9 +32,10 @@ use super::{
     stereo_atom_constraint_form_key, stereo_bond_constraint_form_key,
     stereo_configuration_form_key, stereo_kind_key, stereo_ligand_key, topology_initial_partition,
     unpaired_electrons_form_key, variant, AutomorphismAdapter, BranchOrdering, CanonicalCandidate,
-    CanonicalComparisonKey, CanonicalKeyValue, CanonicalSearchOptions, Canonicalize,
-    CanonicalizeContext, ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition,
-    InitialColorKey, PositionedKey, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
+    CanonicalComparisonKey, CanonicalKeyValue, CanonicalSearchOptions, CanonicalSearchResult,
+    Canonicalize, CanonicalizeContext, ConstraintBlockPosition, DescriptionLevel,
+    EntityBlockPosition, InitialColorKey, PositionedKey, ReactionCanonicalizeError,
+    ReactionSpanCanonicalizeError,
 };
 
 fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorKey, Contradiction> {
@@ -571,7 +572,8 @@ fn canonical_candidate(
     span: &ReactionSpan,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    options: CanonicalSearchOptions,
+) -> Result<CanonicalSearchResult<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
         DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -594,10 +596,6 @@ fn canonical_candidate(
             entity_order: order.to_vec(),
         }
     };
-    let options = CanonicalSearchOptions {
-        automorphism_pruning: false,
-        branch_order: BranchOrdering::NodeId,
-    };
     let selected = match level {
         DescriptionLevel::Topology => canonical_search_from_partition(
             &adapter,
@@ -618,7 +616,7 @@ fn canonical_candidate(
             )
         }
     };
-    Ok(selected.candidate)
+    Ok(selected)
 }
 
 impl ReactionSpan {
@@ -628,8 +626,12 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), ReactionSpanCanonicalizeError> {
+        let options = CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        };
         let normalized = self.normalize()?;
-        let candidate = canonical_candidate(&normalized, level, context)?;
+        let candidate = canonical_candidate(&normalized, level, context, options)?.candidate;
         let incidence_level = match level {
             DescriptionLevel::Topology => IncidenceLevel::Topology,
             DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -648,11 +650,19 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
+        let options = CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        };
         if level == DescriptionLevel::Full {
             let normalized = self.clone().normalize()?;
-            return Ok(canonical_candidate(&normalized, level, context)?.key);
+            return Ok(canonical_candidate(&normalized, level, context, options)?
+                .candidate
+                .key);
         }
-        Ok(canonical_candidate(self, level, context)?.key)
+        Ok(canonical_candidate(self, level, context, options)?
+            .candidate
+            .key)
     }
 }
 

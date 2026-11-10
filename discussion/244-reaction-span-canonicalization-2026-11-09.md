@@ -485,12 +485,16 @@ the two Python test files.
 
 ### S2 — Orbit pruning at Topology and Constitution
 
-#### S2a — Search options as a parameter
+#### S2a — Search options as a parameter **Done**
 
 `canonical_candidate` takes `options: CanonicalSearchOptions` and returns the
 `CanonicalSearchResult`, as the molecule's per-level functions take their options. The two span
 methods pass the options of today: no pruning, node-id order. No behavior change (green).
 [dep: S1b]
+
+Each of the two span methods builds the options itself. The canonical forms and tracked remappings
+of all spans of the pair file are identical before and after, and the tests, clippy, and the
+reference comparison pass.
 
 #### S2b — Pruning on
 
