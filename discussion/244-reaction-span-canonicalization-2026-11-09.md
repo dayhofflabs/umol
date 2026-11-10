@@ -1,6 +1,6 @@
 # 244 — Reaction-span canonicalization aligned with molecules
 
-Status: Proposed
+Status: In Progress
 Date: 2026-11-09
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
@@ -308,9 +308,13 @@ code and about 650 lines of span code without changing them, and splits the 6,59
 
 No behavior changes in this stage.
 
-#### S0a — Benchmark cases
+#### S0a — Benchmark cases **Done**
 
 **Module:** `umol-graph-ir/benches/canonicalize.rs`. Additive (green). [dep: none]
+
+Three benchmark functions add 90 cases. A modified span changes the charge of atom 0 and, in the
+stereo cases, flips the configuration of the first stereo atom, or of the first stereo bond when
+there is no stereo atom. Clippy on the benchmark target is clean, and every new case runs.
 
 - `canonicalize/reaction_span/canonicalize` and `canonicalize/reaction_span/canonical_hash`, over
   the spans the existing `canonical_eq_equal` group uses: each corpus molecule plus one added
@@ -322,9 +326,42 @@ No behavior changes in this stage.
 - `canonicalize/complete/canonical_eq_equal` and `canonicalize/complete/canonical_hash`: molecules
   of the complete corpus, which covers the stereo cases.
 
-#### S0b — Reference checkout
+#### S0b — Reference checkout **Done**
 
 **Location:** `scratch/244-canonicalization-reaction-span`, not committed. [dep: S0a]
+
+Baseline at commit 5049b9796: Criterion medians with a 1-second warm-up and 3 seconds of
+measurement, one run, single-threaded, Nauty, Apple M1 Pro, load average about 3. All 155 medians
+are in `scratch/244-compare/baseline/reference.tsv`, which is not committed. Each span adds one
+nitrogen atom to the molecule; a modified span is described in S0a.
+
+| Case | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` | Modified span `canonicalize` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 21.3 µs | 36.0 µs | 72.6 µs | 134.4 µs | 29.5 µs |
+| `disconnected_rings` | 34.4 µs | 60.0 µs | 4.43 ms | 8.76 ms | 406.1 µs |
+| `overlay_heavy` | 91.8 µs | 166.7 µs | 57.2 µs | 93.0 µs | 56.6 µs |
+| `tetrahedral_stereo` | 41.9 µs | 72.4 µs | 24.8 µs | 36.3 µs | 25.4 µs |
+| `cis_trans_stereo_bond` | 34.7 µs | 58.1 µs | 28.1 µs | 42.7 µs | 33.8 µs |
+| `mixed_atom_and_bond_stereo` | 72.3 µs | 134.7 µs | 48.0 µs | 73.8 µs | 47.7 µs |
+| `frame_relative_stereo_constraint` | 46.7 µs | 86.4 µs | 26.0 µs | 43.6 µs | 27.7 µs |
+| `meso_dichlorobutane` | 68.7 µs | 127.4 µs | 46.7 µs | 79.8 µs | 33.6 µs |
+| `para_stereo_trichloropentane` | 129.5 µs | 243.0 µs | 62.1 µs | 105.1 µs | 44.0 µs |
+| `para_stereo_cascade` | 415.9 µs | 782.8 µs | 520.2 µs | 1.01 ms | 295.3 µs |
+| `feature_free_connected` | 37.8 µs | 72.6 µs | 2.19 ms | 4.44 ms | 375.2 µs |
+| `feature_free_disconnected` | 40.4 µs | 75.6 µs | 2.83 ms | 5.66 ms | 708.3 µs |
+| `symmetry_heavy_radicals` | 31.1 µs | 58.1 µs | 11.12 ms | 22.11 ms | 1.81 ms |
+
+With `#v1` on every hydrogen, which puts the case at Full:
+
+| Case | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` |
+| --- | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 2.16 ms | 4.30 ms | 2.62 ms | 5.45 ms |
+| `feature_free_disconnected` | 2.78 ms | 5.67 ms | 3.52 ms | 6.96 ms |
+| `symmetry_heavy_radicals` | 11.32 ms | 22.52 ms | 14.22 ms | 28.49 ms |
+
+The present span `canonicalize` is slower than the molecule's on six cases: `ordinary_naphthalene`,
+`disconnected_rings`, `para_stereo_cascade`, and the three feature-free cases. It is faster on the
+other seven, although each span has one atom more.
 
 The user-level cargo configuration sends every checkout to one target directory. The reference
 checkout gets its own target directory, `/Users/dr/.cargo-target-244`, set in its
@@ -333,7 +370,7 @@ S0a benchmark file is copied into the reference checkout; it uses public API onl
 groups of S0a and the existing reaction and reaction-span groups run in the reference checkout, and
 the numbers are recorded here as the baseline.
 
-#### S0c — Reference pairs
+#### S0c — Reference pairs **Done**
 
 **Location:** the reference checkout and `scratch/244-compare`, not committed. [dep: S0b]
 
@@ -346,7 +383,14 @@ It reads the file and compares the public `canonical_eq` answers.
 
 **Check:** run against the unchanged working tree, the program reports no mismatch.
 
-#### S0d — Molecule submodule
+`scratch/244-compare/pairs.tsv` holds 10,000 generated pairs and 28 handwritten ones. Identical
+pairs are skipped when drawing, because `canonical_eq` answers them without a search: 26,541 draws
+gave 16,541 identical pairs. Of the generated pairs 4,276 are equal and 5,724 unequal; of the
+handwritten ones 18 and 10. Every span parses back to an equal span, a second run reproduces the
+file, and the two `para_stereo` settings agree on every pair in the reference. Against the unchanged
+working tree the program reports no mismatch, and it does report a deliberately flipped answer.
+
+#### S0d — Molecule submodule **Done**
 
 Move every function that takes a `Molecule`, together with `stereo_refinement_descriptor`, the
 `impl Molecule` block, and `impl Canonicalize for Molecule`, into `canonicalize/molecule.rs`.
@@ -358,6 +402,16 @@ test body changes. Breaking while the move is in progress (red→green). [dep: S
 
 **Check:** the test names and their count are the same before and after, and every test passes. The
 reference comparison reports no mismatch.
+
+Twenty functions and three impl blocks, 1,540 lines, moved to `canonicalize/molecule.rs` as whole
+items. The module imports what it uses explicitly. 54 tests, 4 fixtures, and 10 support functions
+moved to `canonicalize/molecule/tests.rs`; 53 tests and 5 fixtures stay. Nine support functions and
+the test-only `AutomorphismAdapter::automorphisms` are used from both tests files; they stay in
+`canonicalize/tests.rs` as `pub(super)`. Every line of the old source file outside its import block
+is present unchanged in one of the two source files, and the tests files differ from the old one
+only in those ten signatures. The crate lists the same 11,967 library tests, 345 of them for
+canonicalization, and all pass, as do the integration tests and the canonicalization properties.
+Clippy over all targets and features is clean. The reference comparison reports no mismatch.
 
 #### S0e — Reaction-span submodule
 
