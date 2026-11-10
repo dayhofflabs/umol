@@ -1,1 +1,0 @@
-[{:bond {:modify [0 {:expect "#C+" :update "#C?configuration"}]}}]

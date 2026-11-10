@@ -1,1 +1,0 @@
-{:lhs {:atoms [[:c "C"] [:n "N"] "F" "Cl"] :bonds [{:id :b :atoms [:c :n] :attrs "2"} [:c 2 "1"] [:n 3 "1"]] :stereo-bonds [{:id :s :site :b :ligands [[:virt :c] 2 [:virt :n] 3] :attrs "Ct0"}]} :deltas [{:stereo-bond {:modify [:s "Ct?configuration"]}}]}
