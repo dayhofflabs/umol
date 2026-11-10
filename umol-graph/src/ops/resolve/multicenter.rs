@@ -36,10 +36,12 @@ impl MulticenterBondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
+    /// Established constraint contradictions take precedence over underdetermination.
     pub fn plan_resolve(
         &self,
         molecule: &Molecule,
     ) -> Solution<Edits, MulticenterBondsContradiction> {
+        let mut underdetermined = false;
         for atom in molecule.atoms().ids() {
             match IncidenceConstraintInvariantsValidator
                 .validate_molecule_atom_constraint(
@@ -51,13 +53,14 @@ impl MulticenterBondsResolver {
                 .expect("atom id came from the molecule atom store")
             {
                 Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => {
-                    return Solution::Underdetermined(Edits::new());
-                }
+                Solution::Underdetermined(()) => underdetermined = true,
                 Solution::Contradictory(contradiction) => {
                     return Solution::Contradictory(contradiction.into());
                 }
             }
+        }
+        if underdetermined {
+            return Solution::Underdetermined(Edits::new());
         }
 
         let mut charges = Vec::new();
@@ -276,6 +279,30 @@ mod tests {
                        :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#),
         Solution::Underdetermined(Edits::new()),
     )]
+    #[case::unknown_before_contradiction(
+        mol_dsl!(r#"{:atoms ["C#m1" "C" "C" "C#m1"]
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#),
+        Solution::Contradictory(MulticenterBondsContradiction::Constraint(
+            IncidenceConstraintInvariantsContradiction::Atom {
+                atom: AtomId(3),
+                constraint: AtomConstraintForm::multicenter_valence(
+                    MulticenterValenceForm::multicenter(1),
+                ),
+            },
+        )),
+    )]
+    #[case::contradiction_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#m1" "C#m1" "C" "C"]
+                       :multicenter-bonds [{:atoms [1 2 3] :attrs "*"}]}"#),
+        Solution::Contradictory(MulticenterBondsContradiction::Constraint(
+            IncidenceConstraintInvariantsContradiction::Atom {
+                atom: AtomId(0),
+                constraint: AtomConstraintForm::multicenter_valence(
+                    MulticenterValenceForm::multicenter(1),
+                ),
+            },
+        )),
+    )]
     #[case::vacuous(
         mol_dsl!(r#"{:atoms ["C#m*"]}"#),
         Solution::Determined(Edits::new()),
@@ -287,6 +314,17 @@ mod tests {
         let original = molecule.clone();
         let resolver = MulticenterBondsResolver::new();
         assert_eq!(resolver.plan_resolve(&molecule), expected);
+        assert_eq!(molecule, original);
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(match &expected {
+                Solution::Determined(_) => Solution::Determined(original.clone()),
+                Solution::Underdetermined(_) => Solution::Underdetermined(()),
+                Solution::Contradictory(contradiction) => {
+                    Solution::Contradictory(contradiction.clone())
+                }
+            })
+        );
         assert_eq!(
             resolver.resolve_into(&mut molecule),
             Ok(expected.map(|_| ()))

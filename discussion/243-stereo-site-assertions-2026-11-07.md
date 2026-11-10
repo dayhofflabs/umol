@@ -20,8 +20,11 @@ explicit stereo records for configuration data. Configuration-bearing #T/#C
 syntax is rejected in every DSL context.
 
 This records the selected design direction and its consequences. S0–S3 and
-S4a–S4b are complete, including the combined S3f verification gate. S4c's operation
-documentation inventory is next; S4d remains pending.
+S4a–S4c are complete, including the combined S3f verification gate and S4c's
+operation documentation inventory. The confirmed implementation discrepancies
+found during the inventory and guide consolidation are corrected. All recorded
+contracts are consolidated in the operations guide; the validator-family review
+is recorded below. S4d remains pending.
 The semantics, value interface, operation interfaces, and names below are the
 working design. S2 records the implemented perception/resolution interfaces.
 The shared resolver conflict/discharge policy and transformer contracts are
@@ -1552,6 +1555,21 @@ rendering retain their existing design.
   and feature-enabled graph/I/O Clippy passed with warnings denied; formatting
   and git diff --check passed. Valence and aromaticity discharge remain S3d/S3e.
 
+  **Follow-up — 2026-11-09.** The S4c review found that a positive stereo request
+  without an entity was classified as a failure when H/LP counts were nonliteral.
+  StereoPerceiver::derive now returns Underdetermined when a compatible frame
+  remains possible. It reuses virtual-ligand compatibility checking; impossible
+  counts, unsupported topology, and known inconsistencies remain failures or
+  mismatches. Public interfaces are unchanged. Incomplete requests supply no new
+  row; other derived rows and established findings remain in the payload.
+
+  Added 44 cases covering atom/bond requests, finite/ranged/symbolic counts,
+  impossible frames, mixed findings, all resolver failure policies, conformance
+  outcomes, and input preservation. Verification passed: 26,330 workspace tests
+  (nine ignored), 224 graph properties, 4,219 resolution conformance cases,
+  workspace and feature-enabled graph Clippy with warnings denied, 561 resolve
+  and transform benchmark correctness checks, formatting, and git diff --check.
+
 - **S3d — Discharge entailed #v, #d, and #t constraints** — behavior change (green).
   Modules: umol-graph/src/ops/resolve/valence.rs,
   umol-graph/src/ops/resolve.rs, and their tests;
@@ -1781,14 +1799,16 @@ site assertions and preserves the tier-2 open/complete reading choice.
 - **S4c — Inventory operations needing explicit semantic documentation** — additive (green).
   Module: discussion/243-stereo-site-assertions-2026-11-07.md. [dep: S4b]
 
-  Review public operation families against data-types.md, nomenclature.md,
-  algorithms.md, and the operations guide. Cover perception and derivation,
-  resolution, projection and boundary conversion, validation, transformers,
-  normalization, canonicalization, frame transport, matching, and rewriting.
+  Review public umol-graph operation families and external-format conversion
+  against data-types.md, nomenclature.md, algorithms.md, and the operations guide.
+  Cover perception and derivation, resolution, projection, validation,
+  aromaticity/charge, hydrogen, and stereo transformers, and TableIR raising,
+  Interpret, Convey, and ingestion/export. Graph-IR operations are excluded
+  from this inventory.
   Enumerate the operations whose intended contracts need explicit documentation
   or consolidation.
 
-  Record a table here with the owning API, a summary of its intended contract,
+  Record each owning API here with a summary of its intended contract,
   existing references, missing documentation, and any confirmed implementation
   discrepancies. Include effects on attributes, entities, and constraints,
   partial-input behavior, failure outcomes, and preservation obligations where
@@ -1796,6 +1816,938 @@ site assertions and preserves the tier-2 open/complete reading choice.
   This subitem ends with the inventory; writing the remaining guide sections
   and implementing fixes are separately tracked work. Existing semantics remain
   the basis for those follow-ups.
+
+  **AromaticityPerceiver::derive.** Reads aromaticity evidence under the selected
+  model and returns perceived systems plus classified inconsistencies.
+
+  - Combines atom assertions, incident bond evidence, and stored systems. Wholly
+    absent evidence excludes an atom; nonliteral contributions leave perception
+    underdetermined.
+  - Checks asserted aromatic requirements. Each stored system must be reproduced
+    with the same participants and compatible attributes after frame alignment.
+  - Preserves all attributes, entities, and constraints. Applies no recovery policy
+    or discharge.
+  - Determined means the derivation is available; it may contain inconsistencies.
+    Underdetermined reports insufficient information. Direct model rejection uses
+    Contradictory; unavailable model parameters use Err.
+
+  Existing references: [implementation](../umol-graph/src/ops/aromaticity.rs),
+  [constraint readings](../docs/development/nomenclature.md#derived-and-asserted),
+  and [resolver policy](../docs/development/operations.md#resolution).
+  Recorded in the [operations guide](../docs/development/operations.md#perception-and-derivation).
+  The delegated Hückel element-scope correction is recorded under recognition below.
+  The correction to conflict handling is recorded under aromaticity validation below.
+
+  **StereoPerceiver::derive.** Reads the supplied molecule's atom-state and stereo
+  evidence without assuming prior valence resolution. Returns requested stereo
+  entities, supported stored frames, and classified inconsistencies.
+
+  - Positive #T/#C constraints request missing tetrahedral/CisTrans entities with
+    undetermined cosets; negative constraints request no entity.
+  - Identifies Virtual ligands as H or LP when uniquely supported, preserving
+    stored frame positions, configurations, and entity constraints. Fixed ligand
+    kinds remain exact.
+  - Insufficient H/LP information yields Underdetermined unless available evidence
+    proves the requested frame impossible. The payload retains established findings
+    and existing unresolved rows; a missing entity with no determined frame supplies
+    no row. An undetermined coset alone does not imply underdetermination.
+  - Classifies constraint failures, entity failures, and kind mismatches without
+    applying recovery policy or discharge.
+  - Applies the model's creation ring cutoff to missing stereo bonds; checks
+    existing entities regardless of that cutoff.
+  - Leaves all molecule attributes, entities, and constraints unchanged.
+
+  Existing references: [implementation](../umol-graph/src/ops/stereo.rs),
+  [perception and resolution](#perception-and-resolution), and
+  [resolver policy](../docs/development/operations.md#resolution).
+  Recorded in the [operations guide](../docs/development/operations.md#perception-and-derivation).
+  Corrected implementation discrepancy: the missing-request branch classified
+  nonliteral H/LP counts as failures. The S3c follow-up implements underdetermination
+  for compatible incomplete requests and records its verification.
+
+  **StereoPerceiver::recognize.** Identifies selected missing tetrahedral/CisTrans
+  entities.
+
+  - Site, kind, and stereogenicity selectors intersect. None is unrestricted;
+    an empty set selects nothing.
+  - Positive #T/#C requests the kind; negative constraints exclude it. Unasserted
+    sites use automatic chemistry rules. New cosets are undetermined.
+  - Existing entities and all assertions remain unchanged. Selected kind conflicts
+    are returned as inconsistencies.
+  - The model's ring cutoff restricts creation of missing stereo bonds.
+  - Optional stereogenicity filtering uses whole-molecule symmetry with prospective
+    additions included.
+  - Required nonliteral fields and unsupported queries produce StereoPerceptionError.
+    Constraint failures and mismatches are carried in StereoDerivation.
+
+  The molecule is unchanged; recognition applies no recovery policy or discharge.
+  Existing references: [implementation](../umol-graph/src/ops/stereo/recognize.rs)
+  and [stereo transformer contracts](#resolution-and-stereo-transformers).
+  Recorded in the [operations guide](../docs/development/operations.md#perception-and-derivation).
+  Corrected stale
+  rustdoc that described #T/#C as supplying configurations or cosets; no executable
+  behavior changed for this entry.
+
+  **StereoPerceiver::classify.** Assigns Symmetric, Prochiral, or Stereogenic to
+  existing stereo entities at requested sites.
+
+  - Returns one classification per supplied site; empty input returns an empty map.
+  - Uses whole-molecule symmetry, the selected automorphism algorithm, the model's
+    para-stereo setting, and the supplied iteration limit.
+  - Classifies stored arrangements without applying automatic recognition eligibility
+    rules or creation ring cutoffs.
+  - Supports tetrahedral atoms and CisTrans bonds with literal, undetermined, or
+    nonempty finite coset domains. It does not choose a coset.
+  - Graph-derived ligand actions fix virtual ligands; distinguishable hydrogen
+    positions require explicit atoms.
+  - Invalid sites, missing entities, unsupported kinds/configurations or fluxionality,
+    and incompatible arity produce StereoPerceptionError.
+
+  All input attributes, entities, and constraints remain unchanged.
+  Existing references: [implementation](../umol-graph/src/ops/stereo/recognize.rs)
+  and [ligand and site definitions](../docs/development/nomenclature.md#ligand-and-site).
+  Recorded in the [operations guide](../docs/development/operations.md#perception-and-derivation).
+  No implementation discrepancy is identified for this entry.
+
+  **AromaticityPerceiver::recognize.** Identifies aromatic systems under the selected
+  chemistry model from a molecule and caller-supplied aromatic contributions.
+
+  - The callback supplies ground AromaticValence values. NotAromatic excludes an
+    atom; Aromatic(0) remains eligible. Reading non-ground aromatic evidence belongs
+    to derive.
+  - The Hückel count requires aromatic contributions, not element identity.
+    ElementScope::Any therefore accepts undetermined elements. AllowList currently
+    requires a literal permitted element; undetermined elements are excluded.
+  - HMO requires known supported elements for its parameters; Clar requires carbon
+    aromatic input. Their existing input handling is unchanged.
+  - Returns one collection of systems with disjoint participants, sorted member
+    lists, and aligned electron contributions. Non-aromatic bond assertions exclude
+    systems containing both endpoints. Additional checks of positive assertions
+    and stored systems belong to derive.
+  - Determined may contain no systems. Underdetermination is propagated from the
+    selected rule; direct model rejection uses Contradictory and unavailable
+    parameters use Err.
+  - Preserves all input attributes, entities, and constraints. Applies no recovery
+    policy, insertion, or discharge.
+
+  Existing references: [implementation](../umol-graph/src/ops/aromaticity.rs)
+  and [Hückel eligibility](../umol-graph/src/ops/aromaticity/hueckel.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#perception-and-derivation).
+
+  Renamed find_aromatic_systems to recognize, with corresponding recognize_from_rings
+  and recognize_with_exclusions helper names across the dispatcher and Hückel, HMO,
+  and Clar implementations. Migrated callers, test names, benchmark code, and
+  rustdoc; arguments and return types are unchanged. Corrected Hückel recognition's
+  unconditional literal-element requirement under Any. More precise reasoning about
+  partial element forms in allow-lists is outside this change.
+
+  Seven new cases cover undetermined and known elements under both scopes, excluded
+  elements, zero aromatic contributions, exact systems, and unchanged inputs.
+  Verification passed: 8,789 graph unit/integration/property/conformance tests,
+  feature-enabled graph Clippy with warnings denied, 126 resolve benchmark
+  correctness checks, formatting, and git diff --check. Workspace all-target
+  compilation and rustdoc were also checked for the rename.
+
+  **ValenceResolver::admit.** Constructs candidate atom completions using the
+  selected atom-type registry or counts table.
+
+  - Checks #v, #d, and #t against complete derived readings before admitting
+    candidates.
+  - Candidates must respect supplied atom fields and constraints. Isotope
+    information is preserved, including unresolved forms.
+  - Retains multiple admitted completions without selecting one. Aromatic-system
+    selection and tie-breaks belong to later resolution.
+  - Determined describes candidate admission, not a fully resolved molecule.
+    Nonliteral elements yield Underdetermined; established incompatibilities yield
+    Contradictory.
+  - Leaves all molecule attributes, entities, and constraints unchanged. Applying
+    selected completions and discharging independently entailed #v, #d, and #t
+    belong to Resolver::plan_constitution.
+
+  Existing references: [resolver](../umol-graph/src/ops/resolve/valence.rs),
+  [atom typing](../umol-graph/src/ops/valence/atom_typing.rs),
+  [counts](../umol-graph/src/ops/valence/counts.rs), and
+  [resolver scope](../docs/development/operations.md#resolver-scope).
+  Recorded in the [operations guide](../docs/development/operations.md#resolver-scope).
+
+  **Corrected discrepancy — 2026-11-09.** An unresolved incidence assertion
+  previously hid contradictions at later atoms or keys. The precheck now retains
+  uncertainty while checking all owned assertions, rejects an established
+  contradiction immediately, and returns an empty underdetermined state only
+  after the scan. Candidate admission still requires determined prechecks;
+  interfaces and chemistry rules are unchanged.
+
+  Thirty new cases cover both atom orders and later #d/#t contradictions beside
+  unknown #v or #d on the same atom. They check counts and atom typing through
+  direct admission and aggregate resolution, with and without reports, under
+  Clone and Journal rollback. Exact diagnostics and unchanged inputs are checked;
+  existing uncertainty-only and successful-admission cases remain.
+
+  Verification passed: 8,834 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases. Feature-enabled
+  graph Clippy passed with warnings denied; formatting and git diff --check passed.
+
+  **AromaticityResolver::plan_resolve.** Builds an edit plan from the molecule's
+  supplied aromatic evidence under the selected model.
+
+  - Creates missing aromatic systems; preserves stored systems, atom fields, and
+    localized bonds.
+  - Does not perform valence admission. Insufficient aromatic contributions yield
+    Underdetermined with an empty plan.
+  - Error rejects unrealizable assertions or systems; Keep retains them.
+    Conflicting descriptions remain Contradictory under either policy.
+  - Discharges assertions independently entailed by retained or newly added
+    systems. Other compatible assertions remain, including negatives outside
+    systems.
+  - Missing model parameters produce Err.
+  - Planning leaves the molecule unchanged.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve/aromaticity.rs)
+  and [resolver policy](../docs/development/operations.md#resolution).
+  Recorded in the [operations guide](../docs/development/operations.md#resolver-scope).
+  The correction to conflict handling is recorded under aromaticity validation below.
+
+  **AromaticityResolver::plan_project.** Replaces explicit aromatic systems with
+  atom and bond assertions.
+
+  - Writes each member's contribution as #a<n> and each internal bond's aromaticity
+    as #a. Combines these with existing assertions by meet; incompatible assertions
+    cause AromaticityProjectError.
+  - Requires one literal contribution per member, zero system charge, and
+    closed-shell singlet spin. Other partial molecular fields may remain.
+  - Preserves atom fields and localized bonds. Performs no perception, valence
+    completion, or model-dependent selection.
+  - Removes the systems, losing their explicit grouping and system-local
+    constraints.
+  - Returns an edit plan without mutation. No systems means an empty plan;
+    repeated projection changes nothing.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve/aromaticity.rs)
+  and [planning and application](../docs/development/data-types.md#resolution-projection-and-transformations).
+  Recorded in the [operations guide](../docs/development/operations.md#projection).
+
+  **Corrected discrepancy — 2026-11-09.** plan_project previously paired members
+  and contributions with zip without checking their lengths. Integrity-valid
+  six-member systems with five or seven contributions were accepted, silently
+  omitting a member's assertion or discarding an extra value. Planning now returns
+  AromaticityProjectError::ElectronCountMismatch with the system id, member count,
+  and contribution count before pairing or removing systems. The variant follows
+  the existing KekulizeError name and fields; Result signatures are unchanged.
+
+  Six additional cases cover both mismatches, including a malformed system after
+  a valid one. They assert exact errors from planning, consuming, and in-place
+  projection, unchanged inputs, and propagation through the composite Resolver
+  under Clone and Journal. Existing successful and idempotent cases are retained.
+  Verification passed: 8,897 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases.
+  Feature-enabled graph Clippy passed with warnings denied; formatting and
+  git diff --check passed.
+
+  **StereoResolver::plan_resolve.** Plans requested stereo entities,
+  virtual-ligand identification, and constraint discharge.
+
+  - Creates entities requested by positive #T/#C constraints, with undetermined
+    cosets.
+  - Identifies :virt as :h or :lp when uniquely supported, preserving frame order,
+    configurations, and entity attributes.
+  - Discharges kind constraints entailed by new or retained entities. Negatives
+    without an entity remain.
+  - Applies the model's ring cutoff only to missing bond creation. Filtered
+    requests remain under every failure policy.
+  - Error rejects unrealizable descriptions; Keep retains them; Remove removes
+    the failed constraint or entity. Conflicting descriptions are always
+    Contradictory.
+  - Insufficient evidence yields Underdetermined with an empty plan, after
+    checking established findings. An undetermined coset alone does not prevent
+    Determined.
+  - Planning leaves the molecule unchanged; it neither selects configurations
+    nor requires stereogenicity.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve/stereo.rs),
+  [perception and resolution](#perception-and-resolution), and
+  [resolver policy](../docs/development/operations.md#resolution).
+  Recorded in the [operations guide](../docs/development/operations.md#resolver-scope).
+  The partial-request discrepancy and its correction are recorded
+  under StereoPerceiver::derive and the S3c follow-up above.
+
+  **StereoResolver::plan_project.** Deliberately reduces explicit stereo to kind
+  constraints.
+
+  - Replaces tetrahedral stereo atoms with #T+ and CisTrans stereo bonds with #C+.
+  - Discards ligand frames, configurations, and entity-local constraints without
+    interpreting them.
+  - Combines the positive kind with existing site assertions by meet. Conflicts,
+    unsupported kinds, or undetermined kinds produce StereoProjectError.
+  - Preserves other atom and bond data, with ordinary reference compaction.
+  - Requires no model or resolver instance. Planning leaves the input unchanged;
+    no entities means an empty plan, and projection is idempotent.
+
+  Aggregate projection and export preserve explicit stereo entities and do not
+  invoke this lossy operation.
+  Existing references: [implementation](../umol-graph/src/ops/resolve/stereo.rs),
+  [projection design](#projection), and
+  [stereo contracts](../docs/development/data-types.md#invoking-an-integrity-check).
+  Recorded in the [operations guide](../docs/development/operations.md#projection).
+  No implementation discrepancy is identified for this entry.
+
+  **Resolver::resolve.** Completes the molecule through its constituent resolution
+  phases under the selected model and policies.
+
+  - Applies isotope completion, jointly selects valence completions and aromatic
+    systems, then resolves stereo and bond defaults.
+  - Uses model tie-breaks to select admissible completions. Remaining alternatives
+    yield Underdetermined.
+  - Unresolved isotopes allow later phases to run.
+  - Returns Determined only when Molecule::is_concrete holds, including ground
+    stereo configurations. An open coset therefore leaves aggregate resolution
+    Underdetermined; resolution does not choose that coset.
+  - Discharges independently entailed constraints owned by its phases. Other
+    assertions remain; conformance validation remains explicit.
+  - Consumes the input and returns a molecule only on Determined.
+    Underdetermination, contradiction, and operational errors return no molecule.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve.rs),
+  [resolver policy](../docs/development/operations.md#resolution), and
+  [ownership and publication](../docs/development/data-types.md#resolution-projection-and-transformations).
+  Recorded in the [operations guide](../docs/development/operations.md#resolverresolve).
+  No implementation discrepancy is identified for this entry.
+
+  **Resolver::project.** Projects the stages selected by ProjectFlags within graph
+  IR.
+
+  - Runs aromaticity projection, valence projection (currently a no-op), and
+    isotope default elision in that order, for the selected stages only.
+  - Preserves H counts, atom electron fields, atom charge, and explicit stereo
+    entities.
+  - Requires concrete zero charge and closed-shell singlet spin on localized and
+    multicenter bonds, even with empty flags.
+  - The isotope stage requires ground isotope fields. Under Natural policy,
+    replaces natural composition with Undetermined; explicit masses remain.
+  - Successful projection may produce a nonconcrete molecule. External-format
+    representability is checked separately.
+  - Consumes the input; success returns Determined(molecule), while rejected
+    prerequisites or phases return ProjectError.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve.rs) and
+  [ownership and publication](../docs/development/data-types.md#resolution-projection-and-transformations).
+  Recorded in the [operations guide](../docs/development/operations.md#resolverproject).
+  No implementation discrepancy is identified for this entry.
+
+  **IsotopeResolver::plan_resolve.** Plans isotope completion under its selected
+  policy, independently of other molecular fields.
+
+  - Strict preserves every isotope. Natural replaces only Undetermined with
+    natural composition; supplied masses, sets, and variables remain unchanged.
+  - Returns Determined when all isotope fields are ground after the planned
+    completion. Otherwise returns Underdetermined, retaining any proposed defaults
+    in its edit payload. Other atom fields may remain unresolved.
+  - Planning leaves the molecule unchanged. Standalone application publishes only
+    a determined plan; aggregate resolution can apply isotope defaults and continue
+    despite unresolved isotopes, subject to its final concreteness requirement.
+
+  Existing reference: [implementation](../umol-graph/src/ops/resolve/isotope.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#resolver-scope).
+  No implementation discrepancy is identified for this entry.
+
+  **IsotopeResolver::plan_project.** Plans elision of isotope defaults that the
+  same policy restores during resolution.
+
+  - Requires ground isotope fields; otherwise returns
+    IsotopeProjectError::NonGroundIsotope with the atom id. Other molecular fields
+    may remain unresolved.
+  - Natural replaces natural composition with Undetermined. Strict preserves it;
+    both policies preserve explicit masses and every non-isotope field.
+  - Planning leaves the molecule unchanged. Projection followed by resolution
+    under the same policy recovers an input with ground isotope fields exactly.
+    The projected isotope fields need not themselves satisfy projection's ground
+    input requirement.
+
+  Existing reference: [implementation](../umol-graph/src/ops/resolve/isotope.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#projection).
+  No implementation discrepancy is identified for this entry.
+
+  **ValenceResolver::project.** Preserves the molecule exactly and always returns
+  Determined, independently of the valence source and tie-break policy. It performs
+  no inference, validation, or constraint discharge.
+
+  Existing reference: [implementation](../umol-graph/src/ops/resolve/valence.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#projection).
+  No implementation discrepancy is identified for this entry.
+
+  **BondsResolver::plan_resolve.** Plans defaults for localized-bond charge and
+  unpaired-electron fields.
+
+  - Replaces Undetermined charge with zero and wholly undetermined spin fields
+    with a closed-shell singlet.
+  - When one spin component is literal and the other Undetermined, completes the
+    missing component using the high-spin relation. Other supplied forms remain
+    unchanged.
+  - Preserves bond orders, topology, constraints, atoms, and other entities.
+    Produces an edit plan without mutation or model-dependent validation;
+    Determined application need not produce a concrete molecule.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve/bonds.rs)
+  and [spin completion](../umol-graph-ir/src/ir/spin.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#resolver-scope).
+  No implementation discrepancy is identified for this entry.
+
+  **AromaticityConformanceValidator::validate.** Checks aromatic assertions and
+  stored systems under the selected model without changing the molecule.
+
+  - Checks realizability of aromatic contributions and positive bond assertions,
+    reproduction of stored systems, and agreement between descriptions.
+  - Reports established failures and mismatches as Contradictory. Uncertainty
+    yields Underdetermined only when no independent contradiction is established.
+    Model-parameter failures use Err.
+  - Applies no resolver recovery policy, selects no replacement description, and
+    performs no insertion, removal, or constraint discharge.
+
+  Existing references: [implementation](../umol-graph/src/ops/validate/aromaticity.rs)
+  and [validator outcomes](../docs/development/operations.md#outcomes).
+  Recorded in the [operations guide](../docs/development/operations.md#domain-checks).
+
+  **Corrected discrepancy — 2026-11-09.** An internal #a! bond in a stored aromatic
+  system establishes AromaticBondConstraintMismatch. Previously, adding an
+  isolated atom with #a+ changed both aromaticity validation and standalone
+  aromaticity resolution from Contradictory to Underdetermined, hiding the conflict.
+
+  AromaticityPerceiver::derive and AromaticityResolver::select_completions now run
+  the existing check_aromatic_bonds before propagating unknown contributions.
+  Perception retains the exact inconsistency, and validation and resolution
+  reject it under Error and Keep. Interfaces and chemistry rules are unchanged.
+
+  Eight new cases cover the unknown atom before and after the conflicting system,
+  through perception, validation, and resolution under both failure policies.
+  Tests check exact diagnostics and unchanged inputs, including rejected in-place
+  resolution. The existing mixed-evidence case now expects the established
+  mismatch; uncertainty without a conflict remains underdetermined.
+
+  Verification passed: 8,798 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases. Feature-enabled
+  graph Clippy passed with warnings denied; formatting and git diff --check passed.
+
+  **MulticenterBondsResolver::plan_resolve.** Checks multicenter-valence assertions
+  and plans multicenter-bond charge and unpaired-electron defaults.
+
+  - Checks each atom's #m assertion against its complete derived reading.
+    An established contradiction must take precedence over unresolved checks;
+    underdetermination yields an empty plan.
+  - Replaces Undetermined charge with zero and wholly undetermined spin fields
+    with a closed-shell singlet. Completes a missing spin component from a literal
+    counterpart using the high-spin relation.
+  - Preserves electron contributions, participants, topology, constraints, and
+    other entities. Planning leaves the molecule unchanged; a determined plan
+    does not establish that every molecular field is concrete.
+
+  Existing references: [implementation](../umol-graph/src/ops/resolve/multicenter.rs)
+  and [shared conflict contract](../docs/development/operations.md#refinement-and-conflicts).
+  Recorded in the [operations guide](../docs/development/operations.md#resolver-scope).
+
+  **Corrected discrepancy — 2026-11-09.** An unresolved #m check previously
+  returned Underdetermined before checking later atoms. A later, independently
+  contradictory #m1 on an isolated atom was therefore hidden, and reordering
+  atoms changed the outcome.
+
+  Planning now retains uncertainty while checking all atoms and returns an empty
+  underdetermined plan only if no contradiction was found. Default edits are still
+  planned only after those checks pass; no interface or chemistry rule changed.
+
+  Six new cases cover both atom orders through standalone resolution and aggregate
+  resolution with Clone and Journal rollback. They check exact contradictions and
+  unchanged inputs. Existing uncertainty-only and successful-default cases remain.
+
+  Verification passed: 8,804 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases. Feature-enabled
+  graph Clippy passed with warnings denied; formatting and git diff --check passed.
+
+  **ValenceConformanceValidator::validate.** Classifies every atom against the
+  selected atom-type registry or counts table.
+
+  - Requires the classifier's ground atom state and literal complete valence or
+    contribution readings. Unresolved required input contributes Underdetermined.
+  - Continues past uncertain atoms so a known model mismatch yields Contradictory.
+    Determined establishes atom-state acceptance within this validator's scope,
+    without requiring other molecular entities to be concrete.
+  - Leaves the molecule unchanged. Performs no completion, candidate selection,
+    recovery, or constraint discharge.
+
+  Existing references: [validator](../umol-graph/src/ops/validate/valence.rs),
+  [atom typing](../umol-graph/src/ops/valence/atom_typing.rs), and
+  [counts](../umol-graph/src/ops/valence/counts.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#domain-checks).
+  No implementation discrepancy is identified for this entry.
+
+  **ConnectivityConformanceValidator::validate.** Checks the connectivity
+  conditions enabled by ConnectivityModel.
+
+  - Defines components using localized bonds. Dative, aromatic, multicenter,
+    noncovalent, and stereo relations do not join those components.
+  - Checks overall connectivity and whether each enabled relation or constraint
+    stays within one bond component. With overall disconnectedness forbidden,
+    zero or one component is accepted.
+  - Uses topology and references only; unresolved attributes do not prevent a
+    verdict. Current outcomes are Determined or a specific connectivity
+    contradiction.
+  - Leaves attributes, entities, constraints, and participant order unchanged.
+
+  Existing reference: [implementation](../umol-graph/src/ops/validate/connectivity.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#domain-checks).
+  No implementation discrepancy is identified for this entry.
+
+  **ValenceInvariantsValidator::validate.** Checks model-independent electron
+  conservation for every atom using complete incidence evidence.
+
+  - Compares the atom's spin-orbital count with its assigned electron count.
+    Contradictory contribution readings and established count mismatches reject
+    the input; required nonliteral values contribute underdetermination.
+  - A known rejection must take precedence over uncertainty at other atoms.
+  - Uses no valence model, selects no completion, and leaves all input data and
+    constraints unchanged.
+
+  Existing reference: [implementation](../umol-graph/src/ops/invariant.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#validation).
+
+  **Corrected discrepancy — 2026-11-09.** An incomplete atom previously hid an
+  established mismatch or contradictory contribution reading at a later atom.
+  ValenceInvariants::check now retains uncertainty while checking the remaining
+  atoms and returns Underdetermined only when no contradiction was found. Count
+  equations and interfaces are unchanged.
+
+  Nine new cases check ordinary acceptance, partial inputs, and both atom orders
+  for count mismatches and contradictory readings through the public validator.
+  Composite invariant validation also checks count mismatches beside incomplete
+  atoms. Tests assert exact outcomes and unchanged inputs.
+
+  Verification passed: 8,843 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases. Feature-enabled
+  graph Clippy passed with warnings denied; formatting and git diff --check passed.
+
+  **Corrected discrepancy — 2026-11-09.** The per-atom check previously hid a
+  contradictory contribution reading behind an unknown field or earlier reading
+  on the same atom. It now checks all five contribution readings for bottom
+  before requiring literal atom state and contribution counts. Count equations,
+  public interfaces, and uncertainty-only outcomes are unchanged.
+
+  The responsibility boundary remains narrow: ConstraintInvariantsValidator owns
+  general assertion/structure agreement. Electron validation consumes combined
+  evidence and rejects contradictions in the inputs needed by its equation;
+  unrelated constraints are outside its scope. Composite validation already
+  catches these disagreements in its preceding constraint pass.
+
+  Nine additional cases cover all five contribution keys, missing atom fields,
+  and uncertainty before a later contradictory reading. Exact diagnostics and
+  unchanged inputs are checked. The validator-family pass also reviewed spin,
+  stereo, valence, connectivity, aromaticity, and composite validation against
+  their scoped predicates; no further implementation change was needed.
+  Verification passed: 8,906 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases.
+  Feature-enabled graph Clippy passed with warnings denied; formatting and
+  git diff --check passed. No public interfaces changed.
+
+  **SpinInvariantsValidator::validate.** Checks model-independent validity of
+  supplied unpaired-electron counts and multiplicities.
+
+  - Checks atoms, localized bonds, aromatic systems, and multicenter bonds.
+    Literal pairs must form a valid SpinState; incomplete pairs contribute
+    underdetermination, without hiding a known invalid pair elsewhere.
+  - Checks spin-coupling payload validity but does not establish coupling
+    feasibility. An unspecified coupling imposes no spin-state check; other
+    unresolved coupling descriptions remain underdetermined.
+  - Leaves fields, entities, and constraints unchanged; performs no completion,
+    spin selection, or constraint discharge.
+
+  Existing reference: [implementation](../umol-graph/src/ops/validate/spin.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#validation).
+  No implementation discrepancy is identified for this entry.
+
+  **Validator::validate_invariants.** Runs model-independent constraint validation,
+  valence invariant validation, and spin invariant validation, in that order.
+
+  - Uses configured constraint algorithms and DerivedKind; the default is
+    DerivedComplete.
+  - Continues after underdetermination, returning an established contradiction
+    from any later pass. Returns Underdetermined only when a pass remains
+    undecided and no pass rejected the input. Operational errors propagate.
+  - Leaves the molecule unchanged and applies no chemistry-model conformance
+    checks, recovery, or discharge.
+
+  Existing references: [implementation](../umol-graph/src/ops/validate.rs) and
+  [validation tiers](../docs/development/data-types.md#integrity-checks-and-validation-tiers).
+  Recorded in the [operations guide](../docs/development/operations.md#validator).
+  The valence invariant correction is recorded above.
+
+  **Validator::validate_conformance.** Runs connectivity, valence, aromaticity,
+  and stereo conformance, in that order, under the selected chemistry model.
+
+  - Can be invoked independently; it does not run the composite invariant pass.
+    Each component establishes the prerequisites needed by its own queries.
+  - Continues after underdetermination so a later established contradiction can
+    reject the input. Operational errors propagate. Determined establishes the
+    conjunction of the component predicates, without requiring every field to
+    be ground.
+  - Leaves all fields, entities, and constraints unchanged. Uses algorithm
+    configuration and model parameters through the owning validators.
+
+  Existing references: [implementation](../umol-graph/src/ops/validate.rs) and
+  [tier-3 conformance](../docs/development/operations.md#tier-3-conformance-validators).
+  Recorded in the [operations guide](../docs/development/operations.md#validator).
+  Component discrepancies are recorded under their respective validators.
+
+  **Validator::validate.** Runs invariant validation followed by conformance.
+  Continues after an underdetermined invariant verdict; an established rejection
+  in either pass yields Contradictory, while operational errors propagate.
+  Determined requires both passes to be determined. Preserves the molecule
+  exactly, without resolving fields or discharging assertions.
+
+  Existing reference: [implementation](../umol-graph/src/ops/validate.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#validator).
+  Component discrepancies are recorded under their respective validators.
+
+  **StereoConformanceValidator::validate.** Checks stereo kind assertions and
+  stored descriptions under the selected stereo model.
+
+  - Checks kind agreement and realizability without inferring stereogenicity
+    merely from an entity's existence. Stored supported entities are checked
+    independently of accompanying #T/#C assertions.
+  - Checks kind/frame/configuration prerequisites, general and ring-relative E
+    ring-size limits, and asserted stereogenicity, topicity, and ligand symmetry.
+    Ring and symmetry algorithms and iteration limits come from operation config;
+    chemistry limits and para-stereo acceptance come from the model.
+  - Required unresolved evidence contributes underdetermination; independently
+    established violations must take precedence. Applies no resolver failure
+    policy and leaves all data and constraints unchanged.
+
+  Existing references: [implementation](../umol-graph/src/ops/validate/stereo.rs)
+  and [conformance contract](#conformance-validation).
+  Recorded in the [operations guide](../docs/development/operations.md#domain-checks).
+
+  **Corrected discrepancy — 2026-11-09.** A nonliteral coset previously hid
+  invalid topicity positions and ligand-symmetry permutation degrees. Atom and
+  bond validation now check those prerequisites against the stored frame even
+  when symmetry is unavailable. Configuration-dependent checks remain
+  underdetermined when they lack a literal coset. Public interfaces are unchanged.
+
+  Forty additional cases cover literal, undetermined, and set-valued cosets;
+  out-of-range topicity positions; short and long ligand-symmetry permutations;
+  and positive, negative, and undetermined symmetry assertions. They check exact
+  contradictions and unchanged inputs for stereo atoms and bonds. Existing
+  partial-input cases retain their underdetermined outcomes.
+
+  Verification passed: 8,883 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases. Feature-enabled
+  graph Clippy passed with warnings denied; formatting and git diff --check passed.
+
+  **Transformer.** Provides consuming, in-place, and iterator forms of an explicit
+  transformation.
+
+  - Planning establishes every rejection before mutation. Its edits must apply
+    to the unchanged input and preserve representation integrity.
+  - All eligibility and preservation checks belong to planning. Application
+    and publication of the completed plan are infallible on that input; a failure
+    there is an implementation defect. This also applies to enumerated candidates.
+  - transform consumes the input; transform_into applies the same plan without
+    a recovery transaction and leaves the input unchanged on rejection.
+  - Iteration yields independently mutable molecules. Deterministic operations
+    yield one result on success and none on rejection; operations with alternatives
+    define their own order. Transform methods on Molecule delegate to these owners.
+
+  Existing references: [traits](../umol-graph/src/ops/transform.rs),
+  [planning and application](../docs/development/operations.md#transformations), and
+  [ownership](../docs/development/data-types.md#resolution-projection-and-transformations).
+  No implementation discrepancy is identified for this entry.
+
+  **StereoAdder.** Adds selected missing tetrahedral and CisTrans entities using
+  StereoPerceiver::recognize.
+
+  - Intersects site, kind, and stereogenicity selectors. Reads #T/#C as kind
+    evidence and uses automatic recognition rules where unasserted.
+  - Adds undetermined cosets. Preserves existing entities, frames, configurations,
+    scalar assertions, and other input data; performs no constraint discharge.
+  - Applies the model's creation cutoff only to missing stereo bonds. Required
+    incomplete input, invalid selection, and contradictory selected evidence
+    reject the transformation during planning.
+
+  Existing references: [implementation](../umol-graph/src/ops/transform/stereo.rs)
+  and [stereo transformer contracts](#resolution-and-stereo-transformers).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  No implementation discrepancy is identified for this entry.
+
+  **StereoRemover.** Removes selected existing stereo entities and their
+  corresponding scalar kind assertions.
+
+  - Intersects site, kind, and stereogenicity selectors with RemoveStereoMode.
+    All accepts every configuration; Undetermined accepts only a known kind with
+    an explicitly undetermined coset, excluding finite sets and symbolic cosets.
+  - Clears #T/#C only at sites where an entity is removed. Preserves assertions
+    at other sites and unrelated data, with ordinary reference compaction.
+  - Optional stereogenicity filtering uses whole-molecule classification. Applies
+    no creation cutoff or automatic recognition eligibility rule to stored entities.
+    Invalid queries reject before mutation.
+
+  Existing references: [implementation](../umol-graph/src/ops/transform/stereo.rs)
+  and [stereo transformer contracts](#resolution-and-stereo-transformers).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  No implementation discrepancy is identified for this entry.
+
+  **StereoEnumerator.** Enumerates consistent absolute configurations of selected
+  existing stereo entities.
+
+  - Takes domains only from stored configurations: fixed cosets, undetermined
+    cosets, finite sets, and supported constant expressions. Selected variable
+    expressions, unsupported kinds, and unsupported fluxionality reject preparation.
+  - Intersects selectors. The supplied order must contain each selected site
+    exactly once; entries outside the selected set are ignored. Tries admitted
+    cosets in ascending order without symmetry deduplication.
+  - Checks reduced scalar assertions, entity-local constraints, and affected
+    molecular constraints. Rejects false checks while allowing unrelated
+    unresolved information. An assertion without an entity supplies no target.
+  - Changes selected configurations only; preserves frames, scalar assertions,
+    unselected entities, and other data. Singular transformation selects the
+    first consistent assignment or rejects with NoAssignment.
+  - The inherent transform_iter captures a source snapshot and prepares domains
+    immediately, then constructs results lazily. Its owned iterator outlives the
+    caller's source and transformer, preserves multiplicity, and terminates on
+    rejection or exhaustion. No selected work yields one unchanged result when
+    its checks are consistent.
+
+  Existing references: [operation](../umol-graph/src/ops/transform/stereo.rs),
+  [assignment checks](../umol-graph/src/ops/transform/stereo/enumeration.rs), and
+  [stereo transformer contracts](#resolution-and-stereo-transformers).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  No implementation discrepancy is identified.
+
+  **Aromatizer.** Transfers localized pi electrons into systems perceived under
+  the selected aromaticity model.
+
+  - Leaves a molecule with any stored aromatic system unchanged. Otherwise derives
+    contributions from localized bonds and available donor pairs; negative aromatic
+    evidence excludes sites, and incompatible or unrealized positive assertions
+    reject the transformation.
+  - Lowers selected internal double bonds to single bonds and transfers a donor
+    lone pair when it supplies two aromatic electrons. Adds explicit systems and
+    removes realized aromatic assertions under the recorded insertion contract.
+  - Preserves charge, H counts, spin, external bonds, and unrelated state.
+    Required nonliteral transfer data, model failures, conflicting retained
+    assertions, and planned electron-count contradictions reject during planning;
+    the whole molecule need not be ground.
+
+  Existing reference: [implementation](../umol-graph/src/ops/transform/aromaticity.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  No implementation discrepancy is identified for this entry.
+
+  **Kekulizer.** Localizes stored aromatic systems into single/double bonds and
+  atom-local electrons.
+
+  - Reads prescribed zero-, one-, and two-electron contributions. Two-electron
+    donors regain a lone pair; zero-electron acceptors retain their local state;
+    one-electron contributors require a matching. Supports a system charge of
+    plus or minus one separately by choosing one exposed atom when all
+    contributions are one. Open-shell systems are unsupported.
+  - Uses the explicitly selected maximum-matching algorithm and supplied atom
+    order. Each system's atoms must occur exactly once; entries outside that
+    system are ignored. Invalid order, unsupported required data, and impossible
+    matching reject during planning.
+  - Removes the systems and their member atom/bond aromatic assertions. Preserves
+    H placement, unchanged spin data, unrelated atoms, and compatible retained
+    valence assertions; checks planned electron conservation. It does not choose
+    a different input contribution assignment or validate unrelated partial data.
+  - A molecule without aromatic systems is unchanged. Fresh aromatization need
+    not reconstruct the original partition; no general inverse is promised.
+
+  Existing reference: [implementation](../umol-graph/src/ops/transform/aromaticity.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  No implementation discrepancy is identified.
+
+  **ChargeDelocalizer.** Transfers atom-localized charge into eligible homogeneous
+  stored aromatic systems.
+
+  - Sets member atom charges to zero, accumulates them into system charge, and
+    updates system contributions and member aromatic-valence assertions.
+  - Preserves topology, participants, H counts, lone pairs, unpaired-electron
+    fields, and unrelated state. Charge transfer must preserve electron accounting.
+  - Eligibility requires homogeneous literal elements, literal system
+    contributions and charge, and literal member atom charges. Other occupations
+    may remain nonliteral. Ineligible systems are left unchanged; the operation
+    is infallible.
+
+  Existing reference: [implementation](../umol-graph/src/ops/transform/aromaticity.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+
+  **Corrected discrepancy — 2026-11-09.** A neutral six-carbon ring with
+  contributions [1,1,1,1,1,1], one unpaired electron and no implicit H at atom 0,
+  and one implicit H at each other atom passes ValenceInvariantsValidator.
+  ChargeDelocalizer previously changed the contributions to [2,1,1,1,1,1] while
+  keeping all charges and unpaired-electron fields unchanged. Validation reported
+  OrbitalCount at atom 0: seven spin orbitals versus six assigned electrons.
+
+  DelocalizationPlan::derive now uses each member's stored contribution plus its
+  atom charge as the new contribution, sets its atom charge to zero, and adds the
+  removed atom charges to the stored system charge. It no longer reconstructs
+  occupations from element, degree, implicit H, and lone pairs. This preserves
+  electron accounting while leaving other occupations unchanged; a neutral
+  atom's contribution therefore does not change.
+
+  Eligibility and preservation checks remain in planning under the existing
+  skip policy. Application only installs the completed edits. No sequencing
+  change or application-phase validation is required.
+
+  Eight additional cases cover charged and neutral radicals, mixed atom charges,
+  existing system charge, partial occupations, and undetermined transfer data.
+  Concrete transfer cases check exact consuming/in-place results, electron and
+  spin invariants, and conservation of contributions minus system charge.
+  Existing iterator-independence coverage is retained. Public interfaces and
+  application are unchanged.
+
+  Verification passed: 8,891 graph unit/integration/property/conformance tests,
+  including 224 properties and 4,219 resolution conformance cases. Feature-enabled
+  graph Clippy passed with warnings denied; formatting and git diff --check passed.
+
+  **HydrogenFolder.** Replaces eligible ordinary explicit H atoms with implicit H
+  on their partners.
+
+  - Requires default H and single-bond state, exactly one neighbor, a partner
+    known not to be H, and a literal partner H count. Labels, nondefault state,
+    non-stereo relation membership, stereo sites, and explicit molecular
+    constraint references protect H from folding. Nonliteral partner counts
+    leave those explicit H atoms unchanged.
+  - Transfers actual stereo ligands to implicit-H ligands at the same frame
+    positions, preserving configurations and stereo constraints. Scalar #T/#C
+    assertions are unchanged. Adjusts localized valence and degree assertions;
+    total and ring assertions are unchanged. Removed references are compacted.
+  - Negative counts on otherwise eligible partners and repeated implicit-H
+    ligands reject during planning. Successful folding is idempotent and
+    conserves the explicit-plus-implicit H count on its literal domain. No
+    general inverse with unfolding is promised.
+
+  Existing reference: [implementation and contract](../umol-graph/src/ops/transform/hydrogens.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  No implementation discrepancy is identified.
+
+  **HydrogenUnfolder.** Replaces positive literal implicit-H counts with appended
+  ordinary H atoms and single bonds in bearer-atom order.
+
+  - Sets expanded counts to zero. Nonliteral counts remain stored unless they
+    back an implicit-H stereo ligand, which requires a determined replacement.
+    Negative counts and disagreements between a stereo bearer's count and its
+    implicit-H frame ligands reject during planning.
+  - Replaces implicit-H stereo ligands with the new actual H atoms at the same
+    positions. Generic virtual ligands are not identified by this operation.
+    Configurations, stereo constraints, scalar #T/#C, existing identities, and
+    unrelated state are preserved. Localized valence and degree assertions
+    increase with added bonds; total and ring assertions remain stored.
+  - Successful unfolding is idempotent and conserves the explicit-plus-implicit
+    H count on its literal domain. The documented restricted fold/unfold inverse
+    requires compatible counts, frames, and assertions; there is no general inverse.
+
+  Existing reference: [implementation and contract](../umol-graph/src/ops/transform/hydrogens.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#transformations).
+  Removed an obsolete rustdoc sentence assigning implicit frames to #T/#C;
+  implemented behavior is unchanged.
+
+  **TableIR raising (TryIntoIr).** Converts stored boundary data into graph-IR
+  atoms, bonds, and relations, without a chemistry model or resolver.
+
+  - Copies representable fields and applies fixed IO defaults: omitted isotope
+    becomes Natural, omitted atom charge becomes zero, and notation-owned H
+    omission supplies the closed-shell count. Other missing occupations remain
+    unresolved. Aromatic bonds become single localized bonds plus aromatic
+    assertions; fuzzy orders remain undetermined.
+  - Converts explicit frames, MOL wedges, and bond configurations into stereo
+    entities. Transports cosets to their stored frames and preserves an unnamed
+    ligand as Virtual. Raw MOL parity is ignored. No configuration data is
+    placed in #T/#C, and raising makes no stereogenicity judgment.
+  - Preserves source data without mutation. Unsupported or inconsistent stereo
+    presentations and malformed graph-IR entries reject conversion. Integrity
+    publication does not establish chemistry-model conformance. Standalone atom
+    and bond conversions lack the molecule's topology context.
+
+  Existing reference: [raising](../umol-io/src/table_ir/raise.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#tableir-raising).
+  No implementation discrepancy is identified.
+
+  **Interpret::interpret.** Raises a parsed Smiles or ReactionSmiles boundary
+  value, then resolves the new graph representation under the supplied model
+  and ResolveConfig.
+
+  - Returns only a determined aggregate result. Raising failures, semantic
+    contradictions, underdetermination, and execution errors remain distinct.
+    Format-owned values, including Natural isotope composition, survive according
+    to the resolver contract. The parsed source is unchanged on every outcome.
+  - Reaction interpretation resolves both sides independently, preserves unique
+    matched atom-map pairs as a partial correspondence, and leaves unmatched
+    atoms unmatched. Agents and repeated atoms within an atom-map class are
+    rejected. Side failures retain reactant/product context.
+
+  Existing reference: [interpretation](../umol-graph/src/ingest.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#interpretinterpret).
+  No implementation discrepancy is identified.
+
+  **Convey::convey.** Projects a private molecular copy under the supplied model
+  and ResolveConfig, then converts the projected fields to a format boundary.
+
+  - Preserves the source on success and failure. Runs all aggregate projection
+    stages, retaining explicit stereo entities. Conversion preserves atom and
+    localized-bond order and rejects unsupported values, constraints, and entities.
+    Neither conversion nor rendering performs stereo recognition or resolution.
+  - Uses explicit stereo frames and configurations. Generic virtual ligands,
+    unsupported configurations, and frame assertions not representable in TableIR
+    reject conversion. A positive #T/#C is redundant only beside an entity of
+    the matching kind; an assertion alone cannot supply a configuration.
+  - Preserves H counts through projection. Conversion may omit a table count only
+    when the notation permits and inference under the same model and policy
+    recovers it. Missing or ambiguous evidence retains the count; mapped atoms
+    retain it. Atom occupations remain in TableIR even when ordinary SMILES has
+    no independent token for them.
+  - Reaction conversion materializes both sides and their correspondence,
+    projects each side, and assigns shared one-based labels to matched pairs.
+    Unmatched atoms remain unlabeled; agents and source-only labels are absent
+    from the graph representation. Failures retain side context.
+  - Rendering owns its narrower syntax restrictions. Supported ingestion roundtrips
+    under the same model and policy use canonical equality with para_stereo=false;
+    source spelling, ring labels, and redundant slash markers are not preserved.
+
+  Existing reference: [conversion and roundtrip contract](../umol-graph/src/export.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#conveyconvey).
+  No implementation discrepancy is identified.
+
+  **SMILES ingestion and export.** The ingest_smiles and ingest_reaction_smiles
+  families compose parsing and interpretation; export_smiles and
+  export_reaction_smiles compose conversion and rendering.
+
+  - Default entry points use OpenSMILES, the SMILES valence preset, and Natural
+    isotope policy. Explicit variants accept IO configuration, chemistry model,
+    and resolution configuration; byte-input variants use the same semantics.
+  - Unresolved ingestion composes parsing and raising only. It applies format
+    defaults and preserves raised constraints and explicit stereo entities without
+    invoking a resolver. Reaction mapping and unsupported-agent checks still apply.
+  - Syntax, graph conversion, resolution, projection, and rendering failures
+    retain their respective channels. Parsing/rendering remain format operations;
+    chemistry-dependent interpretation and projection belong to the graph layer.
+
+  Existing references: [ingestion](../umol-graph/src/ingest.rs) and
+  [export](../umol-graph/src/export.rs).
+  Recorded in the [operations guide](../docs/development/operations.md#smiles-ingestion-and-export).
+  No implementation discrepancy is identified.
+
+  **Completed — 2026-11-09.** The scoped inventory covers perception, derivation,
+  resolution, projection, validation, transformers, raising, interpretation,
+  conversion, and ingestion/export. Defects found during that inventory are
+  corrected; later consolidation findings are recorded beside their owning entries.
+  Guide consolidation is recorded below. Graph-IR operations remain excluded.
+
+  **Guide consolidation — 2026-11-09.** Corrected the Perception entry's stale
+  AromaticityPerception reference to AromaticityPerceiver in the
+  [nomenclature guide](../docs/development/nomenclature.md#perception).
+  Current code and guides contain no find_aromatic_systems references; remaining
+  occurrences are in dated discussion records. Contracts through
+  ingestion/export are recorded in the operations guide. Shared rules are stated
+  once; family tables record the distinct operation contracts and exceptions.
+  Validation states the responsibility boundary and scope of contradiction precedence.
+  The projection count-mismatch correction is recorded under
+  AromaticityResolver::plan_project; the validator-family correction is recorded
+  under ValenceInvariantsValidator::validate. No further implementation change
+  was needed for the remaining recorded contracts. Consolidation is complete;
+  S4d remains pending.
 
 - **S4d — Run final checks and compare measurements** — verification (green).
   Modules: the test and benchmark targets listed below, and
@@ -1840,10 +2792,9 @@ all-targets checks compile benchmark callers. Replay the existing graph-IR entit
 molecule, reaction, span, and edit fuzz targets on their curated seed inputs.
 
 S0–S3 are complete. S3c restored the passing baseline; S3d and S3e passed their
-independent gates, followed by S3f's combined workflow checks. S4a–S4b are complete;
-S4c is next.
+independent gates, followed by S3f's combined workflow checks. S4a–S4c are complete.
 S4d reuses applicable recorded S3f results while source and test inputs remain
 unchanged, and runs the remaining final checks and
 measurement comparisons.
 There are no deferred stages in this deliverable. The exclusions in Scope remain
-unchanged. S4c–S4d remain pending.
+unchanged. S4d remains pending.

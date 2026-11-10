@@ -38,10 +38,10 @@ pub enum StereoPerceptionError {
 impl StereoPerceiver {
     /// Recognize selected missing tetrahedral atoms and cis/trans bonds.
     ///
-    /// Positive source evidence supplies the configuration; otherwise the coset
-    /// remains undetermined. Negative evidence excludes a site. Automatic local
-    /// chemistry rules apply to unasserted sites; explicit arrangements retain
-    /// the structural rules used by derive_stereo_atom and derive_stereo_bond.
+    /// Positive source evidence requests the kind; new cosets are undetermined.
+    /// Negative evidence excludes a site. Automatic local chemistry rules apply
+    /// to unasserted sites; asserted sites use the structural rules of
+    /// derive_stereo_atom and derive_stereo_bond.
     /// Existing entities are retained and checked for conflicting site evidence.
     /// Missing stereo bonds on double bonds follow the model's minimum ring size.
     /// Existing entities and source assertions are preserved.
@@ -60,7 +60,7 @@ impl StereoPerceiver {
     /// # Semantic properties
     ///
     /// The input is unchanged. Returned additions refer to its topology ids and
-    /// preserve source cosets in the recognized ligand order. Existing stereo
+    /// have undetermined cosets in the recognized ligand order. Existing stereo
     /// entities are never returned as additions. Site/kind/stereogenicity filters
     /// intersect, while classification retains the rest of the molecular context.
     pub fn recognize(

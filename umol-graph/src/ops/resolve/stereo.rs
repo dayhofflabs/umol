@@ -567,7 +567,7 @@ mod tests {
         MoleculeEntries, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
         StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     };
-    use umol_graph_ir::mol_dsl_concrete;
+    use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
     use umol_io::smiles::SmilesIoConfig;
 
     use super::*;
@@ -1853,6 +1853,73 @@ mod tests {
             assert_eq!(
                 resolver.resolve_into(&mut molecule),
                 Solution::Contradictory(expected)
+            );
+        }
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::atom(
+        mol_dsl!(r#"{:atoms ["C#T+" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        None
+    )]
+    #[case::bond(
+        mol_dsl!(r#"{:atoms ["C" "C#h#n0" "F" "Cl"]
+            :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#),
+        None
+    )]
+    #[case::mixed_failure(
+        mol_dsl!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "C#h0#n0#T+"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        Some(StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(4) })
+    )]
+    fn test_stereo_resolver_resolve_partial_requests(
+        stereo_model: StereoModel,
+        #[case] mut molecule: Molecule,
+        #[case] failure: Option<StereoInconsistency>,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        policy: StereoFailurePolicy,
+    ) {
+        let original = molecule.clone();
+        let resolver = StereoResolver::with_config(
+            &stereo_model,
+            StereoResolveConfig {
+                stereo_atom_failure: policy,
+                stereo_bond_failure: policy,
+                ring_config: Default::default(),
+            },
+        );
+        if let Some(failure) = failure.filter(|_| policy == StereoFailurePolicy::Error) {
+            let contradiction = StereoContradiction::Inconsistency(failure);
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Contradictory(contradiction.clone())
+            );
+            assert_eq!(
+                resolver.resolve(molecule.clone()),
+                Solution::Contradictory(contradiction.clone())
+            );
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Solution::Contradictory(contradiction)
+            );
+        } else {
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Underdetermined(Edits::new())
+            );
+            assert_eq!(
+                resolver.resolve(molecule.clone()),
+                Solution::Underdetermined(())
+            );
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Solution::Underdetermined(())
             );
         }
         assert_eq!(molecule, original);

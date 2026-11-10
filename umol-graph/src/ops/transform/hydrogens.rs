@@ -389,9 +389,8 @@ pub enum UnfoldHydrogensError {
 /// Localized valence and degree assertions increase with the added bonds, using
 /// the existing numeric-form arithmetic. Total and ring assertions are unchanged.
 /// Virtual hydrogen ligands become actual ligands in the same stored positions;
-/// configurations and frame-relative constraints are preserved. Appending the
-/// hydrogens preserves the implicit neighbor ordering of tetrahedral and cis/trans
-/// assertions. Molecule-level predicates are unchanged.
+/// configurations and frame-relative constraints are preserved. Scalar stereo
+/// assertions and molecule-level predicates are unchanged.
 ///
 /// # Errors
 ///

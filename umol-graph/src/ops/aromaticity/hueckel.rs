@@ -1,7 +1,7 @@
 //! Hückel-rule (4n+2 electron counting) aromaticity perception.
 //!
-//! Filters candidate atoms by element scope and the per-atom aromatic-valence
-//! constraint, enumerates rings within configured bounds, checks the Hueckel
+//! Filters candidate atoms by element scope and supplied aromatic valences,
+//! enumerates rings within configured bounds, checks the Hueckel
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
 //! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `Molecule::edit`.
 
@@ -106,7 +106,7 @@ impl HueckelAromaticity {
     ///
     /// The ring set is contextually valid for the molecule: its atom and bond ids
     /// and ring incidence agree with the molecule.
-    pub(crate) fn find_from_rings<F>(
+    pub(crate) fn recognize_from_rings<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -115,10 +115,10 @@ impl HueckelAromaticity {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
-        self.find_with_exclusions(molecule, rings, &bond_exclusions(molecule), electrons_at)
+        self.recognize_with_exclusions(molecule, rings, &bond_exclusions(molecule), electrons_at)
     }
 
-    pub(super) fn find_with_exclusions<F>(
+    pub(super) fn recognize_with_exclusions<F>(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
@@ -213,15 +213,14 @@ impl HueckelAromaticity {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
-        let view = molecule.atom(id);
-        let element = match view.attributes().element {
-            ElementForm::Lit(e) => e,
-            _ => return false,
+        let in_scope = match &self.element_scope {
+            ElementScope::Any => true,
+            ElementScope::AllowList(elements) => matches!(
+                molecule.atom(id).element(),
+                ElementForm::Lit(element) if elements.contains(element)
+            ),
         };
-        if !self.element_scope.contains(element) {
-            return false;
-        }
-        matches!(electrons_at(id), AromaticValence::Aromatic(_))
+        in_scope && matches!(electrons_at(id), AromaticValence::Aromatic(_))
     }
 
     fn filter_ring<F>(
@@ -725,7 +724,7 @@ mod tests {
     #[case::phenanthrene(phenanthrene(), 14, 14)]
     #[case::tropylium(tropylium(), 7, 6)]
     #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 6)]
-    fn test_hueckel_aromaticity_find_from_rings_aromatic(
+    fn test_hueckel_aromaticity_recognize_from_rings_aromatic(
         #[case] molecule: Molecule,
         #[case] expected_atoms: usize,
         #[case] expected_electrons: i64,
@@ -740,7 +739,7 @@ mod tests {
             )
             .into_ring_set();
         let model = daylight_model();
-        let aromatic_systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+        let aromatic_systems = model.recognize_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
             .attributes()
             .constraints
@@ -762,7 +761,7 @@ mod tests {
     #[case::cubane(cubane(), daylight_model())]
     #[case::borazine_daylight(borazine(), daylight_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
-    fn test_hueckel_aromaticity_find_from_rings_non_aromatic(
+    fn test_hueckel_aromaticity_recognize_from_rings_non_aromatic(
         #[case] molecule: Molecule,
         #[case] model: HueckelAromaticity,
     ) {
@@ -775,7 +774,7 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let aromatic_systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+        let aromatic_systems = model.recognize_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
             .attributes()
             .constraints
@@ -790,7 +789,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hueckel_aromaticity_find_from_rings_bridged() {
+    fn test_hueckel_aromaticity_recognize_from_rings_bridged() {
         // Two five-rings sharing the two-bond run 3-4-0: the `Bridged`
         // relation, not `Fused`. Neither ring passes alone (sum 4); their
         // union does (sum 6), so the combination walk must cross bridged
@@ -810,7 +809,7 @@ mod tests {
             )
             .into_ring_set();
         let aromatic_systems =
-            daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
+            daylight_model().recognize_from_rings(&molecule, &rings, &|v| match molecule
                 .atom(v)
                 .attributes()
                 .constraints
@@ -834,7 +833,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hueckel_aromaticity_find_from_rings_borazine_permissive(borazine: Molecule) {
+    fn test_hueckel_aromaticity_recognize_from_rings_borazine_permissive(borazine: Molecule) {
         let rings = borazine
             .rings(
                 RingModel {
@@ -845,7 +844,7 @@ mod tests {
             )
             .into_ring_set();
         let aromatic_systems =
-            permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
+            permissive_model().recognize_from_rings(&borazine, &rings, &|v| match borazine
                 .atom(v)
                 .attributes()
                 .constraints

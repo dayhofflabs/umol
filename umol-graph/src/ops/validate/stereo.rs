@@ -120,6 +120,7 @@ impl StereoConformanceValidator {
     /// established contradictions are checked.
     /// Asserted topicity positions must lie within the ligand frame, and ligand-symmetry
     /// permutations must have its degree; disagreements produce `Contradictory`.
+    /// These frame checks do not require a literal coset.
     pub fn validate(
         &self,
         molecule: &Molecule,
@@ -390,18 +391,15 @@ impl StereoConformanceValidator {
         let view = molecule.stereo_atom(id);
         let constraints = view.constraints();
         let stereogenicity = constraints.stereogenicity();
-        if view
+        let sym = view
             .attributes()
             .configuration
             .coset()
             .and_then(AsLit::as_lit)
-            .is_none()
-        {
-            return Solution::Underdetermined(());
-        }
-        let sym = molecule.stereo_atom_symmetry(symmetry, id);
+            .map(|_| molecule.stereo_atom_symmetry(symmetry, id));
         self.validate_symmetry(
-            &sym,
+            view.ligand_ids().len(),
+            sym.as_ref(),
             stereogenicity,
             constraints.topicities(),
             constraints.ligand_symmetries(),
@@ -417,46 +415,45 @@ impl StereoConformanceValidator {
         let view = molecule.stereo_bond(id);
         let constraints = view.constraints();
         let stereogenicity = constraints.stereogenicity();
-        if view
+        let sym = view
             .attributes()
             .configuration
             .coset()
             .and_then(AsLit::as_lit)
-            .is_none()
-        {
-            return Solution::Underdetermined(());
-        }
-        let sym = molecule.stereo_bond_symmetry(symmetry, id);
+            .map(|_| molecule.stereo_bond_symmetry(symmetry, id));
         self.validate_symmetry(
-            &sym,
+            view.ligand_ids().len(),
+            sym.as_ref(),
             stereogenicity,
             constraints.topicities(),
             constraints.ligand_symmetries(),
         )
     }
 
-    /// Compare derived symmetry against constraints.
+    /// Check frame prerequisites and available symmetry against constraints.
     fn validate_symmetry<'a>(
         &self,
-        sym: &StereoSymmetry,
+        degree: usize,
+        sym: Option<&StereoSymmetry>,
         stereogenicity: &StereogenicityForm,
         topicities: impl Iterator<Item = &'a TopicityForm>,
         ligand_symmetries: impl Iterator<Item = &'a LigandSymmetryForm>,
     ) -> Solution<(), StereoConformanceContradiction> {
-        let mut any_undetermined = false;
-        let degree = sym.group().degree();
+        let mut any_undetermined = sym.is_none();
 
-        if !stereogenicity.is_undetermined() {
-            let derived = sym.stereogenicity();
-            if !stereogenicity.matches(&StereogenicityForm::Lit(derived)) {
-                return Solution::Contradictory(
-                    StereoConformanceContradiction::StereogenicityMismatch {
-                        asserted: stereogenicity.clone(),
-                        derived,
-                    },
-                );
+        if let Some(sym) = sym {
+            if !stereogenicity.is_undetermined() {
+                let derived = sym.stereogenicity();
+                if !stereogenicity.matches(&StereogenicityForm::Lit(derived)) {
+                    return Solution::Contradictory(
+                        StereoConformanceContradiction::StereogenicityMismatch {
+                            asserted: stereogenicity.clone(),
+                            derived,
+                        },
+                    );
+                }
+                any_undetermined |= !stereogenicity.is_ground();
             }
-            any_undetermined |= !stereogenicity.is_ground();
         }
 
         for t in topicities {
@@ -471,6 +468,9 @@ impl StereoConformanceValidator {
                     },
                 );
             }
+            let Some(sym) = sym else {
+                continue;
+            };
             let derived = sym.topicity(t.pair.first(), t.pair.second());
             if !t.relation.matches(&TopicityRelationForm::Lit(derived)) {
                 return Solution::Contradictory(StereoConformanceContradiction::TopicityMismatch {
@@ -490,6 +490,9 @@ impl StereoConformanceValidator {
                     StereoConformanceContradiction::LigandSymmetryViolation { asserted: *ls },
                 );
             }
+            let Some(sym) = sym else {
+                continue;
+            };
             let in_group = sym.group().contains(op);
             let holds = match ls.invariant {
                 BooleanForm::Lit(true) => in_group,
@@ -525,7 +528,7 @@ mod tests {
         StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
         StereoLigandPosition, StereoTerm, StereogenicityForm,
     };
-    use umol_graph_ir::mol_dsl_concrete;
+    use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
     use umol_perm::{Orientation, Permutation};
 
     use super::*;
@@ -1445,6 +1448,41 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom(
+        mol_dsl!(r#"{:atoms ["C#T+" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        Solution::Underdetermined(())
+    )]
+    #[case::bond(
+        mol_dsl!(r#"{:atoms ["C" "C#h#n0" "F" "Cl"]
+            :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#),
+        Solution::Underdetermined(())
+    )]
+    #[case::mixed_atom_failure(
+        mol_dsl!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "C#h0#n0#T+"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        Solution::Contradictory(StereoConformanceContradiction::Inconsistency(
+            StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(4) }))
+    )]
+    #[case::mixed_bond_failure(
+        mol_dsl!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "C#h0#n0" "C#h0#n0"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [4 5 "2#C+"]]}"#),
+        Solution::Contradictory(StereoConformanceContradiction::Inconsistency(
+            StereoInconsistency::CisTransStereoFailure { bond: BondId(3) }))
+    )]
+    fn test_stereo_conformance_validator_validate_partial_requests(
+        #[case] molecule: Molecule,
+        #[case] expected: Solution<(), StereoConformanceContradiction>,
+    ) {
+        let original = molecule.clone();
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
+            Ok(expected),
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
     #[case::last_position(0, 3)]
     #[case::second_out_of_range(0, 4)]
     #[case::both_out_of_range(4, 5)]
@@ -1467,7 +1505,8 @@ mod tests {
 
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default()).validate_symmetry(
-                &symmetry,
+                4,
+                Some(&symmetry),
                 &StereogenicityForm::Undetermined,
                 [topicity].iter(),
                 [].iter(),
@@ -1499,7 +1538,8 @@ mod tests {
 
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default()).validate_symmetry(
-                &symmetry,
+                4,
+                Some(&symmetry),
                 &StereogenicityForm::Undetermined,
                 [topicity].iter(),
                 [].iter(),
@@ -1540,7 +1580,8 @@ mod tests {
 
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default()).validate_symmetry(
-                &symmetry,
+                4,
+                Some(&symmetry),
                 &StereogenicityForm::Undetermined,
                 [].iter(),
                 [asserted].iter(),
@@ -1557,6 +1598,12 @@ mod tests {
         #[case] first: u32,
         #[case] second: u32,
         #[values(false, true)] bond: bool,
+        #[values(
+            StereoCoset::Lit(1),
+            StereoCoset::Undetermined,
+            StereoCoset::lit_set([0, 1])
+        )]
+        coset: StereoCoset,
     ) {
         let mut molecule = mol_dsl_concrete!(if bond { BUTENE } else { CFCLBRI });
         let pair = StereoLigandPair::new(StereoLigandPosition(first), StereoLigandPosition(second));
@@ -1565,57 +1612,79 @@ mod tests {
             relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
         };
         if bond {
-            molecule
-                .stereo_bond_mut(StereoBondId(0))
-                .attributes_mut()
+            let mut view = molecule.stereo_bond_mut(StereoBondId(0));
+            view.attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
+            view.attributes_mut()
                 .constraints
                 .set(StereoBondConstraintForm::Topicity(assertion));
         } else {
-            molecule
-                .stereo_atom_mut(StereoAtomId(0))
-                .attributes_mut()
+            let mut view = molecule.stereo_atom_mut(StereoAtomId(0));
+            view.attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset);
+            view.attributes_mut()
                 .constraints
                 .set(StereoAtomConstraintForm::Topicity(assertion));
         }
+        let original = molecule.clone();
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
             Ok(Solution::Contradictory(
                 StereoConformanceContradiction::TopicityPositionOutOfRange { pair, degree: 4 }
             ))
         );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
+    #[case::short(3)]
+    #[case::long(5)]
     fn test_stereo_conformance_validator_validate_ligand_symmetry_error(
-        #[values(false, true)] invariant: bool,
+        #[case] degree: usize,
+        #[values(
+            BooleanForm::Lit(false),
+            BooleanForm::Lit(true),
+            BooleanForm::Undetermined
+        )]
+        invariant: BooleanForm,
         #[values(false, true)] bond: bool,
+        #[values(
+            StereoCoset::Lit(1),
+            StereoCoset::Undetermined,
+            StereoCoset::lit_set([0, 1])
+        )]
+        coset: StereoCoset,
     ) {
         let mut molecule = mol_dsl_concrete!(if bond { BUTENE } else { CFCLBRI });
         let asserted = LigandSymmetryForm {
             permutation: OrientedLigandPermutation {
-                permutation: LigandPermutation(Permutation::identity(3)),
+                permutation: LigandPermutation(Permutation::identity(degree)),
                 orientation: Orientation::Proper,
             },
-            invariant: BooleanForm::Lit(invariant),
+            invariant,
         };
         if bond {
-            molecule
-                .stereo_bond_mut(StereoBondId(0))
-                .attributes_mut()
+            let mut view = molecule.stereo_bond_mut(StereoBondId(0));
+            view.attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
+            view.attributes_mut()
                 .constraints
                 .set(StereoBondConstraintForm::LigandSymmetry(asserted));
         } else {
-            molecule
-                .stereo_atom_mut(StereoAtomId(0))
-                .attributes_mut()
+            let mut view = molecule.stereo_atom_mut(StereoAtomId(0));
+            view.attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset);
+            view.attributes_mut()
                 .constraints
                 .set(StereoAtomConstraintForm::LigandSymmetry(asserted));
         }
+        let original = molecule.clone();
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
             Ok(Solution::Contradictory(
                 StereoConformanceContradiction::LigandSymmetryViolation { asserted }
             ))
         );
+        assert_eq!(molecule, original);
     }
 }

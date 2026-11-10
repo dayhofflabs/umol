@@ -1971,6 +1971,27 @@ mod tests {
     #[case::accepted_pairs(
         mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3#t0"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         AtomId(1), AtomConstraintForm::accepted_pairs(0))]
+    #[case::unknown_before_contradiction(
+        mol_dsl!(r#"{:atoms ["C#v1" "C" "C#v1"] :bonds [[0 1 "*"]]}"#),
+        AtomId(2), AtomConstraintForm::valence(1),
+    )]
+    #[case::contradiction_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#v1" "C#v1" "C"] :bonds [[1 2 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::valence(1),
+    )]
+    #[case::unknown_valence_donated_pairs(
+        mol_dsl!(r#"{:atoms ["N#v1#d1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::donated_pairs(1),
+    )]
+    #[case::unknown_valence_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["B#v1#t1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::accepted_pairs(1),
+    )]
+    #[case::unknown_donated_pairs_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["N#d1#t1" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        AtomId(0), AtomConstraintForm::accepted_pairs(1),
+    )]
     fn test_resolver_resolve_valence_error(
         #[case] molecule: Molecule,
         #[case] atom: AtomId,
@@ -2341,6 +2362,44 @@ mod tests {
     #[case::contradiction(
         mol_dsl!(r#"{
             :atoms ["C#i=#c0#h0#n*#u0#s#v0#a!#m1"]
+        }"#),
+        Solution::Contradictory(ResolveContradiction::MulticenterBonds(
+            MulticenterBondsContradiction::Constraint(
+                IncidenceConstraintInvariantsContradiction::Atom {
+                    atom: AtomId(0),
+                    constraint: AtomConstraintForm::multicenter_valence(
+                        MulticenterValenceForm::multicenter(1),
+                    ),
+                },
+            ),
+        ))
+    )]
+    #[case::unknown_before_contradiction(
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h0#n*#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]
+        }"#),
+        Solution::Contradictory(ResolveContradiction::MulticenterBonds(
+            MulticenterBondsContradiction::Constraint(
+                IncidenceConstraintInvariantsContradiction::Atom {
+                    atom: AtomId(3),
+                    constraint: AtomConstraintForm::multicenter_valence(
+                        MulticenterValenceForm::multicenter(1),
+                    ),
+                },
+            ),
+        ))
+    )]
+    #[case::contradiction_before_unknown(
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h0#n0#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n*#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
+                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"]
+            :multicenter-bonds [{:atoms [1 2 3] :attrs "*"}]
         }"#),
         Solution::Contradictory(ResolveContradiction::MulticenterBonds(
             MulticenterBondsContradiction::Constraint(

@@ -41,10 +41,12 @@ impl<'a> ValenceResolver<'a> {
     /// the incidence-constraint invariants checked first; no edits are
     /// produced. The chemistry solution rides `Solution`; the operational
     /// channel is currently uninhabited.
+    /// Established constraint contradictions take precedence over underdetermination.
     pub fn admit(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<ResolveState, ValenceContradiction>, ValenceError> {
+        let mut underdetermined = false;
         for atom in molecule.atoms().ids() {
             for key in [
                 AtomConstraintKey::Valence,
@@ -61,14 +63,15 @@ impl<'a> ValenceResolver<'a> {
                     .expect("atom id came from the molecule atom store")
                 {
                     Solution::Determined(()) => {}
-                    Solution::Underdetermined(()) => {
-                        return Ok(Solution::Underdetermined(ResolveState::default()));
-                    }
+                    Solution::Underdetermined(()) => underdetermined = true,
                     Solution::Contradictory(contradiction) => {
                         return Ok(Solution::Contradictory(contradiction.into()));
                     }
                 }
             }
+        }
+        if underdetermined {
+            return Ok(Solution::Underdetermined(ResolveState::default()));
         }
         let completions = match self {
             Self::AtomTyping(resolver) => resolver
@@ -252,6 +255,48 @@ mod tests {
         #[case] expected: Solution<ResolveState, ValenceContradiction>,
     ) {
         assert_eq!(ValenceResolver::new(&model).admit(&molecule), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::unknown_before_contradiction(
+        mol_dsl!(r#"{:atoms ["C#v1" "C" "C#v1"] :bonds [[0 1 "*"]]}"#),
+        AtomId(2), AtomConstraintForm::valence(1),
+    )]
+    #[case::contradiction_before_unknown(
+        mol_dsl!(r#"{:atoms ["C#v1" "C#v1" "C"] :bonds [[1 2 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::valence(1),
+    )]
+    #[case::unknown_valence_donated_pairs(
+        mol_dsl!(r#"{:atoms ["N#v1#d1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::donated_pairs(1),
+    )]
+    #[case::unknown_valence_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["B#v1#t1" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0), AtomConstraintForm::accepted_pairs(1),
+    )]
+    #[case::unknown_donated_pairs_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["N#d1#t1" "B"]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        AtomId(0), AtomConstraintForm::accepted_pairs(1),
+    )]
+    fn test_valence_resolver_admit_contradiction(
+        #[case] molecule: Molecule,
+        #[case] atom: AtomId,
+        #[case] constraint: AtomConstraintForm,
+        #[values(
+            ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            ValenceModel::atom_typing(Cow::Borrowed(AtomTypeRegistry::default_registry()))
+        )]
+        model: ValenceModel,
+    ) {
+        let original = molecule.clone();
+        assert_eq!(
+            ValenceResolver::new(&model).admit(&molecule),
+            Ok(Solution::Contradictory(ValenceContradiction::Constraint(
+                IncidenceConstraintInvariantsContradiction::Atom { atom, constraint },
+            )))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

@@ -90,6 +90,14 @@ pub struct AromaticityResolver {
 pub enum AromaticityProjectError {
     #[error("aromatic system {aromatic_system:?} has non-concrete fields")]
     NonConcreteAromaticSystem { aromatic_system: AromaticSystemId },
+    #[error(
+        "aromatic system {aromatic_system:?} has {member_count} members but {electron_count} electron contributions"
+    )]
+    ElectronCountMismatch {
+        aromatic_system: AromaticSystemId,
+        member_count: usize,
+        electron_count: usize,
+    },
     #[error("aromatic system {aromatic_system:?} has nonzero charge")]
     ChargedAromaticSystem { aromatic_system: AromaticSystemId },
     #[error("aromatic system {aromatic_system:?} is not closed-shell singlet")]
@@ -258,7 +266,8 @@ impl AromaticityResolver {
     /// # Errors
     ///
     /// Rejects non-concrete system contributions, charge, or spin; nonzero system charge;
-    /// non-singlet or nonzero-unpaired system spin; and incompatible atom or bond assertions.
+    /// non-singlet or nonzero-unpaired system spin; mismatched member/contribution counts;
+    /// and incompatible atom or bond assertions.
     pub fn project_into(
         &self,
         molecule: &mut Molecule,
@@ -278,7 +287,7 @@ impl AromaticityResolver {
     /// # Errors
     ///
     /// Rejects nonconcrete system fields, nonzero charge, spin other than a closed-shell
-    /// singlet, and conflicting assertions.
+    /// singlet, mismatched member/contribution counts, and conflicting assertions.
     pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, AromaticityProjectError> {
         if !molecule.has_aromatic_systems() {
             return Ok(Edits::new());
@@ -301,6 +310,14 @@ impl AromaticityResolver {
                     aromatic_system: aromatic_system.id(),
                 });
             };
+            let member_count = aromatic_system.atom_ids().len();
+            if electrons.len() != member_count {
+                return Err(AromaticityProjectError::ElectronCountMismatch {
+                    aromatic_system: aromatic_system.id(),
+                    member_count,
+                    electron_count: electrons.len(),
+                });
+            }
             if *charge != 0 {
                 return Err(AromaticityProjectError::ChargedAromaticSystem {
                     aromatic_system: aromatic_system.id(),
@@ -565,14 +582,6 @@ impl AromaticityResolver {
                 }
             }
         }
-        if underdetermined {
-            return Ok(Solution::Underdetermined(ResolveState {
-                completions,
-                aromatic_systems,
-                tie_breaks,
-            }));
-        }
-
         if let Some(inconsistency) = self
             .perception
             .check_aromatic_bonds(molecule)
@@ -580,6 +589,13 @@ impl AromaticityResolver {
             .next()
         {
             return Ok(Solution::Contradictory(inconsistency.into()));
+        }
+        if underdetermined {
+            return Ok(Solution::Underdetermined(ResolveState {
+                completions,
+                aromatic_systems,
+                tie_breaks,
+            }));
         }
         let contribution = |form: &AtomForm| -> AromaticValence {
             form.constraints
@@ -1261,7 +1277,9 @@ mod tests {
     use crate::ops::model::{
         AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope, RingLimits,
     };
-    use crate::ops::resolve::{ResolveConfig, ResolveContradiction, Resolver};
+    use crate::ops::resolve::{
+        ProjectError, ProjectFlags, ResolveConfig, ResolveContradiction, Resolver,
+    };
     use crate::ops::valence::{AtomCompletions, AtomTypingError, ValenceContradiction};
 
     #[fixture]
@@ -1409,21 +1427,54 @@ mod tests {
             :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-        }"#)
+        }"#),
+        Solution::Underdetermined(Edits::new()),
+    )]
+    #[case::bond_mismatch_unknown_first(
+        mol_dsl!(r#"{
+            :atoms ["C#a+" "C" "C" "C" "C" "C" "C"]
+            :bonds [[1 2 "1#a!"] [2 3 "1"] [3 4 "1"]
+                    [4 5 "1"] [5 6 "1"] [6 1 "1"]]
+            :aromatic-systems [{:atoms [1 2 3 4 5 6] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityInconsistency::AromaticBondConstraintMismatch {
+            bond: BondId(0),
+            aromatic_system: AromaticSystemId(0),
+        }.into()),
+    )]
+    #[case::bond_mismatch_unknown_last(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C#a+"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        Solution::Contradictory(AromaticityInconsistency::AromaticBondConstraintMismatch {
+            bond: BondId(0),
+            aromatic_system: AromaticSystemId(0),
+        }.into()),
     )]
     fn test_aromaticity_resolver_plan_resolve_partial(
         aromaticity_model: AromaticityModel,
         #[case] mut molecule: Molecule,
+        #[case] expected: Solution<Edits, AromaticityContradiction>,
+        #[values(AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep)]
+        failure: AromaticityFailurePolicy,
     ) {
         let original = molecule.clone();
-        let resolver = AromaticityResolver::new(&aromaticity_model);
-        assert_eq!(
-            resolver.plan_resolve(&molecule),
-            Ok(Solution::Underdetermined(Edits::new()))
+        let resolver = AromaticityResolver::with_config(
+            &aromaticity_model,
+            AromaticityResolveConfig {
+                aromatic_valence_failure: failure,
+                aromatic_system_failure: failure,
+                ..Default::default()
+            },
         );
+        assert_eq!(resolver.plan_resolve(&molecule), Ok(expected.clone()));
+        assert_eq!(molecule, original);
         assert_eq!(
             resolver.resolve_into(&mut molecule),
-            Ok(Solution::Underdetermined(()))
+            Ok(expected.map(|_| ()))
         );
         assert_eq!(molecule, original);
     }
@@ -2165,6 +2216,12 @@ mod tests {
     #[case::electrons_unknown("*#c0#u0#s", AromaticityProjectError::NonConcreteAromaticSystem { aromatic_system: AromaticSystemId(0) })]
     #[case::unpaired_unknown("[1,1,1,1,1,1]#c0#s", AromaticityProjectError::NonConcreteAromaticSystem { aromatic_system: AromaticSystemId(0) })]
     #[case::multiplicity_unknown("[1,1,1,1,1,1]#c0#u0", AromaticityProjectError::NonConcreteAromaticSystem { aromatic_system: AromaticSystemId(0) })]
+    #[case::short_counts("[1,1,1,1,1]#c0#u0#s", AromaticityProjectError::ElectronCountMismatch {
+        aromatic_system: AromaticSystemId(0), member_count: 6, electron_count: 5,
+    })]
+    #[case::long_counts("[1,1,1,1,1,1,1]#c0#u0#s", AromaticityProjectError::ElectronCountMismatch {
+        aromatic_system: AromaticSystemId(0), member_count: 6, electron_count: 7,
+    })]
     fn test_aromaticity_resolver_project_error(
         resolved_benzene: Molecule,
         #[case] form: &str,
@@ -2178,12 +2235,57 @@ mod tests {
         let mut molecule = editor.finish().unwrap();
         let original = molecule.clone();
         assert_eq!(
+            AromaticityResolver::new(&model).plan_project(&molecule),
+            Err(expected.clone())
+        );
+        assert_eq!(
             AromaticityResolver::new(&model).project(molecule.clone()),
             Err(expected.clone())
         );
         assert_eq!(
             AromaticityResolver::new(&model).project_into(&mut molecule),
             Err(expected)
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::short_counts(5)]
+    #[case::long_counts(7)]
+    fn test_aromaticity_resolver_project_electron_counts(
+        resolved_benzene: Molecule,
+        #[case] electron_count: usize,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut molecule = Molecule::combine_all([&resolved_benzene, &resolved_benzene]);
+        molecule
+            .aromatic_system_mut(AromaticSystemId(1))
+            .attributes_mut()
+            .electrons = ElectronCountsForm::Lit(vec![1; electron_count]);
+        let original = molecule.clone();
+        let expected = AromaticityProjectError::ElectronCountMismatch {
+            aromatic_system: AromaticSystemId(1),
+            member_count: 6,
+            electron_count,
+        };
+        let model = ChemistryModel::default();
+        let aromaticity = AromaticityResolver::new(&model.aromaticity);
+        assert_eq!(aromaticity.plan_project(&molecule), Err(expected.clone()));
+        assert_eq!(aromaticity.project(molecule.clone()), Err(expected.clone()));
+        assert_eq!(
+            aromaticity.project_into(&mut molecule),
+            Err(expected.clone())
+        );
+        assert_eq!(molecule, original);
+
+        let resolver = Resolver::new(&model);
+        assert_eq!(
+            resolver.project(molecule.clone(), ProjectFlags::all()),
+            Err(ProjectError::Aromaticity(expected.clone()))
+        );
+        assert_eq!(
+            resolver.project_into(&mut molecule, ProjectFlags::all(), rollback_method),
+            Err(ProjectError::Aromaticity(expected))
         );
         assert_eq!(molecule, original);
     }

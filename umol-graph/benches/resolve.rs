@@ -459,7 +459,7 @@ fn bench_aromatic_selection_duplicates(c: &mut Criterion) {
         );
         for assignment in 0..1 << flexible_atoms {
             assert_eq!(
-                perception.find_aromatic_systems(&molecule, AromaticityConfig::default(), |atom| {
+                perception.recognize(&molecule, AromaticityConfig::default(), |atom| {
                     let contribution = if atom.0 < 6 || atom.0 == 18 {
                         1
                     } else if atom.0 < 6 + flexible_atoms {

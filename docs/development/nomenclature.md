@@ -1381,7 +1381,7 @@ is an entity-level morphism; a transaction is a rollback-capable molecule-level 
 entities. It produces a policy-free derivation.
 
 **Not:** resolution (which applies policy and edits), validation.
-**In code:** `AromaticityPerception`.
+**In code:** `AromaticityPerceiver`.
 
 ### Permutation and dynamic permutation
 
