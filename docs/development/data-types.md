@@ -720,9 +720,10 @@ Atom collections with set semantics are normalized before comparison; ordered pr
 their order.
 
 Reaction spans reuse the complete molecule schema and lift each entity row through the span tags
-`Unchanged = 0`, `Added = 1`, `Removed = 2`, and `Modified = 3`. `Modified` compares its lhs value
-before its rhs value. Constraint spans use the first three tags. These positions are deliberately
-independent of the Rust declaration order.
+`Unchanged = 0`, `Removed = 1`, `Modified = 2`, and `Added = 3`. `Modified` compares its lhs value
+before its rhs value. `Added` takes the last position, so the typed order places lhs-present
+entities before added ones. Constraint spans use `Unchanged`, `Removed`, and `Added`. These
+positions are deliberately independent of the Rust declaration order.
 
 An absent extension contributes no positioned entry. Therefore appending a later field, variant,
 constraint, or entity kind within its assigned domain can leave the key of every earlier value

@@ -451,7 +451,7 @@ the type name of the returned value. The checks of S0d hold, with one test renam
 
 ### S1 — Span tag order
 
-#### S1a — Tag positions
+#### S1a — Tag positions **Done**
 
 `SpanTagPosition`: `REMOVED = 1`, `MODIFIED = 2`, `ADDED = 3`. The span tag sentence of the
 data-type guide changes with it. Breaking for span keys and representatives (red→green).
@@ -461,6 +461,11 @@ data-type guide changes with it. Breaking for span keys and representatives (red
 `tests/canonicalization/reaction_span.rs`, the span cases of the unit tests, and the Python
 canonicalization tests of `test_reaction_span.py` and `test_reaction.py` are rerun; any changed
 expected value is shown before it is edited.
+
+The three positions and the rows of `test_span_tag_position` changed, and the guide states the new
+positions. No other expected value changed: the library tests, the exact cases, the canonicalization
+properties, and the six Python canonicalization tests pass as they are. The reference comparison
+reports no mismatch.
 
 #### S1b — Remapping from the search order
 

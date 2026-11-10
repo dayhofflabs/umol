@@ -2114,9 +2114,9 @@ fn test_constraint_block_position(
 
 #[rstest]
 #[case::unchanged(SpanTagPosition::UNCHANGED, 0)]
-#[case::added(SpanTagPosition::ADDED, 1)]
-#[case::removed(SpanTagPosition::REMOVED, 2)]
-#[case::modified(SpanTagPosition::MODIFIED, 3)]
+#[case::removed(SpanTagPosition::REMOVED, 1)]
+#[case::modified(SpanTagPosition::MODIFIED, 2)]
+#[case::added(SpanTagPosition::ADDED, 3)]
 fn test_span_tag_position(#[case] position: SpanTagPosition, #[case] expected: u16) {
     assert_eq!(position.0, expected);
 }

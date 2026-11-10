@@ -424,9 +424,9 @@ struct SpanTagPosition(u16);
 
 impl SpanTagPosition {
     const UNCHANGED: Self = Self(0);
-    const ADDED: Self = Self(1);
-    const REMOVED: Self = Self(2);
-    const MODIFIED: Self = Self(3);
+    const REMOVED: Self = Self(1);
+    const MODIFIED: Self = Self(2);
+    const ADDED: Self = Self(3);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
