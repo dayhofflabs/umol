@@ -332,8 +332,9 @@ there is no stereo atom. Clippy on the benchmark target is clean, and every new 
 
 Baseline at commit 5049b9796: Criterion medians with a 1-second warm-up and 3 seconds of
 measurement, one run, single-threaded, Nauty, Apple M1 Pro, load average about 3. All 155 medians
-are in `scratch/244-compare/baseline/reference.tsv`, which is not committed. Each span adds one
-nitrogen atom to the molecule; a modified span is described in S0a.
+are in `scratch/244-compare/baseline/reference.tsv`, which is not committed. One median, the
+modified span of `cis_trans_stereo_bond`, is from a second run in the reference checkout. Each span
+adds one nitrogen atom to the molecule; a modified span is described in S0a.
 
 | Case | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` | Modified span `canonicalize` |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -341,7 +342,7 @@ nitrogen atom to the molecule; a modified span is described in S0a.
 | `disconnected_rings` | 34.4 µs | 60.0 µs | 4.43 ms | 8.76 ms | 406.1 µs |
 | `overlay_heavy` | 91.8 µs | 166.7 µs | 57.2 µs | 93.0 µs | 56.6 µs |
 | `tetrahedral_stereo` | 41.9 µs | 72.4 µs | 24.8 µs | 36.3 µs | 25.4 µs |
-| `cis_trans_stereo_bond` | 34.7 µs | 58.1 µs | 28.1 µs | 42.7 µs | 33.8 µs |
+| `cis_trans_stereo_bond` | 34.7 µs | 58.1 µs | 28.1 µs | 42.7 µs | 29.2 µs |
 | `mixed_atom_and_bond_stereo` | 72.3 µs | 134.7 µs | 48.0 µs | 73.8 µs | 47.7 µs |
 | `frame_relative_stereo_constraint` | 46.7 µs | 86.4 µs | 26.0 µs | 43.6 µs | 27.7 µs |
 | `meso_dichlorobutane` | 68.7 µs | 127.4 µs | 46.7 µs | 79.8 µs | 33.6 µs |
@@ -496,7 +497,7 @@ Each of the two span methods builds the options itself. The canonical forms and 
 of all spans of the pair file are identical before and after, and the tests, clippy, and the
 reference comparison pass.
 
-#### S2b — Pruning on
+#### S2b — Pruning on **Done**
 
 The two span methods pass pruning with backend canonical order at Topology and Constitution. The
 search graph, the partition, and the leaf stay as they are. [dep: S2a]
@@ -506,6 +507,30 @@ without it in key, and the visited-leaf counts of both are exact. Rows: three
 equivalent unchanged atoms; three equivalent added atoms; three equivalent removed atoms; two
 unchanged atoms and one modified atom; equivalent atoms under an unchanged and under a modified
 dative bond and aromatic system at Constitution.
+
+`test_canonical_candidate`, eight cases, passes its options itself and was written before the
+switch. Seven rows visit one leaf with pruning, against 6 or 2 without it. In the modified aromatic
+system row the electron counts single out one of three atoms, and the search visits 6 leaves without
+pruning and 3 with it: positional electron counts are automorphism colors and do not split the
+constitution partition, so the three atoms share a cell and two of them share an orbit.
+
+The canonical forms and tracked remappings of all spans of the pair file are identical to S2a. The
+reference comparison reports no mismatch, and the stage gate passes, including the two Python test
+files.
+
+Medians of the five cases that run at Topology or Constitution, against the S0b baseline:
+
+| Case | Span `canonicalize` | Span `canonical_eq` | Modified span `canonicalize` |
+| --- | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 72.6 → 37.8 µs | 134.4 → 62.8 µs | 29.5 → 29.6 µs |
+| `disconnected_rings` | 4.43 ms → 57.3 µs | 8.76 ms → 101.3 µs | 406.1 → 49.4 µs |
+| `feature_free_connected` | 2.19 ms → 60.4 µs | 4.44 ms → 113.9 µs | 375.2 → 52.3 µs |
+| `feature_free_disconnected` | 2.83 ms → 61.2 µs | 5.66 ms → 114.1 µs | 708.3 → 52.8 µs |
+| `symmetry_heavy_radicals` | 11.12 ms → 40.1 µs | 22.11 ms → 71.9 µs | 1.81 ms → 33.0 µs |
+
+Span `canonical_hash` follows `canonicalize`. The eight cases with stereo entities are within 4% of
+the baseline in every span group. The span `canonicalize` of the five cases is now 1.3 to 1.8 times
+the molecule's.
 
 ### S3 — Stereo-sensitive search at Structure
 

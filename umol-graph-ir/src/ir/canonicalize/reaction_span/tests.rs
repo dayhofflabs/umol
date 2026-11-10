@@ -387,6 +387,140 @@ fn test_initial_color_keys_incidence(
 }
 
 #[rstest]
+#[case::unchanged_atoms(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [6, 1],
+)]
+#[case::added_atoms(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Added(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [6, 1],
+)]
+#[case::removed_atoms(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Removed(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [6, 1],
+)]
+#[case::modified_atom(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Modified {
+                lhs: AtomForm::from_element(Element::C),
+                rhs: AtomForm::from_element(Element::N),
+            },
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [2, 1],
+)]
+#[case::unchanged_dative_bond(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::N, Element::N, Element::B]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        dative: vec![(
+            vec![AtomId(0), AtomId(1)],
+            AtomId(2),
+            EntitySpan::Unchanged(DativeBondForm::from_order(1)),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [2, 1],
+)]
+#[case::modified_dative_bond(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::N, Element::N, Element::B]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        dative: vec![(
+            vec![AtomId(0), AtomId(1)],
+            AtomId(2),
+            EntitySpan::Modified {
+                lhs: DativeBondForm::from_order(1),
+                rhs: DativeBondForm::from_order(2),
+            },
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [2, 1],
+)]
+#[case::unchanged_aromatic_system(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            EntitySpan::Unchanged(AromaticSystemForm::default()),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [6, 1],
+)]
+#[case::modified_aromatic_system(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 2]),
+            },
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [6, 3],
+)]
+fn test_canonical_candidate(
+    canonicalize_context: CanonicalizeContext,
+    #[case] span: ReactionSpan,
+    #[case] level: DescriptionLevel,
+    #[case] expected_visited_leaves: [usize; 2],
+) {
+    let unpruned = canonical_candidate(
+        &span,
+        level,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        },
+    )
+    .expect("fixed span has initial colors");
+    let pruned = canonical_candidate(
+        &span,
+        level,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            branch_order: BranchOrdering::BackendCanonical,
+        },
+    )
+    .expect("fixed span has initial colors");
+
+    assert_eq!(pruned.candidate.key, unpruned.candidate.key);
+    assert_eq!(
+        [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
+        expected_visited_leaves,
+    );
+}
+
+#[rstest]
 #[case::atom(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![

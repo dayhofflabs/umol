@@ -626,9 +626,17 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), ReactionSpanCanonicalizeError> {
+        let automorphism_pruning = matches!(
+            level,
+            DescriptionLevel::Topology | DescriptionLevel::Constitution
+        );
         let options = CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
+            automorphism_pruning,
+            branch_order: if automorphism_pruning {
+                BranchOrdering::BackendCanonical
+            } else {
+                BranchOrdering::NodeId
+            },
         };
         let normalized = self.normalize()?;
         let candidate = canonical_candidate(&normalized, level, context, options)?.candidate;
@@ -650,9 +658,17 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
+        let automorphism_pruning = matches!(
+            level,
+            DescriptionLevel::Topology | DescriptionLevel::Constitution
+        );
         let options = CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
+            automorphism_pruning,
+            branch_order: if automorphism_pruning {
+                BranchOrdering::BackendCanonical
+            } else {
+                BranchOrdering::NodeId
+            },
         };
         if level == DescriptionLevel::Full {
             let normalized = self.clone().normalize()?;
