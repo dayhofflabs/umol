@@ -1363,7 +1363,7 @@ the leaf.
 
 ### S5 — One leaf for both aggregates
 
-#### S5a — Deferred key
+#### S5a — Deferred key **Done**
 
 **Module:** `canonicalize.rs`. Additive (green). [dep: none]
 
@@ -1374,6 +1374,10 @@ if one did.
 **Tests:** `test_deferred_key_into_key`, `test_deferred_key_into_built`, and
 `test_deferred_key_cmp`, with a counting build function: a key is built once, on the first
 comparison or on `into_key`, and not at all for a leaf that is never compared.
+
+`DeferredKey` stands before `TopologySearchInput` and compares by its built key. It carries the
+unused-code attribute until S5b uses it. The three tests have seven cases; the library tests pass
+and clippy is clean.
 
 #### S5b — Span entity order and deferred leaf
 

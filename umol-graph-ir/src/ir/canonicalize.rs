@@ -1,5 +1,6 @@
 //! Aggregate canonicalization inputs and failures.
 
+use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -2368,6 +2369,60 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
             #[cfg(test)]
             stats,
         );
+    }
+}
+
+/// A leaf key that is built when it is first compared or read.
+#[cfg_attr(not(test), expect(dead_code))]
+struct DeferredKey<'a, Build> {
+    order: Vec<NodeId>,
+    build: &'a Build,
+    key: OnceCell<CanonicalComparisonKey>,
+}
+
+#[cfg_attr(not(test), expect(dead_code))]
+impl<'a, Build: Fn(&[NodeId]) -> CanonicalComparisonKey> DeferredKey<'a, Build> {
+    fn new(order: &[NodeId], build: &'a Build) -> Self {
+        Self {
+            order: order.to_vec(),
+            build,
+            key: OnceCell::new(),
+        }
+    }
+
+    fn get(&self) -> &CanonicalComparisonKey {
+        self.key.get_or_init(|| (self.build)(&self.order))
+    }
+
+    /// The key, built now if no comparison built it.
+    fn into_key(self) -> CanonicalComparisonKey {
+        self.get();
+        self.key.into_inner().expect("the key was built")
+    }
+
+    /// The key, if a comparison built it.
+    fn into_built(self) -> Option<CanonicalComparisonKey> {
+        self.key.into_inner()
+    }
+}
+
+impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> PartialEq for DeferredKey<'_, Build> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> Eq for DeferredKey<'_, Build> {}
+
+impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> PartialOrd for DeferredKey<'_, Build> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> Ord for DeferredKey<'_, Build> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.get().cmp(other.get())
     }
 }
 

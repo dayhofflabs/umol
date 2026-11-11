@@ -4,6 +4,7 @@
 //! stereo-frame transport, canonical representatives, and aggregate failure boundaries.
 
 use std::array;
+use std::cell::Cell;
 use std::cmp::Ordering;
 
 use rstest::{fixture, rstest};
@@ -2090,6 +2091,111 @@ fn test_canonical_search_exhaustive(#[case] node_count: usize) {
             );
         }
     }
+}
+
+#[rstest]
+#[case::unbuilt(false, 1)]
+#[case::compared(true, 2)]
+fn test_deferred_key_into_key(#[case] compared: bool, #[case] expected_builds: usize) {
+    let builds = Cell::new(0_usize);
+    let build = |order: &[NodeId]| {
+        builds.set(builds.get() + 1);
+        CanonicalComparisonKey {
+            entity_blocks: vec![PositionedKey {
+                position: EntityBlockPosition::ATOM,
+                value: index_sequence(order.iter().map(|node| node.index())),
+            }],
+            constraints: Vec::new(),
+        }
+    };
+    let key = DeferredKey::new(&[NodeId(1), NodeId(0)], &build);
+    if compared {
+        assert_eq!(
+            key.cmp(&DeferredKey::new(&[NodeId(0), NodeId(1)], &build)),
+            Ordering::Greater,
+        );
+    }
+
+    assert_eq!(
+        key.into_key(),
+        CanonicalComparisonKey {
+            entity_blocks: vec![PositionedKey {
+                position: EntityBlockPosition::ATOM,
+                value: index_sequence([1, 0]),
+            }],
+            constraints: Vec::new(),
+        },
+    );
+    assert_eq!(builds.get(), expected_builds);
+}
+
+#[rstest]
+#[case::unbuilt(false, None, 0)]
+#[case::compared(
+    true,
+    Some(CanonicalComparisonKey {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: index_sequence([1, 0]),
+        }],
+        constraints: Vec::new(),
+    }),
+    2,
+)]
+fn test_deferred_key_into_built(
+    #[case] compared: bool,
+    #[case] expected: Option<CanonicalComparisonKey>,
+    #[case] expected_builds: usize,
+) {
+    let builds = Cell::new(0_usize);
+    let build = |order: &[NodeId]| {
+        builds.set(builds.get() + 1);
+        CanonicalComparisonKey {
+            entity_blocks: vec![PositionedKey {
+                position: EntityBlockPosition::ATOM,
+                value: index_sequence(order.iter().map(|node| node.index())),
+            }],
+            constraints: Vec::new(),
+        }
+    };
+    let key = DeferredKey::new(&[NodeId(1), NodeId(0)], &build);
+    if compared {
+        assert_eq!(
+            key.cmp(&DeferredKey::new(&[NodeId(0), NodeId(1)], &build)),
+            Ordering::Greater,
+        );
+    }
+
+    assert_eq!(key.into_built(), expected);
+    assert_eq!(builds.get(), expected_builds);
+}
+
+#[rstest]
+#[case::less(vec![NodeId(0), NodeId(1)], vec![NodeId(1), NodeId(0)], Ordering::Less)]
+#[case::equal(vec![NodeId(0), NodeId(1)], vec![NodeId(0), NodeId(1)], Ordering::Equal)]
+#[case::greater(vec![NodeId(1), NodeId(0)], vec![NodeId(0), NodeId(1)], Ordering::Greater)]
+fn test_deferred_key_cmp(
+    #[case] left: Vec<NodeId>,
+    #[case] right: Vec<NodeId>,
+    #[case] expected: Ordering,
+) {
+    let builds = Cell::new(0_usize);
+    let build = |order: &[NodeId]| {
+        builds.set(builds.get() + 1);
+        CanonicalComparisonKey {
+            entity_blocks: vec![PositionedKey {
+                position: EntityBlockPosition::ATOM,
+                value: index_sequence(order.iter().map(|node| node.index())),
+            }],
+            constraints: Vec::new(),
+        }
+    };
+    let left = DeferredKey::new(&left, &build);
+    let right = DeferredKey::new(&right, &build);
+
+    assert_eq!(left.cmp(&right), expected);
+    assert_eq!(left.cmp(&right), expected);
+    assert_eq!(builds.get(), 2);
 }
 
 #[rstest]
