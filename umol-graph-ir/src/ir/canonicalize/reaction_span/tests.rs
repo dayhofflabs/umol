@@ -650,6 +650,67 @@ fn test_initial_color_keys_incidence(
 }
 
 #[rstest]
+#[case::unchanged_stereo_atom(ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1))))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([]))),
+        )],
+        ..Default::default()
+}))]
+#[case::modified_stereo_atom_rhs(ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1))))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
+            },
+        )],
+        ..Default::default()
+}))]
+#[case::unchanged_stereo_bond(ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: [(0, 1, 2), (0, 2, 1), (0, 3, 1), (1, 4, 1), (1, 5, 1)]
+            .map(|(first, second, order)| (AtomId(first), AtomId(second), EntitySpan::Unchanged(BondForm::from_order(order))))
+            .into(),
+        stereo_bonds: vec![(
+            BondId(0),
+            [3, 2, 5, 4]
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .into(),
+            EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([]))),
+        )],
+        ..Default::default()
+}))]
+fn test_initial_color_keys_error(#[case] span: ReactionSpan) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+
+    assert_eq!(
+        initial_color_keys(&span, &incidence_graph),
+        Err(Contradiction)
+    );
+}
+
+#[rstest]
 #[case::unchanged_atoms(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],

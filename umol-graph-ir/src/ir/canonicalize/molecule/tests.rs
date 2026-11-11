@@ -3698,12 +3698,53 @@ fn test_colored_encoding_exhaustive_graph_domain(#[case] atom_count: usize) {
 }
 
 #[rstest]
-fn test_initial_colors_error() {
-    let molecule = Molecule::from_entries(MoleculeEntries {
+#[case::charge(
+    Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C).with_charge(NumForm::LitSet(Box::default()))],
         ..Default::default()
-    });
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+    }),
+    IncidenceLevel::Topology,
+)]
+#[case::stereo_atom_configuration(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(AtomForm::from_element)
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
+        )],
+        ..Default::default()
+    }),
+    IncidenceLevel::Full,
+)]
+#[case::stereo_bond_configuration(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(AtomForm::from_element)
+            .into(),
+        bonds: [(0, 1, 2), (0, 2, 1), (0, 3, 1), (1, 4, 1), (1, 5, 1)]
+            .map(|(first, second, order)| (AtomId(first), AtomId(second), BondForm::from_order(order)))
+            .into(),
+        stereo_bonds: vec![(
+            BondId(0),
+            [3, 2, 5, 4]
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .into(),
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([])),
+        )],
+        ..Default::default()
+    }),
+    IncidenceLevel::Full,
+)]
+fn test_initial_colors_error(#[case] molecule: Molecule, #[case] incidence_level: IncidenceLevel) {
+    let incidence_graph = molecule.incidence_graph(incidence_level);
 
     assert_eq!(
         initial_colors(&molecule, &incidence_graph),

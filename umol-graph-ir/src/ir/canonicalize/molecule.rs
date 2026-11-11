@@ -768,7 +768,14 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 EntityBlockPosition::STEREO_ATOM,
                 positioned_product([(
                     2,
-                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                    option(
+                        attributes
+                            .configuration
+                            .clone()
+                            .normalize()?
+                            .kind()
+                            .map(stereo_kind_key),
+                    ),
                 )]),
             )
         }
@@ -791,7 +798,14 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 EntityBlockPosition::STEREO_BOND,
                 positioned_product([(
                     2,
-                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                    option(
+                        attributes
+                            .configuration
+                            .clone()
+                            .normalize()?
+                            .kind()
+                            .map(stereo_kind_key),
+                    ),
                 )]),
             )
         }

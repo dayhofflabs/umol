@@ -1501,6 +1501,33 @@ fn test_reaction_canonicalize_error(
 }
 
 #[rstest]
+#[case::stereo_atom_configuration(ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1))))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([]))),
+        )],
+        ..Default::default()
+}))]
+fn test_reaction_span_canonical_hash_error(
+    canonicalize_context: CanonicalizeContext,
+    #[case] span: ReactionSpan,
+) {
+    assert_eq!(
+        span.canonical_hash(&canonicalize_context),
+        Err(ReactionSpanCanonicalizeError::Contradiction(Contradiction)),
+    );
+}
+
+#[rstest]
 fn test_reaction_canonical_eq(canonicalize_context: CanonicalizeContext) {
     let source = reaction_canonicalization_fixture();
     let canonical = source

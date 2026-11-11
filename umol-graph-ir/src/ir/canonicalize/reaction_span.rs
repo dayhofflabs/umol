@@ -128,7 +128,14 @@ fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorK
                     .ok_or(Contradiction)?;
                 Ok(positioned_product([(
                     2,
-                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                    option(
+                        attributes
+                            .configuration
+                            .clone()
+                            .normalize()?
+                            .kind()
+                            .map(stereo_kind_key),
+                    ),
                 )]))
             })?,
         ),
@@ -147,7 +154,14 @@ fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorK
                     .ok_or(Contradiction)?;
                 Ok(positioned_product([(
                     2,
-                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                    option(
+                        attributes
+                            .configuration
+                            .clone()
+                            .normalize()?
+                            .kind()
+                            .map(stereo_kind_key),
+                    ),
                 )]))
             })?,
         ),
