@@ -2452,16 +2452,6 @@ fn partition_descriptors(
         .collect()
 }
 
-fn topology_initial_partition(
-    adapter: &AutomorphismAdapter,
-    colors: &InitialColors,
-) -> OrderedPartition {
-    OrderedPartition::from_color_ranks(adapter.node_sources.iter().map(|source| match *source {
-        SubdivisionNodeSource::Node(node) => colors.entities[node.index()],
-        SubdivisionNodeSource::Edge(edge) => colors.incidences[edge.index()],
-    }))
-}
-
 /// Search descriptors for the constitution key.
 ///
 /// Dative roles and positional electron counts remain exact automorphism colors, but they do not

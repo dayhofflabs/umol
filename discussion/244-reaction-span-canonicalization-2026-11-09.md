@@ -1541,7 +1541,7 @@ Medians of the five Topology cases for the S0b baseline, S5d, and this subitem:
 `canonical_hash` returns to 1.02 to 1.04 times the baseline and `canonical_eq` to 0.97 to 1.04
 times; `canonicalize` keeps the gain of S5d.
 
-#### S5f — Span Topology search
+#### S5f — Span Topology search **Done**
 
 Add `topology_search_input` over the union graph and `topology_key` in
 `canonicalize::reaction_span`. The Topology arm of `canonical_candidate` searches the topology
@@ -1551,6 +1551,33 @@ forms are unchanged relative to S5b (green). [dep: S0f, S5b]
 **Tests:** `test_topology_search_input`: exact graph, colors, node sources, and partition, including
 a removed and an added bond on one atom pair. `test_topology_key`: equal to the key of the remapped
 span on the Topology rows.
+
+`topology_search_input` and `topology_key` are in `canonicalize::reaction_span`, and the Topology
+arm of `canonical_candidate` uses them under the debug assertion. The other arms rank their colors
+and build their adapter themselves. `topology_initial_partition` had no other user and is removed.
+
+`test_topology_search_input` has four rows: a direct edge, an added atom, a modified bond outside
+the largest bond color class, and a removed and an added bond on one atom pair, of which the removed
+one is the direct edge. `test_topology_key` has five rows, each under two search orders.
+`test_canonical_candidate` gains a Topology row with the removed and the added bond.
+
+The library tests, the two integration tests, and the canonicalization properties pass with the
+assertion active, and clippy is clean. The reference comparison reports no mismatch, the 40,112
+canonical span forms are identical to those of S5b, and the molecule answers are identical.
+
+Medians of the five Topology cases for S5b and this subitem:
+
+| Case | `canonicalize` | `canonical_eq` |
+| --- | ---: | ---: |
+| `ordinary_naphthalene` | 27.4, 21.3 µs | 62.5, 40.5 µs |
+| `disconnected_rings` | 46.9, 34.0 µs | 100.9, 66.4 µs |
+| `feature_free_connected` | 46.3, 37.5 µs | 114.1, 81.0 µs |
+| `feature_free_disconnected` | 46.6, 40.2 µs | 115.3, 86.7 µs |
+| `symmetry_heavy_radicals` | 32.2, 32.7 µs | 72.4, 64.4 µs |
+
+Span `canonicalize` is 14% to 28% faster on four cases and unchanged on `symmetry_heavy_radicals`.
+Span `canonical_eq` is 11% to 35% faster on all five. `overlay_heavy` and `tetrahedral_stereo`,
+which do not take the Topology arm, are within 3% of S5b.
 
 ### S6 — Constraints and positional values in the colors
 

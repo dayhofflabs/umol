@@ -1,6 +1,6 @@
 //! Reaction-span and reaction canonicalization.
 
-use umol_graph_core::NodeId;
+use umol_graph_core::{EdgeId, Graph, NodeId, SubdivisionNodeSource};
 use umol_perm::Permutation;
 
 use super::super::atom::AtomForm;
@@ -31,12 +31,12 @@ use super::{
     positioned_product, product, push_span_block, rank_initial_colors, reaction_canonicalize_level,
     reaction_span_canonicalize_level, reaction_span_counts, relation_span_key, sequence,
     stereo_atom_constraint_form_key, stereo_bond_constraint_form_key,
-    stereo_configuration_form_key, stereo_kind_key, stereo_ligand_key, topology_initial_partition,
-    unpaired_electrons_form_key, variant, AutomorphismAdapter, BranchOrdering, CanonicalCandidate,
+    stereo_configuration_form_key, stereo_kind_key, stereo_ligand_key, unpaired_electrons_form_key,
+    variant, AutomorphismAdapter, AutomorphismColor, BranchOrdering, CanonicalCandidate,
     CanonicalComparisonKey, CanonicalKeyValue, CanonicalSearchOptions, CanonicalSearchResult,
     Canonicalize, CanonicalizeContext, ConstraintBlockPosition, DeferredKey, DescriptionLevel,
-    EntityBlockPosition, InitialColorKey, PositionedKey, ReactionCanonicalizeError,
-    ReactionSpanCanonicalizeError,
+    EntityBlockPosition, InitialColorKey, OrderedPartition, PositionedKey,
+    ReactionCanonicalizeError, ReactionSpanCanonicalizeError, TopologySearchInput,
 };
 
 fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorKey, Contradiction> {
@@ -689,6 +689,134 @@ fn comparison_key(
     })
 }
 
+/// Construct the topology search input from the dense normalized colors of topology entities.
+///
+/// The vertices are the atoms of the union graph. A removed and an added bond on one atom pair
+/// differ in color, so at most one of them is a direct edge.
+fn topology_search_input(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    entity_colors: &[u32],
+) -> TopologySearchInput {
+    let bond_color = |index: usize| {
+        let node = incidence_graph.node_of(Entity::Bond(BondId(index as u32)));
+        entity_colors[node.index()]
+    };
+    let mut bond_color_counts = vec![0_usize; entity_colors.len()];
+    for index in 0..span.bonds().len() {
+        bond_color_counts[bond_color(index) as usize] += 1;
+    }
+    let direct_bond_color = bond_color_counts
+        .into_iter()
+        .enumerate()
+        .filter(|(_, count)| *count > 0)
+        .max_by(|(lhs_color, lhs_count), (rhs_color, rhs_count)| {
+            lhs_count
+                .cmp(rhs_count)
+                .then_with(|| rhs_color.cmp(lhs_color))
+        })
+        .map(|(color, _)| color as u32);
+
+    let atom_count = span.atoms().len();
+    let mut colors = entity_colors[..atom_count]
+        .iter()
+        .copied()
+        .map(AutomorphismColor::Entity)
+        .collect::<Vec<_>>();
+    let mut node_sources = (0..atom_count)
+        .map(|index| SubdivisionNodeSource::Node(NodeId(index as u32)))
+        .collect::<Vec<_>>();
+    let mut edges = Vec::<[u32; 2]>::with_capacity(span.bonds().len() * 2);
+
+    for (index, edge) in span.graph().edge_ids().enumerate() {
+        let color = bond_color(index);
+        let [first, second] = span.graph().edge_endpoints(edge).map(|atom| atom.0);
+        if direct_bond_color == Some(color) {
+            edges.push([first, second]);
+        } else {
+            let subdivision = NodeId(node_sources.len() as u32);
+            node_sources.push(SubdivisionNodeSource::Node(subdivision));
+            colors.push(AutomorphismColor::Entity(color));
+            edges.push([first, subdivision.0]);
+            edges.push([subdivision.0, second]);
+        }
+    }
+
+    let graph = Graph::new(node_sources.len(), &edges);
+    debug_assert!(graph.is_simple());
+    let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
+        let AutomorphismColor::Entity(color) = *color else {
+            unreachable!("the topology search input uses entity colors")
+        };
+        color
+    }));
+
+    TopologySearchInput {
+        adapter: AutomorphismAdapter {
+            graph,
+            colors,
+            node_sources,
+            incidence_nodes: Vec::new(),
+            source_node_count: atom_count,
+        },
+        initial_partition,
+    }
+}
+
+/// The Topology key of the leaf that orders the entities of `span` as `entity_order`.
+///
+/// It equals the comparison key of the remapped span at Topology and is read without remapping:
+/// Topology has no participant frame.
+fn topology_key(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    entity_order: &[NodeId],
+) -> CanonicalComparisonKey {
+    let mut atom_images = vec![0_usize; span.atoms().len()];
+    let mut atoms = Vec::with_capacity(atom_images.len());
+    let mut bonds = Vec::with_capacity(span.bonds().len());
+    for &node in entity_order {
+        match incidence_graph.entity(node) {
+            Entity::Atom(id) => {
+                atom_images[id.index()] = atoms.len();
+                atoms.push(
+                    normalized_entity_span_key(&span.atoms()[id.index()], |attributes| {
+                        Ok(CanonicalKeyValue::Product(atom_inherent_fields(
+                            attributes,
+                        )?))
+                    })
+                    .expect("initial colors established span normalization"),
+                );
+            }
+            Entity::Bond(id) => {
+                let [first, second] = span
+                    .graph()
+                    .edge_endpoints(EdgeId::from(id))
+                    .map(|atom| atom_images[atom.index()]);
+                let endpoints =
+                    product([index_key(first.min(second)), index_key(first.max(second))]);
+                bonds.push(
+                    normalized_entity_span_key(&span.bonds()[id.index()], |attributes| {
+                        Ok(product([
+                            endpoints.clone(),
+                            CanonicalKeyValue::Product(bond_inherent_fields(attributes)?),
+                        ]))
+                    })
+                    .expect("initial colors established span normalization"),
+                );
+            }
+            _ => unreachable!("the Topology order holds atoms and bonds"),
+        }
+    }
+    let mut entity_blocks = Vec::with_capacity(2);
+    push_span_block(&mut entity_blocks, EntityBlockPosition::ATOM, atoms);
+    push_span_block(&mut entity_blocks, EntityBlockPosition::BOND, bonds);
+    CanonicalComparisonKey {
+        entity_blocks,
+        constraints: Vec::new(),
+    }
+}
+
 /// The order of every entity of `level` for an atom order.
 ///
 /// The atoms stand as the search orders them. The entities of each further kind follow with the
@@ -889,9 +1017,7 @@ fn canonical_candidate(
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = initial_color_keys(span, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let build_key = |order: &[NodeId]| {
+    let remapped_key = |order: &[NodeId]| {
         let remapping = remapping_from_order(span, &incidence_graph, order);
         let remapped = span.clone().remap(&remapping);
         let action = remapped.representative_action();
@@ -899,6 +1025,15 @@ fn canonical_candidate(
             .reframe_by(&action)
             .expect("integrity established compatible reaction-span frame actions");
         comparison_key(&reframed, level).expect("initial colors established span normalization")
+    };
+    let build_key = |order: &[NodeId]| {
+        if level == DescriptionLevel::Topology {
+            let key = topology_key(span, &incidence_graph, order);
+            debug_assert!(key == remapped_key(order));
+            key
+        } else {
+            remapped_key(order)
+        }
     };
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(span, &incidence_graph, level, order);
@@ -908,14 +1043,23 @@ fn canonical_candidate(
         }
     };
     let selected = match level {
-        DescriptionLevel::Topology => canonical_search_from_partition(
-            &adapter,
-            topology_initial_partition(&adapter, &colors),
-            context.automorphism_algorithm,
-            options,
-            &leaf_candidate,
-        ),
+        DescriptionLevel::Topology => {
+            let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
+            let TopologySearchInput {
+                adapter,
+                initial_partition,
+            } = topology_search_input(span, &incidence_graph, &entity_colors);
+            canonical_search_from_partition(
+                &adapter,
+                initial_partition,
+                context.automorphism_algorithm,
+                options,
+                &leaf_candidate,
+            )
+        }
         DescriptionLevel::Constitution | DescriptionLevel::Full => {
+            let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             canonical_search(
@@ -927,6 +1071,8 @@ fn canonical_candidate(
             )
         }
         DescriptionLevel::Structure => {
+            let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {

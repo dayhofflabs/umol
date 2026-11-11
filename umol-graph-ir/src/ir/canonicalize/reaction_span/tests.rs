@@ -711,6 +711,183 @@ fn test_initial_color_keys_error(#[case] span: ReactionSpan) {
 }
 
 #[rstest]
+#[case::unchanged_bond(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        ..Default::default()
+    }),
+    Graph::new(2, &[[0, 1]]),
+    vec![AutomorphismColor::Entity(0); 2],
+    vec![
+        SubdivisionNodeSource::Node(NodeId(0)),
+        SubdivisionNodeSource::Node(NodeId(1)),
+    ],
+    vec![vec![NodeId(0), NodeId(1)]],
+)]
+#[case::added_atom(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(1)))],
+        ..Default::default()
+    }),
+    Graph::new(2, &[[0, 1]]),
+    vec![AutomorphismColor::Entity(0), AutomorphismColor::Entity(1)],
+    vec![
+        SubdivisionNodeSource::Node(NodeId(0)),
+        SubdivisionNodeSource::Node(NodeId(1)),
+    ],
+    vec![vec![NodeId(0)], vec![NodeId(1)]],
+)]
+#[case::modified_bond(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (
+                AtomId(0),
+                AtomId(2),
+                EntitySpan::Modified {
+                    lhs: BondForm::from_order(1),
+                    rhs: BondForm::from_order(2),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    Graph::new(4, &[[0, 1], [1, 2], [0, 3], [3, 2]]),
+    vec![
+        AutomorphismColor::Entity(0),
+        AutomorphismColor::Entity(0),
+        AutomorphismColor::Entity(0),
+        AutomorphismColor::Entity(2),
+    ],
+    vec![
+        SubdivisionNodeSource::Node(NodeId(0)),
+        SubdivisionNodeSource::Node(NodeId(1)),
+        SubdivisionNodeSource::Node(NodeId(2)),
+        SubdivisionNodeSource::Node(NodeId(3)),
+    ],
+    vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
+)]
+#[case::removed_and_added_bond(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Graph::new(3, &[[0, 2], [2, 1], [0, 1]]),
+    vec![
+        AutomorphismColor::Entity(0),
+        AutomorphismColor::Entity(0),
+        AutomorphismColor::Entity(2),
+    ],
+    vec![
+        SubdivisionNodeSource::Node(NodeId(0)),
+        SubdivisionNodeSource::Node(NodeId(1)),
+        SubdivisionNodeSource::Node(NodeId(2)),
+    ],
+    vec![vec![NodeId(0), NodeId(1)], vec![NodeId(2)]],
+)]
+fn test_topology_search_input(
+    #[case] span: ReactionSpan,
+    #[case] expected_graph: Graph,
+    #[case] expected_colors: Vec<AutomorphismColor>,
+    #[case] expected_node_sources: Vec<SubdivisionNodeSource>,
+    #[case] expected_partition: Vec<Vec<NodeId>>,
+) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
+    let (entity_keys, _) = initial_color_keys(&span, &incidence_graph).unwrap();
+    let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
+    let input = topology_search_input(&span, &incidence_graph, &entity_colors);
+
+    assert_eq!(input.adapter.graph, expected_graph);
+    assert_eq!(input.adapter.colors, expected_colors);
+    assert_eq!(input.adapter.node_sources, expected_node_sources);
+    assert_eq!(input.adapter.incidence_nodes, Vec::new());
+    assert_eq!(input.adapter.source_node_count, span.atoms().len());
+    assert_eq!(input.initial_partition.cells, expected_partition);
+}
+
+#[rstest]
+#[case::unchanged_path(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+    bonds: vec![
+        (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+        (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+    ],
+    ..Default::default()
+}))]
+#[case::added_bond(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+    bonds: vec![
+        (AtomId(1), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+    ],
+    ..Default::default()
+}))]
+#[case::removed_and_added_bond(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+    bonds: vec![
+        (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
+        (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+    ],
+    ..Default::default()
+}))]
+#[case::modified_atom_and_bond(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::N),
+            rhs: AtomForm::from_element(Element::N).with_charge(1_i64),
+        },
+        EntitySpan::Removed(AtomForm::from_element(Element::O)),
+    ],
+    bonds: vec![
+        (
+            AtomId(0),
+            AtomId(1),
+            EntitySpan::Modified {
+                lhs: BondForm::from_order(1),
+                rhs: BondForm::from_order(2),
+            },
+        ),
+        (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+    ],
+    ..Default::default()
+}))]
+#[case::atoms_only(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        EntitySpan::Added(AtomForm::from_element(Element::C)),
+    ],
+    ..Default::default()
+}))]
+fn test_topology_key(#[case] span: ReactionSpan) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
+    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+
+    for _ in 0..2 {
+        let entity_order =
+            entity_order(&span, &incidence_graph, DescriptionLevel::Topology, &order);
+        let remapping = remapping_from_order(&span, &incidence_graph, &entity_order);
+
+        assert_eq!(
+            topology_key(&span, &incidence_graph, &entity_order),
+            comparison_key(&span.clone().remap(&remapping), DescriptionLevel::Topology).unwrap(),
+        );
+        order.reverse();
+    }
+}
+
+#[rstest]
 #[case::bond_participants(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
@@ -939,6 +1116,18 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
                 lhs: AtomForm::from_element(Element::C),
                 rhs: AtomForm::from_element(Element::N),
             },
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [2, 1],
+)]
+#[case::removed_and_added_bond(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
         ],
         ..Default::default()
     }),
