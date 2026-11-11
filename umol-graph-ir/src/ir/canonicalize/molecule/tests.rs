@@ -2042,6 +2042,387 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
 }
 
 #[rstest]
+#[case::bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    vec![
+        Entity::Atom(AtomId(2)),
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::Bond(BondId(1)),
+        Entity::Bond(BondId(0)),
+    ],
+)]
+#[case::dative_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        dative: vec![
+            (vec![AtomId(0)], AtomId(2), DativeBondForm::from_order(1)),
+            (vec![AtomId(1)], AtomId(3), DativeBondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    vec![
+        Entity::Atom(AtomId(3)),
+        Entity::Atom(AtomId(2)),
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::DativeBond(DativeBondId(1)),
+        Entity::DativeBond(DativeBondId(0)),
+    ],
+)]
+#[case::aromatic_system(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        aromatic: vec![
+            (vec![AtomId(0), AtomId(1)], AromaticSystemForm::default()),
+            (vec![AtomId(2), AtomId(3)], AromaticSystemForm::default()),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    vec![
+        Entity::Atom(AtomId(3)),
+        Entity::Atom(AtomId(2)),
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::AromaticSystem(AromaticSystemId(1)),
+        Entity::AromaticSystem(AromaticSystemId(0)),
+    ],
+)]
+#[case::multicenter_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        multicenter: vec![
+            (vec![AtomId(0), AtomId(1)], MulticenterBondForm::default()),
+            (vec![AtomId(2), AtomId(3)], MulticenterBondForm::default()),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    vec![
+        Entity::Atom(AtomId(3)),
+        Entity::Atom(AtomId(2)),
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::MulticenterBond(MulticenterBondId(1)),
+        Entity::MulticenterBond(MulticenterBondId(0)),
+    ],
+)]
+#[case::noncovalent_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        noncovalent: vec![
+            ([AtomId(0), AtomId(1)], NoncovalentBondForm::default()),
+            ([AtomId(2), AtomId(3)], NoncovalentBondForm::default()),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    vec![
+        Entity::Atom(AtomId(3)),
+        Entity::Atom(AtomId(2)),
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(1)),
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+    ],
+)]
+#[case::stereo_atom(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        stereo_atoms: vec![
+            (AtomId(0), Vec::new(), StereoAtomForm::default()),
+            (AtomId(1), Vec::new(), StereoAtomForm::default()),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    vec![
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::StereoAtom(StereoAtomId(1)),
+        Entity::StereoAtom(StereoAtomId(0)),
+    ],
+)]
+#[case::stereo_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(2), AtomId(3), BondForm::from_order(2)),
+        ],
+        stereo_bonds: vec![
+            (
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::default(),
+            ),
+            (
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::default(),
+            ),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    vec![
+        Entity::Atom(AtomId(3)),
+        Entity::Atom(AtomId(2)),
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::Bond(BondId(1)),
+        Entity::Bond(BondId(0)),
+        Entity::StereoBond(StereoBondId(1)),
+        Entity::StereoBond(StereoBondId(0)),
+    ],
+)]
+#[case::constitution_level(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())],
+        stereo_atoms: vec![(AtomId(0), Vec::new(), StereoAtomForm::default())],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    vec![
+        Entity::Atom(AtomId(1)),
+        Entity::Atom(AtomId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+    ],
+)]
+fn test_entity_order(
+    #[case] molecule: Molecule,
+    #[case] level: DescriptionLevel,
+    #[case] expected: Vec<Entity>,
+) {
+    let incidence_graph = molecule.incidence_graph(match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    });
+    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+    order.reverse();
+
+    assert_eq!(
+        entity_order(&molecule, &incidence_graph, level, &order)
+            .into_iter()
+            .map(|node| incidence_graph.entity(node))
+            .collect::<Vec<_>>(),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(1), AtomId(0), BondForm::from_order(2)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1).with_charge(-1_i64)),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    EntityBlockPosition::BOND,
+    Some(vec![
+        positioned_product([
+            (0, product([CanonicalKeyValue::Unsigned(0), CanonicalKeyValue::Unsigned(1)])),
+            (1, num_form_key(&NumForm::Lit(2))),
+            (2, num_form_key(&NumForm::Undetermined)),
+            (3, unpaired_electrons_form_key(&UnpairedElectronsForm::default())),
+        ]),
+        positioned_product([
+            (0, product([CanonicalKeyValue::Unsigned(1), CanonicalKeyValue::Unsigned(2)])),
+            (1, num_form_key(&NumForm::Lit(1))),
+            (2, num_form_key(&NumForm::Lit(-1))),
+            (3, unpaired_electrons_form_key(&UnpairedElectronsForm::default())),
+        ]),
+    ]),
+)]
+#[case::dative_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        dative: vec![(
+            vec![AtomId(1), AtomId(0)],
+            AtomId(2),
+            DativeBondForm::new(NumForm::RangeFrom(-1)),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    EntityBlockPosition::DATIVE_BOND,
+    Some(vec![positioned_product([
+        (
+            0,
+            sequence([CanonicalKeyValue::Unsigned(0), CanonicalKeyValue::Unsigned(1)]),
+        ),
+        (1, CanonicalKeyValue::Unsigned(2)),
+        (2, num_form_key(&NumForm::RangeFrom(-1))),
+    ])]),
+)]
+#[case::aromatic_system(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![1, 2]).with_charge(NumForm::var("q")),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    EntityBlockPosition::AROMATIC_SYSTEM,
+    Some(vec![positioned_product([
+        (
+            0,
+            sequence([CanonicalKeyValue::Unsigned(0), CanonicalKeyValue::Unsigned(2)]),
+        ),
+        (1, electron_counts_form_key(&ElectronCountsForm::Lit(vec![1, 2]))),
+        (2, num_form_key(&NumForm::var("q"))),
+        (3, unpaired_electrons_form_key(&UnpairedElectronsForm::default())),
+    ])]),
+)]
+#[case::multicenter_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(2)],
+            MulticenterBondForm::from_electrons(vec![2, 1]),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    EntityBlockPosition::MULTICENTER_BOND,
+    Some(vec![positioned_product([
+        (
+            0,
+            sequence([CanonicalKeyValue::Unsigned(0), CanonicalKeyValue::Unsigned(2)]),
+        ),
+        (1, electron_counts_form_key(&ElectronCountsForm::Lit(vec![2, 1]))),
+        (2, num_form_key(&NumForm::Undetermined)),
+        (3, unpaired_electrons_form_key(&UnpairedElectronsForm::default())),
+    ])]),
+)]
+#[case::noncovalent_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        noncovalent: vec![([AtomId(2), AtomId(0)], NoncovalentBondForm::default())],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    EntityBlockPosition::NONCOVALENT_BOND,
+    Some(vec![positioned_product([
+        (0, product([CanonicalKeyValue::Unsigned(0), CanonicalKeyValue::Unsigned(2)])),
+        (1, noncovalent_bond_kind_form_key(&NoncovalentBondKindForm::Undetermined)),
+    ])]),
+)]
+#[case::stereo_atom(
+    stereo_atom_canonicalization_molecule(),
+    DescriptionLevel::Structure,
+    EntityBlockPosition::STEREO_ATOM,
+    Some(vec![positioned_product([
+        (0, CanonicalKeyValue::Unsigned(0)),
+        (
+            1,
+            sequence([
+                stereo_ligand_key(4, StereoLigandKind::Atom),
+                stereo_ligand_key(2, StereoLigandKind::Atom),
+                stereo_ligand_key(1, StereoLigandKind::Atom),
+                stereo_ligand_key(3, StereoLigandKind::Atom),
+            ]),
+        ),
+        (
+            2,
+            stereo_configuration_form_key(&StereoConfigurationForm::kinded(
+                StereoKind::Tetrahedral,
+                0u32,
+            )),
+        ),
+    ])]),
+)]
+#[case::stereo_atom_below_structure(
+    stereo_atom_canonicalization_molecule(),
+    DescriptionLevel::Constitution,
+    EntityBlockPosition::STEREO_ATOM,
+    None
+)]
+fn test_comparison_key(
+    #[case] molecule: Molecule,
+    #[case] level: DescriptionLevel,
+    #[case] position: EntityBlockPosition,
+    #[case] expected: Option<Vec<CanonicalKeyValue>>,
+) {
+    let key = comparison_key(&molecule, level).expect("fixed molecule has a comparison key");
+
+    assert_eq!(
+        key.entity_blocks
+            .into_iter()
+            .find(|block| block.position == position),
+        expected.map(|rows| PositionedKey {
+            position,
+            value: sequence(rows),
+        }),
+    );
+}
+
+#[rstest]
+#[case::topology(initial_color_molecule(), DescriptionLevel::Topology)]
+#[case::constitution(initial_color_molecule(), DescriptionLevel::Constitution)]
+#[case::structure(initial_color_molecule(), DescriptionLevel::Structure)]
+#[case::stereo_atom(stereo_atom_canonicalization_molecule(), DescriptionLevel::Structure)]
+#[case::stereo_bond(stereo_bond_canonicalization_molecule(), DescriptionLevel::Structure)]
+#[case::full(stereo_constraint_canonicalization_molecule(), DescriptionLevel::Full)]
+fn test_leaf_key(#[case] molecule: Molecule, #[case] level: DescriptionLevel) {
+    let molecule = molecule.normalize().expect("fixed molecule normalizes");
+    let incidence_graph = molecule.incidence_graph(match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    });
+    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+
+    for _ in 0..2 {
+        let candidate = match level {
+            DescriptionLevel::Topology => topology_candidate(&molecule, &incidence_graph, &order),
+            DescriptionLevel::Constitution => {
+                constitution_candidate(&molecule, &incidence_graph, &order)
+            }
+            DescriptionLevel::Structure => structure_candidate(&molecule, &incidence_graph, &order),
+            DescriptionLevel::Full => complete_candidate(&molecule, &incidence_graph, &order)
+                .map(|(candidate, _)| candidate),
+        }
+        .expect("fixed molecule has a candidate");
+        let entity_order = entity_order(&molecule, &incidence_graph, level, &order);
+
+        assert_eq!(entity_order, candidate.entity_order);
+        assert_eq!(
+            leaf_key(&molecule, &incidence_graph, level, &entity_order),
+            candidate.key,
+        );
+        order.reverse();
+    }
+}
+
+#[rstest]
 #[case::localized_bond(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],

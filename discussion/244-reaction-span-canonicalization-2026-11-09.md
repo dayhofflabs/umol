@@ -822,6 +822,13 @@ A constrained molecule takes 3% to 6% longer than the same molecule without cons
   forms on pairs of molecules that differ in an arbitrary field or constraint of one entity.
   Equality of forms is derived and sees every field, so a field that does not enter the key fails
   the property. The property covers what its generators produce.
+- **Key rows.** A key row is a plain tuple: the participants of the entity, then its fields in
+  field-kind order, then its constraints. The color of an entity is the frame-independent part of
+  the same tuple. Components carry no explicit position numbers. Keys are compared only within one
+  run, and their stability across code changes is not a design consideration.
+- **Search without a key.** Comparing the candidates by the derived order of their stored,
+  normalized data would remove the key type, its key functions, and the comparison schema of the
+  guide. It is a separate possibility and is not part of this plan.
 
 The search of each level, for both aggregates:
 
@@ -1422,7 +1429,7 @@ ends with one leaf and builds no key, and unchanged on `meso_dichlorobutane`,
 `para_stereo_trichloropentane`, and `para_stereo_cascade`. Span `canonical_eq` is 1% to 5% slower
 on all 16 cases, the cost of the order by participants.
 
-#### S5c — Molecule leaf functions
+#### S5c — Molecule leaf functions **Done**
 
 Add `entity_order`, `comparison_key`, and `leaf_key` in `canonicalize::molecule`. `entity_order`
 gives the order of every entity of a level for an atom order, with the non-atom entities by their
@@ -1433,6 +1440,20 @@ participants. `comparison_key` reads the key of a molecule with every row in sto
 **Tests:** `test_entity_order`; `test_comparison_key`, with the exact keys of the present key tests
 at each level; `test_leaf_key`, which equals the key of the present candidate functions on their
 rows.
+
+The three functions are added with the unused-code attribute, which S5d removes. `entity_order` is
+that of the trial. `comparison_key` builds every row in the layout of the canonical comparison
+schema of the data-type guide, which is the layout of the present candidate functions. The key of
+the trial nested the same components differently; its layout is not taken over, so the keys and
+hashes of molecules do not change in S5d.
+
+`test_entity_order` has eight rows under a reversed search order: bonds; for each of the six
+further kinds two entities stored against the order of their participants; and a row at
+Constitution, which leaves a stereo atom out. `test_comparison_key` has seven rows with the exact
+rows of bonds, of each of the four non-stereo overlay kinds, and of a stereo atom in its stored
+frame, and one row in which the stereo block is absent below Structure. `test_leaf_key` has six
+rows at the four levels: for two search orders the entity order and the key equal those of the
+present candidate function of the level. The library tests pass and clippy is clean.
 
 #### S5d — Molecule searches on the leaf
 
@@ -1506,11 +1527,14 @@ not enter the canonical key.
 
 Add `atom_field_key` and `bond_field_key`. Each takes a field kind and the form, matches on the
 kind, and returns the key of that field. `atom_form_fields` and `bond_form_fields` replace
-`atom_inherent_fields` and `bond_inherent_fields`: each walks the field kinds of its form and
-appends the key of the normalized constraints when the entity has any. Every atom and bond color and
-key row of both aggregates is built from them. Level selection of molecules, spans, and deltas no
-longer reads atom and bond constraints. Breaking for representatives of aggregates with atom or bond
-constraints (red→green). [dep: S5e, S5f, S6b, S6c]
+`atom_inherent_fields` and `bond_inherent_fields`: each walks the field kinds of its form and ends
+with the sequence of the keys of the normalized constraints. An atom color and an atom row are this
+plain tuple; a bond color is the same, and a bond row is the endpoint pair followed by it. The
+explicit field positions of atom and bond rows and colors go. Every atom and bond color and key row
+of both aggregates is built from the two functions. Level selection of molecules, spans, and deltas
+no longer reads atom and bond constraints. Breaking for the keys of every aggregate and for
+representatives of aggregates with atom or bond constraints (red→green).
+[dep: S5e, S5f, S6b, S6c]
 
 **Tests:** `test_atom_field_key` and `test_bond_field_key` with a row per field kind. Rows of
 `test_atom_form_fields` and `test_bond_form_fields` with and without constraints, including a
@@ -1520,39 +1544,47 @@ constraint on one bond, against a renumbered copy and against another placement.
 assert the replaced rule are shown first: four rows of `test_delta_canonicalize_level`, the three
 description-level tests, `test_initial_colors`, `test_topology_comparison_key`,
 `test_canonical_key_by_structure`, the two excluded-data tests, and `test_molecule_canonicalize`.
-The two Python test files are rerun. The Topology benchmarks are timed against S5.
+The exact key rows of atoms and bonds in the key and color tests change with the plain tuple and are
+shown first. The two Python test files are rerun. The Topology benchmarks are timed against S5.
 
 #### S6e — Field keys and constraints of the non-stereo overlay kinds
 
 Add `dative_bond_field_key`, `aromatic_system_field_key`, `multicenter_bond_field_key`, and
 `noncovalent_bond_field_key`, of the shape of S6d. In both aggregates the color of an entity of
 these kinds walks its field kinds and its constraints and keeps those whose `reframe_kind` is
-`Independent`, and its key row is its participants, every field kind, and every constraint. Level
-selection no longer reads the constraints of these kinds. Breaking for representatives of aggregates
-with such constraints (red→green). [dep: S6d]
+`Independent`, and its key row is the plain tuple of its participants, every field kind, and every
+constraint. Level selection no longer reads the constraints of these kinds. Breaking for the keys of
+aggregates with these kinds and for representatives of aggregates with such constraints
+(red→green). [dep: S6d]
 
 **Tests:** one `test_<kind>_field_key` table per kind with a row per field kind. Rows of
 `test_entity_color_key` and `test_comparison_key` for each of the four kinds with a constraint. Rows
 of the two `canonical_eq` tests: biphenyl with `#e6` on one aromatic system against a renumbered
-copy and against the other system. Eight rows of `test_delta_canonicalize_level` are shown first.
+copy and against the other system. Eight rows of `test_delta_canonicalize_level` and the exact key
+rows of the four kinds are shown first.
 
 #### S6f — Field keys and constraints of stereo entities
 
 Add `stereo_atom_field_key` and `stereo_bond_field_key`. In both aggregates the color of a stereo
 entity is its stereo kind followed by the walk of S6e, which keeps the constraints whose
-`reframe_kind` is `Independent`; its key row is its site, its ligands, every field kind, and every
-constraint. `generator_preserves_stereo` transports the whole stereo form by the frame action and
-compares it with the form of the image. Level selection reads no inline constraint, and
-`level_with_constraints` is removed. The Full key keeps the molecule-level constraint block only.
-The data-type guide's passage on constraints and structural orbits is rewritten. Breaking for
-representatives of aggregates with stereo-entity constraints (red→green). [dep: S6e]
+`reframe_kind` is `Independent`; its key row is the plain tuple of its site, its ligands, every
+field kind, and every constraint. `generator_preserves_stereo` transports the whole stereo form by
+the frame action and compares it with the form of the image. Level selection reads no inline
+constraint, and `level_with_constraints` is removed. The Full key keeps the molecule-level
+constraint block only. `positioned_product` goes with its last use. The data-type guide's passage
+on constraints and structural orbits is rewritten, and its canonical comparison schema states the
+rows as plain tuples of participants, fields in field-kind order, and constraints, without explicit
+positions for row components or for colors. Breaking for the keys of aggregates with stereo
+entities and for representatives of aggregates with stereo-entity constraints (red→green).
+[dep: S6e]
 
 **Tests:** `test_stereo_atom_field_key` and `test_stereo_bond_field_key`. Rows of
 `test_retain_stereo_preserving_generators` in both submodules: a topicity constraint on one of two
 equivalent stereocentres; the same constraint on both; a constraint on one side of a span only. Rows
 of the two `canonical_eq` tests: 2,3-dichlorobutane with a stereogenicity or a topicity constraint
 on one centre against a renumbered copy, against the same constraint on the other centre, and
-against another ligand pair. Four rows of `test_delta_canonicalize_level` are shown first.
+against another ligand pair. Four rows of `test_delta_canonicalize_level` and the exact key rows of
+stereo entities are shown first.
 
 #### S6g — Search partition from the colors
 

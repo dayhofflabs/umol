@@ -1271,6 +1271,346 @@ fn remapping_from_order(
     molecule_remapping(&images)
 }
 
+/// The order of every entity of `level` for an atom order.
+///
+/// The atoms stand as the search orders them. The entities of each further kind follow by their
+/// participants. Entities of one kind on the same participants keep their search order.
+#[cfg_attr(not(test), expect(dead_code))]
+fn entity_order(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
+    order: &[NodeId],
+) -> Vec<NodeId> {
+    let node_count = incidence_graph.graph().node_count();
+    let mut positions = vec![0_usize; node_count];
+    let mut atom_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Atom)];
+    let mut entity_order = Vec::with_capacity(node_count);
+    for (position, &node) in order.iter().enumerate() {
+        positions[node.index()] = position;
+        if let Entity::Atom(id) = incidence_graph.entity(node) {
+            atom_images[id.index()] = entity_order.len();
+            entity_order.push(node);
+        }
+    }
+    let atom_image = |atom: AtomId| atom_images[atom.index()];
+    let search_position = |entity: Entity| {
+        let node = incidence_graph.node_of(entity);
+        (positions[node.index()], node)
+    };
+
+    let mut bond_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Bond)];
+    let mut bonds = molecule
+        .bonds()
+        .iter()
+        .map(|bond| {
+            let [first, second] = bond.atom_ids().map(atom_image);
+            let (position, node) = search_position(Entity::Bond(bond.id()));
+            (
+                (first.min(second), first.max(second)),
+                position,
+                node,
+                bond.id(),
+            )
+        })
+        .collect::<Vec<_>>();
+    bonds.sort_unstable();
+    for (image, &(_, _, node, id)) in bonds.iter().enumerate() {
+        bond_images[id.index()] = image;
+        entity_order.push(node);
+    }
+
+    if level >= DescriptionLevel::Constitution {
+        let mut dative = molecule
+            .dative_bonds()
+            .iter()
+            .map(|bond| {
+                let mut donors = bond.donor_ids().map(atom_image).collect::<Vec<_>>();
+                donors.sort_unstable();
+                let (position, node) = search_position(Entity::DativeBond(bond.id()));
+                ((donors, atom_image(bond.acceptor_id())), position, node)
+            })
+            .collect::<Vec<_>>();
+        dative.sort_unstable();
+        entity_order.extend(dative.into_iter().map(|(_, _, node)| node));
+
+        let mut aromatic = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|system| {
+                let mut atoms = system.atom_ids().map(atom_image).collect::<Vec<_>>();
+                atoms.sort_unstable();
+                let (position, node) = search_position(Entity::AromaticSystem(system.id()));
+                (atoms, position, node)
+            })
+            .collect::<Vec<_>>();
+        aromatic.sort_unstable();
+        entity_order.extend(aromatic.into_iter().map(|(_, _, node)| node));
+
+        let mut multicenter = molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|bond| {
+                let mut atoms = bond.atom_ids().map(atom_image).collect::<Vec<_>>();
+                atoms.sort_unstable();
+                let (position, node) = search_position(Entity::MulticenterBond(bond.id()));
+                (atoms, position, node)
+            })
+            .collect::<Vec<_>>();
+        multicenter.sort_unstable();
+        entity_order.extend(multicenter.into_iter().map(|(_, _, node)| node));
+
+        let mut noncovalent = molecule
+            .noncovalent_bonds()
+            .iter()
+            .map(|bond| {
+                let [first, second] = bond.atom_ids().map(atom_image);
+                let (position, node) = search_position(Entity::NoncovalentBond(bond.id()));
+                ((first.min(second), first.max(second)), position, node)
+            })
+            .collect::<Vec<_>>();
+        noncovalent.sort_unstable();
+        entity_order.extend(noncovalent.into_iter().map(|(_, _, node)| node));
+    }
+
+    if level >= DescriptionLevel::Structure {
+        let mut stereo_atoms = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| {
+                let (position, node) = search_position(Entity::StereoAtom(stereo.id()));
+                (atom_image(stereo.site_id()), position, node)
+            })
+            .collect::<Vec<_>>();
+        stereo_atoms.sort_unstable();
+        entity_order.extend(stereo_atoms.into_iter().map(|(_, _, node)| node));
+
+        let mut stereo_bonds = molecule
+            .stereo_bonds()
+            .iter()
+            .map(|stereo| {
+                let (position, node) = search_position(Entity::StereoBond(stereo.id()));
+                (bond_images[stereo.site_id().index()], position, node)
+            })
+            .collect::<Vec<_>>();
+        stereo_bonds.sort_unstable();
+        entity_order.extend(stereo_bonds.into_iter().map(|(_, _, node)| node));
+    }
+
+    entity_order
+}
+
+/// The comparison key of `molecule` at `level`, with every entity row in stored order.
+///
+/// It is the key of a leaf when the molecule stands in the entity order and the participant frames
+/// of that leaf.
+#[cfg_attr(not(test), expect(dead_code))]
+fn comparison_key(
+    molecule: &Molecule,
+    level: DescriptionLevel,
+) -> Result<CanonicalComparisonKey, Contradiction> {
+    let mut entity_blocks = Vec::new();
+    let mut push_block = |position: EntityBlockPosition, rows: Vec<CanonicalKeyValue>| {
+        if !rows.is_empty() {
+            entity_blocks.push(PositionedKey {
+                position,
+                value: sequence(rows),
+            });
+        }
+    };
+    let endpoint_pair = |[first, second]: [AtomId; 2]| {
+        product([
+            index_key(first.index().min(second.index())),
+            index_key(first.index().max(second.index())),
+        ])
+    };
+
+    let atoms = molecule
+        .atoms()
+        .iter()
+        .map(|atom| atom_inherent_fields(atom.attributes()).map(CanonicalKeyValue::Product))
+        .collect::<Result<Vec<_>, _>>()?;
+    let bonds = molecule
+        .bonds()
+        .iter()
+        .map(|bond| {
+            let mut fields = vec![field(0, endpoint_pair(bond.atom_ids()))];
+            fields.extend(bond_inherent_fields(bond.attributes())?);
+            Ok(CanonicalKeyValue::Product(fields))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    push_block(EntityBlockPosition::ATOM, atoms);
+    push_block(EntityBlockPosition::BOND, bonds);
+
+    if level >= DescriptionLevel::Constitution {
+        let dative = molecule
+            .dative_bonds()
+            .iter()
+            .map(|bond| {
+                let mut donors = bond
+                    .donor_ids()
+                    .map(|atom| atom.index())
+                    .collect::<Vec<_>>();
+                donors.sort_unstable();
+                Ok(positioned_product([
+                    (0, sequence(donors.into_iter().map(index_key))),
+                    (1, index_key(bond.acceptor_id().index())),
+                    (2, num_form_key(&bond.order().clone().normalize()?)),
+                ]))
+            })
+            .collect::<Result<Vec<_>, Contradiction>>()?;
+        let aromatic = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|system| {
+                Ok(positioned_product([
+                    (
+                        0,
+                        sequence(system.atom_ids().map(|atom| index_key(atom.index()))),
+                    ),
+                    (
+                        1,
+                        electron_counts_form_key(&system.electrons().clone().normalize()?),
+                    ),
+                    (2, num_form_key(&system.charge().clone().normalize()?)),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            &system.unpaired_electrons().clone().normalize()?,
+                        ),
+                    ),
+                ]))
+            })
+            .collect::<Result<Vec<_>, Contradiction>>()?;
+        let multicenter = molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|bond| {
+                Ok(positioned_product([
+                    (
+                        0,
+                        sequence(bond.atom_ids().map(|atom| index_key(atom.index()))),
+                    ),
+                    (
+                        1,
+                        electron_counts_form_key(&bond.electrons().clone().normalize()?),
+                    ),
+                    (2, num_form_key(&bond.charge().clone().normalize()?)),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            &bond.unpaired_electrons().clone().normalize()?,
+                        ),
+                    ),
+                ]))
+            })
+            .collect::<Result<Vec<_>, Contradiction>>()?;
+        let noncovalent = molecule
+            .noncovalent_bonds()
+            .iter()
+            .map(|bond| {
+                Ok(positioned_product([
+                    (0, endpoint_pair(bond.atom_ids())),
+                    (
+                        1,
+                        noncovalent_bond_kind_form_key(&bond.kind().clone().normalize()?),
+                    ),
+                ]))
+            })
+            .collect::<Result<Vec<_>, Contradiction>>()?;
+        push_block(EntityBlockPosition::DATIVE_BOND, dative);
+        push_block(EntityBlockPosition::AROMATIC_SYSTEM, aromatic);
+        push_block(EntityBlockPosition::MULTICENTER_BOND, multicenter);
+        push_block(EntityBlockPosition::NONCOVALENT_BOND, noncovalent);
+    }
+
+    if level >= DescriptionLevel::Structure {
+        let stereo_atoms = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| {
+                Ok(positioned_product([
+                    (0, index_key(stereo.site_id().index())),
+                    (
+                        1,
+                        sequence(
+                            stereo
+                                .ligand_ids()
+                                .iter()
+                                .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
+                        ),
+                    ),
+                    (
+                        2,
+                        stereo_configuration_form_key(
+                            &stereo.attributes().configuration.clone().normalize()?,
+                        ),
+                    ),
+                ]))
+            })
+            .collect::<Result<Vec<_>, Contradiction>>()?;
+        let stereo_bonds = molecule
+            .stereo_bonds()
+            .iter()
+            .map(|stereo| {
+                Ok(positioned_product([
+                    (0, index_key(stereo.site_id().index())),
+                    (
+                        1,
+                        sequence(
+                            stereo
+                                .ligand_ids()
+                                .iter()
+                                .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
+                        ),
+                    ),
+                    (
+                        2,
+                        stereo_configuration_form_key(
+                            &stereo.attributes().configuration.clone().normalize()?,
+                        ),
+                    ),
+                ]))
+            })
+            .collect::<Result<Vec<_>, Contradiction>>()?;
+        push_block(EntityBlockPosition::STEREO_ATOM, stereo_atoms);
+        push_block(EntityBlockPosition::STEREO_BOND, stereo_bonds);
+    }
+
+    let constraints = if level == DescriptionLevel::Full {
+        constraint_blocks(molecule)
+    } else {
+        Vec::new()
+    };
+    Ok(CanonicalComparisonKey {
+        entity_blocks,
+        constraints,
+    })
+}
+
+/// The key of the leaf that orders the entities of `molecule` as `order`.
+#[cfg_attr(not(test), expect(dead_code))]
+fn leaf_key(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
+    order: &[NodeId],
+) -> CanonicalComparisonKey {
+    let remapping = remapping_from_order(molecule, incidence_graph, order);
+    let remapped = molecule.clone().remap(&remapping);
+    let reframed = if level == DescriptionLevel::Full {
+        remapped
+            .reframe()
+            .expect("initial colors established molecule normalization")
+    } else {
+        let action = remapped.representative_action();
+        remapped
+            .reframe_by(&action)
+            .expect("integrity established compatible molecule frame actions")
+    };
+    comparison_key(&reframed, level).expect("initial colors established molecule normalization")
+}
+
 fn canonicalize_topology(
     molecule: Molecule,
     context: &CanonicalizeContext,
