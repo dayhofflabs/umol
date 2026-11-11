@@ -526,6 +526,131 @@ fn para_stereo_cascade() -> Molecule {
     })
 }
 
+/// Triisopropanolamine with three equally configured stereocentres, as a heavy-atom skeleton.
+///
+/// Each arm is a methylene carbon, the stereocentre, its oxygen, and its methyl carbon. The three
+/// arms are equivalent, so the stereo-blind graph has six automorphisms and each preserves the
+/// stereo atoms.
+fn symmetric_stereo_triisopropanolamine() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::N]
+            .into_iter()
+            .chain([Element::C, Element::C, Element::O, Element::C].repeat(3))
+            .map(atom)
+            .collect(),
+        bonds: [1, 5, 9]
+            .into_iter()
+            .flat_map(|methylene| {
+                [
+                    bond(0, methylene, 1),
+                    bond(methylene, methylene + 1, 1),
+                    bond(methylene + 1, methylene + 2, 1),
+                    bond(methylene + 1, methylene + 3, 1),
+                ]
+            })
+            .collect(),
+        stereo_atoms: [2, 6, 10]
+            .into_iter()
+            .map(|site| {
+                (
+                    AtomId(site),
+                    vec![
+                        ligand(site - 1),
+                        ligand(site + 1),
+                        ligand(site + 2),
+                        implicit_hydrogen(site),
+                    ],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    })
+}
+
+/// Butan-2-ol with explicit hydrogens and its stereocentre configured.
+///
+/// Atoms 0 to 3 are the carbon chain, atom 4 is the oxygen, and atoms 5 to 14 are the hydrogens.
+/// The hydrogens of the two methyl groups and of the methylene group are exchangeable, so the
+/// stereo-blind graph has 6 * 2 * 6 = 72 automorphisms and each preserves the stereo atom.
+fn symmetric_stereo_butanol() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::C, Element::C, Element::C, Element::O]
+            .into_iter()
+            .chain([Element::H; 10])
+            .map(atom)
+            .collect(),
+        bonds: vec![
+            bond(0, 1, 1),
+            bond(1, 2, 1),
+            bond(2, 3, 1),
+            bond(1, 4, 1),
+            bond(0, 5, 1),
+            bond(0, 6, 1),
+            bond(0, 7, 1),
+            bond(1, 8, 1),
+            bond(2, 9, 1),
+            bond(2, 10, 1),
+            bond(3, 11, 1),
+            bond(3, 12, 1),
+            bond(3, 13, 1),
+            bond(4, 14, 1),
+        ],
+        stereo_atoms: vec![(
+            AtomId(1),
+            vec![ligand(0), ligand(2), ligand(4), ligand(8)],
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        )],
+        ..Default::default()
+    })
+}
+
+/// 3,3-Dimethylbutan-2-ol with explicit hydrogens and its stereocentre configured.
+///
+/// Atom 0 is the methyl carbon, atom 1 the stereocentre, atom 2 the quaternary carbon, atoms 3 to 5
+/// the carbons of the tert-butyl group, atom 6 the oxygen, and atoms 7 to 20 the hydrogens. The
+/// three tert-butyl carbons and the hydrogens of each of the four methyl groups are exchangeable,
+/// so the stereo-blind graph has 6 * 6 * 6^3 = 7776 automorphisms and each preserves the stereo
+/// atom.
+fn symmetric_stereo_dimethylbutanol() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C; 6]
+            .into_iter()
+            .chain([Element::O])
+            .chain([Element::H; 14])
+            .map(atom)
+            .collect(),
+        bonds: vec![
+            bond(0, 1, 1),
+            bond(1, 2, 1),
+            bond(2, 3, 1),
+            bond(2, 4, 1),
+            bond(2, 5, 1),
+            bond(1, 6, 1),
+            bond(0, 7, 1),
+            bond(0, 8, 1),
+            bond(0, 9, 1),
+            bond(1, 10, 1),
+            bond(3, 11, 1),
+            bond(3, 12, 1),
+            bond(3, 13, 1),
+            bond(4, 14, 1),
+            bond(4, 15, 1),
+            bond(4, 16, 1),
+            bond(5, 17, 1),
+            bond(5, 18, 1),
+            bond(5, 19, 1),
+            bond(6, 20, 1),
+        ],
+        stereo_atoms: vec![(
+            AtomId(1),
+            vec![ligand(0), ligand(2), ligand(6), ligand(10)],
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        )],
+        ..Default::default()
+    })
+}
+
 fn corpus() -> Vec<CorpusCase> {
     let mut corpus = vec![
         CorpusCase {
@@ -567,6 +692,18 @@ fn corpus() -> Vec<CorpusCase> {
         CorpusCase {
             name: "para_stereo_cascade",
             molecule: para_stereo_cascade(),
+        },
+        CorpusCase {
+            name: "symmetric_stereo_triisopropanolamine",
+            molecule: symmetric_stereo_triisopropanolamine(),
+        },
+        CorpusCase {
+            name: "symmetric_stereo_butanol",
+            molecule: symmetric_stereo_butanol(),
+        },
+        CorpusCase {
+            name: "symmetric_stereo_dimethylbutanol",
+            molecule: symmetric_stereo_dimethylbutanol(),
         },
     ];
     corpus.extend(retained_scaling_corpus());
