@@ -1344,17 +1344,10 @@ fn canonicalize_structure(
     let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let (partition, _) = structure_partition(
-        &molecule,
-        &incidence_graph,
-        &adapter,
-        &entity_keys,
-        context.para_stereo,
-    )?;
-    let descriptors = partition.cell_indices(adapter.graph().node_count());
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let leaf_candidate = |order: &[NodeId]| {
         structure_candidate(&molecule, &incidence_graph, order)
-            .expect("structure descriptors established entity normalization")
+            .expect("initial colors established structure normalization")
     };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
@@ -1489,14 +1482,9 @@ impl Molecule {
         };
         let incidence_graph = molecule.incidence_graph(incidence_level);
         let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
-        let automorphism_pruning = level != DescriptionLevel::Structure;
         let options = CanonicalSearchOptions {
-            automorphism_pruning,
-            branch_order: if automorphism_pruning {
-                BranchOrdering::BackendCanonical
-            } else {
-                BranchOrdering::NodeId
-            },
+            automorphism_pruning: true,
+            branch_order: BranchOrdering::BackendCanonical,
         };
 
         if level == DescriptionLevel::Topology {
@@ -1541,24 +1529,22 @@ impl Molecule {
                 .key
             }
             DescriptionLevel::Structure => {
-                let (partition, _) = structure_partition(
-                    molecule,
-                    &incidence_graph,
-                    &adapter,
-                    &entity_keys,
-                    context.para_stereo,
-                )?;
-                let descriptors = partition.cell_indices(adapter.graph().node_count());
+                let descriptors =
+                    constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
                 let leaf_candidate = |order: &[NodeId]| {
                     structure_candidate(molecule, &incidence_graph, order)
-                        .expect("structure descriptors established entity normalization")
+                        .expect("initial colors established structure normalization")
                 };
-                canonical_search(
+                let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+                    retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
+                };
+                canonical_search_with_generator_filter(
                     &adapter,
                     &descriptors,
                     context.automorphism_algorithm,
                     options,
                     &leaf_candidate,
+                    &filter_generators,
                 )
                 .candidate
                 .key

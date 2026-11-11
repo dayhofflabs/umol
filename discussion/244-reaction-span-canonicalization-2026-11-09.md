@@ -1289,18 +1289,77 @@ The three cases whose search ends with one leaf are within 3% of the committed s
 `para_stereo_cascade` 7% to 11% slower, from backend calls that prune nothing, as the study
 recorded. The three symmetric cases take 75 to 207 µs for `canonicalize`.
 
-#### S4c — Molecule Structure search
+#### S4b.1 — Contradictory stereo configurations **Done**
+
+The color of a stereo entity reads the kind of the normalized configuration, for stereo atoms and
+stereo bonds of both aggregates. A contradictory configuration is then reported where the colors are
+built. Until this subitem the colors did not normalize the configuration: `canonical_hash` and
+`canonical_eq` of a reaction span panicked on a contradictory one at the first leaf, and the
+molecule searches reported it from the structure partition, which S4c takes out of the Structure
+search. Colors of satisfiable inputs are unchanged (green). [dep: S4b]
+
+**Tests:** `test_initial_colors_error` of the molecule, as a table with the charge row, a stereo
+atom, and a stereo bond. `test_initial_color_keys_error` of the span: an unchanged stereo atom, a
+modified one with a contradictory rhs, and a stereo bond.
+`test_reaction_span_canonical_hash_error`.
+
+The library tests, the two integration tests, and the canonicalization properties pass. The
+reference comparison reports no mismatch. The canonical forms and tracked remappings of the pair
+file and the molecule answers are identical to S4b.
+
+#### S4c — Molecule Structure search **Done**
 
 `canonicalize_structure` and the Structure branch of `Molecule::canonical_key_at` start from the
 constitution descriptors and run `canonical_search_with_generator_filter` with
 `retain_stereo_preserving_generators`, with pruning and backend canonical order. The data-type
 guide's prescription of the stereo-sensitive refinement is replaced. Breaking for representatives
-of molecules with stereo entities (red→green). [dep: S0d]
+of molecules with stereo entities (red→green). [dep: S0d, S4b.1]
 
 **Tests:** `test_molecule_canonical_key_at`: for the molecule stereo fixtures and the symmetric
 stereo case with six automorphisms, the Structure key equals the exhaustive minimum over the
 constitution partition, with exact visited-leaf counts. The existing Structure tests are rerun; any
 changed expected value is shown first.
+
+Both Structure searches of the molecule start from the constitution descriptors and prune with the
+stereo generator check. The guide states this rule and limits the stereo-sensitive refinement to the
+complete search of a molecule with constraints, which keeps it until S7b.
+
+No expected value of an existing test changed. `canonical_eq` and the equality of `canonical_hash`
+of molecules give the same answer as the committed search on the 20,056 pairs, and the reference
+comparison of spans reports no mismatch. The library tests, the two integration tests, and the
+canonicalization properties pass, and clippy is clean.
+
+`test_molecule_canonical_key_at` has four rows. In each the Structure key equals the key of the
+exhaustive search from the constitution partition, and the pruned search selects the same key. The
+visited leaves without and with pruning, beside those of the structure partition:
+
+| Fixture | Constitution partition | Structure partition |
+| --- | ---: | ---: |
+| Stereo atom | 1, 1 | 1, 1 |
+| Stereo bond | 1, 1 | 1, 1 |
+| Carbon with four equal carbon ligands and a tetrahedral configuration | 24, 24 | 24, 24 |
+| Para-stereo fixture | 8, 8 | 2, 2 without `para_stereo`; 1, 1 with it |
+
+On the third fixture every generator the backend returns exchanges two ligands and fails the stereo
+check, so pruning removes nothing under either partition.
+
+Medians of the nine cases that run at Structure, against the committed search:
+
+| Case | `canonicalize` | `canonical_hash` | `canonical_eq` |
+| --- | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 40.6 → 21.5 µs | 39.0 → 18.5 µs | 73.3 → 34.6 µs |
+| `cis_trans_stereo_bond` | 33.1 → 20.9 µs | 31.7 → 18.0 µs | 57.8 → 33.2 µs |
+| `mixed_atom_and_bond_stereo` | 72.2 → 40.6 µs | 71.5 → 37.6 µs | 134.1 → 69.5 µs |
+| `meso_dichlorobutane` | 68.0 → 57.3 µs | 65.9 → 52.8 µs | 127.1 → 102.7 µs |
+| `para_stereo_trichloropentane` | 130.6 → 81.8 µs | 124.4 → 77.7 µs | 241.8 → 153.2 µs |
+| `para_stereo_cascade` | 415.4 → 862.5 µs | 401.1 → 841.6 µs | 780.2 µs → 1.76 ms |
+| `symmetric_stereo_triisopropanolamine` | 132.1 → 77.4 µs | 270.1 → 72.5 µs | 529.2 → 141.1 µs |
+| `symmetric_stereo_butanol` | 117.9 → 87.6 µs | 1.29 ms → 84.9 µs | 2.56 ms → 166.0 µs |
+| `symmetric_stereo_dimethylbutanol` | 233.2 → 195.8 µs | 166 ms → 193.2 µs | 329 ms → 390.9 µs |
+
+Eight cases are faster, by factors of 1.2 to 1.9 for `canonicalize`. `para_stereo_cascade` takes 2.1
+to 2.2 times as long, the cost the study recorded for this search with the row leaf; S5d replaces
+the leaf.
 
 ### S5 — One leaf for both aggregates
 

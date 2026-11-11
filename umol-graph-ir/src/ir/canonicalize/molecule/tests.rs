@@ -845,6 +845,62 @@ fn test_canonical_key_by_structure(canonicalize_context: CanonicalizeContext) {
 }
 
 #[rstest]
+#[case::stereo_atom(stereo_atom_canonicalization_molecule(), [1, 1])]
+#[case::stereo_bond(stereo_bond_canonicalization_molecule(), [1, 1])]
+#[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule(), [24, 24])]
+#[case::para_stereo(para_stereo_canonicalization_molecule(), [8, 8])]
+fn test_molecule_canonical_key_at(
+    canonicalize_context: CanonicalizeContext,
+    #[case] molecule: Molecule,
+    #[case] expected_visited_leaves: [usize; 2],
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let (entity_keys, incidence_keys) =
+        initial_color_keys(&molecule, &incidence_graph).expect("fixed molecule has initial colors");
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let leaf_candidate = |order: &[NodeId]| {
+        structure_candidate(&molecule, &incidence_graph, order)
+            .expect("initial colors established structure normalization")
+    };
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
+    };
+    let unpruned = canonical_search(
+        &adapter,
+        &descriptors,
+        canonicalize_context.automorphism_algorithm,
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        },
+        &leaf_candidate,
+    );
+    let pruned = canonical_search_with_generator_filter(
+        &adapter,
+        &descriptors,
+        canonicalize_context.automorphism_algorithm,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            branch_order: BranchOrdering::BackendCanonical,
+        },
+        &leaf_candidate,
+        &filter_generators,
+    );
+
+    assert_eq!(
+        molecule.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
+        Ok(unpruned.candidate.key.clone()),
+    );
+    assert_eq!(pruned.candidate.key, unpruned.candidate.key);
+    assert_eq!(
+        [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
+        expected_visited_leaves,
+    );
+}
+
+#[rstest]
 fn test_canonicalize_structure_selected_layer(
     initial_color_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,

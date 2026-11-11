@@ -537,11 +537,19 @@ Canonicalization may use a private effective structural prefix to avoid construc
 domains, but every present entity, inline constraint, and molecule-level constraint participates in
 the result and in `canonical_eq`.
 
-Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
-para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
-partition. With it enabled, feed each stereo-sensitive partition back into refinement until the
-partition stabilizes. The refinement state is the ordered partition of the complete structure-level
-incidence graph. Each round recomputes stereo descriptors from the current classes of the stereo
+Stored stereo entities participate in every search that includes them. When the effective
+structural prefix ends with the stereo entities, the search starts from the constitution-level
+partition, in which a stereo entity is distinguished by its kind and not by its configuration.
+Configurations are compared in the typed leaf key, so the search separates entities that differ
+only in configuration. Orbit pruning then uses only generators that carry the site, the ligand
+frame, and the configuration of every stereo entity to those of its image.
+
+The complete search of a molecule with constraints starts from a stereo-sensitive partition,
+whether or not para-stereo refinement is enabled. Without para-stereo refinement, perform one
+stereo-sensitive refinement from the constitution-level partition. With it enabled, feed each
+stereo-sensitive partition back into refinement until the partition stabilizes. The refinement
+state is the ordered partition of the complete structure-level incidence graph. Each round
+recomputes stereo descriptors from the current classes of the stereo
 entity's site and ligand occurrences, refines every incidence node by its previous class together
 with its applicable stereo descriptor, and then applies ordinary exact graph refinement. Including
 the previous class makes refinement split-only. Stability means equality of the ordered partition
