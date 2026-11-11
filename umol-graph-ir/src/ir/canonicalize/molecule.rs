@@ -1153,6 +1153,62 @@ fn comparison_key(
     })
 }
 
+/// The Topology key of the leaf that orders the entities of `molecule` as `entity_order`.
+///
+/// It equals `leaf_key` at Topology and is read without remapping: Topology has no participant
+/// frame.
+fn topology_key(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    entity_order: &[NodeId],
+) -> CanonicalComparisonKey {
+    let mut atom_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Atom)];
+    let mut atoms = Vec::with_capacity(atom_images.len());
+    let mut bonds = Vec::with_capacity(incidence_graph.entity_count(EntityKind::Bond));
+    for &node in entity_order {
+        match incidence_graph.entity(node) {
+            Entity::Atom(id) => {
+                atom_images[id.index()] = atoms.len();
+                atoms.push(CanonicalKeyValue::Product(
+                    atom_inherent_fields(molecule.atom(id).attributes())
+                        .expect("initial colors established molecule normalization"),
+                ));
+            }
+            Entity::Bond(id) => {
+                let bond = molecule.bond(id);
+                let [first, second] = bond.atom_ids().map(|atom| atom_images[atom.index()]);
+                let mut fields = vec![field(
+                    0,
+                    product([index_key(first.min(second)), index_key(first.max(second))]),
+                )];
+                fields.extend(
+                    bond_inherent_fields(bond.attributes())
+                        .expect("initial colors established molecule normalization"),
+                );
+                bonds.push(CanonicalKeyValue::Product(fields));
+            }
+            _ => unreachable!("the Topology order holds atoms and bonds"),
+        }
+    }
+    let mut entity_blocks = Vec::with_capacity(2);
+    if !atoms.is_empty() {
+        entity_blocks.push(PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence(atoms),
+        });
+    }
+    if !bonds.is_empty() {
+        entity_blocks.push(PositionedKey {
+            position: EntityBlockPosition::BOND,
+            value: sequence(bonds),
+        });
+    }
+    CanonicalComparisonKey {
+        entity_blocks,
+        constraints: Vec::new(),
+    }
+}
+
 /// The key of the leaf that orders the entities of `molecule` as `order`.
 fn leaf_key(
     molecule: &Molecule,
@@ -1188,12 +1244,16 @@ fn canonicalize_topology(
         initial_partition,
     } = topology_search_input(&molecule, &incidence_graph, &entity_colors);
     let build_key = |order: &[NodeId]| {
-        leaf_key(
-            &molecule,
-            &incidence_graph,
-            DescriptionLevel::Topology,
-            order,
-        )
+        let key = topology_key(&molecule, &incidence_graph, order);
+        debug_assert!(
+            key == leaf_key(
+                &molecule,
+                &incidence_graph,
+                DescriptionLevel::Topology,
+                order
+            )
+        );
+        key
     };
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
@@ -1446,6 +1506,11 @@ impl Molecule {
                 adapter,
                 initial_partition,
             } = topology_search_input(molecule, &incidence_graph, &entity_colors);
+            let build_key = |order: &[NodeId]| {
+                let key = topology_key(molecule, &incidence_graph, order);
+                debug_assert!(key == leaf_key(molecule, &incidence_graph, level, order));
+                key
+            };
             let leaf_candidate = |order: &[NodeId]| {
                 let entity_order = entity_order(molecule, &incidence_graph, level, order);
                 CanonicalCandidate {

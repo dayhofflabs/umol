@@ -2443,6 +2443,65 @@ fn test_comparison_key(
 }
 
 #[rstest]
+#[case::path(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C); 3],
+    bonds: vec![
+        (AtomId(0), AtomId(1), BondForm::from_order(1)),
+        (AtomId(1), AtomId(2), BondForm::from_order(1)),
+    ],
+    ..Default::default()
+}))]
+#[case::minority_bond(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C); 4],
+    bonds: vec![
+        (AtomId(0), AtomId(1), BondForm::from_order(1)),
+        (AtomId(1), AtomId(2), BondForm::from_order(2)),
+        (AtomId(2), AtomId(3), BondForm::from_order(1)),
+    ],
+    ..Default::default()
+}))]
+#[case::distinct_atoms(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::N).with_charge(1_i64),
+        AtomForm::from_element(Element::O),
+    ],
+    bonds: vec![
+        (AtomId(0), AtomId(1), BondForm::from_order(1)),
+        (AtomId(1), AtomId(2), BondForm::from_order(1).with_charge(-1_i64)),
+    ],
+    ..Default::default()
+}))]
+#[case::atoms_only(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C); 2],
+    ..Default::default()
+}))]
+fn test_topology_key(#[case] molecule: Molecule) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+
+    for _ in 0..2 {
+        let entity_order = entity_order(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            &order,
+        );
+
+        assert_eq!(
+            topology_key(&molecule, &incidence_graph, &entity_order),
+            leaf_key(
+                &molecule,
+                &incidence_graph,
+                DescriptionLevel::Topology,
+                &entity_order
+            ),
+        );
+        order.reverse();
+    }
+}
+
+#[rstest]
 #[case::topology(initial_color_molecule(), DescriptionLevel::Topology)]
 #[case::constitution(initial_color_molecule(), DescriptionLevel::Constitution)]
 #[case::structure(initial_color_molecule(), DescriptionLevel::Structure)]

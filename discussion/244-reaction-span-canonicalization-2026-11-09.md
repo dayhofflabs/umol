@@ -1513,7 +1513,7 @@ there than the topology row leaf did. The study recorded this cost; S5e reads th
 directly. `cis_trans_stereo_bond` is 7% to 8% slower in the two key operations, and the other ten
 cases are unchanged or up to 40% faster in them.
 
-#### S5e — Molecule Topology key
+#### S5e — Molecule Topology key **Done**
 
 Add `topology_key`, which reads the Topology key from the entity order without remapping. The
 Topology searches use it, with a debug assertion that it equals `leaf_key`. Results are unchanged
@@ -1521,6 +1521,25 @@ Topology searches use it, with a debug assertion that it equals `leaf_key`. Resu
 
 **Tests:** `test_topology_key`: equal to `leaf_key` on the Topology rows, including a bond outside
 the largest bond color class.
+
+`topology_key` builds the atom and bond rows of the schema from the entity order, and both Topology
+searches use it under the debug assertion. `test_topology_key` has four rows, each under two search
+orders. The library tests, the two integration tests, and the canonicalization properties pass with
+the assertion active, and clippy is clean. The reference comparison reports no mismatch and the
+molecule answers are identical.
+
+Medians of the five Topology cases for the S0b baseline, S5d, and this subitem:
+
+| Case | `canonicalize` | `canonical_hash` | `canonical_eq` |
+| --- | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 21.3, 17.2, 17.3 µs | 21.0, 24.0, 21.4 µs | 36.0, 43.4, 35.0 µs |
+| `disconnected_rings` | 34.4, 29.1, 29.1 µs | 33.3, 37.6, 34.4 µs | 60.0, 69.2, 60.0 µs |
+| `feature_free_connected` | 37.8, 33.4, 33.2 µs | 38.6, 43.3, 40.1 µs | 72.6, 81.6, 74.1 µs |
+| `feature_free_disconnected` | 40.4, 36.7, 36.2 µs | 41.4, 45.6, 42.9 µs | 75.6, 84.9, 78.7 µs |
+| `symmetry_heavy_radicals` | 31.1, 29.6, 29.8 µs | 30.8, 34.6, 32.1 µs | 58.1, 65.0, 59.8 µs |
+
+`canonical_hash` returns to 1.02 to 1.04 times the baseline and `canonical_eq` to 0.97 to 1.04
+times; `canonicalize` keeps the gain of S5d.
 
 #### S5f — Span Topology search
 
