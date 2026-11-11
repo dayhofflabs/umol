@@ -20,7 +20,7 @@ use super::frame::AromaticSystemsFrameAction;
 use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
+use super::traits::{AsColor, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// An aromatic system's atom frame and attributes.
 ///
@@ -795,6 +795,27 @@ impl FrameTransport for AromaticSystemForm {
             unpaired_electrons,
             constraints: constraints.reframe_by(action)?,
         })
+    }
+}
+
+/// The color of an [`AromaticSystemForm`]: the charge, the unpaired electrons, and the constraints.
+/// The electron counts are positional and are not part of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct AromaticSystemColor<'a> {
+    charge: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+    constraints: &'a AromaticSystemConstraintsForm,
+}
+
+impl AsColor for AromaticSystemForm {
+    type Color<'a> = AromaticSystemColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        AromaticSystemColor {
+            charge: &self.charge,
+            unpaired_electrons: &self.unpaired_electrons,
+            constraints: &self.constraints,
+        }
     }
 }
 
@@ -2088,5 +2109,48 @@ mod tests {
         #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::equal(
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1),
+        true
+    )]
+    #[case::charge(
+        AromaticSystemForm::default().with_charge(-1),
+        AromaticSystemForm::default(),
+        false
+    )]
+    #[case::unpaired_electrons(
+        AromaticSystemForm::default().with_unpaired_electrons((2_u8, 3_u8)),
+        AromaticSystemForm::default(),
+        false
+    )]
+    #[case::constraint(
+        AromaticSystemForm::default()
+            .with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        AromaticSystemForm::default(),
+        false
+    )]
+    #[case::electrons(
+        AromaticSystemForm::from_electrons(vec![2, 1, 1]).with_charge(-1),
+        AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(-1),
+        true
+    )]
+    #[case::frame_action(
+        AromaticSystemForm::from_electrons(vec![2, 1, 1]).with_charge(-1),
+        AromaticSystemForm::from_electrons(vec![2, 1, 1])
+            .with_charge(-1)
+            .reframe_by(&DynPermutation::try_from(vec![2, 0, 1]).expect("case is a permutation"))
+            .expect("case action has the degree of the form"),
+        true
+    )]
+    fn test_aromatic_system_form_as_color(
+        #[case] lhs: AromaticSystemForm,
+        #[case] rhs: AromaticSystemForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 }

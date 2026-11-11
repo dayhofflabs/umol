@@ -1783,7 +1783,7 @@ its form: `AtomColor` and `BondColor` after `From<&str>`, `DativeBondColor` afte
 the library build reports five dead-code warnings, which end with S6j for atoms and bonds and with
 S6k for dative and noncovalent bonds. No attribute silences them.
 
-#### S6e — Electron count at a position and the colors of aromatic systems and multicenter bonds
+#### S6e — Electron count at a position; colors of aromatic systems and multicenter bonds **Done**
 
 **Module:** `ir/electrons.rs`, `ir/aromatic.rs`, `ir/multicenter.rs`.
 
@@ -1798,6 +1798,15 @@ literal list. `test_aromatic_system_form_as_color` and `test_multicenter_bond_fo
 that differ in the charge, the unpaired electrons, or a constraint have unequal colors; forms that
 differ in the electron counts only have equal colors; a form and its image under a frame action
 have equal colors.
+
+`at` follows `permute` in the inherent implementation of `ElectronCountsForm`. It indexes the
+literal list, so a position past the end of the list panics. The check of the list length against
+the atom list stays with the caller, where `entity_color_key` has it today and where S6k keeps it.
+Each color follows `FrameTransport` of its form and holds three references in the field order of
+the form. `test_electron_counts_form_at` has 4 rows. Each color table has 6 rows: equal forms, the
+charge, the unpaired electrons, a constraint, the electron counts, and the image under
+`reframe_by`. The 12,173 library tests pass. The library build reports three more dead-code
+warnings, for `at` and the two colors, which end with S6k.
 
 #### S6f — Colors of stereo atoms and stereo bonds
 

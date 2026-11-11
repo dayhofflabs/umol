@@ -20,7 +20,7 @@ use super::frame::MulticenterBondsFrameAction;
 use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
+use super::traits::{AsColor, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A multicenter bond's atom frame and attributes.
 ///
@@ -794,6 +794,27 @@ impl FrameTransport for MulticenterBondForm {
             unpaired_electrons,
             constraints: constraints.reframe_by(action)?,
         })
+    }
+}
+
+/// The color of a [`MulticenterBondForm`]: the charge, the unpaired electrons, and the constraints.
+/// The electron counts are positional and are not part of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct MulticenterBondColor<'a> {
+    charge: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+    constraints: &'a MulticenterBondConstraintsForm,
+}
+
+impl AsColor for MulticenterBondForm {
+    type Color<'a> = MulticenterBondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        MulticenterBondColor {
+            charge: &self.charge,
+            unpaired_electrons: &self.unpaired_electrons,
+            constraints: &self.constraints,
+        }
     }
 }
 
@@ -2087,5 +2108,48 @@ mod tests {
         #[case] expected: MulticenterBondForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::equal(
+        MulticenterBondForm::from_electrons(vec![1, 0, 1]).with_charge(1),
+        MulticenterBondForm::from_electrons(vec![1, 0, 1]).with_charge(1),
+        true
+    )]
+    #[case::charge(
+        MulticenterBondForm::default().with_charge(1),
+        MulticenterBondForm::default(),
+        false
+    )]
+    #[case::unpaired_electrons(
+        MulticenterBondForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        MulticenterBondForm::default(),
+        false
+    )]
+    #[case::constraint(
+        MulticenterBondForm::default()
+            .with_constraint(MulticenterBondConstraintForm::electron_count(2)),
+        MulticenterBondForm::default(),
+        false
+    )]
+    #[case::electrons(
+        MulticenterBondForm::from_electrons(vec![1, 0, 1]).with_charge(1),
+        MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1),
+        true
+    )]
+    #[case::frame_action(
+        MulticenterBondForm::from_electrons(vec![1, 0, 1]).with_charge(1),
+        MulticenterBondForm::from_electrons(vec![1, 0, 1])
+            .with_charge(1)
+            .reframe_by(&DynPermutation::try_from(vec![1, 0, 2]).expect("case is a permutation"))
+            .expect("case action has the degree of the form"),
+        true
+    )]
+    fn test_multicenter_bond_form_as_color(
+        #[case] lhs: MulticenterBondForm,
+        #[case] rhs: MulticenterBondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 }
