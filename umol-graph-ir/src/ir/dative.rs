@@ -18,7 +18,7 @@ use super::error::Contradiction;
 use super::frame::DativeBondsFrameAction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
+use super::traits::{AsColor, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A dative bond's donor frame, acceptor, and attributes.
 ///
@@ -781,6 +781,19 @@ impl FrameTransport for DativeBondForm {
 impl From<&str> for DativeBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid dative bond string")
+    }
+}
+
+/// The color of a [`DativeBondForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct DativeBondColor<'a>(&'a DativeBondForm);
+
+impl AsColor for DativeBondForm {
+    type Color<'a> = DativeBondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        DativeBondColor(self)
     }
 }
 
@@ -1968,5 +1981,21 @@ mod tests {
         #[case] expected: DativeBondForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::equal(DativeBondForm::from_order(1), DativeBondForm::from_order(1), true)]
+    #[case::order(DativeBondForm::from_order(2), DativeBondForm::default(), false)]
+    #[case::constraint(
+        DativeBondForm::default().with_constraint(DativeBondConstraintForm::aromatic(true)),
+        DativeBondForm::default(),
+        false
+    )]
+    fn test_dative_bond_form_as_color(
+        #[case] lhs: DativeBondForm,
+        #[case] rhs: DativeBondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 }

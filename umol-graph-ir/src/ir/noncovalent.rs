@@ -17,7 +17,7 @@ use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
-use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
+use super::traits::{AsColor, AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A noncovalent bond's atom pair and attributes.
 ///
@@ -701,6 +701,19 @@ impl FrameTransport for NoncovalentBondForm {
             kind,
             constraints: constraints.reframe_by(action)?,
         })
+    }
+}
+
+/// The color of a [`NoncovalentBondForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct NoncovalentBondColor<'a>(&'a NoncovalentBondForm);
+
+impl AsColor for NoncovalentBondForm {
+    type Color<'a> = NoncovalentBondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        NoncovalentBondColor(self)
     }
 }
 
@@ -1735,6 +1748,32 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::equal(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        true
+    )]
+    #[case::kind(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::default(),
+        false
+    )]
+    #[case::constraint(
+        NoncovalentBondForm::default().with_constraint(
+            NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))
+        ),
+        NoncovalentBondForm::default(),
+        false
+    )]
+    fn test_noncovalent_bond_form_as_color(
+        #[case] lhs: NoncovalentBondForm,
+        #[case] rhs: NoncovalentBondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 
     #[rustfmt::skip]

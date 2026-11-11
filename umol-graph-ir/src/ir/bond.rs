@@ -6,7 +6,7 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Lattice, Normalize, ReframeKind};
+use super::traits::{AsColor, Lattice, Normalize, ReframeKind};
 
 /// Bond form: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
@@ -166,6 +166,19 @@ impl BondForm {
 impl From<&str> for BondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid bond string")
+    }
+}
+
+/// The color of a [`BondForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct BondColor<'a>(&'a BondForm);
+
+impl AsColor for BondForm {
+    type Color<'a> = BondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        BondColor(self)
     }
 }
 
@@ -449,5 +462,34 @@ mod tests {
         let changed = target.narrow_from(&source);
         assert_eq!(changed, expected_changed);
         assert_eq!(target, expected_after);
+    }
+
+    #[rstest]
+    #[case::equal(BondForm::from_order(1), BondForm::from_order(1), true)]
+    #[case::order(BondForm::from_order(2), BondForm::default(), false)]
+    #[case::charge(
+        BondForm { charge: NumForm::Lit(1), ..Default::default() },
+        BondForm::default(),
+        false
+    )]
+    #[case::unpaired_electrons(
+        BondForm {
+            unpaired_electrons: UnpairedElectronsForm::from((1_u8, 2_u8)),
+            ..Default::default()
+        },
+        BondForm::default(),
+        false
+    )]
+    #[case::constraint(
+        BondForm::default().with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::default(),
+        false
+    )]
+    fn test_bond_form_as_color(
+        #[case] lhs: BondForm,
+        #[case] rhs: BondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 }

@@ -11,7 +11,7 @@ use super::error::{Contradiction, NoJoinError};
 use super::num::NumForm;
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{AsLit, Lattice, Normalize, ReframeKind};
+use super::traits::{AsColor, AsLit, Lattice, Normalize, ReframeKind};
 
 /// Atom form: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -258,6 +258,19 @@ impl From<Element> for AtomForm {
 impl From<&str> for AtomForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid atom string")
+    }
+}
+
+/// The color of an [`AtomForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct AtomColor<'a>(&'a AtomForm);
+
+impl AsColor for AtomForm {
+    type Color<'a> = AtomColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        AtomColor(self)
     }
 }
 
@@ -1086,6 +1099,54 @@ mod tests {
         let changed = target.narrow_from(&source);
         assert_eq!(changed, expected_changed);
         assert_eq!(target, expected_after);
+    }
+
+    #[rstest]
+    #[case::equal(
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::C),
+        true
+    )]
+    #[case::element(AtomForm::from_element(Element::C), AtomForm::default(), false)]
+    #[case::isotope_mass(
+        AtomForm { isotope_mass: IsotopeMassForm::Lit(13), ..Default::default() },
+        AtomForm::default(),
+        false
+    )]
+    #[case::charge(
+        AtomForm { charge: NumForm::Lit(1), ..Default::default() },
+        AtomForm::default(),
+        false
+    )]
+    #[case::implicit_hydrogens(
+        AtomForm { implicit_hydrogens: NumForm::Lit(1), ..Default::default() },
+        AtomForm::default(),
+        false
+    )]
+    #[case::lone_pairs(
+        AtomForm { lone_pairs: NumForm::Lit(1), ..Default::default() },
+        AtomForm::default(),
+        false
+    )]
+    #[case::unpaired_electrons(
+        AtomForm {
+            unpaired_electrons: UnpairedElectronsForm::from((1_u8, 2_u8)),
+            ..Default::default()
+        },
+        AtomForm::default(),
+        false
+    )]
+    #[case::constraint(
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::default(),
+        false
+    )]
+    fn test_atom_form_as_color(
+        #[case] lhs: AtomForm,
+        #[case] rhs: AtomForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 
     #[rustfmt::skip]
