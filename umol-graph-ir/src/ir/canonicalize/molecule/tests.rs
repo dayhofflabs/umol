@@ -51,28 +51,17 @@ fn initial_colors(
     Ok(rank_initial_colors(&entity_keys, &incidence_keys))
 }
 
-fn topology_comparison_key(
+fn leaf_candidate_at(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
     order: &[NodeId],
-) -> Result<CanonicalComparisonKey, Contradiction> {
-    Ok(topology_candidate(molecule, incidence_graph, order)?.key)
-}
-
-fn constitution_comparison_key(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalComparisonKey, Contradiction> {
-    Ok(constitution_candidate(molecule, incidence_graph, order)?.key)
-}
-
-fn structure_comparison_key(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalComparisonKey, Contradiction> {
-    Ok(structure_candidate(molecule, incidence_graph, order)?.key)
+) -> CanonicalCandidate<CanonicalComparisonKey> {
+    let entity_order = entity_order(molecule, incidence_graph, level, order);
+    CanonicalCandidate {
+        key: leaf_key(molecule, incidence_graph, level, &entity_order),
+        entity_order,
+    }
 }
 
 #[fixture]
@@ -191,8 +180,13 @@ fn meso_canonicalization_molecule() -> Molecule {
 fn selected_structure_key(molecule: &Molecule) -> CanonicalComparisonKey {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
-    structure_comparison_key(molecule, &incidence_graph, &order)
-        .expect("canonical molecule has a structure comparison key")
+    leaf_candidate_at(
+        molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        &order,
+    )
+    .key
 }
 
 #[rstest]
@@ -480,12 +474,20 @@ fn test_structure_comparison_key(stereo_atom_canonicalization_molecule: Molecule
     let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
 
     assert_eq!(
-        structure_comparison_key(
+        leaf_candidate_at(
             &stereo_atom_canonicalization_molecule,
             &incidence_graph,
-            &order,
-        ),
-        structure_comparison_key(&constrained, &constrained_incidence_graph, &order),
+            DescriptionLevel::Structure,
+            &order
+        )
+        .key,
+        leaf_candidate_at(
+            &constrained,
+            &constrained_incidence_graph,
+            DescriptionLevel::Structure,
+            &order
+        )
+        .key,
     );
 }
 
@@ -861,8 +863,12 @@ fn test_molecule_canonical_key_at(
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let leaf_candidate = |order: &[NodeId]| {
-        structure_candidate(&molecule, &incidence_graph, order)
-            .expect("initial colors established structure normalization")
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Structure,
+            order,
+        )
     };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
@@ -1003,12 +1009,12 @@ fn test_canonicalize_structure_minimum(
     )
     .expect("fixed molecule has structure descriptors");
     let leaf_candidate = |order: &[NodeId]| {
-        structure_candidate(
+        leaf_candidate_at(
             &symmetric_stereo_canonicalization_molecule,
             &incidence_graph,
+            DescriptionLevel::Structure,
             order,
         )
-        .expect("structure descriptors establish normalization")
     };
     let expected = exhaustive_minimum(
         &adapter,
@@ -1116,8 +1122,12 @@ fn test_canonicalize_structure_orbit_pruning(
     .expect("fixed molecule has a structure partition");
     let descriptors = partition.cell_indices(adapter.graph().node_count());
     let leaf_candidate = |order: &[NodeId]| {
-        structure_candidate(&molecule, &incidence_graph, order)
-            .expect("structure descriptors establish normalization")
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Structure,
+            order,
+        )
     };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
@@ -1700,8 +1710,14 @@ fn test_topology_comparison_key() {
     let undetermined_spin = UnpairedElectronsForm::default();
 
     assert_eq!(
-        topology_comparison_key(&molecule, &incidence_graph, &order),
-        Ok(CanonicalComparisonKey {
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            &order
+        )
+        .key,
+        CanonicalComparisonKey {
             entity_blocks: vec![
                 PositionedKey {
                     position: EntityBlockPosition::ATOM,
@@ -1741,7 +1757,7 @@ fn test_topology_comparison_key() {
                 },
             ],
             constraints: Vec::new(),
-        }),
+        },
     );
 }
 
@@ -1794,8 +1810,20 @@ fn test_topology_comparison_key_dense_remapping() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        topology_comparison_key(&molecule, &incidence_graph, &order),
-        topology_comparison_key(&remapped, &remapped_incidence_graph, &remapped_order),
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            &order
+        )
+        .key,
+        leaf_candidate_at(
+            &remapped,
+            &remapped_incidence_graph,
+            DescriptionLevel::Topology,
+            &remapped_order
+        )
+        .key,
     );
 }
 
@@ -1924,7 +1952,13 @@ fn test_constitution_comparison_key(
             .node_ids()
             .filter(|&node| !matches!(incidence_graph.entity(node), Entity::Atom(_))),
     );
-    let key = constitution_comparison_key(&molecule, &incidence_graph, &order).unwrap();
+    let key = leaf_candidate_at(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Constitution,
+        &order,
+    )
+    .key;
 
     assert_eq!(
         key.entity_blocks
@@ -1990,8 +2024,20 @@ fn test_constitution_comparison_key_dense_remapping() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        constitution_comparison_key(&molecule, &incidence_graph, &order),
-        constitution_comparison_key(&remapped, &remapped_incidence_graph, &remapped_order),
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Constitution,
+            &order
+        )
+        .key,
+        leaf_candidate_at(
+            &remapped,
+            &remapped_incidence_graph,
+            DescriptionLevel::Constitution,
+            &remapped_order
+        )
+        .key,
     );
 }
 
@@ -2018,8 +2064,20 @@ fn test_constitution_comparison_key_excluded_data() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        constitution_comparison_key(&molecule, &incidence_graph, &order),
-        constitution_comparison_key(&excluded, &excluded_incidence_graph, &excluded_order),
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Constitution,
+            &order
+        )
+        .key,
+        leaf_candidate_at(
+            &excluded,
+            &excluded_incidence_graph,
+            DescriptionLevel::Constitution,
+            &excluded_order
+        )
+        .key,
     );
 }
 
@@ -2401,22 +2459,17 @@ fn test_leaf_key(#[case] molecule: Molecule, #[case] level: DescriptionLevel) {
     let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
 
     for _ in 0..2 {
-        let candidate = match level {
-            DescriptionLevel::Topology => topology_candidate(&molecule, &incidence_graph, &order),
-            DescriptionLevel::Constitution => {
-                constitution_candidate(&molecule, &incidence_graph, &order)
-            }
-            DescriptionLevel::Structure => structure_candidate(&molecule, &incidence_graph, &order),
-            DescriptionLevel::Full => complete_candidate(&molecule, &incidence_graph, &order)
-                .map(|(candidate, _)| candidate),
-        }
-        .expect("fixed molecule has a candidate");
         let entity_order = entity_order(&molecule, &incidence_graph, level, &order);
+        let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
+        let canonical = molecule
+            .clone()
+            .remap(&remapping)
+            .reframe()
+            .expect("fixed molecule reframes");
 
-        assert_eq!(entity_order, candidate.entity_order);
         assert_eq!(
             leaf_key(&molecule, &incidence_graph, level, &entity_order),
-            candidate.key,
+            comparison_key(&canonical, level).expect("fixed molecule has a comparison key"),
         );
         order.reverse();
     }
@@ -2880,8 +2933,12 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
     let leaf_candidate = |order: &[NodeId]| {
-        topology_candidate(&molecule, &incidence_graph, order)
-            .expect("selected topology values normalize")
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            order,
+        )
     };
     let expected = exhaustive_minimum(
         &adapter,
@@ -2952,8 +3009,12 @@ fn test_canonical_search_color_labels() {
     });
     let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
     let leaf_candidate = |order: &[NodeId]| {
-        topology_candidate(&molecule, &incidence_graph, order)
-            .expect("selected topology values normalize")
+        leaf_candidate_at(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            order,
+        )
     };
     let options = CanonicalSearchOptions {
         automorphism_pruning: true,
@@ -3240,34 +3301,42 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
     assert_eq!(canonical.check_integrity(), Ok(()));
     assert_eq!(canonical_remapped.check_integrity(), Ok(()));
     assert_eq!(
-        topology_comparison_key(
+        leaf_candidate_at(
             &canonical,
             &canonical_incidence,
-            &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
-        ),
-        topology_comparison_key(
+            DescriptionLevel::Topology,
+            &canonical_incidence.graph().node_ids().collect::<Vec<_>>()
+        )
+        .key,
+        leaf_candidate_at(
             &canonical_again,
             &canonical_again_incidence,
+            DescriptionLevel::Topology,
             &canonical_again_incidence
                 .graph()
                 .node_ids()
-                .collect::<Vec<_>>(),
-        ),
+                .collect::<Vec<_>>()
+        )
+        .key,
     );
     assert_eq!(
-        topology_comparison_key(
+        leaf_candidate_at(
             &canonical,
             &canonical_incidence,
-            &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
-        ),
-        topology_comparison_key(
+            DescriptionLevel::Topology,
+            &canonical_incidence.graph().node_ids().collect::<Vec<_>>()
+        )
+        .key,
+        leaf_candidate_at(
             &canonical_remapped,
             &canonical_remapped_incidence,
+            DescriptionLevel::Topology,
             &canonical_remapped_incidence
                 .graph()
                 .node_ids()
-                .collect::<Vec<_>>(),
-        ),
+                .collect::<Vec<_>>()
+        )
+        .key,
     );
 }
 
@@ -3643,19 +3712,23 @@ fn test_canonicalize_constitution_properties(
     let canonical_incidence = canonical.incidence_graph(IncidenceLevel::Constitution);
     let canonical_again_incidence = canonical_again.incidence_graph(IncidenceLevel::Constitution);
     assert_eq!(
-        constitution_comparison_key(
+        leaf_candidate_at(
             &canonical,
             &canonical_incidence,
-            &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
-        ),
-        constitution_comparison_key(
+            DescriptionLevel::Constitution,
+            &canonical_incidence.graph().node_ids().collect::<Vec<_>>()
+        )
+        .key,
+        leaf_candidate_at(
             &canonical_again,
             &canonical_again_incidence,
+            DescriptionLevel::Constitution,
             &canonical_again_incidence
                 .graph()
                 .node_ids()
-                .collect::<Vec<_>>(),
-        ),
+                .collect::<Vec<_>>()
+        )
+        .key,
     );
 
     let renumbering = reverse_remapping(&initial_color_molecule);
@@ -3760,19 +3833,23 @@ fn test_canonicalize_constitution_properties(
     assert_eq!(composed_action, canonical_renumbered);
     assert!(initial_color_molecule.framed_eq_under(&canonical_renumbered, &composed));
     assert_eq!(
-        constitution_comparison_key(
+        leaf_candidate_at(
             &canonical,
             &canonical_incidence,
-            &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
-        ),
-        constitution_comparison_key(
+            DescriptionLevel::Constitution,
+            &canonical_incidence.graph().node_ids().collect::<Vec<_>>()
+        )
+        .key,
+        leaf_candidate_at(
             &canonical_renumbered,
             &canonical_renumbered_incidence,
+            DescriptionLevel::Constitution,
             &canonical_renumbered_incidence
                 .graph()
                 .node_ids()
-                .collect::<Vec<_>>(),
-        ),
+                .collect::<Vec<_>>()
+        )
+        .key,
     );
 
     let (unpruned, _) = canonicalize_constitution(
@@ -3786,16 +3863,20 @@ fn test_canonicalize_constitution_properties(
     .unwrap();
     let unpruned_incidence = unpruned.incidence_graph(IncidenceLevel::Constitution);
     assert_eq!(
-        constitution_comparison_key(
+        leaf_candidate_at(
             &canonical,
             &canonical_incidence,
-            &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
-        ),
-        constitution_comparison_key(
+            DescriptionLevel::Constitution,
+            &canonical_incidence.graph().node_ids().collect::<Vec<_>>()
+        )
+        .key,
+        leaf_candidate_at(
             &unpruned,
             &unpruned_incidence,
-            &unpruned_incidence.graph().node_ids().collect::<Vec<_>>(),
-        ),
+            DescriptionLevel::Constitution,
+            &unpruned_incidence.graph().node_ids().collect::<Vec<_>>()
+        )
+        .key,
     );
 }
 
@@ -3883,8 +3964,14 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             initial_color_keys(&molecule, &incidence_graph).unwrap();
         let colors = rank_initial_colors(&entity_keys, &incidence_keys);
         let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-        let leaf_candidate =
-            |order: &[NodeId]| constitution_candidate(&molecule, &incidence_graph, order).unwrap();
+        let leaf_candidate = |order: &[NodeId]| {
+            leaf_candidate_at(
+                &molecule,
+                &incidence_graph,
+                DescriptionLevel::Constitution,
+                order,
+            )
+        };
         let expected = exhaustive_minimum(
             &adapter,
             adapter_entity_blocks(&incidence_graph),
@@ -3914,13 +4001,25 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
         let unpruned_order = unpruned_incidence.graph().node_ids().collect::<Vec<_>>();
 
         assert_eq!(
-            constitution_comparison_key(&unpruned, &unpruned_incidence, &unpruned_order),
-            Ok(expected.key.clone()),
+            leaf_candidate_at(
+                &unpruned,
+                &unpruned_incidence,
+                DescriptionLevel::Constitution,
+                &unpruned_order
+            )
+            .key,
+            expected.key.clone(),
             "unpruned {entity_kind}",
         );
         assert_eq!(
-            constitution_comparison_key(&canonical, &canonical_incidence, &canonical_order),
-            Ok(expected.key),
+            leaf_candidate_at(
+                &canonical,
+                &canonical_incidence,
+                DescriptionLevel::Constitution,
+                &canonical_order
+            )
+            .key,
+            expected.key,
             "pruned {entity_kind}",
         );
         assert_eq!(unpruned, canonical, "{entity_kind}");

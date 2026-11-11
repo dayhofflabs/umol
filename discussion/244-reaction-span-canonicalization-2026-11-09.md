@@ -1455,7 +1455,7 @@ frame, and one row in which the stereo block is absent below Structure. `test_le
 rows at the four levels: for two search orders the entity order and the key equal those of the
 present candidate function of the level. The library tests pass and clippy is clean.
 
-#### S5d — Molecule searches on the leaf
+#### S5d — Molecule searches on the leaf **Done**
 
 `canonicalize_topology`, `canonicalize_constitution`, `canonicalize_structure`, `canonicalize_full`,
 and `Molecule::canonical_key_at` take the order of a leaf from `entity_order` and hold a
@@ -1467,6 +1467,51 @@ key move to `test_comparison_key`. Canonical molecules are unchanged (red→gree
 
 **Tests:** the tests of the four per-level functions and of `canonical_key_at` are rerun without a
 changed expected value.
+
+The four per-level functions and `canonical_key_at` take the order of a leaf from `entity_order` and
+hold a `DeferredKey` over `leaf_key`. The five row-leaf functions, `canonical_kinded_stereo_frame`,
+and `CanonicalStereoFrame` are removed, about 470 lines.
+
+No expected value changed. In the molecule tests the three key wrappers over the removed functions
+give way to one support function over `entity_order` and `leaf_key`, and 32 calls go through it;
+the exact keys and canonical molecules these tests assert are as before. The present key tests stay
+in place and are not moved into `test_comparison_key`: they assert the key of a search order, which
+`comparison_key` does not take. `test_leaf_key` compares the key of a leaf with the comparison key
+of the molecule remapped and reframed in the entity order.
+`test_canonical_kinded_stereo_frame_error` is removed with its function.
+
+The library tests, the two integration tests, the canonicalization properties, and the Python suite
+pass, and clippy is clean. The reference comparison reports no mismatch, the molecule answers are
+identical, and the canonical forms and tracked remappings of the spans are identical to S5b.
+
+Medians of the molecule, against S4c for the nine Structure cases and against the S0b baseline for
+the other seven, whose search had not changed since:
+
+| Case | `canonicalize` | `canonical_hash` | `canonical_eq` |
+| --- | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 21.3 → 17.2 µs | 21.0 → 24.0 µs | 36.0 → 43.4 µs |
+| `disconnected_rings` | 34.4 → 29.1 µs | 33.3 → 37.6 µs | 60.0 → 69.2 µs |
+| `feature_free_connected` | 37.8 → 33.4 µs | 38.6 → 43.3 µs | 72.6 → 81.6 µs |
+| `feature_free_disconnected` | 40.4 → 36.7 µs | 41.4 → 45.6 µs | 75.6 → 84.9 µs |
+| `symmetry_heavy_radicals` | 31.1 → 29.6 µs | 30.8 → 34.6 µs | 58.1 → 65.0 µs |
+| `overlay_heavy` | 91.8 → 68.5 µs | 88.1 → 81.3 µs | 166.7 → 155.7 µs |
+| `frame_relative_stereo_constraint` | 46.7 → 34.9 µs | 44.5 → 40.1 µs | 86.4 → 77.4 µs |
+| `tetrahedral_stereo` | 21.5 → 12.9 µs | 18.5 → 16.5 µs | 34.6 → 30.7 µs |
+| `cis_trans_stereo_bond` | 20.9 → 14.9 µs | 18.0 → 19.5 µs | 33.2 → 35.5 µs |
+| `mixed_atom_and_bond_stereo` | 40.6 → 26.5 µs | 37.6 → 34.7 µs | 69.5 → 64.0 µs |
+| `meso_dichlorobutane` | 57.3 → 42.7 µs | 52.8 → 39.3 µs | 102.7 → 75.5 µs |
+| `para_stereo_trichloropentane` | 81.8 → 57.7 µs | 77.7 → 53.9 µs | 153.2 → 102.7 µs |
+| `para_stereo_cascade` | 862.5 → 527.2 µs | 841.6 → 531.8 µs | 1.76 → 1.06 ms |
+| `symmetric_stereo_triisopropanolamine` | 77.4 → 52.5 µs | 72.5 → 62.5 µs | 141.1 → 117.5 µs |
+| `symmetric_stereo_butanol` | 87.6 → 73.6 µs | 84.9 → 86.1 µs | 166.0 → 163.0 µs |
+| `symmetric_stereo_dimethylbutanol` | 195.8 → 176.5 µs | 193.2 → 194.1 µs | 390.9 → 381.8 µs |
+
+`canonicalize` is 5% to 40% faster on all sixteen cases, and `para_stereo_cascade` returns to 1.3
+times its time before S4c. On the five Topology cases `canonical_hash` is 10% to 14% slower and
+`canonical_eq` 12% to 21% slower: these always build the key, and the remapped leaf costs more
+there than the topology row leaf did. The study recorded this cost; S5e reads the Topology key
+directly. `cis_trans_stereo_bond` is 7% to 8% slower in the two key operations, and the other ten
+cases are unchanged or up to 40% faster in them.
 
 #### S5e — Molecule Topology key
 

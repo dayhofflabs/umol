@@ -1045,25 +1045,6 @@ fn test_reaction_span_canonicalize_contradiction(canonicalize_context: Canonical
 }
 
 #[rstest]
-#[case::tetrahedral_short(StereoKind::Tetrahedral, 3)]
-#[case::tetrahedral_long(StereoKind::Tetrahedral, 5)]
-#[case::cis_trans_short(StereoKind::CisTrans, 3)]
-#[case::cis_trans_long(StereoKind::CisTrans, 5)]
-#[case::octahedral_short(StereoKind::Octahedral, 5)]
-#[case::octahedral_long(StereoKind::Octahedral, 7)]
-fn test_canonical_kinded_stereo_frame_error(#[case] kind: StereoKind, #[case] degree: usize) {
-    let ligands = (0..degree)
-        .map(|index| StereoLigand::new(AtomId(index as u32), StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let configuration = StereoConfigurationForm::kinded(kind, 0u32);
-
-    assert_eq!(
-        canonical_kinded_stereo_frame(&ligands, &configuration),
-        Err(Contradiction),
-    );
-}
-
-#[rstest]
 fn test_molecule_canonicalize(canonicalize_context: CanonicalizeContext) {
     let plain = AtomForm::from_element(Element::C);
     let mut constrained = plain.clone();

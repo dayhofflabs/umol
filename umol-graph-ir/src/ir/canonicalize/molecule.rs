@@ -6,7 +6,7 @@ use umol_perm::Permutation;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
-use super::super::id::{AtomId, BondId};
+use super::super::id::AtomId;
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
@@ -17,8 +17,8 @@ use super::super::stereo::StereoConfigurationForm;
 use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::{
     aromatic_system_constraint_form_key, atom_constraint_form_key, atom_inherent_fields,
-    bond_constraint_form_key, bond_inherent_fields, canonical_kinded_stereo_frame,
-    canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
+    bond_constraint_form_key, bond_inherent_fields, canonical_search,
+    canonical_search_from_partition, canonical_search_with_generator_filter,
     constitution_partition_descriptors, constraint_key, dative_bond_constraint_form_key,
     electron_counts_form_key, field, hash_value, incidence_key, index_key,
     molecule_canonicalize_level, molecule_counts, molecule_remapping,
@@ -29,9 +29,9 @@ use super::{
     stereo_kind_key, stereo_ligand_key, unpaired_electrons_form_key, variant, AutomorphismAdapter,
     AutomorphismColor, BranchOrdering, CanonicalCandidate, CanonicalComparisonKey,
     CanonicalKeyValue, CanonicalSearchOptions, Canonicalize, CanonicalizeContext,
-    ConstraintBlockKey, ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition, FieldKey,
-    InitialColorKey, MoleculeCanonicalizeError, OrderedPartition, PositionedKey,
-    TopologySearchInput,
+    ConstraintBlockKey, ConstraintBlockPosition, DeferredKey, DescriptionLevel,
+    EntityBlockPosition, InitialColorKey, MoleculeCanonicalizeError, OrderedPartition,
+    PositionedKey, TopologySearchInput,
 };
 
 /// Construct the ordered constraint blocks used by complete canonicalization.
@@ -814,439 +814,6 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
     Ok(InitialColorKey::Entity { position, value })
 }
 
-fn topology_bond_key_rows(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    atom_images: &[usize],
-) -> Result<Vec<(CanonicalKeyValue, BondId, NodeId)>, Contradiction> {
-    let bond_count = incidence_graph.entity_count(EntityKind::Bond);
-    let mut bonds = molecule
-        .bonds()
-        .iter()
-        .map(|id| {
-            let bond = id;
-            let mut fields = Vec::with_capacity(4);
-            let [first, second] = bond.atom_ids().map(|atom| atom_images[atom.index()] as u64);
-            fields.push(field(
-                0,
-                product([
-                    CanonicalKeyValue::Unsigned(first.min(second)),
-                    CanonicalKeyValue::Unsigned(first.max(second)),
-                ]),
-            ));
-            fields.extend(bond_inherent_fields(bond.attributes())?);
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                bond.id(),
-                incidence_graph.node_of(Entity::Bond(bond.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    debug_assert_eq!(bonds.len(), bond_count);
-    bonds.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    Ok(bonds)
-}
-
-fn topology_candidate(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
-    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
-    let mut atom_images = vec![0_usize; atom_count];
-    let mut atom_order = Vec::with_capacity(atom_count);
-
-    for &node in order {
-        if let Entity::Atom(id) = incidence_graph.entity(node) {
-            atom_images[id.index()] = atom_order.len();
-            atom_order.push(id);
-        }
-    }
-
-    debug_assert_eq!(atom_order.len(), atom_count);
-
-    let atoms = atom_order
-        .iter()
-        .copied()
-        .map(|id| {
-            atom_inherent_fields(molecule.atom(id).attributes()).map(CanonicalKeyValue::Product)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let bonds = topology_bond_key_rows(molecule, incidence_graph, &atom_images)?;
-
-    let mut entity_order = atom_order
-        .into_iter()
-        .map(|id| incidence_graph.node_of(Entity::Atom(id)))
-        .collect::<Vec<_>>();
-    entity_order.extend(bonds.iter().map(|(_, _, node)| *node));
-    let bonds = bonds.into_iter().map(|(key, _, _)| key).collect::<Vec<_>>();
-
-    let mut entity_blocks = Vec::with_capacity(2);
-    if !atoms.is_empty() {
-        entity_blocks.push(PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Sequence(atoms),
-        });
-    }
-    if !bonds.is_empty() {
-        entity_blocks.push(PositionedKey {
-            position: EntityBlockPosition::BOND,
-            value: CanonicalKeyValue::Sequence(bonds),
-        });
-    }
-
-    Ok(CanonicalCandidate {
-        key: CanonicalComparisonKey {
-            entity_blocks,
-            constraints: Vec::new(),
-        },
-        entity_order,
-    })
-}
-
-fn constitution_candidate(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
-    fn electron_occurrence_fields(
-        atom_ids: impl IntoIterator<Item = AtomId>,
-        electrons: &ElectronCountsForm,
-        atom_images: &[usize],
-    ) -> [FieldKey; 2] {
-        match electrons {
-            ElectronCountsForm::Undetermined => {
-                let mut participants = atom_ids
-                    .into_iter()
-                    .map(|atom| atom_images[atom.index()] as u64)
-                    .collect::<Vec<_>>();
-                participants.sort_unstable();
-                [
-                    field(
-                        0,
-                        sequence(participants.into_iter().map(CanonicalKeyValue::Unsigned)),
-                    ),
-                    field(1, electron_counts_form_key(electrons)),
-                ]
-            }
-            ElectronCountsForm::Lit(electrons) => {
-                let mut occurrences = atom_ids
-                    .into_iter()
-                    .zip(electrons)
-                    .map(|(atom, &electrons)| (atom_images[atom.index()] as u64, electrons))
-                    .collect::<Vec<_>>();
-                occurrences.sort_unstable_by_key(|&(atom, _)| atom);
-                let (participants, electrons): (Vec<_>, Vec<_>) = occurrences.into_iter().unzip();
-                [
-                    field(
-                        0,
-                        sequence(participants.into_iter().map(CanonicalKeyValue::Unsigned)),
-                    ),
-                    field(
-                        1,
-                        electron_counts_form_key(&ElectronCountsForm::Lit(electrons)),
-                    ),
-                ]
-            }
-        }
-    }
-
-    let mut candidate = topology_candidate(molecule, incidence_graph, order)?;
-    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
-    let mut atom_images = vec![0_usize; atom_count];
-    for (image, &node) in candidate.entity_order[..atom_count].iter().enumerate() {
-        let Entity::Atom(id) = incidence_graph.entity(node) else {
-            unreachable!("topology candidate begins with every atom")
-        };
-        atom_images[id.index()] = image;
-    }
-
-    let mut dative = molecule
-        .dative_bonds()
-        .iter()
-        .map(|bond| {
-            let mut donors = bond
-                .donor_ids()
-                .map(|atom| atom_images[atom.index()] as u64)
-                .collect::<Vec<_>>();
-            donors.sort_unstable();
-            let fields = vec![
-                field(
-                    0,
-                    sequence(donors.into_iter().map(CanonicalKeyValue::Unsigned)),
-                ),
-                field(
-                    1,
-                    CanonicalKeyValue::Unsigned(atom_images[bond.acceptor_id().index()] as u64),
-                ),
-                field(2, num_form_key(&bond.order().clone().normalize()?)),
-            ];
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                bond.id(),
-                incidence_graph.node_of(Entity::DativeBond(bond.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    dative.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    let dative = dative
-        .into_iter()
-        .map(|(key, _, node)| (key, node))
-        .collect::<Vec<_>>();
-
-    let mut aromatic = molecule
-        .aromatic_systems()
-        .iter()
-        .map(|system| {
-            let electrons = system.electrons().clone().normalize()?;
-            let mut fields =
-                electron_occurrence_fields(system.atom_ids(), &electrons, &atom_images)
-                    .into_iter()
-                    .collect::<Vec<_>>();
-            fields.extend([
-                field(2, num_form_key(&system.charge().clone().normalize()?)),
-                field(
-                    3,
-                    unpaired_electrons_form_key(&system.unpaired_electrons().clone().normalize()?),
-                ),
-            ]);
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                system.id(),
-                incidence_graph.node_of(Entity::AromaticSystem(system.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    aromatic.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    let aromatic = aromatic
-        .into_iter()
-        .map(|(key, _, node)| (key, node))
-        .collect::<Vec<_>>();
-
-    let mut multicenter = molecule
-        .multicenter_bonds()
-        .iter()
-        .map(|bond| {
-            let electrons = bond.electrons().clone().normalize()?;
-            let mut fields = electron_occurrence_fields(bond.atom_ids(), &electrons, &atom_images)
-                .into_iter()
-                .collect::<Vec<_>>();
-            fields.extend([
-                field(2, num_form_key(&bond.charge().clone().normalize()?)),
-                field(
-                    3,
-                    unpaired_electrons_form_key(&bond.unpaired_electrons().clone().normalize()?),
-                ),
-            ]);
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                bond.id(),
-                incidence_graph.node_of(Entity::MulticenterBond(bond.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    multicenter.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    let multicenter = multicenter
-        .into_iter()
-        .map(|(key, _, node)| (key, node))
-        .collect::<Vec<_>>();
-
-    let mut noncovalent = molecule
-        .noncovalent_bonds()
-        .iter()
-        .map(|bond| {
-            let [first, second] = bond.atom_ids().map(|atom| atom_images[atom.index()] as u64);
-            let fields = vec![
-                field(
-                    0,
-                    product([
-                        CanonicalKeyValue::Unsigned(first.min(second)),
-                        CanonicalKeyValue::Unsigned(first.max(second)),
-                    ]),
-                ),
-                field(
-                    1,
-                    noncovalent_bond_kind_form_key(&bond.kind().clone().normalize()?),
-                ),
-            ];
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                bond.id(),
-                incidence_graph.node_of(Entity::NoncovalentBond(bond.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    noncovalent.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    let noncovalent = noncovalent
-        .into_iter()
-        .map(|(key, _, node)| (key, node))
-        .collect::<Vec<_>>();
-
-    for (position, rows) in [
-        (EntityBlockPosition::DATIVE_BOND, &dative),
-        (EntityBlockPosition::AROMATIC_SYSTEM, &aromatic),
-        (EntityBlockPosition::MULTICENTER_BOND, &multicenter),
-        (EntityBlockPosition::NONCOVALENT_BOND, &noncovalent),
-    ] {
-        if !rows.is_empty() {
-            candidate.key.entity_blocks.push(PositionedKey {
-                position,
-                value: sequence(rows.iter().map(|(key, _)| key.clone())),
-            });
-            candidate
-                .entity_order
-                .extend(rows.iter().map(|(_, node)| *node));
-        }
-    }
-
-    Ok(candidate)
-}
-
-fn structure_candidate(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
-    let mut candidate = constitution_candidate(molecule, incidence_graph, order)?;
-    let mut atom_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Atom)];
-    let mut bond_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Bond)];
-    for (image, &node) in candidate.entity_order.iter().enumerate() {
-        match incidence_graph.entity(node) {
-            Entity::Atom(id) => atom_images[id.index()] = image,
-            Entity::Bond(id) => {
-                bond_images[id.index()] = image - atom_images.len();
-            }
-            _ => {}
-        }
-    }
-
-    let remap_ligands = |ligands: &[StereoLigand]| {
-        ligands
-            .iter()
-            .map(|ligand| {
-                StereoLigand::new(
-                    AtomId(atom_images[ligand.atom_id.index()] as u32),
-                    ligand.kind,
-                )
-            })
-            .collect::<Vec<_>>()
-    };
-    let canonical_frame =
-        |ligands: &[StereoLigand],
-         configuration: &StereoConfigurationForm|
-         -> Result<(Vec<StereoLigand>, StereoConfigurationForm), Contradiction> {
-            let mut ligands = remap_ligands(ligands);
-            match configuration {
-                StereoConfigurationForm::Undetermined => {
-                    ligands.sort_unstable();
-                    Ok((ligands, StereoConfigurationForm::Undetermined))
-                }
-                StereoConfigurationForm::Kinded(..) => {
-                    let frame = canonical_kinded_stereo_frame(&ligands, configuration)?
-                        .expect("kinded stereo frames have an allowed permutation");
-                    Ok((frame.ligands, frame.configuration))
-                }
-            }
-        };
-
-    let mut stereo_atoms = molecule
-        .stereo_atoms()
-        .iter()
-        .map(|stereo| {
-            let (ligands, configuration) =
-                canonical_frame(stereo.ligand_ids(), &stereo.attributes().configuration)?;
-            let fields = vec![
-                field(
-                    0,
-                    CanonicalKeyValue::Unsigned(atom_images[stereo.site_id().index()] as u64),
-                ),
-                field(
-                    1,
-                    sequence(
-                        ligands
-                            .iter()
-                            .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
-                    ),
-                ),
-                field(2, stereo_configuration_form_key(&configuration)),
-            ];
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                stereo.id(),
-                incidence_graph.node_of(Entity::StereoAtom(stereo.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    stereo_atoms.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    let stereo_atoms = stereo_atoms
-        .into_iter()
-        .map(|(key, _, node)| (key, node))
-        .collect::<Vec<_>>();
-
-    let mut stereo_bonds = molecule
-        .stereo_bonds()
-        .iter()
-        .map(|stereo| {
-            let (ligands, configuration) =
-                canonical_frame(stereo.ligand_ids(), &stereo.attributes().configuration)?;
-            let fields = vec![
-                field(
-                    0,
-                    CanonicalKeyValue::Unsigned(bond_images[stereo.site_id().index()] as u64),
-                ),
-                field(
-                    1,
-                    sequence(
-                        ligands
-                            .iter()
-                            .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
-                    ),
-                ),
-                field(2, stereo_configuration_form_key(&configuration)),
-            ];
-            Ok((
-                CanonicalKeyValue::Product(fields),
-                stereo.id(),
-                incidence_graph.node_of(Entity::StereoBond(stereo.id())),
-            ))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?;
-    stereo_bonds.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
-    let stereo_bonds = stereo_bonds
-        .into_iter()
-        .map(|(key, _, node)| (key, node))
-        .collect::<Vec<_>>();
-
-    for (position, rows) in [
-        (EntityBlockPosition::STEREO_ATOM, &stereo_atoms),
-        (EntityBlockPosition::STEREO_BOND, &stereo_bonds),
-    ] {
-        if !rows.is_empty() {
-            candidate.key.entity_blocks.push(PositionedKey {
-                position,
-                value: sequence(rows.iter().map(|(key, _)| key.clone())),
-            });
-            candidate
-                .entity_order
-                .extend(rows.iter().map(|(_, node)| *node));
-        }
-    }
-
-    Ok(candidate)
-}
-
-fn complete_candidate(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<(CanonicalCandidate<CanonicalComparisonKey>, Molecule), Contradiction> {
-    let mut candidate = structure_candidate(molecule, incidence_graph, order)?;
-    let remapping = remapping_from_order(molecule, incidence_graph, &candidate.entity_order);
-    let complete = molecule.clone().remap(&remapping).reframe()?;
-    candidate.key.constraints = constraint_blocks(&complete);
-    Ok((candidate, complete))
-}
-
 fn remapping_from_order(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -1275,7 +842,6 @@ fn remapping_from_order(
 ///
 /// The atoms stand as the search orders them. The entities of each further kind follow by their
 /// participants. Entities of one kind on the same participants keep their search order.
-#[cfg_attr(not(test), expect(dead_code))]
 fn entity_order(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -1404,7 +970,6 @@ fn entity_order(
 ///
 /// It is the key of a leaf when the molecule stands in the entity order and the participant frames
 /// of that leaf.
-#[cfg_attr(not(test), expect(dead_code))]
 fn comparison_key(
     molecule: &Molecule,
     level: DescriptionLevel,
@@ -1589,7 +1154,6 @@ fn comparison_key(
 }
 
 /// The key of the leaf that orders the entities of `molecule` as `order`.
-#[cfg_attr(not(test), expect(dead_code))]
 fn leaf_key(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -1623,22 +1187,36 @@ fn canonicalize_topology(
         adapter,
         initial_partition,
     } = topology_search_input(&molecule, &incidence_graph, &entity_colors);
-    let leaf_candidate = |order: &[NodeId]| {
-        topology_candidate(&molecule, &incidence_graph, order)
-            .expect("initial colors established topology normalization")
+    let build_key = |order: &[NodeId]| {
+        leaf_key(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            order,
+        )
     };
-    let selected = canonical_search_from_partition(
+    let leaf_candidate = |order: &[NodeId]| {
+        let entity_order = entity_order(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Topology,
+            order,
+        );
+        CanonicalCandidate {
+            key: DeferredKey::new(&entity_order, &build_key),
+            entity_order,
+        }
+    };
+    let entity_order = canonical_search_from_partition(
         &adapter,
         initial_partition,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-    );
-    let remapping = remapping_from_order(
-        &molecule,
-        &incidence_graph,
-        &selected.candidate.entity_order,
-    );
+    )
+    .candidate
+    .entity_order;
+    let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
 
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
@@ -1654,22 +1232,36 @@ fn canonicalize_constitution(
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
-    let leaf_candidate = |order: &[NodeId]| {
-        constitution_candidate(&molecule, &incidence_graph, order)
-            .expect("initial colors established constitution normalization")
+    let build_key = |order: &[NodeId]| {
+        leaf_key(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Constitution,
+            order,
+        )
     };
-    let selected = canonical_search(
+    let leaf_candidate = |order: &[NodeId]| {
+        let entity_order = entity_order(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Constitution,
+            order,
+        );
+        CanonicalCandidate {
+            key: DeferredKey::new(&entity_order, &build_key),
+            entity_order,
+        }
+    };
+    let entity_order = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-    );
-    let remapping = remapping_from_order(
-        &molecule,
-        &incidence_graph,
-        &selected.candidate.entity_order,
-    );
+    )
+    .candidate
+    .entity_order;
+    let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
 
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
@@ -1685,26 +1277,40 @@ fn canonicalize_structure(
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let build_key = |order: &[NodeId]| {
+        leaf_key(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Structure,
+            order,
+        )
+    };
     let leaf_candidate = |order: &[NodeId]| {
-        structure_candidate(&molecule, &incidence_graph, order)
-            .expect("initial colors established structure normalization")
+        let entity_order = entity_order(
+            &molecule,
+            &incidence_graph,
+            DescriptionLevel::Structure,
+            order,
+        );
+        CanonicalCandidate {
+            key: DeferredKey::new(&entity_order, &build_key),
+            entity_order,
+        }
     };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
-    let selected = canonical_search_with_generator_filter(
+    let entity_order = canonical_search_with_generator_filter(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
         &filter_generators,
-    );
-    let remapping = remapping_from_order(
-        &molecule,
-        &incidence_graph,
-        &selected.candidate.entity_order,
-    );
+    )
+    .candidate
+    .entity_order;
+    let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
 
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
@@ -1728,12 +1334,16 @@ fn canonicalize_full(
         context.para_stereo,
     )?;
     let descriptors = partition.cell_indices(adapter.graph().node_count());
+    let build_key =
+        |order: &[NodeId]| leaf_key(&molecule, &incidence_graph, DescriptionLevel::Full, order);
     let leaf_candidate = |order: &[NodeId]| {
-        complete_candidate(&molecule, &incidence_graph, order)
-            .expect("structure descriptors established complete normalization")
-            .0
+        let entity_order = entity_order(&molecule, &incidence_graph, DescriptionLevel::Full, order);
+        CanonicalCandidate {
+            key: DeferredKey::new(&entity_order, &build_key),
+            entity_order,
+        }
     };
-    let selected = canonical_search(
+    let entity_order = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
@@ -1742,12 +1352,10 @@ fn canonicalize_full(
             ..options
         },
         &leaf_candidate,
-    );
-    let remapping = remapping_from_order(
-        &molecule,
-        &incidence_graph,
-        &selected.candidate.entity_order,
-    );
+    )
+    .candidate
+    .entity_order;
+    let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
 }
@@ -1795,10 +1403,13 @@ impl Molecule {
                 context.para_stereo,
             )?;
             let descriptors = partition.cell_indices(adapter.graph().node_count());
+            let build_key = |order: &[NodeId]| leaf_key(molecule, &incidence_graph, level, order);
             let leaf_candidate = |order: &[NodeId]| {
-                complete_candidate(molecule, &incidence_graph, order)
-                    .expect("normalized structure descriptors established complete normalization")
-                    .0
+                let entity_order = entity_order(molecule, &incidence_graph, level, order);
+                CanonicalCandidate {
+                    key: DeferredKey::new(&entity_order, &build_key),
+                    entity_order,
+                }
             };
             return Ok(canonical_search(
                 &adapter,
@@ -1811,7 +1422,8 @@ impl Molecule {
                 &leaf_candidate,
             )
             .candidate
-            .key);
+            .key
+            .into_key());
         }
         let molecule = self;
         let incidence_level = match level {
@@ -1826,6 +1438,7 @@ impl Molecule {
             automorphism_pruning: true,
             branch_order: BranchOrdering::BackendCanonical,
         };
+        let build_key = |order: &[NodeId]| leaf_key(molecule, &incidence_graph, level, order);
 
         if level == DescriptionLevel::Topology {
             let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
@@ -1834,8 +1447,11 @@ impl Molecule {
                 initial_partition,
             } = topology_search_input(molecule, &incidence_graph, &entity_colors);
             let leaf_candidate = |order: &[NodeId]| {
-                topology_candidate(molecule, &incidence_graph, order)
-                    .expect("initial colors established topology normalization")
+                let entity_order = entity_order(molecule, &incidence_graph, level, order);
+                CanonicalCandidate {
+                    key: DeferredKey::new(&entity_order, &build_key),
+                    entity_order,
+                }
             };
             return Ok(canonical_search_from_partition(
                 &adapter,
@@ -1845,36 +1461,33 @@ impl Molecule {
                 &leaf_candidate,
             )
             .candidate
-            .key);
+            .key
+            .into_key());
         }
 
         let colors = rank_initial_colors(&entity_keys, &incidence_keys);
         let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-        let key = match level {
-            DescriptionLevel::Constitution => {
-                let descriptors =
-                    constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
-                let leaf_candidate = |order: &[NodeId]| {
-                    constitution_candidate(molecule, &incidence_graph, order)
-                        .expect("initial colors established constitution normalization")
-                };
-                canonical_search(
-                    &adapter,
-                    &descriptors,
-                    context.automorphism_algorithm,
-                    options,
-                    &leaf_candidate,
-                )
-                .candidate
-                .key
+        let descriptors =
+            constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+        let leaf_candidate = |order: &[NodeId]| {
+            let entity_order = entity_order(molecule, &incidence_graph, level, order);
+            CanonicalCandidate {
+                key: DeferredKey::new(&entity_order, &build_key),
+                entity_order,
             }
+        };
+        let key = match level {
+            DescriptionLevel::Constitution => canonical_search(
+                &adapter,
+                &descriptors,
+                context.automorphism_algorithm,
+                options,
+                &leaf_candidate,
+            )
+            .candidate
+            .key
+            .into_key(),
             DescriptionLevel::Structure => {
-                let descriptors =
-                    constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
-                let leaf_candidate = |order: &[NodeId]| {
-                    structure_candidate(molecule, &incidence_graph, order)
-                        .expect("initial colors established structure normalization")
-                };
                 let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
                     retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
                 };
@@ -1888,6 +1501,7 @@ impl Molecule {
                 )
                 .candidate
                 .key
+                .into_key()
             }
             DescriptionLevel::Topology | DescriptionLevel::Full => {
                 unreachable!("handled before selected-layer search")

@@ -36,7 +36,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::incidence::{Incidence, IncidenceGraph};
-use super::ligand::{StereoLigand, StereoLigandKind};
+use super::ligand::StereoLigandKind;
 use super::molecule::Molecule;
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
@@ -2562,47 +2562,6 @@ fn bond_inherent_fields(attributes: &BondForm) -> Result<Vec<FieldKey>, Contradi
             unpaired_electrons_form_key(&attributes.unpaired_electrons.clone().normalize()?),
         ),
     ])
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct CanonicalStereoFrame {
-    ligands: Vec<StereoLigand>,
-    configuration: StereoConfigurationForm,
-}
-
-fn canonical_kinded_stereo_frame(
-    ligands: &[StereoLigand],
-    configuration: &StereoConfigurationForm,
-) -> Result<Option<CanonicalStereoFrame>, Contradiction> {
-    let Some(kind) = configuration.kind() else {
-        return Ok(None);
-    };
-    if ligands.len() != kind.degree() {
-        return Err(Contradiction);
-    }
-    let mut minimum: Option<(Vec<StereoLigand>, StereoConfigurationForm)> = None;
-    for permutation in stereo_frame_permutations(kind) {
-        let candidate = (
-            permutation.act(ligands),
-            configuration
-                .apply(permutation)
-                .ok_or(Contradiction)?
-                .normalize()?,
-        );
-        match minimum.as_ref().map(|value| candidate.cmp(value)) {
-            None | Some(Ordering::Less) => {
-                minimum = Some(candidate);
-            }
-            Some(Ordering::Equal | Ordering::Greater) => {}
-        }
-    }
-
-    Ok(
-        minimum.map(|(ligands, configuration)| CanonicalStereoFrame {
-            ligands,
-            configuration,
-        }),
-    )
 }
 
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
