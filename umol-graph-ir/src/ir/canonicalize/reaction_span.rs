@@ -1,6 +1,6 @@
 //! Reaction-span and reaction canonicalization.
 
-use umol_graph_core::{NodeId, SubdivisionNodeSource};
+use umol_graph_core::NodeId;
 use umol_perm::Permutation;
 
 use super::super::atom::AtomForm;
@@ -11,7 +11,7 @@ use super::super::entity::Entity;
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, BondId};
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
-use super::super::ligand::{StereoLigand, StereoLigandKind};
+use super::super::ligand::StereoLigand;
 use super::super::num::NumForm;
 use super::super::reaction::Reaction;
 use super::super::reaction_span::ReactionSpan;
@@ -22,20 +22,21 @@ use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::{
     aromatic_system_constraint_form_key, atom_constraint_form_key, atom_inherent_fields,
     bond_constraint_form_key, bond_inherent_fields, canonical_search,
-    canonical_search_from_partition, constitution_partition_descriptors, constraint_key_span,
-    constraint_span_key, dative_bond_constraint_form_key, electron_counts_form_key,
-    entity_span_key, hash_value, incidence_key, index_key, is_empty_sequence, molecule_remapping,
+    canonical_search_from_partition, canonical_search_with_generator_filter,
+    constitution_partition_descriptors, constraint_key_span, constraint_span_key,
+    dative_bond_constraint_form_key, electron_counts_form_key, entity_span_key, hash_value,
+    incidence_key, index_key, is_empty_sequence, molecule_remapping,
     multicenter_bond_constraint_form_key, noncovalent_bond_constraint_form_key,
     noncovalent_bond_kind_form_key, normalized_entity_span_key, num_form_key, option,
     positioned_product, product, push_span_block, rank_initial_colors, reaction_canonicalize_level,
     reaction_span_canonicalize_level, reaction_span_counts, relation_span_key, sequence,
     stereo_atom_constraint_form_key, stereo_bond_constraint_form_key,
-    stereo_configuration_form_key, stereo_frame_permutations, stereo_kind_key, stereo_ligand_key,
-    topology_initial_partition, unpaired_electrons_form_key, variant, AutomorphismAdapter,
-    BranchOrdering, CanonicalCandidate, CanonicalComparisonKey, CanonicalKeyValue,
-    CanonicalSearchOptions, CanonicalSearchResult, Canonicalize, CanonicalizeContext,
-    ConstraintBlockPosition, DescriptionLevel, EntityBlockPosition, InitialColorKey,
-    OrderedPartition, PositionedKey, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
+    stereo_configuration_form_key, stereo_kind_key, stereo_ligand_key, topology_initial_partition,
+    unpaired_electrons_form_key, variant, AutomorphismAdapter, BranchOrdering, CanonicalCandidate,
+    CanonicalComparisonKey, CanonicalKeyValue, CanonicalSearchOptions, CanonicalSearchResult,
+    Canonicalize, CanonicalizeContext, ConstraintBlockPosition, DescriptionLevel,
+    EntityBlockPosition, InitialColorKey, PositionedKey, ReactionCanonicalizeError,
+    ReactionSpanCanonicalizeError,
 };
 
 fn entity_color_key(span: &ReactionSpan, entity: Entity) -> Result<InitialColorKey, Contradiction> {
@@ -178,7 +179,6 @@ fn remapping_from_order(
     molecule_remapping(&images)
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
 fn generator_preserves_stereo(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
@@ -274,7 +274,6 @@ fn generator_preserves_stereo(
     true
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
 fn retain_stereo_preserving_generators(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
@@ -370,254 +369,6 @@ fn initial_color_keys(
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;
     Ok((entity_keys, incidence_keys))
-}
-
-#[cfg_attr(not(test), expect(dead_code))]
-fn constitution_entity_classes(span: &ReactionSpan) -> Result<Vec<u32>, Contradiction> {
-    let incidence_graph = span.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_color_keys(span, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
-    let partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
-    let classes = partition.cell_indices(adapter.graph().node_count());
-    Ok(classes[..adapter.source_node_count].to_vec())
-}
-
-/// The stereo descriptor of a span entity, minimized over the frame permutations of its kind.
-///
-/// One permutation acts on the ligand classes and on the configuration of each present side.
-#[cfg_attr(not(test), expect(dead_code))]
-fn stereo_refinement_descriptor<T>(
-    site_class: u32,
-    ligand_classes: &[(u32, StereoLigandKind)],
-    span: &EntitySpan<T>,
-    configuration: impl Fn(&T) -> &StereoConfigurationForm,
-) -> Result<CanonicalKeyValue, Contradiction> {
-    let descriptor = |ligands: &[(u32, StereoLigandKind)],
-                      configuration: StereoConfigurationForm| {
-        product([
-            CanonicalKeyValue::Unsigned(site_class.into()),
-            sequence(
-                ligands
-                    .iter()
-                    .map(|&(class, kind)| stereo_ligand_key(class, kind)),
-            ),
-            stereo_configuration_form_key(&configuration),
-        ])
-    };
-
-    let kind = [span.lhs(), span.rhs()]
-        .into_iter()
-        .flatten()
-        .find_map(|attributes| configuration(attributes).kind());
-    match kind {
-        None => {
-            let mut ligands = ligand_classes.to_vec();
-            ligands.sort_unstable();
-            normalized_entity_span_key(span, |_| {
-                Ok(descriptor(&ligands, StereoConfigurationForm::Undetermined))
-            })
-        }
-        Some(kind) => {
-            if ligand_classes.len() != kind.degree() {
-                return Err(Contradiction);
-            }
-            stereo_frame_permutations(kind)
-                .map(|permutation| {
-                    let ligands = permutation.act(ligand_classes);
-                    normalized_entity_span_key(span, |attributes| {
-                        configuration(attributes)
-                            .apply(permutation)
-                            .ok_or(Contradiction)?
-                            .normalize()
-                            .map(|configuration| descriptor(&ligands, configuration))
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter()
-                .min()
-                .ok_or(Contradiction)
-        }
-    }
-}
-
-#[cfg_attr(not(test), expect(dead_code))]
-fn structure_partition_descriptors(
-    span: &ReactionSpan,
-    incidence_graph: &IncidenceGraph,
-    adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialColorKey],
-    entity_classes: &[u32],
-) -> Result<Vec<InitialColorKey>, Contradiction> {
-    let entity_class = |entity: Entity| entity_classes[incidence_graph.node_of(entity).index()];
-
-    adapter
-        .node_sources
-        .iter()
-        .map(|source| match *source {
-            SubdivisionNodeSource::Node(node) => {
-                let entity = incidence_graph.entity(node);
-                let InitialColorKey::Entity { position, .. } = entity_keys[node.index()] else {
-                    unreachable!("entity key corresponds to an entity node")
-                };
-                let value = match entity {
-                    Entity::StereoAtom(id) => {
-                        let ligand_classes = span
-                            .stereo_atoms()
-                            .ligands(id)
-                            .iter()
-                            .map(|ligand| (entity_class(Entity::Atom(ligand.atom_id)), ligand.kind))
-                            .collect::<Vec<_>>();
-                        stereo_refinement_descriptor(
-                            entity_class(Entity::Atom(span.stereo_atoms().site(id))),
-                            &ligand_classes,
-                            span.stereo_atoms().attributes(id),
-                            |attributes| &attributes.configuration,
-                        )?
-                    }
-                    Entity::StereoBond(id) => {
-                        let ligand_classes = span
-                            .stereo_bonds()
-                            .ligands(id)
-                            .iter()
-                            .map(|ligand| (entity_class(Entity::Atom(ligand.atom_id)), ligand.kind))
-                            .collect::<Vec<_>>();
-                        stereo_refinement_descriptor(
-                            entity_class(Entity::Bond(span.stereo_bonds().site(id))),
-                            &ligand_classes,
-                            span.stereo_bonds().attributes(id),
-                            |attributes| &attributes.configuration,
-                        )?
-                    }
-                    _ => product([CanonicalKeyValue::Unsigned(entity_class(entity).into())]),
-                };
-                Ok(InitialColorKey::Entity { position, value })
-            }
-            SubdivisionNodeSource::Edge(edge) => {
-                let value = match incidence_graph.incidence(edge) {
-                    Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
-                    incidence => incidence_key(incidence),
-                };
-                Ok(InitialColorKey::Incidence(value))
-            }
-        })
-        .collect()
-}
-
-#[cfg_attr(not(test), expect(dead_code))]
-fn para_stereo_partition_descriptors(
-    span: &ReactionSpan,
-    incidence_graph: &IncidenceGraph,
-    adapter: &AutomorphismAdapter,
-    partition: &OrderedPartition,
-) -> Result<Vec<(u32, Option<CanonicalKeyValue>)>, Contradiction> {
-    let classes = partition.cell_indices(adapter.graph().node_count());
-    let entity_class = |entity: Entity| classes[incidence_graph.node_of(entity).index()];
-    let ligand_classes = |entity: Entity| {
-        let node = incidence_graph.node_of(entity);
-        let mut edges = incidence_graph
-            .graph()
-            .neighbors(node)
-            .iter()
-            .map(|neighbor| neighbor.edge)
-            .collect::<Vec<_>>();
-        edges.sort_unstable();
-        edges
-            .into_iter()
-            .filter_map(|edge| {
-                let Incidence::StereoLigand(kind) = incidence_graph.incidence(edge) else {
-                    return None;
-                };
-                let occurrence = adapter
-                    .node_of(SubdivisionNodeSource::Edge(edge))
-                    .expect("stereo ligand incidence has an occurrence node");
-                Some((classes[occurrence.index()], *kind))
-            })
-            .collect::<Vec<_>>()
-    };
-
-    adapter
-        .node_sources
-        .iter()
-        .enumerate()
-        .map(|(index, source)| {
-            let descriptor = match *source {
-                SubdivisionNodeSource::Node(node) => match incidence_graph.entity(node) {
-                    Entity::StereoAtom(id) => Some(stereo_refinement_descriptor(
-                        entity_class(Entity::Atom(span.stereo_atoms().site(id))),
-                        &ligand_classes(Entity::StereoAtom(id)),
-                        span.stereo_atoms().attributes(id),
-                        |attributes| &attributes.configuration,
-                    )?),
-                    Entity::StereoBond(id) => Some(stereo_refinement_descriptor(
-                        entity_class(Entity::Bond(span.stereo_bonds().site(id))),
-                        &ligand_classes(Entity::StereoBond(id)),
-                        span.stereo_bonds().attributes(id),
-                        |attributes| &attributes.configuration,
-                    )?),
-                    _ => None,
-                },
-                SubdivisionNodeSource::Edge(_) => None,
-            };
-            Ok((classes[index], descriptor))
-        })
-        .collect()
-}
-
-/// Refine the structure partition, including para-stereo rounds when requested.
-#[cfg_attr(not(test), expect(dead_code))]
-fn structure_partition(
-    span: &ReactionSpan,
-    incidence_graph: &IncidenceGraph,
-    adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialColorKey],
-    para_stereo: bool,
-) -> Result<(OrderedPartition, usize), Contradiction> {
-    let constitution_classes = constitution_entity_classes(span)?;
-    let descriptors = structure_partition_descriptors(
-        span,
-        incidence_graph,
-        adapter,
-        entity_keys,
-        &constitution_classes,
-    )?;
-    let mut partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
-    let mut rounds = 1;
-    let has_unresolved_stereo = |partition: &OrderedPartition| {
-        partition.cells.iter().any(|cell| {
-            cell.len() > 1
-                && cell.iter().any(|&node| {
-                    let SubdivisionNodeSource::Node(node) = adapter.node_source(node) else {
-                        return false;
-                    };
-                    matches!(
-                        incidence_graph.entity(node),
-                        Entity::StereoAtom(_) | Entity::StereoBond(_)
-                    )
-                })
-        })
-    };
-
-    if !para_stereo || !has_unresolved_stereo(&partition) {
-        return Ok((partition, rounds));
-    }
-
-    loop {
-        let cell_count = partition.cells.len();
-        let descriptors =
-            para_stereo_partition_descriptors(span, incidence_graph, adapter, &partition)?;
-        let next = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
-        rounds += 1;
-        if next == partition {
-            return Ok((partition, rounds));
-        }
-        debug_assert!(next.cells.len() > cell_count);
-        partition = next;
-        if !has_unresolved_stereo(&partition) {
-            return Ok((partition, rounds));
-        }
-    }
 }
 
 fn comparison_key(
@@ -960,7 +711,7 @@ fn canonical_candidate(
             options,
             &leaf_candidate,
         ),
-        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
+        DescriptionLevel::Constitution | DescriptionLevel::Full => {
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             canonical_search(
@@ -969,6 +720,21 @@ fn canonical_candidate(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
+            )
+        }
+        DescriptionLevel::Structure => {
+            let descriptors =
+                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+            let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+                retain_stereo_preserving_generators(span, &incidence_graph, generators);
+            };
+            canonical_search_with_generator_filter(
+                &adapter,
+                &descriptors,
+                context.automorphism_algorithm,
+                options,
+                &leaf_candidate,
+                &filter_generators,
             )
         }
     };
@@ -982,10 +748,7 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), ReactionSpanCanonicalizeError> {
-        let automorphism_pruning = matches!(
-            level,
-            DescriptionLevel::Topology | DescriptionLevel::Constitution
-        );
+        let automorphism_pruning = level != DescriptionLevel::Full;
         let options = CanonicalSearchOptions {
             automorphism_pruning,
             branch_order: if automorphism_pruning {
@@ -1014,10 +777,7 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
-        let automorphism_pruning = matches!(
-            level,
-            DescriptionLevel::Topology | DescriptionLevel::Constitution
-        );
+        let automorphism_pruning = level != DescriptionLevel::Full;
         let options = CanonicalSearchOptions {
             automorphism_pruning,
             branch_order: if automorphism_pruning {

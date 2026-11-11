@@ -1,13 +1,9 @@
 //! Unit tests for reaction-span and reaction canonicalization.
 
-use std::iter;
-
 use rstest::rstest;
 use umol_chem::element::Element;
 
-use super::super::tests::{
-    canonicalize_context, initial_color_molecule, para_stereo_canonicalization_molecule,
-};
+use super::super::tests::{canonicalize_context, initial_color_molecule};
 use super::super::*;
 use super::*;
 use crate::ir::{
@@ -654,369 +650,6 @@ fn test_initial_color_keys_incidence(
 }
 
 #[rstest]
-#[case::unchanged(
-    EntitySpan::Unchanged(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
-    vec![1, 0, 2, 3],
-    SpanTagPosition::UNCHANGED,
-    vec![0, 1, 2, 3],
-    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
-)]
-#[case::added(
-    EntitySpan::Added(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
-    vec![1, 0, 2, 3],
-    SpanTagPosition::ADDED,
-    vec![0, 1, 2, 3],
-    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
-)]
-#[case::removed(
-    EntitySpan::Removed(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
-    vec![1, 0, 2, 3],
-    SpanTagPosition::REMOVED,
-    vec![0, 1, 2, 3],
-    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
-)]
-#[case::modified(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
-    },
-    vec![1, 0, 2, 3],
-    SpanTagPosition::MODIFIED,
-    vec![0, 1, 2, 3],
-    vec![
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-    ],
-)]
-#[case::modified_equal_sides(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-    },
-    vec![1, 0, 2, 3],
-    SpanTagPosition::UNCHANGED,
-    vec![0, 1, 2, 3],
-    vec![StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32)],
-)]
-#[case::modified_equal_ligand_classes(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
-        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-    },
-    vec![0, 0, 1, 2],
-    SpanTagPosition::MODIFIED,
-    vec![0, 0, 1, 2],
-    vec![
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
-    ],
-)]
-#[case::modified_lhs_undetermined(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::Undetermined,
-        rhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-    },
-    vec![1, 0, 2, 3],
-    SpanTagPosition::MODIFIED,
-    vec![0, 1, 2, 3],
-    vec![
-        StereoConfigurationForm::Undetermined,
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
-    ],
-)]
-#[case::modified_rhs_undetermined(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-        rhs: StereoConfigurationForm::Undetermined,
-    },
-    vec![1, 0, 2, 3],
-    SpanTagPosition::MODIFIED,
-    vec![0, 1, 2, 3],
-    vec![
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
-        StereoConfigurationForm::Undetermined,
-    ],
-)]
-#[case::undetermined(
-    EntitySpan::Unchanged(StereoConfigurationForm::Undetermined),
-    vec![2, 0, 1],
-    SpanTagPosition::UNCHANGED,
-    vec![0, 1, 2],
-    vec![StereoConfigurationForm::Undetermined],
-)]
-#[case::modified_undetermined_sides(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::Undetermined,
-        rhs: StereoConfigurationForm::Undetermined,
-    },
-    vec![2, 0, 1],
-    SpanTagPosition::UNCHANGED,
-    vec![0, 1, 2],
-    vec![StereoConfigurationForm::Undetermined],
-)]
-fn test_stereo_refinement_descriptor(
-    #[case] span: EntitySpan<StereoConfigurationForm>,
-    #[case] ligand_classes: Vec<u32>,
-    #[case] expected_position: SpanTagPosition,
-    #[case] expected_ligand_classes: Vec<u32>,
-    #[case] expected_configurations: Vec<StereoConfigurationForm>,
-) {
-    let ligands = ligand_classes
-        .into_iter()
-        .map(|class| (class, StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let expected = CanonicalKeyValue::Span(SpanKey {
-        position: expected_position,
-        values: expected_configurations
-            .iter()
-            .map(|configuration| {
-                product([
-                    CanonicalKeyValue::Unsigned(7),
-                    sequence(
-                        expected_ligand_classes
-                            .iter()
-                            .map(|&class| stereo_ligand_key(class, StereoLigandKind::Atom)),
-                    ),
-                    stereo_configuration_form_key(configuration),
-                ])
-            })
-            .collect(),
-    });
-
-    assert_eq!(
-        stereo_refinement_descriptor(7, &ligands, &span, |configuration| configuration),
-        Ok(expected),
-    );
-}
-
-#[rstest]
-#[case::unchanged(|kind| EntitySpan::Unchanged(StereoConfigurationForm::kinded(kind, 0u32)))]
-#[case::added(|kind| EntitySpan::Added(StereoConfigurationForm::kinded(kind, 0u32)))]
-#[case::removed(|kind| EntitySpan::Removed(StereoConfigurationForm::kinded(kind, 0u32)))]
-#[case::modified(|kind| EntitySpan::Modified {
-    lhs: StereoConfigurationForm::kinded(kind, 0u32),
-    rhs: StereoConfigurationForm::kinded(kind, 1u32),
-})]
-#[case::modified_lhs_undetermined(|kind| EntitySpan::Modified {
-    lhs: StereoConfigurationForm::Undetermined,
-    rhs: StereoConfigurationForm::kinded(kind, 0u32),
-})]
-#[case::modified_rhs_undetermined(|kind| EntitySpan::Modified {
-    lhs: StereoConfigurationForm::kinded(kind, 0u32),
-    rhs: StereoConfigurationForm::Undetermined,
-})]
-fn test_stereo_refinement_descriptor_frame_invariant(
-    #[values(
-        StereoKind::Tetrahedral,
-        StereoKind::CisTrans,
-        StereoKind::Axial,
-        StereoKind::SquarePlanar,
-        StereoKind::TrigonalBipyramidal,
-        StereoKind::Octahedral
-    )]
-    kind: StereoKind,
-    #[case] span: fn(StereoKind) -> EntitySpan<StereoConfigurationForm>,
-) {
-    let degree = kind.degree();
-    let frame = if matches!(kind, StereoKind::CisTrans | StereoKind::Axial) {
-        Permutation::from_image(&[2, 3, 0, 1])
-    } else {
-        Permutation::from_image(&(1..degree).chain(iter::once(0)).collect::<Vec<_>>())
-    };
-    let ligands = (0..degree)
-        .map(|class| (class as u32, StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let span = span(kind);
-    let transported = span
-        .clone()
-        .try_map(|configuration| configuration.apply(frame))
-        .expect("the permutation is a parent-group action of the form's kind");
-
-    assert_eq!(
-        stereo_refinement_descriptor(7, &frame.act(&ligands), &transported, |configuration| {
-            configuration
-        })
-        .expect("the frame has the degree of the kind"),
-        stereo_refinement_descriptor(7, &ligands, &span, |configuration| configuration)
-            .expect("the frame has the degree of the kind"),
-    );
-}
-
-#[rstest]
-#[case::unchanged_short(
-    EntitySpan::Unchanged(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
-    3
-)]
-#[case::unchanged_long(
-    EntitySpan::Unchanged(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
-    5
-)]
-#[case::added_short(
-    EntitySpan::Added(StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32)),
-    3
-)]
-#[case::removed_long(
-    EntitySpan::Removed(StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32)),
-    5
-)]
-#[case::modified_short(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32),
-        rhs: StereoConfigurationForm::kinded(StereoKind::Octahedral, 1u32),
-    },
-    5
-)]
-#[case::modified_lhs_undetermined_long(
-    EntitySpan::Modified {
-        lhs: StereoConfigurationForm::Undetermined,
-        rhs: StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32),
-    },
-    7
-)]
-fn test_stereo_refinement_descriptor_error(
-    #[case] span: EntitySpan<StereoConfigurationForm>,
-    #[case] degree: usize,
-) {
-    let ligands = (0..degree)
-        .map(|class| (class as u32, StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        stereo_refinement_descriptor(0, &ligands, &span, |configuration| configuration),
-        Err(Contradiction),
-    );
-}
-
-#[rstest]
-#[case::para_stereo_fixture(
-    Reaction::new(para_stereo_canonicalization_molecule(), Deltas::new())
-        .to_reaction_span()
-        .expect("identity reaction materializes"),
-    [
-        (1, vec![vec![0, 1], vec![2, 6], vec![3, 7], vec![4, 8], vec![5, 9]]),
-        (
-            2,
-            vec![
-                vec![0], vec![1], vec![2], vec![3], vec![4],
-                vec![5], vec![6], vec![7], vec![8], vec![9],
-            ],
-        ),
-    ],
-)]
-#[case::equal_configurations(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: [
-            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
-            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
-        ]
-        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
-        .into(),
-        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
-            .map(|(site, ligand)| {
-                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
-            })
-            .into(),
-        stereo_atoms: vec![
-            (
-                AtomId(0),
-                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
-                EntitySpan::Modified {
-                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
-                },
-            ),
-            (
-                AtomId(5),
-                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
-                EntitySpan::Modified {
-                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
-                },
-            ),
-        ],
-        ..Default::default()
-    }),
-    [(1, vec![vec![0, 1]]), (2, vec![vec![0, 1]])],
-)]
-#[case::rhs_configuration(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: [
-            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
-            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
-        ]
-        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
-        .into(),
-        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
-            .map(|(site, ligand)| {
-                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
-            })
-            .into(),
-        stereo_atoms: vec![
-            (
-                AtomId(0),
-                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
-                EntitySpan::Modified {
-                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
-                },
-            ),
-            (
-                AtomId(5),
-                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
-                EntitySpan::Modified {
-                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                    rhs: StereoAtomForm::default(),
-                },
-            ),
-        ],
-        ..Default::default()
-    }),
-    [(1, vec![vec![0], vec![1]]), (1, vec![vec![0], vec![1]])],
-)]
-#[case::no_stereo(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
-        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
-        ..Default::default()
-    }),
-    [(1, vec![]), (1, vec![])],
-)]
-fn test_structure_partition(
-    #[case] span: ReactionSpan,
-    #[case] expected: [(usize, Vec<Vec<usize>>); 2],
-) {
-    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) =
-        initial_color_keys(&span, &incidence_graph).expect("fixed span has initial colors");
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let actual = [false, true].map(|para_stereo| {
-        let (partition, rounds) =
-            structure_partition(&span, &incidence_graph, &adapter, &entity_keys, para_stereo)
-                .expect("fixed span has a structure partition");
-        let mut stereo_atom_cells = partition
-            .cells
-            .iter()
-            .filter_map(|cell| {
-                cell.iter()
-                    .map(|&node| match adapter.node_source(node) {
-                        SubdivisionNodeSource::Node(node) => match incidence_graph.entity(node) {
-                            Entity::StereoAtom(id) => Some(id.index()),
-                            _ => None,
-                        },
-                        SubdivisionNodeSource::Edge(_) => None,
-                    })
-                    .collect::<Option<Vec<_>>>()
-            })
-            .collect::<Vec<_>>();
-        stereo_atom_cells.sort();
-        (rounds, stereo_atom_cells)
-    });
-
-    assert_eq!(actual, expected);
-}
-
-#[rstest]
 #[case::unchanged_atoms(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
@@ -1115,6 +748,166 @@ fn test_structure_partition(
     }),
     DescriptionLevel::Constitution,
     [6, 3],
+)]
+#[case::equal_stereocentres(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: [0, 5, 10]
+            .into_iter()
+            .flat_map(|site| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(site),
+                        AtomId(site + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(10),
+                [11, 12, 13, 14]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 1],
+)]
+#[case::lhs_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: [0, 5, 10]
+            .into_iter()
+            .flat_map(|site| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(site),
+                        AtomId(site + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(10),
+                [11, 12, 13, 14]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 3],
+)]
+#[case::rhs_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: [0, 5, 10]
+            .into_iter()
+            .flat_map(|site| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(site),
+                        AtomId(site + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(10),
+                [11, 12, 13, 14]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 3],
+)]
+#[case::prochiral_rhs_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::H, Element::H, Element::F, Element::Cl]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::default(),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [2, 2],
 )]
 fn test_canonical_candidate(
     canonicalize_context: CanonicalizeContext,

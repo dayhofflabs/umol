@@ -1223,15 +1223,16 @@ Structure search from the constitution partition and removes the functions of S3
 
 ### S4 — Structure search
 
-#### S4a — Symmetric stereo benchmark cases
+#### S4a — Symmetric stereo benchmark cases **Done**
 
 **Module:** `umol-graph-ir/benches/canonicalize.rs`. Additive (green). [dep: S0a]
 
 The corpus gains the three cases of the study: `symmetric_stereo_triisopropanolamine`,
-`symmetric_stereo_butanol`, and `symmetric_stereo_dimethylbutanol`. The change is in the working
-tree, uncommitted.
+`symmetric_stereo_butanol`, and `symmetric_stereo_dimethylbutanol`.
 
-#### S4b — Span Structure search
+Clippy on the benchmark target is clean, and the three cases run.
+
+#### S4b — Span Structure search **Done**
 
 The Structure arm of `canonical_candidate` starts from the constitution descriptors and runs
 `canonical_search_with_generator_filter` with `retain_stereo_preserving_generators`. The span
@@ -1245,6 +1246,48 @@ with pruning: three equal fragments with equal stereocentres; the same with a di
 configuration on one; the same with a different rhs configuration on one; a stereocentre with two
 hydrogens, lhs undetermined and rhs coset 0. Stereo rows of
 `test_reaction_span_tracked_canonicalize_at`.
+
+The Structure arm is wired as stated, and both span methods prune at every level below Full. The
+five functions of S3a and S3b are removed with their four tests and the imports only they used, and
+the unused-function attributes of S3c are removed.
+
+The canonical forms and tracked remappings of all spans of the pair file are identical to S2b, and
+the reference comparison reports no mismatch. The library tests, the two integration tests, and the
+canonicalization properties pass, and clippy is clean.
+
+`test_canonical_candidate` has four Structure rows, with the visited leaves without and with
+pruning:
+
+| Row | Without pruning | With pruning |
+| --- | ---: | ---: |
+| Three equal fragments with equal stereocentres | 6 | 1 |
+| The same, lhs configuration of one differs | 6 | 3 |
+| The same, rhs configuration of one differs | 6 | 3 |
+| Stereocentre with two hydrogens, lhs undetermined, rhs coset 0 | 2 | 2 |
+
+In the second and third rows the three stereo atoms share a color, which holds the kind and not the
+configuration, so the three fragments share their cells. The exchange of the two equal fragments is
+the one generator the check keeps, and the pruned search visits three leaves. The stereo rows of
+`test_reaction_span_tracked_canonicalize_at` pass unchanged.
+
+Medians of the nine cases that run at Structure, against the committed search:
+
+| Case | Span `canonicalize` | Span `canonical_eq` |
+| --- | ---: | ---: |
+| `tetrahedral_stereo` | 24.2 → 23.4 µs | 36.4 → 35.7 µs |
+| `cis_trans_stereo_bond` | 27.4 → 26.7 µs | 42.4 → 41.4 µs |
+| `mixed_atom_and_bond_stereo` | 46.5 → 45.3 µs | 73.3 → 72.6 µs |
+| `meso_dichlorobutane` | 46.7 → 48.9 µs | 78.8 → 83.9 µs |
+| `para_stereo_trichloropentane` | 62.3 → 64.9 µs | 105.5 → 112.9 µs |
+| `para_stereo_cascade` | 523.8 → 561.5 µs | 1.01 → 1.12 ms |
+| `symmetric_stereo_triisopropanolamine` | 171.9 → 74.8 µs | 326.9 → 133.1 µs |
+| `symmetric_stereo_butanol` | 1.40 ms → 96.7 µs | 2.82 ms → 179.1 µs |
+| `symmetric_stereo_dimethylbutanol` | 194 ms → 206.8 µs | 382 ms → 400.8 µs |
+
+The three cases whose search ends with one leaf are within 3% of the committed search.
+`meso_dichlorobutane` and `para_stereo_trichloropentane` are 4% to 7% slower and
+`para_stereo_cascade` 7% to 11% slower, from backend calls that prune nothing, as the study
+recorded. The three symmetric cases take 75 to 207 µs for `canonicalize`.
 
 #### S4c — Molecule Structure search
 
