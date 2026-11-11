@@ -26,7 +26,6 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityRule
     AromaticityTieBreak
     AromaticityResolveConfig
-    AtomFieldKind
     AtomForm
     AtomUpdate
     AtomCompletions

@@ -764,7 +764,7 @@ fn test_stereo_adder_transform_scope(#[case] field: AtomFieldKind) {
     let original = molecule.clone();
     let error = AddStereoError::Perception(StereoPerceptionError::UnderdeterminedAtomField {
         atom: AtomId(5),
-        field,
+        attributes: Box::new(molecule.atom(AtomId(5)).attributes().clone()),
     });
     let unrestricted = StereoAdder::new(&StereoModel::default());
     let mut in_place = molecule.clone();

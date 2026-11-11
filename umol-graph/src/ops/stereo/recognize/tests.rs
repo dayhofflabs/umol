@@ -688,7 +688,7 @@ fn test_stereo_perceiver_recognize_partial(
         ),
         Err(StereoPerceptionError::UnderdeterminedAtomField {
             atom: AtomId(0),
-            field
+            attributes: Box::new(mixed_sites.atom(AtomId(0)).attributes().clone()),
         })
     );
     assert_eq!(

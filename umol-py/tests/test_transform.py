@@ -1,7 +1,6 @@
 import pytest
 from umol import (
     AddStereoConfig,
-    AtomFieldKind,
     AutomorphismAlgorithm,
     ConnectedComponentsAlgorithm,
     EnumerateStereoConfig,
@@ -452,31 +451,11 @@ def test_stereo_config_properties(constructor, kwargs):
 
 
 @pytest.mark.parametrize(
-    "field",
-    [
-        AtomFieldKind.Element,
-        AtomFieldKind.IsotopeMass,
-        AtomFieldKind.Charge,
-        AtomFieldKind.ImplicitHydrogens,
-        AtomFieldKind.LonePairs,
-        AtomFieldKind.UnpairedElectrons,
-    ],
-)
-def test_atom_field_kind(field):
-    assert eval(repr(field), globals()) == field
-    assert hash(field) == hash(eval(repr(field), globals()))
-
-
-@pytest.mark.parametrize(
     "values,expected",
     [
         (
             [StereoSite.Bond(0), StereoSite.Atom(2), StereoSite.Atom(0)],
             [StereoSite.Atom(0), StereoSite.Atom(2), StereoSite.Bond(0)],
-        ),
-        (
-            [AtomFieldKind.Charge, AtomFieldKind.Element, AtomFieldKind.IsotopeMass],
-            [AtomFieldKind.Element, AtomFieldKind.IsotopeMass, AtomFieldKind.Charge],
         ),
     ],
 )

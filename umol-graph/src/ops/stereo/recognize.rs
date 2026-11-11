@@ -6,7 +6,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AsLit, AtomConstraintForm, AtomConstraintKey, AtomFieldKind, AtomId, BondConstraintForm,
+    AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondConstraintForm,
     BondConstraintKey, BondId, CisTransStereoForm, ConstitutionColoring, GraphSymmetryConfig,
     Molecule, Normalize, RingConfig, RingModel, RingSet, StereoConfigurationForm, StereoCoset,
     StereoKind, Stereogenicity, TetrahedralStereoForm,
@@ -27,8 +27,11 @@ pub enum StereoPerceptionError {
     UnsupportedConfiguration { site: StereoSite },
     #[error("fluxional stereo processing is not implemented for {kind:?}")]
     UnsupportedFluxionality { kind: StereoKind },
-    #[error("stereo recognition requires a literal {field:?} at atom {atom:?}")]
-    UnderdeterminedAtomField { atom: AtomId, field: AtomFieldKind },
+    #[error("stereo recognition requires literal fields at atom {atom:?}: {attributes}")]
+    UnderdeterminedAtomField {
+        atom: AtomId,
+        attributes: Box<AtomForm>,
+    },
     #[error("stereo recognition requires a literal order at bond {bond:?}")]
     UnderdeterminedBondOrder { bond: BondId },
     #[error(transparent)]
@@ -240,12 +243,11 @@ impl StereoPerceiver {
                     .expect("enabled cis/trans recognition");
                 let mut in_scope = true;
                 for atom in [first, second] {
-                    let element = molecule.atom(atom).element().as_lit().ok_or(
-                        StereoPerceptionError::UnderdeterminedAtomField {
-                            atom,
-                            field: AtomFieldKind::Element,
-                        },
-                    )?;
+                    let element = molecule
+                        .atom(atom)
+                        .element()
+                        .as_lit()
+                        .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
                     in_scope &= model.scope.contains(element);
                 }
                 if !in_scope {
@@ -447,13 +449,10 @@ impl StereoPerceiver {
         if !(2..=4).contains(&neighbors) || view.is_in_aromatic_system() {
             return Ok(false);
         }
-        let element =
-            view.element()
-                .as_lit()
-                .ok_or(StereoPerceptionError::UnderdeterminedAtomField {
-                    atom,
-                    field: AtomFieldKind::Element,
-                })?;
+        let element = view
+            .element()
+            .as_lit()
+            .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
         if !self
             .model
             .kind_model(StereoKind::Tetrahedral)
@@ -487,13 +486,10 @@ impl StereoPerceiver {
             }
             valence += order;
         }
-        let charge =
-            view.charge()
-                .as_lit()
-                .ok_or(StereoPerceptionError::UnderdeterminedAtomField {
-                    atom,
-                    field: AtomFieldKind::Charge,
-                })?;
+        let charge = view
+            .charge()
+            .as_lit()
+            .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
         let bonding = neighbors as i64 + hydrogens;
         let eligible = match element {
             Element::B => charge == -1 && valence == 4 && bonding == 4 && lone_pairs == 0,
@@ -596,22 +592,20 @@ fn check_kind(perception: &StereoPerceiver, kind: StereoKind) -> Result<(), Ster
 
 fn require_frame_fields(molecule: &Molecule, atom: AtomId) -> Result<(), StereoPerceptionError> {
     let view = molecule.atom(atom);
-    for (field, literal) in [
-        (AtomFieldKind::Element, view.element().as_lit().is_some()),
-        (
-            AtomFieldKind::ImplicitHydrogens,
-            view.implicit_hydrogens().as_lit().is_some(),
-        ),
-        (
-            AtomFieldKind::LonePairs,
-            view.lone_pairs().as_lit().is_some(),
-        ),
-    ] {
-        if !literal {
-            return Err(StereoPerceptionError::UnderdeterminedAtomField { atom, field });
-        }
+    if view.element().as_lit().is_none()
+        || view.implicit_hydrogens().as_lit().is_none()
+        || view.lone_pairs().as_lit().is_none()
+    {
+        return Err(underdetermined_atom_field(molecule, atom));
     }
     Ok(())
+}
+
+fn underdetermined_atom_field(molecule: &Molecule, atom: AtomId) -> StereoPerceptionError {
+    StereoPerceptionError::UnderdeterminedAtomField {
+        atom,
+        attributes: Box::new(molecule.atom(atom).attributes().clone()),
+    }
 }
 
 fn nitrogen_conjugated(molecule: &Molecule, atom: AtomId) -> Result<bool, StereoPerceptionError> {
@@ -649,22 +643,17 @@ fn conjugation_eligible(molecule: &Molecule, atom: AtomId) -> Result<bool, Stere
     if view.neighbors().len() > 3 {
         return Ok(false);
     }
-    let element =
-        view.element()
-            .as_lit()
-            .ok_or(StereoPerceptionError::UnderdeterminedAtomField {
-                atom,
-                field: AtomFieldKind::Element,
-            })?;
+    let element = view
+        .element()
+        .as_lit()
+        .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
     if !matches!(element.group_base18(), 2 | 13..=16) {
         return Ok(false);
     }
-    let hydrogens = view.implicit_hydrogens().as_lit().ok_or(
-        StereoPerceptionError::UnderdeterminedAtomField {
-            atom,
-            field: AtomFieldKind::ImplicitHydrogens,
-        },
-    )?;
+    let hydrogens = view
+        .implicit_hydrogens()
+        .as_lit()
+        .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
     let count = view.neighbors().len() as i128 + i128::from(hydrogens);
     if !(0..=3).contains(&hydrogens)
         || count > 3
@@ -677,16 +666,12 @@ fn conjugation_eligible(molecule: &Molecule, atom: AtomId) -> Result<bool, Stere
     let charge = view
         .charge()
         .as_lit()
-        .ok_or(StereoPerceptionError::UnderdeterminedAtomField {
-            atom,
-            field: AtomFieldKind::Charge,
-        })?;
-    let unpaired = view.unpaired_electrons().count.as_lit().ok_or(
-        StereoPerceptionError::UnderdeterminedAtomField {
-            atom,
-            field: AtomFieldKind::UnpairedElectrons,
-        },
-    )?;
+        .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
+    let unpaired = view
+        .unpaired_electrons()
+        .count
+        .as_lit()
+        .ok_or_else(|| underdetermined_atom_field(molecule, atom))?;
     let outer = i128::from(element.valence_electrons());
     let minimum = outer.min(8 - outer);
     let mut valence = i128::from(hydrogens);

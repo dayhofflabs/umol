@@ -455,8 +455,8 @@ perceiver, derivation, StereoResolver, or standalone stereo-projection class.
 
 StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
 IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
-the executing operation performs contextual checks. StereoSite, StereoInconsistency,
-and AtomFieldKind retain Rust equality, ordering, and hashing. Named inconsistency fields
+the executing operation performs contextual checks. StereoSite and StereoInconsistency
+retain Rust equality, ordering, and hashing. Named inconsistency fields
 retain their Rust names; StereoSite's tuple payload is available as _0.
 
 StereoSelection accepts keyword-only sites, kinds, and stereogenicities. Each accepts
@@ -530,7 +530,7 @@ classes while retaining the Rust message:
 | MissingStereoEntity | InvalidStructureError | site: StereoSite |
 | UnsupportedKind, UnsupportedFluxionality | ModelConversionError | kind: StereoKind |
 | UnsupportedConfiguration | ModelConversionError | site: StereoSite |
-| UnderdeterminedAtomField | UnderdeterminedError | atom: int, field: AtomFieldKind |
+| UnderdeterminedAtomField | UnderdeterminedError | atom: int, attributes: AtomForm |
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
 | Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
 

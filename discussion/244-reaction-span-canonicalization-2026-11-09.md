@@ -286,13 +286,565 @@ under `scratch/`. No second version of the search is kept in the tree.
 Only equality answers are compared, because representatives and keys change. The comparison covers
 the pairs in the file and nothing beyond them.
 
+## Search study
+
+The Structure search of the plan corrects no error: the search it replaces is exact, and the
+equality answers are unchanged. It measured slower than that search on five of the six stereo cases
+of the corpus, and it costs what the molecule search costs (S3d). This study compares search
+variants on reaction spans and molecules. Its outcome decides the search of each level, and the
+staged plan is revised from it.
+
+### Variants
+
+A search is described by three independent choices. Each value of a choice has a name, and a
+combination is named by its partition and its enumeration, as in constitution-exhaustive.
+
+**Initial partition**
+
+- **Constitution partition.** The constitution descriptors, refined. A stereo entity enters with its
+  kind; its configuration does not enter.
+- **Structure partition.** Constitution classes from a separate refinement over the Constitution
+  incidence graph, then stereo descriptors over these classes, refined again. The para-stereo rounds
+  are a context option of this partition.
+
+**Leaf enumeration**
+
+- **Exhaustive.** Every leaf is visited, in node-id order, without a backend call.
+- **Pruned.** One branch per orbit of the generators that preserve every stereo entity, with a
+  backend call at every branching node and backend canonical order.
+
+**Leaf key**
+
+- **Remapped leaf.** The aggregate is remapped and reframed at each leaf, and the key is read from
+  the result.
+- **Row leaf.** The key rows are built from the leaf order.
+
+### Combinations in the code
+
+| Code | Partition | Enumeration | Leaf |
+| --- | --- | --- | --- |
+| Reaction span at Structure, before S3d | Constitution | Exhaustive | Remapped |
+| Reaction span at Structure, S3d | Structure | Pruned | Remapped |
+| Molecule `canonicalize` at Structure | Structure | Pruned | Row |
+| Molecule `canonical_eq` and `canonical_hash` at Structure | Structure | Exhaustive | Row |
+| Molecule at Full | Structure | Exhaustive | Row for the structure key, remapped for the constraint blocks |
+| Reaction span at Full | Constitution | Exhaustive | Remapped |
+
+The reaction-span operations share one search, so its rows hold for `canonicalize`, `canonical_eq`,
+and `canonical_hash`.
+
+### Candidates
+
+None of the following is implemented.
+
+- **Constitution-pruned.** Pruning with the stereo generator check from the constitution partition,
+  without stereo descriptors.
+- **Staged partition.** The constitution partition, with stereo descriptors computed only when
+  stereo entities remain in shared cells.
+- **Switched enumeration.** Exhaustive when a bound on the leaf count from the refined partition is
+  small, pruned otherwise.
+- **Root-pruned enumeration.** One backend call at the root. Deeper nodes prune with the root
+  generators that fix the individualized nodes.
+- **Backend labelling.** The order is taken from the backend's canonical labelling instead of the
+  minimum of the typed key. The backend then defines the representative. Its exactness is not
+  checked.
+- **Deferred leaf key.** The key of a leaf is built when the leaf is first compared with another
+  one. A `canonicalize` whose search ends with a single leaf then builds no key.
+
+### Cases
+
+The study uses the nine cases of the benchmark corpus that run at Structure: its six stereo cases
+and three cases added for the study. Each added case has stereo atoms and a symmetric stereo-blind
+graph, and every automorphism of that graph preserves the stereo atoms.
+
+| Case | Compound | Atoms | Stereo atoms | Automorphisms of the stereo-blind graph |
+| --- | --- | ---: | ---: | ---: |
+| `symmetric_stereo_triisopropanolamine` | Triisopropanolamine as a heavy-atom skeleton, three equally configured stereocentres | 13 | 3 | 6 |
+| `symmetric_stereo_butanol` | Butan-2-ol with explicit hydrogens | 15 | 1 | 72 |
+| `symmetric_stereo_dimethylbutanol` | 3,3-Dimethylbutan-2-ol with explicit hydrogens | 21 | 1 | 7,776 |
+
+A span is the reaction of the molecule that adds one nitrogen atom.
+
+### Method
+
+- **Code paths.** Criterion medians with a 1-second warm-up and 3 seconds of measurement, Nauty,
+  single-threaded, Apple M1 Pro, `para_stereo` off. The constitution-exhaustive span search runs
+  from a worktree at commit b8102f5a3, the structure-pruned span search from the S3d working tree,
+  and the molecule searches from the working tree.
+- **Stages.** Temporary ignored tests in that worktree call the stage functions of each aggregate in
+  the order of the library, time each stage, and read the statistics of the search. A time is the
+  smallest mean of five batches of about 0.1 s. The four combinations of partition and enumeration
+  are composed from the existing functions. Constitution-pruned for both aggregates and
+  constitution-exhaustive for the molecule exist only in these tests. The tests are not committed.
+- **Check.** The composed totals lie 0% to 6% below the timings of the corresponding code paths, and
+  11% below on one case.
+
+### Results
+
+Visited leaves, with backend calls in parentheses. The counts are the same for a molecule and its
+span.
+
+| Case | Constitution-exhaustive | Constitution-pruned | Structure-exhaustive | Structure-pruned |
+| --- | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 1 | 1 (0) | 1 | 1 (0) |
+| `cis_trans_stereo_bond` | 1 | 1 (0) | 1 | 1 (0) |
+| `mixed_atom_and_bond_stereo` | 1 | 1 (0) | 1 | 1 (0) |
+| `meso_dichlorobutane` | 2 | 2 (1) | 1 | 1 (0) |
+| `para_stereo_trichloropentane` | 2 | 2 (1) | 2 | 2 (1) |
+| `para_stereo_cascade` | 8 | 8 (5) | 2 | 2 (1) |
+| `symmetric_stereo_triisopropanolamine` | 6 | 1 (2) | 6 | 1 (2) |
+| `symmetric_stereo_butanol` | 72 | 1 (5) | 72 | 1 (5) |
+| `symmetric_stereo_dimethylbutanol` | 7,776 | 1 (8) | 7,776 | 1 (8) |
+
+Molecule `canonicalize`, composed from the stage times, row leaf:
+
+| Case | Constitution-exhaustive | Constitution-pruned | Structure-exhaustive | Structure-pruned |
+| --- | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 21.3 µs | 21.3 µs | 40.0 µs | 40.0 µs |
+| `cis_trans_stereo_bond` | 20.4 µs | 20.4 µs | 32.2 µs | 32.2 µs |
+| `mixed_atom_and_bond_stereo` | 40.2 µs | 40.0 µs | 70.9 µs | 70.9 µs |
+| `meso_dichlorobutane` | 52.3 µs | 55.5 µs | 67.0 µs | 67.0 µs |
+| `para_stereo_trichloropentane` | 75.6 µs | 79.7 µs | 124.2 µs | 128.5 µs |
+| `para_stereo_cascade` | 778.9 µs | 845.8 µs | 395.1 µs | 406.7 µs |
+| `symmetric_stereo_triisopropanolamine` | 214.9 µs | 75.3 µs | 270.0 µs | 130.1 µs |
+| `symmetric_stereo_butanol` | 1.27 ms | 86.2 µs | 1.33 ms | 116.8 µs |
+| `symmetric_stereo_dimethylbutanol` | 168 ms | 188.2 µs | 169 ms | 226.6 µs |
+
+Reaction-span `canonicalize`, composed from the stage times, remapped leaf:
+
+| Case | Constitution-exhaustive | Constitution-pruned | Structure-exhaustive | Structure-pruned |
+| --- | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 23.5 µs | 23.6 µs | 43.4 µs | 43.4 µs |
+| `cis_trans_stereo_bond` | 27.0 µs | 27.0 µs | 40.2 µs | 40.3 µs |
+| `mixed_atom_and_bond_stereo` | 45.9 µs | 46.0 µs | 78.7 µs | 78.8 µs |
+| `meso_dichlorobutane` | 45.4 µs | 49.2 µs | 68.0 µs | 68.0 µs |
+| `para_stereo_trichloropentane` | 61.0 µs | 65.7 µs | 113.1 µs | 118.1 µs |
+| `para_stereo_cascade` | 506.9 µs | 572.3 µs | 350.1 µs | 362.5 µs |
+| `symmetric_stereo_triisopropanolamine` | 169.5 µs | 75.9 µs | 227.7 µs | 135.1 µs |
+| `symmetric_stereo_butanol` | 1.40 ms | 97.9 µs | 1.45 ms | 131.2 µs |
+| `symmetric_stereo_dimethylbutanol` | 190 ms | 208.7 µs | 192 ms | 250.7 µs |
+
+Stage times of the molecule. The classes pass and the stereo descriptors are parts of the structure
+partition. The remapped leaf is the span's.
+
+| Case | Constitution partition | Structure partition | Classes pass | Stereo descriptors | Row leaf | Remapped leaf | Backend call |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 4.1 µs | 22.9 µs | 6.5 µs | 14.3 µs | 8.7 µs | 7.4 µs | 1.2 µs |
+| `cis_trans_stereo_bond` | 4.9 µs | 16.7 µs | 8.1 µs | 6.1 µs | 6.0 µs | 8.2 µs | 1.2 µs |
+| `mixed_atom_and_bond_stereo` | 9.6 µs | 40.3 µs | 15.5 µs | 20.2 µs | 14.2 µs | 13.1 µs | 1.9 µs |
+| `meso_dichlorobutane` | 5.6 µs | 39.7 µs | 7.6 µs | 28.0 µs | 15.4 µs | 9.4 µs | 1.5 µs |
+| `para_stereo_trichloropentane` | 8.7 µs | 57.3 µs | 10.8 µs | 42.0 µs | 22.3 µs | 11.8 µs | 3.3 µs |
+| `para_stereo_cascade` | 28.9 µs | 175.7 µs | 33.4 µs | 122.9 µs | 69.8 µs | 33.7 µs | 10.0 µs |
+| `symmetric_stereo_triisopropanolamine` | 11.0 µs | 65.8 µs | 18.6 µs | 42.3 µs | 24.3 µs | 15.1 µs | 5.4 µs |
+| `symmetric_stereo_butanol` | 11.9 µs | 42.5 µs | 23.4 µs | 15.0 µs | 13.0 µs | 14.2 µs | 7.7 µs |
+| `symmetric_stereo_dimethylbutanol` | 15.5 µs | 52.7 µs | 32.2 µs | 15.2 µs | 15.9 µs | 18.3 µs | 21.2 µs |
+
+Code paths, measured with Criterion:
+
+| Case | Span `canonicalize`, constitution-exhaustive | Span `canonicalize`, structure-pruned | Molecule `canonicalize`, structure-pruned | Molecule `canonical_hash`, structure-exhaustive |
+| --- | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 24.2 µs | 45.2 µs | 40.6 µs | 39.0 µs |
+| `cis_trans_stereo_bond` | 27.4 µs | 41.0 µs | 33.1 µs | 31.7 µs |
+| `mixed_atom_and_bond_stereo` | 46.5 µs | 79.8 µs | 72.2 µs | 71.5 µs |
+| `meso_dichlorobutane` | 46.7 µs | 69.3 µs | 68.0 µs | 65.9 µs |
+| `para_stereo_trichloropentane` | 62.3 µs | 124.9 µs | 130.6 µs | 124.4 µs |
+| `para_stereo_cascade` | 523.8 µs | 382.3 µs | 415.4 µs | 401.1 µs |
+| `symmetric_stereo_triisopropanolamine` | 171.9 µs | 143.5 µs | 132.1 µs | 270.1 µs |
+| `symmetric_stereo_butanol` | 1.40 ms | 146.8 µs | 117.9 µs | 1.29 ms |
+| `symmetric_stereo_dimethylbutanol` | 194 ms | 262.0 µs | 233.2 µs | 166 ms |
+
+### Findings
+
+- **Enumeration.** Exhaustive enumeration visits one leaf per automorphism of the stereo-blind
+  graph on the three symmetric cases. It takes 170 to 270 µs with 6 automorphisms, 1.3 to 1.5 ms
+  with 72, and 170 to 190 ms with 7,776. Pruned enumeration visits one leaf on these cases and takes
+  75 to 250 µs. Where the refined partition is discrete, pruning makes no backend call and costs
+  nothing; this holds on three cases. Where a backend call finds nothing to prune, it costs 3 to
+  5 µs on `meso_dichlorobutane` and `para_stereo_trichloropentane`.
+- **Partition.** The structure partition costs 12 to 147 µs more than the constitution partition.
+  The stereo descriptors take about 14 µs for a tetrahedral stereo atom and 6 µs for a cis-trans
+  stereo bond, and up to twice that for a modified stereo entity of a span. The separate classes
+  pass takes 6 to 33 µs. The structure partition lowers the number of visited leaves on two cases,
+  `meso_dichlorobutane` and `para_stereo_cascade`, and lowers the total time on the second only.
+- **Structure-pruned against constitution-exhaustive.** This is the change of S3d, measured on the
+  span code paths. It is 14 to 63 µs slower on the five small stereo cases of the corpus, a factor
+  of 1.5 to 2.0. It is faster by a factor of 1.4 on `para_stereo_cascade` and by factors of 1.2, 10,
+  and 740 on the symmetric cases with 6, 72, and 7,776 automorphisms.
+- **Constitution-pruned.** It is as fast as constitution-exhaustive on three cases, 3 to 5 µs slower
+  on two, and 9% to 13% slower on `para_stereo_cascade`. On the three symmetric cases it is faster
+  by factors of 2 to 3, 14, and 900. It is faster than structure-pruned on eight cases, by 12 to
+  59 µs, and slower on `para_stereo_cascade`: 846 against 407 µs for the molecule and 572 against
+  362 µs for the span.
+- **Molecule key search.** `canonical_eq` and `canonical_hash` of molecules run
+  structure-exhaustive. `canonical_hash` takes 270 µs, 1.29 ms, and 166 ms on the three symmetric
+  cases, against 132, 118, and 233 µs for `canonicalize`.
+- **Leaf.** On the four cases with two or more stereo atoms, the row leaf of the molecule costs 1.6
+  to 2.1 times the remapped leaf of the span. On the other five cases it costs 0.7 to 1.2 times as
+  much.
+- **Para-stereo.** With `para_stereo` on, the structure partition runs a second round on three
+  cases and costs 102, 318, and 111 µs for the molecule, against 57, 176, and 66 µs. The second
+  round removes one further leaf, on `para_stereo_cascade`.
+- **Representative.** The two partitions select different minimum keys on four of the nine cases, so
+  a change of partition changes canonical representatives. The data-type guide prescribes the
+  stereo-sensitive refinement of the structure partition.
+
+### Trial
+
+A trial in the worktree at commit b8102f5a3 makes two changes. It is not committed.
+
+- **Constitution-pruned at Structure** for both aggregates, in `canonicalize`, `canonical_eq`, and
+  `canonical_hash`.
+- **Deferred leaf key** for reaction spans, at every level. The key of a leaf is built when the leaf
+  is first compared with another one, so a `canonicalize` whose search ends with a single leaf
+  builds no key. `canonical_eq` and `canonical_hash` return the key and always build it.
+
+The deferred key does not carry over to the molecule as it stands. The row leaf of the molecule
+produces the order of the non-atom entities together with the key, so `canonicalize` needs the leaf
+even when it is the only one. Deferring the molecule key would require taking that order from the
+search, as the span does, and reading the key from the remapped molecule in stored order.
+
+In the worktree the library tests, the two integration tests, and the canonicalization properties
+pass without a change to an expected value. The reference comparison reports no mismatch on the
+10,028 pairs. The canonical forms and tracked remappings of all 20,056 spans of the pair file are
+identical to those of the committed search.
+
+Reaction spans, Criterion medians. The committed search is constitution-exhaustive at Structure and
+exhaustive at Full, and prunes below Structure.
+
+| Case | Level | `canonicalize` committed | `canonicalize` trial | `canonical_eq` committed | `canonical_eq` trial |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | Topology or Constitution | 37.8 µs | 25.9 µs | 62.8 µs | 61.0 µs |
+| `disconnected_rings` | Topology or Constitution | 57.3 µs | 44.3 µs | 101.3 µs | 97.6 µs |
+| `feature_free_connected` | Topology or Constitution | 60.4 µs | 46.8 µs | 113.9 µs | 111.4 µs |
+| `feature_free_disconnected` | Topology or Constitution | 61.2 µs | 46.4 µs | 114.1 µs | 110.5 µs |
+| `symmetry_heavy_radicals` | Topology or Constitution | 40.1 µs | 32.4 µs | 71.9 µs | 70.1 µs |
+| `tetrahedral_stereo` | Structure | 24.2 µs | 15.4 µs | 36.4 µs | 35.3 µs |
+| `cis_trans_stereo_bond` | Structure | 27.4 µs | 18.2 µs | 42.4 µs | 41.1 µs |
+| `mixed_atom_and_bond_stereo` | Structure | 46.5 µs | 31.1 µs | 73.3 µs | 71.4 µs |
+| `meso_dichlorobutane` | Structure | 46.7 µs | 49.5 µs | 78.8 µs | 81.7 µs |
+| `para_stereo_trichloropentane` | Structure | 62.3 µs | 65.8 µs | 105.5 µs | 112.0 µs |
+| `para_stereo_cascade` | Structure | 523.8 µs | 563.4 µs | 1.01 ms | 1.12 ms |
+| `symmetric_stereo_triisopropanolamine` | Structure | 171.9 µs | 59.0 µs | 326.9 µs | 127.7 µs |
+| `symmetric_stereo_butanol` | Structure | 1.40 ms | 82.1 µs | 2.82 ms | 177.8 µs |
+| `symmetric_stereo_dimethylbutanol` | Structure | 194 ms | 185.3 µs | 382 ms | 398.8 µs |
+| `overlay_heavy` | Full | 56.7 µs | 35.8 µs | 93.8 µs | 89.2 µs |
+| `frame_relative_stereo_constraint` | Full | 26.4 µs | 16.2 µs | 43.5 µs | 41.7 µs |
+
+Molecules, Criterion medians. The committed search is structure-pruned for `canonicalize` and
+structure-exhaustive for `canonical_hash`.
+
+| Case | `canonicalize` committed | `canonicalize` trial | `canonical_hash` committed | `canonical_hash` trial |
+| --- | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 40.6 µs | 21.2 µs | 39.0 µs | 17.6 µs |
+| `cis_trans_stereo_bond` | 33.1 µs | 20.2 µs | 31.7 µs | 17.5 µs |
+| `mixed_atom_and_bond_stereo` | 72.2 µs | 40.0 µs | 71.5 µs | 35.8 µs |
+| `meso_dichlorobutane` | 68.0 µs | 55.5 µs | 65.9 µs | 51.7 µs |
+| `para_stereo_trichloropentane` | 130.6 µs | 80.8 µs | 124.4 µs | 74.5 µs |
+| `para_stereo_cascade` | 415.4 µs | 830.5 µs | 401.1 µs | 813.6 µs |
+| `symmetric_stereo_triisopropanolamine` | 132.1 µs | 75.7 µs | 270.1 µs | 70.0 µs |
+| `symmetric_stereo_butanol` | 117.9 µs | 85.7 µs | 1.29 ms | 82.5 µs |
+| `symmetric_stereo_dimethylbutanol` | 233.2 µs | 190.3 µs | 166 ms | 184.5 µs |
+
+- **Reaction-span `canonicalize`.** It is 19% to 39% faster on the ten cases whose committed search
+  already ends with one leaf, at every level, from the deferred key. It is 6% slower on
+  `meso_dichlorobutane` and `para_stereo_trichloropentane` and 8% slower on `para_stereo_cascade`,
+  from backend calls that prune nothing. On the three symmetric stereo cases it takes 59, 82, and
+  185 µs, against 172 µs, 1.40 ms, and 194 ms.
+- **Reaction-span `canonical_eq`.** It is within 5% of the committed search on those ten cases, 4%
+  to 11% slower on the three cases above, and takes 128, 178, and 399 µs on the symmetric stereo
+  cases, against 327 µs, 2.82 ms, and 382 ms.
+- **Molecule.** `canonicalize` is 18% to 48% faster on eight cases and `canonical_hash` 22% to 55%
+  faster on five; on the three symmetric cases `canonical_hash` takes 70, 83, and 185 µs, against
+  270 µs, 1.29 ms, and 166 ms. On `para_stereo_cascade` both operations take twice as long, about
+  0.82 ms against 0.41 ms.
+- **Composed totals.** The trial timings agree with the totals composed from the stage times to
+  within 6%.
+
+### Trial of the deferred leaf for molecules
+
+A second trial in the same worktree gives the molecule the leaf of the span at all four levels. The
+entity order of a leaf is the search order, the key is read from the remapped and reframed molecule
+with every row in stored order, and the key is deferred. At Topology the search orders atoms only,
+so the bonds follow in the order of their endpoint pairs. Partition and enumeration are those of the
+first trial: constitution-pruned at Structure, unchanged at the other levels. The trial is not
+committed.
+
+The stored-order key and the two functions around it take about 190 lines. The row-leaf functions
+of the molecule and the minimum stereo frame, about 430 lines, are no longer called.
+
+In the worktree the two integration tests and the canonicalization properties pass, and the
+reference comparison of spans reports no mismatch. `canonical_eq` and the equality of
+`canonical_hash` give the same answer as the committed search on 20,056 pairs of molecules, the lhs
+and rhs molecules of the span pairs, under both `para_stereo` settings. One library test changes its
+expected value: `test_canonicalize_constitution` asserts an exact canonical molecule, whose bonds
+now stand in search order instead of the order of their endpoint pairs. Its atoms keep their
+numbers.
+
+Molecules, Criterion medians. The row-leaf columns are the first trial, which ran the Structure
+cases only. The committed timings of the Topology and Full cases are those of the S0b baseline; the
+molecule search has not changed since.
+
+| Case | Level | `canonicalize` committed | Row leaf | Deferred leaf | `canonical_hash` committed | Row leaf | Deferred leaf |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | Topology | 21.3 µs |  | 17.4 µs | 21.0 µs |  | 22.6 µs |
+| `disconnected_rings` | Topology | 34.4 µs |  | 29.2 µs | 33.3 µs |  | 35.5 µs |
+| `feature_free_connected` | Topology | 37.8 µs |  | 32.1 µs | 38.6 µs |  | 40.5 µs |
+| `feature_free_disconnected` | Topology | 40.4 µs |  | 35.2 µs | 41.4 µs |  | 43.3 µs |
+| `symmetry_heavy_radicals` | Topology | 31.1 µs |  | 28.6 µs | 30.8 µs |  | 33.1 µs |
+| `tetrahedral_stereo` | Structure | 40.6 µs | 21.2 µs | 12.3 µs | 39.0 µs | 17.6 µs | 15.5 µs |
+| `cis_trans_stereo_bond` | Structure | 33.1 µs | 20.2 µs | 14.2 µs | 31.7 µs | 17.5 µs | 18.2 µs |
+| `mixed_atom_and_bond_stereo` | Structure | 72.2 µs | 40.0 µs | 25.4 µs | 71.5 µs | 35.8 µs | 32.9 µs |
+| `meso_dichlorobutane` | Structure | 68.0 µs | 55.5 µs | 40.6 µs | 65.9 µs | 51.7 µs | 37.3 µs |
+| `para_stereo_trichloropentane` | Structure | 130.6 µs | 80.8 µs | 54.4 µs | 124.4 µs | 74.5 µs | 50.4 µs |
+| `para_stereo_cascade` | Structure | 415.4 µs | 830.5 µs | 496.4 µs | 401.1 µs | 813.6 µs | 478.0 µs |
+| `symmetric_stereo_triisopropanolamine` | Structure | 132.1 µs | 75.7 µs | 50.6 µs | 270.1 µs | 70.0 µs | 59.2 µs |
+| `symmetric_stereo_butanol` | Structure | 117.9 µs | 85.7 µs | 71.7 µs | 1.29 ms | 82.5 µs | 81.1 µs |
+| `symmetric_stereo_dimethylbutanol` | Structure | 233.2 µs | 190.3 µs | 170.9 µs | 166 ms | 184.5 µs | 184.1 µs |
+| `overlay_heavy` | Full | 91.8 µs |  | 67.2 µs | 88.1 µs |  | 75.0 µs |
+| `frame_relative_stereo_constraint` | Full | 46.7 µs |  | 34.1 µs | 44.5 µs |  | 39.1 µs |
+
+- **`canonicalize`.** It is 8% to 19% faster than the committed search on the five Topology cases,
+  27% faster on the two Full cases, and 1.4 to 3.3 times as fast on eight Structure cases. On
+  `para_stereo_cascade` it takes 496 µs against 415 µs; the row leaf took 831 µs there.
+- **`canonical_hash`.** It is 5% to 8% slower than the committed search on the five Topology cases,
+  where the key is always built and the remapped leaf costs more than the topology row leaf.
+  `canonical_eq` is 7% to 13% slower there. At Structure it is as fast as the row leaf or up to 41%
+  faster, apart from 4% on `cis_trans_stereo_bond`, and it is 12% to 15% faster than the committed
+  search on the two Full cases.
+- **Order of non-atom entities.** With the search order, a canonical molecule at Constitution and
+  above lists bonds, overlays, and stereo entities in the order of the search partition, as a
+  canonical span does, while a molecule at Topology keeps its bonds in the order of their endpoint
+  pairs. The order then depends on the level, which the content of the molecule selects.
+
+### Variants of the second trial
+
+Four variants followed in the same worktree, each on top of the one before.
+
+- **Order by participants.** The first variant orders the non-atom entities of every level by
+  their participants: bonds and noncovalent bonds by endpoint pair, dative bonds by donors and
+  acceptor, aromatic systems and multicenter bonds by their atoms, stereo atoms by site, and stereo
+  bonds by site bond. Entities of one kind on the same participants keep their search order. This
+  is the order molecules have today and a function of the atom numbering alone. With it every
+  library test passes without a changed expected value, and the integration tests, the properties,
+  and both equality comparisons hold. Its cost is below the measurement noise on fifteen of the
+  sixteen cases, between -1.0 and +0.7 µs, and 9 to 11 µs, about 2%, on `para_stereo_cascade`,
+  which compares eight leaves.
+- **Order by participants for spans.** The second variant orders, for reaction spans, the non-atom
+  entities of each kind with the lhs-present ones first and each group by its participants. The
+  canonical form stays lhs-anchored. The properties pass and the reference comparison reports no
+  mismatch. The canonical form of 3,666 of the 20,056 spans of the pair file changes, in the order
+  of non-atom entities and the site indices that follow from it; the atoms keep their numbers. Three
+  exact cases change their expected value: the stereo-bond row of
+  `test_reaction_span_tracked_canonicalize_at` and two cases of
+  `tests/canonicalization/reaction_span.rs`. Against the span trial with search order,
+  `canonicalize` and `canonical_hash` take 0.3 to 3.3 µs more on fifteen cases, 1% to 8%, and 13 to
+  45 µs more on `para_stereo_cascade`, 4% to 8%. The two timings come from separate runs.
+- **Topology key read directly.** The third variant reads the Topology key of a molecule from the
+  entity order without remapping. Topology has no participant frame, so this key equals the key of
+  the remapped molecule; a debug assertion checked the equality on every Topology canonicalization
+  of the library tests and the properties. With it `canonical_hash` and `canonical_eq` take 0.94 to
+  1.02 times the time of the committed search on the five Topology cases, and `canonicalize` stays
+  4% to 17% faster than the committed search.
+- **Span search at Topology.** The fourth variant gives the span the two things the molecule has at
+  Topology: the topology search input, with atoms and the bonds outside the largest bond color class
+  as vertices, and the key read directly from the entity order. The same checks hold, with the debug
+  assertion on the direct key, and no canonical form of the pair file changes relative to the
+  variant with the order by participants. On four of the five Topology cases `canonicalize` is 16%
+  to 24% faster than that variant and 34% to 45% faster than the committed search;
+  `symmetry_heavy_radicals` is 3% slower than the variant and 17% faster than the committed search.
+  `canonical_hash` and `canonical_eq` are 9% to 35% faster than both on all five. The span then
+  takes 1.1 to 1.2 times as long as the molecule on these cases, with one atom more.
+
+Reaction spans at Topology, Criterion medians, for the committed search, the third variant, and the
+fourth:
+
+| Case | `canonicalize` committed | Third | Fourth | `canonical_hash` committed | Fourth | `canonical_eq` committed | Fourth |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 37.8 µs | 26.7 µs | 20.9 µs | 34.1 µs | 23.7 µs | 62.8 µs | 40.5 µs |
+| `disconnected_rings` | 57.3 µs | 44.8 µs | 33.9 µs | 53.1 µs | 36.8 µs | 101.3 µs | 66.3 µs |
+| `feature_free_connected` | 60.4 µs | 46.6 µs | 37.2 µs | 57.6 µs | 42.2 µs | 113.9 µs | 80.3 µs |
+| `feature_free_disconnected` | 61.2 µs | 47.9 µs | 40.1 µs | 57.4 µs | 44.4 µs | 114.1 µs | 85.1 µs |
+| `symmetry_heavy_radicals` | 40.1 µs | 32.1 µs | 33.2 µs | 37.6 µs | 33.5 µs | 71.9 µs | 63.9 µs |
+
+### Trial of constraints as fields
+
+A third trial in the same worktree, on top of the fourth variant, treats inline constraints and
+positional values as the search treats fields. It is not committed.
+
+- **Inline constraints.** No inline constraint selects Full. The level follows from the entities
+  alone: atoms and bonds give Topology; a dative bond, aromatic system, multicenter bond, or
+  noncovalent bond gives Constitution; a stereo entity gives Structure. The constraints of an entity
+  enter its color and its key row at the level where the entity appears. A stereo entity is colored
+  by its frame-independent constraints, and its row carries all of them.
+- **Positional values.** Electron counts and dative roles are incidence colors. They now also split
+  the search partition, which is built from the colors.
+- **Frame-relative values.** The stereo generator check transports the whole stereo form, with
+  configuration and constraints, by the frame action it derives, and compares it with the form of
+  the image.
+- **Full.** Full is reached with molecule-level constraints only. Both aggregates search it from the
+  constitution partition with pruning. A generator is kept when the aggregate remapped by it equals
+  the aggregate under framed equality.
+- **Normalization.** A reaction span is normalized before the search at Full only.
+
+The canonicalization properties pass. The reference comparison reports no mismatch on the 10,028
+pairs, and `canonical_eq` and the equality of `canonical_hash` of molecules give the same answer as
+the committed search on the 20,056 pairs. Of the 40,112 canonical span forms of the pair file,
+counted under both `para_stereo` settings, 16 change.
+
+Temporary tests renumber constrained aggregates and compare the canonical form, the hash, and
+`canonical_eq` of each renumbering with the original, for the molecule and for its span. Every
+renumbering gives the form and the hash of the original. Different placements of a constraint are
+unequal, and a placement moved to an equivalent entity is equal.
+
+| Aggregate | Placements | Renumberings of each |
+| --- | ---: | ---: |
+| Six-ring with valence constraints on atoms and aromatic constraints on bonds | 11 | 16 |
+| Benzene and biphenyl with and without `#e6` on their aromatic systems; five-ring with electron counts 2, 1, 1, 1, 1 | 6 | 1 |
+| 2,3-Dichlorobutane with stereogenicity and topicity constraints on one or both centres | 8 | 6 |
+| Six-ring with one molecule-level charge-sum constraint | 6 | 15 |
+
+Twenty-seven library tests change, and each asserts a rule the trial replaces. Nineteen expect a
+constraint to select Full. Five expect a key or a color below Full to leave constraints out. One
+asserts an exact canonical molecule, in which the constrained atom moves from first to second. One
+compares the Constitution search with the minimum over every relabeling. One asserts a visited-leaf
+count.
+
+Criterion medians of the three scaling cases with `#v1` on every hydrogen, before and after:
+
+| Case | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` |
+| --- | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 2.19 ms → 35.0 µs | 4.39 ms → 81.1 µs | 2.67 ms → 37.4 µs | 5.29 ms → 89.1 µs |
+| `feature_free_disconnected` | 2.80 ms → 37.8 µs | 5.66 ms → 86.2 µs | 3.41 ms → 39.0 µs | 6.87 ms → 93.7 µs |
+| `symmetry_heavy_radicals` | 11.59 ms → 31.0 µs | 23.24 ms → 64.6 µs | 14.10 ms → 31.6 µs | 28.10 ms → 69.2 µs |
+
+A constrained molecule takes 3% to 6% longer than the same molecule without constraints. Molecule
+`canonicalize` of the temporary cases, as the smallest mean of five batches:
+
+| Case | Before | After |
+| --- | ---: | ---: |
+| Benzene with `#e6` | 154 µs | 24 µs |
+| Biphenyl with `#e6` on both aromatic systems | 195 µs | 55 µs |
+| Biphenyl with `#e6` on one aromatic system | 197 µs | 48 µs |
+| Five-ring with electron counts 2, 1, 1, 1, 1 | 67 µs | 18 µs |
+| 2,3-Dichlorobutane with a constraint on a centre, seven placements | 88 µs | 22 to 51 µs |
+| Six-ring, charge-sum constraint over the whole molecule | 122 µs | 29 µs |
+| Six-ring, charge-sum constraint over atom 0, or atoms 0 and 3 | 123 µs | 108 µs |
+| Six-ring, charge-sum constraint over atoms 0, 1, or 0, 2, or 0, 1, 2 | 123 µs | 171 to 186 µs |
+
+- **Cases without constraints.** The 21 Topology benchmarks lie between 0.98 and 1.04 times the time
+  before. Of 128 benchmarks over the corpus, 126 lie between 0.95 and 1.06; three that first
+  measured 1.05 to 1.06 returned 1.00 in a second run.
+- **Cases that ran at Full.** `overlay_heavy` takes 32.1 µs against 71.3 µs and
+  `frame_relative_stereo_constraint` 14.4 µs against 35.0 µs.
+- **Pruned Full.** It is four times as fast as the exhaustive search when the molecule-level
+  constraint keeps the symmetry of the ring, and up to 1.5 times slower when the constraint breaks
+  it. The generator check remaps the whole aggregate, which costs about as much as a leaf, and the
+  leaves are then visited as well.
+- **Normalization.** With the span normalized at Full only, span `canonicalize` takes 0.88 to 1.02
+  times the time before on 35 benchmarks, 1 to 3 µs less on most. All canonical forms and tracked
+  remappings of the pair file are identical before and after.
+
+### Decisions
+
+- **Structure search.** Molecules and reaction spans use constitution-pruned at Structure, for
+  `canonicalize`, `canonical_eq`, and `canonical_hash`. `para_stereo_cascade` is slower with it than
+  with structure-pruned, by a factor of two with the row leaf and of 1.2 with the leaf decided
+  below. It is an edge case and does not hold up the gain on the other cases.
+- **No selectable variant.** The search is fixed. No setting selects a partition or an enumeration,
+  and no setting changes the canonical form.
+- **Representatives.** A change of canonical representatives is acceptable: canonicalization is
+  consistent within a version only.
+- **Guide.** The data-type guide is revised where a faster search requires it. Its prescription of
+  the stereo-sensitive refinement is replaced with the constitution partition at Structure. Its
+  rules that constraints do not distinguish structural orbits, and that complete canonicalization
+  minimizes the structure key before the constraint key, are replaced by the decisions on colors
+  and inline constraints below.
+- **Para-stereo setting.** `para_stereo` is removed from `CanonicalizeContext`. The setting is read
+  only by the structure partition, which no search uses once Structure and Full start from the
+  constitution partition. The search itself separates groups that differ only in configuration, so
+  molecules with para-stereo centres are canonicalized exactly without it.
+  `StereoModel::para_stereo` of `umol-graph` governs stereo recognition and validation and is not
+  affected.
+- **Leaf.** Both aggregates use one leaf. The search orders the atoms. The key of a leaf is read
+  from the aggregate remapped and reframed in the entity order of the leaf, with every row in stored
+  order, and it is built when the leaf is first compared with another one. A `canonicalize` whose
+  search ends with a single leaf builds no key. The molecule gives up its row leaf.
+- **Order of non-atom entities.** In a canonical molecule and in a canonical span, the non-atom
+  entities of each kind are ordered by their participants, at every level: bonds and noncovalent
+  bonds by endpoint pair, dative bonds by donors and acceptor, aromatic systems and multicenter
+  bonds by their atoms, stereo atoms by site, and stereo bonds by site bond. Entities of one kind on
+  the same participants keep their search order. A span places the lhs-present entities of each kind
+  before the added ones and orders each group this way. The order is a function of the atom
+  numbering and does not depend on the level. Canonical molecules keep the order they have today;
+  the canonical form of spans changes.
+- **Topology.** At Topology both aggregates search the topology search input and read the key
+  directly from the entity order, without remapping.
+- **Canonical form.** The canonical form of an aggregate is the leaf of minimum key among the
+  leaves of its search. It is the same for every renumbering of the entities, every participant
+  frame, and every equivalent encoding of a value. It is not required to be the minimum over all
+  renumberings, and the canonical form of a constrained aggregate is not required to extend that of
+  the same aggregate without constraints.
+- **Colors.** `ReframeKind` classifies a field or a constraint by its behavior under a
+  participant-frame action as `Independent`, `Positional`, or `Relative`. A frame-independent value
+  enters the color of its entity. A positional value enters the colors of the incidences of its
+  participants. A frame-relative value enters no color. The search partition is built from the
+  colors, so electron counts and dative roles split it.
+- **Inline constraints.** They contribute as inherent fields do, to the color of their entity and to
+  its key row. No inline constraint selects Full. The level is Topology with atoms and bonds only,
+  Constitution with a dative bond, aromatic system, multicenter bond, or noncovalent bond, and
+  Structure with a stereo entity.
+- **Frame-relative values.** The configuration and the ligand-symmetry, fluxionality, and topicity
+  constraints of a stereo entity are read in the leaf key after reframing. Pruning uses a generator
+  only when one frame action carries the whole form of every stereo entity, on each side of a span,
+  to the form of its image.
+- **Full.** Molecule-level constraints select Full. Both aggregates search it from the constitution
+  partition with pruning, and a generator is used only when it carries the complete aggregate onto
+  itself. The check remaps the aggregate and compares it under framed equality. Where a
+  molecule-level constraint breaks the symmetry of the aggregate, this costs more than the
+  exhaustive search. Such constraints are not expected, and the cost is accepted.
+- **Normalization.** A reaction span is normalized before the search at Full only, as a molecule
+  is. The molecule's Full leaf normalizes through `reframe`, where the span's leaf transports by the
+  representative action and normalizes the constraints as it reads them. This difference is noted
+  in the code and left.
+- **Kinds and queries.** `ReframeKind` sits beside `FrameTransport`. Each of the seven forms other
+  than `AtomForm` gains its field-kind enum, and the eight field-kind enums derive `VariantArray`.
+  The field-kind enums and the eight constraint-key enums have `reframe_kind`, and a property checks
+  it against `reframe_by`.
+- **Field keys.** For each form one function returns the key of one field. It takes the field kind
+  and the form, matches on the kind, and reads that field. The color of an entity is built by
+  walking its field kinds and its constraints and keeping those whose `reframe_kind` is
+  `Independent`. Its key row is its participants, then every field kind, then every constraint. A
+  field kind is thereby placed in every color and key row of both aggregates, and the color and the
+  key cannot disagree. The electron counts on the incidences and the stereo kind in the color of a
+  stereo entity are written out.
+- **Fields without a kind.** No construct in the key functions guards against a field of a form
+  that has no kind. A property asserts it: `canonical_eq` agrees with equality of the canonical
+  forms on pairs of molecules that differ in an arbitrary field or constraint of one entity.
+  Equality of forms is derived and sees every field, so a field that does not enter the key fails
+  the property. The property covers what its generators produce.
+
+The search of each level, for both aggregates:
+
+| Level | Selected by | Searched graph | Initial partition | Enumeration | Generator check | Leaf key |
+| --- | --- | --- | --- | --- | --- | --- |
+| Topology | Atoms and bonds only | Topology search input | Entity colors | Pruned | None | Read from the entity order |
+| Constitution | A dative bond, aromatic system, multicenter bond, or noncovalent bond | Adapter over the Constitution incidence graph | Colors | Pruned | None | Remapped leaf |
+| Structure | A stereo entity | Adapter over the Full incidence graph | Colors | Pruned | The whole form of every stereo entity | Remapped leaf |
+| Full | A molecule-level constraint | Adapter over the Full incidence graph | Colors | Pruned | The whole aggregate | Remapped leaf with the molecule-level constraint block |
+
+Every leaf key is deferred.
+
 ## Staged implementation plan
+
+S0 to S3 were planned before the search study. S4 to S9 implement the decisions of the study, which
+replace the Target section where the two differ. Their changes exist as an uncommitted trial in the
+worktree `scratch/244-canonicalization-molecule-structure`. Each subitem moves the part of the trial
+it names into the tree and adds its tests.
 
 Work proceeds one subitem at a time. After each subitem the narrow tests run and work stops for
 review. After each subitem that changes search behavior, the reference comparison runs first.
-Molecule functions are moved in S0 and edited only in S6. Expected values of exact cases are shown,
-old beside new, before any is edited. Each subitem reports its changed files and a suggested commit
-message; no git command is run.
+Expected values of exact cases are shown, old beside new, before any is edited. Each subitem reports
+its changed files and a suggested commit message; no git command is run.
 
 After S0, molecule code is in `umol-graph-ir/src/ir/canonicalize/molecule.rs` and span and reaction
 code in `umol-graph-ir/src/ir/canonicalize/reaction_span.rs`, each with its own `tests.rs`. A span
@@ -300,9 +852,10 @@ function takes the name of its molecule counterpart. From S1 on, a bare function
 the one in `reaction_span` unless the subitem says otherwise. Tests follow the test-writing skill
 and sit in source order.
 
-The plan adds roughly 900 lines of span code and removes about 290 lines of span code. The estimate
-comes from the sizes of the molecule counterparts. S0 also relocates about 1,450 lines of molecule
-code and about 650 lines of span code without changing them, and splits the 6,594-line tests file.
+S0 relocated about 1,450 lines of molecule code and about 650 lines of span code without changing
+them, and split the 6,594-line tests file. S4 to S8 change the three canonicalization source files
+by about 1,400 added and 630 removed lines, the size of the trial. They also remove about 950 lines
+of functions that lose their last caller, with their tests.
 
 ### S0 — Baseline, reference, and module split
 
@@ -613,7 +1166,7 @@ spans, and four span rows.
 The first two rows together require both sides to be checked. Clippy, the library tests, and the
 two integration tests pass.
 
-#### S3d — Structure search
+#### S3d — Structure search **Superseded by S4b**
 
 The Structure arm of `canonical_candidate` starts from `structure_partition` and runs
 `canonical_search_with_generator_filter` with the span generator check. The span methods pass
@@ -625,144 +1178,343 @@ configurations; one with a different lhs configuration; one with a different rhs
 only. Stereo rows of `test_reaction_span_tracked_canonicalize_at` under both `para_stereo`
 settings.
 
-#### S3e — Properties under both para-stereo settings
+The Structure arm is wired as the molecule's `canonicalize_structure`, and the unused-function
+attributes of S3a to S3c are removed. No expected value of an existing test changed: the library
+tests, the exact cases, the canonicalization properties, and the two Python test files pass as they
+are. The reference comparison reports no mismatch.
 
-**Module:** `umol-graph-ir/tests/property/reaction/span/canonicalize.rs` and
-`.../reaction/canonicalize.rs`. Each property draws `para_stereo` and builds its context from it.
-The laws are unchanged. Additive (green). [dep: S3d]
+Of the 20,056 spans of the pair file, two changed their canonical form, the two spans of one equal
+pair, under both `para_stereo` settings. Two removed bonds exchange their positions and the site of
+the stereo bond follows; the atoms keep their numbers. All other canonical forms and tracked
+remappings are identical to S2b.
 
-### S4 — Full level
+`test_canonical_candidate` has four Structure rows, with the visited leaves without and with
+pruning:
 
-#### S4a — Full search from the structure partition
+| Row | Without pruning | With pruning |
+| --- | ---: | ---: |
+| Three equal fragments with equal stereocentres | 6 | 1 |
+| The same, lhs configuration of one differs | 2 | 1 |
+| The same, rhs configuration of one differs | 2 | 1 |
+| Stereocentre with two hydrogens, lhs undetermined, rhs coset 0 | 2 | 2 |
 
-The Full arm of `canonical_candidate` starts from `structure_partition`. It stays exhaustive in
-node-id order. Breaking for representatives of spans with constraints and stereo entities
-(red→green). [dep: S3b]
+In the last row the hydrogen exchange is an automorphism of the colored graph that does not preserve
+the rhs configuration, so the generator check removes it and both leaves are visited.
+`test_reaction_span_tracked_canonicalize_at` runs all eight rows under both `para_stereo` settings.
 
-**Tests:** Full rows of `test_canonical_candidate` and `test_reaction_span_tracked_canonicalize_at`:
-inline constraints that differ between sides, a constraint span, and stereo entities with
-constraints.
+Medians of the six cases that run at Structure, against the S0b baseline:
 
-#### S4b — Normalization at Full only
+| Case | Span `canonicalize` | Molecule `canonicalize` | Span `canonical_eq` | Modified span `canonicalize` |
+| --- | ---: | ---: | ---: | ---: |
+| `tetrahedral_stereo` | 24.8 → 46.8 µs | 41.9 µs | 36.3 → 80.8 µs | 25.4 → 62.5 µs |
+| `cis_trans_stereo_bond` | 28.1 → 42.5 µs | 34.7 µs | 42.7 → 72.3 µs | 29.2 → 46.5 µs |
+| `mixed_atom_and_bond_stereo` | 48.0 → 83.9 µs | 72.3 µs | 73.8 → 151.8 µs | 47.7 → 98.6 µs |
+| `meso_dichlorobutane` | 46.7 → 72.7 µs | 68.7 µs | 79.8 → 128.7 µs | 33.6 → 87.0 µs |
+| `para_stereo_trichloropentane` | 62.1 → 124.5 µs | 129.5 µs | 105.1 → 233.9 µs | 44.0 → 115.8 µs |
+| `para_stereo_cascade` | 520.2 → 391.0 µs | 415.9 µs | 1.01 ms → 755.3 µs | 295.3 → 327.3 µs |
 
-`ReactionSpan::tracked_canonicalize_at` normalizes the span at Full only. No canonical output
-changes (green). [dep: S4a]
+Span `canonicalize` is 1.5 to 2.0 times slower than the baseline on five cases and 25% faster on
+`para_stereo_cascade`. The modified spans are 1.1 to 2.6 times slower. Span `canonicalize` is now
+0.94 to 1.22 times the molecule's on the six cases. The cases at Topology, Constitution, and Full
+are within 4% of S2b.
+
+This subitem is not committed. The [search study](#search-study) replaces it: S4b wires the
+Structure search from the constitution partition and removes the functions of S3a and S3b.
+
+### S4 — Structure search
+
+#### S4a — Symmetric stereo benchmark cases
+
+**Module:** `umol-graph-ir/benches/canonicalize.rs`. Additive (green). [dep: S0a]
+
+The corpus gains the three cases of the study: `symmetric_stereo_triisopropanolamine`,
+`symmetric_stereo_butanol`, and `symmetric_stereo_dimethylbutanol`. The change is in the working
+tree, uncommitted.
+
+#### S4b — Span Structure search
+
+The Structure arm of `canonical_candidate` starts from the constitution descriptors and runs
+`canonical_search_with_generator_filter` with `retain_stereo_preserving_generators`. The span
+methods pass pruning with backend canonical order at Structure. This replaces the uncommitted wiring
+of S3d. Delete the span's `stereo_refinement_descriptor`, `constitution_entity_classes`,
+`structure_partition_descriptors`, `para_stereo_partition_descriptors`, and `structure_partition`,
+with their tests. Canonical forms are unchanged (green). [dep: S2b, S3c]
+
+**Tests:** Structure rows of `test_canonical_candidate`, with exact visited-leaf counts without and
+with pruning: three equal fragments with equal stereocentres; the same with a different lhs
+configuration on one; the same with a different rhs configuration on one; a stereocentre with two
+hydrogens, lhs undetermined and rhs coset 0. Stereo rows of
+`test_reaction_span_tracked_canonicalize_at`.
+
+#### S4c — Molecule Structure search
+
+`canonicalize_structure` and the Structure branch of `Molecule::canonical_key_at` start from the
+constitution descriptors and run `canonical_search_with_generator_filter` with
+`retain_stereo_preserving_generators`, with pruning and backend canonical order. The data-type
+guide's prescription of the stereo-sensitive refinement is replaced. Breaking for representatives
+of molecules with stereo entities (red→green). [dep: S0d]
+
+**Tests:** `test_molecule_canonical_key_at`: for the molecule stereo fixtures and the symmetric
+stereo case with six automorphisms, the Structure key equals the exhaustive minimum over the
+constitution partition, with exact visited-leaf counts. The existing Structure tests are rerun; any
+changed expected value is shown first.
+
+### S5 — One leaf for both aggregates
+
+#### S5a — Deferred key
+
+**Module:** `canonicalize.rs`. Additive (green). [dep: none]
+
+Add `DeferredKey`. It holds the entity order of a leaf and builds the comparison key when the leaf
+is first compared. `into_key` builds the key if no comparison did, and `into_built` returns it only
+if one did.
+
+**Tests:** `test_deferred_key_into_key`, `test_deferred_key_into_built`, and
+`test_deferred_key_cmp`, with a counting build function: a key is built once, on the first
+comparison or on `into_key`, and not at all for a leaf that is never compared.
+
+#### S5b — Span entity order and deferred leaf
+
+Add `entity_order`: the atoms in search order, then the entities of each further kind with the
+lhs-present ones first and each group by its participants, ties in search order. The leaf of
+`canonical_candidate` takes its order from it and holds a `DeferredKey`. `canonical_candidate` takes
+`defer_key`; `tracked_canonicalize_at` passes it and builds no key for a single leaf. Breaking for
+span representatives (red→green). [dep: S4b, S5a]
+
+**Tests:** `test_entity_order`: for each kind, added entities stored before lhs-present ones, and
+two entities on the same participants. `test_canonical_candidate` runs each row with and without
+`defer_key`. Three exact cases change and are shown first: the stereo-bond row of
+`test_reaction_span_tracked_canonicalize_at`, and `case_3_stereo` and `case_1_lifecycle` of
+`tests/canonicalization/reaction_span.rs`. The two Python test files are rerun.
+
+#### S5c — Molecule leaf functions
+
+Add `entity_order`, `comparison_key`, and `leaf_key` in `canonicalize::molecule`. `entity_order`
+gives the order of every entity of a level for an atom order, with the non-atom entities by their
+participants. `comparison_key` reads the key of a molecule with every row in stored order.
+`leaf_key` remaps and reframes the molecule in an entity order and reads its key. Additive (green).
+[dep: S0d]
+
+**Tests:** `test_entity_order`; `test_comparison_key`, with the exact keys of the present key tests
+at each level; `test_leaf_key`, which equals the key of the present candidate functions on their
+rows.
+
+#### S5d — Molecule searches on the leaf
+
+`canonicalize_topology`, `canonicalize_constitution`, `canonicalize_structure`, `canonicalize_full`,
+and `Molecule::canonical_key_at` take the order of a leaf from `entity_order` and hold a
+`DeferredKey` over `leaf_key`. Delete `topology_bond_key_rows`, `topology_candidate`,
+`constitution_candidate`, `structure_candidate`, `complete_candidate`,
+`canonical_kinded_stereo_frame`, and `CanonicalStereoFrame`, with their tests; rows that assert a
+key move to `test_comparison_key`. Canonical molecules are unchanged (red→green).
+[dep: S4c, S5a, S5c]
+
+**Tests:** the tests of the four per-level functions and of `canonical_key_at` are rerun without a
+changed expected value.
+
+#### S5e — Molecule Topology key
+
+Add `topology_key`, which reads the Topology key from the entity order without remapping. The
+Topology searches use it, with a debug assertion that it equals `leaf_key`. Results are unchanged
+(green). [dep: S5d]
+
+**Tests:** `test_topology_key`: equal to `leaf_key` on the Topology rows, including a bond outside
+the largest bond color class.
+
+#### S5f — Span Topology search
+
+Add `topology_search_input` over the union graph and `topology_key` in
+`canonicalize::reaction_span`. The Topology arm of `canonical_candidate` searches the topology
+search input and reads the key from the entity order, with the debug assertion of S5e. Canonical
+forms are unchanged relative to S5b (green). [dep: S0f, S5b]
+
+**Tests:** `test_topology_search_input`: exact graph, colors, node sources, and partition, including
+a removed and an added bond on one atom pair. `test_topology_key`: equal to the key of the remapped
+span on the Topology rows.
+
+### S6 — Constraints and positional values in the colors
+
+#### S6a — Field kinds
+
+Add `BondFieldKind`, `DativeBondFieldKind`, `AromaticSystemFieldKind`, `MulticenterBondFieldKind`,
+`NoncovalentBondFieldKind`, `StereoAtomFieldKind`, and `StereoBondFieldKind`, each beside its form,
+with the variants of its `*FieldChange` enum. The eight field-kind enums derive `VariantArray`. The
+key-and-kind entry of the nomenclature guide names them. The enums carry no behavior and no test.
+Additive (green). [dep: none]
+
+#### S6b — Reframe kind
+
+**Module:** `ir/traits.rs`, the modules of the eight forms, and the modules of `ir/constraint`.
+Additive (green). [dep: S6a]
+
+Add `ReframeKind` with `Independent`, `Positional`, and `Relative` beside `FrameTransport`, and
+`reframe_kind` on each of the eight field-kind enums and the eight constraint-key enums. The
+electron counts of aromatic systems and multicenter bonds are `Positional`. The configuration of a
+stereo entity and its ligand-symmetry, fluxionality, and topicity keys are `Relative`. Every other
+field kind and constraint key is `Independent`. The nomenclature guide gains the term.
+
+**Tests:** one `test_<enum>_reframe_kind` table per enum with a row per variant. A property over
+`reframe_by`: a field or a constraint whose kind is `Independent` is unchanged by every frame action
+of its entity, and a `Positional` field is permuted with the participants.
+
+#### S6c — Canonical equality pairs
+
+**Module:** `umol-graph-ir/tests/property/strategies.rs`. Additive (green). [dep: none]
+
+`molecule_canonical_pair_strategy` gains a derived molecule in which the attributes of one entity,
+of any of the eight kinds, are replaced by drawn attributes of that kind that keep the molecule's
+integrity: inherent fields and constraints. It takes the place of the draw that changes one atom's
+charge. `test_molecule_canonical_eq_contract` then fails when a field or a constraint of a form does
+not enter the canonical key.
+
+#### S6d — Atom and bond field keys and constraints
+
+Add `atom_field_key` and `bond_field_key`. Each takes a field kind and the form, matches on the
+kind, and returns the key of that field. `atom_form_fields` and `bond_form_fields` replace
+`atom_inherent_fields` and `bond_inherent_fields`: each walks the field kinds of its form and
+appends the key of the normalized constraints when the entity has any. Every atom and bond color and
+key row of both aggregates is built from them. Level selection of molecules, spans, and deltas no
+longer reads atom and bond constraints. Breaking for representatives of aggregates with atom or bond
+constraints (red→green). [dep: S5e, S5f, S6b, S6c]
+
+**Tests:** `test_atom_field_key` and `test_bond_field_key` with a row per field kind. Rows of
+`test_atom_form_fields` and `test_bond_form_fields` with and without constraints, including a
+constraint that normalizes away. Rows of `test_molecule_canonical_eq` and
+`test_reaction_span_canonical_eq`: a six-ring with a valence constraint on one atom, or an aromatic
+constraint on one bond, against a renumbered copy and against another placement. The tests that
+assert the replaced rule are shown first: four rows of `test_delta_canonicalize_level`, the three
+description-level tests, `test_initial_colors`, `test_topology_comparison_key`,
+`test_canonical_key_by_structure`, the two excluded-data tests, and `test_molecule_canonicalize`.
+The two Python test files are rerun. The Topology benchmarks are timed against S5.
+
+#### S6e — Field keys and constraints of the non-stereo overlay kinds
+
+Add `dative_bond_field_key`, `aromatic_system_field_key`, `multicenter_bond_field_key`, and
+`noncovalent_bond_field_key`, of the shape of S6d. In both aggregates the color of an entity of
+these kinds walks its field kinds and its constraints and keeps those whose `reframe_kind` is
+`Independent`, and its key row is its participants, every field kind, and every constraint. Level
+selection no longer reads the constraints of these kinds. Breaking for representatives of aggregates
+with such constraints (red→green). [dep: S6d]
+
+**Tests:** one `test_<kind>_field_key` table per kind with a row per field kind. Rows of
+`test_entity_color_key` and `test_comparison_key` for each of the four kinds with a constraint. Rows
+of the two `canonical_eq` tests: biphenyl with `#e6` on one aromatic system against a renumbered
+copy and against the other system. Eight rows of `test_delta_canonicalize_level` are shown first.
+
+#### S6f — Field keys and constraints of stereo entities
+
+Add `stereo_atom_field_key` and `stereo_bond_field_key`. In both aggregates the color of a stereo
+entity is its stereo kind followed by the walk of S6e, which keeps the constraints whose
+`reframe_kind` is `Independent`; its key row is its site, its ligands, every field kind, and every
+constraint. `generator_preserves_stereo` transports the whole stereo form by the frame action and
+compares it with the form of the image. Level selection reads no inline constraint, and
+`level_with_constraints` is removed. The Full key keeps the molecule-level constraint block only.
+The data-type guide's passage on constraints and structural orbits is rewritten. Breaking for
+representatives of aggregates with stereo-entity constraints (red→green). [dep: S6e]
+
+**Tests:** `test_stereo_atom_field_key` and `test_stereo_bond_field_key`. Rows of
+`test_retain_stereo_preserving_generators` in both submodules: a topicity constraint on one of two
+equivalent stereocentres; the same constraint on both; a constraint on one side of a span only. Rows
+of the two `canonical_eq` tests: 2,3-dichlorobutane with a stereogenicity or a topicity constraint
+on one centre against a renumbered copy, against the same constraint on the other centre, and
+against another ligand pair. Four rows of `test_delta_canonicalize_level` are shown first.
+
+#### S6g — Search partition from the colors
+
+The searches build their partition from the ranked entity and incidence colors, so electron counts
+and dative roles split it. `constitution_partition_descriptors` is removed. Breaking for
+representatives of aggregates in which these values distinguish otherwise equal atoms (red→green).
+[dep: S6f]
+
+**Tests:** `test_canonical_candidate`: the modified aromatic system row visits 2 leaves without
+pruning and 1 with it, against 6 and 3. A row with a five-ring whose aromatic system has the
+electron counts 2, 1, 1, 1, 1. `test_canonicalize_constitution_entity_kind_minimum`, which compares
+the search with the minimum over every relabeling, is removed.
+
+### S7 — Full
+
+#### S7a — Aggregate generator check
+
+Add `remapping_from_generator` and `retain_preserving_generators` in each submodule. The first
+builds the remapping that sends every entity to its image under a generator. The second keeps a
+generator when the aggregate remapped by it equals the aggregate under framed equality. Additive
+(green). [dep: S6f]
+
+**Tests:** `test_remapping_from_generator` with exact remappings.
+`test_retain_preserving_generators`: a six-ring with a charge-sum constraint over the whole
+molecule, over one atom, and over two opposite atoms, with the ring rotations and reflections as
+generators; a span with a constraint span on one side.
+
+#### S7b — Molecule Full search
+
+`canonicalize_full` and the Full branch of `Molecule::canonical_key_at` start from the colors and
+run `canonical_search_with_generator_filter` with `retain_preserving_generators`, with pruning and
+backend canonical order. Delete the molecule's `stereo_refinement_descriptor`,
+`constitution_entity_classes`, `structure_partition_descriptors`,
+`para_stereo_partition_descriptors`, and `structure_partition`, with their tests. Breaking for
+representatives of molecules with molecule-level constraints and stereo entities (red→green).
+[dep: S7a]
+
+**Tests:** Full rows of `test_molecule_canonical_key_at` with exact visited-leaf counts, equal to
+the exhaustive minimum. Rows of `test_molecule_canonical_eq`: the six-ring placements of S7a against
+renumbered copies and against each other.
+
+#### S7c — Span Full search
+
+The Full arm of `canonical_candidate` runs `canonical_search_with_generator_filter` with
+`retain_preserving_generators`, and the span methods pass pruning with backend canonical order at
+Full. Canonical forms are unchanged (green). [dep: S7a]
+
+**Tests:** Full rows of `test_canonical_candidate` with exact visited-leaf counts without and with
+pruning: a constraint span that keeps the symmetry and one that breaks it.
+
+#### S7d — Span normalization at Full only
+
+`ReactionSpan::tracked_canonicalize_at` normalizes the span before the search at Full only. A
+comment at the Full branch of the molecule's `leaf_key` states the remaining difference in
+normalization. No canonical output changes (green). [dep: S7c]
 
 **Tests:** rows of `test_reaction_span_tracked_canonicalize_at` with non-normal values below Full,
 including a modified entity with equal sides, and a contradictory value at each level.
 
-### S5 — Leaf rows and topology search input
+### S8 — Para-stereo setting
 
-Each level replaces the remap and reframe of the whole span at every leaf by rows built from the
-atom order. The rows keep the shapes `comparison_key` builds today. Non-atom entities take their
-order from their rows. Each wiring subitem is breaking for representatives (red→green).
+#### S8a — Remove the setting
 
-#### S5a — Topology functions
+Remove `para_stereo` from `CanonicalizeContext`. `umol-graph` stops passing
+`StereoModel::para_stereo` to it, and the `umol-py` binding, the tests, the properties, and the
+benchmarks drop the field. The data-type guide and the Python API guide follow. Breaking for the
+public API (red→green). [dep: S7b]
 
-Add `topology_search_input` over the union graph, and `topology_bond_key_rows` and
-`topology_candidate`. Additive (green). [dep: S0f, S1b]
+**Tests:** `test_canonicalize_config_context` of `umol-graph` and `test_canonicalize_context` of
+`umol-py` lose their `para_stereo` rows. The Python suite is rerun.
 
-**Tests:** `test_topology_search_input`: exact graph, colors, node sources, and partition, including
-a removed and an added bond on one atom pair. `test_topology_candidate`: exact key and entity order.
+### S9 — Closeout
 
-#### S5b — Topology search
+#### S9a — Final comparison and measurements
 
-The Topology arm uses the topology search input and the topology candidate. [dep: S2b, S5a]
+The reference comparison runs on the full pair file. The benchmark groups of S0a run in the
+reference checkout and in the tree back to back. The table is recorded here. [dep: S8a]
 
-#### S5c — Constitution functions
-
-Add `constitution_candidate`. Additive (green). [dep: S5a]
-
-**Tests:** `test_constitution_candidate`: exact key and entity order for each
-non-stereo overlay kind, unchanged, added, removed, and modified, with participant-indexed electron
-counts on both sides.
-
-#### S5d — Constitution search
-
-The Constitution arm uses the constitution candidate. [dep: S5b, S5c]
-
-#### S5e — Structure functions
-
-Add `structure_candidate`. The stereo rows use `canonical_kinded_stereo_frame` on each side, which
-selects one ligand frame for both. Additive (green). [dep: S5c]
-
-**Tests:** `test_structure_candidate`: exact key and entity order for stereo atoms and stereo bonds,
-unchanged, added, removed, modified, and with one undetermined side.
-
-#### S5f — Structure search
-
-The Structure arm uses the structure candidate. [dep: S3d, S5d, S5e]
-
-#### S5g — Full functions and search
-
-Add `constraint_blocks`, which is the constraint part of `comparison_key` unchanged, and
-`complete_candidate`, the counterpart of the molecule function of that name. The Full arm uses the
-complete candidate. Delete `comparison_key`. [dep: S4b, S5f]
-
-**Tests:** `test_constraint_blocks` and `test_complete_candidate`: exact keys for inline constraints
-on each entity kind and for constraint spans.
-
-### S6 — Trials
-
-Each trial is kept or reverted on its measurement against the S0b baseline.
-
-#### S6a — Molecule key search at Structure
-
-The Structure branch of `Molecule::canonical_key_at` runs `canonical_search_with_generator_filter`
-with `retain_stereo_preserving_generators`, with pruning and backend canonical order. Results are
-unchanged (green). [dep: S0d]
-
-**Tests:** `test_molecule_canonical_key_at` in the molecule tests: for the molecule stereo fixtures,
-the key equals the exhaustive minimum.
-
-#### S6b — Full-level pruning for reaction spans
-
-Add `generator_preserves_constraints` and `retain_constraint_preserving_generators` in
-`canonicalize::reaction_span`. A span without constraint spans searches at Full with the stereo and
-constraint checks and with pruning. [dep: S3c, S5g]
-
-**Tests:** `test_retain_constraint_preserving_generators`: an inline constraint on each entity kind,
-on every equivalent entity and on one of them; a constraint on one side only; frame-relative
-constraints on stereo entities. Full rows of `test_canonical_candidate` with exact leaf counts, and
-one row with a constraint span that stays exhaustive.
-
-#### S6c — Full-level pruning for molecules
-
-Add `generator_preserves_constraints` and `retain_constraint_preserving_generators` in
-`canonicalize::molecule`. A molecule without molecule-level constraints searches at Full with the
-stereo and constraint checks and with pruning, in `canonicalize_full` and in the Full branch of
-`Molecule::canonical_key_at`. Canonical forms are unchanged (green). [dep: S6a]
-
-**Tests:** `test_retain_constraint_preserving_generators` in the molecule tests, with the molecule
-rows of S6b. Full rows
-comparing the pruned search with the exhaustive minimum.
-
-### S7 — Closeout
-
-#### S7a — Final comparison and measurements
-
-The reference comparison runs on the full pair file. The benchmark groups of S0a run in both
-checkouts back to back. The table is recorded here. [dep: S5g, S6]
-
-#### S7b — Gates
+#### S9b — Gates
 
 `cargo +nightly fmt --all`; `cargo clippy --workspace --all-targets -- -D warnings`;
 `cargo test --workspace` with all features; the graph-IR property suite; the Python suite under the
-python-build skill. [dep: S7a]
+python-build skill. [dep: S9a]
 
-#### S7c — Remove the reference setup
+#### S9c — Remove the reference setup
 
-Remove `/Users/dr/.cargo-target-244`, `scratch/244-compare`, and the pair file. The reference
-worktree is removed by the user. [dep: S7b]
+Remove `/Users/dr/.cargo-target-244`, `/Users/dr/.cargo-target-244-1`, `scratch/244-compare`,
+`scratch/244-compare-1`, and the pair file. The two worktrees are removed by the user. [dep: S9b]
 
 ### Stage gate
 
 After every stage: the canonicalization and reaction-span unit tests, the `canonicalization` and
 `reaction_span` integration tests, the canonicalization properties, graph-IR clippy, and the
-reference comparison. Stages that change span representatives also run the two Python test files.
+reference comparison. Stages that change representatives also run the two Python test files.
 
 ### Critical path
 
-S0 → S1 → S2 → S3 → S4 → S5 → S7. S2 to S4 give the pruned, stereo-sensitive search with
-about 400 lines of new code. S5 removes the per-leaf remap and reframe and is measured on its own. S6 is
-deferrable: the span work is complete without it, and S6a can run at any point after S0.
+S4 → S5 → S6 → S7 → S8 → S9. S6a to S6c can run at any point before S6d. No stage is
+deferrable: S4 and S5 carry the search and the leaf, S6 and S7 the treatment of constraints, and S8
+removes a setting that nothing reads after S7b.
