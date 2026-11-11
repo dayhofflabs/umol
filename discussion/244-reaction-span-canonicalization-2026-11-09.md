@@ -1808,7 +1808,7 @@ charge, the unpaired electrons, a constraint, the electron counts, and the image
 `reframe_by`. The 12,173 library tests pass. The library build reports three more dead-code
 warnings, for `at` and the two colors, which end with S6k.
 
-#### S6f — Colors of stereo atoms and stereo bonds
+#### S6f — Colors of stereo atoms and stereo bonds **Done**
 
 **Module:** `ir/stereo.rs`.
 
@@ -1819,6 +1819,17 @@ stereogenicity constraint, and implement `AsColor` on the two forms. Additive (g
 kinds, or with different stereogenicity constraints, have unequal colors; forms that differ in the
 configuration, or in a ligand-symmetry, fluxionality, or topicity constraint, have equal colors; a
 form and its image under a frame action have equal colors.
+
+Each color holds the kind as `Option<StereoKind>`, read with `StereoConfigurationForm::kind`, and a
+reference to the `StereogenicityForm` that `stereogenicity` of the constraints returns, which is
+undetermined when the form has no such constraint. Each color follows the inherent implementation
+of its form that holds `update` and `difference_to`, outside the `stereo_element!` macro. The tests
+are in `ir/stereo/tests/atom_form.rs` and `ir/stereo/tests/bond_form.rs`. The stereo atom table has
+9 rows: equal forms, two kinds, a kind against an undetermined configuration, the stereogenicity,
+the coset, the three frame-relative constraints, and the image under `reframe_by`. The stereo bond
+table has the same rows without the row of two kinds, since a stereo bond has one kind. The 12,190
+library tests pass. The library build reports two more dead-code warnings, for the two colors,
+which end with S6k.
 
 #### S6g — Orders from the declaration
 

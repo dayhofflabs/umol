@@ -23,14 +23,14 @@ use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
 use super::constraint::{
     FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
     StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoLigandPair, TopicityForm,
+    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
 };
 use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoinError};
 use super::frame::{StereoAtomsFrameAction, StereoBondsFrameAction};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
-use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
+use super::traits::{AsColor, AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A stereo atom's site, ligand frame, and attributes.
 ///
@@ -1672,6 +1672,25 @@ impl StereoAtomForm {
     }
 }
 
+/// The color of a [`StereoAtomForm`]: the stereo kind and the stereogenicity constraint. The coset
+/// and the other constraints are relative to the ligand frame and are not part of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct StereoAtomColor<'a> {
+    kind: Option<StereoKind>,
+    stereogenicity: &'a StereogenicityForm,
+}
+
+impl AsColor for StereoAtomForm {
+    type Color<'a> = StereoAtomColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        StereoAtomColor {
+            kind: self.configuration.kind(),
+            stereogenicity: self.constraints.stereogenicity(),
+        }
+    }
+}
+
 impl StereoBondForm {
     /// Apply a raw attribute update, retaining constraints even when the result is kindless.
     pub fn update(&self, update: &StereoBondUpdate) -> Self {
@@ -1729,6 +1748,25 @@ impl StereoBondForm {
         StereoBondUpdate {
             configuration,
             constraints,
+        }
+    }
+}
+
+/// The color of a [`StereoBondForm`]: the stereo kind and the stereogenicity constraint. The coset
+/// and the other constraints are relative to the ligand frame and are not part of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct StereoBondColor<'a> {
+    kind: Option<StereoKind>,
+    stereogenicity: &'a StereogenicityForm,
+}
+
+impl AsColor for StereoBondForm {
+    type Color<'a> = StereoBondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        StereoBondColor {
+            kind: self.configuration.kind(),
+            stereogenicity: self.constraints.stereogenicity(),
         }
     }
 }

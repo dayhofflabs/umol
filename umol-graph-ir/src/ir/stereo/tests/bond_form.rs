@@ -362,3 +362,90 @@ fn test_stereo_bond_form_difference_to(
 fn test_stereo_bond_form_difference_to_identity(#[case] bond: StereoBondForm) {
     assert_eq!(bond.difference_to(&bond), StereoBondUpdate::default());
 }
+
+#[rstest]
+#[case::equal(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    true
+)]
+#[case::kind_undetermined(
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
+    StereoBondForm::default(),
+    false
+)]
+#[case::stereogenicity(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        ))
+    ),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    false
+)]
+#[case::coset(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+    true
+)]
+#[case::ligand_symmetry(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
+        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 3, 2])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
+        })
+    ),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    true
+)]
+#[case::fluxionality(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
+        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            active: BooleanForm::Lit(true),
+        })
+    ),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    true
+)]
+#[case::topicity(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
+        StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        })
+    ),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    true
+)]
+#[case::frame_action(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32)
+        .with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        )))
+        .with_constraint(StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        })),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32)
+        .with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        )))
+        .with_constraint(StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        }))
+        .reframe_by(&Permutation::from_image(&[1, 0, 2, 3]))
+        .expect("case action is an action of the kind"),
+    true
+)]
+fn test_stereo_bond_form_as_color(
+    #[case] lhs: StereoBondForm,
+    #[case] rhs: StereoBondForm,
+    #[case] expected: bool,
+) {
+    assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+}
