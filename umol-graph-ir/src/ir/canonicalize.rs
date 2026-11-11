@@ -2373,14 +2373,12 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
 }
 
 /// A leaf key that is built when it is first compared or read.
-#[cfg_attr(not(test), expect(dead_code))]
 struct DeferredKey<'a, Build> {
     order: Vec<NodeId>,
     build: &'a Build,
     key: OnceCell<CanonicalComparisonKey>,
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
 impl<'a, Build: Fn(&[NodeId]) -> CanonicalComparisonKey> DeferredKey<'a, Build> {
     fn new(order: &[NodeId], build: &'a Build) -> Self {
         Self {

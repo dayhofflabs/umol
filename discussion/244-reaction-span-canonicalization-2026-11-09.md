@@ -1379,7 +1379,7 @@ comparison or on `into_key`, and not at all for a leaf that is never compared.
 unused-code attribute until S5b uses it. The three tests have seven cases; the library tests pass
 and clippy is clean.
 
-#### S5b — Span entity order and deferred leaf
+#### S5b — Span entity order and deferred leaf **Done**
 
 Add `entity_order`: the atoms in search order, then the entities of each further kind with the
 lhs-present ones first and each group by its participants, ties in search order. The leaf of
@@ -1392,6 +1392,35 @@ two entities on the same participants. `test_canonical_candidate` runs each row 
 `defer_key`. Three exact cases change and are shown first: the stereo-bond row of
 `test_reaction_span_tracked_canonicalize_at`, and `case_3_stereo` and `case_1_lifecycle` of
 `tests/canonicalization/reaction_span.rs`. The two Python test files are rerun.
+
+`entity_order` and the deferred leaf are in place, and `DeferredKey` no longer carries the
+unused-code attribute. `canonical_candidate` returns the key when it is requested, or when a
+deferred search compared the selected leaf.
+
+`test_entity_order` has nine rows under a reversed search order: bonds by endpoint pair; for each of
+the seven non-atom kinds an added entity stored before an lhs-present one, with participants that
+would place it first; and a removed and an added bond on one atom pair. Integrity admits no two
+entities of a kind on the same participants on one side, so the last row is the case in which equal
+participants occur. `test_canonical_candidate` runs every row with the key requested and deferred: a
+deferred search returns the key only when it visited more than one leaf, and the same entity order.
+
+The three exact cases changed as named. In each the atoms keep their numbers:
+
+| Case | Bonds before | Bonds after |
+| --- | --- | --- |
+| Stereo-bond row of `test_reaction_span_tracked_canonicalize_at` | `0-2, 1-3, 4-6, 5-7, 0=1, 4=5`; stereo bonds on bonds 4 and 5 | `0=1, 0-2, 1-3, 4=5, 4-6, 5-7`; stereo bonds on bonds 0 and 3 |
+| `case_3_stereo` | `[0 3] [1 3] [0 4] [1 4] [0 5] [2 5] [0 6] [2 6] [1 2]`; stereo bond on bond 8 | `[0 3] [0 4] [0 5] [0 6] [1 2] [1 3] [1 4] [2 5] [2 6]`; stereo bond on bond 4 |
+| `case_1_lifecycle` | removed `[1 2]`, modified `[0 2]`, added `[0 3]` | modified `[0 2]`, removed `[1 2]`, added `[0 3]` |
+
+The reference comparison reports no mismatch, and the molecule answers are identical. Of the 40,112
+canonical span forms of the pair file, 7,332 change; all are identical to those of the trial. The
+library tests, the two integration tests, the canonicalization properties, and the two Python test
+files pass, and clippy is clean.
+
+Against S4b, span `canonicalize` is 10% to 30% faster on 13 of the 16 corpus cases, whose search
+ends with one leaf and builds no key, and unchanged on `meso_dichlorobutane`,
+`para_stereo_trichloropentane`, and `para_stereo_cascade`. Span `canonical_eq` is 1% to 5% slower
+on all 16 cases, the cost of the order by participants.
 
 #### S5c — Molecule leaf functions
 

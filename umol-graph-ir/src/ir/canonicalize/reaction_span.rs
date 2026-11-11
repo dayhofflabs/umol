@@ -34,7 +34,7 @@ use super::{
     stereo_configuration_form_key, stereo_kind_key, stereo_ligand_key, topology_initial_partition,
     unpaired_electrons_form_key, variant, AutomorphismAdapter, BranchOrdering, CanonicalCandidate,
     CanonicalComparisonKey, CanonicalKeyValue, CanonicalSearchOptions, CanonicalSearchResult,
-    Canonicalize, CanonicalizeContext, ConstraintBlockPosition, DescriptionLevel,
+    Canonicalize, CanonicalizeContext, ConstraintBlockPosition, DeferredKey, DescriptionLevel,
     EntityBlockPosition, InitialColorKey, PositionedKey, ReactionCanonicalizeError,
     ReactionSpanCanonicalizeError,
 };
@@ -689,12 +689,199 @@ fn comparison_key(
     })
 }
 
+/// The order of every entity of `level` for an atom order.
+///
+/// The atoms stand as the search orders them. The entities of each further kind follow with the
+/// lhs-present ones first, each group by its participants. Entities of one kind and group on the
+/// same participants keep their search order.
+fn entity_order(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
+    order: &[NodeId],
+) -> Vec<NodeId> {
+    let node_count = incidence_graph.graph().node_count();
+    let mut positions = vec![0_usize; node_count];
+    let mut atom_images = vec![0_usize; span.atoms().len()];
+    let mut entity_order = Vec::with_capacity(node_count);
+    for (position, &node) in order.iter().enumerate() {
+        positions[node.index()] = position;
+        if let Entity::Atom(id) = incidence_graph.entity(node) {
+            atom_images[id.index()] = entity_order.len();
+            entity_order.push(node);
+        }
+    }
+    let atom_image = |atom: AtomId| atom_images[atom.index()];
+    let search_position = |entity: Entity| {
+        let node = incidence_graph.node_of(entity);
+        (positions[node.index()], node)
+    };
+
+    let mut bond_images = vec![0_usize; span.bonds().len()];
+    let mut bonds = span
+        .graph()
+        .edge_ids()
+        .enumerate()
+        .map(|(index, edge)| {
+            let [first, second] = span
+                .graph()
+                .edge_endpoints(edge)
+                .map(|atom| atom_images[atom.index()]);
+            let (position, node) = search_position(Entity::Bond(BondId(index as u32)));
+            (
+                matches!(span.bonds()[index], EntitySpan::Added(_)),
+                (first.min(second), first.max(second)),
+                position,
+                node,
+                index,
+            )
+        })
+        .collect::<Vec<_>>();
+    bonds.sort_unstable();
+    for (image, &(_, _, _, node, index)) in bonds.iter().enumerate() {
+        bond_images[index] = image;
+        entity_order.push(node);
+    }
+
+    if level >= DescriptionLevel::Constitution {
+        let mut dative = span
+            .dative_bonds()
+            .ids()
+            .map(|id| {
+                let mut donors = span
+                    .dative_bonds()
+                    .donors(id)
+                    .map(atom_image)
+                    .collect::<Vec<_>>();
+                donors.sort_unstable();
+                let (position, node) = search_position(Entity::DativeBond(id));
+                (
+                    matches!(span.dative_bonds().attributes(id), EntitySpan::Added(_)),
+                    (donors, atom_image(span.dative_bonds().acceptor(id))),
+                    position,
+                    node,
+                )
+            })
+            .collect::<Vec<_>>();
+        dative.sort_unstable();
+        entity_order.extend(dative.into_iter().map(|(_, _, _, node)| node));
+
+        let mut aromatic = span
+            .aromatic_systems()
+            .ids()
+            .map(|id| {
+                let mut atoms = span
+                    .aromatic_systems()
+                    .atoms(id)
+                    .map(atom_image)
+                    .collect::<Vec<_>>();
+                atoms.sort_unstable();
+                let (position, node) = search_position(Entity::AromaticSystem(id));
+                (
+                    matches!(span.aromatic_systems().attributes(id), EntitySpan::Added(_)),
+                    atoms,
+                    position,
+                    node,
+                )
+            })
+            .collect::<Vec<_>>();
+        aromatic.sort_unstable();
+        entity_order.extend(aromatic.into_iter().map(|(_, _, _, node)| node));
+
+        let mut multicenter = span
+            .multicenter_bonds()
+            .ids()
+            .map(|id| {
+                let mut atoms = span
+                    .multicenter_bonds()
+                    .atoms(id)
+                    .map(atom_image)
+                    .collect::<Vec<_>>();
+                atoms.sort_unstable();
+                let (position, node) = search_position(Entity::MulticenterBond(id));
+                (
+                    matches!(
+                        span.multicenter_bonds().attributes(id),
+                        EntitySpan::Added(_)
+                    ),
+                    atoms,
+                    position,
+                    node,
+                )
+            })
+            .collect::<Vec<_>>();
+        multicenter.sort_unstable();
+        entity_order.extend(multicenter.into_iter().map(|(_, _, _, node)| node));
+
+        let mut noncovalent = span
+            .noncovalent_bonds()
+            .ids()
+            .map(|id| {
+                let [first, second] = span.noncovalent_bonds().atoms(id).map(atom_image);
+                let (position, node) = search_position(Entity::NoncovalentBond(id));
+                (
+                    matches!(
+                        span.noncovalent_bonds().attributes(id),
+                        EntitySpan::Added(_)
+                    ),
+                    (first.min(second), first.max(second)),
+                    position,
+                    node,
+                )
+            })
+            .collect::<Vec<_>>();
+        noncovalent.sort_unstable();
+        entity_order.extend(noncovalent.into_iter().map(|(_, _, _, node)| node));
+    }
+
+    if level >= DescriptionLevel::Structure {
+        let mut stereo_atoms = span
+            .stereo_atoms()
+            .ids()
+            .map(|id| {
+                let (position, node) = search_position(Entity::StereoAtom(id));
+                (
+                    matches!(span.stereo_atoms().attributes(id), EntitySpan::Added(_)),
+                    atom_image(span.stereo_atoms().site(id)),
+                    position,
+                    node,
+                )
+            })
+            .collect::<Vec<_>>();
+        stereo_atoms.sort_unstable();
+        entity_order.extend(stereo_atoms.into_iter().map(|(_, _, _, node)| node));
+
+        let mut stereo_bonds = span
+            .stereo_bonds()
+            .ids()
+            .map(|id| {
+                let (position, node) = search_position(Entity::StereoBond(id));
+                (
+                    matches!(span.stereo_bonds().attributes(id), EntitySpan::Added(_)),
+                    bond_images[span.stereo_bonds().site(id).index()],
+                    position,
+                    node,
+                )
+            })
+            .collect::<Vec<_>>();
+        stereo_bonds.sort_unstable();
+        entity_order.extend(stereo_bonds.into_iter().map(|(_, _, _, node)| node));
+    }
+
+    entity_order
+}
+
+/// Search the canonical entity order of `span` at `level`.
+///
+/// With `defer_key`, the key of the selected leaf is present only when the search compared it with
+/// another leaf.
 fn canonical_candidate(
     span: &ReactionSpan,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<CanonicalSearchResult<CanonicalComparisonKey>, Contradiction> {
+    defer_key: bool,
+) -> Result<CanonicalSearchResult<Option<CanonicalComparisonKey>>, Contradiction> {
     let incidence_level = match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
         DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -704,17 +891,20 @@ fn canonical_candidate(
     let (entity_keys, incidence_keys) = initial_color_keys(span, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let leaf_candidate = |order: &[NodeId]| {
+    let build_key = |order: &[NodeId]| {
         let remapping = remapping_from_order(span, &incidence_graph, order);
         let remapped = span.clone().remap(&remapping);
         let action = remapped.representative_action();
         let reframed = remapped
             .reframe_by(&action)
             .expect("integrity established compatible reaction-span frame actions");
+        comparison_key(&reframed, level).expect("initial colors established span normalization")
+    };
+    let leaf_candidate = |order: &[NodeId]| {
+        let entity_order = entity_order(span, &incidence_graph, level, order);
         CanonicalCandidate {
-            key: comparison_key(&reframed, level)
-                .expect("initial colors established span normalization"),
-            entity_order: order.to_vec(),
+            key: DeferredKey::new(&entity_order, &build_key),
+            entity_order,
         }
     };
     let selected = match level {
@@ -752,7 +942,17 @@ fn canonical_candidate(
             )
         }
     };
-    Ok(selected)
+    let CanonicalCandidate { key, entity_order } = selected.candidate;
+    let key = if defer_key {
+        key.into_built()
+    } else {
+        Some(key.into_key())
+    };
+    Ok(CanonicalSearchResult {
+        candidate: CanonicalCandidate { key, entity_order },
+        #[cfg(test)]
+        stats: selected.stats,
+    })
 }
 
 impl ReactionSpan {
@@ -772,7 +972,7 @@ impl ReactionSpan {
             },
         };
         let normalized = self.normalize()?;
-        let candidate = canonical_candidate(&normalized, level, context, options)?.candidate;
+        let candidate = canonical_candidate(&normalized, level, context, options, true)?.candidate;
         let incidence_level = match level {
             DescriptionLevel::Topology => IncidenceLevel::Topology,
             DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -802,13 +1002,17 @@ impl ReactionSpan {
         };
         if level == DescriptionLevel::Full {
             let normalized = self.clone().normalize()?;
-            return Ok(canonical_candidate(&normalized, level, context, options)?
-                .candidate
-                .key);
+            return Ok(
+                canonical_candidate(&normalized, level, context, options, false)?
+                    .candidate
+                    .key
+                    .expect("the key was requested"),
+            );
         }
-        Ok(canonical_candidate(self, level, context, options)?
+        Ok(canonical_candidate(self, level, context, options, false)?
             .candidate
-            .key)
+            .key
+            .expect("the key was requested"))
     }
 }
 
