@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 
+use strum::VariantArray;
 use umol_graph_core::{
     Compaction, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange, NodeId,
     ParticipantPosition, RelationId, VarRelationSet,
@@ -630,6 +631,14 @@ pub struct AromaticSystemUpdate {
     pub charge: Option<NumForm>,
     pub unpaired_electrons: UnpairedElectronsUpdate,
     pub constraints: AromaticSystemConstraintsForm,
+}
+
+/// Field discriminants of [`AromaticSystemForm`], mirroring `AromaticSystemFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum AromaticSystemFieldKind {
+    Electrons,
+    Charge,
+    UnpairedElectrons,
 }
 
 impl From<&str> for AromaticSystemForm {

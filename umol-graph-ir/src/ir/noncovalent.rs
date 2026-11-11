@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::{array, mem};
 
+use strum::VariantArray;
 use umol_graph_core::{
     Compaction, FixedRelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange,
     NodeId, ParticipantPosition, RelationId,
@@ -577,6 +578,12 @@ pub struct NoncovalentBondForm {
 pub struct NoncovalentBondUpdate {
     pub kind: Option<NoncovalentBondKindForm>,
     pub constraints: NoncovalentBondConstraintsForm,
+}
+
+/// Field discriminants of [`NoncovalentBondForm`], mirroring `NoncovalentBondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum NoncovalentBondFieldKind {
+    Kind,
 }
 
 impl From<&str> for NoncovalentBondForm {

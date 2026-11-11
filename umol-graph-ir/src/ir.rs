@@ -37,9 +37,11 @@ pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod view;
 
-pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystems};
+pub use aromatic::{
+    AromaticSystemFieldKind, AromaticSystemForm, AromaticSystemUpdate, AromaticSystems,
+};
 pub use atom::{AtomFieldKind, AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
-pub use bond::{BondForm, BondUpdate};
+pub use bond::{BondFieldKind, BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use canonicalize::{
     Canonicalize, CanonicalizeContext, MoleculeCanonicalizeError, ReactionCanonicalizeError,
@@ -63,7 +65,7 @@ pub use constraint::{
     TopicityRelationForm,
 };
 pub use correspondence::{MoleculeCorrespondence, MoleculeCorrespondenceComposeError};
-pub use dative::{DativeBondForm, DativeBondUpdate, DativeBonds};
+pub use dative::{DativeBondFieldKind, DativeBondForm, DativeBondUpdate, DativeBonds};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
@@ -106,10 +108,12 @@ pub use molecule::{
     MoleculeIntegrityError, MoleculePushoutCorrespondence, MoleculeSpec, MoleculeSpecTerm, Port,
     PortArg, RollbackMethod, TrackedTransaction, Transaction, TransactionError,
 };
-pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
+pub use multicenter::{
+    MulticenterBondFieldKind, MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds,
+};
 pub use noncovalent::{
-    NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
-    NoncovalentBonds,
+    NoncovalentBondFieldKind, NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
+    NoncovalentBondUpdate, NoncovalentBonds,
 };
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
@@ -124,10 +128,11 @@ pub use ring::{
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
-    CisTransConfiguration, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate, StereoAtoms,
-    StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration, StereoConfigurationForm,
-    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
-    TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
+    CisTransConfiguration, CisTransStereoForm, StereoAtomFieldKind, StereoAtomForm,
+    StereoAtomUpdate, StereoAtoms, StereoBondFieldKind, StereoBondForm, StereoBondUpdate,
+    StereoBonds, StereoConfiguration, StereoConfigurationForm, StereoConfigurationUpdate,
+    StereoCoset, StereoKind, StereoTerm, Stereogenicity, TetrahedralConfiguration,
+    TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,

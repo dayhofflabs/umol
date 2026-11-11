@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 
+use strum::VariantArray;
 use umol_graph_core::{
     Compaction, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping,
     IdRange, NodeId, ParticipantPosition, RelationId,
@@ -662,6 +663,12 @@ pub struct DativeBondForm {
 pub struct DativeBondUpdate {
     pub order: Option<NumForm>,
     pub constraints: DativeBondConstraintsForm,
+}
+
+/// Field discriminants of [`DativeBondForm`], mirroring `DativeBondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum DativeBondFieldKind {
+    Order,
 }
 
 impl DativeBondForm {

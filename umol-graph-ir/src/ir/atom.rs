@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use strum::VariantArray;
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
@@ -44,7 +45,7 @@ pub struct AtomUpdate {
 /// Field discriminants of [`AtomForm`], mirroring `AtomFieldChange`'s variants.
 /// A kind is a unit-variant discriminant; a parameterized discriminant is a
 /// key, as `AtomConstraintKey`'s `RingMembership(RingScope)`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
 pub enum AtomFieldKind {
     Element,
     IsotopeMass,

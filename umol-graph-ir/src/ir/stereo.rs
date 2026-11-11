@@ -1524,6 +1524,18 @@ stereo_element! {
     }
 }
 
+/// Field discriminants of [`StereoAtomForm`], mirroring `StereoAtomFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum StereoAtomFieldKind {
+    Configuration,
+}
+
+/// Field discriminants of [`StereoBondForm`], mirroring `StereoBondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum StereoBondFieldKind {
+    Configuration,
+}
+
 /// Configuration portion of a stereo-element update.
 ///
 /// `Unchanged` omits the field, `Undetermined` explicitly clears it, and

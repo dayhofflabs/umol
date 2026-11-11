@@ -1581,13 +1581,17 @@ which do not take the Topology arm, are within 3% of S5b.
 
 ### S6 — Constraints and positional values in the colors
 
-#### S6a — Field kinds
+#### S6a — Field kinds **Done**
 
 Add `BondFieldKind`, `DativeBondFieldKind`, `AromaticSystemFieldKind`, `MulticenterBondFieldKind`,
 `NoncovalentBondFieldKind`, `StereoAtomFieldKind`, and `StereoBondFieldKind`, each beside its form,
 with the variants of its `*FieldChange` enum. The eight field-kind enums derive `VariantArray`. The
 key-and-kind entry of the nomenclature guide names them. The enums carry no behavior and no test.
 Additive (green). [dep: none]
+
+The seven enums stand beside their forms and are exported from `ir` as `AtomFieldKind` is. The eight
+field-kind enums derive `VariantArray`. The key-and-kind entry of the nomenclature guide names them,
+and the `*Kind` count of its suffix table rises by seven. Clippy is clean.
 
 #### S6b — Reframe kind
 

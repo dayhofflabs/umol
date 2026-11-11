@@ -85,7 +85,7 @@ approximate.
 | `*Config` | composite operational configuration | 30 | graph-ir (ops), graph, io, py — never graph-core |
 | `*Model` | semantic choices deciding chemical acceptance | 13 | graph |
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
-| `*Kind` | unit-variant enum discriminating a closed set of alternatives | 11 | graph-ir, geometric, graph-core, msym, py |
+| `*Kind` | unit-variant enum discriminating a closed set of alternatives | 18 | graph-ir, geometric, graph-core, msym, py |
 | `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
 | `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
@@ -1070,12 +1070,14 @@ model-independent derived value is also an invariant.
 ### Key and kind
 
 A **kind** is a unit-variant discriminant enum naming an alternative without parameters; a
-**key** is a discriminant that carries parameters. `AtomFieldKind` enumerates atom field keys;
-`AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
-Peer entity forms gain `*FieldKind` enums as consumers arrive.
+**key** is a discriminant that carries parameters. Each entity form has a `*FieldKind` enum that
+enumerates its inherent fields, as `AtomFieldKind` for `AtomForm`. `AtomConstraintKey` is a key
+because `RingMembership(RingScope)` carries its scope.
 
 **Not:** interchangeable — a parameterless discriminant enum is a kind, not a key.
-**In code:** `AtomFieldKind`; `AtomConstraintKey` and the per-entity-kind constraint keys.
+**In code:** `AtomFieldKind`, `BondFieldKind`, `DativeBondFieldKind`, `AromaticSystemFieldKind`,
+`MulticenterBondFieldKind`, `NoncovalentBondFieldKind`, `StereoAtomFieldKind`, and
+`StereoBondFieldKind`; `AtomConstraintKey` and the per-entity-kind constraint keys.
 
 ### Lattice
 

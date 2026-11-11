@@ -1,5 +1,6 @@
 //! Bond forms and updates shared across crates.
 
+use strum::VariantArray;
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
@@ -25,6 +26,14 @@ pub struct BondUpdate {
     pub charge: Option<NumForm>,
     pub unpaired_electrons: UnpairedElectronsUpdate,
     pub constraints: BondConstraintsForm,
+}
+
+/// Field discriminants of [`BondForm`], mirroring `BondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum BondFieldKind {
+    Order,
+    Charge,
+    UnpairedElectrons,
 }
 
 impl BondForm {
