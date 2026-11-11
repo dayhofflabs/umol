@@ -183,6 +183,25 @@ pub trait FrameTransport: Sized {
     fn reframe_by(self, action: &Self::Action) -> Option<Self>;
 }
 
+/// How a field, a constraint, or a delta of an entity behaves under an action on the participant
+/// frame of that entity.
+///
+/// # Semantic properties
+///
+/// For every form and every compatible action, a field or a constraint whose kind is
+/// `Independent` is equal before and after [`FrameTransport::reframe_by`], and the components of a
+/// `Positional` field are reordered as the participants are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ReframeKind {
+    /// The value does not refer to the participant frame, and an action leaves it unchanged.
+    Independent,
+    /// The value has one component per participant, and an action permutes its components with
+    /// the participants.
+    Positional,
+    /// The value is stated relative to the participant frame, and an action restates it.
+    Relative,
+}
+
 /// The frame quotient over an entity aggregate: select a determinate participant frame and restate the
 /// frame-relative payload accordingly.
 ///

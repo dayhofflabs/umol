@@ -17,7 +17,7 @@ use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
-use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A noncovalent bond's atom pair and attributes.
 ///
@@ -584,6 +584,15 @@ pub struct NoncovalentBondUpdate {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
 pub enum NoncovalentBondFieldKind {
     Kind,
+}
+
+impl NoncovalentBondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Kind => ReframeKind::Independent,
+        }
+    }
 }
 
 impl From<&str> for NoncovalentBondForm {
@@ -1543,6 +1552,15 @@ mod tests {
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
         assert!(!unsorted_bond.framed_eq(&different));
+    }
+
+    #[rstest]
+    #[case::kind(NoncovalentBondFieldKind::Kind, ReframeKind::Independent)]
+    fn test_noncovalent_bond_field_kind_reframe_kind(
+        #[case] kind: NoncovalentBondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
     }
 
     #[rstest]

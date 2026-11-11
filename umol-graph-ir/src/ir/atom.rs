@@ -11,7 +11,7 @@ use super::error::{Contradiction, NoJoinError};
 use super::num::NumForm;
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{AsLit, Lattice, Normalize};
+use super::traits::{AsLit, Lattice, Normalize, ReframeKind};
 
 /// Atom form: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -53,6 +53,20 @@ pub enum AtomFieldKind {
     ImplicitHydrogens,
     LonePairs,
     UnpairedElectrons,
+}
+
+impl AtomFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Element
+            | Self::IsotopeMass
+            | Self::Charge
+            | Self::ImplicitHydrogens
+            | Self::LonePairs
+            | Self::UnpairedElectrons => ReframeKind::Independent,
+        }
+    }
 }
 
 impl AtomForm {
@@ -802,6 +816,20 @@ mod tests {
 
     use super::*;
     use crate::ir::constraint::{AtomConstraintForm, RingScope};
+
+    #[rstest]
+    #[case::element(AtomFieldKind::Element, ReframeKind::Independent)]
+    #[case::isotope_mass(AtomFieldKind::IsotopeMass, ReframeKind::Independent)]
+    #[case::charge(AtomFieldKind::Charge, ReframeKind::Independent)]
+    #[case::implicit_hydrogens(AtomFieldKind::ImplicitHydrogens, ReframeKind::Independent)]
+    #[case::lone_pairs(AtomFieldKind::LonePairs, ReframeKind::Independent)]
+    #[case::unpaired_electrons(AtomFieldKind::UnpairedElectrons, ReframeKind::Independent)]
+    fn test_atom_field_kind_reframe_kind(
+        #[case] kind: AtomFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
+    }
 
     #[rstest]
     fn test_atom_form_from_element() {

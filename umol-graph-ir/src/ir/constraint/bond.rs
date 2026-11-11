@@ -10,7 +10,7 @@ use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::stereo::CisTransStereoForm;
-use super::super::traits::{Lattice, Normalize};
+use super::super::traits::{Lattice, Normalize, ReframeKind};
 
 /// Localized bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -146,6 +146,17 @@ pub enum BondConstraintKey {
     Aromatic,
     CisTransStereo,
     RingMembership(RingScope),
+}
+
+impl BondConstraintKey {
+    /// The behavior of the constraint under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Aromatic | Self::CisTransStereo | Self::RingMembership(_) => {
+                ReframeKind::Independent
+            }
+        }
+    }
 }
 
 /// Atom constraints container, ordered, unique by key, sorted flat vector storage.
@@ -597,6 +608,20 @@ mod tests {
     #[case::different_key(BondConstraintForm::Aromatic(BooleanForm::Lit(true)), BondConstraintForm::ring_membership(RingScope::All, 1), false)]
     fn test_bond_constraint_form_is_compatible(#[case] a: BondConstraintForm, #[case] b: BondConstraintForm, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
+    }
+
+    #[rstest]
+    #[case::aromatic(BondConstraintKey::Aromatic, ReframeKind::Independent)]
+    #[case::cis_trans_stereo(BondConstraintKey::CisTransStereo, ReframeKind::Independent)]
+    #[case::ring_membership(
+        BondConstraintKey::RingMembership(RingScope::All),
+        ReframeKind::Independent
+    )]
+    fn test_bond_constraint_key_reframe_kind(
+        #[case] key: BondConstraintKey,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(key.reframe_kind(), expected);
     }
 
     #[rstest]

@@ -10,7 +10,7 @@ use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::{read_num, NumForm};
 use super::super::stereo::TetrahedralStereoForm;
-use super::super::traits::{AsLit, Lattice, Normalize};
+use super::super::traits::{AsLit, Lattice, Normalize, ReframeKind};
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -322,6 +322,27 @@ pub enum AtomConstraintKey {
     RingValence,
     TotalHydrogens,
     RingMembership(RingScope),
+}
+
+impl AtomConstraintKey {
+    /// The behavior of the constraint under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Valence
+            | Self::DonatedPairs
+            | Self::AcceptedPairs
+            | Self::AromaticValence
+            | Self::MulticenterValence
+            | Self::TetrahedralStereo
+            | Self::Degree
+            | Self::TotalDegree
+            | Self::TotalValence
+            | Self::RingDegree
+            | Self::RingValence
+            | Self::TotalHydrogens
+            | Self::RingMembership(_) => ReframeKind::Independent,
+        }
+    }
 }
 
 /// Atom constraint container, unique by key, sorted flat vector storage.
@@ -1639,6 +1660,30 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::valence(AtomConstraintKey::Valence, ReframeKind::Independent)]
+    #[case::donated_pairs(AtomConstraintKey::DonatedPairs, ReframeKind::Independent)]
+    #[case::accepted_pairs(AtomConstraintKey::AcceptedPairs, ReframeKind::Independent)]
+    #[case::aromatic_valence(AtomConstraintKey::AromaticValence, ReframeKind::Independent)]
+    #[case::multicenter_valence(AtomConstraintKey::MulticenterValence, ReframeKind::Independent)]
+    #[case::tetrahedral_stereo(AtomConstraintKey::TetrahedralStereo, ReframeKind::Independent)]
+    #[case::degree(AtomConstraintKey::Degree, ReframeKind::Independent)]
+    #[case::total_degree(AtomConstraintKey::TotalDegree, ReframeKind::Independent)]
+    #[case::total_valence(AtomConstraintKey::TotalValence, ReframeKind::Independent)]
+    #[case::ring_degree(AtomConstraintKey::RingDegree, ReframeKind::Independent)]
+    #[case::ring_valence(AtomConstraintKey::RingValence, ReframeKind::Independent)]
+    #[case::total_hydrogens(AtomConstraintKey::TotalHydrogens, ReframeKind::Independent)]
+    #[case::ring_membership(
+        AtomConstraintKey::RingMembership(RingScope::All),
+        ReframeKind::Independent
+    )]
+    fn test_atom_constraint_key_reframe_kind(
+        #[case] key: AtomConstraintKey,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(key.reframe_kind(), expected);
     }
 
     #[rstest]

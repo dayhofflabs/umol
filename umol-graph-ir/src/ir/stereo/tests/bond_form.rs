@@ -3,6 +3,15 @@ use pretty_assertions::assert_eq;
 use super::*;
 
 #[rstest]
+#[case::configuration(StereoBondFieldKind::Configuration, ReframeKind::Relative)]
+fn test_stereo_bond_field_kind_reframe_kind(
+    #[case] kind: StereoBondFieldKind,
+    #[case] expected: ReframeKind,
+) {
+    assert_eq!(kind.reframe_kind(), expected);
+}
+
+#[rstest]
 fn test_stereo_bond_form_new() {
     let stereo_bond = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined);
     assert_eq!(

@@ -20,7 +20,7 @@ use super::frame::AromaticSystemsFrameAction;
 use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// An aromatic system's atom frame and attributes.
 ///
@@ -639,6 +639,16 @@ pub enum AromaticSystemFieldKind {
     Electrons,
     Charge,
     UnpairedElectrons,
+}
+
+impl AromaticSystemFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Electrons => ReframeKind::Positional,
+            Self::Charge | Self::UnpairedElectrons => ReframeKind::Independent,
+        }
+    }
 }
 
 impl From<&str> for AromaticSystemForm {
@@ -1777,6 +1787,20 @@ mod tests {
             AromaticSystemForm::from_electrons(vec![10, 20, 30]),
         )]);
         assert!(!unsorted_system.framed_eq(&different));
+    }
+
+    #[rstest]
+    #[case::electrons(AromaticSystemFieldKind::Electrons, ReframeKind::Positional)]
+    #[case::charge(AromaticSystemFieldKind::Charge, ReframeKind::Independent)]
+    #[case::unpaired_electrons(
+        AromaticSystemFieldKind::UnpairedElectrons,
+        ReframeKind::Independent
+    )]
+    fn test_aromatic_system_field_kind_reframe_kind(
+        #[case] kind: AromaticSystemFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
     }
 
     #[rustfmt::skip]

@@ -20,7 +20,7 @@ use super::frame::MulticenterBondsFrameAction;
 use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A multicenter bond's atom frame and attributes.
 ///
@@ -638,6 +638,16 @@ pub enum MulticenterBondFieldKind {
     Electrons,
     Charge,
     UnpairedElectrons,
+}
+
+impl MulticenterBondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Electrons => ReframeKind::Positional,
+            Self::Charge | Self::UnpairedElectrons => ReframeKind::Independent,
+        }
+    }
 }
 
 impl From<&str> for MulticenterBondForm {
@@ -1720,6 +1730,20 @@ mod tests {
             MulticenterBondForm::from_electrons(vec![10, 20, 30]),
         )]);
         assert!(!unsorted_bond.framed_eq(&different));
+    }
+
+    #[rstest]
+    #[case::electrons(MulticenterBondFieldKind::Electrons, ReframeKind::Positional)]
+    #[case::charge(MulticenterBondFieldKind::Charge, ReframeKind::Independent)]
+    #[case::unpaired_electrons(
+        MulticenterBondFieldKind::UnpairedElectrons,
+        ReframeKind::Independent
+    )]
+    fn test_multicenter_bond_field_kind_reframe_kind(
+        #[case] kind: MulticenterBondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
     }
 
     #[rustfmt::skip]

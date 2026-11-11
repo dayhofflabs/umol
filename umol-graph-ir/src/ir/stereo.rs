@@ -30,7 +30,7 @@ use super::error::{Contradiction, NoJoinError};
 use super::frame::{StereoAtomsFrameAction, StereoBondsFrameAction};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
-use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A stereo atom's site, ligand frame, and attributes.
 ///
@@ -1530,10 +1530,28 @@ pub enum StereoAtomFieldKind {
     Configuration,
 }
 
+impl StereoAtomFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Configuration => ReframeKind::Relative,
+        }
+    }
+}
+
 /// Field discriminants of [`StereoBondForm`], mirroring `StereoBondFieldChange`'s variants.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
 pub enum StereoBondFieldKind {
     Configuration,
+}
+
+impl StereoBondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Configuration => ReframeKind::Relative,
+        }
+    }
 }
 
 /// Configuration portion of a stereo-element update.

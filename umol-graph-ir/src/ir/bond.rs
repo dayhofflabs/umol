@@ -6,7 +6,7 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Lattice, Normalize};
+use super::traits::{Lattice, Normalize, ReframeKind};
 
 /// Bond form: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
@@ -34,6 +34,15 @@ pub enum BondFieldKind {
     Order,
     Charge,
     UnpairedElectrons,
+}
+
+impl BondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Order | Self::Charge | Self::UnpairedElectrons => ReframeKind::Independent,
+        }
+    }
 }
 
 impl BondForm {
@@ -170,6 +179,17 @@ mod tests {
     use crate::ir::error::Contradiction;
     use crate::ir::traits::{Lattice, Normalize};
     use crate::ir::{BooleanForm, CisTransStereoForm};
+
+    #[rstest]
+    #[case::order(BondFieldKind::Order, ReframeKind::Independent)]
+    #[case::charge(BondFieldKind::Charge, ReframeKind::Independent)]
+    #[case::unpaired_electrons(BondFieldKind::UnpairedElectrons, ReframeKind::Independent)]
+    fn test_bond_field_kind_reframe_kind(
+        #[case] kind: BondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
+    }
 
     #[rustfmt::skip]
     #[rstest]

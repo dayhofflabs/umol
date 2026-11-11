@@ -1593,7 +1593,7 @@ The seven enums stand beside their forms and are exported from `ir` as `AtomFiel
 field-kind enums derive `VariantArray`. The key-and-kind entry of the nomenclature guide names them,
 and the `*Kind` count of its suffix table rises by seven. Clippy is clean.
 
-#### S6b — Reframe kind
+#### S6b — Reframe kind **Done**
 
 **Module:** `ir/traits.rs`, the modules of the eight forms, and the modules of `ir/constraint`.
 Additive (green). [dep: S6a]
@@ -1604,9 +1604,32 @@ electron counts of aromatic systems and multicenter bonds are `Positional`. The 
 stereo entity and its ligand-symmetry, fluxionality, and topicity keys are `Relative`. Every other
 field kind and constraint key is `Independent`. The nomenclature guide gains the term.
 
+`reframe_kind` replaces `uses_participant_frame`. A constraint form is asked through its key. Each
+of the six overlay deltas has `reframe_kind`: a `ModifyField` has the kind of its field, through
+`kind` on the eight `*FieldChange` enums, a `ModifyConstraint` that of its key, and an `Add` or a
+`Remove` is `Positional`, or `Relative` for a stereo entity.
+
 **Tests:** one `test_<enum>_reframe_kind` table per enum with a row per variant. A property over
 `reframe_by`: a field or a constraint whose kind is `Independent` is unchanged by every frame action
 of its entity, and a `Positional` field is permuted with the participants.
+
+`ReframeKind` stands after `FrameTransport` in `ir/traits.rs` and is exported from `ir`. Each of the
+sixteen enums has `reframe_kind`, written as a match over every variant. No
+`uses_participant_frame` remains: the constraint containers and the molecule-level constraints ask
+the constraint key, and the callers in `ir/delta.rs` and `ir/reaction.rs` ask the delta.
+
+Sixteen `test_<enum>_reframe_kind` tables hold 48 rows. The tables of the six constraint keys with a
+participant frame replace the six `uses_participant_frame` tables row for row. Six
+`test_<kind>_delta_reframe_kind` tables hold 30 rows, and eight `test_<kind>_field_change_kind`
+tables hold 19.
+
+Ten properties in `tests/property/frame.rs` check `reframe_kind` against `reframe_by`: the fields of
+dative bonds, aromatic systems, multicenter bonds, and noncovalent bonds, and the constraints of the
+six forms with a participant frame. The stereo forms have no `Independent` or `Positional` field.
+With `Electrons` or the topicity key set to `Independent`, the corresponding properties fail.
+
+The library tests, the property suite, and the integration tests pass, and clippy is clean. The
+nomenclature guide has the entry *Reframe kind*.
 
 #### S6c — Canonical equality pairs
 

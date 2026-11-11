@@ -68,7 +68,7 @@ use super::stereo::{
     StereoCoset, StereoKind, StereoTerm,
 };
 use super::substructure::SubstructureMatchConfig;
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 ///
@@ -2720,7 +2720,7 @@ fn reframe_deltas(
                     if matches!(delta, DativeBondDelta::Add { .. }) {
                         return Ok(Delta::DativeBond(delta));
                     }
-                    if delta.uses_participant_frame() {
+                    if delta.reframe_kind() != ReframeKind::Independent {
                         let action = actions
                             .dative_bond_action(id)
                             .ok_or(ApplyError::InternalInvariant)?;
@@ -2756,7 +2756,7 @@ fn reframe_deltas(
                     if matches!(delta, AromaticSystemDelta::Add { .. }) {
                         return Ok(Delta::AromaticSystem(delta));
                     }
-                    if delta.uses_participant_frame() {
+                    if delta.reframe_kind() != ReframeKind::Independent {
                         let action = actions
                             .aromatic_system_action(id)
                             .ok_or(ApplyError::InternalInvariant)?;
@@ -2804,7 +2804,7 @@ fn reframe_deltas(
                     if matches!(delta, MulticenterBondDelta::Add { .. }) {
                         return Ok(Delta::MulticenterBond(delta));
                     }
-                    if delta.uses_participant_frame() {
+                    if delta.reframe_kind() != ReframeKind::Independent {
                         let action = actions
                             .multicenter_bond_action(id)
                             .ok_or(ApplyError::InternalInvariant)?;
@@ -2852,7 +2852,7 @@ fn reframe_deltas(
                     if matches!(delta, NoncovalentBondDelta::Add { .. }) {
                         return Ok(Delta::NoncovalentBond(delta));
                     }
-                    if delta.uses_participant_frame() {
+                    if delta.reframe_kind() != ReframeKind::Independent {
                         let action = actions
                             .noncovalent_bond_action(id)
                             .ok_or(ApplyError::InternalInvariant)?;
@@ -2883,7 +2883,7 @@ fn reframe_deltas(
                     if matches!(delta, StereoAtomDelta::Add { .. }) {
                         return Ok(Delta::StereoAtom(delta));
                     }
-                    if delta.uses_participant_frame() {
+                    if delta.reframe_kind() != ReframeKind::Independent {
                         let action = actions
                             .stereo_atom_action(id)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
@@ -2935,7 +2935,7 @@ fn reframe_deltas(
                     if matches!(delta, StereoBondDelta::Add { .. }) {
                         return Ok(Delta::StereoBond(delta));
                     }
-                    if delta.uses_participant_frame() {
+                    if delta.reframe_kind() != ReframeKind::Independent {
                         let action = actions
                             .stereo_bond_action(id)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;

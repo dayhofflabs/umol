@@ -52,7 +52,7 @@ use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
     StereoKind,
 };
-use super::traits::{EntityPatch, FrameTransport, Lattice, Normalize};
+use super::traits::{EntityPatch, FrameTransport, Lattice, Normalize, ReframeKind};
 
 /// A resolved edit to a single atom.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -314,16 +314,18 @@ pub enum DativeBondDelta {
 }
 
 impl DativeBondDelta {
-    pub(crate) fn uses_participant_frame(&self) -> bool {
+    /// The behavior of the delta under an action on the participant frame of its entity. An `Add`
+    /// or a `Remove` carries the participant list, which is positional.
+    pub fn reframe_kind(&self) -> ReframeKind {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
-            Self::ModifyField { change, .. } => match change {
-                DativeBondFieldChange::Order { .. } => false,
-            },
+            Self::Add { .. } | Self::Remove { .. } => ReframeKind::Positional,
+            Self::ModifyField { change, .. } => change.kind().reframe_kind(),
             Self::ModifyConstraint { old, new, .. } => old
                 .iter()
                 .chain(new)
-                .any(DativeBondConstraintForm::uses_participant_frame),
+                .map(|constraint| constraint.key().reframe_kind())
+                .find(|kind| *kind != ReframeKind::Independent)
+                .unwrap_or(ReframeKind::Independent),
         }
     }
 
@@ -418,18 +420,18 @@ pub enum AromaticSystemDelta {
 }
 
 impl AromaticSystemDelta {
-    pub(crate) fn uses_participant_frame(&self) -> bool {
+    /// The behavior of the delta under an action on the participant frame of its entity. An `Add`
+    /// or a `Remove` carries the participant list, which is positional.
+    pub fn reframe_kind(&self) -> ReframeKind {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
-            Self::ModifyField { change, .. } => match change {
-                AromaticSystemFieldChange::Electrons { .. } => true,
-                AromaticSystemFieldChange::Charge { .. }
-                | AromaticSystemFieldChange::UnpairedElectrons { .. } => false,
-            },
+            Self::Add { .. } | Self::Remove { .. } => ReframeKind::Positional,
+            Self::ModifyField { change, .. } => change.kind().reframe_kind(),
             Self::ModifyConstraint { old, new, .. } => old
                 .iter()
                 .chain(new)
-                .any(AromaticSystemConstraintForm::uses_participant_frame),
+                .map(|constraint| constraint.key().reframe_kind())
+                .find(|kind| *kind != ReframeKind::Independent)
+                .unwrap_or(ReframeKind::Independent),
         }
     }
 
@@ -546,18 +548,18 @@ pub enum MulticenterBondDelta {
 }
 
 impl MulticenterBondDelta {
-    pub(crate) fn uses_participant_frame(&self) -> bool {
+    /// The behavior of the delta under an action on the participant frame of its entity. An `Add`
+    /// or a `Remove` carries the participant list, which is positional.
+    pub fn reframe_kind(&self) -> ReframeKind {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
-            Self::ModifyField { change, .. } => match change {
-                MulticenterBondFieldChange::Electrons { .. } => true,
-                MulticenterBondFieldChange::Charge { .. }
-                | MulticenterBondFieldChange::UnpairedElectrons { .. } => false,
-            },
+            Self::Add { .. } | Self::Remove { .. } => ReframeKind::Positional,
+            Self::ModifyField { change, .. } => change.kind().reframe_kind(),
             Self::ModifyConstraint { old, new, .. } => old
                 .iter()
                 .chain(new)
-                .any(MulticenterBondConstraintForm::uses_participant_frame),
+                .map(|constraint| constraint.key().reframe_kind())
+                .find(|kind| *kind != ReframeKind::Independent)
+                .unwrap_or(ReframeKind::Independent),
         }
     }
 
@@ -674,16 +676,18 @@ pub enum NoncovalentBondDelta {
 }
 
 impl NoncovalentBondDelta {
-    pub(crate) fn uses_participant_frame(&self) -> bool {
+    /// The behavior of the delta under an action on the participant frame of its entity. An `Add`
+    /// or a `Remove` carries the participant list, which is positional.
+    pub fn reframe_kind(&self) -> ReframeKind {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
-            Self::ModifyField { change, .. } => match change {
-                NoncovalentBondFieldChange::Kind { .. } => false,
-            },
+            Self::Add { .. } | Self::Remove { .. } => ReframeKind::Positional,
+            Self::ModifyField { change, .. } => change.kind().reframe_kind(),
             Self::ModifyConstraint { old, new, .. } => old
                 .iter()
                 .chain(new)
-                .any(NoncovalentBondConstraintForm::uses_participant_frame),
+                .map(|constraint| constraint.key().reframe_kind())
+                .find(|kind| *kind != ReframeKind::Independent)
+                .unwrap_or(ReframeKind::Independent),
         }
     }
 
@@ -792,16 +796,18 @@ impl StereoAtomDelta {
         }
     }
 
-    pub(crate) fn uses_participant_frame(&self) -> bool {
+    /// The behavior of the delta under an action on the participant frame of its entity. An `Add`
+    /// or a `Remove` carries the ligand frame and a configuration stated relative to it.
+    pub fn reframe_kind(&self) -> ReframeKind {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
-            Self::ModifyField { change, .. } => match change {
-                StereoAtomFieldChange::Configuration { .. } => true,
-            },
+            Self::Add { .. } | Self::Remove { .. } => ReframeKind::Relative,
+            Self::ModifyField { change, .. } => change.kind().reframe_kind(),
             Self::ModifyConstraint { old, new, .. } => old
                 .iter()
                 .chain(new)
-                .any(StereoAtomConstraintForm::uses_participant_frame),
+                .map(|constraint| constraint.key().reframe_kind())
+                .find(|kind| *kind != ReframeKind::Independent)
+                .unwrap_or(ReframeKind::Independent),
         }
     }
 
@@ -919,16 +925,18 @@ impl StereoBondDelta {
         }
     }
 
-    pub(crate) fn uses_participant_frame(&self) -> bool {
+    /// The behavior of the delta under an action on the participant frame of its entity. An `Add`
+    /// or a `Remove` carries the ligand frame and a configuration stated relative to it.
+    pub fn reframe_kind(&self) -> ReframeKind {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
-            Self::ModifyField { change, .. } => match change {
-                StereoBondFieldChange::Configuration { .. } => true,
-            },
+            Self::Add { .. } | Self::Remove { .. } => ReframeKind::Relative,
+            Self::ModifyField { change, .. } => change.kind().reframe_kind(),
             Self::ModifyConstraint { old, new, .. } => old
                 .iter()
                 .chain(new)
-                .any(StereoBondConstraintForm::uses_participant_frame),
+                .map(|constraint| constraint.key().reframe_kind())
+                .find(|kind| *kind != ReframeKind::Independent)
+                .unwrap_or(ReframeKind::Independent),
         }
     }
 
@@ -1404,7 +1412,7 @@ impl Delta {
         match self {
             Self::Atom(_) | Self::Bond(_) => {}
             Self::DativeBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match delta {
                         DativeBondDelta::Add { id, .. }
                         | DativeBondDelta::Remove { id, .. }
@@ -1415,7 +1423,7 @@ impl Delta {
                 }
             }
             Self::AromaticSystem(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match delta {
                         AromaticSystemDelta::Add { id, .. }
                         | AromaticSystemDelta::Remove { id, .. }
@@ -1426,7 +1434,7 @@ impl Delta {
                 }
             }
             Self::MulticenterBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match delta {
                         MulticenterBondDelta::Add { id, .. }
                         | MulticenterBondDelta::Remove { id, .. }
@@ -1437,7 +1445,7 @@ impl Delta {
                 }
             }
             Self::NoncovalentBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match delta {
                         NoncovalentBondDelta::Add { id, .. }
                         | NoncovalentBondDelta::Remove { id, .. }
@@ -1448,12 +1456,12 @@ impl Delta {
                 }
             }
             Self::StereoAtom(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     domain.insert_stereo_atom(delta.id());
                 }
             }
             Self::StereoBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     domain.insert_stereo_bond(delta.id());
                 }
             }
@@ -1469,7 +1477,7 @@ impl Delta {
             Self::Atom(delta) => Self::Atom(delta),
             Self::Bond(delta) => Self::Bond(delta),
             Self::DativeBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match &delta {
                         DativeBondDelta::Add { id, .. }
                         | DativeBondDelta::Remove { id, .. }
@@ -1484,7 +1492,7 @@ impl Delta {
                 }
             }
             Self::AromaticSystem(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match &delta {
                         AromaticSystemDelta::Add { id, .. }
                         | AromaticSystemDelta::Remove { id, .. }
@@ -1499,7 +1507,7 @@ impl Delta {
                 }
             }
             Self::MulticenterBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match &delta {
                         MulticenterBondDelta::Add { id, .. }
                         | MulticenterBondDelta::Remove { id, .. }
@@ -1514,7 +1522,7 @@ impl Delta {
                 }
             }
             Self::NoncovalentBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let id = match &delta {
                         NoncovalentBondDelta::Add { id, .. }
                         | NoncovalentBondDelta::Remove { id, .. }
@@ -1529,7 +1537,7 @@ impl Delta {
                 }
             }
             Self::StereoAtom(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let entity = Entity::StereoAtom(delta.id());
                     let action = actions.stereo_atom_action(delta.id()).ok_or(entity)?;
                     Self::StereoAtom(delta.reframe_by(action).ok_or(entity)?)
@@ -1538,7 +1546,7 @@ impl Delta {
                 }
             }
             Self::StereoBond(delta) => {
-                if delta.uses_participant_frame() {
+                if delta.reframe_kind() != ReframeKind::Independent {
                     let entity = Entity::StereoBond(delta.id());
                     let action = actions.stereo_bond_action(delta.id()).ok_or(entity)?;
                     Self::StereoBond(delta.reframe_by(action).ok_or(entity)?)
@@ -3534,8 +3542,9 @@ mod tests {
         DativeBondConstraintsForm, ElectronCountsForm, ElementForm, IsotopeMassForm,
         MulticenterBondConstraintsForm, NoncovalentBondConstraintsForm, NoncovalentBondKindForm,
         RingScope, StereoAtomConstraintsForm, StereoBondConstraintsForm, StereoConfigurationForm,
-        StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
-        StereogenicityForm, UnpairedElectronsForm, UnpairedElectronsUpdate,
+        StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, StereoLigandPair,
+        StereoLigandPosition, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
+        TopicityRelationForm, UnpairedElectronsForm, UnpairedElectronsUpdate,
     };
 
     #[fixture]
@@ -3849,6 +3858,50 @@ mod tests {
         assert_eq!(BondDelta::for_update(BondId(0), &current, &update), Vec::new());
     }
 
+    #[rstest]
+    #[case::add(
+        DativeBondDelta::Add {
+            id: DativeBondId(0),
+            donors: vec![AtomId(0), AtomId(1)],
+            acceptor: AtomId(2),
+            attributes: DativeBondForm::from_order(1),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::remove(
+        DativeBondDelta::Remove {
+            id: DativeBondId(0),
+            donors: vec![AtomId(0), AtomId(1)],
+            acceptor: AtomId(2),
+            attributes: DativeBondForm::from_order(1),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::modify_order(
+        DativeBondDelta::ModifyField {
+            id: DativeBondId(0),
+            change: DativeBondFieldChange::Order {
+                old: NumForm::Lit(1),
+                new: NumForm::Lit(2),
+            },
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_constraint(
+        DativeBondDelta::ModifyConstraint {
+            id: DativeBondId(0),
+            old: None,
+            new: Some(DativeBondConstraintForm::aromatic(true)),
+        },
+        ReframeKind::Independent,
+    )]
+    fn test_dative_bond_delta_reframe_kind(
+        #[case] delta: DativeBondDelta,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(delta.reframe_kind(), expected);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::fields_and_constraints(
@@ -3898,6 +3951,68 @@ mod tests {
             DativeBondDelta::for_update(DativeBondId(0), &current, &update),
             Vec::new(),
         );
+    }
+
+    #[rstest]
+    #[case::add(
+        AromaticSystemDelta::Add {
+            id: AromaticSystemId(0),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1, 2]),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::remove(
+        AromaticSystemDelta::Remove {
+            id: AromaticSystemId(0),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1, 2]),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::modify_electrons(
+        AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![1, 1, 2]),
+                new: ElectronCountsForm::Lit(vec![1, 2, 2]),
+            },
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::modify_charge(
+        AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::Lit(1),
+            },
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_unpaired_electrons(
+        AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsForm::default(),
+                new: UnpairedElectronsForm::from((1_u8, 2_u8)),
+            },
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_constraint(
+        AromaticSystemDelta::ModifyConstraint {
+            id: AromaticSystemId(0),
+            old: None,
+            new: Some(AromaticSystemConstraintForm::electron_count(6_i64)),
+        },
+        ReframeKind::Independent,
+    )]
+    fn test_aromatic_system_delta_reframe_kind(
+        #[case] delta: AromaticSystemDelta,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(delta.reframe_kind(), expected);
     }
 
     #[rustfmt::skip]
@@ -3951,6 +4066,68 @@ mod tests {
             AromaticSystemDelta::for_update(AromaticSystemId(0), &current, &update),
             Vec::new(),
         );
+    }
+
+    #[rstest]
+    #[case::add(
+        MulticenterBondDelta::Add {
+            id: MulticenterBondId(0),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1, 2]),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::remove(
+        MulticenterBondDelta::Remove {
+            id: MulticenterBondId(0),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1, 2]),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::modify_electrons(
+        MulticenterBondDelta::ModifyField {
+            id: MulticenterBondId(0),
+            change: MulticenterBondFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![1, 1, 2]),
+                new: ElectronCountsForm::Lit(vec![1, 2, 2]),
+            },
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::modify_charge(
+        MulticenterBondDelta::ModifyField {
+            id: MulticenterBondId(0),
+            change: MulticenterBondFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::Lit(1),
+            },
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_unpaired_electrons(
+        MulticenterBondDelta::ModifyField {
+            id: MulticenterBondId(0),
+            change: MulticenterBondFieldChange::UnpairedElectrons {
+                old: UnpairedElectronsForm::default(),
+                new: UnpairedElectronsForm::from((1_u8, 2_u8)),
+            },
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_constraint(
+        MulticenterBondDelta::ModifyConstraint {
+            id: MulticenterBondId(0),
+            old: None,
+            new: Some(MulticenterBondConstraintForm::electron_count(6_i64)),
+        },
+        ReframeKind::Independent,
+    )]
+    fn test_multicenter_bond_delta_reframe_kind(
+        #[case] delta: MulticenterBondDelta,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(delta.reframe_kind(), expected);
     }
 
     #[rustfmt::skip]
@@ -4009,6 +4186,48 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::add(
+        NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::remove(
+        NoncovalentBondDelta::Remove {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        },
+        ReframeKind::Positional,
+    )]
+    #[case::modify_kind(
+        NoncovalentBondDelta::ModifyField {
+            id: NoncovalentBondId(0),
+            change: NoncovalentBondFieldChange::Kind {
+                old: NoncovalentBondKindForm::Undetermined,
+                new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+            },
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_constraint(
+        NoncovalentBondDelta::ModifyConstraint {
+            id: NoncovalentBondId(0),
+            old: None,
+            new: Some(NoncovalentBondConstraintForm::intramolecular(true)),
+        },
+        ReframeKind::Independent,
+    )]
+    fn test_noncovalent_bond_delta_reframe_kind(
+        #[case] delta: NoncovalentBondDelta,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(delta.reframe_kind(), expected);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::kind_and_constraint(
@@ -4053,6 +4272,65 @@ mod tests {
             NoncovalentBondDelta::for_update(NoncovalentBondId(0), &current, &update),
             Vec::new(),
         );
+    }
+
+    #[rstest]
+    #[case::add(
+        StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        },
+        ReframeKind::Relative,
+    )]
+    #[case::remove(
+        StereoAtomDelta::Remove {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        },
+        ReframeKind::Relative,
+    )]
+    #[case::modify_configuration(
+        StereoAtomDelta::ModifyField {
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            },
+        },
+        ReframeKind::Relative,
+    )]
+    #[case::modify_stereogenicity(
+        StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: Some(StereoKind::Tetrahedral),
+            old: None,
+            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            ))),
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_topicity(
+        StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: Some(StereoKind::Tetrahedral),
+            old: Some(StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            })),
+            new: None,
+        },
+        ReframeKind::Relative,
+    )]
+    fn test_stereo_atom_delta_reframe_kind(
+        #[case] delta: StereoAtomDelta,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(delta.reframe_kind(), expected);
     }
 
     #[rstest]
@@ -4192,6 +4470,65 @@ mod tests {
             StereoAtomDelta::for_update(StereoAtomId(0), &current, &update),
             Vec::new(),
         );
+    }
+
+    #[rstest]
+    #[case::add(
+        StereoBondDelta::Add {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        },
+        ReframeKind::Relative,
+    )]
+    #[case::remove(
+        StereoBondDelta::Remove {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        },
+        ReframeKind::Relative,
+    )]
+    #[case::modify_configuration(
+        StereoBondDelta::ModifyField {
+            id: StereoBondId(0),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            },
+        },
+        ReframeKind::Relative,
+    )]
+    #[case::modify_stereogenicity(
+        StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(0),
+            kind: Some(StereoKind::CisTrans),
+            old: None,
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            ))),
+        },
+        ReframeKind::Independent,
+    )]
+    #[case::modify_topicity(
+        StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(0),
+            kind: Some(StereoKind::CisTrans),
+            old: Some(StereoBondConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            })),
+            new: None,
+        },
+        ReframeKind::Relative,
+    )]
+    fn test_stereo_bond_delta_reframe_kind(
+        #[case] delta: StereoBondDelta,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(delta.reframe_kind(), expected);
     }
 
     #[rstest]

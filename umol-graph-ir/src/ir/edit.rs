@@ -13,9 +13,9 @@ use std::vec::IntoIter;
 
 use thiserror::Error;
 
-use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
-use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
-use super::bond::{BondForm, BondUpdate};
+use super::aromatic::{AromaticSystemFieldKind, AromaticSystemForm, AromaticSystemUpdate};
+use super::atom::{AtomFieldKind, AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
+use super::bond::{BondFieldKind, BondForm, BondUpdate};
 use super::compact::{MoleculeCompaction, UndoCompaction};
 use super::constraint::{
     AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
@@ -25,7 +25,7 @@ use super::constraint::{
     RelationalConstraint, StereoAtomConstraintForm, StereoAtomConstraintKey,
     StereoBondConstraintForm, StereoBondConstraintKey,
 };
-use super::dative::{DativeBondForm, DativeBondUpdate};
+use super::dative::{DativeBondFieldKind, DativeBondForm, DativeBondUpdate};
 use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::id::{
@@ -33,13 +33,15 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
-use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
+use super::multicenter::{MulticenterBondFieldKind, MulticenterBondForm, MulticenterBondUpdate};
+use super::noncovalent::{
+    NoncovalentBondFieldKind, NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate,
+};
 use super::num::NumForm;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
-    StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
-    StereoKind,
+    StereoAtomFieldKind, StereoAtomForm, StereoAtomUpdate, StereoBondFieldKind, StereoBondForm,
+    StereoBondUpdate, StereoConfigurationForm, StereoKind,
 };
 use super::traits::{Lattice, Normalize};
 
@@ -105,6 +107,18 @@ pub enum AtomFieldChange {
 }
 
 impl AtomFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> AtomFieldKind {
+        match self {
+            Self::Element { .. } => AtomFieldKind::Element,
+            Self::IsotopeMass { .. } => AtomFieldKind::IsotopeMass,
+            Self::Charge { .. } => AtomFieldKind::Charge,
+            Self::ImplicitHydrogens { .. } => AtomFieldKind::ImplicitHydrogens,
+            Self::LonePairs { .. } => AtomFieldKind::LonePairs,
+            Self::UnpairedElectrons { .. } => AtomFieldKind::UnpairedElectrons,
+        }
+    }
+
     /// Swap `old` and `new` across all variants.
     pub fn inverse(self) -> Self {
         match self {
@@ -135,6 +149,15 @@ pub enum BondFieldChange {
 }
 
 impl BondFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> BondFieldKind {
+        match self {
+            Self::Order { .. } => BondFieldKind::Order,
+            Self::Charge { .. } => BondFieldKind::Charge,
+            Self::UnpairedElectrons { .. } => BondFieldKind::UnpairedElectrons,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Order { old, new } => Self::Order { old: new, new: old },
@@ -150,6 +173,13 @@ pub enum DativeBondFieldChange {
 }
 
 impl DativeBondFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> DativeBondFieldKind {
+        match self {
+            Self::Order { .. } => DativeBondFieldKind::Order,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Order { old, new } => Self::Order { old: new, new: old },
@@ -174,6 +204,15 @@ pub enum AromaticSystemFieldChange {
 }
 
 impl AromaticSystemFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> AromaticSystemFieldKind {
+        match self {
+            Self::Electrons { .. } => AromaticSystemFieldKind::Electrons,
+            Self::Charge { .. } => AromaticSystemFieldKind::Charge,
+            Self::UnpairedElectrons { .. } => AromaticSystemFieldKind::UnpairedElectrons,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Electrons { old, new } => Self::Electrons { old: new, new: old },
@@ -200,6 +239,15 @@ pub enum MulticenterBondFieldChange {
 }
 
 impl MulticenterBondFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> MulticenterBondFieldKind {
+        match self {
+            Self::Electrons { .. } => MulticenterBondFieldKind::Electrons,
+            Self::Charge { .. } => MulticenterBondFieldKind::Charge,
+            Self::UnpairedElectrons { .. } => MulticenterBondFieldKind::UnpairedElectrons,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Electrons { old, new } => Self::Electrons { old: new, new: old },
@@ -218,6 +266,13 @@ pub enum NoncovalentBondFieldChange {
 }
 
 impl NoncovalentBondFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> NoncovalentBondFieldKind {
+        match self {
+            Self::Kind { .. } => NoncovalentBondFieldKind::Kind,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Kind { old, new } => Self::Kind { old: new, new: old },
@@ -235,6 +290,13 @@ pub enum StereoAtomFieldChange {
 }
 
 impl StereoAtomFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> StereoAtomFieldKind {
+        match self {
+            Self::Configuration { .. } => StereoAtomFieldKind::Configuration,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Configuration { old, new } => Self::Configuration { old: new, new: old },
@@ -253,6 +315,13 @@ pub enum StereoBondFieldChange {
 }
 
 impl StereoBondFieldChange {
+    /// The kind of the changed field.
+    pub fn kind(&self) -> StereoBondFieldKind {
+        match self {
+            Self::Configuration { .. } => StereoBondFieldKind::Configuration,
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Configuration { old, new } => Self::Configuration { old: new, new: old },
@@ -3111,6 +3180,56 @@ mod tests {
             old: ElementForm::Lit(Element::C),
             new: ElementForm::Lit(Element::N),
         },
+        AtomFieldKind::Element,
+    )]
+    #[case::isotope_mass(
+        AtomFieldChange::IsotopeMass {
+            old: IsotopeMassForm::Natural,
+            new: IsotopeMassForm::Lit(13),
+        },
+        AtomFieldKind::IsotopeMass,
+    )]
+    #[case::charge(
+        AtomFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+        AtomFieldKind::Charge,
+    )]
+    #[case::implicit_hydrogens(
+        AtomFieldChange::ImplicitHydrogens {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+        AtomFieldKind::ImplicitHydrogens,
+    )]
+    #[case::lone_pairs(
+        AtomFieldChange::LonePairs {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+        AtomFieldKind::LonePairs,
+    )]
+    #[case::unpaired_electrons(
+        AtomFieldChange::UnpairedElectrons {
+            old: UnpairedElectronsForm::default(),
+            new: UnpairedElectronsForm::from((1_u8, 2_u8)),
+        },
+        AtomFieldKind::UnpairedElectrons,
+    )]
+    fn test_atom_field_change_kind(
+        #[case] change: AtomFieldChange,
+        #[case] expected: AtomFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
+    }
+
+    #[rstest]
+    #[case::element(
+        AtomFieldChange::Element {
+            old: ElementForm::Lit(Element::C),
+            new: ElementForm::Lit(Element::N),
+        },
         AtomFieldChange::Element {
             old: ElementForm::Lit(Element::N),
             new: ElementForm::Lit(Element::C),
@@ -3135,6 +3254,109 @@ mod tests {
     }
 
     #[rstest]
+    #[case::order(
+        DativeBondFieldChange::Order {
+            old: NumForm::Lit(1),
+            new: NumForm::Lit(2),
+        },
+        DativeBondFieldKind::Order,
+    )]
+    fn test_dative_bond_field_change_kind(
+        #[case] change: DativeBondFieldChange,
+        #[case] expected: DativeBondFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
+    }
+
+    #[rstest]
+    #[case::electrons(
+        AromaticSystemFieldChange::Electrons {
+            old: ElectronCountsForm::Lit(vec![1, 1]),
+            new: ElectronCountsForm::Lit(vec![1, 2]),
+        },
+        AromaticSystemFieldKind::Electrons,
+    )]
+    #[case::charge(
+        AromaticSystemFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+        AromaticSystemFieldKind::Charge,
+    )]
+    #[case::unpaired_electrons(
+        AromaticSystemFieldChange::UnpairedElectrons {
+            old: UnpairedElectronsForm::default(),
+            new: UnpairedElectronsForm::from((1_u8, 2_u8)),
+        },
+        AromaticSystemFieldKind::UnpairedElectrons,
+    )]
+    fn test_aromatic_system_field_change_kind(
+        #[case] change: AromaticSystemFieldChange,
+        #[case] expected: AromaticSystemFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
+    }
+
+    #[rstest]
+    #[case::electrons(
+        MulticenterBondFieldChange::Electrons {
+            old: ElectronCountsForm::Lit(vec![1, 1]),
+            new: ElectronCountsForm::Lit(vec![1, 2]),
+        },
+        MulticenterBondFieldKind::Electrons,
+    )]
+    #[case::charge(
+        MulticenterBondFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+        MulticenterBondFieldKind::Charge,
+    )]
+    #[case::unpaired_electrons(
+        MulticenterBondFieldChange::UnpairedElectrons {
+            old: UnpairedElectronsForm::default(),
+            new: UnpairedElectronsForm::from((1_u8, 2_u8)),
+        },
+        MulticenterBondFieldKind::UnpairedElectrons,
+    )]
+    fn test_multicenter_bond_field_change_kind(
+        #[case] change: MulticenterBondFieldChange,
+        #[case] expected: MulticenterBondFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
+    }
+
+    #[rstest]
+    #[case::kind(
+        NoncovalentBondFieldChange::Kind {
+            old: NoncovalentBondKindForm::Undetermined,
+            new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+        },
+        NoncovalentBondFieldKind::Kind,
+    )]
+    fn test_noncovalent_bond_field_change_kind(
+        #[case] change: NoncovalentBondFieldChange,
+        #[case] expected: NoncovalentBondFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
+    }
+
+    #[rstest]
+    #[case::configuration(
+        StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        },
+        StereoAtomFieldKind::Configuration,
+    )]
+    fn test_stereo_atom_field_change_kind(
+        #[case] change: StereoAtomFieldChange,
+        #[case] expected: StereoAtomFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
+    }
+
+    #[rstest]
     #[case::configuration(
         StereoAtomFieldChange::Configuration {
             old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
@@ -3151,6 +3373,21 @@ mod tests {
     ) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    #[case::configuration(
+        StereoBondFieldChange::Configuration {
+            old: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+        },
+        StereoBondFieldKind::Configuration,
+    )]
+    fn test_stereo_bond_field_change_kind(
+        #[case] change: StereoBondFieldChange,
+        #[case] expected: StereoBondFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
     }
 
     #[rstest]
@@ -4338,6 +4575,35 @@ mod tests {
         );
 
         assert_eq!(edits, Edits::new());
+    }
+
+    #[rstest]
+    #[case::order(
+        BondFieldChange::Order {
+            old: NumForm::Lit(1),
+            new: NumForm::Lit(2),
+        },
+        BondFieldKind::Order,
+    )]
+    #[case::charge(
+        BondFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+        BondFieldKind::Charge,
+    )]
+    #[case::unpaired_electrons(
+        BondFieldChange::UnpairedElectrons {
+            old: UnpairedElectronsForm::default(),
+            new: UnpairedElectronsForm::from((1_u8, 2_u8)),
+        },
+        BondFieldKind::UnpairedElectrons,
+    )]
+    fn test_bond_field_change_kind(
+        #[case] change: BondFieldChange,
+        #[case] expected: BondFieldKind,
+    ) {
+        assert_eq!(change.kind(), expected);
     }
 
     #[rstest]

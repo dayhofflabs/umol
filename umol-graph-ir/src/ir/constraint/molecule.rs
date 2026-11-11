@@ -21,7 +21,7 @@ use super::super::id::{
 use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
-use super::super::traits::{FrameTransport, Lattice, Normalize};
+use super::super::traits::{FrameTransport, Lattice, Normalize, ReframeKind};
 use super::aromatic::AromaticSystemConstraintForm;
 use super::atom::AtomConstraintForm;
 use super::bond::BondConstraintForm;
@@ -371,22 +371,34 @@ impl Constraint {
 
     pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
         match self {
-            Self::DativeBond(id, constraint) if constraint.uses_participant_frame() => {
+            Self::DativeBond(id, constraint)
+                if constraint.key().reframe_kind() != ReframeKind::Independent =>
+            {
                 domain.insert_dative_bond(*id)
             }
-            Self::AromaticSystem(id, constraint) if constraint.uses_participant_frame() => {
+            Self::AromaticSystem(id, constraint)
+                if constraint.key().reframe_kind() != ReframeKind::Independent =>
+            {
                 domain.insert_aromatic_system(*id)
             }
-            Self::MulticenterBond(id, constraint) if constraint.uses_participant_frame() => {
+            Self::MulticenterBond(id, constraint)
+                if constraint.key().reframe_kind() != ReframeKind::Independent =>
+            {
                 domain.insert_multicenter_bond(*id)
             }
-            Self::NoncovalentBond(id, constraint) if constraint.uses_participant_frame() => {
+            Self::NoncovalentBond(id, constraint)
+                if constraint.key().reframe_kind() != ReframeKind::Independent =>
+            {
                 domain.insert_noncovalent_bond(*id)
             }
-            Self::StereoAtom(id, _, constraint) if constraint.uses_participant_frame() => {
+            Self::StereoAtom(id, _, constraint)
+                if constraint.key().reframe_kind() != ReframeKind::Independent =>
+            {
                 domain.insert_stereo_atom(*id)
             }
-            Self::StereoBond(id, _, constraint) if constraint.uses_participant_frame() => {
+            Self::StereoBond(id, _, constraint)
+                if constraint.key().reframe_kind() != ReframeKind::Independent =>
+            {
                 domain.insert_stereo_bond(*id)
             }
             Self::Relational(constraint) => constraint.collect_frame_action_domain(domain),
@@ -414,7 +426,7 @@ impl Constraint {
     ) -> Result<Self, Entity> {
         Ok(match self {
             Self::DativeBond(id, constraint) => {
-                if constraint.uses_participant_frame() {
+                if constraint.key().reframe_kind() != ReframeKind::Independent {
                     let action = actions
                         .dative_bond_action(id)
                         .ok_or(Entity::DativeBond(id))?;
@@ -429,7 +441,7 @@ impl Constraint {
                 }
             }
             Self::AromaticSystem(id, constraint) => {
-                if constraint.uses_participant_frame() {
+                if constraint.key().reframe_kind() != ReframeKind::Independent {
                     let action = actions
                         .aromatic_system_action(id)
                         .ok_or(Entity::AromaticSystem(id))?;
@@ -444,7 +456,7 @@ impl Constraint {
                 }
             }
             Self::MulticenterBond(id, constraint) => {
-                if constraint.uses_participant_frame() {
+                if constraint.key().reframe_kind() != ReframeKind::Independent {
                     let action = actions
                         .multicenter_bond_action(id)
                         .ok_or(Entity::MulticenterBond(id))?;
@@ -459,7 +471,7 @@ impl Constraint {
                 }
             }
             Self::NoncovalentBond(id, constraint) => {
-                if constraint.uses_participant_frame() {
+                if constraint.key().reframe_kind() != ReframeKind::Independent {
                     let action = actions
                         .noncovalent_bond_action(id)
                         .ok_or(Entity::NoncovalentBond(id))?;
@@ -474,7 +486,7 @@ impl Constraint {
                 }
             }
             Self::StereoAtom(id, kind, constraint) => {
-                if !constraint.uses_participant_frame() {
+                if constraint.key().reframe_kind() == ReframeKind::Independent {
                     Self::StereoAtom(id, kind, constraint)
                 } else {
                     let entity = Entity::StereoAtom(id);
@@ -486,7 +498,7 @@ impl Constraint {
                 }
             }
             Self::StereoBond(id, kind, constraint) => {
-                if !constraint.uses_participant_frame() {
+                if constraint.key().reframe_kind() == ReframeKind::Independent {
                     Self::StereoBond(id, kind, constraint)
                 } else {
                     let entity = Entity::StereoBond(id);

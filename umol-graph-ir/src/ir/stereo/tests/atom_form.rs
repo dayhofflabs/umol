@@ -3,6 +3,15 @@ use pretty_assertions::assert_eq;
 use super::*;
 
 #[rstest]
+#[case::configuration(StereoAtomFieldKind::Configuration, ReframeKind::Relative)]
+fn test_stereo_atom_field_kind_reframe_kind(
+    #[case] kind: StereoAtomFieldKind,
+    #[case] expected: ReframeKind,
+) {
+    assert_eq!(kind.reframe_kind(), expected);
+}
+
+#[rstest]
 fn test_stereo_atom_form_new() {
     let stereo_atom = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
     assert_eq!(

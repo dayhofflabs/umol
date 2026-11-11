@@ -18,7 +18,7 @@ use super::error::Contradiction;
 use super::frame::DativeBondsFrameAction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A dative bond's donor frame, acceptor, and attributes.
 ///
@@ -669,6 +669,15 @@ pub struct DativeBondUpdate {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
 pub enum DativeBondFieldKind {
     Order,
+}
+
+impl DativeBondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Order => ReframeKind::Independent,
+        }
+    }
 }
 
 impl DativeBondForm {
@@ -1738,6 +1747,15 @@ mod tests {
             DativeBondForm::from_order(2),
         )]);
         assert!(!unsorted_bond.framed_eq(&different));
+    }
+
+    #[rstest]
+    #[case::order(DativeBondFieldKind::Order, ReframeKind::Independent)]
+    fn test_dative_bond_field_kind_reframe_kind(
+        #[case] kind: DativeBondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
     }
 
     #[rstest]

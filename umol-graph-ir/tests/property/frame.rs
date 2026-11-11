@@ -5,11 +5,19 @@
 //! from independent atom relabelings. The same actions exercise entity-kind span aggregates and the
 //! three root aggregate shapes. Missing domains, wrong degrees, and covering supersets are checked
 //! separately so successful action laws do not hide compatibility failures.
+//!
+//! The reframe-kind properties check `reframe_kind` against `reframe_by` on the local forms. A field
+//! or a constraint whose kind is `Independent` is equal before and after a compatible action, and a
+//! `Positional` field is reordered as the participants are. The stereo forms have no field of either
+//! kind, so only their constraints are covered.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use strum::VariantArray;
 use umol_graph_ir::ir::{
-    DativeBondId, FrameTransport, MulticenterBondId, Reaction, Reframe, StereoKind,
+    AromaticSystemFieldKind, AromaticSystemForm, DativeBondFieldKind, DativeBondId,
+    ElectronCountsForm, FrameTransport, MulticenterBondFieldKind, MulticenterBondForm,
+    MulticenterBondId, NoncovalentBondFieldKind, Reaction, Reframe, ReframeKind, StereoKind,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -194,6 +202,222 @@ proptest! {
             form.reframe_by(&Permutation::from_image(&[1, 2, 0, 3])),
             None,
         );
+    }
+
+    #[test]
+    fn test_dative_bond_field_kind_reframe_kind(
+        (form, action) in (1usize..=6).prop_flat_map(|degree| (
+            dative_bond_strategy(),
+            dynamic_action_pair_strategy(degree),
+        )).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("a dative bond form takes any action");
+
+        for &kind in DativeBondFieldKind::VARIANTS {
+            let unchanged = match kind {
+                DativeBondFieldKind::Order => reframed.order == form.order,
+            };
+            if kind.reframe_kind() == ReframeKind::Independent {
+                prop_assert!(unchanged, "{:?}", kind);
+            }
+        }
+    }
+
+    #[test]
+    fn test_dative_bond_constraint_key_reframe_kind(
+        (form, action) in (1usize..=6).prop_flat_map(|degree| (
+            dative_bond_strategy(),
+            dynamic_action_pair_strategy(degree),
+        )).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("a dative bond form takes any action");
+
+        for constraint in form.constraints.iter() {
+            let key = constraint.key();
+            if key.reframe_kind() == ReframeKind::Independent {
+                prop_assert_eq!(reframed.constraints.get(key), Some(constraint));
+            }
+        }
+    }
+
+    #[test]
+    fn test_aromatic_system_field_kind_reframe_kind(
+        (form, action) in (3usize..=6).prop_flat_map(|degree| (
+            aromatic_system_form_for(degree),
+            dynamic_action_pair_strategy(degree),
+        )).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action has the degree of the form");
+        let ElectronCountsForm::Lit(counts) = &form.electrons else {
+            unreachable!("the strategy emits literal electron counts")
+        };
+        let permuted = AromaticSystemForm {
+            electrons: ElectronCountsForm::Lit(
+                action.act(counts).expect("the action has the degree of the form"),
+            ),
+            ..form.clone()
+        };
+        let same_field = |left: &AromaticSystemForm, right: &AromaticSystemForm, kind| match kind {
+            AromaticSystemFieldKind::Electrons => left.electrons == right.electrons,
+            AromaticSystemFieldKind::Charge => left.charge == right.charge,
+            AromaticSystemFieldKind::UnpairedElectrons => {
+                left.unpaired_electrons == right.unpaired_electrons
+            }
+        };
+
+        for &kind in AromaticSystemFieldKind::VARIANTS {
+            match kind.reframe_kind() {
+                ReframeKind::Independent => {
+                    prop_assert!(same_field(&reframed, &form, kind), "{:?}", kind);
+                }
+                ReframeKind::Positional => {
+                    prop_assert!(same_field(&reframed, &permuted, kind), "{:?}", kind);
+                }
+                ReframeKind::Relative => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_aromatic_system_constraint_key_reframe_kind(
+        (form, action) in (3usize..=6).prop_flat_map(|degree| (
+            aromatic_system_form_for(degree),
+            dynamic_action_pair_strategy(degree),
+        )).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action has the degree of the form");
+
+        for constraint in form.constraints.iter() {
+            let key = constraint.key();
+            if key.reframe_kind() == ReframeKind::Independent {
+                prop_assert_eq!(reframed.constraints.get(key), Some(constraint));
+            }
+        }
+    }
+
+    #[test]
+    fn test_multicenter_bond_field_kind_reframe_kind(
+        (form, action) in (3usize..=6).prop_flat_map(|degree| (
+            multicenter_bond_form_for(degree),
+            dynamic_action_pair_strategy(degree),
+        )).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action has the degree of the form");
+        let ElectronCountsForm::Lit(counts) = &form.electrons else {
+            unreachable!("the strategy emits literal electron counts")
+        };
+        let permuted = MulticenterBondForm {
+            electrons: ElectronCountsForm::Lit(
+                action.act(counts).expect("the action has the degree of the form"),
+            ),
+            ..form.clone()
+        };
+        let same_field = |left: &MulticenterBondForm, right: &MulticenterBondForm, kind| match kind {
+            MulticenterBondFieldKind::Electrons => left.electrons == right.electrons,
+            MulticenterBondFieldKind::Charge => left.charge == right.charge,
+            MulticenterBondFieldKind::UnpairedElectrons => {
+                left.unpaired_electrons == right.unpaired_electrons
+            }
+        };
+
+        for &kind in MulticenterBondFieldKind::VARIANTS {
+            match kind.reframe_kind() {
+                ReframeKind::Independent => {
+                    prop_assert!(same_field(&reframed, &form, kind), "{:?}", kind);
+                }
+                ReframeKind::Positional => {
+                    prop_assert!(same_field(&reframed, &permuted, kind), "{:?}", kind);
+                }
+                ReframeKind::Relative => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_multicenter_bond_constraint_key_reframe_kind(
+        (form, action) in (3usize..=6).prop_flat_map(|degree| (
+            multicenter_bond_form_for(degree),
+            dynamic_action_pair_strategy(degree),
+        )).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action has the degree of the form");
+
+        for constraint in form.constraints.iter() {
+            let key = constraint.key();
+            if key.reframe_kind() == ReframeKind::Independent {
+                prop_assert_eq!(reframed.constraints.get(key), Some(constraint));
+            }
+        }
+    }
+
+    #[test]
+    fn test_noncovalent_bond_field_kind_reframe_kind(
+        (form, action) in (
+            noncovalent_bond_form_strategy(),
+            dynamic_action_pair_strategy(2),
+        ).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action has degree two");
+
+        for &kind in NoncovalentBondFieldKind::VARIANTS {
+            let unchanged = match kind {
+                NoncovalentBondFieldKind::Kind => reframed.kind == form.kind,
+            };
+            if kind.reframe_kind() == ReframeKind::Independent {
+                prop_assert!(unchanged, "{:?}", kind);
+            }
+        }
+    }
+
+    #[test]
+    fn test_noncovalent_bond_constraint_key_reframe_kind(
+        (form, action) in (
+            noncovalent_bond_form_strategy(),
+            dynamic_action_pair_strategy(2),
+        ).prop_map(|(form, (action, _))| (form, action)),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action has degree two");
+
+        for constraint in form.constraints.iter() {
+            let key = constraint.key();
+            if key.reframe_kind() == ReframeKind::Independent {
+                prop_assert_eq!(reframed.constraints.get(key), Some(constraint));
+            }
+        }
+    }
+
+    #[test]
+    fn test_stereo_atom_constraint_key_reframe_kind(
+        (form, action) in stereo_atom_form_strategy().prop_flat_map(|form| {
+            let kind = form.configuration.kind().expect("the strategy emits a kinded form");
+            (Just(form), stereo_frame_permutation_strategy(kind))
+        }),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action belongs to the kind of the form");
+
+        for constraint in form.constraints.iter() {
+            let key = constraint.key();
+            if key.reframe_kind() == ReframeKind::Independent {
+                prop_assert_eq!(reframed.constraints.get(key), Some(constraint));
+            }
+        }
+    }
+
+    #[test]
+    fn test_stereo_bond_constraint_key_reframe_kind(
+        (form, action) in (
+            stereo_bond_form_strategy(),
+            stereo_frame_permutation_strategy(StereoKind::CisTrans),
+        ),
+    ) {
+        let reframed = form.clone().reframe_by(&action).expect("the action belongs to the kind of the form");
+
+        for constraint in form.constraints.iter() {
+            let key = constraint.key();
+            if key.reframe_kind() == ReframeKind::Independent {
+                prop_assert_eq!(reframed.constraints.get(key), Some(constraint));
+            }
+        }
     }
 
     #[test]
