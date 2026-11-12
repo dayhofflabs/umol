@@ -1248,15 +1248,9 @@ impl Canonicalize for Reaction {
         if self == other {
             return true;
         }
-        match (
-            self.clone().canonicalize(context),
-            other.clone().canonicalize(context),
-        ) {
-            (Ok(left), Ok(right)) => left == right,
-            (
-                Err(ReactionCanonicalizeError::Contradiction(_)),
-                Err(ReactionCanonicalizeError::Contradiction(_)),
-            ) => self.framed_eq(other),
+        match (self.to_reaction_span(), other.to_reaction_span()) {
+            (Ok(left), Ok(right)) => left.canonical_eq(&right, context),
+            (Err(_), Err(_)) => self.framed_eq(other),
             _ => false,
         }
     }

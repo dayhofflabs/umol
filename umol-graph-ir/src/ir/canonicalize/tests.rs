@@ -3856,6 +3856,150 @@ fn test_reaction_canonical_eq(canonicalize_context: CanonicalizeContext) {
 }
 
 #[rstest]
+#[case::hydrolysis_renumbered(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction(),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction(),
+    true
+)]
+#[case::hydrolysis_thiolysis(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction(),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Added(AtomForm::from_element(Element::S)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction(),
+    false
+)]
+#[case::hydrolysis_reverse_reaction(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction(),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::F)),
+            EntitySpan::Removed(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction(),
+    false
+)]
+#[case::charge_set_to_the_same_value(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
+            ..Default::default()
+        }),
+        Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::lit_set([0]),
+            },
+        })]),
+    ),
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
+            ..Default::default()
+        }),
+        Deltas::new(),
+    ),
+    true
+)]
+#[case::charge_changed(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
+            ..Default::default()
+        }),
+        Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::Lit(1),
+            },
+        })]),
+    ),
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
+            ..Default::default()
+        }),
+        Deltas::new(),
+    ),
+    false
+)]
+fn test_reaction_canonical_eq_compounds(
+    canonicalize_context: CanonicalizeContext,
+    #[case] left: Reaction,
+    #[case] right: Reaction,
+    #[case] expected: bool,
+) {
+    assert_eq!(left.canonical_eq(&right, &canonicalize_context), expected);
+    assert_eq!(right.canonical_eq(&left, &canonicalize_context), expected);
+}
+
+#[rstest]
 #[case::one_fails(
     Reaction::new(
         Molecule::from_entries(MoleculeEntries {
@@ -4015,6 +4159,72 @@ fn test_reaction_canonical_eq(canonicalize_context: CanonicalizeContext) {
                 new: NumForm::Lit(3),
             },
         })]),
+    ),
+    false
+)]
+#[case::both_fail_equal_normal_forms(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            )],
+            ..Default::default()
+        }),
+        Deltas::new(),
+    ),
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(1_i64),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            )],
+            ..Default::default()
+        }),
+        Deltas::new(),
+    ),
+    true
+)]
+#[case::both_fail_different_frames(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            )],
+            ..Default::default()
+        }),
+        Deltas::new(),
+    ),
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            )],
+            ..Default::default()
+        }),
+        Deltas::new(),
     ),
     false
 )]

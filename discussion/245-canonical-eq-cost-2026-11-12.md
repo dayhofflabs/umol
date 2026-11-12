@@ -779,7 +779,7 @@ comparison as a function, so that molecules and spans share it. `test_same_entit
 entity pairs of the span `test_initial_colors`, and `test_same_colors` has five rows. The tests of
 `umol-graph-ir` pass with all features.
 
-#### S4b — `Reaction::canonical_eq` through reaction spans
+#### S4b — `Reaction::canonical_eq` through reaction spans **Done**
 
 **Module:** `ir/canonicalize/reaction_span.rs`.
 
@@ -790,6 +790,19 @@ convert and both fail are decided by the span. Changes no result (green). [dep: 
 **Tests:** `test_reaction_canonical_eq` and the properties of S1b hold unchanged. If the
 property that `framed_eq` implies `canonical_eq` fails for reactions, work stops and the case is
 raised.
+
+Guard rows were added and run on the code of S4a before the change, and they give the same
+results after it. `test_reaction_canonical_eq_contradiction` gains two rows on a cyclopropenyl
+cation whose aromatic system has two electron counts for three atoms: equal normal forms give
+true, and two atom orders of the system give false. `test_reaction_canonical_eq_compounds` is new
+and asserts both directions: the hydrolysis of fluoromethane against a renumbered copy, against
+its thiolysis, and against its reverse; a charge set to the same value against no change, which
+is equal; and a changed charge against no change.
+
+The existing tests and properties pass unchanged, among them the property that requires
+`canonical_eq` of two reactions to agree with the equality of their canonical forms. The tests of
+`umol-graph-ir` pass with all features and clippy with all targets is clean, which is the stage
+gate of S4.
 
 ### S5 — Final comparison and closeout
 
