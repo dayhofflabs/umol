@@ -333,9 +333,10 @@ proptest! {
         prop_assert!(!first.framed_eq(&second));
         prop_assert!(!second.framed_eq(&third));
         prop_assert!(!first.framed_eq(&third));
-        prop_assert!(first.canonical_eq(&second, &context));
-        prop_assert!(second.canonical_eq(&third, &context));
-        prop_assert!(first.canonical_eq(&third, &context));
+        prop_assert!(first.canonical_eq(&first.clone(), &context));
+        prop_assert!(!first.canonical_eq(&second, &context));
+        prop_assert!(!second.canonical_eq(&third, &context));
+        prop_assert!(!first.canonical_eq(&third, &context));
         prop_assert_eq!(
             first.tracked_canonicalize(&context),
             Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),

@@ -382,7 +382,8 @@ proptest! {
         }
     }
 
-    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    /// `canonical_eq` agrees with equality of the canonical forms, and with `framed_eq` when both
+    /// canonicalizations fail.
     #[test]
     fn test_molecule_canonical_eq_contract(
         (left, right) in molecule_canonical_pair_strategy(),
@@ -393,14 +394,14 @@ proptest! {
             right.clone().canonicalize(&context),
         ) {
             (Ok(left), Ok(right)) => left == right,
-            (Err(_), Err(_)) => true,
+            (Err(_), Err(_)) => left.framed_eq(&right),
             _ => false,
         };
 
         prop_assert_eq!(left.canonical_eq(&right, &context), expected);
         match (left.canonical_hash(&context), right.canonical_hash(&context)) {
             (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
-            (Err(_), Err(_)) => prop_assert!(expected),
+            (Err(_), Err(_)) => {}
             _ => prop_assert!(!expected),
         }
     }

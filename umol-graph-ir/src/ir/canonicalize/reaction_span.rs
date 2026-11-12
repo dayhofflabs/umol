@@ -979,6 +979,9 @@ impl Canonicalize for ReactionSpan {
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
+        if self.entity_counts() != other.entity_counts() {
+            return false;
+        }
         if self == other {
             return true;
         }
@@ -990,7 +993,7 @@ impl Canonicalize for ReactionSpan {
             (
                 Err(ReactionSpanCanonicalizeError::Contradiction(_)),
                 Err(ReactionSpanCanonicalizeError::Contradiction(_)),
-            ) => true,
+            ) => self.framed_eq(other),
             _ => false,
         }
     }
@@ -1046,7 +1049,7 @@ impl Canonicalize for Reaction {
             (
                 Err(ReactionCanonicalizeError::Contradiction(_)),
                 Err(ReactionCanonicalizeError::Contradiction(_)),
-            ) => true,
+            ) => self.framed_eq(other),
             _ => false,
         }
     }

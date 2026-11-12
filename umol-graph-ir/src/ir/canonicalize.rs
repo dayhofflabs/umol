@@ -169,8 +169,9 @@ pub trait Canonicalize: Reframe {
 
     /// Compare complete canonical forms.
     ///
-    /// Structural identity short-circuits the operation. Otherwise, two intrinsic contradictions
-    /// compare equal.
+    /// Structural identity short-circuits the operation. A value whose canonicalization fails is
+    /// unequal to one whose canonicalization succeeds, and two values whose canonicalizations
+    /// both fail are compared by [`Reframe::framed_eq`].
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool;
 }
 

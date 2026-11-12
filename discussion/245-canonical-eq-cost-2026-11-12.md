@@ -529,7 +529,7 @@ No separate property for the implication was added. On contradictory values the 
 above state the exact result of both equalities, which contains it, and on satisfiable values the
 standardization properties already state it. The tests of `umol-graph-ir` pass with all features.
 
-#### S1b — `canonical_eq` of the aggregates
+#### S1b — `canonical_eq` of the aggregates **Done**
 
 **Module:** `ir/canonicalize.rs`, both submodules.
 
@@ -550,6 +550,19 @@ Breaking for contradictory aggregates (red→green). [dep: S1a]
 The three `test_*_canonical_eq_contradiction` properties are read at the subitem and their
 expected values shown old beside new. New rows cover the `canonical_eq` line of the table and
 different entity counts. The property of S1a gains that `framed_eq` implies `canonical_eq`.
+
+The two unit tests are now tables of the rule, and `test_reaction_span_canonical_eq_contradiction`
+is new, 16 rows in all. The molecule test no longer asserts that no remapping relates its two
+contradictory molecules, which illustrated the old rule. The reaction row
+`both_fail_equal_reframed_forms` holds two reactions whose deltas do not materialize and whose
+left sides list one aromatic system in two atom orders; they are equal.
+
+In the three contradiction properties the `canonical_eq` of each pair of the three values
+changes from true to false, and a value is asserted equal to its clone. The three contract
+properties passed unchanged before the edit, since their strategies do not produce two failing
+values that differ; their expected value and their hash clause are changed as the table says.
+As in S1a no separate property for the implication was added. The tests of `umol-graph-ir` pass
+with all features.
 
 #### S1c — Guides
 
