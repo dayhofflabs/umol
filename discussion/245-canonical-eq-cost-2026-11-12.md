@@ -487,7 +487,7 @@ Scaling cases and inline constraints:
 This stage changes the result of the three equalities for contradictory aggregates and nothing
 else. Each subitem carries the tests that change with it (red→green).
 
-#### S1a — `normalized_eq` and `framed_eq` of the aggregates
+#### S1a — `normalized_eq` and `framed_eq` of the aggregates **Done**
 
 **Module:** `ir/molecule.rs`, `ir/reaction_span.rs`, `ir/reaction.rs`, `ir/traits.rs`.
 
@@ -504,6 +504,30 @@ two that fail with equal normal forms; two that fail otherwise; and, for molecul
 different entity counts. A property per aggregate, over strategies that include contradictory
 values, requires that `normalized_eq` implies `framed_eq`. Existing tests whose expected value
 changes are found by the test run and shown old beside new.
+
+No unit test stated the present rule for these two equalities. Three properties did:
+`test_molecule_canonical_eq_contradiction`, `test_reaction_canonical_eq_contradiction`, and
+`test_reaction_span_canonical_eq_contradiction`. Each takes three structurally different values
+that fail normalization.
+
+| Assertion | Old | New |
+| --- | --- | --- |
+| `normalized_eq` of each pair of the three | true | false |
+| `framed_eq` of each pair of the three | true | false |
+| `normalized_eq` and `framed_eq` of a value and its clone | not stated | true |
+
+The `canonical_eq` assertions of the three properties are unchanged until S1b.
+
+New unit tables: `test_molecule_normalized_eq_contradiction`,
+`test_molecule_framed_eq_contradiction`, `test_reaction_span_normalized_eq`,
+`test_reaction_span_framed_eq`, `test_reaction_normalized_eq`, and `test_reaction_framed_eq`, 36
+rows in all. The rows `both_fail_equal_normal_forms` and `both_fail_different_frames` use a
+cyclopropenyl cation whose aromatic system has two electron counts for three atoms, which
+normalizes and fails to reframe.
+
+No separate property for the implication was added. On contradictory values the three properties
+above state the exact result of both equalities, which contains it, and on satisfiable values the
+standardization properties already state it. The tests of `umol-graph-ir` pass with all features.
 
 #### S1b — `canonical_eq` of the aggregates
 
@@ -529,11 +553,13 @@ different entity counts. The property of S1a gains that `framed_eq` implies `can
 
 #### S1c — Guides
 
-**Module:** `docs/development/data-types.md`, `docs/development/nomenclature.md`.
+**Module:** `docs/development/data-types.md`, `docs/development/nomenclature.md`,
+`docs/development/property-tests.md`.
 
 Rewrite the passages on the totalization of equality for two intrinsic contradictions to the
-rule of the Contradictions section. `python-api.md` and `operations.md` are read for statements
-of the old rule. No code. [dep: S1b]
+rule of the Contradictions section. The property-tests guide states the old rule in its section
+on the standardization pipeline. `python-api.md` and `operations.md` are read for statements of
+the old rule. No code. [dep: S1b]
 
 ### S2 — Two changes to existing canonicalization code
 

@@ -894,6 +894,14 @@ impl Normalize for Reaction {
             deltas: Arc::new(deltas),
         })
     }
+
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self == other
+            || matches!(
+                (self.clone().normalize(), other.clone().normalize()),
+                (Ok(left), Ok(right)) if left == right
+            )
+    }
 }
 
 impl FrameTransport for Reaction {
@@ -931,6 +939,17 @@ impl Reframe for Reaction {
             deltas: Arc::new(deltas),
         }
         .normalize()
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        match (self.clone().reframe(), other.clone().reframe()) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => self.normalized_eq(other),
+            _ => false,
+        }
     }
 }
 
@@ -4700,6 +4719,120 @@ mod tests {
     }
 
     #[rstest]
+    #[case::equal_normal_forms(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(1_i64),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        true
+    )]
+    #[case::different_element(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::N),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    #[case::one_fails(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    #[case::both_fail_identical(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        true
+    )]
+    #[case::both_fail_different(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    fn test_reaction_normalized_eq(
+        #[case] left: Reaction,
+        #[case] right: Reaction,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(left.normalized_eq(&right), expected);
+    }
+
+    #[rstest]
     #[case::dative(EntityKind::DativeBond)]
     #[case::aromatic(EntityKind::AromaticSystem)]
     #[case::multicenter(EntityKind::MulticenterBond)]
@@ -5006,6 +5139,216 @@ mod tests {
             Some([1, 0].as_slice()),
         );
         assert_eq!(reaction.normalize(), Err(Contradiction));
+    }
+
+    #[rstest]
+    #[case::aromatic_frame(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::O),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+                    AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::O),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(0)],
+                    AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 2]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        true
+    )]
+    #[case::different_element(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::N),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    #[case::one_fails(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    #[case::both_fail_identical(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        true
+    )]
+    #[case::both_fail_equal_normal_forms(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(1_i64),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        true
+    )]
+    #[case::both_fail_different_frames(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(1), AtomId(0), AtomId(2)],
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    #[case::both_fail_different(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([])),
+                ],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        ),
+        false
+    )]
+    fn test_reaction_framed_eq(
+        #[case] left: Reaction,
+        #[case] right: Reaction,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(left.framed_eq(&right), expected);
     }
 
     #[rstest]

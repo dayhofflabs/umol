@@ -325,12 +325,14 @@ proptest! {
 
         prop_assert_ne!(&first, &second);
         prop_assert_ne!(&second, &third);
-        prop_assert!(first.normalized_eq(&second));
-        prop_assert!(second.normalized_eq(&third));
-        prop_assert!(first.normalized_eq(&third));
-        prop_assert!(first.framed_eq(&second));
-        prop_assert!(second.framed_eq(&third));
-        prop_assert!(first.framed_eq(&third));
+        prop_assert!(first.normalized_eq(&first.clone()));
+        prop_assert!(!first.normalized_eq(&second));
+        prop_assert!(!second.normalized_eq(&third));
+        prop_assert!(!first.normalized_eq(&third));
+        prop_assert!(first.framed_eq(&first.clone()));
+        prop_assert!(!first.framed_eq(&second));
+        prop_assert!(!second.framed_eq(&third));
+        prop_assert!(!first.framed_eq(&third));
         prop_assert!(first.canonical_eq(&second, &context));
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));

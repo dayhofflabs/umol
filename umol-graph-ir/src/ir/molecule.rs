@@ -271,7 +271,6 @@ impl Molecule {
     /// Under identity this is [`Reframe::framed_eq`]. Inverting the permutations reverses the
     /// comparison, and successive remappings compose. For molecules whose canonicalizations
     /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
-    /// Equality totalization for two intrinsic contradictions does not require such a witness.
     pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
         self.clone()
             .try_remap(remapping)
@@ -2832,6 +2831,15 @@ impl Normalize for Molecule {
         *constraints = mem::take(constraints).normalize()?;
         Ok(self)
     }
+
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self.entity_counts() == other.entity_counts()
+            && (self == other
+                || matches!(
+                    (self.clone().normalize(), other.clone().normalize()),
+                    (Ok(left), Ok(right)) if left == right
+                ))
+    }
 }
 
 impl FrameTransport for Molecule {
@@ -2939,6 +2947,20 @@ impl Reframe for Molecule {
                 .normalize()?,
         );
         Ok(self)
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self.entity_counts() != other.entity_counts() {
+            return false;
+        }
+        if self == other {
+            return true;
+        }
+        match (self.clone().reframe(), other.clone().reframe()) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => self.normalized_eq(other),
+            _ => false,
+        }
     }
 }
 

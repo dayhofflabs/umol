@@ -416,7 +416,6 @@ impl ReactionSpan {
     /// Under identity this is [`Reframe::framed_eq`]. Inverting the permutations reverses the
     /// comparison, and successive remappings compose. For spans whose canonicalizations
     /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
-    /// Equality totalization for two intrinsic contradictions does not require such a witness.
     pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
         self.clone()
             .try_remap(remapping)
@@ -1854,6 +1853,15 @@ impl Normalize for ReactionSpan {
         ))?);
         Ok(self)
     }
+
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self.entity_counts() == other.entity_counts()
+            && (self == other
+                || matches!(
+                    (self.clone().normalize(), other.clone().normalize()),
+                    (Ok(left), Ok(right)) if left == right
+                ))
+    }
 }
 
 impl FrameTransport for ReactionSpan {
@@ -1965,6 +1973,20 @@ impl Reframe for ReactionSpan {
             .collect::<Result<_, _>>()?;
         self.constraints = Arc::new(normalize_constraint_spans(constraints)?);
         Ok(self)
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self.entity_counts() != other.entity_counts() {
+            return false;
+        }
+        if self == other {
+            return true;
+        }
+        match (self.clone().reframe(), other.clone().reframe()) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => self.normalized_eq(other),
+            _ => false,
+        }
     }
 }
 
@@ -3356,6 +3378,109 @@ mod tests {
     }
 
     #[rstest]
+    #[case::modified_equal_sides(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Modified { lhs: AtomForm::from_element(Element::C), rhs: AtomForm::from_element(Element::C) },
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::different_element(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::one_fails(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_identical(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::both_fail_different(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_different_counts(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    fn test_reaction_span_normalized_eq(
+        #[case] left: ReactionSpanEntries,
+        #[case] right: ReactionSpanEntries,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            ReactionSpan::from_entries(left).normalized_eq(&ReactionSpan::from_entries(right)),
+            expected,
+        );
+    }
+
+    #[rstest]
     fn test_reaction_span_reframe_by(#[values(false, true)] shared: bool) {
         let predicate = |value| Box::new(AtomConstraintForm::valence(NumForm::Lit(value)));
         let entries = ReactionSpanEntries {
@@ -3526,6 +3651,193 @@ mod tests {
         assert_eq!(
             retained,
             shared.then(|| ReactionSpan::from_entries(entries))
+        );
+    }
+
+    #[rstest]
+    #[case::aromatic_frame(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(0)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 2])),
+            )],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::different_element(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::one_fails(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_identical(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::both_fail_equal_normal_forms(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Modified { lhs: AtomForm::from_element(Element::C), rhs: AtomForm::from_element(Element::C) },
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::both_fail_different_frames(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_different(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_different_counts(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    fn test_reaction_span_framed_eq(
+        #[case] left: ReactionSpanEntries,
+        #[case] right: ReactionSpanEntries,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            ReactionSpan::from_entries(left).framed_eq(&ReactionSpan::from_entries(right)),
+            expected,
         );
     }
 

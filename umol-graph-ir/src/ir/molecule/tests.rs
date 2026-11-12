@@ -2105,6 +2105,130 @@ fn test_molecule_framed_eq(#[from(molecule_reframe_source)] source: Molecule) {
 }
 
 #[rstest]
+#[case::one_fails(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::both_fail_identical(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    true
+)]
+#[case::both_fail_equal_normal_forms(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![2, 1]),
+        )],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(1_i64),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![2, 1]),
+        )],
+        ..Default::default()
+    }),
+    true
+)]
+#[case::both_fail_different_frames(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(1_i64),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![2, 1]),
+        )],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(1_i64),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+        ],
+        aromatic: vec![(
+            vec![AtomId(1), AtomId(0), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![2, 1]),
+        )],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::both_fail_different(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::both_fail_different_counts(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+fn test_molecule_framed_eq_contradiction(
+    #[case] left: Molecule,
+    #[case] right: Molecule,
+    #[case] expected: bool,
+) {
+    assert_eq!(left.framed_eq(&right), expected);
+}
+
+#[rstest]
 fn test_molecule_normalized_eq_entity_data(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
@@ -2280,6 +2404,76 @@ fn test_molecule_normalized_eq_structure_and_counts(
             .collect::<Vec<_>>(),
         vec![false; 9],
     );
+}
+
+#[rstest]
+#[case::one_fails(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::both_fail_identical(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    true
+)]
+#[case::both_fail_different(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::both_fail_different_counts(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+        ],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([])),
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+fn test_molecule_normalized_eq_contradiction(
+    #[case] left: Molecule,
+    #[case] right: Molecule,
+    #[case] expected: bool,
+) {
+    assert_eq!(left.normalized_eq(&right), expected);
 }
 
 #[rstest]
