@@ -1329,6 +1329,120 @@ fn test_automorphism_adapter_automorphisms() {
 }
 
 #[rstest]
+#[case::rotation(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 9],
+    true
+)]
+#[case::transposition(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    vec![0, 2, 1, 3, 4, 6, 5, 7, 8, 9],
+    false
+)]
+#[case::site_moved(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    vec![1, 0, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+#[case::renumbered(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
+    ),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    true
+)]
+#[case::renumbered_inverted(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th2"}]}"#
+    ),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    false
+)]
+#[case::stereo_bond(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    true
+)]
+#[case::stereo_bond_inverted(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct2"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    false
+)]
+fn test_remapping_preserves_stereo(
+    #[case] source: Molecule,
+    #[case] target: Molecule,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let incidence_graph = source.incidence_graph(IncidenceLevel::Full);
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_preserves_stereo(&source, &target, &incidence_graph, &images),
+        expected,
+    );
+}
+
+#[rstest]
 #[case::feature_free(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![

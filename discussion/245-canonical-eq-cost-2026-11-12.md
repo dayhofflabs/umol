@@ -612,7 +612,7 @@ The span test has six rows on furan: a bond endpoint, and the oxygen of an aroma
 is unchanged, modified, added, and removed, and a carbon whose count is equal on both sides of a
 modified system. The tests of `umol-graph-ir` pass with all features.
 
-#### S2b — `remapping_preserves_stereo`
+#### S2b — `remapping_preserves_stereo` **Done**
 
 **Module:** both submodules.
 
@@ -624,6 +624,17 @@ No behavior of the search changes (green).
 generator that keeps and one that breaks a configuration; a value against a renumbered copy under
 the remapping of the renumbering; and against a copy with one configuration inverted. The tests
 of `retain_stereo_preserving_generators` are unchanged.
+
+`remapping_preserves_stereo(source, target, incidence_graph, images)` reads the image entity
+from `target`; the comparison itself is unchanged. The loop variables are renamed, since `source`
+and `target` now name the two values. The molecule test has seven rows: chlorotrifluoromethane
+under a rotation of its three fluorine atoms and under a transposition of two;
+bromochlorofluoroiodomethane under a remapping that moves the site, against a renumbered copy,
+and against a renumbered copy with the other configuration; and but-2-ene against itself and
+against the other configuration. The span test has the same seven rows on unchanged spans and
+two rows on a stereo atom whose configuration is modified, in the same and in the reversed
+direction. The tests of `umol-graph-ir` pass with all features, and clippy with all targets is
+clean, which is the stage gate of S2.
 
 ### S3 — Remapping search for molecules
 

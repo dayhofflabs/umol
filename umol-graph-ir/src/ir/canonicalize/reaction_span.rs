@@ -101,15 +101,22 @@ fn remapping_from_generator(
     molecule_remapping(&images)
 }
 
-fn generator_preserves_stereo(
-    span: &ReactionSpan,
+/// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
+/// `target` with the same site and the same form.
+///
+/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `source`,
+/// and `target` has the entity counts of `source`. A generator of `source` is such a remapping of
+/// `source` onto itself.
+fn remapping_preserves_stereo(
+    source: &ReactionSpan,
+    target: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
-    generator: &[NodeId],
+    images: &[NodeId],
 ) -> bool {
     let entity_image =
-        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
-    let frame_action = |source: &[StereoLigand], target: &[StereoLigand]| {
-        let mapped = source
+        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
+        let mapped = ligands
             .iter()
             .map(|ligand| {
                 let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
@@ -118,7 +125,7 @@ fn generator_preserves_stereo(
                 Some(StereoLigand::new(atom_id, ligand.kind))
             })
             .collect::<Option<Vec<_>>>()?;
-        Permutation::between(&mapped, target)
+        Permutation::between(&mapped, image_ligands)
     };
     fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
     where
@@ -130,48 +137,48 @@ fn generator_preserves_stereo(
             .is_some_and(|mapped| mapped.normalized_eq(target))
     }
 
-    for source_id in span.stereo_atoms().ids() {
-        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source_id)) else {
+    for id in source.stereo_atoms().ids() {
+        let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(id)) else {
             return false;
         };
-        if entity_image(Entity::Atom(span.stereo_atoms().site(source_id)))
-            != Entity::Atom(span.stereo_atoms().site(target_id))
+        if entity_image(Entity::Atom(source.stereo_atoms().site(id)))
+            != Entity::Atom(target.stereo_atoms().site(image_id))
         {
             return false;
         }
         let Some(action) = frame_action(
-            span.stereo_atoms().ligands(source_id),
-            span.stereo_atoms().ligands(target_id),
+            source.stereo_atoms().ligands(id),
+            target.stereo_atoms().ligands(image_id),
         ) else {
             return false;
         };
         if !form_preserved(
-            span.stereo_atoms().attributes(source_id),
-            span.stereo_atoms().attributes(target_id),
+            source.stereo_atoms().attributes(id),
+            target.stereo_atoms().attributes(image_id),
             action,
         ) {
             return false;
         }
     }
 
-    for source_id in span.stereo_bonds().ids() {
-        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source_id)) else {
+    for id in source.stereo_bonds().ids() {
+        let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(id)) else {
             return false;
         };
-        if entity_image(Entity::Bond(span.stereo_bonds().site(source_id)))
-            != Entity::Bond(span.stereo_bonds().site(target_id))
+        if entity_image(Entity::Bond(source.stereo_bonds().site(id)))
+            != Entity::Bond(target.stereo_bonds().site(image_id))
         {
             return false;
         }
         let Some(action) = frame_action(
-            span.stereo_bonds().ligands(source_id),
-            span.stereo_bonds().ligands(target_id),
+            source.stereo_bonds().ligands(id),
+            target.stereo_bonds().ligands(image_id),
         ) else {
             return false;
         };
         if !form_preserved(
-            span.stereo_bonds().attributes(source_id),
-            span.stereo_bonds().attributes(target_id),
+            source.stereo_bonds().attributes(id),
+            target.stereo_bonds().attributes(image_id),
             action,
         ) {
             return false;
@@ -189,7 +196,8 @@ fn retain_stereo_preserving_generators(
     if span.stereo_atoms().count() == 0 && span.stereo_bonds().count() == 0 {
         return;
     }
-    generators.retain(|generator| generator_preserves_stereo(span, incidence_graph, generator));
+    generators
+        .retain(|generator| remapping_preserves_stereo(span, span, incidence_graph, generator));
 }
 
 /// Keep the generators that carry `span` onto itself: the span remapped by the generator equals the

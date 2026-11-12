@@ -56,15 +56,22 @@ struct ColorKey {
     constraints: Constraints,
 }
 
-fn generator_preserves_stereo(
-    molecule: &Molecule,
+/// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
+/// `target` with the same site and the same form.
+///
+/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `source`,
+/// and `target` has the entity counts of `source`. A generator of `source` is such a remapping of
+/// `source` onto itself.
+fn remapping_preserves_stereo(
+    source: &Molecule,
+    target: &Molecule,
     incidence_graph: &IncidenceGraph,
-    generator: &[NodeId],
+    images: &[NodeId],
 ) -> bool {
     let entity_image =
-        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
-    let frame_action = |source: &[StereoLigand], target: &[StereoLigand]| {
-        let mapped = source
+        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
+        let mapped = ligands
             .iter()
             .map(|ligand| {
                 let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
@@ -73,7 +80,7 @@ fn generator_preserves_stereo(
                 Some(StereoLigand::new(atom_id, ligand.kind))
             })
             .collect::<Option<Vec<_>>>()?;
-        Permutation::between(&mapped, target)
+        Permutation::between(&mapped, image_ligands)
     };
     fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
     where
@@ -85,34 +92,34 @@ fn generator_preserves_stereo(
             .is_some_and(|mapped| mapped.normalized_eq(target))
     }
 
-    for source in molecule.stereo_atoms().iter() {
-        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source.id())) else {
+    for stereo in source.stereo_atoms().iter() {
+        let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(stereo.id())) else {
             return false;
         };
-        let target = molecule.stereo_atom(target_id);
-        if entity_image(Entity::Atom(source.site_id())) != Entity::Atom(target.site_id()) {
+        let image = target.stereo_atom(image_id);
+        if entity_image(Entity::Atom(stereo.site_id())) != Entity::Atom(image.site_id()) {
             return false;
         }
-        let Some(action) = frame_action(source.ligand_ids(), target.ligand_ids()) else {
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
             return false;
         };
-        if !form_preserved(source.attributes(), target.attributes(), action) {
+        if !form_preserved(stereo.attributes(), image.attributes(), action) {
             return false;
         }
     }
 
-    for source in molecule.stereo_bonds().iter() {
-        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source.id())) else {
+    for stereo in source.stereo_bonds().iter() {
+        let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(stereo.id())) else {
             return false;
         };
-        let target = molecule.stereo_bond(target_id);
-        if entity_image(Entity::Bond(source.site_id())) != Entity::Bond(target.site_id()) {
+        let image = target.stereo_bond(image_id);
+        if entity_image(Entity::Bond(stereo.site_id())) != Entity::Bond(image.site_id()) {
             return false;
         }
-        let Some(action) = frame_action(source.ligand_ids(), target.ligand_ids()) else {
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
             return false;
         };
-        if !form_preserved(source.attributes(), target.attributes(), action) {
+        if !form_preserved(stereo.attributes(), image.attributes(), action) {
             return false;
         }
     }
@@ -128,7 +135,9 @@ fn retain_stereo_preserving_generators(
     if molecule.stereo_atoms().count() == 0 && molecule.stereo_bonds().count() == 0 {
         return;
     }
-    generators.retain(|generator| generator_preserves_stereo(molecule, incidence_graph, generator));
+    generators.retain(|generator| {
+        remapping_preserves_stereo(molecule, molecule, incidence_graph, generator)
+    });
 }
 
 /// Keep the generators that carry `molecule` onto itself: the molecule remapped by the generator

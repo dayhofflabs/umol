@@ -15,6 +15,7 @@ use crate::ir::{
     StereoAtomDelta, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoKind,
     StereoLigand, StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
+use crate::mol_dsl;
 
 #[rstest]
 #[case::topology(
@@ -279,6 +280,298 @@ fn test_remapping_from_generator(
     assert_eq!(
         remapping_from_generator(&span, &incidence_graph, &generator),
         expected
+    );
+}
+
+#[rstest]
+#[case::rotation(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 9],
+    true
+)]
+#[case::transposition(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 2, 1, 3, 4, 6, 5, 7, 8, 9],
+    false
+)]
+#[case::site_moved(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![1, 0, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+#[case::renumbered(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+                :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+                :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    true
+)]
+#[case::renumbered_inverted(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+                :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+                :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th2"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    false
+)]
+#[case::stereo_bond(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    true
+)]
+#[case::stereo_bond_inverted(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct2"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    false
+)]
+#[case::modified_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    true
+)]
+#[case::modified_configuration_reversed(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+fn test_remapping_preserves_stereo(
+    #[case] source: ReactionSpan,
+    #[case] target: ReactionSpan,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let incidence_graph = source.incidence_graph(IncidenceLevel::Full);
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_preserves_stereo(&source, &target, &incidence_graph, &images),
+        expected,
     );
 }
 
