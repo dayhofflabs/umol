@@ -2372,7 +2372,7 @@ of the three inline-constraint cases, which reach Full until S8b, falls from 4.3
 23.04 ms to 181.5 µs, 200.3 µs, and 154.5 µs. `canonical_eq` of two equal molecules takes 1.86 to
 2.07 times `canonical_hash`: it canonicalizes both.
 
-#### S8b — Molecule level from the entities
+#### S8b — Molecule level from the entities **Done**
 
 **Module:** `ir/canonicalize.rs`.
 
@@ -2386,6 +2386,53 @@ constraint to select Full, and `test_canonicalize_topology_excluded_data`. The r
 `test_molecule_canonicalize_placement` with an inline constraint on an atom, a bond, an aromatic
 system, and a stereo atom hold before and after. The Python test files are rerun. The
 inline-constraint benchmarks are timed against S8a.
+
+`molecule_canonicalize_level` reads the molecule-level constraints and the kinds of entity present,
+and no inline constraint.
+
+`reaction_canonicalize_level` started from `molecule_canonicalize_level` of the lhs. With the
+molecule level changed alone, two reactions that differ only in an atom constraint compared equal,
+and the row of `test_canonical_eq_additional_entity` with an atom constraint failed: the reaction
+search stays on the encoded path until S9b, where an inline constraint enters the key at Full only.
+The check of the inline constraints is therefore moved into `reaction_canonicalize_level`, which
+applies it to the lhs through `level_with_constraints`. The level of a reaction is unchanged, and
+S9c removes the check.
+
+Tests. One expected value changed. In `test_molecule_canonicalize_level` the row of two carbon
+atoms, one of them with a valence constraint, expected Full and expects Topology. It is renamed
+from `full` to `atom_constraint`. The row with a molecule-level constraint, which expects Full, is
+renamed from `molecule_constraint` to `full` and follows `structure`.
+`test_canonicalize_topology_excluded_data` was removed at S7b.
+
+The 12,173 library tests, the integration tests of the crate, the 555 properties, the default
+tests of the workspace without `umol-py`, and the three Python test files pass. The library build
+and clippy on the crate report the two dead-code warnings of S7a and nothing else.
+
+The break list. Two counts differ from S8a, because the rows of the placement table with an
+inline constraint on a stereo atom are searched at Structure and no longer reach Full:
+
+| Break | Failing tests | Rows of the placement table among them |
+| --- | ---: | ---: |
+| The pruning treats every candidate of a cell as one orbit | 14 | 5 |
+| `retain_stereo_preserving_generators` keeps every generator | 10 | 2 |
+| `retain_preserving_generators` keeps every generator | 5 | 3 |
+| The incidence colors leave out the electron counts | 4 | 2 |
+| The color of an aromatic system leaves out its charge | 4 | 1 |
+
+Criterion medians of the inline-constraint cases against a run at S8a, with a 1-second warm-up and
+3 seconds of measurement:
+
+| Case with `#v1` | `canonicalize` before | After | Ratio | `canonical_eq` before | After | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 93.0 µs | 26.1 µs | 0.28 | 182.5 µs | 53.8 µs | 0.30 |
+| `feature_free_disconnected` | 99.7 µs | 29.2 µs | 0.29 | 198.6 µs | 60.2 µs | 0.30 |
+| `symmetry_heavy_radicals` | 77.0 µs | 26.0 µs | 0.34 | 154.7 µs | 53.9 µs | 0.35 |
+
+Stage gate of S8. The reference comparison reports no mismatch on the 10,028 pairs, and
+`canonical_eq` and the equality of `canonical_hash` of molecules give the same answer as the
+committed search on the 20,056 pairs. `para_stereo_cascade` and
+`symmetric_stereo_triisopropanolamine`, which read high in the two runs of S7b, take 253.3 µs and
+35.6 µs in `canonicalize`, against 250.1 µs and 35.4 µs at S6k.
 
 ### S9 — Reaction spans and reactions
 

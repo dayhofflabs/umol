@@ -185,40 +185,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
 }
 
 fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
-    let has_inline_constraints = molecule
-        .atoms()
-        .iter()
-        .any(|atom| !atom.attributes().constraints.is_empty())
-        || molecule
-            .bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || molecule
-            .dative_bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || molecule
-            .aromatic_systems()
-            .iter()
-            .any(|system| !system.attributes().constraints.is_empty())
-        || molecule
-            .multicenter_bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || molecule
-            .noncovalent_bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || molecule
-            .stereo_atoms()
-            .iter()
-            .any(|stereo| !stereo.attributes().constraints.is_empty())
-        || molecule
-            .stereo_bonds()
-            .iter()
-            .any(|stereo| !stereo.attributes().constraints.is_empty());
-
-    if has_inline_constraints || molecule.has_constraints() {
+    if molecule.has_constraints() {
         DescriptionLevel::Full
     } else if molecule.has_stereo_atoms() || molecule.has_stereo_bonds() {
         DescriptionLevel::Structure
@@ -234,8 +201,42 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
 }
 
 fn reaction_canonicalize_level(reaction: &Reaction) -> DescriptionLevel {
+    let lhs = reaction.lhs();
+    let has_inline_constraints = lhs
+        .atoms()
+        .iter()
+        .any(|atom| !atom.attributes().constraints.is_empty())
+        || lhs
+            .bonds()
+            .iter()
+            .any(|bond| !bond.attributes().constraints.is_empty())
+        || lhs
+            .dative_bonds()
+            .iter()
+            .any(|bond| !bond.attributes().constraints.is_empty())
+        || lhs
+            .aromatic_systems()
+            .iter()
+            .any(|system| !system.attributes().constraints.is_empty())
+        || lhs
+            .multicenter_bonds()
+            .iter()
+            .any(|bond| !bond.attributes().constraints.is_empty())
+        || lhs
+            .noncovalent_bonds()
+            .iter()
+            .any(|bond| !bond.attributes().constraints.is_empty())
+        || lhs
+            .stereo_atoms()
+            .iter()
+            .any(|stereo| !stereo.attributes().constraints.is_empty())
+        || lhs
+            .stereo_bonds()
+            .iter()
+            .any(|stereo| !stereo.attributes().constraints.is_empty());
+
     reaction.deltas().iter().fold(
-        molecule_canonicalize_level(reaction.lhs()),
+        level_with_constraints(molecule_canonicalize_level(lhs), has_inline_constraints),
         |level, delta| level.max(delta_canonicalize_level(delta)),
     )
 }

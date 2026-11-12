@@ -184,13 +184,25 @@ fn meso_canonicalization_molecule() -> Molecule {
 )]
 #[case::full(
     Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: None,
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+)]
+#[case::atom_constraint(
+    Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
             AtomForm::from_element(Element::C),
         ],
         ..Default::default()
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Topology,
 )]
 #[case::aromatic_system(
     Molecule::from_entries(MoleculeEntries {
@@ -229,18 +241,6 @@ fn meso_canonicalization_molecule() -> Molecule {
     DescriptionLevel::Constitution,
 )]
 #[case::stereo_bond(stereo_bond_canonicalization_molecule(), DescriptionLevel::Structure)]
-#[case::molecule_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: None,
-            sum: NumForm::Lit(0),
-        })
-        .into(),
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
 fn test_molecule_canonicalize_level(
     #[case] molecule: Molecule,
     #[case] expected: DescriptionLevel,
