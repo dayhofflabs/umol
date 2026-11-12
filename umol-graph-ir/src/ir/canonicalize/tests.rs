@@ -1886,6 +1886,49 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
           :bonds [{:add [0 1 "1#a"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
     false
 )]
+#[case::atom_added(
+    r#"{:atoms [{:add "C"} "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] {:add [0 5 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" {:add "C"} "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] {:add [2 3 "1"]} {:add [3 4 "1"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_added_removed(
+    r#"{:atoms [{:add "C"} "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] {:add [0 5 "1"]}]}"#,
+    r#"{:atoms [{:remove "C"} "C" "C" "C" "C" "C"]
+          :bonds
+          [{:remove [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] {:remove [0 5 "1"]}]}"#,
+    false
+)]
+#[case::bond_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:add [3 4 "1"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_added_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} {:add [1 2 "1"]} [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] {:add [3 4 "1"]} [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:remove [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:remove [3 4 "1"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:remove [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
 #[case::dative_bond_unchanged(
     r#"{:atoms ["C" "C" "C" "C" "C" "C"]
           :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]

@@ -11,7 +11,7 @@ use crate::ir::{
     ConstraintDelta, DativeBondForm, DativeBondId, Deltas, Entity, IncidenceLevel,
     MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
     NoncovalentBondForm, NoncovalentBondId, ReactionSpanEntries, StereoAtomForm, StereoAtomId,
-    StereoBondForm, StereoBondId, StereoKind, StereoLigand, StereoLigandKind,
+    StereoBondForm, StereoBondId, StereoKind, StereoLigand, StereoLigandKind, TopicityForm,
 };
 
 #[rstest]
@@ -525,6 +525,102 @@ fn test_remapping_from_generator(
     ],
     true,
 )]
+#[case::rhs_topicity_one_site(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+        ]
+        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+        .into(),
+        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
+            .map(|(site, ligand)| {
+                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .into(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32).with_constraint(
+                        StereoAtomConstraintForm::Topicity(TopicityForm {
+                            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                        }),
+                    ),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
+    ],
+    false,
+)]
+#[case::rhs_topicity_both_sites(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+            Element::C, Element::F, Element::Cl, Element::Br, Element::I,
+        ]
+        .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+        .into(),
+        bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (5, 6), (5, 7), (5, 8), (5, 9)]
+            .map(|(site, ligand)| {
+                (AtomId(site), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .into(),
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32).with_constraint(
+                        StereoAtomConstraintForm::Topicity(TopicityForm {
+                            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                        }),
+                    ),
+                },
+            ),
+            (
+                AtomId(5),
+                [6, 7, 8, 9].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).into(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32).with_constraint(
+                        StereoAtomConstraintForm::Topicity(TopicityForm {
+                            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                        }),
+                    ),
+                },
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
+    ],
+    true,
+)]
 fn test_retain_stereo_preserving_generators(
     #[case] span: ReactionSpan,
     #[case] generator: Vec<NodeId>,
@@ -586,172 +682,6 @@ fn test_retain_preserving_generators(
     retain_preserving_generators(&span, &incidence_graph, &mut generators);
 
     assert_eq!(generators, expected);
-}
-
-#[rstest]
-#[case::unchanged(
-    EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 2])),
-    EntitySpan::Unchanged(MulticenterBondForm::from_electrons(vec![1, 2])),
-    [(SpanTagPosition::UNCHANGED, vec![NumForm::Lit(1)]),
-     (SpanTagPosition::UNCHANGED, vec![NumForm::Lit(2)])],
-)]
-#[case::added(
-    EntitySpan::Added(AromaticSystemForm::from_electrons(vec![1, 2])),
-    EntitySpan::Added(MulticenterBondForm::from_electrons(vec![1, 2])),
-    [(SpanTagPosition::ADDED, vec![NumForm::Lit(1)]),
-     (SpanTagPosition::ADDED, vec![NumForm::Lit(2)])],
-)]
-#[case::removed(
-    EntitySpan::Removed(AromaticSystemForm::from_electrons(vec![1, 2])),
-    EntitySpan::Removed(MulticenterBondForm::from_electrons(vec![1, 2])),
-    [(SpanTagPosition::REMOVED, vec![NumForm::Lit(1)]),
-     (SpanTagPosition::REMOVED, vec![NumForm::Lit(2)])],
-)]
-#[case::modified(
-    EntitySpan::Modified {
-        lhs: AromaticSystemForm::from_electrons(vec![1, 2]),
-        rhs: AromaticSystemForm::from_electrons(vec![1, 0]),
-    },
-    EntitySpan::Modified {
-        lhs: MulticenterBondForm::from_electrons(vec![1, 2]),
-        rhs: MulticenterBondForm::from_electrons(vec![1, 0]),
-    },
-    [(SpanTagPosition::UNCHANGED, vec![NumForm::Lit(1)]),
-     (SpanTagPosition::MODIFIED, vec![NumForm::Lit(2), NumForm::Lit(0)])],
-)]
-#[case::undetermined(
-    EntitySpan::Unchanged(AromaticSystemForm::default()),
-    EntitySpan::Unchanged(MulticenterBondForm::default()),
-    [(SpanTagPosition::UNCHANGED, vec![NumForm::Undetermined]),
-     (SpanTagPosition::UNCHANGED, vec![NumForm::Undetermined])],
-)]
-fn test_initial_color_keys_incidence(
-    #[case] aromatic: EntitySpan<AromaticSystemForm>,
-    #[case] multicenter: EntitySpan<MulticenterBondForm>,
-    #[case] expected: [(SpanTagPosition, Vec<NumForm>); 2],
-) {
-    let span = ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
-        aromatic: vec![(vec![AtomId(1), AtomId(0)], aromatic)],
-        multicenter: vec![(vec![AtomId(0), AtomId(1)], multicenter)],
-        ..Default::default()
-    });
-    let incidence = span.incidence_graph(IncidenceLevel::Constitution);
-    let (_, keys) = initial_color_keys(&span, &incidence).unwrap();
-    assert_eq!(
-        incidence
-            .incidences()
-            .map(|(_, role)| role.clone())
-            .collect::<Vec<_>>(),
-        vec![
-            Incidence::AromaticAtom,
-            Incidence::AromaticAtom,
-            Incidence::MulticenterAtom,
-            Incidence::MulticenterAtom
-        ],
-    );
-    let expected = expected.map(|(position, values)| {
-        CanonicalKeyValue::Span(SpanKey {
-            position,
-            values: values.iter().map(num_form_key).collect(),
-        })
-    });
-    assert_eq!(
-        incidence
-            .incidences()
-            .map(|(edge, _)| {
-                let [atom, owner] = incidence.graph().edge_endpoints(edge);
-                (
-                    incidence.entity(atom),
-                    incidence.entity(owner),
-                    keys[edge.index()].clone(),
-                )
-            })
-            .collect::<Vec<_>>(),
-        vec![
-            (
-                Entity::Atom(AtomId(1)),
-                Entity::AromaticSystem(AromaticSystemId(0)),
-                InitialColorKey::Incidence(variant(3, [expected[0].clone()]))
-            ),
-            (
-                Entity::Atom(AtomId(0)),
-                Entity::AromaticSystem(AromaticSystemId(0)),
-                InitialColorKey::Incidence(variant(3, [expected[1].clone()]))
-            ),
-            (
-                Entity::Atom(AtomId(0)),
-                Entity::MulticenterBond(MulticenterBondId(0)),
-                InitialColorKey::Incidence(variant(4, [expected[0].clone()]))
-            ),
-            (
-                Entity::Atom(AtomId(1)),
-                Entity::MulticenterBond(MulticenterBondId(0)),
-                InitialColorKey::Incidence(variant(4, [expected[1].clone()]))
-            ),
-        ],
-    );
-}
-
-#[rstest]
-#[case::unchanged_stereo_atom(ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
-            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
-            .into(),
-        bonds: (1..=4)
-            .map(|ligand| (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1))))
-            .collect(),
-        stereo_atoms: vec![(
-            AtomId(0),
-            (1..=4)
-                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
-                .collect(),
-            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([]))),
-        )],
-        ..Default::default()
-}))]
-#[case::modified_stereo_atom_rhs(ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
-            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
-            .into(),
-        bonds: (1..=4)
-            .map(|ligand| (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1))))
-            .collect(),
-        stereo_atoms: vec![(
-            AtomId(0),
-            (1..=4)
-                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
-                .collect(),
-            EntitySpan::Modified {
-                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
-            },
-        )],
-        ..Default::default()
-}))]
-#[case::unchanged_stereo_bond(ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: [Element::C, Element::C, Element::F, Element::Cl, Element::Br, Element::I]
-            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
-            .into(),
-        bonds: [(0, 1, 2), (0, 2, 1), (0, 3, 1), (1, 4, 1), (1, 5, 1)]
-            .map(|(first, second, order)| (AtomId(first), AtomId(second), EntitySpan::Unchanged(BondForm::from_order(order))))
-            .into(),
-        stereo_bonds: vec![(
-            BondId(0),
-            [3, 2, 5, 4]
-                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
-                .into(),
-            EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([]))),
-        )],
-        ..Default::default()
-}))]
-fn test_initial_color_keys_error(#[case] span: ReactionSpan) {
-    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
-
-    assert_eq!(
-        initial_color_keys(&span, &incidence_graph),
-        Err(Contradiction)
-    );
 }
 
 #[fixture]
@@ -1316,87 +1246,16 @@ fn test_topology_search_input(
     #[case] expected_node_sources: Vec<SubdivisionNodeSource>,
     #[case] expected_partition: Vec<Vec<NodeId>>,
 ) {
+    let span = span.normalize().unwrap();
     let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, _) = initial_color_keys(&span, &incidence_graph).unwrap();
-    let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
-    let input = topology_search_input(&span, &incidence_graph, &entity_colors);
+    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Topology).unwrap();
+    let input = topology_search_input(&span, &incidence_graph, &colors.entities);
 
     assert_eq!(input.adapter.graph, expected_graph);
     assert_eq!(input.adapter.colors, expected_colors);
     assert_eq!(input.adapter.node_sources, expected_node_sources);
     assert_eq!(input.adapter.source_node_count, span.atoms().len());
     assert_eq!(input.initial_partition.cells, expected_partition);
-}
-
-#[rstest]
-#[case::unchanged_path(ReactionSpan::from_entries(ReactionSpanEntries {
-    atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
-    bonds: vec![
-        (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
-        (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
-    ],
-    ..Default::default()
-}))]
-#[case::added_bond(ReactionSpan::from_entries(ReactionSpanEntries {
-    atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
-    bonds: vec![
-        (AtomId(1), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
-        (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
-    ],
-    ..Default::default()
-}))]
-#[case::removed_and_added_bond(ReactionSpan::from_entries(ReactionSpanEntries {
-    atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
-    bonds: vec![
-        (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
-        (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
-    ],
-    ..Default::default()
-}))]
-#[case::modified_atom_and_bond(ReactionSpan::from_entries(ReactionSpanEntries {
-    atoms: vec![
-        EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-        EntitySpan::Modified {
-            lhs: AtomForm::from_element(Element::N),
-            rhs: AtomForm::from_element(Element::N).with_charge(1_i64),
-        },
-        EntitySpan::Removed(AtomForm::from_element(Element::O)),
-    ],
-    bonds: vec![
-        (
-            AtomId(0),
-            AtomId(1),
-            EntitySpan::Modified {
-                lhs: BondForm::from_order(1),
-                rhs: BondForm::from_order(2),
-            },
-        ),
-        (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
-    ],
-    ..Default::default()
-}))]
-#[case::atoms_only(ReactionSpan::from_entries(ReactionSpanEntries {
-    atoms: vec![
-        EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-        EntitySpan::Added(AtomForm::from_element(Element::C)),
-    ],
-    ..Default::default()
-}))]
-fn test_topology_key(#[case] span: ReactionSpan) {
-    let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
-    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
-
-    for _ in 0..2 {
-        let entity_order =
-            entity_order(&span, &incidence_graph, DescriptionLevel::Topology, &order);
-        let remapping = remapping_from_order(&span, &incidence_graph, &entity_order);
-
-        assert_eq!(
-            topology_key(&span, &incidence_graph, &entity_order),
-            comparison_key(&span.clone().remap(&remapping), DescriptionLevel::Topology).unwrap(),
-        );
-        order.reverse();
-    }
 }
 
 #[rstest]
@@ -1885,13 +1744,47 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
     DescriptionLevel::Structure,
     [2, 2],
 )]
+#[case::symmetric_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 1],
+)]
+#[case::asymmetric_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0)]),
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 3],
+)]
 fn test_canonical_candidate(
     canonicalize_context: CanonicalizeContext,
     #[case] span: ReactionSpan,
     #[case] level: DescriptionLevel,
     #[case] expected_visited_leaves: [usize; 2],
 ) {
-    let search = |automorphism_pruning: bool, defer_key: bool| {
+    let span = span.normalize().expect("fixed span normalizes");
+    let incidence_graph = span.incidence_graph(match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    });
+    let [unpruned, pruned] = [false, true].map(|automorphism_pruning| {
         canonical_candidate(
             &span,
             level,
@@ -1904,33 +1797,29 @@ fn test_canonical_candidate(
                     BranchOrdering::NodeId
                 },
             },
-            defer_key,
         )
-        .expect("fixed span has initial colors")
+        .expect("fixed span has colors")
+    });
+    let canonical = |search: &CanonicalSearchResult<Option<ColorKey>>| {
+        span.clone()
+            .remap(&remapping_from_order(
+                &span,
+                &incidence_graph,
+                &search.candidate.entity_order,
+            ))
+            .reframe()
+            .expect("selected leaf preserves compatible frames")
     };
-    let [unpruned, pruned] =
-        [false, true].map(|automorphism_pruning| search(automorphism_pruning, false));
 
-    assert!(unpruned.candidate.key.is_some());
-    assert_eq!(pruned.candidate.key, unpruned.candidate.key);
+    assert_eq!(canonical(&pruned), canonical(&unpruned));
     assert_eq!(
         [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
         expected_visited_leaves,
     );
-    for (automorphism_pruning, searched) in [(false, &unpruned), (true, &pruned)] {
-        let deferred = search(automorphism_pruning, true);
-
+    for search in [&unpruned, &pruned] {
         assert_eq!(
-            deferred.candidate.key,
-            if searched.stats.visited_leaves > 1 {
-                searched.candidate.key.clone()
-            } else {
-                None
-            },
-        );
-        assert_eq!(
-            deferred.candidate.entity_order,
-            searched.candidate.entity_order
+            search.candidate.key.is_some(),
+            search.stats.visited_leaves > 1
         );
     }
 }
@@ -1963,10 +1852,6 @@ fn test_canonicalize_checked_reaction_span_modified(
             .clone()
             .tracked_canonicalize_at(level, &canonicalize_context)
             .map(|(canonical, _)| canonical),
-        Ok(expected.clone()),
-    );
-    assert_eq!(
-        source.canonical_key_at(level, &canonicalize_context),
-        expected.canonical_key_at(level, &canonicalize_context),
+        Ok(expected),
     );
 }

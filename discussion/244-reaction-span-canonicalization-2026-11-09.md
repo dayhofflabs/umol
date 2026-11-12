@@ -941,9 +941,9 @@ Three readings of the code accompany the trial.
   transported with the atoms as a stereo form is with its ligands, and the incidence integers serve
   the search graph only. Keys are compared only within one run, and their stability across code
   changes is not a design consideration.
-- **Equality and hash.** `canonical_eq` and `canonical_hash` of a molecule canonicalize a copy and
-  compare or hash the canonical form. The key of a leaf is compared only with the keys of the other
-  leaves of one search: its integers are ranks within one aggregate.
+- **Equality and hash.** `canonical_eq` and `canonical_hash` of a molecule, a reaction span, and a
+  reaction canonicalize a copy and compare or hash the canonical form. The key of a leaf is compared
+  only with the keys of the other leaves of one search: its integers are ranks within one aggregate.
 - **Encoding.** `CanonicalKeyValue`, its encoding functions, the explicit positions, and the
   per-field key functions planned before the trial of colors are removed or not written. The order
   of every value is the derived order of its type.
@@ -2513,7 +2513,7 @@ The 12,319 library tests, the integration tests of the crate, the 555 properties
 tests of the workspace without `umol-py` pass. Clippy on the crate reports the five dead-code
 warnings and nothing else.
 
-#### S9b — Span search on colors
+#### S9b — Span search on colors **Done**
 
 **Module:** `ir/canonicalize/reaction_span.rs`.
 
@@ -2522,17 +2522,89 @@ the adapter and the search partition from the integers, and searches with deferr
 level. At Full it runs the pruned search in backend canonical order with
 `retain_preserving_generators`, and the key adds the constraint spans of the span remapped and
 reframed in the entity order of the leaf. `generator_preserves_stereo` transports the whole stereo
-form on each side. `ReactionSpan::canonical_key_at` takes a normalized span. `canonical_eq` and
-`canonical_hash` of spans and of reactions normalize a copy and compare or hash the keys.
+form on each side. `canonical_eq` and `canonical_hash` of spans and of reactions canonicalize a
+copy and compare or hash the canonical form, and `canonical_key_at` of both goes.
 Delete the span's `comparison_key`, `topology_key`, `initial_color_keys`, and `entity_color_key`,
-with their tests. Breaking for the keys and the hash values of spans and reactions, and for
-representatives of spans that reach Full (red→green). [dep: S7a, S9a]
+with their tests. Breaking for the hash values of spans and reactions, and for representatives of
+spans (red→green). [dep: S7a, S9a]
 
-**Tests:** rows of `test_canonical_candidate` at each level with exact keys and exact
-visited-leaf counts without and with pruning; at Full a constraint span that keeps the symmetry and
-one that breaks it. The exact keys of the deleted key tests are shown first. Rows of
-`test_retain_stereo_preserving_generators` with a constraint on one side of a span only. The span
-and reaction benchmarks are timed against S8.
+**Tests:** no exact key is pinned. `test_canonical_candidate` keeps its visited-leaf counts without
+and with pruning and gains two Full rows, a constraint span that keeps the symmetry and one that
+breaks it. Rows of `test_retain_stereo_preserving_generators` with a constraint on one side of a
+span only. The span placement table and the reference comparison hold before and after. The break
+list is run with the span counterparts. The span and reaction benchmarks are timed against S8.
+
+The subitem was planned with a comparison of the keys of two spans; `canonical_eq` and
+`canonical_hash` go through `canonicalize` instead, as the molecule's do since S8a. A `ColorKey`
+has the field `constraints`, the constraint spans of the span remapped by `remapping_from_order`
+and reframed, filled when the span has any. `canonical_candidate` takes a normalized span and no
+longer a flag for the deferred key: the key it returns is present only when the search compared
+it. `tracked_canonicalize_at` passes pruning and backend canonical order at every level.
+`ReactionSpan::entries`, which only `comparison_key` read, is removed.
+
+The encoding of `ir/canonicalize.rs` has no caller left outside its own tests. The library build
+reports 88 dead-code warnings for it until S10a, and no other warning; the five warnings of S7a
+and S9a are gone.
+
+Tests. No expected value changed: the 14 earlier rows of `test_canonical_candidate` keep their
+visited-leaf counts, and `test_topology_search_input` its colors. `test_canonical_candidate`
+normalizes its span, asserts that the pruned and the unpruned search select the same canonical
+form, where it compared keys, and that a key is present exactly when more than one leaf was
+visited. Its two new rows are three carbon atoms with an added charge-sum constraint: over all
+atoms the search visits 6 leaves without pruning and 1 with it, over one atom 6 and 3.
+`test_retain_stereo_preserving_generators` has two new rows of two stereocentres exchanged by a
+generator: with a topicity constraint on the rhs of one of them the generator is dropped, with the
+constraint on the rhs of both it is kept. `test_initial_color_keys_incidence`,
+`test_initial_color_keys_error`, and `test_topology_key` go with their functions, and
+`test_canonicalize_checked_reaction_span_modified` loses its comparison of two keys.
+
+`test_reaction_span_canonicalize_placement` gains six rows, 116 in all. In them the only datum is
+which atom or bond of a six-ring is added or removed. They were missing: the first run of the
+break list below failed no row of the table under the last break, since every added or removed
+entity of the 110 rows also differed from its neighbours in form or in position.
+
+The 12,316 library tests, the integration tests of the crate, the 555 properties, the default
+tests of the workspace without `umol-py`, and the Python suite pass. The reference comparison
+reports no mismatch on the 10,028 pairs, and `canonical_eq` and the equality of `canonical_hash`
+of molecules give the same answer as the committed search on the 20,056 pairs.
+
+The break list:
+
+| Break | Failing tests | Rows of the molecule table | Rows of the span table |
+| --- | ---: | ---: | ---: |
+| The pruning treats every candidate of a cell as one orbit | 22 | 5 | 7 |
+| The molecule's `retain_stereo_preserving_generators` keeps every generator | 10 | 2 | 0 |
+| The molecule's `retain_preserving_generators` keeps every generator | 5 | 3 | 0 |
+| The molecule's incidence colors leave out the electron counts | 4 | 2 | 0 |
+| The color of an aromatic system leaves out its charge | 7 | 1 | 2 |
+| The span's `retain_stereo_preserving_generators` keeps every generator | 10 | 0 | 2 |
+| The span's `retain_preserving_generators` keeps every generator | 8 | 0 | 5 |
+| The span's incidence colors leave out the electron counts | 13 | 0 | 8 |
+| The color of an added entity is read as unchanged | 11 | 0 | 2 |
+
+Criterion medians against a run at S9a, with a 1-second warm-up and 3 seconds of measurement. Each
+group has the 20 cases of the corpus; the ratio of `asymmetric_charge_sum` is given apart:
+
+| Group | Ratio of the other 19 cases | `asymmetric_charge_sum` before | After | Ratio |
+| --- | ---: | ---: | ---: | ---: |
+| Span `canonicalize` | 0.18 to 0.89 | 131.5 µs | 147.5 µs | 1.12 |
+| Span `canonical_hash` | 0.19 to 0.88 | 130.2 µs | 151.2 µs | 1.16 |
+| Span `canonical_eq` | 0.19 to 0.92 | 257.2 µs | 298.8 µs | 1.16 |
+| Span `canonicalize`, modified entities | 0.40 to 0.88 | 34.3 µs | 27.5 µs | 0.80 |
+| Span `canonical_eq`, modified entities | 0.47 to 0.88 | 61.1 µs | 54.6 µs | 0.89 |
+| Reaction `canonical_eq`, equal | 0.22 to 0.95 | 301.6 µs | 315.7 µs | 1.05 |
+| Reaction `canonical_eq`, unequal | 0.23 to 0.95 | 272.9 µs | 312.7 µs | 1.15 |
+
+`asymmetric_charge_sum` is slower in the five groups whose span reaches Full with its constraint,
+by 5% to 16%: the generator checks of Full cost time and prune little, as for molecules since S7b.
+Every other case is faster in every group. The spans with an inline valence constraint, which
+reach Full until S9c and were searched without pruning:
+
+| Case with `#v1` | `canonicalize` before | After | `canonical_eq` before | After |
+| --- | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 2.50 ms | 94.9 µs | 4.99 ms | 199.5 µs |
+| `feature_free_disconnected` | 3.38 ms | 104.2 µs | 6.45 ms | 214.3 µs |
+| `symmetry_heavy_radicals` | 13.38 ms | 81.8 µs | 26.77 ms | 163.9 µs |
 
 #### S9c — Span and reaction level from the entities
 
@@ -2621,8 +2693,9 @@ test notices is reported as a gap in the tests before the stage closes.
 - `retain_preserving_generators` keeps every generator.
 - The incidence colors leave out the electron counts.
 - The color of an aromatic system leaves out its charge.
-- From S9: the span counterparts of the last four, and a span color that ignores which side a
-  form is on.
+- From S9: the span's `retain_stereo_preserving_generators` and `retain_preserving_generators`
+  keep every generator, the span's incidence colors leave out the electron counts, and the color
+  of an added entity is read as unchanged.
 
 At S7 the first four were run: 14, 9, 6, and 9 tests fail, among them 5, 1, 4, and 5 rows of
 `test_molecule_canonicalize_placement`.
