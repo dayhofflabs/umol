@@ -2131,7 +2131,7 @@ between the runs.
 
 ### S7 — Full
 
-#### S7a — Aggregate generator check
+#### S7a — Aggregate generator check **Done**
 
 Add `remapping_from_generator` and `retain_preserving_generators` in each submodule. The first
 builds the remapping that sends every entity to its image under a generator. The second keeps a
@@ -2142,6 +2142,17 @@ generator when the aggregate remapped by it equals the aggregate under framed eq
 `test_retain_preserving_generators`: a six-ring with a charge-sum constraint over the whole
 molecule, over one atom, and over two opposite atoms, with the ring rotations and reflections as
 generators; a span with a constraint span on one side.
+
+`remapping_from_generator` follows `remapping_from_order` and `retain_preserving_generators`
+follows `retain_stereo_preserving_generators`, in both submodules. The molecule check is
+`framed_eq_under` of the molecule with itself; the span check remaps a copy and compares it with
+`framed_eq`. The molecule tests have 3 and 3 rows. The six-ring keeps the rotation by one and a
+reflection with the constraint over the whole molecule, only the reflection through the atom with
+the constraint over one atom, and the half-turn and that reflection with it over two opposite
+atoms. The span tests have 2 and 3 rows: a span of two equal atoms keeps their exchange with an
+added constraint over both atoms, and drops it with one over a single atom and with a removed and
+an added constraint over one atom each. The 12,228 library tests pass. The four functions have no
+caller until S7b and S9b, so the library build reports four dead-code warnings.
 
 #### S7b — Molecule `canonicalize` at Full
 

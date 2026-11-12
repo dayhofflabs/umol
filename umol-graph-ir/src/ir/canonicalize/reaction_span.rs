@@ -193,6 +193,21 @@ fn remapping_from_order(
     molecule_remapping(&images)
 }
 
+/// The remapping that sends every entity of `incidence_graph` to its image under `generator`.
+fn remapping_from_generator(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> MoleculeRemapping {
+    let mut images = reaction_span_counts(span).map(|count| (0..count).collect::<Vec<_>>());
+    for node in incidence_graph.graph().node_ids() {
+        let entity = incidence_graph.entity(node);
+        images[entity.kind() as usize][entity.kind_id()] =
+            incidence_graph.entity(generator[node.index()]).kind_id();
+    }
+    molecule_remapping(&images)
+}
+
 fn generator_preserves_stereo(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
@@ -297,6 +312,20 @@ fn retain_stereo_preserving_generators(
         return;
     }
     generators.retain(|generator| generator_preserves_stereo(span, incidence_graph, generator));
+}
+
+/// Keep the generators that carry `span` onto itself: the span remapped by the generator equals the
+/// span under framed equality.
+fn retain_preserving_generators(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    generators.retain(|generator| {
+        span.clone()
+            .try_remap(&remapping_from_generator(span, incidence_graph, generator))
+            .is_some_and(|remapped| remapped.framed_eq(span))
+    });
 }
 
 fn initial_color_keys(

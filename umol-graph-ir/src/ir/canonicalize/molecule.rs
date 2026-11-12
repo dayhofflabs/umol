@@ -304,6 +304,21 @@ fn retain_stereo_preserving_generators(
     generators.retain(|generator| generator_preserves_stereo(molecule, incidence_graph, generator));
 }
 
+/// Keep the generators that carry `molecule` onto itself: the molecule remapped by the generator
+/// equals the molecule under framed equality.
+fn retain_preserving_generators(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    generators.retain(|generator| {
+        molecule.framed_eq_under(
+            molecule,
+            &remapping_from_generator(molecule, incidence_graph, generator),
+        )
+    });
+}
+
 /// Construct the normalized entity and incidence keys used for initial colors.
 fn initial_color_keys(
     molecule: &Molecule,
@@ -1041,6 +1056,21 @@ fn remapping_from_order(
         };
         images[entity_kind][kind_id] = next[entity_kind];
         next[entity_kind] += 1;
+    }
+    molecule_remapping(&images)
+}
+
+/// The remapping that sends every entity of `incidence_graph` to its image under `generator`.
+fn remapping_from_generator(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> MoleculeRemapping {
+    let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
+    for node in incidence_graph.graph().node_ids() {
+        let entity = incidence_graph.entity(node);
+        images[entity.kind() as usize][entity.kind_id()] =
+            incidence_graph.entity(generator[node.index()]).kind_id();
     }
     molecule_remapping(&images)
 }

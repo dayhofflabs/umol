@@ -2004,6 +2004,76 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
 }
 
 #[rstest]
+#[case::identity(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    [0, 1, 2, 3, 4].map(NodeId).into(),
+    molecule_remapping(&[
+        vec![0, 1, 2],
+        vec![0, 1],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ])
+)]
+#[case::path_reversal(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    [2, 1, 0, 4, 3].map(NodeId).into(),
+    molecule_remapping(&[
+        vec![2, 1, 0],
+        vec![1, 0],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ])
+)]
+#[case::stereo_site_exchange(
+    stereo_site_exchange_canonicalization_molecule(),
+    [5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 14, 15, 16, 17, 10, 11, 12, 13, 19, 18].map(NodeId).into(),
+    molecule_remapping(&[
+        vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4],
+        vec![4, 5, 6, 7, 0, 1, 2, 3],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![1, 0],
+        Vec::new(),
+    ])
+)]
+fn test_remapping_from_generator(
+    #[case] molecule: Molecule,
+    #[case] generator: Vec<NodeId>,
+    #[case] expected: MoleculeRemapping,
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+
+    assert_eq!(
+        remapping_from_generator(&molecule, &incidence_graph, &generator),
+        expected
+    );
+}
+
+#[rstest]
 #[case::bond(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 3],
@@ -3108,6 +3178,67 @@ fn test_retain_stereo_preserving_generators(
     };
 
     retain_stereo_preserving_generators(&molecule, &incidence_graph, &mut generators);
+
+    assert_eq!(generators, expected);
+}
+
+#[rstest]
+#[case::whole_molecule(
+    None,
+    vec![
+        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+    ],
+    vec![
+        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+    ]
+)]
+#[case::one_atom(
+    Some(vec![AtomId(0)]),
+    vec![
+        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+    ],
+    vec![[0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into()]
+)]
+#[case::two_opposite_atoms(
+    Some(vec![AtomId(0), AtomId(3)]),
+    vec![
+        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
+        [3, 4, 5, 0, 1, 2, 10, 9, 11, 7, 6, 8].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+    ],
+    vec![
+        [3, 4, 5, 0, 1, 2, 10, 9, 11, 7, 6, 8].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+    ]
+)]
+fn test_retain_preserving_generators(
+    #[case] atoms: Option<Vec<AtomId>>,
+    #[case] mut generators: Vec<Vec<NodeId>>,
+    #[case] expected: Vec<Vec<NodeId>>,
+) {
+    let molecule = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(5), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms,
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    });
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+
+    retain_preserving_generators(&molecule, &incidence_graph, &mut generators);
 
     assert_eq!(generators, expected);
 }

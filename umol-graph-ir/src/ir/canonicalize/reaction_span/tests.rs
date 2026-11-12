@@ -282,6 +282,61 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
 }
 
 #[rstest]
+#[case::identity(
+    [0, 1, 2, 3, 4].map(NodeId).into(),
+    molecule_remapping(&[
+        vec![0, 1, 2],
+        vec![0, 1],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ])
+)]
+#[case::path_reversal(
+    [2, 1, 0, 4, 3].map(NodeId).into(),
+    molecule_remapping(&[
+        vec![2, 1, 0],
+        vec![1, 0],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ])
+)]
+fn test_remapping_from_generator(
+    #[case] generator: Vec<NodeId>,
+    #[case] expected: MoleculeRemapping,
+) {
+    let span = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        bonds: vec![
+            (
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+        ],
+        ..Default::default()
+    });
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+
+    assert_eq!(
+        remapping_from_generator(&span, &incidence_graph, &generator),
+        expected
+    );
+}
+
+#[rstest]
 #[case::feature_free(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
@@ -540,6 +595,51 @@ fn test_retain_stereo_preserving_generators(
     };
 
     retain_stereo_preserving_generators(&span, &incidence_graph, &mut generators);
+
+    assert_eq!(generators, expected);
+}
+
+#[rstest]
+#[case::added_over_one_atom(
+    vec![ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+        atoms: Some(vec![AtomId(0)]),
+        sum: NumForm::Lit(0),
+    }))],
+    Vec::new()
+)]
+#[case::added_over_both_atoms(
+    vec![ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+        atoms: Some(vec![AtomId(0), AtomId(1)]),
+        sum: NumForm::Lit(0),
+    }))],
+    vec![[1, 0].map(NodeId).into()]
+)]
+#[case::removed_and_added_over_one_atom_each(
+    vec![
+        ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0)]),
+            sum: NumForm::Lit(0),
+        })),
+        ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(1)]),
+            sum: NumForm::Lit(0),
+        })),
+    ],
+    Vec::new()
+)]
+fn test_retain_preserving_generators(
+    #[case] constraints: Vec<ConstraintSpan>,
+    #[case] expected: Vec<Vec<NodeId>>,
+) {
+    let span = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        constraints,
+        ..Default::default()
+    });
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+    let mut generators: Vec<Vec<NodeId>> = vec![[1, 0].map(NodeId).into()];
+
+    retain_preserving_generators(&span, &incidence_graph, &mut generators);
 
     assert_eq!(generators, expected);
 }
