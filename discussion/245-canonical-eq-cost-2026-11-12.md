@@ -641,7 +641,7 @@ clean, which is the stage gate of S2.
 For molecules without contradiction, `canonical_eq` relates the same pairs after this stage as
 before it.
 
-#### S3a — Shared functions
+#### S3a — Shared functions **Done**
 
 **Module:** `ir/canonicalize.rs`.
 
@@ -656,6 +656,32 @@ the second also compares its result with `framed_eq_under` under the same remapp
 `test_remapping_exists` has a row for each way a pair is decided: cells differ, single-node cells
 with a remapping that passes and one that fails, the first path, a search that finds a remapping,
 and a search that finds none.
+
+`remapping_exists` takes the check as a function of the image of each entity node, and the
+generator filter in the form `canonical_search_impl` takes it. It does not call
+`remapping_preserves_incidences` itself; the check of the caller does. The helper that lists the
+incidences of a node is nested in `remapping_preserves_incidences`.
+
+`test_color_representatives` is in `ir/canonicalize/tests.rs`. The other three tests build their
+adapters from molecules and are in `ir/canonicalize/molecule/tests.rs`, beside the existing
+adapter tests. `test_same_cells` compares 2-methylpentane with a renumbered copy, hexane with
+2-methylpentane, and propane with butane. `test_remapping_preserves_incidences` has five rows on
+ammonia borane, furan, and methoxyamine against N-methylhydroxylamine, and asserts the same
+result from `framed_eq_under`. `test_remapping_exists` runs at Topology with
+`remapping_preserves_incidences` as the check:
+
+| Row | Pair | Result |
+| --- | --- | --- |
+| `cells_differ` | hexane, 2-methylpentane | false |
+| `single_node_cells` | methoxyamine, renumbered | true |
+| `single_node_cells_check_fails` | methoxyamine, N-methylhydroxylamine | false |
+| `first_path` | cyclohexane, renumbered | true |
+| `search_finds_remapping` | cuneane, renumbered | true |
+| `search_finds_none` | cubane, cuneane | false |
+
+A temporary print, removed again, showed that the last two rows reach the search and the first
+four do not. The tests of `umol-graph-ir` pass with all features. The library build reports the
+four functions as unused until S3b.
 
 #### S3b — `Molecule::canonical_eq_at`
 

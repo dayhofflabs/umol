@@ -1893,6 +1893,127 @@ fn test_ordered_partition_refine_exhaustive_domain(
 }
 
 #[rstest]
+#[case::renumbered(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"] [4 0 "1"]]}"#),
+    true
+)]
+#[case::different_constitution(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    false
+)]
+#[case::different_size(
+    mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}"#),
+    false
+)]
+fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] expected: bool) {
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_adapter = AutomorphismAdapter::new(
+        &source_incidence,
+        &initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let target_adapter = AutomorphismAdapter::new(
+        &target_incidence,
+        &initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let source_partition =
+        OrderedPartition::from_descriptors(&source_adapter.colors).refine(source_adapter.graph());
+    let target_partition =
+        OrderedPartition::from_descriptors(&target_adapter.colors).refine(target_adapter.graph());
+
+    assert_eq!(
+        same_cells(
+            &source_adapter,
+            &source_partition,
+            &target_adapter,
+            &target_partition
+        ),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::renumbered(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    mol_dsl!(r#"{:atoms ["B" "N"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#),
+    vec![1, 0, 2],
+    true
+)]
+#[case::donor_and_acceptor_exchanged(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#),
+    vec![0, 1, 2],
+    false
+)]
+#[case::electron_counts(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    true
+)]
+#[case::electron_counts_moved(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,2,1,1,1]"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    false
+)]
+#[case::bond_moved(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 2 "1"] [2 1 "1"]]}"#),
+    vec![0, 1, 2, 3, 4],
+    false
+)]
+fn test_remapping_preserves_incidences(
+    #[case] source: Molecule,
+    #[case] target: Molecule,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_adapter = AutomorphismAdapter::new(
+        &source_incidence,
+        &initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let target_adapter = AutomorphismAdapter::new(
+        &target_incidence,
+        &initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_preserves_incidences(&source_adapter, &target_adapter, &images),
+        expected,
+    );
+    assert_eq!(
+        source.framed_eq_under(
+            &target,
+            &remapping_from_generator(&source, &source_incidence, &images),
+        ),
+        expected,
+    );
+}
+
+#[rstest]
 fn test_canonical_search_color_labels() {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -1945,6 +2066,90 @@ fn test_canonical_search_color_labels() {
     );
 
     assert_eq!(actual.candidate.key, expected.candidate.key);
+}
+
+#[rstest]
+#[case::cells_differ(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    false
+)]
+#[case::single_node_cells(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["N" "O" "C"] :bonds [[2 1 "1"] [1 0 "1"]]}"#),
+    true
+)]
+#[case::single_node_cells_check_fails(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 2 "1"] [2 1 "1"]]}"#),
+    false
+)]
+#[case::first_path(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 2 "1"] [2 4 "1"] [4 1 "1"] [1 3 "1"] [3 5 "1"] [5 0 "1"]]}"#),
+    true
+)]
+#[case::search_finds_remapping(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 0 "1"] [0 4 "1"] [1 3 "1"] [2 6 "1"] [5 7 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[7 6 "1"] [6 5 "1"] [5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"]
+                    [1 0 "1"] [0 7 "1"] [7 3 "1"] [6 4 "1"] [5 1 "1"] [2 0 "1"]]}"#
+    ),
+    true
+)]
+#[case::search_finds_none(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 4 "1"] [0 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 0 "1"] [0 4 "1"] [1 3 "1"] [2 6 "1"] [5 7 "1"]]}"#
+    ),
+    false
+)]
+fn test_remapping_exists(
+    #[case] source: Molecule,
+    #[case] target: Molecule,
+    #[case] expected: bool,
+) {
+    let source_incidence = source.incidence_graph(IncidenceLevel::Topology);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Topology);
+    let source_colors =
+        initial_colors(&source, &source_incidence, DescriptionLevel::Topology).unwrap();
+    let target_colors =
+        initial_colors(&target, &target_incidence, DescriptionLevel::Topology).unwrap();
+    let TopologySearchInput {
+        adapter: source_adapter,
+        initial_partition: source_partition,
+    } = topology_search_input(&source, &source_incidence, &source_colors.entities);
+    let TopologySearchInput {
+        adapter: target_adapter,
+        initial_partition: target_partition,
+    } = topology_search_input(&target, &target_incidence, &target_colors.entities);
+
+    assert_eq!(
+        remapping_exists(
+            &source_adapter,
+            source_partition,
+            &target_adapter,
+            target_partition,
+            AutomorphismAlgorithm::Nauty,
+            &|images: &[NodeId]| {
+                remapping_preserves_incidences(&source_adapter, &target_adapter, images)
+            },
+            false,
+            &|_: &mut Vec<Vec<NodeId>>| {},
+        ),
+        expected,
+    );
 }
 
 #[rstest]

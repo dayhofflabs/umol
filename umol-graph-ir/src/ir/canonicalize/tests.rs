@@ -3273,6 +3273,22 @@ fn test_rank_colors(
 }
 
 #[rstest]
+#[case::empty(vec![], vec![], Some(vec![]))]
+#[case::reordered(vec![0, 0, 1], vec![0, 1, 0], Some(vec![(0, 0), (2, 1)]))]
+#[case::offset(vec![5, 6, 6], vec![6, 5, 6], Some(vec![(0, 1), (1, 0)]))]
+#[case::different_counts(vec![0, 0, 1], vec![0, 1, 1], None)]
+#[case::different_lengths(vec![0], vec![0, 0], None)]
+#[case::integer_above(vec![0, 1], vec![0, 2], None)]
+#[case::integer_below(vec![1, 2], vec![0, 1], None)]
+fn test_color_representatives(
+    #[case] source: Vec<u32>,
+    #[case] target: Vec<u32>,
+    #[case] expected: Option<Vec<(usize, usize)>>,
+) {
+    assert_eq!(color_representatives(&source, &target), expected);
+}
+
+#[rstest]
 #[case::empty(
     4,
     Vec::new(),
