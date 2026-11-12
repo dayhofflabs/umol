@@ -247,6 +247,98 @@ fn overlay_heavy() -> Molecule {
     })
 }
 
+fn overlay_unconstrained() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::C,
+            Element::N,
+            Element::O,
+            Element::F,
+            Element::Cl,
+        ]
+        .into_iter()
+        .map(atom)
+        .collect(),
+        bonds: vec![
+            bond(0, 1, 1),
+            bond(1, 2, 2),
+            bond(2, 3, 1),
+            bond(3, 0, 1),
+            bond(1, 4, 1),
+            bond(1, 5, 1),
+            bond(2, 6, 1),
+            bond(2, 7, 1),
+        ],
+        dative: vec![(
+            vec![AtomId(5), AtomId(4)],
+            AtomId(3),
+            DativeBondForm::from_order(1),
+        )],
+        aromatic: vec![(
+            vec![AtomId(3), AtomId(2), AtomId(1), AtomId(0)],
+            AromaticSystemForm::default(),
+        )],
+        multicenter: vec![(
+            vec![AtomId(5), AtomId(4), AtomId(0)],
+            MulticenterBondForm::default(),
+        )],
+        noncovalent: vec![(
+            [AtomId(7), AtomId(6)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        ..Default::default()
+    })
+}
+
+fn aromatic_electron_counts() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![atom(Element::C); 5],
+        bonds: vec![
+            bond(0, 1, 1),
+            bond(1, 2, 1),
+            bond(2, 3, 1),
+            bond(3, 4, 1),
+            bond(4, 0, 1),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+        )],
+        ..Default::default()
+    })
+}
+
+fn charge_sum_ring(atoms: Option<Vec<AtomId>>) -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![atom(Element::C); 6],
+        bonds: vec![
+            bond(0, 1, 1),
+            bond(1, 2, 1),
+            bond(2, 3, 1),
+            bond(3, 4, 1),
+            bond(4, 5, 1),
+            bond(5, 0, 1),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms,
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    })
+}
+
+fn symmetric_charge_sum() -> Molecule {
+    charge_sum_ring(None)
+}
+
+fn asymmetric_charge_sum() -> Molecule {
+    charge_sum_ring(Some(vec![AtomId(0), AtomId(1)]))
+}
+
 fn large_aromatic() -> Molecule {
     const ATOM_COUNT: usize = 128;
 
@@ -664,6 +756,22 @@ fn corpus() -> Vec<CorpusCase> {
         CorpusCase {
             name: "overlay_heavy",
             molecule: overlay_heavy(),
+        },
+        CorpusCase {
+            name: "overlay_unconstrained",
+            molecule: overlay_unconstrained(),
+        },
+        CorpusCase {
+            name: "aromatic_electron_counts",
+            molecule: aromatic_electron_counts(),
+        },
+        CorpusCase {
+            name: "symmetric_charge_sum",
+            molecule: symmetric_charge_sum(),
+        },
+        CorpusCase {
+            name: "asymmetric_charge_sum",
+            molecule: asymmetric_charge_sum(),
         },
         CorpusCase {
             name: "tetrahedral_stereo",
