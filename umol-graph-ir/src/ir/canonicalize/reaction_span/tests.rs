@@ -7,11 +7,12 @@ use super::super::tests::{canonicalize_context, initial_color_molecule};
 use super::super::*;
 use super::*;
 use crate::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomFieldChange, AtomForm, AtomId, BondId,
+    AromaticSystemForm, AromaticSystemId, AtomDelta, AtomFieldChange, AtomForm, AtomId, BondId,
     ConstraintDelta, DativeBondForm, DativeBondId, Deltas, Entity, IncidenceLevel,
     MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
-    NoncovalentBondForm, NoncovalentBondId, ReactionSpanEntries, StereoAtomForm, StereoAtomId,
-    StereoBondForm, StereoBondId, StereoKind, StereoLigand, StereoLigandKind, TopicityForm,
+    NoncovalentBondDelta, NoncovalentBondForm, NoncovalentBondId, ReactionSpanEntries,
+    StereoAtomDelta, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoKind,
+    StereoLigand, StereoLigandKind, TopicityForm,
 };
 
 #[rstest]

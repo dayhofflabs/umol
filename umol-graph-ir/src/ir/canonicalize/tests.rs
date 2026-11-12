@@ -13,15 +13,17 @@ use umol_edn::FromEdn;
 
 use super::*;
 use crate::ir::{
-    AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
-    AtomFieldChange, AtomForm, AtomId, BondFieldChange, BondForm, BondId, BooleanForm, Constraint,
-    ConstraintDelta, DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas, MoleculeEntries,
-    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId, NoncovalentBondFieldChange,
-    NoncovalentBondForm, NoncovalentBondId, ReactionSpanEntries, StereoAtomConstraintForm,
-    StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
-    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandPair, Stereogenicity, StereogenicityForm, Topicity,
-    TopicityForm, TopicityRelationForm,
+    AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
+    AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm, AtomId, BondDelta, BondFieldChange,
+    BondForm, BondId, BooleanForm, Constraint, ConstraintDelta, DativeBondDelta,
+    DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas, MoleculeEntries,
+    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondId,
+    ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange,
+    StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta, StereoBondFieldChange,
+    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandPair, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
+    TopicityRelationForm,
 };
 
 impl AutomorphismAdapter {
@@ -376,65 +378,6 @@ fn test_description_level_order(#[case] lower: DescriptionLevel, #[case] upper: 
 }
 
 #[rstest]
-#[case::unchanged(
-    EntitySpan::Unchanged(false),
-    DescriptionLevel::Topology,
-    DescriptionLevel::Topology
-)]
-#[case::added(
-    EntitySpan::Added(false),
-    DescriptionLevel::Constitution,
-    DescriptionLevel::Constitution
-)]
-#[case::removed(
-    EntitySpan::Removed(false),
-    DescriptionLevel::Structure,
-    DescriptionLevel::Structure
-)]
-#[case::modified(
-    EntitySpan::Modified { lhs: false, rhs: false },
-    DescriptionLevel::Constitution,
-    DescriptionLevel::Constitution,
-)]
-#[case::unchanged_constraint(
-    EntitySpan::Unchanged(true),
-    DescriptionLevel::Topology,
-    DescriptionLevel::Full
-)]
-#[case::added_constraint(
-    EntitySpan::Added(true),
-    DescriptionLevel::Constitution,
-    DescriptionLevel::Full
-)]
-#[case::removed_constraint(
-    EntitySpan::Removed(true),
-    DescriptionLevel::Structure,
-    DescriptionLevel::Full
-)]
-#[case::modified_lhs_constraint(
-    EntitySpan::Modified { lhs: true, rhs: false },
-    DescriptionLevel::Topology,
-    DescriptionLevel::Full,
-)]
-#[case::modified_rhs_constraint(
-    EntitySpan::Modified { lhs: false, rhs: true },
-    DescriptionLevel::Topology,
-    DescriptionLevel::Full,
-)]
-fn test_entity_span_canonicalize_level(
-    #[case] span: EntitySpan<bool>,
-    #[case] base: DescriptionLevel,
-    #[case] expected: DescriptionLevel,
-) {
-    assert_eq!(
-        entity_span_canonicalize_level(&span, base, |has_inline_constraints| {
-            *has_inline_constraints
-        }),
-        expected,
-    );
-}
-
-#[rstest]
 #[case::atom_add(
     Delta::Atom(AtomDelta::Add {
         id: AtomId(0),
@@ -458,7 +401,7 @@ fn test_entity_span_canonicalize_level(
 )]
 #[case::atom_modify_constraint(
     Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: None }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Topology,
 )]
 #[case::atom_inline_constraint(
     Delta::Atom(AtomDelta::Add {
@@ -466,7 +409,7 @@ fn test_entity_span_canonicalize_level(
         attributes: AtomForm::from_element(Element::C)
             .with_constraint(AtomConstraintForm::valence(4)),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Topology,
 )]
 #[case::bond_add(
     Delta::Bond(BondDelta::Add {
@@ -493,7 +436,7 @@ fn test_entity_span_canonicalize_level(
 )]
 #[case::bond_modify_constraint(
     Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: None }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Topology,
 )]
 #[case::bond_inline_constraint(
     Delta::Bond(BondDelta::Add {
@@ -502,7 +445,7 @@ fn test_entity_span_canonicalize_level(
         attributes: BondForm::from_order(1)
             .with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Topology,
 )]
 #[case::dative_add(
     Delta::DativeBond(DativeBondDelta::Add {
@@ -535,7 +478,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::dative_inline_constraint(
     Delta::DativeBond(DativeBondDelta::Add {
@@ -545,7 +488,7 @@ fn test_entity_span_canonicalize_level(
         attributes: DativeBondForm::from_order(1)
             .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::aromatic_add(
     Delta::AromaticSystem(AromaticSystemDelta::Add {
@@ -579,7 +522,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::aromatic_inline_constraint(
     Delta::AromaticSystem(AromaticSystemDelta::Add {
@@ -588,7 +531,7 @@ fn test_entity_span_canonicalize_level(
         attributes: AromaticSystemForm::from_electrons(vec![1, 1])
             .with_constraint(AromaticSystemConstraintForm::electron_count(2)),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::multicenter_add(
     Delta::MulticenterBond(MulticenterBondDelta::Add {
@@ -622,7 +565,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::multicenter_inline_constraint(
     Delta::MulticenterBond(MulticenterBondDelta::Add {
@@ -631,7 +574,7 @@ fn test_entity_span_canonicalize_level(
         attributes: MulticenterBondForm::from_electrons(vec![1, 1])
             .with_constraint(MulticenterBondConstraintForm::electron_count(2)),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::noncovalent_add(
     Delta::NoncovalentBond(NoncovalentBondDelta::Add {
@@ -665,7 +608,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::noncovalent_inline_constraint(
     Delta::NoncovalentBond(NoncovalentBondDelta::Add {
@@ -674,7 +617,7 @@ fn test_entity_span_canonicalize_level(
         attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
             .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Constitution,
 )]
 #[case::stereo_atom_add(
     Delta::StereoAtom(StereoAtomDelta::Add {
@@ -711,7 +654,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_atom_inline_constraint(
     Delta::StereoAtom(StereoAtomDelta::Add {
@@ -724,7 +667,7 @@ fn test_entity_span_canonicalize_level(
             )),
         ),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_bond_add(
     Delta::StereoBond(StereoBondDelta::Add {
@@ -761,7 +704,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_bond_inline_constraint(
     Delta::StereoBond(StereoBondDelta::Add {
@@ -774,7 +717,7 @@ fn test_entity_span_canonicalize_level(
             )),
         ),
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Structure,
 )]
 #[case::constraint(
     Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
@@ -796,7 +739,7 @@ fn test_delta_canonicalize_level(#[case] delta: Delta, #[case] expected: Descrip
         }],
         ..Default::default()
     }),
-    DescriptionLevel::Full,
+    DescriptionLevel::Topology,
 )]
 fn test_reaction_span_canonicalize_level_modified(
     #[case] span: ReactionSpan,

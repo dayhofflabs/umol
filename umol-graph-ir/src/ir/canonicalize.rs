@@ -25,10 +25,7 @@ use super::constraint::{
     StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
     TopicityRelationForm,
 };
-use super::delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, MulticenterBondDelta,
-    NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
-};
+use super::delta::Delta;
 use super::electrons::ElectronCountsForm;
 use super::error::Contradiction;
 use super::id::{
@@ -72,114 +69,14 @@ enum DescriptionLevel {
     Full,
 }
 
-fn level_with_constraints(
-    base: DescriptionLevel,
-    has_inline_constraints: bool,
-) -> DescriptionLevel {
-    if has_inline_constraints {
-        DescriptionLevel::Full
-    } else {
-        base
-    }
-}
-
-fn entity_span_canonicalize_level<T>(
-    span: &EntitySpan<T>,
-    base: DescriptionLevel,
-    has_inline_constraints: impl Fn(&T) -> bool,
-) -> DescriptionLevel {
-    let has_inline_constraints = match span {
-        EntitySpan::Unchanged(attributes)
-        | EntitySpan::Added(attributes)
-        | EntitySpan::Removed(attributes) => has_inline_constraints(attributes),
-        EntitySpan::Modified { lhs, rhs } => {
-            has_inline_constraints(lhs) || has_inline_constraints(rhs)
-        }
-    };
-    level_with_constraints(base, has_inline_constraints)
-}
-
 fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
     match delta {
-        Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
-            level_with_constraints(
-                DescriptionLevel::Topology,
-                !attributes.constraints.is_empty(),
-            )
-        }
-        Delta::Atom(AtomDelta::ModifyField { .. }) => DescriptionLevel::Topology,
-        Delta::Atom(AtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
-        Delta::Bond(BondDelta::Add { attributes, .. } | BondDelta::Remove { attributes, .. }) => {
-            level_with_constraints(
-                DescriptionLevel::Topology,
-                !attributes.constraints.is_empty(),
-            )
-        }
-        Delta::Bond(BondDelta::ModifyField { .. }) => DescriptionLevel::Topology,
-        Delta::Bond(BondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
-        Delta::DativeBond(
-            DativeBondDelta::Add { attributes, .. } | DativeBondDelta::Remove { attributes, .. },
-        ) => level_with_constraints(
-            DescriptionLevel::Constitution,
-            !attributes.constraints.is_empty(),
-        ),
-        Delta::DativeBond(DativeBondDelta::ModifyField { .. }) => DescriptionLevel::Constitution,
-        Delta::DativeBond(DativeBondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
-        Delta::AromaticSystem(
-            AromaticSystemDelta::Add { attributes, .. }
-            | AromaticSystemDelta::Remove { attributes, .. },
-        ) => level_with_constraints(
-            DescriptionLevel::Constitution,
-            !attributes.constraints.is_empty(),
-        ),
-        Delta::AromaticSystem(AromaticSystemDelta::ModifyField { .. }) => {
-            DescriptionLevel::Constitution
-        }
-        Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { .. }) => {
-            DescriptionLevel::Full
-        }
-        Delta::MulticenterBond(
-            MulticenterBondDelta::Add { attributes, .. }
-            | MulticenterBondDelta::Remove { attributes, .. },
-        ) => level_with_constraints(
-            DescriptionLevel::Constitution,
-            !attributes.constraints.is_empty(),
-        ),
-        Delta::MulticenterBond(MulticenterBondDelta::ModifyField { .. }) => {
-            DescriptionLevel::Constitution
-        }
-        Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { .. }) => {
-            DescriptionLevel::Full
-        }
-        Delta::NoncovalentBond(
-            NoncovalentBondDelta::Add { attributes, .. }
-            | NoncovalentBondDelta::Remove { attributes, .. },
-        ) => level_with_constraints(
-            DescriptionLevel::Constitution,
-            !attributes.constraints.is_empty(),
-        ),
-        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { .. }) => {
-            DescriptionLevel::Constitution
-        }
-        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { .. }) => {
-            DescriptionLevel::Full
-        }
-        Delta::StereoAtom(
-            StereoAtomDelta::Add { attributes, .. } | StereoAtomDelta::Remove { attributes, .. },
-        ) => level_with_constraints(
-            DescriptionLevel::Structure,
-            !attributes.constraints.is_empty(),
-        ),
-        Delta::StereoAtom(StereoAtomDelta::ModifyField { .. }) => DescriptionLevel::Structure,
-        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
-        Delta::StereoBond(
-            StereoBondDelta::Add { attributes, .. } | StereoBondDelta::Remove { attributes, .. },
-        ) => level_with_constraints(
-            DescriptionLevel::Structure,
-            !attributes.constraints.is_empty(),
-        ),
-        Delta::StereoBond(StereoBondDelta::ModifyField { .. }) => DescriptionLevel::Structure,
-        Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
+        Delta::Atom(_) | Delta::Bond(_) => DescriptionLevel::Topology,
+        Delta::DativeBond(_)
+        | Delta::AromaticSystem(_)
+        | Delta::MulticenterBond(_)
+        | Delta::NoncovalentBond(_) => DescriptionLevel::Constitution,
+        Delta::StereoAtom(_) | Delta::StereoBond(_) => DescriptionLevel::Structure,
         Delta::Constraint(_) => DescriptionLevel::Full,
     }
 }
@@ -201,109 +98,26 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
 }
 
 fn reaction_canonicalize_level(reaction: &Reaction) -> DescriptionLevel {
-    let lhs = reaction.lhs();
-    let has_inline_constraints = lhs
-        .atoms()
-        .iter()
-        .any(|atom| !atom.attributes().constraints.is_empty())
-        || lhs
-            .bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || lhs
-            .dative_bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || lhs
-            .aromatic_systems()
-            .iter()
-            .any(|system| !system.attributes().constraints.is_empty())
-        || lhs
-            .multicenter_bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || lhs
-            .noncovalent_bonds()
-            .iter()
-            .any(|bond| !bond.attributes().constraints.is_empty())
-        || lhs
-            .stereo_atoms()
-            .iter()
-            .any(|stereo| !stereo.attributes().constraints.is_empty())
-        || lhs
-            .stereo_bonds()
-            .iter()
-            .any(|stereo| !stereo.attributes().constraints.is_empty());
-
     reaction.deltas().iter().fold(
-        level_with_constraints(molecule_canonicalize_level(lhs), has_inline_constraints),
+        molecule_canonicalize_level(reaction.lhs()),
         |level, delta| level.max(delta_canonicalize_level(delta)),
     )
 }
 
 fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
     if !span.constraints().is_empty() {
-        return DescriptionLevel::Full;
+        DescriptionLevel::Full
+    } else if span.stereo_atoms().count() > 0 || span.stereo_bonds().count() > 0 {
+        DescriptionLevel::Structure
+    } else if span.dative_bonds().count() > 0
+        || span.aromatic_systems().count() > 0
+        || span.multicenter_bonds().count() > 0
+        || span.noncovalent_bonds().count() > 0
+    {
+        DescriptionLevel::Constitution
+    } else {
+        DescriptionLevel::Topology
     }
-
-    let mut level = DescriptionLevel::Topology;
-    for entity in span.atoms() {
-        level = level.max(entity_span_canonicalize_level(
-            entity,
-            DescriptionLevel::Topology,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for entity in span.bonds() {
-        level = level.max(entity_span_canonicalize_level(
-            entity,
-            DescriptionLevel::Topology,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for id in span.dative_bonds().ids() {
-        level = level.max(entity_span_canonicalize_level(
-            span.dative_bonds().attributes(id),
-            DescriptionLevel::Constitution,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for id in span.aromatic_systems().ids() {
-        level = level.max(entity_span_canonicalize_level(
-            span.aromatic_systems().attributes(id),
-            DescriptionLevel::Constitution,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for id in span.multicenter_bonds().ids() {
-        level = level.max(entity_span_canonicalize_level(
-            span.multicenter_bonds().attributes(id),
-            DescriptionLevel::Constitution,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for id in span.noncovalent_bonds().ids() {
-        level = level.max(entity_span_canonicalize_level(
-            span.noncovalent_bonds().attributes(id),
-            DescriptionLevel::Constitution,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for id in span.stereo_atoms().ids() {
-        level = level.max(entity_span_canonicalize_level(
-            span.stereo_atoms().attributes(id),
-            DescriptionLevel::Structure,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    for id in span.stereo_bonds().ids() {
-        level = level.max(entity_span_canonicalize_level(
-            span.stereo_bonds().attributes(id),
-            DescriptionLevel::Structure,
-            |attributes| !attributes.constraints.is_empty(),
-        ));
-    }
-    level
 }
 
 /// Canonical entity-frame selection for complete indexed graph-IR aggregates.

@@ -2606,7 +2606,7 @@ reach Full until S9c and were searched without pruning:
 | `feature_free_disconnected` | 3.38 ms | 104.2 µs | 6.45 ms | 214.3 µs |
 | `symmetry_heavy_radicals` | 13.38 ms | 81.8 µs | 26.77 ms | 163.9 µs |
 
-#### S9c — Span and reaction level from the entities
+#### S9c — Span and reaction level from the entities **Done**
 
 **Module:** `ir/canonicalize.rs`.
 
@@ -2619,6 +2619,57 @@ removed. Breaking for representatives and keys of spans and reactions with inlin
 `test_entity_span_canonicalize_level`, `test_reaction_span_canonicalize_level`, and
 `test_reaction_canonicalize_level` that expect a constraint to select Full. The span placement
 table of S9a holds before and after.
+
+`reaction_span_canonicalize_level` has the shape of the molecule's: a constraint span gives Full,
+a stereo entity Structure, a dative bond, aromatic system, multicenter bond, or noncovalent bond
+Constitution, and atoms and bonds alone Topology. `delta_canonicalize_level` gives the level of
+the entity kind of the delta, and Full for a constraint delta. `reaction_canonicalize_level`
+starts from `molecule_canonicalize_level` of the lhs again, without the check of inline
+constraints that S8b moved into it. `level_with_constraints` is removed.
+`entity_span_canonicalize_level` is removed as well: it read nothing but the inline constraints
+and would return its argument.
+
+Tests. Seventeen expected values changed. In `test_delta_canonicalize_level` the two rows of each
+entity kind with a modified constraint and with an inline constraint expected Full and expect the
+level of the kind: Topology for an atom and a bond, Constitution for a dative bond, an aromatic
+system, a multicenter bond, and a noncovalent bond, Structure for a stereo atom and a stereo
+bond. The row of `test_reaction_span_canonicalize_level_modified`, an atom with a valence
+constraint on the rhs, expected Full and expects Topology.
+`test_entity_span_canonicalize_level` goes with its function. The rows of
+`test_reaction_span_canonicalize_level` and `test_reaction_canonicalize_level` did not change:
+their Full rows hold a constraint delta.
+
+The 12,307 library tests, the integration tests of the crate, the 555 properties, the default
+tests of the workspace without `umol-py`, and the Python suite pass. The library build and clippy
+report the 88 dead-code warnings of the encoding and nothing else.
+
+The break list. Two counts differ from S9b, because the rows of the span table with an inline
+constraint on a stereo atom are searched at Structure and no longer reach Full:
+
+| Break | Failing tests | Rows of the molecule table | Rows of the span table |
+| --- | ---: | ---: | ---: |
+| The pruning treats every candidate of a cell as one orbit | 22 | 5 | 7 |
+| The molecule's `retain_stereo_preserving_generators` keeps every generator | 10 | 2 | 0 |
+| The molecule's `retain_preserving_generators` keeps every generator | 5 | 3 | 0 |
+| The molecule's incidence colors leave out the electron counts | 4 | 2 | 0 |
+| The color of an aromatic system leaves out its charge | 7 | 1 | 2 |
+| The span's `retain_stereo_preserving_generators` keeps every generator | 12 | 0 | 4 |
+| The span's `retain_preserving_generators` keeps every generator | 6 | 0 | 3 |
+| The span's incidence colors leave out the electron counts | 13 | 0 | 8 |
+| The color of an added entity is read as unchanged | 11 | 0 | 2 |
+
+Criterion medians of the spans with an inline valence constraint against a run at S9b, with a
+1-second warm-up and 3 seconds of measurement:
+
+| Case with `#v1` | `canonicalize` before | After | Ratio | `canonical_eq` before | After | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 96.0 µs | 29.0 µs | 0.30 | 197.5 µs | 59.2 µs | 0.30 |
+| `feature_free_disconnected` | 105.9 µs | 31.6 µs | 0.30 | 217.2 µs | 65.1 µs | 0.30 |
+| `symmetry_heavy_radicals` | 81.9 µs | 28.0 µs | 0.34 | 166.4 µs | 59.7 µs | 0.36 |
+
+Stage gate of S9. The reference comparison reports no mismatch on the 10,028 pairs, and
+`canonical_eq` and the equality of `canonical_hash` of molecules give the same answer as the
+committed search on the 20,056 pairs.
 
 ### S10 — Encoding
 
