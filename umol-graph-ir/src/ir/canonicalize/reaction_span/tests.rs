@@ -855,7 +855,6 @@ fn test_topology_search_input(
     assert_eq!(input.adapter.graph, expected_graph);
     assert_eq!(input.adapter.colors, expected_colors);
     assert_eq!(input.adapter.node_sources, expected_node_sources);
-    assert_eq!(input.adapter.incidence_nodes, Vec::new());
     assert_eq!(input.adapter.source_node_count, span.atoms().len());
     assert_eq!(input.initial_partition.cells, expected_partition);
 }

@@ -785,7 +785,6 @@ fn topology_search_input(
             graph,
             colors,
             node_sources,
-            incidence_nodes: Vec::new(),
             source_node_count: atom_count,
         },
         initial_partition,

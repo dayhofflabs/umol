@@ -1298,6 +1298,12 @@ fn test_molecule_canonicalize_placement(
         expected
     );
     assert_eq!(lhs.canonical_eq(&rhs, &canonicalize_context), expected);
+    if expected {
+        assert_eq!(
+            lhs.canonical_hash(&canonicalize_context),
+            rhs.canonical_hash(&canonicalize_context),
+        );
+    }
 }
 
 #[rstest]
@@ -1869,7 +1875,6 @@ fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
         graph: source.clone(),
         colors: vec![AutomorphismColor::Entity(0); source.node_count()],
         node_sources: source.node_ids().map(SubdivisionNodeSource::Node).collect(),
-        incidence_nodes: vec![None; source.edge_count()],
         source_node_count: source.node_count(),
     }
 }

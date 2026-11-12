@@ -361,8 +361,7 @@ pub trait Canonicalize: Reframe {
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
-    /// Hash the comparison key of the complete canonical form, the value canonical equality
-    /// compares.
+    /// Hash the complete canonical form.
     ///
     /// The returned value uses Rust's [`DefaultHasher`]. It may collide and is not a persistent
     /// identifier: both the hasher and umol's canonical comparison schema may change between
@@ -1666,7 +1665,6 @@ struct AutomorphismAdapter {
     graph: Graph,
     colors: Vec<AutomorphismColor>,
     node_sources: Vec<SubdivisionNodeSource>,
-    incidence_nodes: Vec<Option<NodeId>>,
     source_node_count: usize,
 }
 
@@ -1696,7 +1694,6 @@ impl AutomorphismAdapter {
             .node_ids()
             .map(SubdivisionNodeSource::Node)
             .collect::<Vec<_>>();
-        let mut incidence_nodes = vec![None; source.edge_count()];
         let mut edges = Vec::new();
 
         let direct_pair_counts = source
@@ -1728,7 +1725,6 @@ impl AutomorphismAdapter {
 
             let occurrence = NodeId(node_sources.len() as u32);
             node_sources.push(SubdivisionNodeSource::Edge(edge));
-            incidence_nodes[edge.index()] = Some(occurrence);
             colors.push(AutomorphismColor::Incidence(
                 initial_colors.incidences[edge.index()],
             ));
@@ -1742,7 +1738,6 @@ impl AutomorphismAdapter {
             graph,
             colors,
             node_sources,
-            incidence_nodes,
             source_node_count: source.node_count(),
         }
     }
@@ -1757,13 +1752,6 @@ impl AutomorphismAdapter {
 
     fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
         self.node_sources[node.index()]
-    }
-
-    fn node_of(&self, source: SubdivisionNodeSource) -> Option<NodeId> {
-        match source {
-            SubdivisionNodeSource::Node(node) => Some(node),
-            SubdivisionNodeSource::Edge(edge) => self.incidence_nodes[edge.index()],
-        }
     }
 
     fn automorphisms_for_partition(
@@ -2436,23 +2424,6 @@ struct TopologySearchInput {
     initial_partition: OrderedPartition,
 }
 
-/// Construct topology-level partition descriptors for the exact adapter.
-#[cfg(test)]
-fn partition_descriptors(
-    adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialColorKey],
-    incidence_keys: &[InitialColorKey],
-) -> Vec<InitialColorKey> {
-    adapter
-        .node_sources
-        .iter()
-        .map(|source| match *source {
-            SubdivisionNodeSource::Node(node) => entity_keys[node.index()].clone(),
-            SubdivisionNodeSource::Edge(edge) => incidence_keys[edge.index()].clone(),
-        })
-        .collect()
-}
-
 /// Construct constitution-level partition descriptors for the exact adapter.
 ///
 /// An entity node takes its key and an occurrence node its incidence color, so dative roles and
@@ -2475,14 +2446,6 @@ fn constitution_partition_descriptors(
             }
         })
         .collect()
-}
-
-fn stereo_frame_permutations(kind: StereoKind) -> impl Iterator<Item = Permutation> {
-    let degree = kind.degree();
-    let count = (1..=degree).product::<usize>().max(1);
-    (0..count)
-        .map(move |rank| Permutation::unrank(degree, rank))
-        .filter(move |permutation| kind.class_key().space().allows(*permutation))
 }
 
 /// Assign dense ordered colors to normalized entity and incidence keys.

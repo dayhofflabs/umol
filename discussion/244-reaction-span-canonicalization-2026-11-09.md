@@ -941,9 +941,9 @@ Three readings of the code accompany the trial.
   transported with the atoms as a stereo form is with its ligands, and the incidence integers serve
   the search graph only. Keys are compared only within one run, and their stability across code
   changes is not a design consideration.
-- **Equality and hash.** `canonical_eq` and `canonical_hash` compare and hash the key of the
-  minimum leaf and never build the canonical form. The integers are ranks within one aggregate, so
-  the key carries the distinct colors in rank order beside the rows.
+- **Equality and hash.** `canonical_eq` and `canonical_hash` of a molecule canonicalize a copy and
+  compare or hash the canonical form. The key of a leaf is compared only with the keys of the other
+  leaves of one search: its integers are ranks within one aggregate.
 - **Encoding.** `CanonicalKeyValue`, its encoding functions, the explicit positions, and the
   per-field key functions planned before the trial of colors are removed or not written. The order
   of every value is the derived order of its type.
@@ -2269,29 +2269,108 @@ symmetry of the ring, so the generator checks cost time and prune little. A seco
 the editor, and 1.6% and 6.5% high in a second run under load. They are re-measured at the stage
 gate. `canonical_eq` of the inline-constraint cases, still on the encoded path, stays within 1.3%.
 
-### S8 — Molecule key and level
+### S8 — Molecule equality, hash, and level
 
-#### S8a — Molecule key on colors
+#### S8a — Molecule equality and hash through `canonicalize` **Done**
 
 **Module:** `ir/canonicalize/molecule.rs`.
 
-The molecule's `CanonicalComparisonKey` gains the distinct colors of each kind and of the
-incidences, in rank order, beside its rows. `Molecule::canonical_key_at` takes a normalized
-molecule, runs the search of its level as `canonicalize` does, and returns the key of the minimum
-leaf, which borrows from the molecule.
-`canonical_eq` and `canonical_hash` normalize a copy of each molecule, keep two
-contradictions equal, and compare or hash the keys. The `debug_assert!` of S6j goes. Delete the
-molecule's `comparison_key`, `topology_key`, `leaf_key`, `initial_color_keys`, `entity_color_key`,
-`constraint_blocks`, `stereo_refinement_descriptor`, `constitution_entity_classes`,
-`structure_partition_descriptors`, `para_stereo_partition_descriptors`, and `structure_partition`,
-with their tests. Breaking for the keys and the hash values of molecules (red→green). [dep: S7b]
+`canonical_eq` and `canonical_hash` of a molecule canonicalize a copy of the molecule and compare
+or hash the canonical form. Two contradictions stay equal. `Molecule::canonical_key_at` and the
+`debug_assert!`s of S6j and S6k go. Delete the molecule's `comparison_key`, `topology_key`,
+`leaf_key`, `initial_color_keys`, `entity_color_key`, `constraint_blocks`,
+`stereo_refinement_descriptor`, `constitution_entity_classes`, `structure_partition_descriptors`,
+`para_stereo_partition_descriptors`, and `structure_partition`, with their tests. Breaking for the
+hash values of molecules (red→green). [dep: S7b]
 
-**Tests:** no exact key is pinned. `test_molecule_canonicalize_placement`, which asserts
-`canonical_eq` on every row, and the properties hold before and after. The placement table gains
-the assertion that the two molecules of a row with the same molecule have equal canonical hashes.
-`test_molecule_canonical_key_at` keeps its visited-leaf counts and its comparison of the pruned
-with the unpruned key. The tests of the deleted functions go with them. The break list is run.
-The benchmarks of molecule `canonical_eq` and `canonical_hash` are timed against S7.
+**Tests:** `test_molecule_canonicalize_placement`, which asserts `canonical_eq` on every row, and
+the properties hold before and after. The placement table gains the assertion that the two
+molecules of a row with the same molecule have equal canonical hashes. The tests of the deleted
+functions go with them. The break list is run. The benchmarks of molecule `canonical_eq` and
+`canonical_hash` are timed against S7.
+
+The subitem was planned as a comparison of the keys of two molecules, with the distinct colors of
+each kind beside the rows. That is not built. A key stays what the search needs: the rows of one
+leaf, compared with the other leaves of the same molecule.
+
+`canonical_hash` clones the molecule, calls `canonicalize`, and hashes the result.
+`canonical_eq` returns true for two structurally identical molecules; otherwise it canonicalizes a
+copy of each and compares the results, with two contradictions equal. Each molecule is searched at
+its own level, where both were searched at the higher of the two levels before.
+
+Three items of `ir/canonicalize.rs` lost their last use and are removed:
+`stereo_frame_permutations`, `AutomorphismAdapter::node_of` with the field `incidence_nodes`, and
+the test-only `partition_descriptors`. The documentation of `Canonicalize::canonical_hash` says
+that it hashes the complete canonical form.
+
+Tests. Twenty tests go with the deleted functions: the two `test_stereo_refinement_descriptor_*`,
+the three `test_structure_partition*`, `test_structure_comparison_key`, `test_entity_color_key`,
+the three `test_encoded_initial_colors*`, the two `test_topology_comparison_key*`, the three
+`test_constitution_comparison_key*`, `test_comparison_key`, `test_topology_key`, `test_leaf_key`,
+and the two `test_colored_encoding_*`, which compared two molecules by the encoded colors of
+`initial_color_keys`.
+
+Six tests used the encoded functions for setup only and now read `initial_colors` and `color_key`:
+`test_topology_search_input`, `test_automorphism_adapter_new`,
+`test_automorphism_adapter_automorphisms`, `test_canonical_search_color_labels`,
+`test_canonicalize_structure_orbit_pruning`, and `test_molecule_canonical_key_at`. The last is
+renamed `test_canonicalize_structure_visited_leaves` and loses its comparison with
+`canonical_key_at`. No expected value changed: the colors of the topology search input, the search
+statistics, and the visited-leaf counts are the same on the colors as on the encoded path.
+`test_automorphism_adapter_new` reads the nodes of the adapter through `node_source`. The two
+tests that built an adapter over the Topology incidence graph build it over the Constitution one,
+since Topology ranks no incidence.
+
+`test_molecule_canonicalize_placement` asserts equal canonical hashes on the rows whose two
+molecules are the same. No other test outside the properties calls `Molecule::canonical_hash`.
+
+The 12,173 library tests, the integration tests of the crate, and the 555 properties pass.
+The default tests of the workspace without `umol-py` pass. The library build and clippy on the
+crate report the two dead-code warnings of S7a and nothing else.
+
+The break list, with the fifth break run for the first time:
+
+| Break | Failing tests | Rows of the placement table among them |
+| --- | ---: | ---: |
+| The pruning treats every candidate of a cell as one orbit | 14 | 5 |
+| `retain_stereo_preserving_generators` keeps every generator | 9 | 1 |
+| `retain_preserving_generators` keeps every generator | 6 | 4 |
+| The incidence colors leave out the electron counts | 4 | 2 |
+| The color of an aromatic system leaves out its charge | 4 | 1 |
+
+The fourth break failed 9 tests at S7, when the `debug_assert!` of S6k still compared every
+selected form with the encoded path.
+
+Criterion medians against a run at S7b, with a 1-second warm-up and 3 seconds of measurement:
+
+| Case | `canonical_hash` before | After | Ratio | `canonical_eq` before | After | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 19.7 µs | 13.6 µs | 0.69 | 34.7 µs | 25.3 µs | 0.73 |
+| `disconnected_rings` | 32.8 µs | 24.5 µs | 0.75 | 58.8 µs | 47.2 µs | 0.80 |
+| `overlay_heavy` | 75.7 µs | 20.2 µs | 0.27 | 149.1 µs | 38.9 µs | 0.26 |
+| `overlay_unconstrained` | 29.7 µs | 14.4 µs | 0.48 | 55.3 µs | 27.3 µs | 0.49 |
+| `aromatic_electron_counts` | 21.3 µs | 12.8 µs | 0.60 | 40.0 µs | 24.3 µs | 0.61 |
+| `symmetric_charge_sum` | 122.8 µs | 22.5 µs | 0.18 | 240.9 µs | 44.7 µs | 0.19 |
+| `asymmetric_charge_sum` | 123.7 µs | 137.0 µs | 1.11 | 244.4 µs | 274.3 µs | 1.12 |
+| `tetrahedral_stereo` | 15.7 µs | 8.7 µs | 0.55 | 29.1 µs | 16.6 µs | 0.57 |
+| `cis_trans_stereo_bond` | 18.3 µs | 9.4 µs | 0.51 | 34.0 µs | 17.8 µs | 0.52 |
+| `mixed_atom_and_bond_stereo` | 33.5 µs | 15.5 µs | 0.46 | 60.6 µs | 29.8 µs | 0.49 |
+| `frame_relative_stereo_constraint` | 38.7 µs | 9.2 µs | 0.24 | 76.9 µs | 17.6 µs | 0.23 |
+| `meso_dichlorobutane` | 37.3 µs | 20.2 µs | 0.54 | 73.5 µs | 39.7 µs | 0.54 |
+| `para_stereo_trichloropentane` | 51.0 µs | 27.7 µs | 0.54 | 98.9 µs | 54.6 µs | 0.55 |
+| `para_stereo_cascade` | 499.2 µs | 250.0 µs | 0.50 | 1.02 ms | 513.7 µs | 0.50 |
+| `symmetric_stereo_triisopropanolamine` | 59.2 µs | 36.6 µs | 0.62 | 112.8 µs | 72.0 µs | 0.64 |
+| `symmetric_stereo_butanol` | 81.8 µs | 57.9 µs | 0.71 | 158.5 µs | 114.3 µs | 0.72 |
+| `symmetric_stereo_dimethylbutanol` | 186.7 µs | 152.3 µs | 0.82 | 375.5 µs | 314.8 µs | 0.84 |
+| `feature_free_connected` | 37.7 µs | 26.9 µs | 0.71 | 71.2 µs | 52.9 µs | 0.74 |
+| `feature_free_disconnected` | 39.7 µs | 30.5 µs | 0.77 | 75.2 µs | 59.0 µs | 0.78 |
+| `symmetry_heavy_radicals` | 30.3 µs | 26.4 µs | 0.87 | 57.5 µs | 52.2 µs | 0.91 |
+
+`asymmetric_charge_sum` is slower by 11% and 12%: it now pays the generator checks of Full that
+`canonicalize` pays since S7b. The other nineteen cases are faster, by 9% to 82%. `canonical_eq`
+of the three inline-constraint cases, which reach Full until S8b, falls from 4.35 ms, 5.74 ms, and
+23.04 ms to 181.5 µs, 200.3 µs, and 154.5 µs. `canonical_eq` of two equal molecules takes 1.86 to
+2.07 times `canonical_hash`: it canonicalizes both.
 
 #### S8b — Molecule level from the entities
 
