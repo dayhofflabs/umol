@@ -935,10 +935,12 @@ Three readings of the code accompany the trial.
   representative order of the entity, followed by the integers of its colors. An atom gives its
   integer. A bond or a noncovalent bond gives its endpoint pair and its integer. A dative bond
   gives its sorted donors, its acceptor, and its integer. An aromatic system or a multicenter bond
-  gives its sorted atoms, the integer of the incidence of each atom in that order, and its integer.
-  A stereo entity gives its site, its ligands in the frame of the leaf, and its transported form.
-  No form is read for a row except a stereo form. Keys are compared only within one run, and their
-  stability across code changes is not a design consideration.
+  gives its sorted atoms, its electron counts in that order, and its integer. A stereo entity gives
+  its site, its ligands in the frame of the leaf, and its transported form. No form is read for a
+  row except these electron counts and a stereo form. The electron counts are a part of the form,
+  transported with the atoms as a stereo form is with its ligands, and the incidence integers serve
+  the search graph only. Keys are compared only within one run, and their stability across code
+  changes is not a design consideration.
 - **Equality and hash.** `canonical_eq` and `canonical_hash` compare and hash the key of the
   minimum leaf and never build the canonical form. The integers are ranks within one aggregate, so
   the key carries the distinct colors in rank order beside the rows.
@@ -2031,7 +2033,7 @@ colors, with a 1-second warm-up and 3 seconds of measurement:
 path, measure 0.94 to 0.98 of their earlier medians. The two runs are hours apart, so up to 6% of
 each ratio above can be drift between them.
 
-#### S6k — Molecule `canonicalize` at Constitution and Structure
+#### S6k — Molecule `canonicalize` at Constitution and Structure **Done**
 
 **Module:** `ir/canonicalize/molecule.rs`.
 
@@ -2051,6 +2053,82 @@ topicity constraint on one of two equivalent stereocentres, and the same constra
 stereo benchmarks of molecule `canonicalize` are timed against S5, and the two Constitution cases
 against S6i.
 
+The color integers have one shape at every level. `colors` is renamed `initial_colors` after the
+existing `InitialColors`, which it now returns: one integer per entity by incidence node and one
+per incidence by edge. At Topology it ranks atoms and bonds only and leaves the incidences empty,
+since the topology search input does not read them. No further struct is added. `rank_colors`
+takes the position of each integer instead of a node, because incidences are ranked by edge.
+
+The row of an aromatic system or a multicenter bond holds the sorted atom images, the electron
+counts permuted by the representative action of those images, and the integer. This replaces the
+incidence integers of the earlier decision, which would have needed a second table of them by
+entity and position. `generator_preserves_stereo` transports the whole stereo form. The search
+partition is the colors of the adapter. Each of the two functions compares, in a
+`debug_assert!`, the encoded key of its selected order with `canonical_key_at`, unless the
+molecule has a constraint.
+
+Tests. The test module had a function `initial_colors` for the encoded path and three tests named
+after it; they are now `encoded_initial_colors` and `test_encoded_initial_colors`, with unchanged
+expectations. `test_initial_colors` has the 4 rows of `test_colors`, written as `InitialColors`
+values with the same integers, and 6 rows for the further kinds. `test_initial_colors_error` has 3
+rows: an electron list of the wrong length on an aromatic system and on a multicenter bond, and a
+coset outside its kind. `test_color_key` has 14 rows, among them an aromatic system in two atom
+orders and a stereo atom whose coset changes when two ligands exchange. The two planned rows of
+`test_retain_stereo_preserving_generators` expect the exchange of two stereocentres to be dropped
+with a topicity constraint on one and kept with it on both. `test_rank_colors` changes spelling
+only.
+
+`test_canonicalize_constitution_excluded_data` is removed. It gave one of two carbon atoms a
+valence constraint and expected the same remapping at Constitution wherever the constraint sat,
+which holds only while constraints stay out of the colors. Its two molecules also differ in stereo
+data, but on the same site, which cannot change an atom remapping. `canonicalize` still runs a
+molecule with an inline constraint at Full until S8b.
+
+Tests left from the removed design in which a caller chose the level are removed with this
+subitem. They ran a level below the content of the molecule, which `canonicalize`,
+`canonical_hash`, and `canonical_eq` never do: `test_canonical_key_by_topology`,
+`test_canonical_key_by_constitution`, `test_canonical_key_by_structure`, and the span test
+`test_canonicalize_checked_reaction_span_by`, whose result
+`test_reaction_span_tracked_canonicalize_at` also asserts.
+`test_canonicalize_molecule_by_effective_regression` is removed as well. Beyond its loop over the
+four levels it asserted that three molecules kept from earlier failures come back unchanged from
+`tracked_canonicalize`. The property `test_molecule_canonicalize` asserts invariance under
+renumbering, the tracked correspondence, and framed equality on generated molecules, and the
+exact numbering of those three molecules is no requirement. No function has such a name. Other
+tests still pass an explicit level to `tracked_canonicalize_at` and `canonical_key_at`.
+
+The 12,217 library tests, the integration tests of the crate, the 555 properties, and the default
+tests of the other workspace crates without `umol-py` pass with the assertions active. The library
+build reports no warning.
+
+Criterion medians of molecule `canonicalize`, with a 1-second warm-up and 3 seconds of
+measurement. The Topology cases are compared with S6j, the Constitution and Full cases with S6i,
+and the stereo cases with the run on the main tree before the trial of colors.
+
+| Case | Level | Before | After | Ratio |
+| --- | --- | ---: | ---: | ---: |
+| Five Topology cases | Topology | 12.5 to 28.7 µs | 12.3 to 28.5 µs | 0.98 to 1.00 |
+| Carbon paths, 8 to 128 atoms | Topology | 7.7 to 221.2 µs | 7.6 to 224.2 µs | 0.98 to 1.03 |
+| `overlay_unconstrained` | Constitution | 22.3 µs | 13.1 µs | 0.59 |
+| `aromatic_electron_counts` | Constitution | 17.3 µs | 11.8 µs | 0.69 |
+| `tetrahedral_stereo` | Structure | 12.8 µs | 8.0 µs | 0.62 |
+| `cis_trans_stereo_bond` | Structure | 14.8 µs | 8.6 µs | 0.58 |
+| `mixed_atom_and_bond_stereo` | Structure | 26.4 µs | 14.1 µs | 0.54 |
+| `meso_dichlorobutane` | Structure | 43.2 µs | 19.3 µs | 0.45 |
+| `para_stereo_trichloropentane` | Structure | 57.1 µs | 26.9 µs | 0.47 |
+| `para_stereo_cascade` | Structure | 526.4 µs | 250.1 µs | 0.48 |
+| `symmetric_stereo_triisopropanolamine` | Structure | 52.3 µs | 35.4 µs | 0.68 |
+| `symmetric_stereo_butanol` | Structure | 75.5 µs | 55.4 µs | 0.74 |
+| `symmetric_stereo_dimethylbutanol` | Structure | 186.7 µs | 149.5 µs | 0.80 |
+| `symmetric_charge_sum` | Full | 124.2 µs | 122.7 µs | 0.99 |
+| `asymmetric_charge_sum` | Full | 121.7 µs | 125.0 µs | 1.03 |
+| `overlay_heavy` | Full | 68.8 µs | 66.5 µs | 0.97 |
+| `frame_relative_stereo_constraint` | Full | 35.4 µs | 33.7 µs | 0.95 |
+
+`canonical_hash` and `canonical_eq`, which stay on the encoded path, lie within 3% of S6i and S6j.
+Against the earlier run they measure 0.92 to 0.96, so up to 8% of a Structure ratio can be drift
+between the runs.
+
 ### S7 — Full
 
 #### S7a — Aggregate generator check
@@ -2069,10 +2147,11 @@ generators; a span with a constraint span on one side.
 
 **Module:** `ir/canonicalize/molecule.rs`.
 
-`canonicalize_full` ranks the colors with `colors`, builds the search partition from the integers,
-and runs the pruned search in backend canonical order with `retain_preserving_generators` as the
-generator filter. The key of a Full leaf is the key of Structure followed by the
-molecule-level constraints of the molecule remapped and reframed in the entity order of the leaf.
+`canonicalize_full` ranks the colors with `initial_colors`, builds the search partition from the
+integers, and runs the pruned search in backend canonical order with
+`retain_preserving_generators` as the generator filter. The key of a Full leaf is the key of
+Structure followed by the molecule-level constraints of the molecule remapped and reframed in the
+entity order of the leaf.
 `canonical_key_at` keeps the encoded exhaustive search at Full until S8a. Breaking for
 representatives of molecules that reach Full (red→green). [dep: S6k, S7a]
 
@@ -2129,13 +2208,13 @@ timed against S8a.
 
 **Module:** `ir/canonicalize/reaction_span.rs`.
 
-Add `colors`, `color_key`, and the span submodule's own `CanonicalComparisonKey`, the counterparts
-of the molecule's.
+Add `initial_colors`, `color_key`, and the span submodule's own `CanonicalComparisonKey`, the
+counterparts of the molecule's.
 The color of a span entity is the color of its `EntitySpan` of forms, and the positional part of an
 incidence is lifted through the span in the same way. A stereo row holds the `EntitySpan` of the
 transported forms. Additive (green). [dep: S6g, S6k]
 
-**Tests:** `test_colors` and `test_color_key` with exact integers for the fixtures of
+**Tests:** `test_initial_colors` and `test_color_key` with exact integers for the fixtures of
 `test_canonical_candidate`, among them a `Modified` aromatic system whose sides differ in the
 electron counts only, and an added atom.
 
@@ -2143,8 +2222,8 @@ electron counts only, and an added atom.
 
 **Module:** `ir/canonicalize/reaction_span.rs`.
 
-`canonical_candidate` ranks the colors with `colors`, builds the topology search input or the
-adapter and the search partition from the integers, and searches with deferred keys at every
+`canonical_candidate` ranks the colors with `initial_colors`, builds the topology search input or
+the adapter and the search partition from the integers, and searches with deferred keys at every
 level. At Full it runs the pruned search in backend canonical order with
 `retain_preserving_generators`, and the key adds the constraint spans of the span remapped and
 reframed in the entity order of the leaf. `generator_preserves_stereo` transports the whole stereo

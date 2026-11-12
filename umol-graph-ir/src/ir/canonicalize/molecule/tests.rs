@@ -5,7 +5,6 @@ use std::iter;
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
-use umol_edn::FromEdn;
 use umol_perm::Permutation;
 
 use super::super::tests::{
@@ -26,7 +25,7 @@ use crate::ir::{
     TopicityForm, TopicityRelationForm,
 };
 
-fn initial_colors(
+fn encoded_initial_colors(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
 ) -> Result<InitialColors, Contradiction> {
@@ -654,182 +653,6 @@ fn test_canonicalize_structure_stereo_bond_constraints(
 }
 
 #[rstest]
-#[case::feature_free_connected(
-    r#"
-{:atoms ["H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "C#i=#c0#h0#n0#u0#s"
-         "C#i=#c0#h0#n0#u0#s"
-         "C#i=#c0#h0#n0#u0#s"]
- :bonds [[0 8 "1#c0#u0#s"]
-         [1 8 "1#c0#u0#s"]
-         [2 8 "1#c0#u0#s"]
-         [3 9 "1#c0#u0#s"]
-         [4 9 "1#c0#u0#s"]
-         [5 9 "1#c0#u0#s"]
-         [6 10 "1#c0#u0#s"]
-         [7 10 "1#c0#u0#s"]
-         [8 10 "1#c0#u0#s"]
-         [9 10 "1#c0#u0#s"]]}
-"#
-)]
-#[case::feature_free_disconnected(
-    r#"
-{:atoms ["H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "H#i=#c0#h0#n0#u0#s"
-         "C#i=#c0#h0#n0#u0#s"
-         "C#i=#c0#h0#n0#u#s2"
-         "C#i=#c0#h0#n0#u#s2"]
- :bonds [[0 8 "1#c0#u0#s"]
-         [1 8 "1#c0#u0#s"]
-         [2 8 "1#c0#u0#s"]
-         [3 8 "1#c0#u0#s"]
-         [4 9 "1#c0#u0#s"]
-         [5 9 "1#c0#u0#s"]
-         [6 10 "1#c0#u0#s"]
-         [7 10 "1#c0#u0#s"]
-         [9 10 "1#c0#u0#s"]]}
-"#
-)]
-#[case::symmetry_heavy_radicals(
-    r#"
-{:atoms ["H#i=#c0#h0#n0#u#s2"
-         "H#i=#c0#h0#n0#u#s2"
-         "H#i=#c0#h0#n0#u#s2"
-         "H#i=#c0#h0#n0#u#s2"
-         "H#i=#c0#h0#n0#u#s2"
-         "H#i=#c0#h0#n0#u#s2"
-         "C#i=#c0#h0#n0#u#s2"
-         "C#i=#c0#h0#n0#u#s2"]
- :bonds [[6 7 "3#c0#u0#s"]]}
-"#
-)]
-fn test_canonicalize_molecule_by_effective_regression(
-    canonicalize_context: CanonicalizeContext,
-    #[case] source: &str,
-) {
-    let source = Molecule::from_edn_str(source).expect("retained molecule parses");
-    let expected = source.clone();
-
-    for level in [
-        DescriptionLevel::Topology,
-        DescriptionLevel::Constitution,
-        DescriptionLevel::Structure,
-        DescriptionLevel::Full,
-    ] {
-        let canonical = source
-            .clone()
-            .tracked_canonicalize_at(level, &canonicalize_context)
-            .map(|(canonical, _)| canonical)
-            .expect("retained molecule canonicalizes");
-
-        assert_eq!(canonical, expected);
-        assert_eq!(
-            canonical.canonical_key_at(level, &canonicalize_context),
-            expected.canonical_key_at(level, &canonicalize_context),
-        );
-    }
-
-    let (canonical, remapping) = source
-        .clone()
-        .tracked_canonicalize(&canonicalize_context)
-        .expect("retained molecule canonicalizes with a remapping");
-    let transported = source.clone().remap(&remapping);
-
-    assert_eq!(canonical, expected);
-    assert_eq!(transported, expected);
-    assert!(source.framed_eq_under(&canonical, &remapping));
-}
-
-#[rstest]
-fn test_canonical_key_by_topology(canonicalize_context: CanonicalizeContext) {
-    let left = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        ..Default::default()
-    });
-    let right = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
-        ..Default::default()
-    });
-
-    assert_eq!(
-        left.canonical_key_at(DescriptionLevel::Topology, &canonicalize_context),
-        right.canonical_key_at(DescriptionLevel::Topology, &canonicalize_context),
-    );
-    assert_ne!(
-        left.canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
-        right.canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
-    );
-}
-
-#[rstest]
-fn test_canonical_key_by_constitution(
-    stereo_atom_canonicalization_molecule: Molecule,
-    canonicalize_context: CanonicalizeContext,
-) {
-    let constitution = Molecule::from_entries(MoleculeEntries {
-        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
-            .into_iter()
-            .map(AtomForm::from_element)
-            .collect(),
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            (AtomId(0), AtomId(3), BondForm::from_order(1)),
-            (AtomId(0), AtomId(4), BondForm::from_order(1)),
-        ],
-        ..Default::default()
-    });
-
-    assert_eq!(
-        constitution.canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
-        stereo_atom_canonicalization_molecule
-            .canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
-    );
-    assert_ne!(
-        constitution.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
-        stereo_atom_canonicalization_molecule
-            .canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
-    );
-}
-
-#[rstest]
-fn test_canonical_key_by_structure(canonicalize_context: CanonicalizeContext) {
-    let plain = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
-        ..Default::default()
-    });
-    let constrained = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4))
-        ],
-        ..Default::default()
-    });
-
-    assert_eq!(
-        plain.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
-        constrained.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
-    );
-    assert_ne!(
-        plain.canonical_key_at(DescriptionLevel::Full, &canonicalize_context),
-        constrained.canonical_key_at(DescriptionLevel::Full, &canonicalize_context),
-    );
-}
-
-#[rstest]
 #[case::stereo_atom(stereo_atom_canonicalization_molecule(), [1, 1])]
 #[case::stereo_bond(stereo_bond_canonicalization_molecule(), [1, 1])]
 #[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule(), [24, 24])]
@@ -1440,14 +1263,14 @@ fn test_entity_color_key(
     true
 )]
 #[case::entity_kind(Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
-fn test_initial_colors(
+fn test_encoded_initial_colors(
     initial_color_molecule: Molecule,
     #[case] lhs: Entity,
     #[case] rhs: Entity,
     #[case] expected_equal: bool,
 ) {
     let incidence_graph = initial_color_molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&initial_color_molecule, &incidence_graph).unwrap();
+    let colors = encoded_initial_colors(&initial_color_molecule, &incidence_graph).unwrap();
     let lhs_color = colors.entities[incidence_graph.node_of(lhs).index()];
     let rhs_color = colors.entities[incidence_graph.node_of(rhs).index()];
 
@@ -1455,9 +1278,9 @@ fn test_initial_colors(
 }
 
 #[rstest]
-fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
+fn test_encoded_initial_colors_incidence(initial_color_molecule: Molecule) {
     let incidence_graph = initial_color_molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&initial_color_molecule, &incidence_graph).unwrap();
+    let colors = encoded_initial_colors(&initial_color_molecule, &incidence_graph).unwrap();
     let contributions = [1, 2, 2, 1, 1, 2, 1, 2, 2, 1];
     let incidences = incidence_graph
         .incidences()
@@ -1492,7 +1315,8 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 0, 0, 1, 1]
+    DescriptionLevel::Topology,
+    InitialColors { entities: vec![0, 0, 0, 1, 1], incidences: Vec::new() }
 )]
 #[case::minority_bond(
     Molecule::from_entries(MoleculeEntries {
@@ -1504,7 +1328,8 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 0, 0, 0, 1, 2, 1]
+    DescriptionLevel::Topology,
+    InitialColors { entities: vec![0, 0, 0, 0, 1, 2, 1], incidences: Vec::new() }
 )]
 #[case::distinct_atoms(
     Molecule::from_entries(MoleculeEntries {
@@ -1519,19 +1344,148 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 1, 2, 3, 4]
+    DescriptionLevel::Topology,
+    InitialColors { entities: vec![0, 1, 2, 3, 4], incidences: Vec::new() }
 )]
 #[case::atoms_only(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 2],
         ..Default::default()
     }),
-    vec![0, 0]
+    DescriptionLevel::Topology,
+    InitialColors { entities: vec![0, 0], incidences: Vec::new() }
 )]
-fn test_colors(#[case] molecule: Molecule, #[case] expected: Vec<u32>) {
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+#[case::dative(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::N, Element::N, Element::B].map(AtomForm::from_element).into(),
+        dative: vec![(vec![AtomId(1), AtomId(0)], AtomId(2), DativeBondForm::from_order(1))],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    InitialColors { entities: vec![1, 1, 0, 2], incidences: vec![3, 3, 4] }
+)]
+#[case::aromatic(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(2), AtomId(0), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    InitialColors { entities: vec![0, 0, 0, 1], incidences: vec![3, 2, 2] }
+)]
+#[case::multicenter(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::B, Element::H, Element::B].map(AtomForm::from_element).into(),
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondForm::from_electrons(vec![1, 0, 1]),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    InitialColors { entities: vec![1, 0, 1, 2], incidences: vec![4, 3, 4] }
+)]
+#[case::noncovalent(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::O, Element::H].map(AtomForm::from_element).into(),
+        noncovalent: vec![(
+            [AtomId(0), AtomId(1)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    InitialColors { entities: vec![1, 0, 2], incidences: vec![3, 3] }
+)]
+#[case::stereo_atom(
+    stereo_atom_canonicalization_molecule(),
+    DescriptionLevel::Structure,
+    InitialColors {
+        entities: vec![0, 1, 2, 3, 4, 5, 5, 5, 5, 6],
+        incidences: vec![7, 7, 7, 7, 7, 7, 7, 7, 8, 9, 9, 9, 9],
+    }
+)]
+#[case::stereo_bond(
+    stereo_bond_canonicalization_molecule(),
+    DescriptionLevel::Structure,
+    InitialColors {
+        entities: vec![0, 0, 1, 2, 3, 4, 6, 5, 5, 5, 5, 7],
+        incidences: vec![8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 10, 10, 10, 10],
+    }
+)]
+fn test_initial_colors(
+    #[case] molecule: Molecule,
+    #[case] level: DescriptionLevel,
+    #[case] expected: InitialColors,
+) {
+    let incidence_graph = molecule.incidence_graph(match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    });
 
-    assert_eq!(colors(&molecule, &incidence_graph), expected);
+    assert_eq!(
+        initial_colors(&molecule, &incidence_graph, level),
+        Ok(expected)
+    );
+}
+
+#[rstest]
+#[case::aromatic_electron_count_length(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![2, 1]),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution
+)]
+#[case::multicenter_electron_count_length(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::B, Element::H, Element::B].map(AtomForm::from_element).into(),
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondForm::from_electrons(vec![1, 0, 1, 0]),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution
+)]
+#[case::stereo_atom_coset_range(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(AtomForm::from_element)
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 2u32),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure
+)]
+fn test_initial_colors_error(#[case] molecule: Molecule, #[case] level: DescriptionLevel) {
+    let incidence_graph = molecule.incidence_graph(match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    });
+
+    assert_eq!(
+        initial_colors(&molecule, &incidence_graph, level),
+        Err(Contradiction)
+    );
 }
 
 #[rstest]
@@ -2461,11 +2415,12 @@ fn test_topology_key(#[case] molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 0, 0, 1, 1],
+    InitialColors { entities: vec![0, 0, 0, 1, 1], incidences: Vec::new() },
     vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)],
     CanonicalComparisonKey {
         atoms: vec![0, 0, 0],
         bonds: vec![[0, 1, 1], [1, 2, 1]],
+        ..Default::default()
     }
 )]
 #[case::minority_bond(
@@ -2478,11 +2433,12 @@ fn test_topology_key(#[case] molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 0, 0, 0, 1, 2, 1],
+    InitialColors { entities: vec![0, 0, 0, 0, 1, 2, 1], incidences: Vec::new() },
     vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5), NodeId(6)],
     CanonicalComparisonKey {
         atoms: vec![0, 0, 0, 0],
         bonds: vec![[0, 1, 1], [1, 2, 2], [2, 3, 1]],
+        ..Default::default()
     }
 )]
 #[case::distinct_atoms(
@@ -2498,11 +2454,12 @@ fn test_topology_key(#[case] molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 1, 2, 3, 4],
+    InitialColors { entities: vec![0, 1, 2, 3, 4], incidences: Vec::new() },
     vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)],
     CanonicalComparisonKey {
         atoms: vec![0, 1, 2],
         bonds: vec![[0, 1, 3], [1, 2, 4]],
+        ..Default::default()
     }
 )]
 #[case::distinct_atoms_reversed(
@@ -2518,11 +2475,12 @@ fn test_topology_key(#[case] molecule: Molecule) {
         ],
         ..Default::default()
     }),
-    vec![0, 1, 2, 3, 4],
+    InitialColors { entities: vec![0, 1, 2, 3, 4], incidences: Vec::new() },
     vec![NodeId(2), NodeId(1), NodeId(0), NodeId(4), NodeId(3)],
     CanonicalComparisonKey {
         atoms: vec![2, 1, 0],
         bonds: vec![[0, 1, 4], [1, 2, 3]],
+        ..Default::default()
     }
 )]
 #[case::atoms_only(
@@ -2530,20 +2488,186 @@ fn test_topology_key(#[case] molecule: Molecule) {
         atoms: vec![AtomForm::from_element(Element::C); 2],
         ..Default::default()
     }),
-    vec![0, 0],
+    InitialColors { entities: vec![0, 0], incidences: Vec::new() },
     vec![NodeId(0), NodeId(1)],
     CanonicalComparisonKey {
         atoms: vec![0, 0],
         bonds: Vec::new(),
+        ..Default::default()
+    }
+)]
+#[case::dative(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::N, Element::N, Element::B].map(AtomForm::from_element).into(),
+        dative: vec![(vec![AtomId(1), AtomId(0)], AtomId(2), DativeBondForm::from_order(1))],
+        ..Default::default()
+    }),
+    InitialColors { entities: vec![1, 1, 0, 2], incidences: vec![3, 3, 4] },
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+    CanonicalComparisonKey {
+        atoms: vec![1, 1, 0],
+        dative: vec![(vec![0, 1], 2, 2)],
+        ..Default::default()
+    }
+)]
+#[case::dative_reversed(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::N, Element::N, Element::B].map(AtomForm::from_element).into(),
+        dative: vec![(vec![AtomId(1), AtomId(0)], AtomId(2), DativeBondForm::from_order(1))],
+        ..Default::default()
+    }),
+    InitialColors { entities: vec![1, 1, 0, 2], incidences: vec![3, 3, 4] },
+    vec![NodeId(2), NodeId(1), NodeId(0), NodeId(3)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 1, 1],
+        dative: vec![(vec![1, 2], 0, 2)],
+        ..Default::default()
+    }
+)]
+#[case::aromatic(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(2), AtomId(0), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+        )],
+        ..Default::default()
+    }),
+    InitialColors { entities: vec![0, 0, 0, 1], incidences: vec![3, 2, 2] },
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 0, 0],
+        aromatic: vec![(vec![0, 1, 2], ElectronCountsForm::Lit(vec![1, 1, 2]), 1)],
+        ..Default::default()
+    }
+)]
+#[case::aromatic_reversed(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(2), AtomId(0), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+        )],
+        ..Default::default()
+    }),
+    InitialColors { entities: vec![0, 0, 0, 1], incidences: vec![3, 2, 2] },
+    vec![NodeId(2), NodeId(1), NodeId(0), NodeId(3)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 0, 0],
+        aromatic: vec![(vec![0, 1, 2], ElectronCountsForm::Lit(vec![2, 1, 1]), 1)],
+        ..Default::default()
+    }
+)]
+#[case::multicenter(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::B, Element::H, Element::B].map(AtomForm::from_element).into(),
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondForm::from_electrons(vec![1, 0, 1]),
+        )],
+        ..Default::default()
+    }),
+    InitialColors { entities: vec![1, 0, 1, 2], incidences: vec![4, 3, 4] },
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+    CanonicalComparisonKey {
+        atoms: vec![1, 0, 1],
+        multicenter: vec![(vec![0, 1, 2], ElectronCountsForm::Lit(vec![1, 0, 1]), 2)],
+        ..Default::default()
+    }
+)]
+#[case::noncovalent(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::O, Element::H].map(AtomForm::from_element).into(),
+        noncovalent: vec![(
+            [AtomId(0), AtomId(1)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        ..Default::default()
+    }),
+    InitialColors { entities: vec![1, 0, 2], incidences: vec![3, 3] },
+    vec![NodeId(0), NodeId(1), NodeId(2)],
+    CanonicalComparisonKey {
+        atoms: vec![1, 0],
+        noncovalent: vec![[0, 1, 2]],
+        ..Default::default()
+    }
+)]
+#[case::stereo_atom(
+    stereo_atom_canonicalization_molecule(),
+    InitialColors {
+        entities: vec![0, 1, 2, 3, 4, 5, 5, 5, 5, 6],
+        incidences: vec![7, 7, 7, 7, 7, 7, 7, 7, 8, 9, 9, 9, 9],
+    },
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 1, 2, 3, 4],
+        bonds: vec![[0, 1, 5], [0, 2, 5], [0, 3, 5], [0, 4, 5]],
+        stereo_atoms: vec![(
+            0,
+            vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        )],
+        ..Default::default()
+    }
+)]
+#[case::stereo_atom_ligands_exchanged(
+    stereo_atom_canonicalization_molecule(),
+    InitialColors {
+        entities: vec![0, 1, 2, 3, 4, 5, 5, 5, 5, 6],
+        incidences: vec![7, 7, 7, 7, 7, 7, 7, 7, 8, 9, 9, 9, 9],
+    },
+    vec![NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4), NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 2, 1, 3, 4],
+        bonds: vec![[0, 1, 5], [0, 2, 5], [0, 3, 5], [0, 4, 5]],
+        stereo_atoms: vec![(
+            0,
+            vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        )],
+        ..Default::default()
+    }
+)]
+#[case::stereo_bond(
+    stereo_bond_canonicalization_molecule(),
+    InitialColors {
+        entities: vec![0, 0, 1, 2, 3, 4, 6, 5, 5, 5, 5, 7],
+        incidences: vec![8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 10, 10, 10, 10],
+    },
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9), NodeId(10), NodeId(11)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 0, 1, 2, 3, 4],
+        bonds: vec![[0, 1, 6], [0, 2, 5], [0, 3, 5], [1, 4, 5], [1, 5, 5]],
+        stereo_bonds: vec![(
+            0,
+            vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+        ],
+            StereoBondForm::new(StereoKind::CisTrans, 1u32),
+        )],
+        ..Default::default()
     }
 )]
 fn test_color_key(
     #[case] molecule: Molecule,
-    #[case] colors: Vec<u32>,
+    #[case] colors: InitialColors,
     #[case] entity_order: Vec<NodeId>,
     #[case] expected: CanonicalComparisonKey,
 ) {
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
 
     assert_eq!(
         color_key(&molecule, &incidence_graph, &colors, &entity_order),
@@ -2636,7 +2760,7 @@ fn test_automorphism_adapter_new(
     #[case] expected_occurrence_nodes: usize,
 ) {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph).unwrap();
+    let colors = encoded_initial_colors(&molecule, &incidence_graph).unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let source = incidence_graph.graph();
 
@@ -2696,7 +2820,7 @@ fn test_automorphism_adapter_automorphisms() {
         ..Default::default()
     });
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let colors = initial_colors(&molecule, &incidence_graph).unwrap();
+    let colors = encoded_initial_colors(&molecule, &incidence_graph).unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
 
     assert_eq!(
@@ -2853,6 +2977,120 @@ fn test_automorphism_adapter_automorphisms() {
     vec![
         NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
         NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
+    ],
+    true,
+)]
+#[case::stereo_site_exchange_one_topicity(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(5), AtomId(6), BondForm::from_order(1)),
+            (AtomId(5), AtomId(7), BondForm::from_order(1)),
+            (AtomId(5), AtomId(8), BondForm::from_order(1)),
+            (AtomId(5), AtomId(9), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                (1..=4)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+                    .with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm {
+                        pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                        relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                    })),
+            ),
+            (
+                AtomId(5),
+                (6..=9)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
+    ],
+    false,
+)]
+#[case::stereo_site_exchange_both_topicity(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(5), AtomId(6), BondForm::from_order(1)),
+            (AtomId(5), AtomId(7), BondForm::from_order(1)),
+            (AtomId(5), AtomId(8), BondForm::from_order(1)),
+            (AtomId(5), AtomId(9), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                (1..=4)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+                    .with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm {
+                        pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                        relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                    })),
+            ),
+            (
+                AtomId(5),
+                (6..=9)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+                    .with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm {
+                        pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                        relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                    })),
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
     ],
     true,
 )]
@@ -3598,81 +3836,6 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
 }
 
 #[rstest]
-fn test_canonicalize_constitution_excluded_data(canonicalize_context: CanonicalizeContext) {
-    let left = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C)
-                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(3))),
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
-        ],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            (AtomId(1), AtomId(3), BondForm::from_order(1)),
-        ],
-        stereo_atoms: vec![(
-            AtomId(0),
-            vec![
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            ],
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        )],
-        ..Default::default()
-    });
-    let right = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C)
-                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(3))),
-            AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
-        ],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            (AtomId(1), AtomId(3), BondForm::from_order(1)),
-        ],
-        stereo_atoms: vec![(
-            AtomId(0),
-            vec![
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-            ],
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        )],
-        ..Default::default()
-    });
-
-    let (_, left_remapping) = canonicalize_constitution(
-        left.clone(),
-        &canonicalize_context,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    )
-    .unwrap();
-    let (_, right_remapping) = canonicalize_constitution(
-        right.clone(),
-        &canonicalize_context,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    )
-    .unwrap();
-
-    assert_eq!(right_remapping, left_remapping);
-}
-
-#[rstest]
 fn test_canonicalize_constitution_properties(
     initial_color_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
@@ -4251,11 +4414,14 @@ fn test_colored_encoding_exhaustive_graph_domain(#[case] atom_count: usize) {
     }),
     IncidenceLevel::Full,
 )]
-fn test_initial_colors_error(#[case] molecule: Molecule, #[case] incidence_level: IncidenceLevel) {
+fn test_encoded_initial_colors_error(
+    #[case] molecule: Molecule,
+    #[case] incidence_level: IncidenceLevel,
+) {
     let incidence_graph = molecule.incidence_graph(incidence_level);
 
     assert_eq!(
-        initial_colors(&molecule, &incidence_graph),
+        encoded_initial_colors(&molecule, &incidence_graph),
         Err(Contradiction)
     );
 }

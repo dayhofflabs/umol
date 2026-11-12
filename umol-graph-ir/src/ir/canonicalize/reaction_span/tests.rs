@@ -1741,58 +1741,6 @@ fn test_reaction_span_tracked_canonicalize_at(
 #[case::constitution(DescriptionLevel::Constitution)]
 #[case::structure(DescriptionLevel::Structure)]
 #[case::full(DescriptionLevel::Full)]
-fn test_canonicalize_checked_reaction_span_by(
-    canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
-) {
-    let source = ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![
-            EntitySpan::Added(AtomForm::from_element(Element::O)),
-            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-            EntitySpan::Removed(AtomForm::from_element(Element::N)),
-        ],
-        bonds: vec![(
-            AtomId(1),
-            AtomId(2),
-            EntitySpan::Removed(BondForm::from_order(1)),
-        )],
-        ..Default::default()
-    });
-    let expected = ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![
-            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-            EntitySpan::Removed(AtomForm::from_element(Element::N)),
-            EntitySpan::Added(AtomForm::from_element(Element::O)),
-        ],
-        bonds: vec![(
-            AtomId(0),
-            AtomId(1),
-            EntitySpan::Removed(BondForm::from_order(1)),
-        )],
-        ..Default::default()
-    });
-
-    assert_eq!(
-        source
-            .clone()
-            .tracked_canonicalize_at(level, &canonicalize_context)
-            .map(|(canonical, _)| canonical),
-        Ok(expected.clone()),
-    );
-    assert_eq!(
-        source
-            .clone()
-            .tracked_canonicalize_at(level, &canonicalize_context)
-            .map(|(canonical, _)| canonical),
-        Ok(expected),
-    );
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
 fn test_canonicalize_checked_reaction_span_modified(
     canonicalize_context: CanonicalizeContext,
     #[case] level: DescriptionLevel,

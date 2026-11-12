@@ -2518,18 +2518,18 @@ fn rank_initial_colors(
     }
 }
 
-/// Assign dense integers to the colors of one entity kind, in the order of the colors and starting
-/// at `first`. The integer of each node is written into `ranks`, and the integer after the last one
-/// used is returned.
-fn rank_colors<T: Ord>(mut colors: Vec<(T, NodeId)>, first: u32, ranks: &mut [u32]) -> u32 {
+/// Assign dense integers to the colors of one entity kind or of the incidences, in the order of the
+/// colors and starting at `first`. Each color comes with the position of its integer in `ranks`.
+/// The integer after the last one used is returned.
+fn rank_colors<T: Ord>(mut colors: Vec<(T, usize)>, first: u32, ranks: &mut [u32]) -> u32 {
     colors.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
     let mut rank = first;
     let mut previous = None;
-    for (color, node) in &colors {
+    for (color, position) in &colors {
         if previous.is_some_and(|previous| previous != color) {
             rank += 1;
         }
-        ranks[node.index()] = rank;
+        ranks[*position] = rank;
         previous = Some(color);
     }
     if colors.is_empty() {

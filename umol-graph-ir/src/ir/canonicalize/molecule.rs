@@ -3,17 +3,22 @@
 use umol_graph_core::{Graph, NodeId, SubdivisionNodeSource};
 use umol_perm::Permutation;
 
+use super::super::aromatic::aromatic_system_representative_action;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
-use super::super::id::AtomId;
+use super::super::id::{AtomId, AtomPosition};
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
+use super::super::multicenter::multicenter_bond_representative_action;
 use super::super::num::NumForm;
 use super::super::remap::MoleculeRemapping;
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
-use super::super::stereo::StereoConfigurationForm;
+use super::super::stereo::{
+    stereo_atom_representative_action, stereo_bond_representative_action, StereoAtomForm,
+    StereoBondForm, StereoConfigurationForm,
+};
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     aromatic_system_constraint_form_key, atom_constraint_form_key, atom_inherent_fields,
@@ -30,17 +35,33 @@ use super::{
     AutomorphismColor, BranchOrdering, CanonicalCandidate, CanonicalKeyValue,
     CanonicalSearchOptions, Canonicalize, CanonicalizeContext, ConstraintBlockKey,
     ConstraintBlockPosition, DeferredKey, DescriptionLevel, EntityBlockPosition, InitialColorKey,
-    MoleculeCanonicalizeError, OrderedPartition, PositionedKey, TopologySearchInput,
+    InitialColors, MoleculeCanonicalizeError, OrderedPartition, PositionedKey, TopologySearchInput,
 };
 
 /// The key of a leaf: the molecule in the entity order of the leaf, with each form as the integer
 /// of its color.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 struct CanonicalComparisonKey {
     /// The integer of each atom.
     atoms: Vec<u32>,
     /// The two endpoint images and the integer of each bond.
     bonds: Vec<[u32; 3]>,
+    /// The sorted donor images, the acceptor image, and the integer of each dative bond.
+    dative: Vec<(Vec<u32>, u32, u32)>,
+    /// The sorted atom images, the electron counts in that order, and the integer of each aromatic
+    /// system.
+    aromatic: Vec<(Vec<u32>, ElectronCountsForm, u32)>,
+    /// The sorted atom images, the electron counts in that order, and the integer of each
+    /// multicenter bond.
+    multicenter: Vec<(Vec<u32>, ElectronCountsForm, u32)>,
+    /// The two endpoint images and the integer of each noncovalent bond.
+    noncovalent: Vec<[u32; 3]>,
+    /// The site image, the ligands in the frame of the leaf, and the form in that frame of each
+    /// stereo atom.
+    stereo_atoms: Vec<(u32, Vec<StereoLigand>, StereoAtomForm)>,
+    /// The image of the site bond, the ligands in the frame of the leaf, and the form in that frame
+    /// of each stereo bond.
+    stereo_bonds: Vec<(u32, Vec<StereoLigand>, StereoBondForm)>,
 }
 
 /// Construct the ordered constraint blocks used by complete canonicalization.
@@ -227,14 +248,15 @@ fn generator_preserves_stereo(
             .collect::<Option<Vec<_>>>()?;
         Permutation::between(&mapped, target)
     };
-    let configuration_preserved = |source: &StereoConfigurationForm,
-                                   target: &StereoConfigurationForm,
-                                   action: Permutation| {
+    fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
+    where
+        Form: Clone + FrameTransport<Action = Permutation> + Normalize,
+    {
         source
             .clone()
             .reframe_by(&action)
             .is_some_and(|mapped| mapped.normalized_eq(target))
-    };
+    }
 
     for source in molecule.stereo_atoms().iter() {
         let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source.id())) else {
@@ -247,11 +269,7 @@ fn generator_preserves_stereo(
         let Some(action) = frame_action(source.ligand_ids(), target.ligand_ids()) else {
             return false;
         };
-        if !configuration_preserved(
-            &source.attributes().configuration,
-            &target.attributes().configuration,
-            action,
-        ) {
+        if !form_preserved(source.attributes(), target.attributes(), action) {
             return false;
         }
     }
@@ -267,11 +285,7 @@ fn generator_preserves_stereo(
         let Some(action) = frame_action(source.ligand_ids(), target.ligand_ids()) else {
             return false;
         };
-        if !configuration_preserved(
-            &source.attributes().configuration,
-            &target.attributes().configuration,
-            action,
-        ) {
+        if !form_preserved(source.attributes(), target.attributes(), action) {
             return false;
         }
     }
@@ -352,34 +366,188 @@ fn initial_color_keys(
     Ok((entity_keys, incidence_keys))
 }
 
-/// The integer of the color of each atom and bond of a normalized molecule, by incidence node.
+/// The integers of the colors of a normalized molecule at `level`: one per entity, by incidence
+/// node, and one per incidence, by incidence edge.
 ///
-/// The atoms take the integers of their colors, and the bonds continue after them.
-fn colors(molecule: &Molecule, incidence_graph: &IncidenceGraph) -> Vec<u32> {
-    let mut ranks = vec![0; incidence_graph.graph().node_count()];
+/// The colors of each entity kind are ranked in kind order, and the incidences continue after the
+/// entities. The color of an incidence is its role and, for an atom of an aromatic system or a
+/// multicenter bond, the electron count of that atom. At Topology the incidences are not ranked,
+/// since the topology search input does not read them.
+fn initial_colors(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
+) -> Result<InitialColors, Contradiction> {
+    let mut entities = vec![0; incidence_graph.graph().node_count()];
+    let position = |entity: Entity| incidence_graph.node_of(entity).index();
+
     let atoms = molecule
         .atoms()
         .iter()
         .map(|atom| {
             (
                 atom.attributes().as_color(),
-                incidence_graph.node_of(Entity::Atom(atom.id())),
+                position(Entity::Atom(atom.id())),
             )
         })
         .collect();
-    let first_bond = rank_colors(atoms, 0, &mut ranks);
+    let mut next = rank_colors(atoms, 0, &mut entities);
     let bonds = molecule
         .bonds()
         .iter()
         .map(|bond| {
             (
                 bond.attributes().as_color(),
-                incidence_graph.node_of(Entity::Bond(bond.id())),
+                position(Entity::Bond(bond.id())),
             )
         })
         .collect();
-    rank_colors(bonds, first_bond, &mut ranks);
-    ranks
+    next = rank_colors(bonds, next, &mut entities);
+    if level == DescriptionLevel::Topology {
+        return Ok(InitialColors {
+            entities,
+            incidences: Vec::new(),
+        });
+    }
+
+    let dative = molecule
+        .dative_bonds()
+        .iter()
+        .map(|bond| {
+            (
+                bond.attributes().as_color(),
+                position(Entity::DativeBond(bond.id())),
+            )
+        })
+        .collect();
+    next = rank_colors(dative, next, &mut entities);
+    let mut aromatic = Vec::with_capacity(molecule.aromatic_systems().count());
+    for system in molecule.aromatic_systems().iter() {
+        let attributes = system.attributes();
+        if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+            if counts.len() != system.atom_ids().len())
+        {
+            return Err(Contradiction);
+        }
+        aromatic.push((
+            attributes.as_color(),
+            position(Entity::AromaticSystem(system.id())),
+        ));
+    }
+    next = rank_colors(aromatic, next, &mut entities);
+    let mut multicenter = Vec::with_capacity(molecule.multicenter_bonds().count());
+    for bond in molecule.multicenter_bonds().iter() {
+        let attributes = bond.attributes();
+        if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+            if counts.len() != bond.atom_ids().len())
+        {
+            return Err(Contradiction);
+        }
+        multicenter.push((
+            attributes.as_color(),
+            position(Entity::MulticenterBond(bond.id())),
+        ));
+    }
+    next = rank_colors(multicenter, next, &mut entities);
+    let noncovalent = molecule
+        .noncovalent_bonds()
+        .iter()
+        .map(|bond| {
+            (
+                bond.attributes().as_color(),
+                position(Entity::NoncovalentBond(bond.id())),
+            )
+        })
+        .collect();
+    next = rank_colors(noncovalent, next, &mut entities);
+
+    if level >= DescriptionLevel::Structure {
+        let mut stereo_atoms = Vec::with_capacity(molecule.stereo_atoms().count());
+        for stereo in molecule.stereo_atoms().iter() {
+            let attributes = stereo.attributes();
+            if let Some(kind) = attributes.configuration.kind() {
+                check_stereo_atom_kind(Entity::StereoAtom(stereo.id()), kind)
+                    .map_err(|_| Contradiction)?;
+            }
+            attributes
+                .clone()
+                .reframe_by(&Permutation::identity(stereo.ligand_count()))
+                .ok_or(Contradiction)?;
+            stereo_atoms.push((
+                attributes.as_color(),
+                position(Entity::StereoAtom(stereo.id())),
+            ));
+        }
+        next = rank_colors(stereo_atoms, next, &mut entities);
+        let mut stereo_bonds = Vec::with_capacity(molecule.stereo_bonds().count());
+        for stereo in molecule.stereo_bonds().iter() {
+            let attributes = stereo.attributes();
+            if let Some(kind) = attributes.configuration.kind() {
+                check_stereo_bond_kind(Entity::StereoBond(stereo.id()), kind)
+                    .map_err(|_| Contradiction)?;
+            }
+            attributes
+                .clone()
+                .reframe_by(&Permutation::identity(stereo.ligand_count()))
+                .ok_or(Contradiction)?;
+            stereo_bonds.push((
+                attributes.as_color(),
+                position(Entity::StereoBond(stereo.id())),
+            ));
+        }
+        next = rank_colors(stereo_bonds, next, &mut entities);
+    }
+
+    let incidence_colors = incidence_graph
+        .incidences()
+        .map(|(edge, incidence)| {
+            let electron_count = match incidence {
+                Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+                    let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+                    let (owner, atom) = match (
+                        incidence_graph.entity(first),
+                        incidence_graph.entity(second),
+                    ) {
+                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                        _ => {
+                            unreachable!("an electron contribution connects an overlay to an atom")
+                        }
+                    };
+                    let (atom_position, electrons) = match owner {
+                        Entity::AromaticSystem(id) => (
+                            molecule
+                                .aromatic_system(id)
+                                .atom_ids()
+                                .position(|id| id == atom),
+                            &molecule.aromatic_system(id).attributes().electrons,
+                        ),
+                        Entity::MulticenterBond(id) => (
+                            molecule
+                                .multicenter_bond(id)
+                                .atom_ids()
+                                .position(|id| id == atom),
+                            &molecule.multicenter_bond(id).attributes().electrons,
+                        ),
+                        _ => unreachable!(
+                            "electron contributions belong to aromatic or multicenter entities"
+                        ),
+                    };
+                    let atom_position =
+                        atom_position.expect("incidence atom belongs to its overlay");
+                    electrons.at(AtomPosition::from(atom_position))
+                }
+                _ => None,
+            };
+            ((incidence, electron_count), edge.index())
+        })
+        .collect();
+    let mut incidences = vec![0; incidence_graph.graph().edge_count()];
+    rank_colors(incidence_colors, next, &mut incidences);
+
+    Ok(InitialColors {
+        entities,
+        incidences,
+    })
 }
 
 /// Construct the topology search input from the dense normalized colors of topology entities.
@@ -1248,34 +1416,155 @@ fn topology_key(
     }
 }
 
-/// The key of the leaf that orders the entities of `molecule` as `entity_order`: the integer of
-/// each atom, then the two endpoint images and the integer of each bond.
+/// The key of the leaf that orders the entities of `molecule` as `entity_order`.
+///
+/// A row holds the participants of its entity in their new numbers, in the representative order of
+/// the entity, and the integer of its color. The row of an aromatic system or a multicenter bond
+/// also holds its electron counts in that order, and the row of a stereo entity holds its form in
+/// the frame of the leaf in place of the integer.
 fn color_key(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
-    colors: &[u32],
+    colors: &InitialColors,
     entity_order: &[NodeId],
 ) -> CanonicalComparisonKey {
     let mut atom_images = vec![0_u32; incidence_graph.entity_count(EntityKind::Atom)];
+    let mut bond_images = vec![0_u32; incidence_graph.entity_count(EntityKind::Bond)];
     let mut key = CanonicalComparisonKey {
         atoms: Vec::with_capacity(atom_images.len()),
-        bonds: Vec::with_capacity(incidence_graph.entity_count(EntityKind::Bond)),
+        bonds: Vec::with_capacity(bond_images.len()),
+        dative: Vec::new(),
+        aromatic: Vec::new(),
+        multicenter: Vec::new(),
+        noncovalent: Vec::new(),
+        stereo_atoms: Vec::new(),
+        stereo_bonds: Vec::new(),
     };
     for &node in entity_order {
+        let color = colors.entities[node.index()];
         match incidence_graph.entity(node) {
             Entity::Atom(id) => {
                 atom_images[id.index()] = key.atoms.len() as u32;
-                key.atoms.push(colors[node.index()]);
+                key.atoms.push(color);
             }
             Entity::Bond(id) => {
+                bond_images[id.index()] = key.bonds.len() as u32;
                 let [first, second] = molecule
                     .bond(id)
                     .atom_ids()
                     .map(|atom| atom_images[atom.index()]);
                 key.bonds
-                    .push([first.min(second), first.max(second), colors[node.index()]]);
+                    .push([first.min(second), first.max(second), color]);
             }
-            _ => unreachable!("the Topology order holds atoms and bonds"),
+            Entity::DativeBond(id) => {
+                let bond = molecule.dative_bond(id);
+                let mut donors = bond
+                    .donor_ids()
+                    .map(|atom| atom_images[atom.index()])
+                    .collect::<Vec<_>>();
+                donors.sort_unstable();
+                key.dative
+                    .push((donors, atom_images[bond.acceptor_id().index()], color));
+            }
+            Entity::AromaticSystem(id) => {
+                let system = molecule.aromatic_system(id);
+                let atoms = system
+                    .atom_ids()
+                    .map(|atom| AtomId(atom_images[atom.index()]))
+                    .collect::<Vec<_>>();
+                let action = aromatic_system_representative_action(atoms.clone());
+                key.aromatic.push((
+                    action
+                        .act(&atoms)
+                        .expect("the action has the degree of the atom list")
+                        .into_iter()
+                        .map(|atom| atom.0)
+                        .collect(),
+                    system
+                        .attributes()
+                        .electrons
+                        .clone()
+                        .reframe_by(&action)
+                        .expect("the colors established the length of the electron counts"),
+                    color,
+                ));
+            }
+            Entity::MulticenterBond(id) => {
+                let bond = molecule.multicenter_bond(id);
+                let atoms = bond
+                    .atom_ids()
+                    .map(|atom| AtomId(atom_images[atom.index()]))
+                    .collect::<Vec<_>>();
+                let action = multicenter_bond_representative_action(atoms.clone());
+                key.multicenter.push((
+                    action
+                        .act(&atoms)
+                        .expect("the action has the degree of the atom list")
+                        .into_iter()
+                        .map(|atom| atom.0)
+                        .collect(),
+                    bond.attributes()
+                        .electrons
+                        .clone()
+                        .reframe_by(&action)
+                        .expect("the colors established the length of the electron counts"),
+                    color,
+                ));
+            }
+            Entity::NoncovalentBond(id) => {
+                let [first, second] = molecule
+                    .noncovalent_bond(id)
+                    .atom_ids()
+                    .map(|atom| atom_images[atom.index()]);
+                key.noncovalent
+                    .push([first.min(second), first.max(second), color]);
+            }
+            Entity::StereoAtom(id) => {
+                let stereo = molecule.stereo_atom(id);
+                let ligands = stereo
+                    .ligand_ids()
+                    .iter()
+                    .map(|ligand| {
+                        StereoLigand::new(AtomId(atom_images[ligand.atom_id.index()]), ligand.kind)
+                    })
+                    .collect::<Vec<_>>();
+                let action = stereo_atom_representative_action(&ligands)
+                    .expect("stereo atom ligand frame has a supported degree");
+                key.stereo_atoms.push((
+                    atom_images[stereo.site_id().index()],
+                    action.act(&ligands),
+                    stereo
+                        .attributes()
+                        .clone()
+                        .reframe_by(&action)
+                        .expect("the colors established compatible stereo frame actions")
+                        .normalize()
+                        .expect("the molecule is normalized"),
+                ));
+            }
+            Entity::StereoBond(id) => {
+                let stereo = molecule.stereo_bond(id);
+                let ligands = stereo
+                    .ligand_ids()
+                    .iter()
+                    .map(|ligand| {
+                        StereoLigand::new(AtomId(atom_images[ligand.atom_id.index()]), ligand.kind)
+                    })
+                    .collect::<Vec<_>>();
+                let action = stereo_bond_representative_action(&ligands)
+                    .expect("stereo bond ligand frame has a supported degree");
+                key.stereo_bonds.push((
+                    bond_images[stereo.site_id().index()],
+                    action.act(&ligands),
+                    stereo
+                        .attributes()
+                        .clone()
+                        .reframe_by(&action)
+                        .expect("the colors established compatible stereo frame actions")
+                        .normalize()
+                        .expect("the molecule is normalized"),
+                ));
+            }
         }
     }
     key
@@ -1310,13 +1599,12 @@ fn canonicalize_topology(
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let entity_colors = colors(&molecule, &incidence_graph);
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Topology)?;
     let TopologySearchInput {
         adapter,
         initial_partition,
-    } = topology_search_input(&molecule, &incidence_graph, &entity_colors);
-    let build_key =
-        |order: &[NodeId]| color_key(&molecule, &incidence_graph, &entity_colors, order);
+    } = topology_search_input(&molecule, &incidence_graph, &colors.entities);
+    let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
             &molecule,
@@ -1363,19 +1651,11 @@ fn canonicalize_constitution(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
+    let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Constitution)?;
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
-    let build_key = |order: &[NodeId]| {
-        leaf_key(
-            &molecule,
-            &incidence_graph,
-            DescriptionLevel::Constitution,
-            order,
-        )
-    };
+    let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
             &molecule,
@@ -1390,13 +1670,26 @@ fn canonicalize_constitution(
     };
     let entity_order = canonical_search(
         &adapter,
-        &descriptors,
+        &adapter.colors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
     )
     .candidate
     .entity_order;
+    debug_assert!(
+        molecule_canonicalize_level(&molecule) == DescriptionLevel::Full
+            || molecule
+                .canonical_key_at(DescriptionLevel::Constitution, context)
+                .ok()
+                == Some(leaf_key(
+                    &molecule,
+                    &incidence_graph,
+                    DescriptionLevel::Constitution,
+                    &entity_order
+                )),
+        "the color key and the encoded key select different Constitution forms",
+    );
     let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
 
     let canonical = molecule.remap(&remapping).reframe()?;
@@ -1408,19 +1701,11 @@ fn canonicalize_structure(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
+    let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure)?;
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
-    let build_key = |order: &[NodeId]| {
-        leaf_key(
-            &molecule,
-            &incidence_graph,
-            DescriptionLevel::Structure,
-            order,
-        )
-    };
+    let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
             &molecule,
@@ -1438,7 +1723,7 @@ fn canonicalize_structure(
     };
     let entity_order = canonical_search_with_generator_filter(
         &adapter,
-        &descriptors,
+        &adapter.colors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
@@ -1446,6 +1731,19 @@ fn canonicalize_structure(
     )
     .candidate
     .entity_order;
+    debug_assert!(
+        molecule_canonicalize_level(&molecule) == DescriptionLevel::Full
+            || molecule
+                .canonical_key_at(DescriptionLevel::Structure, context)
+                .ok()
+                == Some(leaf_key(
+                    &molecule,
+                    &incidence_graph,
+                    DescriptionLevel::Structure,
+                    &entity_order
+                )),
+        "the color key and the encoded key select different Structure forms",
+    );
     let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
 
     let canonical = molecule.remap(&remapping).reframe()?;
