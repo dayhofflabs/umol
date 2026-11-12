@@ -1192,7 +1192,26 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Constitution,
-    [6, 3],
+    [2, 1],
+)]
+#[case::aromatic_electron_counts(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 5],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(4), AtomId(0), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [2, 1],
 )]
 #[case::equal_stereocentres(
     ReactionSpan::from_entries(ReactionSpanEntries {

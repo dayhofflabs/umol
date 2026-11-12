@@ -2453,28 +2453,25 @@ fn partition_descriptors(
         .collect()
 }
 
-/// Search descriptors for the constitution key.
-///
-/// Dative roles and positional electron counts remain exact automorphism colors, but they do not
-/// fix the search partition: their order is selected by the typed leaf key. Using them for both
-/// purposes would exclude valid dense relabelings before the key can compare them.
 /// Construct constitution-level partition descriptors for the exact adapter.
+///
+/// An entity node takes its key and an occurrence node its incidence color, so dative roles and
+/// positional electron counts split the search partition.
 fn constitution_partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialColorKey],
-    incidence_graph: &IncidenceGraph,
 ) -> Vec<InitialColorKey> {
     adapter
         .node_sources
         .iter()
-        .map(|source| match *source {
-            SubdivisionNodeSource::Node(node) => entity_keys[node.index()].clone(),
-            SubdivisionNodeSource::Edge(edge) => {
-                let value = match incidence_graph.incidence(edge) {
-                    Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
-                    incidence => incidence_key(incidence),
-                };
-                InitialColorKey::Incidence(value)
+        .zip(&adapter.colors)
+        .map(|(source, color)| match (*source, *color) {
+            (SubdivisionNodeSource::Node(node), _) => entity_keys[node.index()].clone(),
+            (SubdivisionNodeSource::Edge(_), AutomorphismColor::Incidence(rank)) => {
+                InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(rank.into()))
+            }
+            (SubdivisionNodeSource::Edge(_), AutomorphismColor::Entity(_)) => {
+                unreachable!("an occurrence node has an incidence color")
             }
         })
         .collect()

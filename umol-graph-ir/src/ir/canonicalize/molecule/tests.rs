@@ -9,7 +9,7 @@ use umol_edn::FromEdn;
 use umol_perm::Permutation;
 
 use super::super::tests::{
-    canonicalize_context, exhaustive_minimum, explicitly_dense_equivalent, initial_color_molecule,
+    canonicalize_context, explicitly_dense_equivalent, initial_color_molecule,
     para_stereo_canonicalization_molecule, permutations, reverse_remapping,
     stereo_atom_canonicalization_molecule, stereo_bond_canonicalization_molecule,
     stereo_constraint_canonicalization_molecule,
@@ -25,23 +25,6 @@ use crate::ir::{
     StereoKind, StereoLigand, StereoLigandPair, Stereogenicity, StereogenicityForm, Topicity,
     TopicityForm, TopicityRelationForm,
 };
-
-fn adapter_entity_blocks(incidence_graph: &IncidenceGraph) -> Vec<Vec<NodeId>> {
-    let mut blocks = Vec::<Vec<NodeId>>::new();
-    let mut previous_kind = None;
-    for node in incidence_graph.graph().node_ids() {
-        let kind = incidence_graph.entity(node).kind();
-        if previous_kind != Some(kind) {
-            blocks.push(Vec::new());
-            previous_kind = Some(kind);
-        }
-        blocks
-            .last_mut()
-            .expect("current entity block is present")
-            .push(node);
-    }
-    blocks
-}
 
 fn initial_colors(
     molecule: &Molecule,
@@ -861,7 +844,7 @@ fn test_molecule_canonical_key_at(
         initial_color_keys(&molecule, &incidence_graph).expect("fixed molecule has initial colors");
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
     let leaf_candidate = |order: &[NodeId]| {
         leaf_candidate_at(
             &molecule,
@@ -983,74 +966,29 @@ fn test_canonicalize_structure_renumbering(
 
 #[rstest]
 #[case::nauty(AutomorphismAlgorithm::Nauty)]
-fn test_canonicalize_structure_minimum(
+fn test_canonicalize_structure_search_options(
     symmetric_stereo_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
     #[case] algorithm: AutomorphismAlgorithm,
 ) {
-    let incidence_graph =
-        symmetric_stereo_canonicalization_molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(
-        &symmetric_stereo_canonicalization_molecule,
-        &incidence_graph,
-    )
-    .expect("fixed molecule has initial colors");
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let constitution_classes =
-        constitution_entity_classes(&symmetric_stereo_canonicalization_molecule)
-            .expect("fixed molecule has constitution classes");
-    let descriptors = structure_partition_descriptors(
-        &symmetric_stereo_canonicalization_molecule,
-        &incidence_graph,
-        &adapter,
-        &entity_keys,
-        &constitution_classes,
-    )
-    .expect("fixed molecule has structure descriptors");
-    let leaf_candidate = |order: &[NodeId]| {
-        leaf_candidate_at(
-            &symmetric_stereo_canonicalization_molecule,
-            &incidence_graph,
-            DescriptionLevel::Structure,
-            order,
+    let canonicalize = |options: CanonicalSearchOptions| {
+        canonicalize_structure(
+            symmetric_stereo_canonicalization_molecule.clone(),
+            &CanonicalizeContext {
+                automorphism_algorithm: algorithm,
+                ..canonicalize_context
+            },
+            options,
         )
+        .expect("fixed molecule canonicalizes")
+        .0
     };
-    let expected = exhaustive_minimum(
-        &adapter,
-        adapter_entity_blocks(&incidence_graph),
-        &leaf_candidate,
-    );
-    let expected_remapping = remapping_from_order(
-        &symmetric_stereo_canonicalization_molecule,
-        &incidence_graph,
-        &expected.entity_order,
-    );
-    let expected_molecule = symmetric_stereo_canonicalization_molecule
-        .clone()
-        .remap(&expected_remapping)
-        .reframe()
-        .expect("exhaustive minimum preserves compatible frames");
+    let expected = canonicalize(CanonicalSearchOptions {
+        automorphism_pruning: false,
+        branch_order: BranchOrdering::NodeId,
+    });
 
     for options in [
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-    ] {
-        let actual = canonical_search(&adapter, &descriptors, algorithm, options, &leaf_candidate);
-        assert_eq!(actual.candidate.key, expected.key, "{options:?}");
-    }
-
-    for options in [
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
         CanonicalSearchOptions {
             automorphism_pruning: false,
             branch_order: BranchOrdering::ReverseNodeId,
@@ -1068,34 +1006,7 @@ fn test_canonicalize_structure_minimum(
             branch_order: BranchOrdering::BackendCanonical,
         },
     ] {
-        let (canonical, remapping) = canonicalize_structure(
-            symmetric_stereo_canonicalization_molecule.clone(),
-            &CanonicalizeContext {
-                automorphism_algorithm: algorithm,
-                ..canonicalize_context
-            },
-            options,
-        )
-        .expect("fixed molecule canonicalizes");
-
-        assert_eq!(canonical, expected_molecule, "{options:?}");
-        assert_eq!(
-            selected_structure_key(&canonical),
-            expected.key,
-            "{options:?}"
-        );
-        assert!(
-            symmetric_stereo_canonicalization_molecule.framed_eq_under(&canonical, &remapping),
-            "{options:?}",
-        );
-        assert_eq!(
-            symmetric_stereo_canonicalization_molecule
-                .clone()
-                .remap(&remapping)
-                .reframe(),
-            Ok(canonical),
-            "{options:?}",
-        );
+        assert_eq!(canonicalize(options), expected, "{options:?}");
     }
 }
 
@@ -1132,23 +1043,7 @@ fn test_canonicalize_structure_orbit_pruning(
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
-    let entity_cells = partition
-        .cells
-        .iter()
-        .filter(|cell| {
-            cell.first()
-                .is_some_and(|node| node.index() < adapter.source_node_count)
-        })
-        .cloned()
-        .collect();
-    let expected = exhaustive_minimum(&adapter, entity_cells, &leaf_candidate);
-    let expected_remapping =
-        remapping_from_order(&molecule, &incidence_graph, &expected.entity_order);
-    let expected_molecule = molecule
-        .clone()
-        .remap(&expected_remapping)
-        .reframe()
-        .expect("exhaustive minimum preserves compatible frames");
+    let mut candidates = Vec::new();
     let mut stats = Vec::new();
 
     for options in [
@@ -1183,15 +1078,18 @@ fn test_canonicalize_structure_orbit_pruning(
             .clone()
             .remap(&remapping)
             .reframe()
-            .expect("selected minimum preserves compatible frames");
+            .expect("selected leaf preserves compatible frames");
 
-        assert_eq!(actual.candidate.key, expected.key, "{options:?}");
-        assert_eq!(canonical, expected_molecule, "{options:?}");
         assert!(
             molecule.framed_eq_under(&canonical, &remapping),
             "{options:?}",
         );
+        candidates.push((actual.candidate.key, canonical));
         stats.push(actual.stats);
+    }
+
+    for candidate in &candidates[1..] {
+        assert_eq!(candidate, &candidates[0]);
     }
 
     assert_eq!(
@@ -2949,99 +2847,6 @@ fn test_ordered_partition_refine_exhaustive_domain(
 }
 
 #[rstest]
-#[case::path(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(1), AtomId(2), BondForm::from_order(1)),
-                (AtomId(2), AtomId(3), BondForm::from_order(1)),
-            ],
-            ..Default::default()
-        }),
-    )]
-#[case::branched(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 4],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-            ],
-            ..Default::default()
-        }),
-    )]
-#[case::distinct_attributes(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::O),
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::N),
-            ],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-                (AtomId(1), AtomId(2), BondForm::from_order(1)),
-            ],
-            ..Default::default()
-        }),
-    )]
-fn test_canonical_search(#[case] molecule: Molecule) {
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph).unwrap();
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
-    let leaf_candidate = |order: &[NodeId]| {
-        leaf_candidate_at(
-            &molecule,
-            &incidence_graph,
-            DescriptionLevel::Topology,
-            order,
-        )
-    };
-    let expected = exhaustive_minimum(
-        &adapter,
-        adapter_entity_blocks(&incidence_graph),
-        &leaf_candidate,
-    );
-    let unpruned = canonical_search(
-        &adapter,
-        &descriptors,
-        AutomorphismAlgorithm::Nauty,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
-        &leaf_candidate,
-    );
-    let reversed = canonical_search(
-        &adapter,
-        &descriptors,
-        AutomorphismAlgorithm::Nauty,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-        &leaf_candidate,
-    );
-    let pruned = canonical_search(
-        &adapter,
-        &descriptors,
-        AutomorphismAlgorithm::Nauty,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-        &leaf_candidate,
-    );
-
-    assert_eq!(unpruned.candidate.key, expected.key);
-    assert_eq!(reversed.candidate.key, expected.key);
-    assert_eq!(pruned.candidate.key, expected.key);
-    assert!(pruned.stats.visited_leaves <= unpruned.stats.visited_leaves);
-}
-
-#[rstest]
 fn test_canonical_search_color_labels() {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -3940,7 +3745,7 @@ fn test_canonicalize_constitution_properties(
 }
 
 #[rstest]
-fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: CanonicalizeContext) {
+fn test_canonicalize_constitution_entity_kind(canonicalize_context: CanonicalizeContext) {
     let atoms = vec![AtomForm::from_element(Element::C); 4];
     let cases = [
         (
@@ -4018,24 +3823,6 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
     ];
 
     for (entity_kind, molecule) in cases {
-        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-        let (entity_keys, incidence_keys) =
-            initial_color_keys(&molecule, &incidence_graph).unwrap();
-        let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-        let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-        let leaf_candidate = |order: &[NodeId]| {
-            leaf_candidate_at(
-                &molecule,
-                &incidence_graph,
-                DescriptionLevel::Constitution,
-                order,
-            )
-        };
-        let expected = exhaustive_minimum(
-            &adapter,
-            adapter_entity_blocks(&incidence_graph),
-            &leaf_candidate,
-        );
         let (canonical, remapping) = canonicalize_constitution(
             molecule.clone(),
             &canonicalize_context,
@@ -4054,33 +3841,7 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             },
         )
         .unwrap();
-        let canonical_incidence = canonical.incidence_graph(IncidenceLevel::Constitution);
-        let canonical_order = canonical_incidence.graph().node_ids().collect::<Vec<_>>();
-        let unpruned_incidence = unpruned.incidence_graph(IncidenceLevel::Constitution);
-        let unpruned_order = unpruned_incidence.graph().node_ids().collect::<Vec<_>>();
 
-        assert_eq!(
-            leaf_candidate_at(
-                &unpruned,
-                &unpruned_incidence,
-                DescriptionLevel::Constitution,
-                &unpruned_order
-            )
-            .key,
-            expected.key.clone(),
-            "unpruned {entity_kind}",
-        );
-        assert_eq!(
-            leaf_candidate_at(
-                &canonical,
-                &canonical_incidence,
-                DescriptionLevel::Constitution,
-                &canonical_order
-            )
-            .key,
-            expected.key,
-            "pruned {entity_kind}",
-        );
         assert_eq!(unpruned, canonical, "{entity_kind}");
         assert!(
             molecule.framed_eq_under(&canonical, &remapping),

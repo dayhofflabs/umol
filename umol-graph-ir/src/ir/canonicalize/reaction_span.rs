@@ -1060,8 +1060,7 @@ fn canonical_candidate(
         DescriptionLevel::Constitution | DescriptionLevel::Full => {
             let colors = rank_initial_colors(&entity_keys, &incidence_keys);
             let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-            let descriptors =
-                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+            let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
             canonical_search(
                 &adapter,
                 &descriptors,
@@ -1073,8 +1072,7 @@ fn canonical_candidate(
         DescriptionLevel::Structure => {
             let colors = rank_initial_colors(&entity_keys, &incidence_keys);
             let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-            let descriptors =
-                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+            let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
             let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
                 retain_stereo_preserving_generators(span, &incidence_graph, generators);
             };

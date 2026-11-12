@@ -1880,7 +1880,7 @@ before and after and the returned integer. The three `test_deferred_key_*` tests
 and the 12,202 library tests pass. `rank_colors` has no caller until S6j, so the library build
 reports an eleventh dead-code warning.
 
-#### S6h.1 — Benchmark cases for Constitution and Full
+#### S6h.1 — Benchmark cases for Constitution and Full **Done**
 
 **Module:** `umol-graph-ir/benches/canonicalize.rs`. Additive (green). [dep: S4a]
 
@@ -1902,7 +1902,25 @@ Today `ordinary_naphthalene`, `disconnected_rings`, `feature_free_connected`,
 nine cases run at Structure, and none runs at Constitution. The inline-constraint groups run at
 Full until S8b and at the level of their entities after it.
 
-#### S6i — Search partition from the colors
+The four cases are in `corpus()` after `overlay_heavy`. The two charge-sum cases share the function
+`charge_sum_ring`, which takes the atoms of the constraint. With them the corpus has 20 cases: 5 at
+Topology, 2 at Constitution, 9 at Structure, and 4 at Full.
+
+Criterion medians at commit 1590d2e94: a 1-second warm-up and 3 seconds of measurement, one run,
+Nauty, Apple M1 Pro, load average about 3. All 60 medians of the four cases are in
+`scratch/244-compare/baseline/s6h1.tsv`, which is not committed.
+
+| Case | Level | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` | Modified span `canonicalize` |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `overlay_unconstrained` | Constitution | 22.6 µs | 54.4 µs | 28.5 µs | 66.2 µs | 28.6 µs |
+| `aromatic_electron_counts` | Constitution | 65.2 µs | 125.1 µs | 77.1 µs | 146.5 µs | 20.9 µs |
+| `symmetric_charge_sum` | Full | 121.3 µs | 238.6 µs | 131.6 µs | 260.1 µs | 34.9 µs |
+| `asymmetric_charge_sum` | Full | 123.0 µs | 242.5 µs | 133.0 µs | 263.0 µs | 34.7 µs |
+
+Molecule `canonical_hash` takes 30.0 µs, 62.4 µs, 119.7 µs, and 120.9 µs in the same order. The two
+charge-sum cases take the same time within 2%, as expected while no search prunes at Full.
+
+#### S6i — Search partition from the colors **Done**
 
 **Module:** `ir/canonicalize.rs`, `ir/canonicalize/molecule.rs`.
 
@@ -1917,6 +1935,47 @@ leaves without pruning and 1 with it, against 6 and 3, and
 `test_canonicalize_constitution_entity_kind_minimum`, which compares the search with the minimum
 over every relabeling, is removed. A row with a five-ring whose aromatic system has the electron
 counts 2, 1, 1, 1, 1. The two Constitution cases are timed against S6h.1.
+
+In both functions an occurrence node takes the rank of its incidence color from the adapter.
+`constitution_partition_descriptors` loses its `incidence_graph` argument at seven call sites.
+
+The search no longer returns the least key over every relabeling, and no test requires it. That
+comparison stood in for invariance: the least key is the same for every numbering. Invariance is
+now tested by renumbering and by the properties. The tests changed as follows.
+
+- `test_canonical_candidate`: the modified aromatic system row expects 2 and 1 visited leaves
+  against 6 and 3. The new row `aromatic_electron_counts`, the five-ring as an unchanged span at
+  Constitution, expects 2 and 1.
+- `test_canonicalize_constitution_entity_kind_minimum` loses its two least-key assertions and is
+  named `test_canonicalize_constitution_entity_kind`. For a dative, an aromatic, a multicenter, and
+  a noncovalent molecule it still asserts that the pruned and unpruned results agree, that the
+  remapping carries the input to the result, that integrity holds, and that all 24 renumberings of
+  the atoms give the same canonical form.
+- `test_canonical_search` and `test_canonical_search_exhaustive` are removed. Without the least-key
+  comparison they repeat `test_canonicalize_topology_exhaustive_domain`, which compares the pruned
+  with the unpruned search and checks every renumbering on every small molecule.
+- `test_canonicalize_structure_minimum` becomes `test_canonicalize_structure_search_options`. It
+  asserts that `canonicalize_structure` of the symmetric stereo molecule gives the same molecule
+  for the five combinations of pruning and branch order. No other test runs that function with
+  pruning off on this molecule; `test_canonicalize_structure_renumbering` covers the rest.
+- `test_canonicalize_structure_orbit_pruning` compares the key and molecule of every option set
+  with those of the first, and keeps its remapping assertion and its exact search statistics.
+- The test functions `exhaustive_minimum` and `adapter_entity_blocks` have no caller and are
+  removed.
+
+The 12,199 library tests, the integration tests of the crate, the 555 properties, and the default
+tests of the other workspace crates without `umol-py` pass. The Python tests wait for the stage
+gate. Criterion medians against S6h.1, with the conditions of that run:
+
+| Case | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` |
+| --- | ---: | ---: | ---: | ---: |
+| `overlay_unconstrained` | 22.6 → 22.3 µs | 54.4 → 54.2 µs | 28.5 → 28.2 µs | 66.2 → 67.4 µs |
+| `aromatic_electron_counts` | 65.2 → 17.3 µs | 125.1 → 40.1 µs | 77.1 → 22.0 µs | 146.5 → 48.4 µs |
+| `symmetric_charge_sum` | 121.3 → 124.2 µs | 238.6 → 238.4 µs | 131.6 → 132.8 µs | 260.1 → 261.3 µs |
+| `asymmetric_charge_sum` | 123.0 → 121.7 µs | 242.5 → 241.3 µs | 133.0 → 133.2 µs | 263.0 → 263.8 µs |
+
+`aromatic_electron_counts` takes 0.26 to 0.39 times its former time in the nine groups that run a
+search on the unmodified case. The other 51 medians of the four cases stay within 4.1%.
 
 #### S6j — Molecule `canonicalize` at Topology
 

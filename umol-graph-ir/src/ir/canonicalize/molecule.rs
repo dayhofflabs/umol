@@ -417,7 +417,7 @@ fn constitution_entity_classes(molecule: &Molecule) -> Result<Vec<u32>, Contradi
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
     let partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
     let classes = partition.cell_indices(adapter.graph().node_count());
     Ok(classes[..adapter.source_node_count].to_vec())
@@ -481,8 +481,9 @@ fn structure_partition_descriptors(
     adapter
         .node_sources
         .iter()
-        .map(|source| match *source {
-            SubdivisionNodeSource::Node(node) => {
+        .zip(&adapter.colors)
+        .map(|(source, color)| match (*source, *color) {
+            (SubdivisionNodeSource::Node(node), _) => {
                 let entity = incidence_graph.entity(node);
                 let InitialColorKey::Entity { position, .. } = entity_keys[node.index()] else {
                     unreachable!("entity key corresponds to an entity node")
@@ -526,12 +527,11 @@ fn structure_partition_descriptors(
                 };
                 Ok(InitialColorKey::Entity { position, value })
             }
-            SubdivisionNodeSource::Edge(edge) => {
-                let value = match incidence_graph.incidence(edge) {
-                    Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
-                    incidence => incidence_key(incidence),
-                };
-                Ok(InitialColorKey::Incidence(value))
+            (SubdivisionNodeSource::Edge(_), AutomorphismColor::Incidence(rank)) => Ok(
+                InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(rank.into())),
+            ),
+            (SubdivisionNodeSource::Edge(_), AutomorphismColor::Entity(_)) => {
+                unreachable!("an occurrence node has an incidence color")
             }
         })
         .collect()
@@ -1291,7 +1291,7 @@ fn canonicalize_constitution(
     let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
     let build_key = |order: &[NodeId]| {
         leaf_key(
             &molecule,
@@ -1336,7 +1336,7 @@ fn canonicalize_structure(
     let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
     let build_key = |order: &[NodeId]| {
         leaf_key(
             &molecule,
@@ -1532,8 +1532,7 @@ impl Molecule {
 
         let colors = rank_initial_colors(&entity_keys, &incidence_keys);
         let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-        let descriptors =
-            constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+        let descriptors = constitution_partition_descriptors(&adapter, &entity_keys);
         let leaf_candidate = |order: &[NodeId]| {
             let entity_order = entity_order(molecule, &incidence_graph, level, order);
             CanonicalCandidate {
