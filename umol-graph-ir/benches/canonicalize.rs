@@ -826,7 +826,7 @@ fn retained_scaling_corpus() -> Vec<CorpusCase> {
                 .into_parts()
                 .0;
             assert_eq!(
-                molecule_counts(&molecule),
+                molecule.entity_counts(),
                 expected_counts,
                 "benchmark case {name} changed shape"
             );
@@ -985,7 +985,9 @@ fn bench_remapping(c: &mut Criterion) {
 
     for case in &corpus {
         let correspondence = reverse_remapping(&case.molecule);
-        let counts = molecule_counts(&case.molecule)
+        let counts = case
+            .molecule
+            .entity_counts()
             .into_iter()
             .map(|count| count.to_string())
             .collect::<Vec<_>>()
@@ -1010,7 +1012,9 @@ fn bench_canonicalize(c: &mut Criterion) {
     };
     let mut group = c.benchmark_group("canonicalize/complete/canonicalize");
     for case in &corpus {
-        let counts = molecule_counts(&case.molecule)
+        let counts = case
+            .molecule
+            .entity_counts()
             .into_iter()
             .map(|count| count.to_string())
             .collect::<Vec<_>>()
@@ -1453,19 +1457,6 @@ fn bench_inline_constraint(c: &mut Criterion) {
         });
     }
     group.finish();
-}
-
-fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
-    [
-        molecule.atoms().count(),
-        molecule.bonds().count(),
-        molecule.dative_bonds().count(),
-        molecule.aromatic_systems().count(),
-        molecule.multicenter_bonds().count(),
-        molecule.noncovalent_bonds().count(),
-        molecule.stereo_atoms().count(),
-        molecule.stereo_bonds().count(),
-    ]
 }
 
 criterion_group!(

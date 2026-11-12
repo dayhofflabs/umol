@@ -916,32 +916,6 @@ fn rank_colors<T: Ord>(mut colors: Vec<(T, usize)>, first: u32, ranks: &mut [u32
     }
 }
 
-fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
-    [
-        molecule.atoms().count(),
-        molecule.bonds().count(),
-        molecule.dative_bonds().count(),
-        molecule.aromatic_systems().count(),
-        molecule.multicenter_bonds().count(),
-        molecule.noncovalent_bonds().count(),
-        molecule.stereo_atoms().count(),
-        molecule.stereo_bonds().count(),
-    ]
-}
-
-fn reaction_span_counts(span: &ReactionSpan) -> [usize; 8] {
-    [
-        span.atoms().len(),
-        span.bonds().len(),
-        span.dative_bonds().count(),
-        span.aromatic_systems().count(),
-        span.multicenter_bonds().count(),
-        span.noncovalent_bonds().count(),
-        span.stereo_atoms().count(),
-        span.stereo_bonds().count(),
-    ]
-}
-
 fn molecule_remapping(images: &[Vec<usize>; 8]) -> MoleculeRemapping {
     fn remapping<Id: Copy + Debug + Into<usize> + From<usize>>(images: &[usize]) -> Remapping<Id> {
         Remapping::new(images.iter().copied().map(Id::from).collect())

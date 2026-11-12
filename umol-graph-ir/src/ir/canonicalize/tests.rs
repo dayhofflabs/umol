@@ -2693,7 +2693,7 @@ fn test_reaction_span_canonical_eq_renumbering(
     canonicalize_context: CanonicalizeContext,
     #[case] span: ReactionSpan,
 ) {
-    let images = reaction_span_counts(&span).map(|count| (0..count).rev().collect::<Vec<_>>());
+    let images = span.entity_counts().map(|count| (0..count).rev().collect::<Vec<_>>());
     let renumbered = span.clone().remap(&molecule_remapping(&images));
 
     assert!(span.canonical_eq(&renumbered, &canonicalize_context));
@@ -2826,8 +2826,8 @@ pub(super) fn explicitly_dense_equivalent(left: &Molecule, right: &Molecule) -> 
         })
     }
 
-    let left_counts = molecule_counts(left);
-    if left_counts != molecule_counts(right) {
+    let left_counts = left.entity_counts();
+    if left_counts != right.entity_counts() {
         return false;
     }
     let permutations = left_counts.map(permutations);
@@ -2841,7 +2841,9 @@ pub(super) fn explicitly_dense_equivalent(left: &Molecule, right: &Molecule) -> 
 }
 
 pub(super) fn reverse_remapping(molecule: &Molecule) -> MoleculeRemapping {
-    let images = molecule_counts(molecule).map(|count| (0..count).rev().collect::<Vec<_>>());
+    let images = molecule
+        .entity_counts()
+        .map(|count| (0..count).rev().collect::<Vec<_>>());
     molecule_remapping(&images)
 }
 

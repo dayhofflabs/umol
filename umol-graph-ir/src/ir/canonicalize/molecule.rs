@@ -22,9 +22,9 @@ use super::super::stereo::{
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    hash_value, molecule_canonicalize_level, molecule_counts, molecule_remapping, rank_colors,
-    AutomorphismAdapter, AutomorphismColor, CanonicalCandidate, Canonicalize, CanonicalizeContext,
-    DeferredKey, DescriptionLevel, InitialColors, MoleculeCanonicalizeError, OrderedPartition,
+    hash_value, molecule_canonicalize_level, molecule_remapping, rank_colors, AutomorphismAdapter,
+    AutomorphismColor, CanonicalCandidate, Canonicalize, CanonicalizeContext, DeferredKey,
+    DescriptionLevel, InitialColors, MoleculeCanonicalizeError, OrderedPartition,
     TopologySearchInput,
 };
 
@@ -403,7 +403,9 @@ fn remapping_from_order(
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
+    let mut images = molecule
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
         let (entity_kind, kind_id) = match incidence_graph.entity(node) {
@@ -428,7 +430,9 @@ fn remapping_from_generator(
     incidence_graph: &IncidenceGraph,
     generator: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
+    let mut images = molecule
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
     for node in incidence_graph.graph().node_ids() {
         let entity = incidence_graph.entity(node);
         images[entity.kind() as usize][entity.kind_id()] =

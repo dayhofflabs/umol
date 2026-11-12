@@ -255,7 +255,8 @@ fn test_canonicalize_structure_para_stereo(
     canonicalize_context: CanonicalizeContext,
 ) {
     let atom_images = [1, 0, 6, 8, 7, 9, 2, 4, 3, 5, 13, 11, 10, 12].map(AtomId);
-    let mut images = molecule_counts(&para_stereo_canonicalization_molecule)
+    let mut images = para_stereo_canonicalization_molecule
+        .entity_counts()
         .map(|count| (0..count).collect::<Vec<_>>());
     images[0] = atom_images.iter().map(|id| id.index()).collect();
     let remapping = molecule_remapping(&images);
@@ -2002,7 +2003,9 @@ fn test_canonicalize_constitution_entity_kind(canonicalize_context: Canonicalize
             .into_iter()
             .enumerate()
         {
-            let mut images = molecule_counts(&molecule).map(|count| (0..count).collect::<Vec<_>>());
+            let mut images = molecule
+                .entity_counts()
+                .map(|count| (0..count).collect::<Vec<_>>());
             images[0] = atom_images;
             if index % 2 == 1 {
                 for entity_kind_images in &mut images[1..6] {

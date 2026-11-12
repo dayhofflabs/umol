@@ -3153,6 +3153,60 @@ fn test_molecule_is_empty_rich(#[from(rich_molecule)] molecule: Molecule) {
 }
 
 #[rstest]
+#[case::helium(mol_dsl!(r#"{:atoms ["He"]}"#), [1, 0, 0, 0, 0, 0, 0, 0])]
+#[case::ethane(
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+    [2, 1, 0, 0, 0, 0, 0, 0]
+)]
+#[case::ammonia_borane(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    [2, 0, 1, 0, 0, 0, 0, 0]
+)]
+#[case::benzene(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#
+    ),
+    [6, 6, 0, 1, 0, 0, 0, 0]
+)]
+#[case::diborane(
+    mol_dsl!(
+        r#"{:atoms ["B" "B" "H" "H"]
+            :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]"}
+                                {:atoms [0 3 1] :attrs "[0,1,1]"}]}"#
+    ),
+    [4, 0, 0, 0, 2, 0, 0, 0]
+)]
+#[case::water_dimer(
+    mol_dsl!(
+        r#"{:atoms ["O" "H" "H" "O" "H" "H"]
+            :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"]]
+            :noncovalent-bonds [{:atoms [1 3] :attrs "Hbd"}]}"#
+    ),
+    [6, 4, 0, 0, 0, 1, 0, 0]
+)]
+#[case::bromochlorofluoroiodomethane(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    [5, 4, 0, 0, 0, 0, 1, 0]
+)]
+#[case::but_2_ene(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    [4, 3, 0, 0, 0, 0, 0, 1]
+)]
+fn test_molecule_entity_counts(#[case] molecule: Molecule, #[case] expected: [usize; 8]) {
+    assert_eq!(molecule.entity_counts(), expected);
+}
+
+#[rstest]
 fn test_molecule_has_constraints_empty() {
     assert!(!Molecule::default().has_constraints());
 }

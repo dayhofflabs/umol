@@ -24,10 +24,10 @@ use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
     hash_value, molecule_remapping, rank_colors, reaction_canonicalize_level,
-    reaction_span_canonicalize_level, reaction_span_counts, AutomorphismAdapter, AutomorphismColor,
-    CanonicalCandidate, CanonicalSearchResult, Canonicalize, CanonicalizeContext, DeferredKey,
-    DescriptionLevel, InitialColors, OrderedPartition, ReactionCanonicalizeError,
-    ReactionSpanCanonicalizeError, TopologySearchInput,
+    reaction_span_canonicalize_level, AutomorphismAdapter, AutomorphismColor, CanonicalCandidate,
+    CanonicalSearchResult, Canonicalize, CanonicalizeContext, DeferredKey, DescriptionLevel,
+    InitialColors, OrderedPartition, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
+    TopologySearchInput,
 };
 
 /// The key of a leaf: the span in the entity order of the leaf, with each entity span as the
@@ -63,7 +63,9 @@ fn remapping_from_order(
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = reaction_span_counts(span).map(|count| (0..count).collect::<Vec<_>>());
+    let mut images = span
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
         let (entity_kind, kind_id) = match incidence_graph.entity(node) {
@@ -88,7 +90,9 @@ fn remapping_from_generator(
     incidence_graph: &IncidenceGraph,
     generator: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = reaction_span_counts(span).map(|count| (0..count).collect::<Vec<_>>());
+    let mut images = span
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
     for node in incidence_graph.graph().node_ids() {
         let entity = incidence_graph.entity(node);
         images[entity.kind() as usize][entity.kind_id()] =

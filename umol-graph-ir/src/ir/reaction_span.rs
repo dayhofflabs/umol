@@ -13,6 +13,7 @@ use std::hash::Hash;
 use std::mem;
 use std::sync::Arc;
 
+use strum::EnumCount;
 use thiserror::Error;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCorrespondence,
@@ -1189,6 +1190,20 @@ impl ReactionSpan {
 
     pub fn constraints(&self) -> &[ConstraintSpan] {
         &self.constraints
+    }
+
+    /// Number of entities of each kind in the union frame, indexed by `EntityKind as usize`.
+    pub fn entity_counts(&self) -> [usize; EntityKind::COUNT] {
+        [
+            self.atoms.len(),
+            self.bonds.len(),
+            self.dative_bonds.count(),
+            self.aromatic_systems.count(),
+            self.multicenter_bonds.count(),
+            self.noncovalent_bonds.count(),
+            self.stereo_atoms.count(),
+            self.stereo_bonds.count(),
+        ]
     }
 
     fn reverse_sides(&self) -> Self {
@@ -2752,6 +2767,7 @@ mod tests {
     use super::super::num::NumForm;
     use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
     use super::*;
+    use crate::mol_dsl;
 
     #[fixture]
     fn canonicalize_context() -> CanonicalizeContext {
@@ -5474,6 +5490,109 @@ mod tests {
         assert_eq!(
             reaction.to_reaction_span().unwrap().constraints(),
             expected.as_slice(),
+        );
+    }
+
+    #[rstest]
+    #[case::helium(
+        Reaction::new(mol_dsl!(r#"{:atoms ["He"]}"#), Deltas::default()),
+        [1, 0, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::atom_added(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+                id: AtomId(1),
+                attributes: AtomForm::from_element(Element::O),
+            })]),
+        ),
+        [2, 0, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::atom_removed(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(1),
+                attributes: AtomForm::from_element(Element::O),
+            })]),
+        ),
+        [2, 0, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::ethane(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::default(),
+        ),
+        [2, 1, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::ammonia_borane(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [2, 0, 1, 0, 0, 0, 0, 0]
+    )]
+    #[case::benzene(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+                    :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+                    :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [6, 6, 0, 1, 0, 0, 0, 0]
+    )]
+    #[case::diborane(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["B" "B" "H" "H"]
+                    :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]"}
+                                        {:atoms [0 3 1] :attrs "[0,1,1]"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [4, 0, 0, 0, 2, 0, 0, 0]
+    )]
+    #[case::water_dimer(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["O" "H" "H" "O" "H" "H"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"]]
+                    :noncovalent-bonds [{:atoms [1 3] :attrs "Hbd"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [6, 4, 0, 0, 0, 1, 0, 0]
+    )]
+    #[case::bromochlorofluoroiodomethane(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [5, 4, 0, 0, 0, 0, 1, 0]
+    )]
+    #[case::but_2_ene(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "C" "C" "C"]
+                    :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                    :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [4, 3, 0, 0, 0, 0, 0, 1]
+    )]
+    fn test_reaction_span_entity_counts(#[case] reaction: Reaction, #[case] expected: [usize; 8]) {
+        assert_eq!(
+            reaction.to_reaction_span().unwrap().entity_counts(),
+            expected,
         );
     }
 
