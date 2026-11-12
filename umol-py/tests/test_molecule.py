@@ -407,17 +407,11 @@ def test_molecule_canonicalize():
         '{:atoms ["C#c+" "C"] :constraints '
         '[{:charge-sum {:atoms [0 0] :sum 0}}]}'
     )
-    expected = Molecule.parse(
-        '{:atoms ["C" "C#c+"] :constraints '
-        '[{:charge-sum {:atoms [1] :sum 0}}]}'
-    )
 
     canonical = source.canonicalize()
 
     assert canonical is not source
-    assert canonical == expected
-    assert source != expected
-    assert source.canonical_eq(expected)
+    assert source.canonical_eq(canonical)
 
 
 def test_molecule_tracked_canonicalize():

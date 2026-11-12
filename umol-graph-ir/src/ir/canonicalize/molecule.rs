@@ -4,6 +4,7 @@ use umol_graph_core::{Graph, NodeId, SubdivisionNodeSource};
 use umol_perm::Permutation;
 
 use super::super::aromatic::aromatic_system_representative_action;
+use super::super::constraint::Constraints;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
@@ -62,6 +63,8 @@ struct CanonicalComparisonKey {
     /// The image of the site bond, the ligands in the frame of the leaf, and the form in that frame
     /// of each stereo bond.
     stereo_bonds: Vec<(u32, Vec<StereoLigand>, StereoBondForm)>,
+    /// The molecule-level constraints in the entity order and the frames of the leaf.
+    constraints: Constraints,
 }
 
 /// Construct the ordered constraint blocks used by complete canonicalization.
@@ -1451,7 +1454,8 @@ fn topology_key(
 /// A row holds the participants of its entity in their new numbers, in the representative order of
 /// the entity, and the integer of its color. The row of an aromatic system or a multicenter bond
 /// also holds its electron counts in that order, and the row of a stereo entity holds its form in
-/// the frame of the leaf in place of the integer.
+/// the frame of the leaf in place of the integer. The molecule-level constraints follow, read
+/// from the molecule remapped and reframed in the order of the leaf.
 fn color_key(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -1469,6 +1473,7 @@ fn color_key(
         noncovalent: Vec::new(),
         stereo_atoms: Vec::new(),
         stereo_bonds: Vec::new(),
+        constraints: Constraints::new(),
     };
     for &node in entity_order {
         let color = colors.entities[node.index()];
@@ -1596,6 +1601,19 @@ fn color_key(
                 ));
             }
         }
+    }
+    if molecule.has_constraints() {
+        key.constraints = molecule
+            .clone()
+            .remap(&remapping_from_order(
+                molecule,
+                incidence_graph,
+                entity_order,
+            ))
+            .reframe()
+            .expect("the molecule is normalized")
+            .constraints()
+            .clone();
     }
     key
 }
@@ -1787,19 +1805,9 @@ fn canonicalize_full(
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Full)?;
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let (partition, _) = structure_partition(
-        &molecule,
-        &incidence_graph,
-        &adapter,
-        &entity_keys,
-        context.para_stereo,
-    )?;
-    let descriptors = partition.cell_indices(adapter.graph().node_count());
-    let build_key =
-        |order: &[NodeId]| leaf_key(&molecule, &incidence_graph, DescriptionLevel::Full, order);
+    let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(&molecule, &incidence_graph, DescriptionLevel::Full, order);
         CanonicalCandidate {
@@ -1807,15 +1815,16 @@ fn canonicalize_full(
             entity_order,
         }
     };
-    let entity_order = canonical_search(
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_preserving_generators(&molecule, &incidence_graph, generators);
+    };
+    let entity_order = canonical_search_with_generator_filter(
         &adapter,
-        &descriptors,
+        &adapter.colors,
         context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            ..options
-        },
+        options,
         &leaf_candidate,
+        &filter_generators,
     )
     .candidate
     .entity_order;
@@ -1832,12 +1841,8 @@ impl Molecule {
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), MoleculeCanonicalizeError> {
         let options = CanonicalSearchOptions {
-            automorphism_pruning: level != DescriptionLevel::Full,
-            branch_order: if level == DescriptionLevel::Full {
-                BranchOrdering::NodeId
-            } else {
-                BranchOrdering::BackendCanonical
-            },
+            automorphism_pruning: true,
+            branch_order: BranchOrdering::BackendCanonical,
         };
         match level {
             DescriptionLevel::Topology => canonicalize_topology(self, context, options),

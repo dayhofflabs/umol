@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
+use umol_edn::FromEdn;
 
 use super::*;
 use crate::ir::{
@@ -805,7 +806,7 @@ fn test_reaction_span_canonicalize_level_modified(
 }
 
 #[rstest]
-#[case::constitution(
+#[case::dative_bond(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::N),
@@ -821,10 +822,8 @@ fn test_reaction_span_canonicalize_level_modified(
         dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
         ..Default::default()
     }),
-    DescriptionLevel::Topology,
-    DescriptionLevel::Constitution,
 )]
-#[case::structure(
+#[case::stereo_atom(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),
@@ -867,10 +866,8 @@ fn test_reaction_span_canonicalize_level_modified(
         )],
         ..Default::default()
     }),
-    DescriptionLevel::Constitution,
-    DescriptionLevel::Structure,
 )]
-#[case::full(
+#[case::atom_constraint(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),
@@ -917,15 +914,11 @@ fn test_reaction_span_canonicalize_level_modified(
         )],
         ..Default::default()
     }),
-    DescriptionLevel::Structure,
-    DescriptionLevel::Full,
 )]
-fn test_canonicalize_canonical_eq_description_level(
+fn test_canonical_eq_additional_entity(
     canonicalize_context: CanonicalizeContext,
     #[case] left: Molecule,
     #[case] right: Molecule,
-    #[case] left_level: DescriptionLevel,
-    #[case] right_level: DescriptionLevel,
 ) {
     let left_reaction = Reaction::new(left.clone(), Deltas::new());
     let right_reaction = Reaction::new(right.clone(), Deltas::new());
@@ -938,12 +931,6 @@ fn test_canonicalize_canonical_eq_description_level(
         .to_reaction_span()
         .expect("identity reaction materializes");
 
-    assert_eq!(molecule_canonicalize_level(&left), left_level);
-    assert_eq!(molecule_canonicalize_level(&right), right_level);
-    assert_eq!(reaction_canonicalize_level(&left_reaction), left_level);
-    assert_eq!(reaction_canonicalize_level(&right_reaction), right_level);
-    assert_eq!(reaction_span_canonicalize_level(&left_span), left_level);
-    assert_eq!(reaction_span_canonicalize_level(&right_span), right_level);
     assert_eq!(
         (
             left.canonical_eq(&right, &canonicalize_context),
@@ -978,51 +965,339 @@ fn test_reaction_span_canonicalize_contradiction(canonicalize_context: Canonical
 }
 
 #[rstest]
-fn test_molecule_canonicalize(canonicalize_context: CanonicalizeContext) {
-    let plain = AtomForm::from_element(Element::C);
-    let mut constrained = plain.clone();
-    constrained.constraints = AtomConstraintForm::valence(4).into();
-    let source = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![plain.clone(), constrained.clone()],
-        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: Some(vec![AtomId(1), AtomId(1)]),
-            sum: NumForm::Lit(0),
-        })
-        .into(),
-        ..Default::default()
-    });
-    let renumbered = source.clone().remap(&molecule_remapping(&[
-        vec![1, 0],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    ]));
-    let expected = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![constrained, plain],
-        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: Some(vec![AtomId(0)]),
-            sum: NumForm::Lit(0),
-        })
-        .into(),
-        ..Default::default()
-    });
+#[case::atom_charge(
+    r#"{:atoms ["C#c+" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C#c+" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_charge_absent(
+    r#"{:atoms ["C#c+" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_charge_pair(
+    r#"{:atoms ["C#c+" "C#c+" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C#c+" "C" "C" "C#c+" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_constraint(
+    r#"{:atoms ["C#v4" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C#v4" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_constraint_absent(
+    r#"{:atoms ["C#v4" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_constraint_pair(
+    r#"{:atoms ["C#v4" "C#v4" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C#v4" "C" "C" "C#v4" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_order(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "2"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_order_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_order_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "2"] [1 2 "2"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "2"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_constraint(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1#a"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_constraint_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::dative_bond(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 3 :attrs "1"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [1] :acceptor 4 :attrs "1"}]}"#,
+    true
+)]
+#[case::dative_bond_distance(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 3 :attrs "1"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 2 :attrs "1"}]}"#,
+    false
+)]
+#[case::dative_bond_role(
+    r#"{:atoms ["N" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 3 :attrs "1"}]}"#,
+    r#"{:atoms ["N" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [3] :acceptor 0 :attrs "1"}]}"#,
+    false
+)]
+#[case::aromatic_electron_counts(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,2,1,1]"}]}"#,
+    true
+)]
+#[case::aromatic_electron_counts_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#,
+    false
+)]
+#[case::aromatic_electron_counts_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,2,1,1,1,1]"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,2,1,1]"}]}"#,
+    false
+)]
+#[case::aromatic_system_charge(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#c-"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*#c-"}]}"#,
+    true
+)]
+#[case::aromatic_system_charge_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#c-"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_constraint(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#e2"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*#e2"}]}"#,
+    true
+)]
+#[case::aromatic_system_constraint_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#e2"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::multicenter_electron_counts(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[0,0,2]"}]}"#,
+    true
+)]
+#[case::multicenter_electron_counts_distinct(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,1,0]"}]}"#,
+    false
+)]
+#[case::noncovalent_bond(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [0 3] :attrs "Hbd"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [1 4] :attrs "Hbd"}]}"#,
+    true
+)]
+#[case::noncovalent_bond_distance(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [0 3] :attrs "Hbd"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [0 2] :attrs "Hbd"}]}"#,
+    false
+)]
+#[case::stereo_configuration(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    true
+)]
+#[case::stereo_configuration_distinct(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    false
+)]
+#[case::stereo_stereogenicity(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0#g/"}]}"#,
+    true
+)]
+#[case::stereo_stereogenicity_absent(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_topicity(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0#o(0,1)'"}]}"#,
+    true
+)]
+#[case::stereo_topicity_pair(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,2)'"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::molecule_constraint(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [3] :sum 0}}]}"#,
+    true
+)]
+#[case::molecule_constraint_opposite(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 3] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [1 4] :sum 0}}]}"#,
+    true
+)]
+#[case::molecule_constraint_adjacent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 1] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [3 2] :sum 0}}]}"#,
+    true
+)]
+#[case::molecule_constraint_count(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 3] :sum 0}}]}"#,
+    false
+)]
+#[case::molecule_constraint_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 1] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 3] :sum 0}}]}"#,
+    false
+)]
+#[case::molecule_constraint_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+fn test_molecule_canonicalize_placement(
+    canonicalize_context: CanonicalizeContext,
+    #[case] lhs: &str,
+    #[case] rhs: &str,
+    #[case] expected: bool,
+) {
+    let [lhs, rhs] =
+        [lhs, rhs].map(|source| Molecule::from_edn_str(source).expect("case molecule parses"));
 
     assert_eq!(
-        source.clone().canonicalize(&canonicalize_context),
-        Ok(expected.clone()),
+        lhs.clone().canonicalize(&canonicalize_context)
+            == rhs.clone().canonicalize(&canonicalize_context),
+        expected
     );
-    assert_eq!(
-        renumbered.canonicalize(&canonicalize_context),
-        Ok(expected.clone()),
-    );
-    assert_eq!(
-        expected.clone().canonicalize(&canonicalize_context),
-        Ok(expected.clone()),
-    );
+    assert_eq!(lhs.canonical_eq(&rhs, &canonicalize_context), expected);
 }
 
 #[rstest]
@@ -1062,14 +1337,55 @@ fn test_molecule_canonicalize_stereo_frame(
 }
 
 #[rstest]
-fn test_molecule_canonicalize_contradiction(canonicalize_context: CanonicalizeContext) {
-    let mut atom = AtomForm::from_element(Element::C);
-    atom.constraints = AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())).into();
-    let molecule = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![atom],
-        ..Default::default()
-    });
-
+#[case::atom_charge(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C).with_charge(NumForm::lit_set(Vec::<i64>::new()))],
+    ..Default::default()
+}))]
+#[case::atom_constraint(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C)
+        .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())))],
+    ..Default::default()
+}))]
+#[case::dative_order(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![
+        AtomForm::from_element(Element::N),
+        AtomForm::from_element(Element::B),
+    ],
+    dative: vec![(
+        vec![AtomId(0)],
+        AtomId(1),
+        DativeBondForm::new(NumForm::lit_set(Vec::<i64>::new())),
+    )],
+    ..Default::default()
+}))]
+#[case::stereo_coset(Molecule::from_entries(MoleculeEntries {
+    atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+        .map(AtomForm::from_element)
+        .into(),
+    bonds: (1..=4)
+        .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+        .collect(),
+    stereo_atoms: vec![(
+        AtomId(0),
+        (1..=4)
+            .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+            .collect(),
+        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
+    )],
+    ..Default::default()
+}))]
+#[case::electron_count_length(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C); 3],
+    aromatic: vec![(
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        AromaticSystemForm::from_electrons(vec![2, 1]),
+    )],
+    ..Default::default()
+}))]
+fn test_molecule_canonicalize_contradiction(
+    canonicalize_context: CanonicalizeContext,
+    #[case] molecule: Molecule,
+) {
     assert_eq!(
         molecule.canonicalize(&canonicalize_context),
         Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),

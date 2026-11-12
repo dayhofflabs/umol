@@ -2154,7 +2154,7 @@ added constraint over both atoms, and drops it with one over a single atom and w
 an added constraint over one atom each. The 12,228 library tests pass. The four functions have no
 caller until S7b and S9b, so the library build reports four dead-code warnings.
 
-#### S7b — Molecule `canonicalize` at Full
+#### S7b — Molecule `canonicalize` at Full **Done**
 
 **Module:** `ir/canonicalize/molecule.rs`.
 
@@ -2170,6 +2170,104 @@ representatives of molecules that reach Full (red→green). [dep: S6k, S7a]
 placements of S7a against renumbered copies and against each other. `overlay_heavy`,
 `frame_relative_stereo_constraint`, the two charge-sum cases, and the inline-constraint benchmarks
 of molecule `canonicalize` are timed against S6.
+
+The key has the row `constraints`, of type `Constraints`. `color_key` fills it when the molecule
+has molecule-level constraints, from a copy of the molecule remapped by `remapping_from_order`
+and reframed. `tracked_canonicalize_at` passes pruning and backend canonical order at every
+level. No assertion compares Full with the encoded path, since the representatives differ.
+
+Tests. `test_color_key` has two Full rows: two carbon atoms with a charge-sum constraint over one
+of them, in both atom orders.
+
+`test_molecule_canonicalize_placement` is new and was not planned. Each of its 37 rows gives two
+molecules in the DSL that carry one kind of datum on a symmetric carrier, and says whether they
+are the same molecule. The test asserts that their canonical forms are equal, and that
+`canonical_eq` holds, exactly in that case. The kinds are an atom charge, an atom constraint, a
+bond order, a bond constraint, a dative bond and its roles, the electron counts, the charge, and
+the constraint of an aromatic system, the electron counts of a multicenter bond, a noncovalent
+bond, a stereo configuration, a stereogenicity and a topicity constraint, and a molecule-level
+constraint. The carriers are a six-ring, two three-rings, three boron atoms, and two equal
+stereocentres. The table targets the failure this work can introduce: a color or a key that
+leaves out a datum, or a prune that uses a symmetry the datum breaks. Two temporary changes
+confirm it: with the electron counts left out of the incidence colors 5 rows fail, and with the
+generator check of Full keeping every generator 4 rows fail. A test that compared the pruned with
+the unpruned Full search on the six-ring did not fail under the second change and is not kept.
+
+`test_molecule_canonicalize` is removed. It pinned the canonical form of two carbon atoms, one of
+them constrained, as the constrained atom first; the atoms are now ordered by their colors and
+the unconstrained one comes first. A representative is not required to survive a change of the
+search, so no test pins one. Its other assertions, that the molecule, a renumbered copy, and the
+result canonicalize to the same molecule, are made by the property `test_molecule_canonicalize`
+on generated molecules and by the six-ring test.
+
+The other tests that pin a canonical form are removed with this subitem, for the same reason.
+
+- `test_canonicalize_topology` and `test_canonicalize_topology_components` expected exact
+  molecules with the atoms in element order, and `test_canonicalize_constitution` an exact
+  remapping. `test_molecule_canonicalize_standardization` asserts normalization, and
+  `test_canonicalize_topology_exhaustive_domain` and `test_canonicalize_constitution_entity_kind`
+  assert the agreement of runs and renumberings.
+- `test_reaction_span_tracked_canonicalize_at`, 8 rows, expected exact spans. The requirement in
+  them is lhs anchoring, which the span properties assert.
+- `tests/canonicalization/reaction_span.rs`, 5 rows of serialized canonical spans, is deleted. Its
+  header said that the fixtures preserve the published canonical representation, which the
+  decision on representatives does not require.
+- The three `*_canonicalize_description_level` tests become `test_molecule_canonicalize_level`,
+  `test_reaction_span_canonicalize_level`, and `test_reaction_canonicalize_level`: one row per
+  content and the level it selects, asserted on the level function alone. The molecule table has
+  9 rows, one for each kind of entity and of constraint. The level is not observable, but a level
+  that is too high costs only time and fails no other test.
+- `test_canonicalize_canonical_eq_description_level` becomes
+  `test_canonical_eq_additional_entity`. It keeps that a molecule, a reaction, and a span with and
+  without a dative bond, a stereo atom, or an atom constraint are not canonically equal, and loses
+  its level assertions.
+- The Python tests `test_molecule_canonicalize`, `test_reaction_span_canonicalize`, and
+  `test_reaction_canonicalize` lose the literal expected value. They keep that a new object is
+  returned and that it is canonically equal to the source.
+
+Tests are held to one rule from here on: a test states a requirement on the result of a public
+operation, or the contract of a single function, and it fails when the code is broken in the way
+it guards against. Three more changes follow from it.
+
+- `test_initial_colors` asserted exact integer vectors, which pin the order of the colors. It now
+  asserts, for 16 pairs of entities of one molecule, whether the two share an integer, and
+  `test_initial_colors_incidence` asserts that two incidences share one exactly when their role
+  and electron count agree. `test_color_key` asserted exact key rows, which pin the layout of the
+  key, and is removed; the placement table tests what the key is for.
+- Seven tests ran a level below the content of their molecule and are removed:
+  `test_canonicalize_topology_error`, `test_canonicalize_topology_excluded_data`,
+  `test_canonicalize_constitution_contradiction`, `test_canonicalize_constitution_properties`,
+  `test_canonicalize_structure_selected_layer`, and the two
+  `test_canonicalize_structure_stereo_*_constraints`. No span test does so. The contradictions
+  they covered are now 5 rows of `test_molecule_canonicalize_contradiction`, which calls
+  `canonicalize`: a contradictory atom charge, atom constraint, dative order, and stereo coset,
+  and an electron list of the wrong length.
+- Assertions on visited leaves and on search statistics stay. Like the level tables they guard a
+  cost: a search that stops pruning fails no other test.
+
+The 12,247 library tests, the integration tests of the crate, the 555 properties, and the default
+tests of the other workspace crates without `umol-py` pass, and so do the three Python test files.
+The library build reports two dead-code warnings, for the span functions of S7a.
+
+Criterion medians of molecule `canonicalize` against S6k, and against a run at S7a for the
+inline-constraint cases, with a 1-second warm-up and 3 seconds of measurement:
+
+| Case | Before | After | Ratio |
+| --- | ---: | ---: | ---: |
+| `overlay_heavy` | 66.5 µs | 18.4 µs | 0.28 |
+| `frame_relative_stereo_constraint` | 33.7 µs | 8.7 µs | 0.26 |
+| `symmetric_charge_sum` | 122.7 µs | 21.9 µs | 0.18 |
+| `asymmetric_charge_sum` | 125.0 µs | 138.1 µs | 1.10 |
+| `feature_free_connected` with `#v1` | 2.15 ms | 89.3 µs | 0.04 |
+| `feature_free_disconnected` with `#v1` | 2.85 ms | 98.0 µs | 0.03 |
+| `symmetry_heavy_radicals` with `#v1` | 11.67 ms | 78.0 µs | 0.007 |
+
+`asymmetric_charge_sum` is slower, as the decision on Full accepts: its constraint breaks the
+symmetry of the ring, so the generator checks cost time and prune little. A second run gave
+135.7 µs. Of the fourteen cases below Full, twelve stay within 3%. `para_stereo_cascade` and
+`symmetric_stereo_triisopropanolamine` read 14% and 11% high in a run disturbed by a compiler in
+the editor, and 1.6% and 6.5% high in a second run under load. They are re-measured at the stage
+gate. `canonical_eq` of the inline-constraint cases, still on the encoded path, stays within 1.3%.
 
 ### S8 — Molecule key and level
 
@@ -2188,11 +2286,12 @@ molecule's `comparison_key`, `topology_key`, `leaf_key`, `initial_color_keys`, `
 `structure_partition_descriptors`, `para_stereo_partition_descriptors`, and `structure_partition`,
 with their tests. Breaking for the keys and the hash values of molecules (red→green). [dep: S7b]
 
-**Tests:** rows of `test_molecule_canonical_key_at` at each level with exact keys and exact
-visited-leaf counts; the Full rows equal the exhaustive minimum. The exact keys of the deleted key
-tests are shown first, beside the new keys of the same fixtures. `test_molecule_canonical_eq` and
-its siblings are rerun unchanged. The benchmarks of molecule `canonical_eq` and `canonical_hash`
-are timed against S7.
+**Tests:** no exact key is pinned. `test_molecule_canonicalize_placement`, which asserts
+`canonical_eq` on every row, and the properties hold before and after. The placement table gains
+the assertion that the two molecules of a row with the same molecule have equal canonical hashes.
+`test_molecule_canonical_key_at` keeps its visited-leaf counts and its comparison of the pruned
+with the unpruned key. The tests of the deleted functions go with them. The break list is run.
+The benchmarks of molecule `canonical_eq` and `canonical_hash` are timed against S7.
 
 #### S8b — Molecule level from the entities
 
@@ -2203,15 +2302,11 @@ stereo entity Structure, a dative bond, aromatic system, multicenter bond, or no
 Constitution, and atoms and bonds alone Topology. Breaking for representatives and keys of
 molecules with inline constraints (red→green). [dep: S8a]
 
-**Tests:** shown first: the molecule rows that expect a constraint to select Full, in
-`test_molecule_canonicalize_description_level`, `test_canonicalize_canonical_eq_description_level`,
-and the two excluded-data tests. Rows of `test_molecule_canonical_eq`: a six-ring with a valence
-constraint on one atom, or an aromatic constraint on one bond, against a renumbered copy and
-against another placement; biphenyl with `#e6` on one aromatic system against a renumbered copy and
-against the other system; 2,3-dichlorobutane with a stereogenicity or a topicity constraint on one
-centre against a renumbered copy, against the same constraint on the other centre, and against
-another ligand pair. The two Python test files are rerun. The inline-constraint benchmarks are
-timed against S8a.
+**Tests:** shown first: the row of `test_molecule_canonicalize_level` that expects an inline
+constraint to select Full, and `test_canonicalize_topology_excluded_data`. The rows of
+`test_molecule_canonicalize_placement` with an inline constraint on an atom, a bond, an aromatic
+system, and a stereo atom hold before and after. The Python test files are rerun. The
+inline-constraint benchmarks are timed against S8a.
 
 ### S9 — Reaction spans and reactions
 
@@ -2225,9 +2320,11 @@ The color of a span entity is the color of its `EntitySpan` of forms, and the po
 incidence is lifted through the span in the same way. A stereo row holds the `EntitySpan` of the
 transported forms. Additive (green). [dep: S6g, S6k]
 
-**Tests:** `test_initial_colors` and `test_color_key` with exact integers for the fixtures of
-`test_canonical_candidate`, among them a `Modified` aromatic system whose sides differ in the
-electron counts only, and an added atom.
+**Tests:** `test_initial_colors`: which entities of a span share an integer, among them a
+`Modified` aromatic system whose sides differ in the electron counts only, and an added atom.
+`test_reaction_span_canonicalize_placement`, the counterpart of the molecule table: the same kinds
+of datum on symmetric carriers, each as an unchanged, an added, a removed, and a modified entity,
+and a constraint on one side of a span only. Its rows hold before and after S9b and S9c.
 
 #### S9b — Span search on colors
 
@@ -2260,10 +2357,9 @@ removed. Breaking for representatives and keys of spans and reactions with inlin
 (red→green). [dep: S8b, S9b]
 
 **Tests:** shown first: the rows of `test_delta_canonicalize_level`,
-`test_entity_span_canonicalize_level`, `test_reaction_span_canonicalize_description_level`, and
-`test_reaction_canonicalize_description_level` that expect a constraint to select Full. Rows of
-`test_reaction_span_canonical_eq_renumbering` with the constrained fixtures of S8b lifted to spans,
-and with a constraint on one side of a span only.
+`test_entity_span_canonicalize_level`, `test_reaction_span_canonicalize_level`, and
+`test_reaction_canonicalize_level` that expect a constraint to select Full. The span placement
+table of S9a holds before and after.
 
 ### S10 — Encoding
 
@@ -2328,6 +2424,21 @@ Remove `/Users/dr/.cargo-target-244`, `/Users/dr/.cargo-target-244-1`, `scratch/
 After every stage: the canonicalization and reaction-span unit tests, the `canonicalization` and
 `reaction_span` integration tests, the canonicalization properties, graph-IR clippy, and the
 reference comparison. Stages that change representatives also run the two Python test files.
+
+From S7 on, the gate also runs the break list. Each break is made temporarily, the library tests
+are run, and the file is restored. Every break must make at least one test fail; a break that no
+test notices is reported as a gap in the tests before the stage closes.
+
+- The pruning treats every candidate of a cell as one orbit.
+- `retain_stereo_preserving_generators` keeps every generator.
+- `retain_preserving_generators` keeps every generator.
+- The incidence colors leave out the electron counts.
+- The color of an aromatic system leaves out its charge.
+- From S9: the span counterparts of the last four, and a span color that ignores which side a
+  form is on.
+
+At S7 the first four were run: 14, 9, 6, and 9 tests fail, among them 5, 1, 4, and 5 rows of
+`test_molecule_canonicalize_placement`.
 
 ### Critical path
 
