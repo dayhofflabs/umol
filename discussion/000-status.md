@@ -289,3 +289,4 @@ the statuses recorded here remain authoritative.
 | [240-validation-constraint-ops-2026-10-18.md](240-validation-constraint-ops-2026-10-18.md)                       | In Progress   | 2026-11-02   | Settle S13a; implement S13b/S13d and S14/S16. |
 | [242-stereo-transformers-2026-10-29.md](242-stereo-transformers-2026-10-29.md)                                 | Completed     | 2026-10-30   | |
 | [243-stereo-site-assertions-2026-11-07.md](243-stereo-site-assertions-2026-11-07.md)                                 | Completed     | 2026-11-09   | |
+| [244-reaction-span-canonicalization-2026-11-09.md](244-reaction-span-canonicalization-2026-11-09.md)             | Completed     | 2026-11-12   | |

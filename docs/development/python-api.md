@@ -455,8 +455,8 @@ perceiver, derivation, StereoResolver, or standalone stereo-projection class.
 
 StereoSite.Atom(id) and StereoSite.Bond(id) preserve the Rust topology-site distinction.
 IDs are unsigned 32-bit integers. Construction does not check them against a molecule;
-the executing operation performs contextual checks. StereoSite, StereoInconsistency,
-and AtomFieldKind retain Rust equality, ordering, and hashing. Named inconsistency fields
+the executing operation performs contextual checks. StereoSite and StereoInconsistency
+retain Rust equality, ordering, and hashing. Named inconsistency fields
 retain their Rust names; StereoSite's tuple payload is available as _0.
 
 StereoSelection accepts keyword-only sites, kinds, and stereogenicities. Each accepts
@@ -530,7 +530,7 @@ classes while retaining the Rust message:
 | MissingStereoEntity | InvalidStructureError | site: StereoSite |
 | UnsupportedKind, UnsupportedFluxionality | ModelConversionError | kind: StereoKind |
 | UnsupportedConfiguration | ModelConversionError | site: StereoSite |
-| UnderdeterminedAtomField | UnderdeterminedError | atom: int, field: AtomFieldKind |
+| UnderdeterminedAtomField | UnderdeterminedError | atom: int, attributes: AtomForm |
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
 | Inconsistency | ContradictionError | inconsistency: StereoInconsistency |
 
@@ -690,7 +690,7 @@ a second public data model.
 
 `Molecule`, `Reaction`, and `ReactionSpan` expose complete-only `canonicalize`,
 `tracked_canonicalize`, and `canonical_eq`. Each accepts the same optional
-`StereoModel` and `CanonicalizeConfig`; canonicalization of an intrinsically contradictory value
+`CanonicalizeConfig`; canonicalization of an intrinsically contradictory value
 raises `ContradictionError`. Python does not expose `DescriptionLevel`, a molecule
 `description_level` query, or level-parameterized `*_by` operations. Topology, constitution, and
 structure remain private search prefixes rather than reduced public comparison surfaces.

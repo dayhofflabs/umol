@@ -3,7 +3,6 @@
 
 use pyo3::prelude::*;
 use umol_graph::ops::canonicalize::CanonicalizeConfig as GraphCanonicalizeConfig;
-use umol_graph::ops::model::StereoModel as GraphStereoModel;
 use umol_graph_ir::ir::{
     Canonicalize, CanonicalizeContext as GraphIrCanonicalizeContext,
     MoleculeCanonicalizeError as GraphIrMoleculeCanonicalizeError,
@@ -13,7 +12,6 @@ use umol_graph_ir::ir::{
 
 use crate::algorithm::AutomorphismAlgorithm;
 use crate::error::ContradictionError;
-use crate::model::stereo::StereoModel;
 use crate::molecule::Molecule;
 use crate::reaction::Reaction;
 use crate::reaction_span::ReactionSpan;
@@ -77,12 +75,8 @@ impl CanonicalizeConfig {
     }
 }
 
-fn canonicalize_context(
-    stereo_model: Option<StereoModel>,
-    config: Option<CanonicalizeConfig>,
-) -> GraphIrCanonicalizeContext {
-    let model = stereo_model.map_or_else(GraphStereoModel::default, |model| model.to_rust());
-    config.unwrap_or_default().to_rust().context(&model)
+fn canonicalize_context(config: Option<CanonicalizeConfig>) -> GraphIrCanonicalizeContext {
+    config.unwrap_or_default().to_rust().context()
 }
 
 fn molecule_canonicalization_error(error: GraphIrMoleculeCanonicalizeError) -> PyErr {
@@ -114,15 +108,11 @@ impl Molecule {
     /// Return the complete canonical form without changing this molecule.
     ///
     /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize(
-        &self,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<Self> {
+    #[pyo3(signature = (*, config=None))]
+    fn canonicalize(&self, config: Option<CanonicalizeConfig>) -> PyResult<Self> {
         self.to_rust()
             .clone()
-            .canonicalize(&canonicalize_context(stereo_model, config))
+            .canonicalize(&canonicalize_context(config))
             .map(Self::from_rust)
             .map_err(molecule_canonicalization_error)
     }
@@ -132,15 +122,14 @@ impl Molecule {
     /// The remapping is total across every entity kind and maps entity ids; participant
     /// frames are selected internally and are not encoded in it. Canonical representatives may
     /// change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (*, stereo_model=None, config=None))]
+    #[pyo3(signature = (*, config=None))]
     fn tracked_canonicalize(
         &self,
-        stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeRemapping)> {
         self.to_rust()
             .clone()
-            .tracked_canonicalize(&canonicalize_context(stereo_model, config))
+            .tracked_canonicalize(&canonicalize_context(config))
             .map(|(canonical, remapping)| {
                 (
                     Self::from_rust(canonical),
@@ -150,16 +139,11 @@ impl Molecule {
             .map_err(molecule_canonicalization_error)
     }
 
-    /// Compare complete canonical forms under the same model and config.
-    #[pyo3(signature = (other, *, stereo_model=None, config=None))]
-    fn canonical_eq(
-        &self,
-        other: &Self,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> bool {
+    /// Compare complete canonical forms under the same config.
+    #[pyo3(signature = (other, *, config=None))]
+    fn canonical_eq(&self, other: &Self, config: Option<CanonicalizeConfig>) -> bool {
         self.to_rust()
-            .canonical_eq(other.to_rust(), &canonicalize_context(stereo_model, config))
+            .canonical_eq(other.to_rust(), &canonicalize_context(config))
     }
 }
 
@@ -168,15 +152,11 @@ impl ReactionSpan {
     /// Return the complete canonical form without changing this reaction span.
     ///
     /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize(
-        &self,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<Self> {
+    #[pyo3(signature = (*, config=None))]
+    fn canonicalize(&self, config: Option<CanonicalizeConfig>) -> PyResult<Self> {
         self.to_rust()
             .clone()
-            .canonicalize(&canonicalize_context(stereo_model, config))
+            .canonicalize(&canonicalize_context(config))
             .map(Self::from_rust)
             .map_err(reaction_span_canonicalization_error)
     }
@@ -186,15 +166,14 @@ impl ReactionSpan {
     /// The remapping is total across every union-frame entity kind and maps entity ids;
     /// participant frames are selected internally and are not encoded in it. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (*, stereo_model=None, config=None))]
+    #[pyo3(signature = (*, config=None))]
     fn tracked_canonicalize(
         &self,
-        stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeRemapping)> {
         self.to_rust()
             .clone()
-            .tracked_canonicalize(&canonicalize_context(stereo_model, config))
+            .tracked_canonicalize(&canonicalize_context(config))
             .map(|(canonical, remapping)| {
                 (
                     Self::from_rust(canonical),
@@ -204,16 +183,11 @@ impl ReactionSpan {
             .map_err(reaction_span_canonicalization_error)
     }
 
-    /// Compare complete canonical forms under the same model and config.
-    #[pyo3(signature = (other, *, stereo_model=None, config=None))]
-    fn canonical_eq(
-        &self,
-        other: &Self,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> bool {
+    /// Compare complete canonical forms under the same config.
+    #[pyo3(signature = (other, *, config=None))]
+    fn canonical_eq(&self, other: &Self, config: Option<CanonicalizeConfig>) -> bool {
         self.to_rust()
-            .canonical_eq(other.to_rust(), &canonicalize_context(stereo_model, config))
+            .canonical_eq(other.to_rust(), &canonicalize_context(config))
     }
 }
 
@@ -222,16 +196,11 @@ impl Reaction {
     /// Return the complete canonical form without changing this reaction.
     ///
     /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize(
-        &self,
-        py: Python<'_>,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<Self> {
+    #[pyo3(signature = (*, config=None))]
+    fn canonicalize(&self, py: Python<'_>, config: Option<CanonicalizeConfig>) -> PyResult<Self> {
         let canonical = self
             .to_rust(py)?
-            .canonicalize(&canonicalize_context(stereo_model, config))
+            .canonicalize(&canonicalize_context(config))
             .map_err(reaction_canonicalization_error)?;
         Self::from_rust(py, canonical)
     }
@@ -241,16 +210,15 @@ impl Reaction {
     /// The remapping is total across every materialized union-frame entity kind and maps
     /// entity ids; participant frames are selected internally and are not encoded in it. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (*, stereo_model=None, config=None))]
+    #[pyo3(signature = (*, config=None))]
     fn tracked_canonicalize(
         &self,
         py: Python<'_>,
-        stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeRemapping)> {
         let (canonical, remapping) = self
             .to_rust(py)?
-            .tracked_canonicalize(&canonicalize_context(stereo_model, config))
+            .tracked_canonicalize(&canonicalize_context(config))
             .map_err(reaction_canonicalization_error)?;
         Ok((
             Self::from_rust(py, canonical)?,
@@ -258,19 +226,17 @@ impl Reaction {
         ))
     }
 
-    /// Compare complete canonical forms under the same model and config.
-    #[pyo3(signature = (other, *, stereo_model=None, config=None))]
+    /// Compare complete canonical forms under the same config.
+    #[pyo3(signature = (other, *, config=None))]
     fn canonical_eq(
         &self,
         other: &Self,
         py: Python<'_>,
-        stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<bool> {
-        Ok(self.to_rust(py)?.canonical_eq(
-            &other.to_rust(py)?,
-            &canonicalize_context(stereo_model, config),
-        ))
+        Ok(self
+            .to_rust(py)?
+            .canonical_eq(&other.to_rust(py)?, &canonicalize_context(config)))
     }
 }
 
@@ -303,18 +269,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::without_para_stereo(false)]
-    #[case::with_para_stereo(true)]
-    fn test_canonicalize_context(#[case] para_stereo: bool) {
-        let model = StereoModel::from_rust(&GraphStereoModel {
-            para_stereo,
-            ..GraphStereoModel::default()
-        });
-
+    fn test_canonicalize_context() {
         assert_eq!(
-            canonicalize_context(Some(model), Some(CanonicalizeConfig::default())),
+            canonicalize_context(Some(CanonicalizeConfig::default())),
             GraphIrCanonicalizeContext {
-                para_stereo,
                 automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
             },
         );

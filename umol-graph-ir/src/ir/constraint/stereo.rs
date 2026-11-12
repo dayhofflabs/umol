@@ -15,7 +15,7 @@ use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoinError};
 use super::super::id::StereoLigandPosition;
 use super::super::stereo::{Stereogenicity, Topicity};
-use super::super::traits::{AsLit, Lattice, Normalize};
+use super::super::traits::{AsLit, Lattice, Normalize, ReframeKind};
 
 /// Stereo atom and bond constraints.
 macro_rules! stereo_constraint {
@@ -27,6 +27,18 @@ macro_rules! stereo_constraint {
             Fluxionality(LigandPermutation),
             Topicity(StereoLigandPair),
             Stereogenicity,
+        }
+
+        impl $key {
+            /// The behavior of the constraint under an action on the participant frame of its entity.
+            pub fn reframe_kind(self) -> ReframeKind {
+                match self {
+                    Self::LigandSymmetry(_) | Self::Fluxionality(_) | Self::Topicity(_) => {
+                        ReframeKind::Relative
+                    }
+                    Self::Stereogenicity => ReframeKind::Independent,
+                }
+            }
         }
 
         #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,13 +87,6 @@ macro_rules! stereo_constraint {
             /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
             pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
                 Some(self)
-            }
-
-            pub(crate) fn uses_participant_frame(&self) -> bool {
-                match self {
-                    Self::LigandSymmetry(_) | Self::Fluxionality(_) | Self::Topicity(_) => true,
-                    Self::Stereogenicity(_) => false,
-                }
             }
         }
 
@@ -924,78 +929,58 @@ mod tests {
 
     use super::*;
 
-    #[rustfmt::skip]
     #[rstest]
     #[case::ligand_symmetry(
-        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-                orientation: Orientation::Proper,
-            },
-            invariant: BooleanForm::Lit(true),
+        StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            orientation: Orientation::Proper,
         }),
-        true,
+        ReframeKind::Relative,
     )]
     #[case::fluxionality(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-            active: BooleanForm::Lit(true),
-        }),
-        true,
+        StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))),
+        ReframeKind::Relative,
     )]
     #[case::topicity(
-        StereoAtomConstraintForm::Topicity(TopicityForm {
-            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
-            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
-        }),
-        true,
+        StereoAtomConstraintKey::Topicity(StereoLigandPair::new(
+            StereoLigandPosition(0),
+            StereoLigandPosition(1),
+        )),
+        ReframeKind::Relative
     )]
-    #[case::stereogenicity(
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
-        false,
-    )]
-    fn test_stereo_atom_constraint_form_uses_participant_frame(
-        #[case] constraint: StereoAtomConstraintForm,
-        #[case] expected: bool,
+    #[case::stereogenicity(StereoAtomConstraintKey::Stereogenicity, ReframeKind::Independent)]
+    fn test_stereo_atom_constraint_key_reframe_kind(
+        #[case] key: StereoAtomConstraintKey,
+        #[case] expected: ReframeKind,
     ) {
-        assert_eq!(constraint.uses_participant_frame(), expected);
+        assert_eq!(key.reframe_kind(), expected);
     }
 
-    #[rustfmt::skip]
     #[rstest]
     #[case::ligand_symmetry(
-        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-                orientation: Orientation::Proper,
-            },
-            invariant: BooleanForm::Lit(true),
+        StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            orientation: Orientation::Proper,
         }),
-        true,
+        ReframeKind::Relative,
     )]
     #[case::fluxionality(
-        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-            active: BooleanForm::Lit(true),
-        }),
-        true,
+        StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))),
+        ReframeKind::Relative,
     )]
     #[case::topicity(
-        StereoBondConstraintForm::Topicity(TopicityForm {
-            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
-            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
-        }),
-        true,
+        StereoBondConstraintKey::Topicity(StereoLigandPair::new(
+            StereoLigandPosition(0),
+            StereoLigandPosition(1),
+        )),
+        ReframeKind::Relative
     )]
-    #[case::stereogenicity(
-        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
-        false,
-    )]
-    fn test_stereo_bond_constraint_form_uses_participant_frame(
-        #[case] constraint: StereoBondConstraintForm,
-        #[case] expected: bool,
+    #[case::stereogenicity(StereoBondConstraintKey::Stereogenicity, ReframeKind::Independent)]
+    fn test_stereo_bond_constraint_key_reframe_kind(
+        #[case] key: StereoBondConstraintKey,
+        #[case] expected: ReframeKind,
     ) {
-        assert_eq!(constraint.uses_participant_frame(), expected);
+        assert_eq!(key.reframe_kind(), expected);
     }
 
     #[rustfmt::skip]

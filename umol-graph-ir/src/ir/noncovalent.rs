@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::{array, mem};
 
+use strum::VariantArray;
 use umol_graph_core::{
     Compaction, FixedRelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange,
     NodeId, ParticipantPosition, RelationId,
@@ -12,11 +13,11 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
-use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
-use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
+use super::span::EntitySpan;
+use super::traits::{AsColor, AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A noncovalent bond's atom pair and attributes.
 ///
@@ -579,6 +580,21 @@ pub struct NoncovalentBondUpdate {
     pub constraints: NoncovalentBondConstraintsForm,
 }
 
+/// Field discriminants of [`NoncovalentBondForm`], mirroring `NoncovalentBondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum NoncovalentBondFieldKind {
+    Kind,
+}
+
+impl NoncovalentBondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Kind => ReframeKind::Independent,
+        }
+    }
+}
+
 impl From<&str> for NoncovalentBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid noncovalent bond string")
@@ -685,6 +701,19 @@ impl FrameTransport for NoncovalentBondForm {
             kind,
             constraints: constraints.reframe_by(action)?,
         })
+    }
+}
+
+/// The color of a [`NoncovalentBondForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct NoncovalentBondColor<'a>(&'a NoncovalentBondForm);
+
+impl AsColor for NoncovalentBondForm {
+    type Color<'a> = NoncovalentBondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        NoncovalentBondColor(self)
     }
 }
 
@@ -1539,6 +1568,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::kind(NoncovalentBondFieldKind::Kind, ReframeKind::Independent)]
+    fn test_noncovalent_bond_field_kind_reframe_kind(
+        #[case] kind: NoncovalentBondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
+    }
+
+    #[rstest]
     #[case::new(NoncovalentBondForm::new(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraintsForm::new() })]
@@ -1710,6 +1748,32 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::equal(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        true
+    )]
+    #[case::kind(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::default(),
+        false
+    )]
+    #[case::constraint(
+        NoncovalentBondForm::default().with_constraint(
+            NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))
+        ),
+        NoncovalentBondForm::default(),
+        false
+    )]
+    fn test_noncovalent_bond_form_as_color(
+        #[case] lhs: NoncovalentBondForm,
+        #[case] rhs: NoncovalentBondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 
     #[rustfmt::skip]

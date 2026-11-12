@@ -145,9 +145,8 @@ pub trait Lattice: Normalize {
     }
 }
 
-/// Normal form of a graph-IR value. The per-type `normalize` puts a
-/// value into its one normal form — sorted/deduped sets, singleton collapse,
-/// folded decidable expressions — returning `Err(Contradiction)` for an
+/// Normal form of a graph-IR values, including sorted/deduped sets, singleton
+/// collapse, folded decidable expressions — returning `Err(Contradiction)` for an
 /// unsatisfiable value (e.g. an empty set).
 ///
 /// Equality is **lazy**: `==`/`Hash`/`Ord` stay derived-structural ("same
@@ -165,11 +164,7 @@ pub trait Normalize: Sized + Clone + PartialEq {
 }
 
 /// Transport a frame-relative value through an independently supplied compatible action.
-///
-/// This operation neither normalizes the value nor selects a participant frame. Compatibility is
-/// receiver-relative: an implementation checks every action-domain, degree, positional-length, and
-/// subgroup condition represented by `self`, and returns `None` when any such condition fails.
-/// Information available only from an owning aggregate is checked by that aggregate.
+/// Incompatible actions return None.
 ///
 /// # Semantic properties
 ///
@@ -183,17 +178,54 @@ pub trait FrameTransport: Sized {
     fn reframe_by(self, action: &Self::Action) -> Option<Self>;
 }
 
+/// How a field, a constraint, or a delta of an entity behaves under an action on the participant
+/// frame of that entity.
+///
+/// # Semantic properties
+///
+/// For every form and every compatible action, a field or a constraint whose kind is
+/// `Independent` is equal before and after [`FrameTransport::reframe_by`], and the components of a
+/// `Positional` field are reordered as the participants are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ReframeKind {
+    /// The value does not refer to the participant frame, and an action leaves it unchanged.
+    Independent,
+    /// The value has one component per participant, and an action permutes its components with
+    /// the participants.
+    Positional,
+    /// The value is stated relative to the participant frame, and an action restates it.
+    Relative,
+}
+
+/// The color of a form: its frame-independent part, as a value that borrows from the form.
+///
+/// Canonicalization ranks the colors of the entities of one kind and searches on the ranks. The
+/// receiver is a normal form.
+///
+/// # Semantic properties
+///
+/// Invariance: for every normal form and every compatible action, the color is equal before and
+/// after [`FrameTransport::reframe_by`].
+///
+/// Completeness: a form without frame-relative parts is determined by its color and its positional
+/// parts. Two such normal forms with equal colors and equal positional parts are equal.
+pub(crate) trait AsColor {
+    /// The frame-independent part of the form.
+    type Color<'a>: Ord + Hash
+    where
+        Self: 'a;
+
+    /// The color of the form.
+    fn as_color(&self) -> Self::Color<'_>;
+}
+
 /// The frame quotient over an entity aggregate: select a determinate participant frame and restate the
 /// frame-relative payload accordingly.
 ///
-/// The aggregate is the carrier that knows both which factor bears a frame and what the payload means,
-/// so it owns the quotient rather than the storage shape or the form.
 /// `representative_action` exposes the complete witness when a downstream consumer needs it;
-/// `reframe` may fuse local selection and transport when it does not. `tracked_reframe` and
-/// `framed_eq` are provided from those operations.
-/// Aggregate action values are operation-issued witnesses with private construction. Their algebra
-/// preserves an exact input domain, while `reframe_by` consumers may accept a covering witness and
-/// ignore entries they do not reference.
+/// `reframe` may fuse local selection and transport if downstream consumer does not require a witness.
+/// `tracked_reframe` returns the witness along with the reframed receiver. `framed_eq` determined equality
+/// normalization and frame transport.
 ///
 /// # Semantic properties
 ///

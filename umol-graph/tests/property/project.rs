@@ -83,7 +83,7 @@ proptest! {
         let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
         prop_assert_eq!(Validator::new(&model).validate(&restored), Ok(Solution::Determined(())));
         let context = CanonicalizeContext {
-            para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };
         prop_assert!(source.canonical_eq(&restored, &context));
         let repeated = Smiles::convey(&restored, &model, &config, &io).unwrap().render_with(&io).unwrap();
@@ -125,7 +125,7 @@ proptest! {
         prop_assert_eq!(export_reaction_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
         prop_assert_eq!(&source, &original);
         let restored = ingest_reaction_smiles_with(&text, &io, &model, &config).unwrap();
-        let context = CanonicalizeContext { para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+        let context = CanonicalizeContext { automorphism_algorithm: AutomorphismAlgorithm::Nauty };
         prop_assert!(source.canonical_eq(&restored, &context));
         let repeated = ReactionSmiles::convey(&restored, &model, &config, &io).unwrap().render().unwrap();
         prop_assert_eq!(text, repeated);
@@ -712,7 +712,7 @@ proptest! {
             let expected = match state { 1 => "F/C=C\\F", 2 => "F/C=C/F", _ => "FC=CF" };
             let expected = ingest_smiles_with(expected, &io, &model, &config).unwrap();
             let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
-            let context = CanonicalizeContext { para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+            let context = CanonicalizeContext { automorphism_algorithm: AutomorphismAlgorithm::Nauty };
             prop_assert!(source.canonical_eq(&expected, &context));
             prop_assert!(source.canonical_eq(&restored, &context));
             prop_assert_eq!(export_smiles_with(&source, &io, &model, &config).unwrap(), text);
@@ -747,7 +747,7 @@ proptest! {
         let original = source.clone();
         let text = export_reaction_smiles_with(&source, &io, &model, &config).unwrap();
         let restored = ingest_reaction_smiles_with(&text, &io, &model, &config).unwrap();
-        let context = CanonicalizeContext { para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+        let context = CanonicalizeContext { automorphism_algorithm: AutomorphismAlgorithm::Nauty };
         prop_assert!(source.canonical_eq(&restored, &context));
         prop_assert_eq!(export_reaction_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
         prop_assert_eq!(export_reaction_smiles_with(&restored, &io, &model, &config).unwrap(), text);
@@ -806,7 +806,6 @@ fn test_export_smiles_with_order(
     };
     let io = SmilesIoConfig::opensmiles();
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let first = ingest_smiles_with(first, &io, &model, &config).unwrap();
@@ -857,7 +856,6 @@ fn test_export_smiles_with_hydrogens(
     let implicit = ingest_smiles_with(implicit, &io, &model, &config).unwrap();
     let actual = ingest_smiles_with(actual, &io, &model, &config).unwrap();
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     assert!(!implicit.canonical_eq(&actual, &context));

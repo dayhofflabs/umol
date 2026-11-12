@@ -1032,7 +1032,6 @@ mod tests {
             ..ChemistryModel::default()
         };
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
         };
         for is_reverse in [true, false] {
@@ -1082,7 +1081,6 @@ mod tests {
         };
         let actual = interpret_molecule(&table, &model, &ResolveConfig::default()).unwrap();
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
         };
         assert!(actual.canonical_eq(&expected, &context));
@@ -1350,7 +1348,6 @@ mod tests {
         let left = ingest_smiles(left).unwrap();
         let right = ingest_smiles(right).unwrap();
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
         };
         assert_eq!(left.canonical_eq(&right, &context), expected);
@@ -2263,7 +2260,6 @@ mod tests {
         let reaction = ingest_reaction_smiles(input).unwrap();
         let span = reaction.to_reaction_span().unwrap();
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
         };
         assert_eq!(span.lhs().canonical_eq(&span.rhs(), &context), expected);

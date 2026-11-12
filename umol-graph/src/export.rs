@@ -197,8 +197,8 @@ impl Convey for Smiles {
     /// Success and failure leave the input unchanged. Atom and localized-bond order are
     /// preserved. Actual H atoms, implicit H, and lone-pair stereo ligands remain distinct.
     /// For the supported ingested domain, convey, render, parse, and interpretation under
-    /// the same model and policy recover a molecule equal under Molecule::canonical_eq with
-    /// para_stereo=false. Source spelling, ring labels, and redundant slash markers may change.
+    /// the same model and policy recover a molecule equal under Molecule::canonical_eq. Source
+    /// spelling, ring labels, and redundant slash markers may change.
     /// H omission uses joint valence/aromatic evidence: Strict requires one allowed count,
     /// MostSaturated selects the greatest. Missing or ambiguous evidence retains the count.
     /// Stored lone pairs and atom-typing row order or repetition do not change that decision.
@@ -238,8 +238,7 @@ impl Convey for ReactionSmiles {
     /// Mapped atoms retain their H counts. Unmatched atoms use the same omission decision as
     /// molecular conversion. Repeated convey produces the same boundary. For the supported
     /// ingested domain, convey/render followed by parse/interpret under the same model and policy
-    /// recovers a reaction equal under Reaction::canonical_eq with para_stereo=false, including
-    /// correspondence. Rendering still owns format-specific support failures.
+    /// recovers a reaction equal under Reaction::canonical_eq, including correspondence. Rendering still owns format-specific support failures.
     ///
     /// # Errors
     ///
@@ -315,7 +314,7 @@ pub fn export_smiles(input: &Molecule) -> Result<String, SmilesOutputError> {
 ///
 /// The input is unchanged on success and failure. Repeated output is text-identical for the
 /// same input and configurations. Supported ingested molecules survive export and ingestion
-/// under the same configurations with canonical GraphIR equality (para_stereo=false).
+/// under the same configurations with canonical GraphIR equality.
 ///
 /// # Errors
 ///
@@ -360,8 +359,8 @@ pub fn export_reaction_smiles(input: &Reaction) -> Result<String, ReactionSmiles
 ///
 /// The input is unchanged on success and failure. Repeated output is text-identical for the
 /// same input and configurations. Supported ingested reactions survive export and ingestion
-/// under the same configurations with canonical GraphIR equality (para_stereo=false), including
-/// atom correspondence. Original numeric map labels are not retained.
+/// under the same configurations with canonical GraphIR equality, including atom
+/// correspondence. Original numeric map labels are not retained.
 ///
 /// # Errors
 ///
@@ -924,7 +923,6 @@ mod tests {
         assert!(original.canonical_eq(
             &restored,
             &CanonicalizeContext {
-                para_stereo: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ));
@@ -1284,7 +1282,6 @@ mod tests {
         assert!(source.canonical_eq(
             &restored,
             &CanonicalizeContext {
-                para_stereo: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ));
@@ -1417,7 +1414,6 @@ mod tests {
         assert_eq!(export_smiles(&source), Ok(output.clone()));
         let restored = ingest_smiles(&output).unwrap();
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };
         assert!(source.canonical_eq(&restored, &context));
@@ -1520,7 +1516,6 @@ mod tests {
         assert_eq!(export_reaction_smiles(&source), Ok(output.clone()));
         let restored = ingest_reaction_smiles(&output).unwrap();
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };
         assert!(source.canonical_eq(&restored, &context));

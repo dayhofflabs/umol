@@ -501,7 +501,6 @@ proptest! {
         prop_assert_eq!(realized.lhs(), &host);
         prop_assert_eq!(with_normalized_constraints(&span.lhs()), with_normalized_constraints(&host));
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };
         prop_assert!(product.canonical_eq(&span.rhs(), &context));
@@ -697,7 +696,6 @@ proptest! {
         prop_assert_eq!(realized.len(), expected.len());
         prop_assert_eq!(spans.len(), expected.len());
         let context = CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };
         for ((application, realized), span) in expected.into_iter().zip(realized).zip(spans) {

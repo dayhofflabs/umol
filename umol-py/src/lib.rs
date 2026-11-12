@@ -16,10 +16,7 @@ use crate::{
         SubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
     aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystemView, AromaticSystemViews},
-    atom::{
-        AtomFieldKind, AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass,
-        IsotopeMassForm,
-    },
+    atom::{AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
     bond::{BondForm, BondUpdate, BondView, BondViews},
     boolean::BooleanForm,
     canonicalize::CanonicalizeConfig,
@@ -402,7 +399,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<SpinState>()?;
         module.add_class::<UnpairedElectronsForm>()?;
         module.add_class::<UnpairedElectronsUpdate>()?;
-        module.add_class::<AtomFieldKind>()?;
         module.add_class::<AtomForm>()?;
         module.add_class::<AtomUpdate>()?;
         module.add_class::<AtomView>()?;

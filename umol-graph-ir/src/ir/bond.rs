@@ -1,11 +1,12 @@
 //! Bond forms and updates shared across crates.
 
+use strum::VariantArray;
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Lattice, Normalize};
+use super::traits::{AsColor, Lattice, Normalize, ReframeKind};
 
 /// Bond form: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
@@ -25,6 +26,23 @@ pub struct BondUpdate {
     pub charge: Option<NumForm>,
     pub unpaired_electrons: UnpairedElectronsUpdate,
     pub constraints: BondConstraintsForm,
+}
+
+/// Field discriminants of [`BondForm`], mirroring `BondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum BondFieldKind {
+    Order,
+    Charge,
+    UnpairedElectrons,
+}
+
+impl BondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Order | Self::Charge | Self::UnpairedElectrons => ReframeKind::Independent,
+        }
+    }
 }
 
 impl BondForm {
@@ -151,6 +169,19 @@ impl From<&str> for BondForm {
     }
 }
 
+/// The color of a [`BondForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct BondColor<'a>(&'a BondForm);
+
+impl AsColor for BondForm {
+    type Color<'a> = BondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        BondColor(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -161,6 +192,17 @@ mod tests {
     use crate::ir::error::Contradiction;
     use crate::ir::traits::{Lattice, Normalize};
     use crate::ir::{BooleanForm, CisTransStereoForm};
+
+    #[rstest]
+    #[case::order(BondFieldKind::Order, ReframeKind::Independent)]
+    #[case::charge(BondFieldKind::Charge, ReframeKind::Independent)]
+    #[case::unpaired_electrons(BondFieldKind::UnpairedElectrons, ReframeKind::Independent)]
+    fn test_bond_field_kind_reframe_kind(
+        #[case] kind: BondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -420,5 +462,34 @@ mod tests {
         let changed = target.narrow_from(&source);
         assert_eq!(changed, expected_changed);
         assert_eq!(target, expected_after);
+    }
+
+    #[rstest]
+    #[case::equal(BondForm::from_order(1), BondForm::from_order(1), true)]
+    #[case::order(BondForm::from_order(2), BondForm::default(), false)]
+    #[case::charge(
+        BondForm { charge: NumForm::Lit(1), ..Default::default() },
+        BondForm::default(),
+        false
+    )]
+    #[case::unpaired_electrons(
+        BondForm {
+            unpaired_electrons: UnpairedElectronsForm::from((1_u8, 2_u8)),
+            ..Default::default()
+        },
+        BondForm::default(),
+        false
+    )]
+    #[case::constraint(
+        BondForm::default().with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::default(),
+        false
+    )]
+    fn test_bond_form_as_color(
+        #[case] lhs: BondForm,
+        #[case] rhs: BondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 }

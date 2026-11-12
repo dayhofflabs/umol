@@ -12,7 +12,7 @@ use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
-use super::super::traits::{FrameTransport, Lattice, Normalize};
+use super::super::traits::{FrameTransport, Lattice, Normalize, ReframeKind};
 
 /// Dative-bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -58,12 +58,6 @@ impl DativeBondConstraintForm {
     /// Value-only payload: no entity ids to compact, so this never drops.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    pub(crate) fn uses_participant_frame(&self) -> bool {
-        match self {
-            Self::Aromatic(_) | Self::RingMembership(_) => false,
-        }
     }
 }
 
@@ -146,6 +140,16 @@ pub enum DativeBondConstraintKey {
     Aromatic,
     RingMembership(RingScope),
 }
+
+impl DativeBondConstraintKey {
+    /// The behavior of the constraint under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Aromatic | Self::RingMembership(_) => ReframeKind::Independent,
+        }
+    }
+}
+
 /// Dative bond constraints container, ordered, unique by key, sorted flat vector storage.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DativeBondConstraintsForm(Vec<DativeBondConstraintForm>);
@@ -338,9 +342,9 @@ impl FrameTransport for DativeBondConstraintsForm {
     type Action = DynPermutation;
 
     fn reframe_by(self, action: &Self::Action) -> Option<Self> {
-        if !self
+        if self
             .iter()
-            .any(DativeBondConstraintForm::uses_participant_frame)
+            .all(|constraint| constraint.key().reframe_kind() == ReframeKind::Independent)
         {
             return Some(self);
         }
@@ -552,23 +556,25 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraintForm::aromatic(true), false)]
-    #[case::ring_membership(DativeBondConstraintForm::ring_membership(RingScope::All, 1), false)]
-    fn test_dative_bond_constraint_form_uses_participant_frame(
-        #[case] constraint: DativeBondConstraintForm,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(constraint.uses_participant_frame(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::aromatic(DativeBondConstraintForm::aromatic(true))]
     #[case::ring_membership(DativeBondConstraintForm::ring_membership(RingScope::All, 1))]
     fn test_dative_bond_constraint_form_reframe_by(#[case] constraint: DativeBondConstraintForm) {
         let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
 
         assert_eq!(constraint.clone().reframe_by(&action), Some(constraint));
+    }
+
+    #[rstest]
+    #[case::aromatic(DativeBondConstraintKey::Aromatic, ReframeKind::Independent)]
+    #[case::ring_membership(
+        DativeBondConstraintKey::RingMembership(RingScope::All),
+        ReframeKind::Independent
+    )]
+    fn test_dative_bond_constraint_key_reframe_kind(
+        #[case] key: DativeBondConstraintKey,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(key.reframe_kind(), expected);
     }
 
     #[rstest]

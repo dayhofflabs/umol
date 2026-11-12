@@ -3,8 +3,6 @@
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::CanonicalizeContext;
 
-use super::model::StereoModel;
-
 /// Operational configuration for aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CanonicalizeConfig {
@@ -21,10 +19,9 @@ impl Default for CanonicalizeConfig {
 }
 
 impl CanonicalizeConfig {
-    /// Combine the operation config with the canonicalization-relevant part of the stereo model.
-    pub fn context(&self, model: &StereoModel) -> CanonicalizeContext {
+    /// The graph-IR canonicalization context of this config.
+    pub fn context(&self) -> CanonicalizeContext {
         CanonicalizeContext {
-            para_stereo: model.para_stereo,
             automorphism_algorithm: self.automorphism_algorithm,
         }
     }
@@ -47,18 +44,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::without_para_stereo(false)]
-    #[case::with_para_stereo(true)]
-    fn test_canonicalize_config_context(#[case] para_stereo: bool) {
-        let model = StereoModel {
-            para_stereo,
-            ..StereoModel::default()
-        };
-
+    fn test_canonicalize_config_context() {
         assert_eq!(
-            CanonicalizeConfig::default().context(&model),
+            CanonicalizeConfig::default().context(),
             CanonicalizeContext {
-                para_stereo,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         );

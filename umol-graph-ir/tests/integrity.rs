@@ -95,14 +95,12 @@ fn test_molecule_electron_attributes(
     );
     assert_eq!(
         molecule.clone().canonicalize(&CanonicalizeContext {
-            para_stereo: true,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty
         }),
         Err(MoleculeCanonicalizeError::Contradiction(Contradiction))
     );
     assert_eq!(
         span.canonicalize(&CanonicalizeContext {
-            para_stereo: true,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty
         }),
         Err(ReactionSpanCanonicalizeError::Contradiction(Contradiction))
@@ -194,7 +192,6 @@ fn test_molecule_stereo_attributes(#[case] degree: u32, #[case] form: StereoAtom
     assert_eq!(span.rhs(), molecule);
     assert_eq!(molecule.clone().edit().finish().unwrap(), molecule);
     let context = CanonicalizeContext {
-        para_stereo: true,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let canonical_molecule = molecule.clone().canonicalize(&context);
@@ -274,7 +271,6 @@ fn test_reaction_span_electron_attributes(
     }
     assert_eq!(
         span.canonicalize(&CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }),
         Err(ReactionSpanCanonicalizeError::Contradiction(Contradiction))

@@ -10,7 +10,7 @@ use umol_perm::DynPermutation;
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoinError};
-use super::super::traits::{FrameTransport, Lattice, Normalize};
+use super::super::traits::{FrameTransport, Lattice, Normalize, ReframeKind};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -50,12 +50,6 @@ impl NoncovalentBondConstraintForm {
     /// Value-only: no indices to compact.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    pub(crate) fn uses_participant_frame(&self) -> bool {
-        match self {
-            Self::Intramolecular(_) => false,
-        }
     }
 }
 
@@ -124,6 +118,15 @@ impl Lattice for NoncovalentBondConstraintForm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondConstraintKey {
     Intramolecular,
+}
+
+impl NoncovalentBondConstraintKey {
+    /// The behavior of the constraint under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Intramolecular => ReframeKind::Independent,
+        }
+    }
 }
 
 /// Per-noncovalent-bond constraint container, ordered, unique by key, sorted flat vector storage.
@@ -298,9 +301,9 @@ impl FrameTransport for NoncovalentBondConstraintsForm {
     type Action = DynPermutation;
 
     fn reframe_by(self, action: &Self::Action) -> Option<Self> {
-        if !self
+        if self
             .iter()
-            .any(NoncovalentBondConstraintForm::uses_participant_frame)
+            .all(|constraint| constraint.key().reframe_kind() == ReframeKind::Independent)
         {
             return Some(self);
         }
@@ -506,15 +509,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::intramolecular(NoncovalentBondConstraintForm::intramolecular(true), false)]
-    fn test_noncovalent_bond_constraint_form_uses_participant_frame(
-        #[case] constraint: NoncovalentBondConstraintForm,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(constraint.uses_participant_frame(), expected);
-    }
-
-    #[rstest]
     #[case::intramolecular(NoncovalentBondConstraintForm::intramolecular(true))]
     fn test_noncovalent_bond_constraint_form_reframe_by(
         #[case] constraint: NoncovalentBondConstraintForm,
@@ -522,6 +516,15 @@ mod tests {
         let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
 
         assert_eq!(constraint.clone().reframe_by(&action), Some(constraint));
+    }
+
+    #[rstest]
+    #[case::intramolecular(NoncovalentBondConstraintKey::Intramolecular, ReframeKind::Independent)]
+    fn test_noncovalent_bond_constraint_key_reframe_kind(
+        #[case] key: NoncovalentBondConstraintKey,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(key.reframe_kind(), expected);
     }
 
     #[rstest]

@@ -29,7 +29,7 @@ use umol_graph_ir::ir::{
     TransactionError as GraphIrTransactionError,
 };
 
-use crate::atom::AtomFieldKind;
+use crate::atom::AtomForm;
 use crate::stereo::{StereoInconsistency, StereoKind, StereoSite};
 
 create_exception!(
@@ -345,9 +345,9 @@ pub(crate) fn stereo_perception_error(py: Python<'_>, error: GraphStereoPercepti
             | GraphStereoPerceptionError::UnsupportedFluxionality { kind } => {
                 value.setattr("kind", StereoKind::from_rust(kind))?;
             }
-            GraphStereoPerceptionError::UnderdeterminedAtomField { atom, field } => {
+            GraphStereoPerceptionError::UnderdeterminedAtomField { atom, attributes } => {
                 value.setattr("atom", atom.0)?;
-                value.setattr("field", AtomFieldKind::from_rust(field))?;
+                value.setattr("attributes", AtomForm::from_rust(*attributes))?;
             }
             GraphStereoPerceptionError::UnderdeterminedBondOrder { bond } => {
                 value.setattr("bond", bond.0)?;
@@ -402,9 +402,8 @@ mod tests {
     };
     use umol_graph_ir::dsl::MetadataError as GraphIrMetadataError;
     use umol_graph_ir::ir::{
-        AromaticSystemId, AtomConstraintForm, AtomFieldKind as GraphIrAtomFieldKind, AtomId,
-        BondId, Entity, EntityKind, NumForm, StereoAtomId, StereoBondId,
-        StereoKind as GraphIrStereoKind,
+        AromaticSystemId, AtomConstraintForm, AtomForm as GraphIrAtomForm, AtomId, BondId, Entity,
+        EntityKind, NumForm, StereoAtomId, StereoBondId, StereoKind as GraphIrStereoKind,
     };
     use umol_io::smiles::ParseError as SmilesParseError;
     use umol_io::table_ir::raise::RaiseError;
@@ -936,7 +935,7 @@ mod tests {
     #[case::kind(GraphStereoPerceptionError::UnsupportedKind { kind: GraphIrStereoKind::SquarePlanar }, "ModelConversionError")]
     #[case::configuration(GraphStereoPerceptionError::UnsupportedConfiguration { site: GraphStereoSite::Bond(BondId(1)) }, "ModelConversionError")]
     #[case::fluxionality(GraphStereoPerceptionError::UnsupportedFluxionality { kind: GraphIrStereoKind::Tetrahedral }, "ModelConversionError")]
-    #[case::field(GraphStereoPerceptionError::UnderdeterminedAtomField { atom: AtomId(2), field: GraphIrAtomFieldKind::Charge }, "UnderdeterminedError")]
+    #[case::field(GraphStereoPerceptionError::UnderdeterminedAtomField { atom: AtomId(2), attributes: Box::new(GraphIrAtomForm::default()) }, "UnderdeterminedError")]
     #[case::order(GraphStereoPerceptionError::UnderdeterminedBondOrder { bond: BondId(2) }, "UnderdeterminedError")]
     #[case::inconsistency(GraphStereoPerceptionError::Inconsistency(GraphStereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(1), stereo_atom: StereoAtomId(0) }), "ContradictionError")]
     fn test_stereo_perception_error(
@@ -977,19 +976,19 @@ mod tests {
                         kind
                     );
                 }
-                GraphStereoPerceptionError::UnderdeterminedAtomField { atom, field } => {
+                GraphStereoPerceptionError::UnderdeterminedAtomField { atom, attributes } => {
                     assert_eq!(
                         value.getattr("atom").unwrap().extract::<u32>().unwrap(),
                         atom.0
                     );
                     assert_eq!(
                         value
-                            .getattr("field")
+                            .getattr("attributes")
                             .unwrap()
-                            .extract::<AtomFieldKind>()
+                            .extract::<PyRef<AtomForm>>()
                             .unwrap()
                             .to_rust(),
-                        field
+                        attributes.as_ref()
                     );
                 }
                 GraphStereoPerceptionError::UnderdeterminedBondOrder { bond } => {

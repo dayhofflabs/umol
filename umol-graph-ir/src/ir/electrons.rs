@@ -5,6 +5,7 @@ use umol_graph_core::ParticipantPosition;
 use umol_perm::DynPermutation;
 
 use super::error::{Contradiction, NoJoinError};
+use super::id::AtomPosition;
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize};
 
 /// Per-position electron counts as one atomic lattice value: undetermined, or a
@@ -37,6 +38,19 @@ impl ElectronCountsForm {
             }
             let reordered: Vec<i64> = order.iter().map(|p| counts[p.index()]).collect();
             *counts = reordered;
+        }
+    }
+
+    /// The electron count of the atom at `position` in the atom list of the entity, or `None` when
+    /// the counts are undetermined.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `position` is past the end of a literal list.
+    pub(crate) fn at(&self, position: AtomPosition) -> Option<i64> {
+        match self {
+            Self::Undetermined => None,
+            Self::Lit(counts) => Some(counts[position.index()]),
         }
     }
 }
@@ -189,6 +203,19 @@ mod tests {
     ) {
         input.permute(&order);
         assert_eq!(input, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(ElectronCountsForm::Undetermined, AtomPosition(1), None)]
+    #[case::lit_first(ElectronCountsForm::Lit(vec![2, 0, 1]), AtomPosition(0), Some(2))]
+    #[case::lit_second(ElectronCountsForm::Lit(vec![2, 0, 1]), AtomPosition(1), Some(0))]
+    #[case::lit_third(ElectronCountsForm::Lit(vec![2, 0, 1]), AtomPosition(2), Some(1))]
+    fn test_electron_counts_form_at(
+        #[case] form: ElectronCountsForm,
+        #[case] position: AtomPosition,
+        #[case] expected: Option<i64>,
+    ) {
+        assert_eq!(form.at(position), expected);
     }
 
     #[rstest]

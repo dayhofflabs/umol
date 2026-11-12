@@ -1,7 +1,5 @@
 //! Incidence (Levi) graph: relations lifted to pseudonodes for symmetry analysis.
 
-use std::cmp::Ordering;
-
 use strum::EnumCount;
 use umol_graph_core::{EdgeId, Graph, NodeId};
 
@@ -32,10 +30,10 @@ pub enum IncidenceLevel {
 ///
 /// # Semantic properties
 ///
-/// The total order uses the frozen aggregate-canonicalization schema rather
-/// than enum declaration order. Canonicalization augments these roles with
-/// the owning forms' electron contributions when constructing colors.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// The total order follows the declaration order of the variants. Canonicalization
+/// augments these roles with the owning forms' electron contributions when
+/// constructing colors.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Incidence {
     BondEndpoint,
     DativeDonor,
@@ -45,38 +43,6 @@ pub enum Incidence {
     NoncovalentEndpoint,
     StereoSite,
     StereoLigand(StereoLigandKind),
-}
-
-impl Incidence {
-    fn position(&self) -> u8 {
-        match self {
-            Self::BondEndpoint => 0,
-            Self::DativeDonor => 1,
-            Self::DativeAcceptor => 2,
-            Self::AromaticAtom => 3,
-            Self::MulticenterAtom => 4,
-            Self::NoncovalentEndpoint => 5,
-            Self::StereoSite => 6,
-            Self::StereoLigand(_) => 7,
-        }
-    }
-}
-
-impl Ord for Incidence {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.position()
-            .cmp(&other.position())
-            .then_with(|| match (self, other) {
-                (Self::StereoLigand(lhs), Self::StereoLigand(rhs)) => lhs.cmp(rhs),
-                _ => Ordering::Equal,
-            })
-    }
-}
-
-impl PartialOrd for Incidence {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 /// A molecule's incidence graph: one node per selected molecule entity, with

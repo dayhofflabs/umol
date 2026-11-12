@@ -35,8 +35,8 @@ use super::delta::{
     apply_dative_bond_modification, apply_multicenter_bond_modification,
     apply_noncovalent_bond_modification, apply_stereo_atom_modification,
     apply_stereo_bond_modification, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
-    ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan, MulticenterBondDelta,
-    NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
+    DativeBondDelta, Delta, Deltas, EntityFold, MulticenterBondDelta, NoncovalentBondDelta,
+    StereoAtomDelta, StereoBondDelta,
 };
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
@@ -56,6 +56,7 @@ use super::noncovalent::{
 };
 use super::reaction::{normalize_reaction_deltas, Reaction};
 use super::remap::MoleculeRemapping;
+use super::span::{ConstraintSpan, EntitySpan};
 use super::stereo::{
     reframe_stereo_atom_spans_with, reframe_stereo_bond_spans_with, StereoAtomForm,
     StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,
@@ -1188,89 +1189,6 @@ impl ReactionSpan {
 
     pub fn constraints(&self) -> &[ConstraintSpan] {
         &self.constraints
-    }
-
-    pub(crate) fn entries(&self) -> ReactionSpanEntries {
-        ReactionSpanEntries {
-            atoms: self.atoms.as_ref().clone(),
-            bonds: self
-                .bonds
-                .iter()
-                .enumerate()
-                .map(|(index, attributes)| {
-                    let [first, second] = self.graph.edge_endpoints(EdgeId(index as u32));
-                    (
-                        AtomId::from(first),
-                        AtomId::from(second),
-                        attributes.clone(),
-                    )
-                })
-                .collect(),
-            dative: self
-                .dative_bonds
-                .ids()
-                .map(|id| {
-                    (
-                        self.dative_bonds.donors(id).collect(),
-                        self.dative_bonds.acceptor(id),
-                        self.dative_bonds.attributes(id).clone(),
-                    )
-                })
-                .collect(),
-            aromatic: self
-                .aromatic_systems
-                .ids()
-                .map(|id| {
-                    (
-                        self.aromatic_systems.atoms(id).collect(),
-                        self.aromatic_systems.attributes(id).clone(),
-                    )
-                })
-                .collect(),
-            multicenter: self
-                .multicenter_bonds
-                .ids()
-                .map(|id| {
-                    (
-                        self.multicenter_bonds.atoms(id).collect(),
-                        self.multicenter_bonds.attributes(id).clone(),
-                    )
-                })
-                .collect(),
-            noncovalent: self
-                .noncovalent_bonds
-                .ids()
-                .map(|id| {
-                    (
-                        self.noncovalent_bonds.atoms(id),
-                        self.noncovalent_bonds.attributes(id).clone(),
-                    )
-                })
-                .collect(),
-            stereo_atoms: self
-                .stereo_atoms
-                .ids()
-                .map(|id| {
-                    (
-                        self.stereo_atoms.site(id),
-                        self.stereo_atoms.ligands(id).to_vec(),
-                        self.stereo_atoms.attributes(id).clone(),
-                    )
-                })
-                .collect(),
-            stereo_bonds: self
-                .stereo_bonds
-                .ids()
-                .map(|id| {
-                    (
-                        self.stereo_bonds.site(id),
-                        self.stereo_bonds.ligands(id).to_vec(),
-                        self.stereo_bonds.attributes(id).clone(),
-                    )
-                })
-                .collect(),
-            constraints: self.constraints.as_ref().clone(),
-        }
     }
 
     fn reverse_sides(&self) -> Self {
@@ -2838,7 +2756,6 @@ mod tests {
     #[fixture]
     fn canonicalize_context() -> CanonicalizeContext {
         CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
     }

@@ -288,8 +288,8 @@ do not duplicate a reduced model type when the operation needs only a primitive 
 Aggregate canonicalization is the reference case. `umol-graph-core` supplies canonical labels and
 the automorphism algorithm selector. `umol-graph-ir` owns typed incidence, stereo-frame actions,
 complete remapping, constraint transport, and canonical representative construction.
-`umol-graph` may project `StereoModel::para_stereo` and its operation config into the public graph-IR
-context, but canonicalization itself remains in `umol-graph-ir`.
+`umol-graph` may project its operation config into the public graph-IR context, but
+canonicalization itself remains in `umol-graph-ir`.
 
 ### Copy-on-write aggregate storage
 
@@ -445,21 +445,14 @@ participant frames and entity ids. Every semantic comparison includes constraint
 distinction matters for patterns, where constraints are not redundant with the structural
 description.
 
-Entity and molecular structural identity is established from inherent fields and structural
-incidence. Constraints restrict the states admitted by an entity or molecule but do not establish
-that structural identity. They therefore do not distinguish the initial structural automorphism
-orbits. After structural labeling establishes the minimum structure key, aggregate canonicalization
-normalizes entity-level and molecule-level constraints and minimizes the typed canonical constraint
-key over every admissible entity remapping and participant-frame action that attains that structure
-minimum. Equivalently, complete canonicalization minimizes `(structure key, constraint key)`
-lexicographically: constraints distinguish only tied structural frames and never make a larger
-structure key win. Remapping transports every reference they contain. Graph-only automorphism
-orbits may discard a tied frame only when the orbit action carries the complete covariant
-participant-frame and constraint action; otherwise those frames are searched exactly. This
-post-hoc participation gives the complete IR assertion a unique canonical form without turning
-constraints into structural identity features. Complete canonicalization must therefore retain or
-reconstruct every action attaining the minimum structure key until the constraint minimum is
-selected; it cannot commit the single `Structure` representative and inspect only that frame.
+Constraints restrict the states admitted by an entity or molecule, and canonicalization includes
+them. An inline constraint contributes as an inherent field does: to the color of its entity, and
+through it to the search partition and to the key of a leaf. A constraint that is relative to the
+participant frame of a stereo entity (ligand symmetry, fluxionality, and topicity) enters the key
+with the form transported into the frame of the leaf, as the configuration does. A molecule-level
+constraint selects the complete search. Remapping transports every reference a constraint
+contains. The canonical form of a constrained aggregate is not required to extend the canonical
+form of the same aggregate without its constraints.
 
 ## Aggregate canonicalization
 
@@ -537,202 +530,43 @@ Canonicalization may use a private effective structural prefix to avoid construc
 domains, but every present entity, inline constraint, and molecule-level constraint participates in
 the result and in `canonical_eq`.
 
-Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
-para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
-partition. With it enabled, feed each stereo-sensitive partition back into refinement until the
-partition stabilizes. The refinement state is the ordered partition of the complete structure-level
-incidence graph. Each round recomputes stereo descriptors from the current classes of the stereo
-entity's site and ligand occurrences, refines every incidence node by its previous class together
-with its applicable stereo descriptor, and then applies ordinary exact graph refinement. Including
-the previous class makes refinement split-only. Stability means equality of the ordered partition
-cells, not merely an unchanged cell count or unchanged backend color integers. Every non-stable
-round strictly increases the number of cells, so the finite incidence-node set supplies the
-termination bound. Do not expose an iteration cutoff that can change the canonical form.
+The search is selected by the content of the aggregate. With atoms and bonds only it runs over
+the topology. A dative bond, aromatic system, multicenter bond, or noncovalent bond selects the
+search over the constitution, a stereo entity the search over the structure, and a molecule-level
+constraint the complete search. An inline constraint selects nothing: it belongs to its entity.
 
-Backend canonical labels are search inputs, not the numbering authority. The canonical frame
-is the minimum under the library's typed comparison order. Automorphism generators and orbits may
-prune equivalent branches, but changing the selected graph algorithm must not change the resulting
-canonical representative.
+Every search starts from the partition of the colors. The color of an entity is the
+frame-independent part of its normal form: the whole form for atoms, bonds, dative bonds, and
+noncovalent bonds; the form without its electron counts for aromatic systems and multicenter
+bonds; and the stereo kind with the stereogenicity constraint for stereo entities. The electron
+count of an atom in an aromatic system or a multicenter bond is part of the color of that
+incidence. In a reaction span the color of an entity is the span of the colors of its sides.
+
+The configuration and the other frame-relative values of a stereo entity are compared in the key
+of a leaf, so the search separates entities that differ only in them. Orbit pruning uses a
+generator only when one frame action carries the whole form of every stereo entity, on each side
+of a reaction span, to the form of its image. In the complete search it uses a generator only
+when the generator carries the whole aggregate onto itself.
+
+Backend canonical labels are search inputs, not the numbering authority. The canonical form is the
+leaf of minimum key among the leaves of the search. It is the same for every renumbering of the
+entities, every participant frame, and every equivalent encoding of a value; it is not required to
+be the minimum over all renumberings. Automorphism generators and orbits may prune equivalent
+branches, but changing the selected graph algorithm must not change the resulting canonical
+representative.
 
 For a fixed umol release, canonicalization is deterministic under a fixed context. The
-returned canonical form is an ordinary IR value: it carries no canonicalization-schema version or
-producer provenance and is not a persistent identifier. During the 0.x series, the typed comparison
-schema and resulting canonical numbering may change between releases as the entity model and
+returned canonical form is an ordinary IR value: it carries no canonicalization version or
+producer provenance and is not a persistent identifier. During the 0.x series, the order of keys
+and the resulting canonical numbering may change between releases as the entity model and
 canonicalization rules are corrected or extended. Persisted canonical forms must therefore record
 their producing umol version externally and must not be compared across releases as stable ids.
 
-The explicit positions below define the current implementation and keep its order independent of
-Rust enum declaration order. An append-only extension that leaves every earlier value unchanged is
-desirable when the model permits it, but it is not a 0.x compatibility guarantee. New entity kinds,
-fields, and constraint variants—and corrections to existing ones—must choose their positions
-deliberately and update the normative table and exact ordering tests together. A future durable
-canonicalization profile requires its own explicit version, compatibility rules, and conformance
-fixtures; the unversioned aggregate API does not imply that contract.
-
-### Canonical comparison schema
-
-The following schema is the normative typed order for the current aggregate-canonicalization
-implementation. Numeric positions are local to the table in which they occur. Code must use these
-explicit positions instead of inferring order from Rust declarations. During 0.x, an intentional
-schema revision may change them together with this table and the corresponding exact tests.
-
-The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
-stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo, and
-structure is topology plus overlays. The private canonicalization implementation uses those
-prefixes to select the least search carrier containing the complete input; this is an optimization,
-not a public description-level operation. Complete canonicalization appends normalized entity-level
-and molecule-level constraints after the complete structure key.
-
-| Domain position | Structural domain | Entity indices |
-| ---: | --- | --- |
-| 0 | Topology | Atom = 0, Bond = 1 |
-| 1 | NonStereo | Dative bond = 0, Aromatic system = 1, Multicenter bond = 2, Noncovalent bond = 3 |
-| 2 | Stereo | Stereo atom = 0, Stereo bond = 1 |
-
-An entity-block position is the composite `(domain position, entity index)`. Entity blocks compare by
-this position and then by their dense row sequence. This hierarchy makes topology, constitution,
-and structure exact internal domain prefixes while allowing a future entity kind to be appended
-within the domain to which it belongs. An absent block contributes no entry. The separate terminal
-constraint section follows every structural domain. Extending an entity domain does not move that
-section or alter keys for molecules that lack the new kind.
-
-Rows compare their components in the following local field order. Every present entity kind
-contributes all of its inherent fields; participant topology,
-participant-indexed values, and frame-dependent values occupy the listed structural components
-rather than being omitted. The dense row index is implicit in the row sequence. Inline constraints
-are excluded here and enter through the constraint section.
-
-| Entity row | Components from position 0 onward |
-| --- | --- |
-| Atom | element, isotope mass, charge, implicit hydrogens, lone pairs, unpaired electrons |
-| Bond | endpoint pair, order, charge, unpaired electrons |
-| Dative bond | donors, acceptor, order |
-| Aromatic system | participants, participant electron counts, charge, unpaired electrons |
-| Multicenter bond | participants, participant electron counts, charge, unpaired electrons |
-| Noncovalent bond | endpoint pair, kind |
-| Stereo atom | site, ligand frame, configuration |
-| Stereo bond | site, ligand frame, configuration |
-
-Canonical-search initial colors retain these listed field positions even when participant data
-is represented by incidence occurrences. Omitted participant-bearing fields are not renumbered: for
-example, a bond node uses positions 1 through 3 for order, charge, and unpaired electrons, while its
-endpoint pair is represented by two incidences. Entity-node colors contain only normalized,
-constraint-free, frame-independent values. Aromatic and multicenter participant electron counts and
-stereo ligand kinds occur on their corresponding incidences; raw stereo configurations do not enter
-the initial node colors.
-
-Typed incidences use the following order:
-
-| Position | Incidence |
-| ---: | --- |
-| 0 | Bond endpoint |
-| 1 | Dative donor |
-| 2 | Dative acceptor |
-| 3 | Aromatic participant, followed by its normalized electron-count value |
-| 4 | Multicenter participant, followed by its normalized electron-count value |
-| 5 | Noncovalent endpoint |
-| 6 | Stereo site |
-| 7 | Stereo ligand, followed by its ligand kind |
-
-The public `Incidence` total order follows this table and agrees with the typed canonical key for
-normalized incidence values. Entity-node and incidence colors occupy disjoint key domains.
-
-Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
-donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand
-kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, `LonePair = 2`, and `Virtual = 3`. Unpaired electrons
-are the product `(count = 0, multiplicity = 1)`. A stereo configuration is the product of its kind
-and coset after the complete participant-frame action described above.
-
-Products compare components in position order. Variants compare their explicit tag first and then
-their payload components in written order. Sequences compare lexicographically, with a proper prefix
-sorting before the longer sequence. Sets compare as sorted, duplicate-free member sequences. Options
-use `None = 0` and `Some = 1`, followed by the value. Booleans use `false < true`; signed and unsigned
-integers use numeric order; strings use lexicographic Unicode scalar-value order; entity ids use
-their numeric indices. Elements use atomic-number order. A permutation compares as
-`(degree, one-line image)`, and orientation uses `Proper = 0`, `Improper = 1`.
-
-The normalized form variants have these tag positions:
-
-| Type | Variant positions from 0 onward |
-| --- | --- |
-| `BooleanForm` | `Undetermined`, `Lit` |
-| `NumForm` | `Undetermined`, `Lit`, `LitSet`, `RangeFrom`, `RangeTo`, `ArithExpr`, `PredExpr` |
-| `ArithExpr` | `Lit`, `Var`, `Neg`, `Sum`, `Product`, `Div`, `Rem` |
-| `PredExpr` | `Rel`, `Mem`, `Not`, `And`, `Or` |
-| `RelOp` | `Le`, `Ge`, `Eq`, `Lt`, `Gt`, `Ne` |
-| `MemOp` | `In`, `NotIn` |
-| `ElementForm` | `Undetermined`, `Lit`, `LitSet`, `NotSet`, `Var` |
-| `IsotopeMassForm` | `Undetermined`, `Natural`, `Lit`, `LitSet`, `Var` |
-| `ElectronCountsForm` | `Undetermined`, `Lit` |
-| `AromaticValenceForm` | `Undetermined`, `NotAromatic`, `Aromatic` |
-| `MulticenterValenceForm` | `Undetermined`, `NotMulticenter`, `Multicenter` |
-| `TetrahedralStereoForm`, `CisTransStereoForm` | `Undetermined`, `NotStereo`, `Stereo` |
-| `NoncovalentBondKindForm` | `Undetermined`, `Lit` |
-| `NoncovalentBondKind` | `HydrogenBond`, `HalogenBond`, `ChalcogenBond`, `Ionic`, `VanDerWaals` |
-| `StereoConfigurationForm` | `Undetermined`, `Kinded` |
-| `StereoKind` | `Tetrahedral`, `CisTrans`, `Axial`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral` |
-| `StereoCoset` | `Undetermined`, `Lit`, `LitSet`, `Term` |
-| `StereoTerm` | `Var`, `Lit`, `LitSet`, `Swap`, `Mirror`, `Apply` |
-| `RingScope` | `All`, `Size` |
-| `TopicityRelationForm`, `StereogenicityForm` | `Undetermined`, `Lit`, `LitSet`, `NotSet` |
-| `Topicity` | `Homotopic`, `Enantiotopic`, `Diastereotopic` |
-| `Stereogenicity` | `Symmetric`, `Prochiral`, `Stereogenic` |
-
-Inline constraint blocks use the same composite entity-block positions and therefore the same
-topology, non-stereo, and stereo domain hierarchy. The molecule-level constraint tree is a terminal
-block after every inline block. An inline constraint row is `(entity id, constraint tag, payload)`.
-The currently assigned inline constraint tags are:
-
-| Constraint block | Variant positions from 0 onward |
-| --- | --- |
-| Atom | `Valence`, `DonatedPairs`, `AcceptedPairs`, `AromaticValence`, `MulticenterValence`, `TetrahedralStereo`, `Degree`, `TotalDegree`, `TotalValence`, `RingDegree`, `RingValence`, `TotalHydrogens`, `RingMembership` |
-| Bond | `Aromatic`, `CisTransStereo`, `RingMembership` |
-| Dative bond | `Aromatic`, `RingMembership` |
-| Aromatic system | `ElectronCount` |
-| Multicenter bond | `ElectronCount` |
-| Noncovalent bond | `Intramolecular` |
-| Stereo atom, stereo bond | `LigandSymmetry`, `Fluxionality`, `Topicity`, `Stereogenicity` |
-
-The molecule-level `Constraint` comparison key uses `EntityLeaf = 0`, `Relational = 1`,
-`Molecule = 2`, `And = 3`, `Or = 4`, and `Not = 5`. Every public entity-leaf variant maps to
-`EntityLeaf`, followed by its composite entity-block position, referenced entity id, stereo kind
-where present, and inline constraint key. This comparison-key grouping does not change the public
-`Constraint` enum. `And` and `Or` compare their normalized set-like child sequences.
-
-`MoleculeConstraint` uses `ChargeSum = 0`, `UnpairedElectronCoupling = 1`, `BondOrderSum = 2`,
-and `Connected = 3`. Payload fields compare in their declaration's semantic order: the optional
-entity subset first, then the asserted value where one exists.
-
-`RelationalConstraint` uses the composite position `(owning entity-block position, local index)`.
-The assigned local indices are:
-
-| Owning entity | Local indices and variants in order |
-| --- | --- |
-| Dative bond | 0–7: `DativeBondDonors`, `DativeBondDonor`, `DativeBondContainsAllDonors`, `DativeBondAllDonors`, `DativeBondAnyDonor`, `DativeBondAcceptor`, `DativeBondAcceptorSatisfies`, `DativeBondParallels` |
-| Aromatic system | 0–4: `AromaticSystemAtoms`, `AromaticSystemContains`, `AromaticSystemContainsAll`, `AromaticSystemAllAtoms`, `AromaticSystemAnyAtom` |
-| Multicenter bond | 0–4: `MulticenterBondAtoms`, `MulticenterBondContains`, `MulticenterBondContainsAll`, `MulticenterBondAllAtoms`, `MulticenterBondAnyAtom` |
-| Noncovalent bond | 0–2: `NoncovalentBondEnds`, `NoncovalentBondContains`, `NoncovalentBondEndsSatisfy` |
-| Stereo atom | 0–4: `StereoAtomSite`, `StereoAtomContains`, `StereoAtomLigands`, `StereoAtomAllLigands`, `StereoAtomAnyLigand` |
-| Stereo bond | 0–4: `StereoBondSite`, `StereoBondContains`, `StereoBondLigands`, `StereoBondAllLigands`, `StereoBondAnyLigand` |
-
-Each relational payload compares its named fields from left to right as shown by the public variant.
-Atom collections with set semantics are normalized before comparison; ordered predicate pairs retain
-their order.
-
-Reaction spans reuse the complete molecule schema and lift each entity row through the span tags
-`Unchanged = 0`, `Added = 1`, `Removed = 2`, and `Modified = 3`. `Modified` compares its lhs value
-before its rhs value. Constraint spans use the first three tags. These positions are deliberately
-independent of the Rust declaration order.
-
-An absent extension contributes no positioned entry. Therefore appending a later field, variant,
-constraint, or entity kind within its assigned domain can leave the key of every earlier value
-byte-for-byte equivalent at the typed-key level. This is a useful extension property, not a
-cross-release promise. A genuinely new structural category may instead require another domain;
-moving an existing entity kind between domains or inserting a domain changes both comparison order
-and the private structural-prefix semantics. The concrete Rust key storage remains private and may
-change.
-Exact ordering tests instantiate the current positions to detect accidental drift; an intentional
-schema revision updates those tests and this table together.
+The order of colors and keys is the derived order of their types, so a change of a declaration
+order changes canonical representatives. `EntitySpan` declares `Added` last so that the entities
+present on the lhs precede the added ones. A future durable canonicalization profile requires its
+own explicit version, compatibility rules, and conformance fixtures; the unversioned aggregate
+API does not imply that contract.
 
 ## Provenance and contextual validity
 

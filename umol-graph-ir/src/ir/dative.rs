@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 
+use strum::VariantArray;
 use umol_graph_core::{
     Compaction, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping,
     IdRange, NodeId, ParticipantPosition, RelationId,
@@ -12,12 +13,12 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
-use super::delta::EntitySpan;
 use super::error::Contradiction;
 use super::frame::DativeBondsFrameAction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
-use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+use super::span::EntitySpan;
+use super::traits::{AsColor, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A dative bond's donor frame, acceptor, and attributes.
 ///
@@ -664,6 +665,21 @@ pub struct DativeBondUpdate {
     pub constraints: DativeBondConstraintsForm,
 }
 
+/// Field discriminants of [`DativeBondForm`], mirroring `DativeBondFieldChange`'s variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, VariantArray)]
+pub enum DativeBondFieldKind {
+    Order,
+}
+
+impl DativeBondFieldKind {
+    /// The behavior of the field under an action on the participant frame of its entity.
+    pub fn reframe_kind(self) -> ReframeKind {
+        match self {
+            Self::Order => ReframeKind::Independent,
+        }
+    }
+}
+
 impl DativeBondForm {
     /// Concrete: every inherent field is ground; the constraint channel does
     /// not bear on concreteness.
@@ -765,6 +781,19 @@ impl FrameTransport for DativeBondForm {
 impl From<&str> for DativeBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid dative bond string")
+    }
+}
+
+/// The color of a [`DativeBondForm`]: the whole form, since no part of it depends on a participant
+/// frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct DativeBondColor<'a>(&'a DativeBondForm);
+
+impl AsColor for DativeBondForm {
+    type Color<'a> = DativeBondColor<'a>;
+
+    fn as_color(&self) -> Self::Color<'_> {
+        DativeBondColor(self)
     }
 }
 
@@ -1734,6 +1763,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::order(DativeBondFieldKind::Order, ReframeKind::Independent)]
+    fn test_dative_bond_field_kind_reframe_kind(
+        #[case] kind: DativeBondFieldKind,
+        #[case] expected: ReframeKind,
+    ) {
+        assert_eq!(kind.reframe_kind(), expected);
+    }
+
+    #[rstest]
     #[case::new(DativeBondForm::new(NumForm::Lit(2)),
         DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintsForm::new() })]
     #[case::from_order(DativeBondForm::from_order(3),
@@ -1943,5 +1981,21 @@ mod tests {
         #[case] expected: DativeBondForm,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::equal(DativeBondForm::from_order(1), DativeBondForm::from_order(1), true)]
+    #[case::order(DativeBondForm::from_order(2), DativeBondForm::default(), false)]
+    #[case::constraint(
+        DativeBondForm::default().with_constraint(DativeBondConstraintForm::aromatic(true)),
+        DativeBondForm::default(),
+        false
+    )]
+    fn test_dative_bond_form_as_color(
+        #[case] lhs: DativeBondForm,
+        #[case] rhs: DativeBondForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(lhs.as_color() == rhs.as_color(), expected);
     }
 }
