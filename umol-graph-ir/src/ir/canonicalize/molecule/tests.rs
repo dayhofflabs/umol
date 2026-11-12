@@ -15,7 +15,7 @@ use super::super::tests::{
     stereo_constraint_canonicalization_molecule,
 };
 use super::super::*;
-use super::*;
+use super::{CanonicalComparisonKey, *};
 use crate::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
     Constraint, Constraints, DativeBondForm, DativeBondId, Entity, IncidenceLevel,
@@ -39,7 +39,7 @@ fn leaf_candidate_at(
     incidence_graph: &IncidenceGraph,
     level: DescriptionLevel,
     order: &[NodeId],
-) -> CanonicalCandidate<CanonicalComparisonKey> {
+) -> CanonicalCandidate<super::super::CanonicalComparisonKey> {
     let entity_order = entity_order(molecule, incidence_graph, level, order);
     CanonicalCandidate {
         key: leaf_key(molecule, incidence_graph, level, &entity_order),
@@ -160,7 +160,7 @@ fn meso_canonicalization_molecule() -> Molecule {
     })
 }
 
-fn selected_structure_key(molecule: &Molecule) -> CanonicalComparisonKey {
+fn selected_structure_key(molecule: &Molecule) -> super::super::CanonicalComparisonKey {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
     leaf_candidate_at(
@@ -1483,6 +1483,58 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
 }
 
 #[rstest]
+#[case::path(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 0, 0, 1, 1]
+)]
+#[case::minority_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(2)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 0, 0, 0, 1, 2, 1]
+)]
+#[case::distinct_atoms(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N).with_charge(1_i64),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1).with_charge(-1_i64)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4]
+)]
+#[case::atoms_only(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        ..Default::default()
+    }),
+    vec![0, 0]
+)]
+fn test_colors(#[case] molecule: Molecule, #[case] expected: Vec<u32>) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+
+    assert_eq!(colors(&molecule, &incidence_graph), expected);
+}
+
+#[rstest]
 #[case::incomplete_order_one(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 2],
@@ -1615,7 +1667,7 @@ fn test_topology_comparison_key() {
             &order
         )
         .key,
-        CanonicalComparisonKey {
+        super::super::CanonicalComparisonKey {
             entity_blocks: vec![
                 PositionedKey {
                     position: EntityBlockPosition::ATOM,
@@ -2397,6 +2449,106 @@ fn test_topology_key(#[case] molecule: Molecule) {
         );
         order.reverse();
     }
+}
+
+#[rstest]
+#[case::path(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 0, 0, 1, 1],
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 0, 0],
+        bonds: vec![[0, 1, 1], [1, 2, 1]],
+    }
+)]
+#[case::minority_bond(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(2)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 0, 0, 0, 1, 2, 1],
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5), NodeId(6)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 0, 0, 0],
+        bonds: vec![[0, 1, 1], [1, 2, 2], [2, 3, 1]],
+    }
+)]
+#[case::distinct_atoms(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N).with_charge(1_i64),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1).with_charge(-1_i64)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4],
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 1, 2],
+        bonds: vec![[0, 1, 3], [1, 2, 4]],
+    }
+)]
+#[case::distinct_atoms_reversed(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N).with_charge(1_i64),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1).with_charge(-1_i64)),
+        ],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4],
+    vec![NodeId(2), NodeId(1), NodeId(0), NodeId(4), NodeId(3)],
+    CanonicalComparisonKey {
+        atoms: vec![2, 1, 0],
+        bonds: vec![[0, 1, 4], [1, 2, 3]],
+    }
+)]
+#[case::atoms_only(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        ..Default::default()
+    }),
+    vec![0, 0],
+    vec![NodeId(0), NodeId(1)],
+    CanonicalComparisonKey {
+        atoms: vec![0, 0],
+        bonds: Vec::new(),
+    }
+)]
+fn test_color_key(
+    #[case] molecule: Molecule,
+    #[case] colors: Vec<u32>,
+    #[case] entity_order: Vec<NodeId>,
+    #[case] expected: CanonicalComparisonKey,
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+
+    assert_eq!(
+        color_key(&molecule, &incidence_graph, &colors, &entity_order),
+        expected,
+    );
 }
 
 #[rstest]

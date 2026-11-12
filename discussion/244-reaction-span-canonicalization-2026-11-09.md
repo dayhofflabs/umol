@@ -1977,7 +1977,7 @@ gate. Criterion medians against S6h.1, with the conditions of that run:
 `aromatic_electron_counts` takes 0.26 to 0.39 times its former time in the nine groups that run a
 search on the unmodified case. The other 51 medians of the four cases stay within 4.1%.
 
-#### S6j — Molecule `canonicalize` at Topology
+#### S6j — Molecule `canonicalize` at Topology **Done**
 
 **Module:** `ir/canonicalize/molecule.rs`.
 
@@ -1993,6 +1993,43 @@ for molecules without inline constraints. Canonical forms are unchanged (green).
 
 **Tests:** `test_colors` and `test_color_key` with exact integers for the fixtures of
 `test_topology_key`. The Topology benchmarks of molecule `canonicalize` are timed against S5.
+
+`colors` returns the integers by incidence node. The key of the molecule submodule has the fields
+`atoms`, one integer per atom, and `bonds`, the two endpoint images and the integer of each bond.
+The encoded key is written `super::CanonicalComparisonKey` at six places in the file and three in
+its tests. `canonicalize_topology` normalizes, ranks, searches with deferred keys, and remaps; it
+no longer reframes, since the atoms and bonds of a normalized molecule have no frame to change.
+`canonicalize` selects Topology only for a molecule of atoms and bonds. A test that asks for
+Topology on a molecule with further entities now gets them remapped in their stored frames.
+Its `debug_assert!` runs `canonical_key_at` at Topology and compares the result with `topology_key`
+of the selected order, unless an atom or bond carries an inline constraint.
+
+No expected value changed. `test_colors` has 4 rows and `test_color_key` 5, the fifth with the
+atoms of the third fixture in reverse order. The 12,208 library tests, the integration tests of the
+crate, the 555 properties, and the default tests of the other workspace crates without `umol-py`
+pass with the assertion active. Seven colors and `AsColor` now have a caller through the trait, so
+the library build reports one dead-code warning, for `ElectronCountsForm::at`.
+
+Criterion medians of molecule `canonicalize` against the run on the main tree before the trial of
+colors, with a 1-second warm-up and 3 seconds of measurement:
+
+| Case | Before | After | Ratio |
+| --- | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 17.4 µs | 12.5 µs | 0.72 |
+| `disconnected_rings` | 29.3 µs | 23.4 µs | 0.80 |
+| `feature_free_connected` | 33.2 µs | 26.1 µs | 0.78 |
+| `feature_free_disconnected` | 35.9 µs | 28.7 µs | 0.80 |
+| `symmetry_heavy_radicals` | 29.8 µs | 25.7 µs | 0.86 |
+| Carbon path, 8 atoms | 11.1 µs | 7.7 µs | 0.69 |
+| Carbon path, 16 atoms | 19.8 µs | 12.8 µs | 0.65 |
+| Carbon path, 32 atoms | 41.5 µs | 27.1 µs | 0.65 |
+| Carbon path, 64 atoms | 101.9 µs | 71.1 µs | 0.70 |
+| Carbon path, 77 atoms | 132.1 µs | 95.3 µs | 0.72 |
+| Carbon path, 128 atoms | 287.7 µs | 221.2 µs | 0.77 |
+
+`canonical_hash` and `canonical_eq` of the five cases, which this subitem leaves on the encoded
+path, measure 0.94 to 0.98 of their earlier medians. The two runs are hours apart, so up to 6% of
+each ratio above can be drift between them.
 
 #### S6k — Molecule `canonicalize` at Constitution and Structure
 

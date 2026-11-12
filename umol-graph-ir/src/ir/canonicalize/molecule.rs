@@ -14,7 +14,7 @@ use super::super::num::NumForm;
 use super::super::remap::MoleculeRemapping;
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::StereoConfigurationForm;
-use super::super::traits::{FrameTransport, Normalize, Reframe};
+use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     aromatic_system_constraint_form_key, atom_constraint_form_key, atom_inherent_fields,
     bond_constraint_form_key, bond_inherent_fields, canonical_search,
@@ -23,16 +23,25 @@ use super::{
     electron_counts_form_key, field, hash_value, incidence_key, index_key,
     molecule_canonicalize_level, molecule_counts, molecule_remapping,
     multicenter_bond_constraint_form_key, noncovalent_bond_constraint_form_key,
-    noncovalent_bond_kind_form_key, num_form_key, option, positioned_product, product,
+    noncovalent_bond_kind_form_key, num_form_key, option, positioned_product, product, rank_colors,
     rank_initial_colors, sequence, stereo_atom_constraint_form_key,
     stereo_bond_constraint_form_key, stereo_configuration_form_key, stereo_frame_permutations,
     stereo_kind_key, stereo_ligand_key, unpaired_electrons_form_key, variant, AutomorphismAdapter,
-    AutomorphismColor, BranchOrdering, CanonicalCandidate, CanonicalComparisonKey,
-    CanonicalKeyValue, CanonicalSearchOptions, Canonicalize, CanonicalizeContext,
-    ConstraintBlockKey, ConstraintBlockPosition, DeferredKey, DescriptionLevel,
-    EntityBlockPosition, InitialColorKey, MoleculeCanonicalizeError, OrderedPartition,
-    PositionedKey, TopologySearchInput,
+    AutomorphismColor, BranchOrdering, CanonicalCandidate, CanonicalKeyValue,
+    CanonicalSearchOptions, Canonicalize, CanonicalizeContext, ConstraintBlockKey,
+    ConstraintBlockPosition, DeferredKey, DescriptionLevel, EntityBlockPosition, InitialColorKey,
+    MoleculeCanonicalizeError, OrderedPartition, PositionedKey, TopologySearchInput,
 };
+
+/// The key of a leaf: the molecule in the entity order of the leaf, with each form as the integer
+/// of its color.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct CanonicalComparisonKey {
+    /// The integer of each atom.
+    atoms: Vec<u32>,
+    /// The two endpoint images and the integer of each bond.
+    bonds: Vec<[u32; 3]>,
+}
 
 /// Construct the ordered constraint blocks used by complete canonicalization.
 fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
@@ -341,6 +350,36 @@ fn initial_color_keys(
         .collect();
 
     Ok((entity_keys, incidence_keys))
+}
+
+/// The integer of the color of each atom and bond of a normalized molecule, by incidence node.
+///
+/// The atoms take the integers of their colors, and the bonds continue after them.
+fn colors(molecule: &Molecule, incidence_graph: &IncidenceGraph) -> Vec<u32> {
+    let mut ranks = vec![0; incidence_graph.graph().node_count()];
+    let atoms = molecule
+        .atoms()
+        .iter()
+        .map(|atom| {
+            (
+                atom.attributes().as_color(),
+                incidence_graph.node_of(Entity::Atom(atom.id())),
+            )
+        })
+        .collect();
+    let first_bond = rank_colors(atoms, 0, &mut ranks);
+    let bonds = molecule
+        .bonds()
+        .iter()
+        .map(|bond| {
+            (
+                bond.attributes().as_color(),
+                incidence_graph.node_of(Entity::Bond(bond.id())),
+            )
+        })
+        .collect();
+    rank_colors(bonds, first_bond, &mut ranks);
+    ranks
 }
 
 /// Construct the topology search input from the dense normalized colors of topology entities.
@@ -973,7 +1012,7 @@ fn entity_order(
 fn comparison_key(
     molecule: &Molecule,
     level: DescriptionLevel,
-) -> Result<CanonicalComparisonKey, Contradiction> {
+) -> Result<super::CanonicalComparisonKey, Contradiction> {
     let mut entity_blocks = Vec::new();
     let mut push_block = |position: EntityBlockPosition, rows: Vec<CanonicalKeyValue>| {
         if !rows.is_empty() {
@@ -1147,7 +1186,7 @@ fn comparison_key(
     } else {
         Vec::new()
     };
-    Ok(CanonicalComparisonKey {
+    Ok(super::CanonicalComparisonKey {
         entity_blocks,
         constraints,
     })
@@ -1161,7 +1200,7 @@ fn topology_key(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     entity_order: &[NodeId],
-) -> CanonicalComparisonKey {
+) -> super::CanonicalComparisonKey {
     let mut atom_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Atom)];
     let mut atoms = Vec::with_capacity(atom_images.len());
     let mut bonds = Vec::with_capacity(incidence_graph.entity_count(EntityKind::Bond));
@@ -1203,10 +1242,43 @@ fn topology_key(
             value: sequence(bonds),
         });
     }
-    CanonicalComparisonKey {
+    super::CanonicalComparisonKey {
         entity_blocks,
         constraints: Vec::new(),
     }
+}
+
+/// The key of the leaf that orders the entities of `molecule` as `entity_order`: the integer of
+/// each atom, then the two endpoint images and the integer of each bond.
+fn color_key(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    colors: &[u32],
+    entity_order: &[NodeId],
+) -> CanonicalComparisonKey {
+    let mut atom_images = vec![0_u32; incidence_graph.entity_count(EntityKind::Atom)];
+    let mut key = CanonicalComparisonKey {
+        atoms: Vec::with_capacity(atom_images.len()),
+        bonds: Vec::with_capacity(incidence_graph.entity_count(EntityKind::Bond)),
+    };
+    for &node in entity_order {
+        match incidence_graph.entity(node) {
+            Entity::Atom(id) => {
+                atom_images[id.index()] = key.atoms.len() as u32;
+                key.atoms.push(colors[node.index()]);
+            }
+            Entity::Bond(id) => {
+                let [first, second] = molecule
+                    .bond(id)
+                    .atom_ids()
+                    .map(|atom| atom_images[atom.index()]);
+                key.bonds
+                    .push([first.min(second), first.max(second), colors[node.index()]]);
+            }
+            _ => unreachable!("the Topology order holds atoms and bonds"),
+        }
+    }
+    key
 }
 
 /// The key of the leaf that orders the entities of `molecule` as `order`.
@@ -1215,7 +1287,7 @@ fn leaf_key(
     incidence_graph: &IncidenceGraph,
     level: DescriptionLevel,
     order: &[NodeId],
-) -> CanonicalComparisonKey {
+) -> super::CanonicalComparisonKey {
     let remapping = remapping_from_order(molecule, incidence_graph, order);
     let remapped = molecule.clone().remap(&remapping);
     let reframed = if level == DescriptionLevel::Full {
@@ -1236,25 +1308,15 @@ fn canonicalize_topology(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
+    let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, _) = initial_color_keys(&molecule, &incidence_graph)?;
-    let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
+    let entity_colors = colors(&molecule, &incidence_graph);
     let TopologySearchInput {
         adapter,
         initial_partition,
     } = topology_search_input(&molecule, &incidence_graph, &entity_colors);
-    let build_key = |order: &[NodeId]| {
-        let key = topology_key(&molecule, &incidence_graph, order);
-        debug_assert!(
-            key == leaf_key(
-                &molecule,
-                &incidence_graph,
-                DescriptionLevel::Topology,
-                order
-            )
-        );
-        key
-    };
+    let build_key =
+        |order: &[NodeId]| color_key(&molecule, &incidence_graph, &entity_colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
             &molecule,
@@ -1276,10 +1338,24 @@ fn canonicalize_topology(
     )
     .candidate
     .entity_order;
+    debug_assert!(
+        molecule
+            .atoms()
+            .iter()
+            .any(|atom| !atom.attributes().constraints.is_empty())
+            || molecule
+                .bonds()
+                .iter()
+                .any(|bond| !bond.attributes().constraints.is_empty())
+            || molecule
+                .canonical_key_at(DescriptionLevel::Topology, context)
+                .ok()
+                == Some(topology_key(&molecule, &incidence_graph, &entity_order)),
+        "the color key and the encoded key select different Topology forms",
+    );
     let remapping = remapping_from_order(&molecule, &incidence_graph, &entity_order);
 
-    let canonical = molecule.remap(&remapping).reframe()?;
-    Ok((canonical, remapping))
+    Ok((molecule.remap(&remapping), remapping))
 }
 
 fn canonicalize_constitution(
@@ -1448,7 +1524,7 @@ impl Molecule {
         &self,
         level: DescriptionLevel,
         context: &CanonicalizeContext,
-    ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
+    ) -> Result<super::CanonicalComparisonKey, MoleculeCanonicalizeError> {
         if level == DescriptionLevel::Full {
             let molecule = &self.clone().normalize()?;
             let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
