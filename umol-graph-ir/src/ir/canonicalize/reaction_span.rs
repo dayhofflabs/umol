@@ -200,9 +200,10 @@ fn retain_preserving_generators(
     generators: &mut Vec<Vec<NodeId>>,
 ) {
     generators.retain(|generator| {
-        span.clone()
-            .try_remap(&remapping_from_generator(span, incidence_graph, generator))
-            .is_some_and(|remapped| remapped.framed_eq(span))
+        span.framed_eq_under(
+            span,
+            &remapping_from_generator(span, incidence_graph, generator),
+        )
     });
 }
 

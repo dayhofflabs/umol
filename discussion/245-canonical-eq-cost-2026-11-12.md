@@ -338,7 +338,7 @@ adds a row with an added atom and one with a removed atom, which count in the un
 test helpers that called the removed functions call the method. The tests of `umol-graph-ir`
 pass with all features.
 
-#### S0b — `ReactionSpan::framed_eq_under`
+#### S0b — `ReactionSpan::framed_eq_under` **Done**
 
 **Module:** `ir/reaction_span.rs`, `ir/canonicalize/reaction_span.rs`.
 
@@ -350,6 +350,18 @@ behavior (green).
 **Tests:** rows that mirror the `test_molecule_framed_eq_under_*` unit tests on spans, and the
 identity, inverse, and composition properties that `tests/property/molecule/comparison.rs` holds
 for molecules.
+
+Three unit tests. `test_reaction_span_framed_eq_under` compares the span of the hydrolysis of
+fluoromethane with itself under identity, with a renumbered copy under the remapping of the
+renumbering and under identity, and with a renumbered copy that adds sulfur for oxygen.
+`test_reaction_span_framed_eq_under_frame` compares two spans of furan whose aromatic system
+lists its atoms in different orders. `test_reaction_span_framed_eq_under_count_error` has a row
+per entity kind with a remapping one entry too long.
+
+Four properties in `tests/property/reaction/span/remap.rs`, over generated spans with two
+generated remappings: a span is equal to its remapped copy under the remapping; under identity
+the result is that of `framed_eq`; inverting the remapping reverses the comparison; and two
+successive remappings compose. The tests of `umol-graph-ir` pass with all features.
 
 #### S0c — Benchmark pairs and baseline
 
